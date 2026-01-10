@@ -2,16 +2,17 @@
 
 import type React from "react"
 
+import { Badge } from "@/components/bs-ui/badge"
 import { Button } from "@/components/bs-ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/bs-ui/dropdownMenu"
 import { Input } from "@/components/bs-ui/input"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
+import { locationContext } from "@/contexts/locationContext"
 import { cn } from "@/utils"
 import { MoreHorizontal } from "lucide-react"
 import { useContext, useEffect, useRef, useState } from "react"
+import { useTranslation } from "react-i18next"
 import { Dashboard } from "../../types/dataConfig"
-import { Badge } from "@/components/bs-ui/badge"
-import { locationContext } from "@/contexts/locationContext"
 
 
 interface DashboardListItemProps {
@@ -35,6 +36,8 @@ export function DashboardListItem({
     onDefault,
     onDelete,
 }: DashboardListItemProps) {
+    const { t } = useTranslation("dashboard")
+
     const [isEditing, setIsEditing] = useState(false)
     const [title, setTitle] = useState(dashboard.title)
     const inputRef = useRef<HTMLInputElement>(null)
@@ -57,7 +60,7 @@ export function DashboardListItem({
         let trimmedTitle = title.trim()
 
         if (!trimmedTitle) {
-            trimmedTitle = '未命名看板'
+            trimmedTitle = t('untitledDashboard')
             // setTitle(dashboard.title)
             // toast({
             //     description: "名称不能为空",
@@ -69,7 +72,7 @@ export function DashboardListItem({
         if (trimmedTitle.length > 200) {
             setTitle(dashboard.title)
             toast({
-                description: "字数范围 1-200 字",
+                description: t('charLimit200'),
                 variant: "error",
             })
             return
@@ -115,7 +118,7 @@ export function DashboardListItem({
                     </div>
                 )}
             </div>
-            {dashboard.is_default && <Badge variant="outline" className="border border-primary text-primary scale-75">默认</Badge>}
+            {dashboard.is_default && <Badge variant="outline" className="border border-primary text-primary scale-75">{t('default')}</Badge>}
 
             <DropdownMenu>
                 <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
@@ -124,12 +127,12 @@ export function DashboardListItem({
                     </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                    {dashboard.write && appConfig.isPro && <DropdownMenuItem onClick={() => setIsEditing(true)}>重命名</DropdownMenuItem>}
-                    {appConfig.isPro && <DropdownMenuItem disabled={dashboard.is_default} onClick={() => onDefault(dashboard.id)}>{dashboard.is_default ? '已设为默认' : '设为默认'}</DropdownMenuItem>}
-                    {dashboard.write && appConfig.isPro && <DropdownMenuItem onClick={() => onDuplicate(dashboard)}>复制</DropdownMenuItem>}
-                    <DropdownMenuItem onClick={() => onShare(dashboard.id)}>分享</DropdownMenuItem>
+                    {dashboard.write && appConfig.isPro && <DropdownMenuItem onClick={() => setIsEditing(true)}>{t('rename')}</DropdownMenuItem>}
+                    {appConfig.isPro && <DropdownMenuItem disabled={dashboard.is_default} onClick={() => onDefault(dashboard.id)}>{dashboard.is_default ? t('alreadyDefault') : t('setAsDefault')}</DropdownMenuItem>}
+                    {dashboard.write && appConfig.isPro && <DropdownMenuItem onClick={() => onDuplicate(dashboard)}>{t('duplicate')}</DropdownMenuItem>}
+                    <DropdownMenuItem onClick={() => onShare(dashboard.id)}>{t('share')}</DropdownMenuItem>
                     {dashboard.write && appConfig.isPro && <DropdownMenuItem className="text-destructive" onClick={() => onDelete(dashboard.id)}>
-                        删除
+                        {t('delete')}
                     </DropdownMenuItem>}
                 </DropdownMenuContent>
             </DropdownMenu>

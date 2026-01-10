@@ -17,6 +17,7 @@ import { ComponentWrapper } from "./ComponentWrapper"
 import Home from "./Home"
 import "./index.css"
 import { cn } from "@/utils"
+import { useTranslation } from "react-i18next"
 
 interface EditorCanvasProps {
     isPreviewMode?: boolean
@@ -31,13 +32,13 @@ export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanv
         setCurrentDashboard,
         layouts,
         setLayouts,
-        updateComponent: updateComponentInStore,
         duplicateComponent: duplicateComponentInStore,
         deleteComponent: deleteComponentInStore,
         initializeAutoRefresh,
     } = useEditorDashboardStore()
 
     const { clear: clearComponentEditorStore } = useComponentEditorStore();
+    const { t } = useTranslation("dashboard")
 
     const { toast } = useToast()
     const queryClient = useQueryClient()
@@ -55,13 +56,13 @@ export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanv
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: [DashboardsQueryKey] })
             toast({
-                description: "已复制到目标看板",
+                description: t('copyToTargetSuccess'),
                 variant: "success",
             })
         },
         onError: () => {
             toast({
-                description: "复制失败",
+                description: t('copyFailed'),
                 variant: "error",
             })
         },
@@ -144,8 +145,8 @@ export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanv
         if (!component) return
 
         bsConfirm({
-            desc: `确认删除组件"${component.title}"?`,
-            okTxt: "删除",
+            desc: t('confirmDeleteComponent', { name: component.title }),
+            okTxt: t('delete'),
             onOk(next) {
                 deleteComponentInStore(componentId)
                 clearComponentEditorStore(true)
@@ -208,14 +209,14 @@ export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanv
     }, [width, isPreviewMode, mounted, currentDashboard?.style_config.theme]);
 
 
-    // 如果没有dashboard，显示空状态
+    // loading
     if (isLoading || !currentDashboard) {
         return <div className="w-full h-full flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
             <LoadingIcon />
         </div>
     }
 
-    // 如果没有组件，显示空状态
+    // show home
     if (!currentDashboard.components || currentDashboard.components.length === 0) {
         if (isPreviewMode) {
             return
@@ -278,7 +279,7 @@ export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanv
                         )}
                     </div>
                 </div>
-                {/* 配置抽屉 */}
+                {/* drawer */}
                 {!isPreviewMode && <ComponentConfigDrawer />}
             </div>
         </>
@@ -294,7 +295,7 @@ const useContainerWidth = () => {
 
     useEffect(() => {
         setMounted(true);
-        if (!window.ResizeObserver) alert('您的浏览器不支持ResizeObserver，请使用最新版本的Chrome浏览器。');
+        if (!window.ResizeObserver) alert('Your browser does not support ResizeObserver. Please use the latest version of Chrome browser.');
 
         const resizeObserver = new ResizeObserver((entries) => {
             for (let entry of entries) {

@@ -4,11 +4,13 @@ import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
 import { Button } from "@/components/bs-ui/button"
 import { SearchInput } from "@/components/bs-ui/input"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
+import Tip from "@/components/bs-ui/tooltip/tip"
 import { userContext } from "@/contexts/userContext"
-import { copyDashboard, createDashboard, deleteDashboard, duplicateDashboard } from "@/controllers/API/dashboard"
+import { copyDashboard, createDashboard, deleteDashboard } from "@/controllers/API/dashboard"
 import { useMiniDebounce } from "@/util/hook"
+import { generateUniqueName } from "@/util/utils"
 import { cn } from "@/utils"
-import { ChevronLeft, ChevronRight, ListIndentDecrease, ListIndentIncrease, Plus, SquarePlusIcon } from "lucide-react"
+import { ListIndentDecrease, ListIndentIncrease, SquarePlusIcon } from "lucide-react"
 import type React from "react"
 import { useContext, useMemo, useState } from "react"
 import { useMutation, useQueryClient } from "react-query"
@@ -16,8 +18,7 @@ import { useNavigate } from "react-router-dom"
 import { DashboardsQueryKey } from "../../hook"
 import { Dashboard } from "../../types/dataConfig"
 import { DashboardListItem } from "./DashboardListItem"
-import Tip from "@/components/bs-ui/tooltip/tip"
-import { generateUniqueName } from "@/util/utils"
+import { useTranslation } from "react-i18next"
 
 interface DashboardSidebarProps {
     dashboards: Dashboard[]
@@ -36,6 +37,8 @@ export function DashboardSidebar({
     onDefault,
     onShare
 }: DashboardSidebarProps) {
+    const { t } = useTranslation("dashboard")
+
     const [searchQuery, setSearchQuery] = useState("")
     const [isCollapsed, setIsCollapsed] = useState(false)
     const { user } = useContext(userContext);
@@ -71,7 +74,7 @@ export function DashboardSidebar({
         },
         onError: () => {
             toast({
-                description: "创建失败，请重试",
+                description: t('createFailed'),
                 variant: "error",
             })
         },
@@ -79,13 +82,13 @@ export function DashboardSidebar({
     const handleCreate = () => {
         if (dashboards.length >= 20) {
             toast({
-                description: "最多允许创建 20 个看板",
+                description: t('maxLimitReached', { count: 20 }),
                 variant: "error",
             })
             return
         }
 
-        createMutation.mutate(generateUniqueName(dashboards, 'title', `未命名看板`, '(x)'))
+        createMutation.mutate(generateUniqueName(dashboards, 'title', t('untitledDashboard'), '(x)'))
     }
 
 
@@ -98,7 +101,7 @@ export function DashboardSidebar({
         },
         onError: () => {
             toast({
-                description: "复制失败",
+                description: t('copyFailed'),
                 variant: "error",
             })
         },
@@ -106,16 +109,16 @@ export function DashboardSidebar({
     const handleDuplicate = (dashboard: Dashboard) => {
         if (dashboards.length >= 20) {
             toast({
-                description: "最多允许创建 20 个看板",
+                description: t('maxLimitReached', { count: 20 }),
                 variant: "error",
             })
             return
         }
 
-        const newTitle = generateUniqueName(dashboards, 'title', `${dashboard.title}-副本`, '(x)')
+        const newTitle = generateUniqueName(dashboards, 'title', t('dashboardCopyName', { title: dashboard.title }), '(x)')
         if (newTitle.length > 200) {
             return toast({
-                description: "名称不能超过 200 字",
+                description: t('charLimit200'),
                 variant: "error",
             })
         }
@@ -141,7 +144,7 @@ export function DashboardSidebar({
         },
         onError: () => {
             toast({
-                description: "删除失败",
+                description: "delete error",
                 variant: "error",
             })
         },
@@ -151,8 +154,8 @@ export function DashboardSidebar({
         if (!dashboard) return
 
         bsConfirm({
-            desc: `确认删除${dashboard.title}？删除后不可恢复。`,
-            okTxt: "删除",
+            desc: t('confirmDeleteDashboard', { title: dashboard.title }),
+            okTxt: t('delete'),
             onOk(next) {
                 deleteMutation.mutate(id)
                 next()
@@ -169,15 +172,15 @@ export function DashboardSidebar({
         >
             {
                 !isCollapsed && <div className="header relative flex items-center justify-between h-[52px] px-2 pr-11 border-b">
-                    <p className="text-base font-bold">看板列表</p>
+                    <p className="text-base font-bold">{t('dashboardList')}</p>
                     {
-                        canCreate && <Tip content={"添加看板"} >
+                        canCreate && <Tip content={t('addDashboard')} >
                             <Button variant="ghost" size="icon" onClick={handleCreate}><SquarePlusIcon size={16} /></Button>
                         </Tip>
                     }
                 </div>
             }
-            <Tip content={isCollapsed ? "展开列表" : "收起列表"} >
+            <Tip content={isCollapsed ? t('expandList') : t('collapseList')}>
                 <Button
                     variant={isCollapsed ? "outline" : "ghost"}
                     size="icon"
@@ -203,7 +206,7 @@ export function DashboardSidebar({
                     <div className="flex-1 overflow-y-auto space-y-1">
                         {filteredDashboards.length === 0 ? (
                             <div className="text-center text-muted-foreground text-sm py-8">
-                                {searchQuery ? "未找到匹配的看板" : "暂无看板"}
+                                {searchQuery ? t('noMatchingDashboards') : t('noDashboards')}
                             </div>
                         ) : (
                             filteredDashboards.map((dashboard) => (

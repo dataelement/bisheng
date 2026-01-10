@@ -8,7 +8,7 @@ import { Input } from "@/components/bs-ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select"
 import { RadioGroup, RadioGroupItem } from "@/components/bs-ui/radio"
 import { Label } from "@/components/bs-ui/label"
-import { Checkbox } from "@/components/bs-ui/checkbox"
+import { Checkbox } from "@/components/bs-ui/checkBox"
 import { useTranslation } from "react-i18next"
 
 interface DimensionItem {

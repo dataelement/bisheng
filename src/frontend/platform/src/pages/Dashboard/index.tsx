@@ -10,6 +10,7 @@ import {
 } from "@/controllers/API/dashboard"
 import { copyText } from "@/utils"
 import { useContext, useState } from "react"
+import { useTranslation } from "react-i18next"
 import { useMutation, useQuery, useQueryClient } from "react-query"
 import { useNavigate } from "react-router-dom"
 import { DashboardDetail } from "./components/dashboard/DashboardDetail"
@@ -18,6 +19,7 @@ import { DashboardQueryKey, DashboardsQueryKey } from "./hook"
 
 
 export default function DashboardPage() {
+    const { t } = useTranslation("dashboard")
     const { appConfig } = useContext(locationContext)
     const [selectedId, setSelectedId] = useState<string | null>(null)
     const { toast } = useToast()
@@ -33,13 +35,13 @@ export default function DashboardPage() {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: [DashboardsQueryKey] })
             toast({
-                description: "已重命名",
+                description: t('renameSuccess'),
                 variant: "success",
             })
         },
         onError: () => {
             toast({
-                description: "重命名失败",
+                description: t('renameError'),
                 variant: "error",
             })
         },
@@ -55,17 +57,14 @@ export default function DashboardPage() {
         }
     })
 
-
-
     const handleRename = (id: string, newTitle: string) => {
         updateMutation.mutate({ id, title: newTitle })
     }
 
-
     const handleShare = async (id: string) => {
         if (selectedDashboard?.status === "draft") {
             toast({
-                description: "该看板尚未发布",
+                description: t('shareNotPublished'),
                 variant: "error",
             })
             return
@@ -75,17 +74,16 @@ export default function DashboardPage() {
             const link = `${location.origin}${__APP_ENV__.BASE_URL}/dashboard/share/${btoa(selectedDashboard.id)}`
             await copyText(link)
             toast({
-                description: "分享链接已复制",
+                description: t('shareCopySuccess'),
                 variant: "success",
             })
         } catch (error) {
             toast({
-                description: "复制失败",
+                description: t('shareCopyError'),
                 variant: "error",
             })
         }
     }
-
 
     const navigator = useNavigate()
     const handleEdit = (id: string) => {

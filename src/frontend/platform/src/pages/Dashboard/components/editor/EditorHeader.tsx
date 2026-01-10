@@ -29,12 +29,12 @@ export function EditorHeader({
     dashboard,
     dashboardId,
 }: EditorHeaderProps) {
+    const { t } = useTranslation("dashboard")
     const { currentDashboard, hasUnsavedChanges, isSaving, layouts,
         reset, setIsSaving, setHasUnsavedChanges, addComponentToLayout } = useEditorDashboardStore()
     const [isEditingTitle, setIsEditingTitle] = useState(false)
     const [title, setTitle] = useState(dashboard?.title || "")
     const inputRef = useRef<HTMLInputElement>(null)
-    const { t } = useTranslation()
     const queryClient = useQueryClient()
     const { toast } = useToast()
 
@@ -63,13 +63,13 @@ export function EditorHeader({
             queryClient.invalidateQueries({ queryKey: ["dashboards"] })
             // autosave not require toast
             !autoSave && toast({
-                description: "保存成功",
+                description: t('saveSuccess'),
                 variant: "success",
             })
         },
         onError: () => {
             toast({
-                description: "保存失败",
+                description: t('saveFailed'),
                 variant: "error",
             })
         },
@@ -107,9 +107,9 @@ export function EditorHeader({
     }, [hasUnsavedChanges, isSaving, saveMutation])
 
     const getSaveStatus = () => {
-        if (isSaving) return "保存中..."
-        if (hasUnsavedChanges) return "未保存"
-        return "已保存"
+        if (isSaving) return t('saving')
+        if (hasUnsavedChanges) return t('unsaved')
+        return t('saved')
     }
 
     const handleTitleBlur = () => {
@@ -142,24 +142,6 @@ export function EditorHeader({
 
         if (hasUnsavedChanges) {
             setLiveModalOpen(true)
-            // bsConfirm({
-            //     desc: "当前有未保存的修改",
-            //     okTxt: "保存并退出",
-            //     cancelTxt: "不保存退出",
-            //     showThirdButton: true,
-            //     thirdButtonTxt: "取消",
-            //     onOk: async (next) => {
-            //         await saveMutation.mutateAsync({})
-            //         reset()
-            //         navgator(`/?selected=${dashboardId}`)
-            //         next()
-            //     },
-            // onCancel: (next) => {
-            //     reset()
-            //     navgator(`/?selected=${dashboardId}`)
-            //     next()
-            // },
-            // })
         } else {
             reset()
             navigator(-1)
@@ -242,7 +224,7 @@ export function EditorHeader({
                 <ComponentPicker onSelect={addComponentToLayout}>
                     <Button variant="outline" size="sm" className="gap-2">
                         <Grid2X2PlusIcon size="14" />
-                        添加图表
+                        {t('addChart')}
                     </Button>
                 </ComponentPicker>
                 <Button variant="outline" size="sm" className="gap-2" onClick={() => addComponentToLayout({
@@ -250,7 +232,7 @@ export function EditorHeader({
                     type: ChartType.Query
                 })}>
                     <FunnelIcon size="14" />
-                    添加查询组件
+                    {t('addQueryComponent')}
                 </Button>
             </div>
 
@@ -260,13 +242,13 @@ export function EditorHeader({
                     const element = document.getElementById('edit-charts-panne');
                     element.requestFullscreen();
                 }}>
-                    全屏
+                    {t('fullScreen')}
                 </Button>
                 <Button variant="outline" disabled={isPublishing} onClick={handlePublish}>
-                    保存并发布
+                    {t('saveAndPublish')}
                 </Button>
                 <Button onClick={handleSave} disabled={isSaving}>
-                    保存
+                    {t('save')}
                 </Button>
             </div>
 
@@ -274,14 +256,14 @@ export function EditorHeader({
                 <DialogContent className="sm:max-w-[425px]" close={false}>
                     <DialogHeader>
                         <DialogTitle>{t('prompt')}</DialogTitle>
-                        <DialogDescription>{'您有未保存的更改,确定要离开吗?'}</DialogDescription>
+                        <DialogDescription>{t('unsavedChangesWarning')}</DialogDescription>
                     </DialogHeader>
                     <DialogFooter>
                         <Button className="leave h-8" onClick={handleSaveAndClose}>
-                            {t('flow.leaveAndSave')}
+                            {t('saveAndLeave')}
                         </Button>
                         <Button className="h-8" variant="destructive" onClick={() => navigator(-1)}>
-                            {t('build.leaveWithoutSave')}
+                            {t('leaveWithoutSaving')}
                         </Button>
                         <Button className="h-8" variant="outline" onClick={() => setLiveModalOpen(false)}>
                             {t('cancel')}

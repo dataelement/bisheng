@@ -18,7 +18,7 @@ import {
   DialogTitle,
   DialogFooter
 } from "@/components/bs-ui/dialog"
-import { Checkbox } from "@/components/bs-ui/checkbox"
+import { Checkbox } from "@/components/bs-ui/checkBox"
 import { Badge } from "@/components/bs-ui/badge"
 import { generateUUID } from "@/components/bs-ui/utils"
 import { getFieldEnums } from "@/controllers/API/dashboard"

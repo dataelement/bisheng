@@ -3,6 +3,7 @@ import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { publishDashboard } from "@/controllers/API/dashboard";
 import { useEditorDashboardStore } from "@/store/dashboardStore";
 import { useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { useMutation, useQueryClient } from "react-query";
 
 export const DashboardsQueryKey = "DashboardsQueryKey"
@@ -15,6 +16,7 @@ export const enum DashboardStatus {
 export const usePublishDashboard = () => {
     const queryClient = useQueryClient();
     const { toast } = useToast();
+    const { t } = useTranslation("dashboard")
 
     const mutation = useMutation({
         mutationFn: ({ id, published }: { id: string; published: boolean }) =>
@@ -25,20 +27,20 @@ export const usePublishDashboard = () => {
         onSuccess: (_, variables) => {
             queryClient.invalidateQueries({ queryKey: [DashboardQueryKey, variables.id] });
             toast({
-                description: variables.published ? "已取消发布" : "已发布",
+                description: variables.published ? t('unpublishSuccess') : t('publishSuccess'),
                 variant: "success"
             });
         },
         onError: (error) => {
             console.error("Publish Error:", error);
             toast({
-                description: "操作失败",
+                description: t('operationFailed'),
                 variant: "error",
             });
         },
     });
 
-    // 封装最终调用的方法
+    // publish function
     const handlePublish = (id: string, published: boolean) => {
         mutation.mutate({ id, published });
     };

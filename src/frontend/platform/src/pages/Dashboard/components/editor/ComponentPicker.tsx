@@ -2,44 +2,45 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/bs-ui/popo
 import { cn } from '@/utils';
 import React, { useState } from 'react';
 import { ChartType } from '../../types/dataConfig';
+import { useTranslation } from 'react-i18next';
 
 export const ChartGroupItems = [
     {
-        label: '柱状图',
+        label: 'barChart',
         data: [
-            { type: ChartType.Bar, label: '基础柱状图' },
-            { type: ChartType.StackedBar, label: '堆叠柱状图' },
-            { type: ChartType.GroupedBar, label: '分组柱状图' }
+            { type: ChartType.Bar, label: 'basicBarChart' },
+            { type: ChartType.StackedBar, label: 'stackedBarChart' },
+            { type: ChartType.GroupedBar, label: 'groupedBarChart' }
         ]
     },
     {
-        label: '条形图',
+        label: 'horizontalBarChart',
         data: [
-            { type: ChartType.HorizontalBar, label: '基础条形图' },
-            { type: ChartType.StackedHorizontalBar, label: '堆叠条形图' },
-            { type: ChartType.GroupedHorizontalBar, label: '分组条形图' }
+            { type: ChartType.HorizontalBar, label: 'basicHorizontalBarChart' },
+            { type: ChartType.StackedHorizontalBar, label: 'stackedHorizontalBarChart' },
+            { type: ChartType.GroupedHorizontalBar, label: 'groupedHorizontalBarChart' }
         ]
     },
     {
-        label: '折线图',
+        label: 'lineChart',
         data: [
-            { type: ChartType.Line, label: '基础折线图' },
-            { type: ChartType.StackedLine, label: '堆叠折线图' },
-            { type: ChartType.Area, label: '面积图' },
-            { type: ChartType.StackedArea, label: '堆叠面积图' }
+            { type: ChartType.Line, label: 'basicLineChart' },
+            { type: ChartType.StackedLine, label: 'stackedLineChart' },
+            { type: ChartType.Area, label: 'areaChart' },
+            { type: ChartType.StackedArea, label: 'stackedAreaChart' }
         ]
     },
     {
-        label: '饼图',
+        label: 'pieChart',
         data: [
-            { type: ChartType.Pie, label: '饼图' },
-            { type: ChartType.Donut, label: '环形图' }
+            { type: ChartType.Pie, label: 'pieChart' },
+            { type: ChartType.Donut, label: 'donutChart' }
         ]
     },
     {
-        label: '其他',
+        label: 'others',
         data: [
-            { type: ChartType.Metric, label: '指标卡' }
+            { type: ChartType.Metric, label: 'metricCard' }
         ]
     }
 ];
@@ -59,10 +60,11 @@ interface ComponentPickerProps {
 }
 
 const ComponentPicker = ({ children, className, onSelect, maxHeight = 500 }: ComponentPickerProps) => {
+    const { t } = useTranslation("dashboard")
     const [open, setOpen] = useState(false);
 
     const handleItemClick = (item) => {
-        onSelect({ ...item, title: item.label });
+        onSelect({ ...item, title: t(`chart.${item.label}`) });
         setOpen(false);
     };
 
@@ -74,10 +76,10 @@ const ComponentPicker = ({ children, className, onSelect, maxHeight = 500 }: Com
                     onClick={() => handleItemClick(item)}
                     className={`flex flex-col items-center group gap-2 outline-none cursor-pointer ${item.type === ChartType.StackedLine && 'mr-2'}`}
                 >
-                    <div className="w-[88px] h-[86px] flex flex-col items-center justify-center border rounded-md group-hover:bg-blue-50 transition-colors group-hover:border-primary">
+                    <div className="w-[88px] min-h-[86px] flex flex-col items-center justify-center border rounded-md group-hover:bg-blue-50 transition-colors group-hover:border-primary">
                         <img src={`${__APP_ENV__.BASE_URL}/assets/dashboard/${item.type}.png`} className="w-8 h-8 mb-2" />
-                        <span className="text-[12px] text-gray-600 whitespace-nowrap">
-                            {item.label}
+                        <span className="text-[12px] text-gray-600 text-center">
+                            {t(`chart.${item.label}`)}
                         </span>
                     </div>
                 </div>
@@ -99,7 +101,7 @@ const ComponentPicker = ({ children, className, onSelect, maxHeight = 500 }: Com
                     {
                         ChartGroupItems.map((item, index) => (
                             <div key={index}>
-                                <h4 className="text-sm font-medium mb-2 px-1">{item.label}</h4>
+                                <h4 className="text-sm font-medium mb-2 px-1">{t(`chart.${item.label}`)}</h4>
                                 <ItemGrid list={item.data} />
                             </div>
                         ))
