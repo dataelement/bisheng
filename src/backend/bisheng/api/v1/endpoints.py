@@ -257,7 +257,7 @@ async def process_flow(
                                    chat_id=session_id,
                                    category='question',
                                    flow_id=flow_id,
-                                   message=json.dumps(inputs))
+                                   message=json.dumps(inputs, ensure_ascii=False))
             message = ChatMessage(user_id=login_user.user_id,
                                   is_bot=True,
                                   chat_id=session_id,
