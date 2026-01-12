@@ -243,7 +243,7 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
                                             key={dimension.field}
                                             className="flex items-center gap-2 p-2 rounded hover:bg-accent/30 cursor-move transition-colors"
                                             draggable
-                                            onDragStart={(e) => handleDragStart(e, dimension, 'dimension')}
+                                            onDragStart={(e) => handleDragStart(e, field, 'dimension')}
                                             onClick={(e) => { e.stopPropagation(); onFieldClick?.(field) }}
                                         >
                                             {getFieldTypeIcon(field.fieldType)}
@@ -284,7 +284,7 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
                                             key={index}
                                             className="flex items-center gap-2 p-2 rounded hover:bg-accent/30 cursor-move transition-colors"
                                             draggable
-                                            onDragStart={(e) => handleDragStart(e, metric, 'metric')}
+                                            onDragStart={(e) => handleDragStart(e, field, 'metric')}
                                             onClick={(e) => {
                                                 e.stopPropagation()
                                                 onFieldClick?.(field)
