@@ -35,7 +35,7 @@ export function useChartState(initialComponent: any) {
     setStyleConfigState(newConfig);
 
   }, [initialComponent, updateEditingComponent, refreshChart]);
-  
+
   // 初始化逻辑
   useEffect(() => {
     const componentId = initialComponent?.id
@@ -262,6 +262,7 @@ export function useChartState(initialComponent: any) {
         setDragOverSection(null)
         return
       }
+      console.log(data, 888);
 
       const fieldId = data.id || data.name || `field_${Date.now()}`
       const name = data.name || data.displayName || fieldId
@@ -346,11 +347,11 @@ export function useChartState(initialComponent: any) {
     setSortPriorityOrder(newOrder)
     setDraggingId(null)
   }, [draggingId, sortPriorityOrder])
-  
+
   const handleAddFilter = useCallback(() => {
     setFilterGroup({
       logic: 'and',
-      conditions: [{ 
+      conditions: [{
         id: generateUUID(6),
         fieldId: '',
         fieldCode: '',
@@ -396,27 +397,27 @@ export function useChartState(initialComponent: any) {
       isVirtual: false,
       aggregation: metric.aggregation || 'sum',
       numberFormat: metric.numberFormat || {
-          type: 'number' as const, 
-          decimalPlaces: 2, 
-          unit: undefined, 
-          suffix: undefined, 
-          thousandSeparator: true 
-        }
+        type: 'number' as const,
+        decimalPlaces: 2,
+        unit: undefined,
+        suffix: undefined,
+        thousandSeparator: true
+      }
     }))
-    
+
     // 4. 构建字段顺序 - 按照 sortPriorityOrder 排序
     const allFields = [
-      ...categoryDimensions.map(d => ({ 
-        ...d, 
-        type: 'dimension' as const 
+      ...categoryDimensions.map(d => ({
+        ...d,
+        type: 'dimension' as const
       })),
-      ...stackDimensions.map(d => ({ 
-        ...d, 
-        type: 'stack_dimension' as const 
+      ...stackDimensions.map(d => ({
+        ...d,
+        type: 'stack_dimension' as const
       })),
-      ...valueDimensions.map(m => ({ 
-        ...m, 
-        type: 'metric' as const 
+      ...valueDimensions.map(m => ({
+        ...m,
+        type: 'metric' as const
       }))
     ]
 
@@ -424,16 +425,16 @@ export function useChartState(initialComponent: any) {
     const sortedFields = [...allFields].sort((a, b) => {
       const indexA = sortPriorityOrder.indexOf(a.id)
       const indexB = sortPriorityOrder.indexOf(b.id)
-      
+
       // 如果都在排序列表中，按照列表顺序排序
       if (indexA !== -1 && indexB !== -1) {
         return indexA - indexB
       }
-      
+
       // 如果有一个不在列表中，不在列表的排在后面
       if (indexA === -1 && indexB !== -1) return 1
       if (indexA !== -1 && indexB === -1) return -1
-      
+
       // 都不在列表中，保持原有顺序
       return 0
     })
@@ -443,10 +444,10 @@ export function useChartState(initialComponent: any) {
       fieldId: field.fieldId,
       fieldType: field.type
     }))
-    
+
     // 5. 构建筛选条件
     const filters = filterGroup ? filterGroup.conditions.map((condition, index) => {
-      console.log(condition,8989999)
+      console.log(condition, 8989999)
       return {
         id: condition.id || `filter_${Date.now()}_${index}`, // 确保有 fieldId
         fieldId: condition.fieldCode || '',

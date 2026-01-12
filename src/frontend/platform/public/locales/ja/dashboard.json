@@ -97,6 +97,16 @@
       "value": "メトリックエリア"
     }
   },
+  "validation": {
+  "validationFailed": "検証に失敗しました",
+  "chartTypeRequired": "グラフタイプを選択してください",
+  "categoryRequired": "少なくとも1つのカテゴリーディメンションを追加してください",
+  "metricRequired": "少なくとも1つのメトリックを追加してください",
+  "datasetRequired": "データセットを選択してください",
+  "stackRequired": "積み上げグラフにはスタックディメンションが必要です",
+  "invalidCategoryFields": "カテゴリーディメンションに無効なフィールドがあります",
+  "invalidMetricFields": "メトリックに無効なフィールドがあります"
+},
   "configPanel": {
     "title": "ダッシュボード設定",
     "dashboardStyle": "ダッシュボードスタイル",
@@ -156,6 +166,7 @@
     },
     "dialog": {
       "formatTitle": "数値フォーマット",
+      "chartUpdated": "グラフが更新されました",
       "formatType": "フォーマットタイプ",
       "decimalPlaces": "小数位数",
       "unit": "単位",
@@ -216,7 +227,9 @@
       "atLeastOneCondition": "有効なフィルター条件を少なくとも1つ設定してください"
     },
     "toast": {
-      "fetchEnumFailed": "列挙値の取得に失敗しました。後で再試行してください"
+      "fetchEnumFailed": "列挙値の取得に失敗しました。後で再試行してください",
+      "virtualMetricConflict": "仮想メトリックと通常のメトリックを同時に追加することはできません",
+      "multipleVirtualMetric": "複数の仮想メトリックを同時に追加することはできません"
     },
     "enumSelect": {
       "placeholder": "選択してください",

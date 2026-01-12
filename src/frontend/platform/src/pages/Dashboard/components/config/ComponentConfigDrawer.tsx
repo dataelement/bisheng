@@ -22,6 +22,7 @@ import { DimensionBlock } from "./DimensionBlock"
 import { FilterConditionDialog } from "./FilterConditionDialog"
 import { StyleConfigPanel } from "./StyleConfigPanel"
 import { useChartState } from "./useChartState"
+import { generateUUID } from "@/components/bs-ui/utils"
 
 // 图表类型选项
 export const CHART_TYPES: {
@@ -403,7 +404,7 @@ export function ComponentConfigDrawer() {
     refreshChart(editingComponent.id)
 
     toast({
-      description: t("componentConfigDrawer.toast.chartUpdated"),
+      description: t("componentConfigDrawer.dialog.chartUpdated"),
       variant: "success"
     })
   }, [
