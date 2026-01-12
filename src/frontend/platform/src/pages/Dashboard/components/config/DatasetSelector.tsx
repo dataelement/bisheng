@@ -16,6 +16,7 @@ export interface DatasetField {
     role: "dimension" | "metric"
     enumValues?: string[]
     isVirtual?: boolean
+    timeGranularity?: string
 }
 
 interface DatasetSelectorProps {
@@ -83,7 +84,6 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
 
     // 处理拖拽开始
     const handleDragStart = (e: React.DragEvent, data: any, fieldType: 'dimension' | 'metric') => {
-
         e.dataTransfer.effectAllowed = 'copy'
         const dragData = {
             id: data.fieldCode,
@@ -91,8 +91,10 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
             displayName: data.displayName,
             fieldId: data.fieldId,
             fieldCode: data.fieldCode,
-            fieldType
+            fieldType,
+            timeGranularity: data.timeGranularity,
         }
+
         e.dataTransfer.setData('application/json', JSON.stringify(dragData))
         if (onDragStart) {
             onDragStart(e, dragData)
@@ -208,6 +210,7 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
                                                 displayName,
                                                 fieldType: "date",
                                                 role: "dimension",
+                                                timeGranularity: g,
                                             }
                                             return (
                                                 <div

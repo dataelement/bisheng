@@ -484,6 +484,7 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
   };
 
   const handleSave = async () => {
+
     const sanitizeIds = (arr: any[]) => (arr || []).filter(Boolean);
     if (!form.name.length || form.name.length > 50) {
       return setErrorData({ title: t('prompt'), list: [t('system.roleNameRequired'), t('system.roleNamePrompt')] });
@@ -491,12 +492,19 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
     if (onBeforeChange(form.name)) {
       return setErrorData({ title: t('prompt'), list: [t('system.roleNameExists')] });
     }
-
+    const menuSet = new Set(form.useMenu);
     // 检查是否至少有一个空间权限被选中
     if (!spacePermissions.workspace && !spacePermissions.admin) {
       return setErrorData({ title: t('prompt'), list: [t('system.atLeastOneSpaceRequired')] });
     }
+    if (spacePermissions.workspace) menuSet.add(MenuType.FRONTEND);
+    else menuSet.delete(MenuType.FRONTEND);
 
+    if (spacePermissions.admin) menuSet.add(MenuType.BACKEND);
+    else menuSet.delete(MenuType.BACKEND);
+
+    if (form.allowCreateBoard) menuSet.add(MenuType.CREATE_DASHBOARD);
+    else menuSet.delete(MenuType.CREATE_DASHBOARD);
     let roleIdLocal = id;
     if (id === -1) {
       const res = await captureAndAlertRequestErrorHoc(createRole(groupId, form.name));
@@ -505,7 +513,7 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
       await captureAndAlertRequestErrorHoc(updateRoleNameApi(roleIdLocal, form.name));
     }
 
-    const menuPermissionsToSave = form.useMenu;
+    const menuPermissionsToSave = Array.from(menuSet);
 
     await Promise.all([
       updateRolePermissionsApi({ role_id: roleIdLocal, access_id: form.useSkills as any, type: 2 as any }),

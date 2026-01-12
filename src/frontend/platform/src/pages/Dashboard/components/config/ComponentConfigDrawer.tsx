@@ -132,6 +132,7 @@ export function ComponentConfigDrawer() {
           displayName: field.displayName || field.fieldName,
           originalName: field.displayName || field.fieldName,
           fieldType: field.role,
+          timeGranularity: field.timeGranularity,
           sort: null
         }
         chartState.setCategoryDimensions(prev => [...prev, newDimension])
@@ -151,6 +152,7 @@ export function ComponentConfigDrawer() {
           displayName: field.displayName || field.fieldName,
           originalName: field.displayName || field.fieldName,
           fieldType: field.role,
+          timeGranularity: field.timeGranularity,
           sort: null
         }
         chartState.setStackDimensions(prev => [...prev, newDimension])
@@ -192,7 +194,7 @@ export function ComponentConfigDrawer() {
           return
         }
 
-        // 🚫 多个虚拟指标
+        // 多个虚拟指标
         if (currentIsVirtual && hasVirtualMetric) {
           toast({
             description: t("componentConfigDrawer.toast.multipleVirtualMetric"),

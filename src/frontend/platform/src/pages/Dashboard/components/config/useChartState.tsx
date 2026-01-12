@@ -73,7 +73,8 @@ export function useChartState(initialComponent: any) {
             name: dim.fieldCode,
             displayName: dim.displayName || dim.fieldName,
             originalName: dim.fieldName,
-            sort: dim.sort || 'none',
+            sort: dim.sort || null,
+            timeGranularity: dim.timeGranularity || null,
             sortPriority: 0,
             fieldType: 'dimension'
           }))
@@ -90,6 +91,7 @@ export function useChartState(initialComponent: any) {
             displayName: dc.stackDimension.displayName || dc.stackDimension.fieldName,
             originalName: dc.stackDimension.fieldName,
             sort: dc.stackDimension.sort || null,
+            timeGranularity: dc.timeGranularity || null,
             sortPriority: 0,
             fieldType: 'dimension'
           }
@@ -298,6 +300,7 @@ export function useChartState(initialComponent: any) {
         originalName,
         sort: null,
         sortPriority: 0,
+        timeGranularity: data.timeGranularity,
         fieldType
       }
 
@@ -388,7 +391,7 @@ export function useChartState(initialComponent: any) {
       fieldCode: dim.name,
       displayName: dim.displayName,
       sort: dim.sort,
-      timeGranularity: null
+      timeGranularity: dim.timeGranularity || null
     }))
 
     const stackDimension = stackDimensions.length > 0 ? {
@@ -397,7 +400,7 @@ export function useChartState(initialComponent: any) {
       fieldCode: stackDimensions[0].name,
       displayName: stackDimensions[0].displayName,
       sort: stackDimensions[0].sort,
-      timeGranularity: null
+      timeGranularity: stackDimensions[0].timeGranularity || null
     } : undefined
 
     const metrics = valueDimensions.map(metric => ({
