@@ -101,7 +101,6 @@ const SearchPanne = ({
         page_num: page,
         page_size: pageSize
       };
-      console.log(type, 7877);
 
       switch (type) {
         case 'flow':
@@ -352,7 +351,7 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
 
   const [form, setForm] = useState({
     name,
-    useSkills: [], useLibs: [], useAssistant: [], useFlows: [], useTools: [], useMenu: [MenuType.BUILD, MenuType.KNOWLEDGE, MenuType.MODEL, MenuType.EVALUATION, MenuType.BOARD],
+    useSkills: [], useLibs: [], useAssistant: [], useFlows: [], useTools: [], useMenu: [MenuType.BUILD, MenuType.KNOWLEDGE, MenuType.MODEL, MenuType.EVALUATION],
     manageLibs: [], manageAssistants: [], manageSkills: [], manageFlows: [], manageTools: [], useBoards: [], manageBoards: [],
     allowCreateBoard: false,
   });
@@ -521,33 +520,48 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
       {/* 空间授权 - 完全独立于菜单权限 */}
       <div className="mt-10">
         <div className="items-center relative">
-          <p className="text-xl font-bold">{t('空间授权')}</p>
-          <p className="text-sm text-[#8F959E]">{t('选择该角色可以访问的空间')}</p>
+          <p className="text-xl font-bold">{t('system.spaceAuthorization')}</p>
+          <p className="text-sm text-[#8F959E]">
+            {t('system.spaceAuthorizationDesc')}
+          </p>
         </div>
+
         <div className="w-full">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>{t('空间名称')}</TableHead>
-                <TableHead className="text-right w-[75px]">{t('system.viewPermission')}</TableHead>
+                <TableHead>{t('system.spaceName')}</TableHead>
+                <TableHead className="text-right w-[75px]">
+                  {t('system.viewPermission')}
+                </TableHead>
               </TableRow>
             </TableHeader>
+
             <TableBody>
               <TableRow>
-                <TableCell className="font-medium">{t('工作台')}</TableCell>
+                <TableCell className="font-medium">
+                  {t('system.workspace')}
+                </TableCell>
                 <TableCell className="text-center">
                   <Switch
                     checked={spacePermissions.workspace}
-                    onCheckedChange={(bln) => handleSpacePermissionChange('workspace', bln)}
+                    onCheckedChange={(bln) =>
+                      handleSpacePermissionChange('workspace', bln)
+                    }
                   />
                 </TableCell>
               </TableRow>
+
               <TableRow>
-                <TableCell className="font-medium">{t('管理后台')}</TableCell>
+                <TableCell className="font-medium">
+                  {t('system.adminSpace')}
+                </TableCell>
                 <TableCell className="text-center">
                   <Switch
                     checked={spacePermissions.admin}
-                    onCheckedChange={(bln) => handleSpacePermissionChange('admin', bln)}
+                    onCheckedChange={(bln) =>
+                      handleSpacePermissionChange('admin', bln)
+                    }
                   />
                 </TableCell>
               </TableRow>
@@ -555,6 +569,7 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
           </Table>
         </div>
       </div>
+
 
       {/* 权限 Tabs */}
       <div className="flex gap-6 border-b mt-10">
