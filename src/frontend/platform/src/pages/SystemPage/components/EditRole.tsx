@@ -351,7 +351,7 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
 
   const [form, setForm] = useState({
     name,
-    useSkills: [], useLibs: [], useAssistant: [], useFlows: [], useTools: [], useMenu: [MenuType.BUILD, MenuType.KNOWLEDGE, MenuType.MODEL, MenuType.EVALUATION],
+    useSkills: [], useLibs: [], useAssistant: [], useFlows: [], useTools: [], useMenu: [MenuType.BUILD, MenuType.KNOWLEDGE],
     manageLibs: [], manageAssistants: [], manageSkills: [], manageFlows: [], manageTools: [], useBoards: [], manageBoards: [],
     allowCreateBoard: false,
   });
