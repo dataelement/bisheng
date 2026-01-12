@@ -3,6 +3,7 @@ import json
 from datetime import datetime
 from typing import List, Any, Dict, Optional
 
+from bisheng.telemetry_search.domain.services.dashboard import DashboardService
 from fastapi import Request, HTTPException
 from fastapi.encoders import jsonable_encoder
 from loguru import logger
@@ -22,7 +23,6 @@ from bisheng.database.models.group_resource import GroupResourceDao, ResourceTyp
 from bisheng.database.models.role import RoleDao
 from bisheng.database.models.user_group import UserGroupCreate, UserGroupDao, UserGroupRead
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
-from bisheng.telemetry_search.domain.services.dashboard import DashboardService
 from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
 from bisheng.user.domain.models.user import User, UserDao
 from bisheng.user.domain.models.user_role import UserRoleDao
@@ -363,7 +363,8 @@ class RoleGroupService():
 
         user_map = await self.aget_user_map(set([one.user_id for one in data]))
         for one in data:
-            one_dict = one.model_dump()
+            one_dict = one.model_dump(exclude={"layout_config", "style_config"})
+            one_dict["name"] = one.title
             one_dict["user_name"] = user_map.get(one.user_id, one.user_id)
             res.append(one_dict)
         return res, len(res)
