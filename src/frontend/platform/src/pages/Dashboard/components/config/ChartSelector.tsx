@@ -49,23 +49,23 @@ export default function ChartSelector({
   // 从 store 获取当前 dashboard 和组件
   const { currentDashboard } = useEditorDashboardStore()
   const { editingComponent } = useComponentEditorStore()
-  
+
   useEffect(() => {
     const config = editingComponent?.data_config
-    
+
     if (config && 'linkedComponentIds' in config) {
       setSelectedCharts(config.linkedComponentIds || [])
-      
+
       if (config.queryConditions) {
         const queryCond = config.queryConditions
-        
+
         if (queryCond.displayType) {
-          const displayTypeValue = queryCond.displayType === "single" 
+          const displayTypeValue = queryCond.displayType === "single"
             ? t("chartSelector.displayTypes.time", "时间")
             : t("chartSelector.displayTypes.timeRange", "时间范围")
           setDisplayType(displayTypeValue)
         }
-        
+
         // 映射时间粒度
         if (queryCond.timeGranularity) {
           let timeGranularityValue = t("chartSelector.granularities.yearMonthDay", "年月日")
@@ -76,18 +76,18 @@ export default function ChartSelector({
           }
           setTimeGranularity(timeGranularityValue)
         }
-        
+
         // 设置默认值
         if (queryCond.hasDefaultValue !== undefined) {
           setIsDefault(queryCond.hasDefaultValue)
         }
-        
+
         // 处理时间范围
         if (queryCond.hasDefaultValue && queryCond.defaultValue?.type === 'custom') {
           try {
             const startTime = queryCond.defaultValue.startDate
             const endTime = queryCond.defaultValue.endDate
-            
+
             if (startTime && endTime) {
               setTimeFilter({
                 startTime: Math.floor(startTime / 1000),
@@ -112,19 +112,18 @@ export default function ChartSelector({
       setTimeFilter(null)
     }
   }, [editingComponent, t])
-  
+
   // 获取所有非查询类型的图表组件
-  const charts = currentDashboard 
+  const charts = currentDashboard
     ? currentDashboard.components
-        .filter(component => 
-          component.type !== 'query' && 
-          component.type !== 'metric'
-        )
-        .map(component => ({
-          id: component.id,
-          name: component.title || t("chartSelector.unnamedChart"),
-          dataset: component.dataset_code || t("chartSelector.noDataset")
-        }))
+      .filter(component =>
+        component.type !== 'query'
+      )
+      .map(component => ({
+        id: component.id,
+        name: component.title || t("chartSelector.unnamedChart"),
+        dataset: component.dataset_code || t("chartSelector.noDataset")
+      }))
     : []
 
   // 获取当前编辑的组件名称
@@ -147,23 +146,23 @@ export default function ChartSelector({
       setSelectedCharts(allChartIds)
     }
   }
-  
+
   /* 保存 */
   const handleSave = () => {
     let finalStartDate = ""
     let finalEndDate = ""
-    
+
     if (timeFilter && timeFilter.startTime) {
       // 将时间戳转换为日期字符串
       const startDateObj = new Date(timeFilter.startTime * 1000)
       const endDateObj = new Date(timeFilter.endTime * 1000)
-      
+
       // 根据时间粒度格式化
       const year = startDateObj.getFullYear()
       const month = String(startDateObj.getMonth() + 1).padStart(2, '0')
       const day = String(startDateObj.getDate()).padStart(2, '0')
       const hour = String(startDateObj.getHours()).padStart(2, '0')
-      
+
       if (timeGranularity === t("chartSelector.granularities.yearMonth")) {
         finalStartDate = `${year}-${month}`
         finalEndDate = `${year}-${month}`
@@ -172,7 +171,7 @@ export default function ChartSelector({
         const endMonth = String(endDateObj.getMonth() + 1).padStart(2, '0')
         const endDay = String(endDateObj.getDate()).padStart(2, '0')
         const endHour = String(endDateObj.getHours()).padStart(2, '0')
-        
+
         if (displayType === t("chartSelector.displayTypes.time")) {
           // 时间点模式
           finalStartDate = `${year}-${month}-${day} ${hour}:00`
@@ -193,13 +192,13 @@ export default function ChartSelector({
           const endYear = endDateObj.getFullYear()
           const endMonth = String(endDateObj.getMonth() + 1).padStart(2, '0')
           const endDay = String(endDateObj.getDate()).padStart(2, '0')
-          
+
           finalStartDate = `${year}-${month}-${day}`
           finalEndDate = `${endYear}-${endMonth}-${endDay}`
         }
       }
     }
-    
+
     const config: ChartLinkConfig = {
       chartIds: selectedCharts,
       displayType,
@@ -210,7 +209,7 @@ export default function ChartSelector({
         end: finalEndDate
       }
     }
-    
+
     toast({
       variant: 'success',
       description: t("chartSelector.messages.saveSuccess"),
@@ -239,8 +238,8 @@ export default function ChartSelector({
   if (collapsed) {
     return (
       <div className="border-r flex flex-col h-full w-12 shrink-0">
-        <div className="h-full flex flex-col items-center justify-center cursor-pointer hover:bg-accent/50 transition-colors" 
-             onClick={() => setCollapsed(false)}>
+        <div className="h-full flex flex-col items-center justify-center cursor-pointer hover:bg-accent/50 transition-colors"
+          onClick={() => setCollapsed(false)}>
           <div className="writing-mode-vertical text-sm font-medium py-4">
             {t("chartSelector.messages.collapse")}
           </div>
@@ -270,7 +269,7 @@ export default function ChartSelector({
         {/* 图表列表 */}
         <div className="max-h-64 overflow-y-auto space-y-2">
           <div>{t("chartSelector.selectCharts")}</div>
-          
+
           {/* 全选 */}
           <div className="flex items-center gap-2">
             <Checkbox
@@ -306,15 +305,15 @@ export default function ChartSelector({
             </div>
           )}
         </div>
-        
+
         <div className="h-px bg-muted"></div>
-        
+
         {/* 配置区 */}
         <div className="space-y-3">
           <div className="text-md font-medium">
             {t("chartSelector.config")}
           </div>
-          
+
           {/* 展示类型 */}
           <div className="space-y-1">
             <label className="text-sm">
