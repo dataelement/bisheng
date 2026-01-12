@@ -24,27 +24,6 @@ import { StyleConfigPanel } from "./StyleConfigPanel"
 import { useChartState } from "./useChartState"
 import { generateUUID } from "@/components/bs-ui/utils"
 
-// 图表类型选项
-export const CHART_TYPES: {
-  label: string;
-  value: ChartType;
-  hasStack: boolean;
-}[] = [
-    { label: "基础柱状图", value: ChartType.Bar, hasStack: false },
-    { label: "堆叠柱状图", value: ChartType.StackedBar, hasStack: true },
-    { label: "组合柱状图", value: ChartType.GroupedBar, hasStack: false },
-    { label: "基础条形图", value: ChartType.HorizontalBar, hasStack: false },
-    { label: "堆叠条形图", value: ChartType.StackedHorizontalBar, hasStack: true },
-    { label: "组合条形图", value: ChartType.GroupedHorizontalBar, hasStack: false },
-    { label: "分组条形图", value: ChartType.GroupedHorizontalBar, hasStack: false },
-    { label: "基础折线图", value: ChartType.Line, hasStack: false },
-    { label: "堆叠折线图", value: ChartType.StackedLine, hasStack: true },
-    { label: "基础面积图", value: ChartType.Area, hasStack: false },
-    { label: "堆叠面积图", value: ChartType.StackedArea, hasStack: true },
-    { label: "饼状图", value: ChartType.Pie, hasStack: false },
-    { label: "环状图", value: ChartType.Donut, hasStack: false },
-    { label: "指标卡", value: ChartType.Metric, hasStack: false },
-  ];
 
 export function ComponentConfigDrawer() {
   const { t } = useTranslation("dashboard")
