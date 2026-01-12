@@ -10,6 +10,7 @@ import { ChartContainer } from "../charts/ChartContainer"
 import { QueryFilter } from "../charts/QueryFilter"
 import "./index.css"
 import { cn } from "@/utils"
+import { useTranslation } from "react-i18next"
 
 interface ComponentWrapperProps {
     component: DashboardComponent
@@ -26,6 +27,8 @@ export function ComponentWrapper({
     dashboards, component, isPreviewMode, isDark,
     onDuplicate, onCopyTo, onDelete
 }: ComponentWrapperProps) {
+    const { t } = useTranslation("dashboard")
+
     const [isHovered, setIsHovered] = useState(false)
     const [isEditing, setIsEditing] = useState(false)
     const inputRef = useRef<HTMLInputElement>(null)
@@ -60,7 +63,7 @@ export function ComponentWrapper({
         if (!trimmedTitle) {
             setTitle(component.title)
             toast({
-                description: "名称不能为空",
+                description: t('nameRequired'),
                 variant: "error",
             })
             return
@@ -69,7 +72,7 @@ export function ComponentWrapper({
         if (trimmedTitle.length < 1 || trimmedTitle.length > 200) {
             setTitle(component.title)
             toast({
-                description: "字数范围 1-200 字",
+                description: t('charLimit200'),
                 variant: "error",
             })
             return
@@ -128,7 +131,7 @@ export function ComponentWrapper({
                                         onDuplicate(componentData)
                                     }}>
                                         <Copy className="h-4 w-4 mr-2" />
-                                        复制
+                                        {t('duplicate')}
                                     </DropdownMenuItem>
                                     <DropdownMenuItem
                                         variant="destructive"
@@ -138,7 +141,7 @@ export function ComponentWrapper({
                                         }}
                                     >
                                         <Trash2 className="h-4 w-4 mr-2" />
-                                        删除
+                                        {t('delete')}
                                     </DropdownMenuItem>
                                 </>
                             ) : (
@@ -149,23 +152,23 @@ export function ComponentWrapper({
                                         setIsEditing(true)
                                     }}>
                                         <Edit3 className="h-4 w-4 mr-2" />
-                                        重命名
+                                        {t('rename')}
                                     </DropdownMenuItem>
                                     <DropdownMenuItem onClick={(e) => {
                                         e.stopPropagation()
                                         onDuplicate(componentData)
                                     }}>
                                         <Copy className="h-4 w-4 mr-2" />
-                                        复制
+                                        {t('duplicate')}
                                     </DropdownMenuItem>
                                     <DropdownMenuSub>
                                         <DropdownMenuSubTrigger onClick={(e) => e.stopPropagation()}>
                                             <Copy className="h-4 w-4 mr-2" />
-                                            复制到
+                                            {t('copyTo')}
                                         </DropdownMenuSubTrigger>
                                         <DropdownMenuSubContent onClick={(e) => e.stopPropagation()}>
                                             {dashboards.length === 0 ? (
-                                                <div className="px-2 py-1.5 text-sm text-muted-foreground">暂无其他看板</div>
+                                                <div className="px-2 py-1.5 text-sm text-muted-foreground">{t('noOtherDashboards')}</div>
                                             ) : (
                                                 dashboards
                                                     .filter(d => d.id !== component.dashboard_id && d.status === 'draft' && d.write)
@@ -191,7 +194,7 @@ export function ComponentWrapper({
                                         }}
                                     >
                                         <Trash2 className="h-4 w-4 mr-2" />
-                                        删除
+                                        {t('delete')}
                                     </DropdownMenuItem>
                                 </>
                             )}

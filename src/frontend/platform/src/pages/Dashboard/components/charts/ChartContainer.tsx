@@ -8,6 +8,7 @@ import { useEffect } from 'react'
 import { useQuery } from 'react-query'
 import { BaseChart } from './BaseChart'
 import { MetricCard } from './MetricCard'
+import { useTranslation } from 'react-i18next'
 
 interface ChartContainerProps {
   isDark: boolean;
@@ -16,6 +17,8 @@ interface ChartContainerProps {
 }
 
 export function ChartContainer({ isPreviewMode, isDark, component }: ChartContainerProps) {
+  const { t } = useTranslation("dashboard")
+
   const chartRefreshTriggers = useEditorDashboardStore(state => state.chartRefreshTriggers)
   const currentDashboard = useEditorDashboardStore(state => state.currentDashboard)
   const refreshInfo = chartRefreshTriggers[component.id]
@@ -57,7 +60,7 @@ export function ChartContainer({ isPreviewMode, isDark, component }: ChartContai
         <div className="relative z-10 bg-white px-6 py-2 rounded-md backdrop-blur-sm">
           <div className="flex items-center gap-3">
             <span className="text-[#8da9ff] font-medium text-lg tracking-wider animate-pulse">
-              图表更新中
+              {t('updatingCharts')}
             </span>
           </div>
         </div>
@@ -82,7 +85,7 @@ export function ChartContainer({ isPreviewMode, isDark, component }: ChartContai
       <div className="flex items-center justify-center h-full relative">
         <img src={`${__APP_ENV__.BASE_URL}/assets/dashboard/ept-${component.type}.png`} className="w-full max-w-60" />
         <div className='flex size-full absolute justify-center items-center'>
-          <span className="text-sm bg-gray-50/80 px-2 py-1 text-primary">当前图表无数据</span>
+          <span className="text-sm bg-gray-50/80 px-2 py-1 text-primary">{t('noDataInChart')}</span>
         </div>
       </div>
     );

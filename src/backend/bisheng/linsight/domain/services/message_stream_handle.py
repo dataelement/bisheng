@@ -1,6 +1,6 @@
 from starlette.websockets import WebSocket
 
-from bisheng.linsight.state_message_manager import LinsightStateMessageManager, MessageData, MessageEventType
+from bisheng.linsight.domain.services.state_message_manager import LinsightStateMessageManager, MessageData, MessageEventType
 
 
 class MessageStreamHandle(object):

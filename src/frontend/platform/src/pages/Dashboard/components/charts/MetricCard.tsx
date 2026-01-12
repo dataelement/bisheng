@@ -72,8 +72,8 @@ export const unitConversion = (value, dataConfig) => {
 
 export function MetricCard({ data, dataConfig, styleConfig }: MetricCardProps) {
 
-  const indicatorName = styleConfig.title || '指标名称'
-  const subTitle = styleConfig.subtitle || '副标题'
+  const indicatorName = styleConfig.title
+  const subTitle = styleConfig.subtitle
 
   // format
   const [formatValue, displayUnit] = useMemo(() => unitConversion(data.value, dataConfig), [dataConfig, data]);

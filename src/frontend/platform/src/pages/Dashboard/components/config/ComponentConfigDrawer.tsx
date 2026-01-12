@@ -4,24 +4,24 @@
 import { Button } from "@/components/bs-ui/button"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog"
 import { Input } from "@/components/bs-ui/input"
-import { ChevronDown, ChevronLeft, ChevronRight, GripVertical, Plus, X } from "lucide-react"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { ChevronDown, ChevronLeft, ChevronRight, GripVertical, X } from "lucide-react"
+import { useCallback, useMemo, useState } from "react"
 
+import { Label } from "@/components/bs-ui/label"
+import { RadioGroup, RadioGroupItem } from "@/components/bs-ui/radio"
+import { useToast } from "@/components/bs-ui/toast/use-toast"
 import { useComponentEditorStore, useEditorDashboardStore } from "@/store/dashboardStore"
-import { ChartType, ComponentStyleConfig, DataConfig, QueryConfig } from "../../types/dataConfig"
-import { DatasetField, DatasetSelector } from "./DatasetSelector"
-import { StyleConfigPanel } from "./StyleConfigPanel"
-import { DimensionBlock } from "./DimensionBlock"
-import { FilterConditionDialog } from "./FilterConditionDialog"
+import { useTranslation } from "react-i18next"
+import { ChartType, QueryConfig } from "../../types/dataConfig"
+import { AdvancedDatePicker } from "../AdvancedDatePicker"
+import ComponentPicker, { ChartGroupItems } from "../editor/ComponentPicker"
 import ChartSelector from "./ChartSelector"
 import { DashboardConfigPanel } from "./DashboardConfigPanel"
-import { AdvancedDatePicker } from "../AdvancedDatePicker"
+import { DatasetField, DatasetSelector } from "./DatasetSelector"
+import { DimensionBlock } from "./DimensionBlock"
+import { FilterConditionDialog } from "./FilterConditionDialog"
+import { StyleConfigPanel } from "./StyleConfigPanel"
 import { useChartState } from "./useChartState"
-import { useToast } from "@/components/bs-ui/toast/use-toast"
-import ComponentPicker, { ChartGroupItems, ChartItems } from "../editor/ComponentPicker"
-import { RadioGroup, RadioGroupItem } from "@/components/bs-ui/radio"
-import { Label } from "@/components/bs-ui/label"
-import { useTranslation } from "react-i18next"
 
 // 图表类型选项
 export const CHART_TYPES: {
@@ -574,7 +574,7 @@ export function ComponentConfigDrawer() {
                       {
                         editingComponent.type !== 'metric' && (
                           <>
-                            {/* 图表类型 */}
+                            {/* chart type */}
                             <FormBlock label={t("componentConfigDrawer.chartType")} required>
                               <ComponentPicker onSelect={(data) => handleChartTypeChange(data.type)} maxHeight={500}>
                                 <div className="relative w-full group">
@@ -582,12 +582,12 @@ export function ComponentConfigDrawer() {
                                     {/* 文本区域 */}
                                     <div className="flex-1">
                                       <span className="truncate text-gray-700">
-                                        {ChartGroupItems
+                                        {t(`chart.${ChartGroupItems
                                           .flatMap(item => item.data)
-                                          .find(item => item.type === chartType)?.label || t("componentConfigDrawer.selectChartType")}
+                                          .find(item => item.type === chartType)?.label}`) || t("componentConfigDrawer.selectChartType")}
                                       </span>
                                     </div>
-                                    {/* ChevronDown 图标 */}
+                                    {/* ChevronDown */}
                                     <ChevronDown className="h-4 w-4 text-gray-500 flex-shrink-0" />
                                   </div>
                                 </div>

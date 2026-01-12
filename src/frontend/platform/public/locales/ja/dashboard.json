@@ -1,22 +1,22 @@
 {
-     "chartSelector": {
+  "chartSelector": {
     "title": "関連グラフ設定",
     "componentName": "コンポーネント: {{componentName}}",
-    
+
     "selectCharts": "関連グラフを選択",
     "selectAll": "すべて選択",
     "unnamedChart": "無名グラフ",
     "noDataset": "データセット未設定",
-    
+
     "config": "クエリ条件設定",
     "displayType": "表示タイプ",
     "displayTypes": {
       "timeRange": "時間範囲",
       "time": "時間"
     },
-      "dashboard": {
- 
-  },
+    "dashboard": {
+
+    },
     "timeGranularity": "時間粒度",
     "granularities": {
       "yearMonth": "年月",
@@ -29,12 +29,12 @@
       "single": "時間",
       "range": "時間範囲"
     },
-    
+
     "buttons": {
       "cancel": "キャンセル",
       "save": "保存"
     },
-    
+
     "messages": {
       "saveSuccess": "関連グラフ設定を保存しました",
       "noCharts": "関連可能なグラフがありません",
@@ -46,33 +46,33 @@
     "customStyle": "カスタムスタイル",
     "basicConfigTab": "基本設定",
     "styleConfigTab": "カスタムスタイル",
-    
+
     "chartType": "グラフタイプ",
     "selectChartType": "グラフタイプを選択",
-    
+
     "categoryAxis": "カテゴリ軸 / ディメンション",
     "stackItem": "積み上げ項目 / ディメンション",
     "valueAxis": "値軸 / メトリック",
-    
+
     "sortPriority": "ソート優先順位",
     "sortHint": "ディメンションまたはメトリックを追加してソート優先順位を調整",
-    
+
     "filter": "フィルター",
     "addFilterCondition": "フィルター条件を追加",
     "filterConditionsAdded": "フィルター条件 {{count}} 個を追加",
     "filterLogicHint": " ({{logic}})",
-    
+
     "timeRange": "時間範囲",
     "selectTimeRange": "時間範囲を選択",
-    
+
     "resultsDisplay": "結果表示",
     "allResults": "すべて",
     "limitResults": "件",
-    
+
     "updateChartData": "グラフデータを更新",
-    
+
     "dataSelection": "データ選択",
-    
+
     "dialog": {
       "editDisplayName": "表示名を編集",
       "originalName": "元の名前",
@@ -82,7 +82,7 @@
       "cancel": "キャンセル",
       "confirm": "確認"
     },
-    
+
     "toast": {
       "fieldAlreadyExists": "フィールドは既に{{section}}に存在します",
       "dimensionLimitReached": "ディメンションの上限に達しました",
@@ -90,19 +90,19 @@
       "virtualMetricConflict": "仮想指標と通常の指標を同時に追加することはできません",
       "multipleVirtualMetric": "複数の仮想指標を同時に追加することはできません"
     },
-    
+
     "sections": {
       "category": "カテゴリ軸",
       "stack": "積み上げ項目",
       "value": "メトリックエリア"
     }
   },
-"configPanel": {
-      "title": "ダッシュボード設定",
-      "dashboardStyle": "ダッシュボードスタイル",
-      "lightTheme": "ライトテーマ",
-      "darkTheme": "ダークテーマ"
-    },
+  "configPanel": {
+    "title": "ダッシュボード設定",
+    "dashboardStyle": "ダッシュボードスタイル",
+    "lightTheme": "ライトテーマ",
+    "darkTheme": "ダークテーマ"
+  },
   "datasetSelector": {
     "dataset": "データセット",
     "selectDataset": "データセットを選択",
@@ -113,13 +113,13 @@
     "metrics": "メトリック",
     "virtualMetric": "*",
     "selectDatasetPrompt": "まずデータセットを選択してください",
-    
+
     "fieldTypes": {
       "date": "日付",
       "integer": "整数",
       "keyword": "テキスト"
     },
-    
+
     "timeGranularity": {
       "year": "年",
       "quarter": "四半期",
@@ -128,8 +128,8 @@
       "day": "日",
       "hour": "時"
     }
-},
-"dimensionBlock": {
+  },
+  "dimensionBlock": {
     "menu": {
       "sort": "ソート",
       "aggregation": "集計方法",
@@ -288,5 +288,98 @@
       "maxStackDimension": "スタックディメンションは1つだけ許可されます。既存のスタックディメンションを先に削除してください",
       "maxCategoryDimensions": "カテゴリーディメンションは最大2つまで許可されます"
     }
+  },
+  "renameSuccess": "名前を変更しました",
+  "renameError": "名前の変更に失敗しました",
+  "shareNotPublished": "このダッシュボードはまだ公開されていません",
+  "shareCopySuccess": "共有リンクをコピーしました",
+  "shareCopyError": "コピーに失敗しました",
+  "publishSuccess": "公開されました",
+  "unpublishSuccess": "公開を取り消しました",
+  "operationFailed": "操作に失敗しました",
+  "selectTime": "時間を選択",
+  "startHour": "開始時間",
+  "endHour": "終了時間",
+  "dynamicUpdate": "動的更新 (次回表示時に現在時刻から自動計算)",
+  "cancel": "キャンセル",
+  "confirm": "確定",
+  "yearUnit": "年",
+  "monthUnit": "月",
+  "shortcut": {
+    "last_7": "過去7日間",
+    "last_30": "過去30日間",
+    "last_90": "過去90日間",
+    "last_180": "過去180日間"
+  },
+  "selectComponentToStart": "コンポーネントを選択して、データダッシュボードの作成を開始してください",
+  "saveSuccess": "保存に成功しました",
+  "saveFailed": "保存に失敗しました",
+  "saving": "保存中...",
+  "unsaved": "未保存",
+  "saved": "保存済み",
+  "addChart": "チャートを追加",
+  "addQueryComponent": "クエリコンポーネントを追加",
+  "fullScreen": "全画面表示",
+  "saveAndPublish": "保存して公開",
+  "save": "保存",
+  "prompt": "ヒント",
+  "unsavedChangesWarning": "保存されていない変更があります。退出してもよろしいですか？",
+  "saveAndLeave": "保存して退出",
+  "leaveWithoutSaving": "保存せずに退出",
+  "copyToTargetSuccess": "対象のダッシュボードにコピーしました",
+  "copyFailed": "コピーに失敗しました",
+  "confirmDeleteComponent": "コンポーネント「{{name}}」を削除してもよろしいですか？",
+  "delete": "削除",
+  "nameRequired": "名前は空欄にできません",
+  "charLimit200": "文字数は1〜200文字の範囲で入力してください",
+  "rename": "名前を変更",
+  "duplicate": "複製",
+  "copyTo": "先にコピー",
+  "noOtherDashboards": "他のダッシュボードはありません",
+  "createFailed": "作成に失敗しました。もう一度お試しください",
+  "maxLimitReached": "最大 {{count}} 個のダッシュボードまで作成可能です",
+  "untitledDashboard": "無題のダッシュボード",
+  "dashboardCopyName": "{{title}}-コピー",
+  "confirmDeleteDashboard": "{{title}}を削除しますか？削除後は元に戻せません。",
+  "dashboardList": "看板一覧",
+  "addDashboard": "看板を追加",
+  "expandList": "リストを展開",
+  "collapseList": "リストを折りたたむ",
+  "noMatchingDashboards": "該当する看板が見つかりません",
+  "noDashboards": "看板がありません",
+  "default": "デフォルト",
+  "setAsDefault": "デフォルトに設定",
+  "alreadyDefault": "デフォルト設定済み",
+  "share": "共有",
+  "selectADashboard": "看板を選択してください",
+  "createdBy": "作成者",
+  "createTime": "作成日時",
+  "lastUpdateTime": "最終更新日時",
+  "publish": "公開",
+  "unpublish": "公開中止",
+  "editDashboard": "看板を編集",
+  "editAfterUnpublish": "編集するには公開を中止してください",
+  "updatingCharts": "チャートを更新中",
+  "noDataInChart": "このチャートにはデータがありません",
+  "selectDate": "日付を選択",
+  "query": "照会",
+  "chart": {
+    "barChart": "柱状グラフ",
+    "basicBarChart": "基本柱状グラフ",
+    "stackedBarChart": "積み上げ柱状グラフ",
+    "groupedBarChart": "グループ化柱状グラフ",
+    "horizontalBarChart": "バーチャレンジャー",
+    "basicHorizontalBarChart": "基本バーチャレンジャー",
+    "stackedHorizontalBarChart": "積み上げバーチャレンジャー",
+    "groupedHorizontalBarChart": "グループ化バーチャレンジャー",
+    "lineChart": "折れ線グラフ",
+    "basicLineChart": "基本折れ線グラフ",
+    "stackedLineChart": "積み上げ折れ線グラフ",
+    "areaChart": "面グラフ",
+    "stackedAreaChart": "積み上げ面グラフ",
+    "pieChart": "円グラフ",
+    "donutChart": "ドーナツグラフ",
+    "others": "その他",
+    "metricCard": "指標カード"
   }
 }

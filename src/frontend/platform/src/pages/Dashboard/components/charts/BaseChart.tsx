@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react'
 import { colorSchemes, convertToEChartsTheme } from '../../colorSchemes'
 import { ChartDataResponse } from '../../types/chartData'
 import { unitConversion } from './MetricCard'
+import { useTranslation } from 'react-i18next'
 
 // Dynamic loading of ECharts.
 const loadECharts = async () => {
@@ -39,6 +40,8 @@ interface BaseChartProps {
 }
 
 export function BaseChart({ isDark, data, chartType, dataConfig, styleConfig }: BaseChartProps) {
+  const { t } = useTranslation("dashboard")
+
   const chartRef = useRef<any>(null)
   const domRef = useRef<HTMLDivElement>(null)
   const echartsLibRef = useRef(null)
@@ -119,7 +122,7 @@ export function BaseChart({ isDark, data, chartType, dataConfig, styleConfig }: 
   if (isLoading) {
     return (
       <div className="w-full h-full flex items-center justify-center">
-        <div className="text-sm text-muted-foreground">加载图表中...</div>
+        <div className="text-sm text-muted-foreground">{t('updatingCharts')}...</div>
       </div>
     )
   }

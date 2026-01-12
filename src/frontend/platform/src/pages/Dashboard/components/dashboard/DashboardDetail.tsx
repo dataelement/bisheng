@@ -3,17 +3,18 @@
 import type React from "react"
 
 import { Button } from "@/components/bs-ui/button"
+import { ButtonGroup } from "@/components/bs-ui/button/group"
 import { Input } from "@/components/bs-ui/input"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
 import Tip from "@/components/bs-ui/tooltip/tip"
 import { locationContext } from "@/contexts/locationContext"
 import { userContext } from "@/contexts/userContext"
-import { CircleAlert, Edit, Eye, EyeOff, Maximize2, Share2 } from "lucide-react"
+import { CircleAlert } from "lucide-react"
 import { useContext, useEffect, useRef, useState } from "react"
+import { useTranslation } from "react-i18next"
 import { DashboardStatus, usePublishDashboard } from "../../hook"
 import { Dashboard } from "../../types/dataConfig"
 import { EditorCanvas } from "../editor/EditorCanvas"
-import { ButtonGroup } from "@/components/bs-ui/button/group"
 
 interface DashboardDetailProps {
     dashboard: Dashboard | null
@@ -32,6 +33,8 @@ export function DashboardDetail({
     onShare,
     onEdit
 }: DashboardDetailProps) {
+    const { t } = useTranslation("dashboard")
+
     const [isEditingTitle, setIsEditingTitle] = useState(false)
     const [title, setTitle] = useState(dashboard?.title || "")
     const inputRef = useRef<HTMLInputElement>(null)
@@ -66,7 +69,7 @@ export function DashboardDetail({
         if (!trimmedTitle || !dashboard) {
             setTitle(dashboard?.title || "")
             return toast({
-                description: "名称不能为空",
+                description: t('nameRequired'),
                 variant: "error",
             })
         }
@@ -74,7 +77,7 @@ export function DashboardDetail({
         if (trimmedTitle.length > 200) {
             setTitle(dashboard.title)
             return toast({
-                description: "字数范围 1-200 字",
+                description: t('charLimit200'),
                 variant: "error",
             })
         }
@@ -103,7 +106,7 @@ export function DashboardDetail({
     const { publish } = usePublishDashboard()
 
     if (!dashboard) {
-        return <div className="flex-1 flex items-center justify-center text-muted-foreground">请选择一个看板</div>
+        return <div className="flex-1 flex items-center justify-center text-muted-foreground">{t('selectADashboard')}</div>
     }
     const isPublished = dashboard.status === DashboardStatus.Published
     console.log('dashboard :>> ', dashboard);
@@ -134,17 +137,17 @@ export function DashboardDetail({
                         )}
                         {appConfig.isPro && <>
                             <p className="text-sm ml-4 mr-2">
-                                <span className="text-muted-foreground">创建人：</span>
+                                <span className="text-muted-foreground">{t('createdBy')}: </span>
                                 {dashboard.user_name}</p>
                             <Tip
                                 styleClasses="bg-white text-gary-400 border"
                                 content={
                                     <div >
-                                        <p className="text-sm text-gray-500">创建人：</p>
+                                        <p className="text-sm text-gray-500">{t('createdBy')}: </p>
                                         <p className="text-sm mb-1.5">{dashboard.user_name}</p>
-                                        <p className="text-sm text-gray-500">创建时间：</p>
+                                        <p className="text-sm text-gray-500">{t('createTime')}: </p>
                                         <p className="text-sm mb-1.5">{dashboard.create_time.replace('T', ' ')}</p>
-                                        <p className="text-sm text-gray-500">最近更新时间：</p>
+                                        <p className="text-sm text-gray-500">{t('lastUpdateTime')}: </p>
                                         <p className="text-sm mb-1.5">{dashboard.update_time.replace('T', ' ')}</p>
                                     </div>
                                 }
@@ -157,9 +160,9 @@ export function DashboardDetail({
 
                 <div className="flex items-center gap-2">
                     <ButtonGroup>
-                        <Button variant="outline" size="sm" onClick={handleFullscreen}>全屏</Button>
-                        {dashboard.write && <Button variant="outline" size="sm" onClick={() => publish(dashboard.id, isPublished)}>{isPublished ? '取消发布' : '发布'}</Button>}
-                        <Button variant="outline" size="sm" onClick={() => onShare(dashboard.id)}>分享</Button>
+                        <Button variant="outline" size="sm" onClick={handleFullscreen}>{t('fullScreen')}</Button>
+                        {dashboard.write && <Button variant="outline" size="sm" onClick={() => publish(dashboard.id, isPublished)}>{isPublished ? t('unpublish') : t('publish')}</Button>}
+                        <Button variant="outline" size="sm" onClick={() => onShare(dashboard.id)}>{t('share')}</Button>
                     </ButtonGroup>
 
                     {appConfig.isPro && <Button
@@ -168,17 +171,17 @@ export function DashboardDetail({
                         disabled={dashboard.is_default}
                         size="sm"
                         onClick={() => onDefault(dashboard.id)}>
-                        {dashboard.is_default ? '已设为默认' : '设为默认'}
+                        {dashboard.is_default ? t('alreadyDefault') : t('setAsDefault')}
                     </Button>}
 
                     {appConfig.isPro && dashboard.write &&
-                        <Tip content={isPublished ? "取消发布后方可编辑" : ""} side={"top"} styleClasses="-translate-x-12" >
+                        <Tip content={isPublished ? t('editAfterUnpublish') : ""} side={"top"} styleClasses="-translate-x-12" >
                             <Button
                                 className="disabled:pointer-events-auto"
                                 disabled={isPublished}
                                 size="sm"
                                 onClick={() => onEdit(dashboard.id)}>
-                                编辑看板
+                                {t('editDashboard')}
                             </Button>
                         </Tip>
                     }

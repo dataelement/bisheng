@@ -1,13 +1,13 @@
 "use client"
 
 import { Button } from "@/components/bs-ui/button"
-import { DatePicker } from "@/components/bs-ui/calendar/datePicker"
 import { useEditorDashboardStore } from "@/store/dashboardStore"
+import { cn } from "@/utils"
 import { Search } from "lucide-react"
 import { useEffect, useState } from "react"
-import { AdvancedDatePicker, DatePickerValue } from "../AdvancedDatePicker"
 import { DashboardComponent, QueryConfig, TimeRangeMode, TimeRangeType } from "../../types/dataConfig"
-import { cn } from "@/utils"
+import { AdvancedDatePicker, DatePickerValue } from "../AdvancedDatePicker"
+import { useTranslation } from "react-i18next"
 
 interface QueryFilterProps {
     component: DashboardComponent  // Query the ID of the component, which is used to trigger the refresh of the associated chart
@@ -16,6 +16,8 @@ interface QueryFilterProps {
 }
 
 export function QueryFilter({ isDark, component, isPreviewMode = false }: QueryFilterProps) {
+    const { t } = useTranslation("dashboard")
+
     const { refreshChartsByQuery, setQueryComponentParams } = useEditorDashboardStore()
     const [date, setDate] = useState<Date | undefined>(undefined)
 
@@ -56,9 +58,9 @@ export function QueryFilter({ isDark, component, isPreviewMode = false }: QueryF
 
     return (
         <div className="w-full h-full p-4 flex flex-col gap-3 relative">
-            {/* 日期选择区域 */}
+            {/* date zone */}
             <div className="flex flex-col gap-2 pr-24">
-                <label className={cn("text-sm font-medium", "dark:text-gray-400")}>选择日期</label>
+                <label className={cn("text-sm font-medium", "dark:text-gray-400")}>{t('selectDate')}</label>
                 <AdvancedDatePicker
                     granularity={map[queryConditions.timeGranularity]}
                     mode={queryConditions.displayType}
@@ -71,11 +73,11 @@ export function QueryFilter({ isDark, component, isPreviewMode = false }: QueryF
                 />
             </div>
 
-            {/* 查询按钮 - 固定在右下角 */}
+            {/* query btn */}
             <div className="absolute bottom-4 right-4">
                 <Button onClick={handleQuery} size="sm" className="gap-1">
                     <Search className="h-4 w-4" />
-                    查询
+                    {t('query')}
                 </Button>
             </div>
         </div>

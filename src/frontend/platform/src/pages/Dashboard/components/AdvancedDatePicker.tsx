@@ -1,36 +1,37 @@
-import React, { useState, useEffect } from "react";
-import { format, subDays, startOfMonth, endOfMonth, startOfDay, endOfDay, setHours, getHours, setMonth, setYear, getYear, getMonth, isValid, parse } from "date-fns";
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { Button } from "@/components/bs-ui/button";
-import { cn } from "@/utils";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/bs-ui/popover";
 import { Calendar } from "@/components/bs-ui/calendar";
-import { Label } from "@/components/bs-ui/label";
+import { Checkbox } from "@/components/bs-ui/checkBox";
 import { Input } from "@/components/bs-ui/input";
-import { Checkbox } from "@/components/bs-ui/checkbox";
+import { Label } from "@/components/bs-ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/bs-ui/popover";
+import { cn } from "@/utils";
+import { endOfDay, endOfMonth, format, getHours, getMonth, getYear, setHours, startOfDay, startOfMonth, subDays } from "date-fns";
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 
-// --- 类型定义 ---
+// --- Type Definitions ---
 
 export type DateGranularity = "month" | "day" | "hour";
 
 export interface DatePickerValue {
-  startTime: number; // 10位时间戳 (秒)
-  endTime: number;   // 10位时间戳 (秒)
-  shortcutKey?: string; // 选中的快捷键 key
-  isDynamic?: boolean;  // 是否动态更新
+  startTime: number; // 10-digit Unix timestamp (seconds)
+  endTime: number;   // 10-digit Unix timestamp (seconds)
+  shortcutKey?: string; // Key of the selected shortcut
+  isDynamic?: boolean;  // Whether the time range updates dynamically relative to "now"
 }
 
 interface AdvancedDatePickerProps {
   value?: DatePickerValue;
   onChange: (value: DatePickerValue) => void;
-  granularity?: DateGranularity; // 粒度：month | day | hour
-  mode?: "single" | "range";     // 模式：单点 | 范围
+  granularity?: DateGranularity; // Precision: month | day | hour
+  mode?: "single" | "range";     // Selection mode: single point or range
   placeholder?: string;
   isDark?: boolean;
 }
 
-// --- 辅助组件：月份选择器 ---
-// Shadcn/RD-Picker 不好支持纯月份选择，手写一个轻量级的
+// --- Helper Component: MonthPicker ---
+// Custom lightweight Month Picker as standard Shadcn/Date-pickers often focus on days
 const MonthPicker = ({
   currentDate,
   onSelect,
@@ -42,16 +43,16 @@ const MonthPicker = ({
   selection: any;
   mode: "single" | "range";
 }) => {
+  const { t } = useTranslation("dashboard")
   const [year, setYearState] = useState(currentDate.getFullYear());
 
   const months = Array.from({ length: 12 }, (_, i) => i);
 
   const isSelected = (m: number) => {
-    const target = new Date(year, m, 1);
     if (mode === "single") {
       return selection && getYear(selection) === year && getMonth(selection) === m;
     }
-    // Range 简单的判断 (仅高亮端点，为了视觉简单)
+    // Simple Range highlighting (highlights endpoints for visual clarity)
     if (selection?.from && getYear(selection.from) === year && getMonth(selection.from) === m) return true;
     if (selection?.to && getYear(selection.to) === year && getMonth(selection.to) === m) return true;
     return false;
@@ -61,7 +62,7 @@ const MonthPicker = ({
     <div className="p-3">
       <div className="flex items-center justify-between mb-4">
         <Button variant="outline" size="icon" onClick={() => setYearState(year - 1)} className="h-7 w-7"><ChevronLeft className="h-4 w-4" /></Button>
-        <span className="font-semibold">{year}年</span>
+        <span className="font-semibold">{year}{t('yearUnit')}</span>
         <Button variant="outline" size="icon" onClick={() => setYearState(year + 1)} className="h-7 w-7"><ChevronRight className="h-4 w-4" /></Button>
       </div>
       <div className="grid grid-cols-3 gap-2">
@@ -72,7 +73,7 @@ const MonthPicker = ({
             className={cn("h-9", isSelected(m) && "bg-primary text-primary-foreground")}
             onClick={() => onSelect(new Date(year, m, 1))}
           >
-            {m + 1}月
+            {m + 1}{t('monthUnit')}
           </Button>
         ))}
       </div>
@@ -80,27 +81,28 @@ const MonthPicker = ({
   );
 };
 
-// --- 主组件 ---
+// --- Main Component ---
 export function AdvancedDatePicker({
   value,
   onChange,
   granularity = "day",
   mode = "range",
-  placeholder = "选择时间",
+  placeholder = "select time",
   isDark = false
 }: AdvancedDatePickerProps) {
+  const { t } = useTranslation("dashboard")
   const [open, setOpen] = useState(false);
 
-  // 内部状态
+  // Internal State
   const [dateRange, setDateRange] = useState<{ from?: Date; to?: Date } | undefined>();
   const [selectedShortcut, setSelectedShortcut] = useState<string | undefined>(undefined);
   const [isDynamic, setIsDynamic] = useState(false);
 
-  // 小时状态 (独立管理，为了方便 UI 绑定)
+  // Hour State (Managed independently for easier UI binding)
   const [startHour, setStartHour] = useState(0);
   const [endHour, setEndHour] = useState(0);
 
-  // 初始化回显逻辑
+  // Sync internal state with external value when popover opens or value changes
   useEffect(() => {
     if (value && value.startTime) {
       const start = new Date(value.startTime * 1000);
@@ -112,30 +114,28 @@ export function AdvancedDatePicker({
       setSelectedShortcut(value.shortcutKey);
       setIsDynamic(!!value.isDynamic);
     } else {
-      // 默认空
+      // Reset to default
       setDateRange(undefined);
       setStartHour(0);
       setEndHour(0);
       setSelectedShortcut(undefined);
       setIsDynamic(false);
     }
-  }, [value, open]); // 打开时也可以重置一下状态确保同步
+  }, [value, open]);
 
-  // --- 逻辑处理函数 ---
+  // --- Logic Handlers ---
 
   const handleShortcutClick = (days: number, key: string) => {
     const end = new Date();
     const start = subDays(end, days);
     setDateRange({ from: start, to: end });
 
-    // 快捷键默认设为 0点 到 当前时间 或者 23点? 
-    // 通常最近7天是: 7天前的0点 到 今天的当前时间 或 23:59:59
-    // 这里简化为整天逻辑
+    // Shortcuts usually default to 00:00:00 of the start day to 23:59:59 of the current day
     setStartHour(0);
     setEndHour(23);
 
     setSelectedShortcut(key);
-    // 重置动态勾选，除非业务要求保留
+    // Reset dynamic toggle unless business logic requires persistence
     setIsDynamic(false);
   };
 
@@ -145,44 +145,32 @@ export function AdvancedDatePicker({
     let finalStart = new Date(dateRange.from);
     let finalEnd = dateRange.to ? new Date(dateRange.to) : new Date(dateRange.from);
 
-    // 1. 根据粒度 处理 StartTime
+    // 1. Process StartTime based on granularity
     if (granularity === "month") {
       finalStart = startOfMonth(finalStart);
     } else if (granularity === "day") {
       finalStart = startOfDay(finalStart);
     } else if (granularity === "hour") {
       finalStart = setHours(startOfDay(finalStart), startHour);
-      // 分秒置0
       finalStart.setMinutes(0);
       finalStart.setSeconds(0);
     }
 
-    // 2. 根据粒度 处理 EndTime
-    // 如果是单选模式，user只点了一个日期，我们需要把它扩展成这个时间段的末尾
+    // 2. Process EndTime based on granularity
     if (granularity === "month") {
       finalEnd = endOfMonth(finalEnd);
-      // 23:59:59 由 endOfMonth 配合 endOfDay处理，或者手动处理
       finalEnd = endOfDay(finalEnd);
     } else if (granularity === "day") {
       finalEnd = endOfDay(finalEnd);
     } else if (granularity === "hour") {
-      finalEnd = setHours(startOfDay(finalEnd), mode === 'single' ? startHour : endHour); // 单选模式下 EndHour 跟 StartHour 一样（还是说业务想要这个小时结束？）
-      // 这里的业务逻辑：选某个小时，通常指 XX:00:00 到 XX:59:59 ?
-      // 题目说：选某天就是0点到23:59:59。
-      // 并没有明确说选小时。假设：小时粒度下，如果是单点，就是这个小时的0分到59分？ 
-      // 这里为了简单，如果选小时粒度，开始和结束时间戳如果不跨度，就给那个小时的起止。
-      // 但题目要求返回 10位时间戳。
-
-      // 修正逻辑：
-      // 范围+年月日时：2025/09/02 09 - 2025/10/02 09
-      // 这意味着开始时间是 09:00:00，结束时间是 09:00:00 还是 09:59:59？
-      // 通常范围选择器选的是标点。比如 9点到10点。
-      // 按照常规理解：
-      finalStart.setMinutes(0); finalStart.setSeconds(0);
-      finalEnd.setMinutes(0); finalEnd.setSeconds(0);
+      // If single mode, EndHour matches StartHour; otherwise use endHour state
+      finalEnd = setHours(startOfDay(finalEnd), mode === 'single' ? startHour : endHour);
+      // Logic: For hour granularity, we treat the selection as the start of that hour block
+      finalEnd.setMinutes(0);
+      finalEnd.setSeconds(0);
     }
 
-    // 转换成秒级时间戳
+    // Convert to Unix timestamp (seconds)
     const startStamp = Math.floor(finalStart.getTime() / 1000);
     const endStamp = Math.floor(finalEnd.getTime() / 1000);
 
@@ -195,14 +183,18 @@ export function AdvancedDatePicker({
     setOpen(false);
   };
 
-  // --- 显示格式化 ---
+  // --- Display Formatting ---
   const getDisplayValue = () => {
     if (!value?.startTime) return "";
-    if (selectedShortcut) return shortcuts.find((s) => s.key === selectedShortcut)?.label;
+    // if (selectedShortcut) return shortcuts.find((s) => s.key === selectedShortcut)?.label;
+    if (selectedShortcut) {
+      return t(`shortcut.${selectedShortcut}`);
+    }
+
     const start = new Date(value.startTime * 1000);
     const end = new Date(value.endTime * 1000);
 
-    // 格式化模板
+    // Formatting templates
     let fmt = "yyyy/MM/dd";
     if (granularity === "month") fmt = "yyyy/MM";
     if (granularity === "hour") fmt = "yyyy/MM/dd HH";
@@ -210,23 +202,21 @@ export function AdvancedDatePicker({
     const sStr = format(start, fmt);
     const eStr = format(end, fmt);
 
-    // 如果是单点模式，或者开始等于结束 (且没有明确说是Range模式强制显示两个)
-    // 题目要求：时间+年月：2025/09。
-    // 判断是否实际上是同一个“时间点”（根据粒度）
+    // Check if it's effectively a single point in time based on granularity
     const isSamePoint = sStr === eStr;
 
     if (mode === "single" || isSamePoint) {
       return sStr;
     }
-    return `${sStr}-${eStr}`;
+    return `${sStr} - ${eStr}`;
   };
 
-  // --- 快捷选项配置 ---
+  // --- Shortcut Configurations ---
   const shortcuts = [
-    { label: "最近7天", days: 7, key: "last_7" },
-    { label: "最近30天", days: 30, key: "last_30" },
-    { label: "最近90天", days: 90, key: "last_90" },
-    { label: "最近180天", days: 180, key: "last_180" },
+    { label: t('shortcut.last_7'), days: 7, key: "last_7" },
+    { label: t('shortcut.last_30'), days: 30, key: "last_30" },
+    { label: t('shortcut.last_90'), days: 90, key: "last_90" },
+    { label: t('shortcut.last_180'), days: 180, key: "last_180" },
   ];
 
   return (
@@ -250,23 +240,21 @@ export function AdvancedDatePicker({
           <div className="flex">
             {granularity === "month" ? (
               <div className="flex flex-row gap-2 p-2">
-                {/* 为了模拟 Range 左右两个面板的效果，如果是 Range 模式且 granularity=month，可以渲染两个MonthPicker，
-                     但这比较复杂，通常月份选择只要一个面板选范围即可。
-                     为了简化，这里Month只用单面板逻辑处理 Range (第一次点Start，第二次点End) 
-                 */}
+                {/* Simplified Month Selection: 
+                   First click selects 'from', second click selects 'to'. 
+                */}
                 <MonthPicker
                   mode={mode}
                   currentDate={dateRange?.from || new Date()}
                   selection={dateRange}
                   onSelect={(d) => {
-                    // 简单的 Range 逻辑
                     if (mode === 'single') {
                       setDateRange({ from: d, to: d });
                     } else {
                       if (!dateRange?.from || (dateRange.from && dateRange.to)) {
                         setDateRange({ from: d, to: undefined });
                       } else {
-                        // 比较大小，确保 from < to
+                        // Ensure chronological order (from < to)
                         if (d < dateRange.from) {
                           setDateRange({ from: d, to: dateRange.from });
                         } else {
@@ -296,11 +284,11 @@ export function AdvancedDatePicker({
             )}
           </div>
 
-          {/* Hour Inputs Area (Only if granularity is hour) */}
+          {/* Hour Inputs Area (Visible only for hour granularity) */}
           {granularity === "hour" && (
             <div className="flex justify-between items-center px-3 mb-3">
               <div className="flex items-center gap-2">
-                <Label className="text-xs text-muted-foreground break-keep">开始小时</Label>
+                <Label className="text-xs text-muted-foreground break-keep">{t('startHour')}</Label>
                 <Input
                   type="number"
                   min={0} max={23}
@@ -315,7 +303,7 @@ export function AdvancedDatePicker({
 
               {mode === "range" && (
                 <div className="flex items-center gap-2">
-                  <Label className="text-xs text-muted-foreground break-keep">结束小时</Label>
+                  <Label className="text-xs text-muted-foreground break-keep">{t('endHour')}</Label>
                   <Input
                     type="number"
                     min={0} max={23}
@@ -331,7 +319,7 @@ export function AdvancedDatePicker({
             </div>
           )}
 
-          {/* Shortcuts Area (Only for Range Mode) */}
+          {/* Shortcuts Area (Range Mode only) */}
           {mode === "range" && (
             <div className="px-3 mb-3">
               <div className="flex flex-wrap gap-2">
@@ -348,7 +336,7 @@ export function AdvancedDatePicker({
                 ))}
               </div>
 
-              {/* Dynamic Checkbox - Only show when shortcut is selected */}
+              {/* Dynamic Checkbox - Appears only when a shortcut is active */}
               {selectedShortcut && (
                 <div className="flex items-center space-x-2 px-1 mt-2">
                   <Checkbox
@@ -357,7 +345,7 @@ export function AdvancedDatePicker({
                     onCheckedChange={(c) => setIsDynamic(c as boolean)}
                   />
                   <Label htmlFor="dynamic-mode" className="text-xs cursor-pointer">
-                    动态更新 (下次查看时自动根据当前时间推算)
+                    {t('dynamicUpdate')}
                   </Label>
                 </div>
               )}
@@ -366,8 +354,8 @@ export function AdvancedDatePicker({
 
           {/* Footer Action */}
           <div className="flex justify-end gap-2  px-3 mb-3">
-            <Button className="h-6" variant="ghost" size="sm" onClick={() => setOpen(false)}>取消</Button>
-            <Button className="h-6" size="sm" onClick={handleConfirm}>确定</Button>
+            <Button className="h-6" variant="ghost" size="sm" onClick={() => setOpen(false)}>{t('cancel')}</Button>
+            <Button className="h-6" size="sm" onClick={handleConfirm}>{t('confirm')}</Button>
           </div>
 
         </div>

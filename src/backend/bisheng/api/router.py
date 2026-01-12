@@ -6,7 +6,7 @@ from bisheng.api.v1 import (assistant_router, audit_router, chat_router, compone
                             group_router, mark_router,
                             report_router, skillcenter_router, tag_router,
                             user_router, validate_router, variable_router, workflow_router,
-                            workstation_router, linsight_router, tool_router, invite_code_router)
+                            workstation_router, tool_router, invite_code_router)
 from bisheng.chat_session.api.router import router as session_router
 from bisheng.finetune.api.finetune import router as finetune_router
 from bisheng.finetune.api.server import router as server_router
@@ -17,6 +17,7 @@ from bisheng.open_endpoints.api.router import (assistant_router_rpc, chat_router
                                                knowledge_router_rpc, workflow_router_rpc,
                                                filelib_router_rpc)
 from bisheng.share_link.api.router import router as share_link_router
+from bisheng.linsight.api.router import router as linsight_router
 from bisheng.telemetry_search.api.router import router as telemetry_search_router
 
 router = APIRouter(prefix='/api/v1', )

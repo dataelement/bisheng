@@ -9,7 +9,7 @@ from typing import Optional, Union
 from bisheng.core.cache.redis_conn import RedisClient
 from bisheng.core.cache.redis_manager import get_redis_client_sync
 from bisheng.core.logger import set_logger_config
-from bisheng.linsight.task_exec import LinsightWorkflowTask
+from bisheng.linsight.domain.task_exec import LinsightWorkflowTask
 from bisheng.common.services.config_service import settings
 
 logger = logging.getLogger(__name__)
@@ -179,7 +179,7 @@ if __name__ == '__main__':
     max_concurrency = Manager().Value('i', args.max_concurrency)
 
     # Check for incomplete tasks and terminate
-    from bisheng.linsight.utils import check_and_terminate_incomplete_tasks
+    from bisheng.linsight.domain.utils import check_and_terminate_incomplete_tasks
 
     asyncio.run(check_and_terminate_incomplete_tasks())
 

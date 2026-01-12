@@ -154,6 +154,7 @@
     "managePermission": "Manage Permission",
     "roleNamePrompt": "Role name cannot exceed 50 characters",
     "roleNameRequired": "Role name is required",
+    "atLeastOneSpaceRequired": "At least one space is required",
     "roleNameExists": "Role name already exists",
     "groupNameExists": "UserGroup name already exists",
     "groupNamePrompt": "UserGroup name cannot exceed 30 characters",

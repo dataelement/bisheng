@@ -6,7 +6,7 @@ from sqlalchemy import update
 from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlmodel import Field, select, delete, col, or_, func, Column, Text, DateTime, text, CHAR
 
-from bisheng.api.v1.schema.inspiration_schema import SOPManagementUpdateSchema
+from bisheng.linsight.domain.schemas.inspiration_schema import SOPManagementUpdateSchema
 from bisheng.core.database import get_async_db_session
 from bisheng.database.base import async_get_count
 from bisheng.common.models.base import SQLModelSerializable

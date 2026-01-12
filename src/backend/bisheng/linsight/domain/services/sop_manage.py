@@ -12,8 +12,8 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from loguru import logger
 
 from bisheng.api.services.knowledge_imp import decide_vectorstores, extract_code_blocks
-from bisheng.api.v1.schema.inspiration_schema import SOPManagementSchema, SOPManagementUpdateSchema
-from bisheng.api.v1.schema.linsight_schema import SopRecordRead
+from bisheng.linsight.domain.schemas.inspiration_schema import SOPManagementSchema, SOPManagementUpdateSchema
+from bisheng.linsight.domain.schemas.linsight_schema import SopRecordRead
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
@@ -27,7 +27,7 @@ from bisheng.common.errcode.server import (
 )
 from bisheng.common.services.config_service import settings
 from bisheng.core.prompts.manager import get_prompt_manager
-from bisheng.database.models.linsight_sop import LinsightSOP, LinsightSOPDao, LinsightSOPRecord
+from bisheng.linsight.domain.models.linsight_sop import LinsightSOP, LinsightSOPDao, LinsightSOPRecord
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.llm.domain.const import LLMModelType
 from bisheng.llm.domain.models import LLMDao

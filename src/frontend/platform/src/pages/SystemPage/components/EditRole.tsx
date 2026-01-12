@@ -24,6 +24,7 @@ import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 import { useTable } from "../../../util/hook";
 import { LoadingIcon } from "@/components/bs-icons/loading";
 import { locationContext } from "@/contexts/locationContext";
+import { message } from "@/components/bs-ui/toast/use-toast";
 
 interface SearchPanneProps {
   groupId: any;
@@ -46,8 +47,13 @@ const enum MenuType {
   KNOWLEDGE = 'knowledge',
   MODEL = 'model',
   EVALUATION = 'evaluation',
-  BOARD = 'board'
+  BOARD = 'board',
+
+  FRONTEND = 'frontend',
+  BACKEND = 'backend',
+  CREATE_DASHBOARD = 'create_dashboard',
 }
+
 
 const MENU_LIST = [
   { id: MenuType.BUILD, name: 'menu.skills', user_name: '-' },
@@ -153,68 +159,68 @@ const SearchPanne = ({
   };
 
   return <>
-<div className="mt-6 flex flex-col items-start relative gap-3">
-  {/* <p className="text-xl font-bold">{title}</p> */}
-{type === 'board' && (
-  <div className="flex flex-col gap-4 w-full">
-    {/* 允许创建看板开关 */}
-    <div className="flex items-center gap-2">
-      <Switch
-        checked={!!allowCreateBoard}
-        disabled={!appConfig.isPro}
-        onCheckedChange={(val) => onAllowCreateBoardChange?.(val)}
-      />
-      <div className="flex flex-col items-start gap-1">
-        <span className="font-medium">{t('system.allowCreateBoard')}</span>
-        <p className="text-sm text-muted-foreground ml-0">
-          {t('system.allowCreateBoardDesc')}
-        </p>
-      </div>
+    <div className="mt-6 flex flex-col items-start relative gap-3">
+      {/* <p className="text-xl font-bold">{title}</p> */}
+      {type === 'board' && (
+        <div className="flex flex-col gap-4 w-full">
+          {/* 允许创建看板开关 */}
+          <div className="flex items-center gap-2">
+            <Switch
+              checked={!!allowCreateBoard}
+              disabled={!appConfig.isPro}
+              onCheckedChange={(val) => onAllowCreateBoardChange?.(val)}
+            />
+            <div className="flex flex-col items-start gap-1">
+              <span className="font-medium">{t('system.allowCreateBoard')}</span>
+              <p className="text-sm text-muted-foreground ml-0">
+                {t('system.allowCreateBoardDesc')}
+              </p>
+            </div>
+          </div>
+
+          {/* 看板使用/管理权限表格 */}
+          <Table className="mt-2">
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t(nameKey)}</TableHead>
+                <TableHead className="text-center w-[175px]">{t('system.usePermission')}</TableHead>
+                <TableHead className="text-center w-[175px]">{t('system.managePermission')}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {data.map((el: any) => {
+                const id = Number(el.id);
+                return (
+                  <TableRow key={id}>
+                    <TableCell className="font-medium">{t(el.name)}</TableCell>
+                    <TableCell className="text-center">
+                      <Switch
+                        checked={useChecked(id)}
+                        onCheckedChange={(bln) => onUseChange(id, bln)}
+                      />
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <Switch
+                        disabled={!appConfig.isPro}
+                        checked={manageChecked(id)}
+                        onCheckedChange={(bln) => onManageChange(id, bln)}
+                      />
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+
+
+      {type !== 'menu' && <SearchInput
+        onChange={(e) => search(e.target.value)}
+        placeholder={placeholderKey ? t(placeholderKey) : ''}
+        className="mt-0"
+      />}
     </div>
-
-    {/* 看板使用/管理权限表格 */}
-    <Table className="mt-2">
-      <TableHeader>
-        <TableRow>
-          <TableHead>{t(nameKey)}</TableHead>
-          <TableHead className="text-center w-[175px]">{t('system.usePermission')}</TableHead>
-          <TableHead className="text-center w-[175px]">{t('system.managePermission')}</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {data.map((el: any) => {
-          const id = Number(el.id);
-          return (
-            <TableRow key={id}>
-              <TableCell className="font-medium">{t(el.name)}</TableCell>
-              <TableCell className="text-center">
-                <Switch
-                  checked={useChecked(id)}
-                  onCheckedChange={(bln) => onUseChange(id, bln)}
-                />
-              </TableCell>
-              <TableCell className="text-center">
-                <Switch
-                  disabled={!appConfig.isPro}
-                  checked={manageChecked(id)}
-                  onCheckedChange={(bln) => onManageChange(id, bln)}
-                />
-              </TableCell>
-            </TableRow>
-          );
-        })}
-      </TableBody>
-    </Table>
-  </div>
-)}
-
-
-  {type !== 'menu' && <SearchInput 
-    onChange={(e) => search(e.target.value)} 
-    placeholder={placeholderKey ? t(placeholderKey) : ''} 
-    className="mt-0"
-  />}
-</div>
     <div className="mt-4">
       {loading ?
         <div className="w-full h-[468px] flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
@@ -227,26 +233,26 @@ const SearchPanne = ({
 };
 
 const usePermissionSwitchLogic = (form, setForm) => {
-const switchDataChange = (id, key, checked) => {
-  setForm(prev => {
-    const array = prev[key] || [];
-    const numberFields = ['useLibs', 'manageLibs', 'useTools', 'manageTools', 'useBoards', 'manageBoards'];
-    const convertedId = numberFields.includes(key) ? Number(id) : String(id);
-    const index = array.findIndex(el => el === convertedId);
-    
-    let newArray;
-    if (checked && index === -1) {
-      newArray = [...array, convertedId];
-    } else if (!checked && index !== -1) {
-      newArray = [...array];
-      newArray.splice(index, 1);
-    } else {
-      newArray = array;
-    }
+  const switchDataChange = (id, key, checked) => {
+    setForm(prev => {
+      const array = prev[key] || [];
+      const numberFields = ['useLibs', 'manageLibs', 'useTools', 'manageTools', 'useBoards', 'manageBoards'];
+      const convertedId = numberFields.includes(key) ? Number(id) : String(id);
+      const index = array.findIndex(el => el === convertedId);
 
-    return { ...prev, [key]: newArray };
-  });
-};
+      let newArray;
+      if (checked && index === -1) {
+        newArray = [...array, convertedId];
+      } else if (!checked && index !== -1) {
+        newArray = [...array];
+        newArray.splice(index, 1);
+      } else {
+        newArray = array;
+      }
+
+      return { ...prev, [key]: newArray };
+    });
+  };
 
 
   const switchManage = (id, keyManage, keyUse, checked) => {
@@ -257,36 +263,36 @@ const switchDataChange = (id, key, checked) => {
   return {
     switchDataChange,
     switchLibManage: (id, checked) => switchManage(id, 'manageLibs', 'useLibs', checked),
-    switchUseLib: (id, checked) => { 
-      if (!checked && (form.manageLibs || []).includes(Number(id))) return; 
-      switchDataChange(id, 'useLibs', checked); 
+    switchUseLib: (id, checked) => {
+      if (!checked && (form.manageLibs || []).includes(Number(id))) return;
+      switchDataChange(id, 'useLibs', checked);
     },
     switchAssistantManage: (id, checked) => switchManage(id, 'manageAssistants', 'useAssistant', checked),
-    switchUseAssistant: (id, checked) => { 
-      if (!checked && (form.manageAssistants || []).includes(String(id))) return; 
-      switchDataChange(id, 'useAssistant', checked); 
+    switchUseAssistant: (id, checked) => {
+      if (!checked && (form.manageAssistants || []).includes(String(id))) return;
+      switchDataChange(id, 'useAssistant', checked);
     },
     switchSkillManage: (id, checked) => switchManage(id, 'manageSkills', 'useSkills', checked),
-    switchUseSkill: (id, checked) => { 
-      if (!checked && (form.manageSkills || []).includes(String(id))) return; 
-      switchDataChange(id, 'useSkills', checked); 
+    switchUseSkill: (id, checked) => {
+      if (!checked && (form.manageSkills || []).includes(String(id))) return;
+      switchDataChange(id, 'useSkills', checked);
     },
     switchFlowManage: (id, checked) => switchManage(id, 'manageFlows', 'useFlows', checked),
-    switchUseFlow: (id, checked) => { 
-      if (!checked && (form.manageFlows || []).includes(String(id))) return; 
-      switchDataChange(id, 'useFlows', checked); 
+    switchUseFlow: (id, checked) => {
+      if (!checked && (form.manageFlows || []).includes(String(id))) return;
+      switchDataChange(id, 'useFlows', checked);
     },
     switchToolManage: (id, checked) => switchManage(id, 'manageTools', 'useTools', checked),
-    switchUseTool: (id, checked) => { 
-      if (!checked && (form.manageTools || []).includes(Number(id))) return; 
-      switchDataChange(id, 'useTools', checked); 
+    switchUseTool: (id, checked) => {
+      if (!checked && (form.manageTools || []).includes(Number(id))) return;
+      switchDataChange(id, 'useTools', checked);
     },
     switchMenu: (id, checked) => switchDataChange(id, 'useMenu', checked),
     switchBoardManage: (id, checked) => switchManage(id, 'manageBoards', 'useBoards', checked),
-    switchUseBoard: (id, checked) => { 
-    const numId = Number(id);
-    if (!checked && (form.manageBoards || []).includes(numId)) return; 
-    switchDataChange(numId, 'useBoards', checked); 
+    switchUseBoard: (id, checked) => {
+      const numId = Number(id);
+      if (!checked && (form.manageBoards || []).includes(numId)) return;
+      switchDataChange(numId, 'useBoards', checked);
     }
   };
 };
@@ -295,7 +301,7 @@ const initPermissionData = (resData) => {
   const initData = {
     useSkills: [], useLibs: [], useAssistant: [], useFlows: [], useTools: [], useMenu: [],
     manageLibs: [], manageAssistants: [], manageSkills: [], manageFlows: [], manageTools: [],
-    useBoards: [],manageBoards: []
+    useBoards: [], manageBoards: []
   };
   resData.forEach(item => {
     switch (item.type) {
@@ -309,10 +315,10 @@ const initPermissionData = (resData) => {
       case 8: initData.manageTools.push(Number(item.third_id)); break;
       case 9: initData.useFlows.push(String(item.third_id)); break;
       case 10: initData.manageFlows.push(String(item.third_id)); break;
-      case 11: //看板管理
+      case 11:
         initData.manageBoards.push(Number(item.third_id));
         break;
-    case 12: // 看板使用
+      case 12:
         initData.useBoards.push(Number(item.third_id));
         break;
 
@@ -322,34 +328,34 @@ const initPermissionData = (resData) => {
   return initData;
 };
 
-const getSearchPanneConfig = (type, form, switches, t, groupId, roleId,handleAllowCreateBoardChange) => {
-    const placeholderMap = {
-        assistant: 'system.searchAssistant', 
-        skill: 'system.searchSkill', 
-        flow: 'system.searchFlow', 
-        knowledge: 'system.searchKnowledge',
-        tool: 'system.searchTool',
-        menu: '',
-        board: 'system.searchBoard',
-    };
+const getSearchPanneConfig = (type, form, switches, t, groupId, roleId, handleAllowCreateBoardChange) => {
+  const placeholderMap = {
+    assistant: 'system.searchAssistant',
+    skill: 'system.searchSkill',
+    flow: 'system.searchFlow',
+    knowledge: 'system.searchKnowledge',
+    tool: 'system.searchTool',
+    menu: '',
+    board: 'system.searchBoard',
+  };
 
   const configMap = {
-    assistant: { title: t('system.assistantAuthorization'), nameKey: 'system.assistantName', useChecked: (id) => form.useAssistant.includes(String(id)), manageChecked: (id) => form.manageAssistants.includes(String(id)), onUseChange: switches.switchUseAssistant, onManageChange: switches.switchAssistantManage,placeholderKey: placeholderMap.assistant  },
-    skill: { title: t('system.skillAuthorization'), nameKey: 'system.skillName', useChecked: (id) => form.useSkills.includes(String(id)), manageChecked: (id) => form.manageSkills.includes(String(id)), onUseChange: switches.switchUseSkill, onManageChange: switches.switchSkillManage,placeholderKey: placeholderMap.skill },
-    flow: { title: t('system.flowAuthorization'), nameKey: 'system.flowName', useChecked: (id) => form.useFlows.includes(String(id)), manageChecked: (id) => form.manageFlows.includes(String(id)), onUseChange: switches.switchUseFlow, onManageChange: switches.switchFlowManage,placeholderKey: placeholderMap.flow },
-    knowledge: { title: t('system.knowledgeAuthorization'), nameKey: 'system.libraryName', useChecked: (id) => form.useLibs.includes(Number(id)), manageChecked: (id) => form.manageLibs.includes(Number(id)), onUseChange: switches.switchUseLib, onManageChange: switches.switchLibManage,placeholderKey: placeholderMap.knowledge },
-    tool: { title: t('system.toolAuthorization'), nameKey: 'tools.toolName', useChecked: (id) => form.useTools.includes(Number(id)), manageChecked: (id) => form.manageTools.includes(Number(id)), onUseChange: switches.switchUseTool, onManageChange: switches.switchToolManage,placeholderKey: placeholderMap.tool },
-    menu: { title: t('system.menuAuthorization'), nameKey: 'system.primaryMenu', useChecked: (id) => form.useMenu.includes(String(id)), manageChecked: () => false, onUseChange: switches.switchMenu, onManageChange: () => {},placeholderKey: placeholderMap.menu },
+    assistant: { title: t('system.assistantAuthorization'), nameKey: 'system.assistantName', useChecked: (id) => form.useAssistant.includes(String(id)), manageChecked: (id) => form.manageAssistants.includes(String(id)), onUseChange: switches.switchUseAssistant, onManageChange: switches.switchAssistantManage, placeholderKey: placeholderMap.assistant },
+    skill: { title: t('system.skillAuthorization'), nameKey: 'system.skillName', useChecked: (id) => form.useSkills.includes(String(id)), manageChecked: (id) => form.manageSkills.includes(String(id)), onUseChange: switches.switchUseSkill, onManageChange: switches.switchSkillManage, placeholderKey: placeholderMap.skill },
+    flow: { title: t('system.flowAuthorization'), nameKey: 'system.flowName', useChecked: (id) => form.useFlows.includes(String(id)), manageChecked: (id) => form.manageFlows.includes(String(id)), onUseChange: switches.switchUseFlow, onManageChange: switches.switchFlowManage, placeholderKey: placeholderMap.flow },
+    knowledge: { title: t('system.knowledgeAuthorization'), nameKey: 'system.libraryName', useChecked: (id) => form.useLibs.includes(Number(id)), manageChecked: (id) => form.manageLibs.includes(Number(id)), onUseChange: switches.switchUseLib, onManageChange: switches.switchLibManage, placeholderKey: placeholderMap.knowledge },
+    tool: { title: t('system.toolAuthorization'), nameKey: 'tools.toolName', useChecked: (id) => form.useTools.includes(Number(id)), manageChecked: (id) => form.manageTools.includes(Number(id)), onUseChange: switches.switchUseTool, onManageChange: switches.switchToolManage, placeholderKey: placeholderMap.tool },
+    menu: { title: t('system.menuAuthorization'), nameKey: 'system.primaryMenu', useChecked: (id) => form.useMenu.includes(String(id)), manageChecked: () => false, onUseChange: switches.switchMenu, onManageChange: () => { }, placeholderKey: placeholderMap.menu },
     board: {
-        title: t('system.boardAuthorization'),
-        nameKey: 'system.boardName',
-        useChecked: (id) => form.useBoards?.includes(Number(id)),
-        manageChecked: (id) => form.manageBoards?.includes(Number(id)),
-        onUseChange: switches.switchUseBoard,
-        onManageChange: switches.switchBoardManage,
-        placeholderKey: placeholderMap.board,
-        allowCreateBoard: form.allowCreateBoard,
-        onAllowCreateBoardChange: handleAllowCreateBoardChange,
+      title: t('system.boardAuthorization'),
+      nameKey: 'system.boardName',
+      useChecked: (id) => form.useBoards?.includes(Number(id)),
+      manageChecked: (id) => form.manageBoards?.includes(Number(id)),
+      onUseChange: switches.switchUseBoard,
+      onManageChange: switches.switchBoardManage,
+      placeholderKey: placeholderMap.board,
+      allowCreateBoard: form.allowCreateBoard,
+      onAllowCreateBoardChange: handleAllowCreateBoardChange,
     }
   };
 
@@ -368,7 +374,7 @@ const getSearchPanneConfig = (type, form, switches, t, groupId, roleId,handleAll
     onManageChange: config.onManageChange,
     form,
     placeholderKey: config.placeholderKey,
-     allowCreateBoard: config.allowCreateBoard,
+    allowCreateBoard: config.allowCreateBoard,
     onAllowCreateBoardChange: config.onAllowCreateBoardChange,
   };
 };
@@ -376,24 +382,36 @@ const getSearchPanneConfig = (type, form, switches, t, groupId, roleId,handleAll
 export default function EditRole({ id, name, groupId, onChange, onBeforeChange }) {
   const { setErrorData, setSuccessData } = useContext(alertContext);
   const { t } = useTranslation();
-  const [activeTab, setActiveTab] = useState<'menu' | 'assistant' | 'skill' | 'flow' | 'knowledge' | 'tool'|'board'>('menu');
+  const [activeTab, setActiveTab] = useState<'menu' | 'assistant' | 'skill' | 'flow' | 'knowledge' | 'tool' | 'board'>('menu');
 
   const [form, setForm] = useState({
     name,
     useSkills: [], useLibs: [], useAssistant: [], useFlows: [], useTools: [], useMenu: [MenuType.BUILD, MenuType.KNOWLEDGE, MenuType.MODEL, MenuType.EVALUATION, MenuType.BOARD],
-    manageLibs: [], manageAssistants: [], manageSkills: [], manageFlows: [], manageTools: [],useBoards: [], manageBoards: [],
+    manageLibs: [], manageAssistants: [], manageSkills: [], manageFlows: [], manageTools: [], useBoards: [], manageBoards: [],
     allowCreateBoard: false,
   });
-  
-  // 独立的空间权限状态 - 只控制工作台和管理后台的访问
+
   const [spacePermissions, setSpacePermissions] = useState({
-    workspace: true,    // 工作台
-    admin: true,        // 管理后台
+    workspace: true,
+    admin: true,
   });
 
   const handleAllowCreateBoardChange = (checked: boolean) => {
-    setForm(prev => ({ ...prev, allowCreateBoard: checked }));
+    setForm(prev => {
+      const menuSet = new Set(prev.useMenu);
+
+      checked
+        ? menuSet.add(MenuType.CREATE_DASHBOARD)
+        : menuSet.delete(MenuType.CREATE_DASHBOARD);
+
+      return {
+        ...prev,
+        allowCreateBoard: checked,
+        useMenu: Array.from(menuSet),
+      };
+    });
   };
+
 
   const switches = usePermissionSwitchLogic(form, setForm);
 
@@ -401,33 +419,68 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
     if (id !== -1) {
       getRolePermissionsApi(id).then(res => {
         const initData = initPermissionData(res.data);
-        setForm(prev => ({ ...prev, ...initData }));
+
+        setForm(prev => ({
+          ...prev,
+          ...initData,
+          allowCreateBoard: initData.useMenu.includes(MenuType.CREATE_DASHBOARD),
+        }));
+
+        setSpacePermissions({
+          workspace: initData.useMenu.includes(MenuType.FRONTEND),
+          admin: initData.useMenu.includes(MenuType.BACKEND),
+        });
       });
     }
   }, [id]);
 
+
   const roleId = id === -1 ? 0 : id;
 
-  const PERMISSION_TABS = ['menu', 'assistant', 'skill', 'flow', 'knowledge', 'tool','board'];
+  const PERMISSION_TABS = ['menu', 'assistant', 'skill', 'flow', 'knowledge', 'tool', 'board'];
 
   const renderPermissionPanne = (type) => {
     const config = getSearchPanneConfig(type, form, switches, t, groupId, roleId, handleAllowCreateBoardChange);
     return <SearchPanne key={type} {...config} />;
   };
+  const syncSpaceToMenu = (next: { workspace: boolean; admin: boolean }) => {
+    setForm(prev => {
+      const menuSet = new Set(prev.useMenu);
 
-  const handleSpacePermissionChange = (key: 'workspace' | 'admin', checked: boolean) => {
-    // 检查是否要关闭最后一个开启的空间
-    const workspaceOpen = key === 'workspace' ? checked : spacePermissions.workspace;
-    const adminOpen = key === 'admin' ? checked : spacePermissions.admin;
-    
-    if (!workspaceOpen && !adminOpen) {
-      // 两个都关闭，不允许
-      setErrorData({ title: t('prompt'), list: [t('system.atLeastOneSpaceRequired')] });
+      next.workspace
+        ? menuSet.add(MenuType.FRONTEND)
+        : menuSet.delete(MenuType.FRONTEND);
+
+      next.admin
+        ? menuSet.add(MenuType.BACKEND)
+        : menuSet.delete(MenuType.BACKEND);
+
+      return {
+        ...prev,
+        useMenu: Array.from(menuSet),
+      };
+    });
+  };
+
+  const handleSpacePermissionChange = (
+    key: 'workspace' | 'admin',
+    checked: boolean
+  ) => {
+    const next = {
+      ...spacePermissions,
+      [key]: checked,
+    };
+
+    if (!next.workspace && !next.admin) {
+      setErrorData({
+        title: t('prompt'),
+        list: [t('system.atLeastOneSpaceRequired')],
+      });
       return;
     }
-    
-    // 只更新空间权限，不影响菜单权限
-    setSpacePermissions(prev => ({ ...prev, [key]: checked }));
+
+    setSpacePermissions(next);
+    syncSpaceToMenu(next);
   };
 
   const handleSave = async () => {
@@ -452,10 +505,8 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
       await captureAndAlertRequestErrorHoc(updateRoleNameApi(roleIdLocal, form.name));
     }
 
-    // 保存菜单权限（type: 99）
     const menuPermissionsToSave = form.useMenu;
-    // 如果需要保存空间权限，可以在这里添加对应的API调用
-    
+
     await Promise.all([
       updateRolePermissionsApi({ role_id: roleIdLocal, access_id: form.useSkills as any, type: 2 as any }),
       updateRolePermissionsApi({ role_id: roleIdLocal, access_id: form.useLibs as any, type: 1 as any }),
@@ -470,20 +521,15 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
       updateRolePermissionsApi({ role_id: roleIdLocal, access_id: sanitizeIds(menuPermissionsToSave) as any, type: 99 as any }),
       updateRolePermissionsApi({ role_id: roleIdLocal, access_id: sanitizeIds(form.useBoards) as any, type: 11 as any }),
       updateRolePermissionsApi({ role_id: roleIdLocal, access_id: sanitizeIds(form.manageBoards) as any, type: 12 as any }),
-      updateRolePermissionsApi({
-        role_id: roleIdLocal,
-        allow_create_board: form.allowCreateBoard,
-        type: 13
-      }),
-      // 保存空间权限，添加新的API调用
-      // updateRolePermissionsApi({ role_id: roleIdLocal, access_id: spacePermissions.workspace ? ['workspace'] : [], type: 100 as any }),
-      // updateRolePermissionsApi({ role_id: roleIdLocal, access_id: spacePermissions.admin ? ['admin'] : [], type: 101 as any }),
-    ]);
 
+    ]);
+    message({
+      variant: 'success',
+      description: t('saved')
+    });
     setSuccessData({ title: t('saved') });
     onChange(true);
   };
-
   return (
     <div className="max-w-[600px] mx-auto pt-4 h-[calc(100vh-128px)] overflow-y-auto pb-40 scrollbar-hide">
       {/* 角色名称输入 */}
@@ -516,18 +562,18 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
               <TableRow>
                 <TableCell className="font-medium">{t('工作台')}</TableCell>
                 <TableCell className="text-center">
-                  <Switch 
-                    checked={spacePermissions.workspace} 
-                    onCheckedChange={(bln) => handleSpacePermissionChange('workspace', bln)} 
+                  <Switch
+                    checked={spacePermissions.workspace}
+                    onCheckedChange={(bln) => handleSpacePermissionChange('workspace', bln)}
                   />
                 </TableCell>
               </TableRow>
               <TableRow>
                 <TableCell className="font-medium">{t('管理后台')}</TableCell>
                 <TableCell className="text-center">
-                  <Switch 
-                    checked={spacePermissions.admin} 
-                    onCheckedChange={(bln) => handleSpacePermissionChange('admin', bln)} 
+                  <Switch
+                    checked={spacePermissions.admin}
+                    onCheckedChange={(bln) => handleSpacePermissionChange('admin', bln)}
                   />
                 </TableCell>
               </TableRow>

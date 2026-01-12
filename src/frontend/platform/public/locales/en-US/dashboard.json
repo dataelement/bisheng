@@ -1,40 +1,40 @@
 {
-      "chartSelector": {
+  "chartSelector": {
     "title": "Chart Link Configuration",
     "componentName": "Component: {{componentName}}",
-    
+
     "selectCharts": "Select Linked Charts",
     "selectAll": "Select All",
     "unnamedChart": "Unnamed Chart",
     "noDataset": "No dataset",
-    
+
     "config": "Query Condition Configuration",
     "displayType": "Display Type",
     "displayTypes": {
       "timeRange": "Time Range",
       "time": "Time"
     },
-    
+
     "timeGranularity": "Time Granularity",
     "granularities": {
       "yearMonth": "Year-Month",
       "yearMonthDay": "Year-Month-Day",
       "yearMonthDayHour": "Year-Month-Day-Hour"
     },
-    
+
     "setDefault": "Set as Default Value",
-    
+
     "datePicker": {
       "placeholder": "Select {{displayType}}",
       "single": "Time",
       "range": "Time Range"
     },
-    
+
     "buttons": {
       "cancel": "Cancel",
       "save": "Save"
     },
-    
+
     "messages": {
       "saveSuccess": "Chart link configuration saved",
       "noCharts": "No charts available for linking",
@@ -46,33 +46,33 @@
     "customStyle": "Custom Style",
     "basicConfigTab": "Basic Configuration",
     "styleConfigTab": "Custom Style",
-    
+
     "chartType": "Chart Type",
     "selectChartType": "Select Chart Type",
-    
+
     "categoryAxis": "Category Axis / Dimension",
     "stackItem": "Stack Item / Dimension",
     "valueAxis": "Value Axis / Metric",
-    
+
     "sortPriority": "Sort Priority",
     "sortHint": "Add dimensions or metrics to adjust sort priority",
-    
+
     "filter": "Filter",
     "addFilterCondition": "Add Filter Condition",
     "filterConditionsAdded": "{{count}} filter conditions added",
     "filterLogicHint": " ({{logic}})",
-    
+
     "timeRange": "Time Range",
     "selectTimeRange": "Select time range",
-    
+
     "resultsDisplay": "Results Display",
     "allResults": "All",
     "limitResults": "records",
-    
+
     "updateChartData": "Update Chart Data",
-    
+
     "dataSelection": "Data Selection",
-    
+
     "dialog": {
       "editDisplayName": "Edit Name",
       "originalName": "Original Name",
@@ -82,29 +82,29 @@
       "cancel": "Cancel",
       "confirm": "Confirm"
     },
-      "dashboard": {
+    "dashboard": {
 
-  },
+    },
     "toast": {
       "fieldAlreadyExists": "Field already exists in {{section}}",
       "dimensionLimitReached": "Dimension limit reached",
-       "metricLimitReached": "This chart can have at most {{count}} metrics",
+      "metricLimitReached": "This chart can have at most {{count}} metrics",
       "virtualMetricConflict": "Virtual metrics cannot be used together with non-virtual metrics",
       "multipleVirtualMetric": "Multiple virtual metrics are not allowed"
     },
-    
+
     "sections": {
       "category": "category axis",
       "stack": "stack item",
       "value": "metric area"
     }
   },
-    "configPanel": {
-      "title": "Dashboard Configuration",
-      "dashboardStyle": "Dashboard Style",
-      "lightTheme": "Light Theme",
-      "darkTheme": "Dark Theme"
-    },
+  "configPanel": {
+    "title": "Dashboard Configuration",
+    "dashboardStyle": "Dashboard Style",
+    "lightTheme": "Light Theme",
+    "darkTheme": "Dark Theme"
+  },
   "datasetSelector": {
     "dataset": "Dataset",
     "selectDataset": "Select dataset",
@@ -115,13 +115,13 @@
     "metrics": "Metrics",
     "virtualMetric": "*",
     "selectDatasetPrompt": "Please select a dataset first",
-    
+
     "fieldTypes": {
       "date": "Date",
       "integer": "Integer",
       "keyword": "Text"
     },
-    
+
     "timeGranularity": {
       "year": "Year",
       "quarter": "Quarter",
@@ -130,8 +130,8 @@
       "day": "Day",
       "hour": "Hour"
     }
-},
-"dimensionBlock": {
+  },
+  "dimensionBlock": {
     "menu": {
       "sort": "Sort",
       "aggregation": "Aggregation",
@@ -175,7 +175,7 @@
       }
     }
   },
-   "filterConditionDialog": {
+  "filterConditionDialog": {
     "title": "Filter Condition Configuration",
     "keywords": {
       "time": "time",
@@ -290,5 +290,98 @@
       "maxStackDimension": "Only one stack dimension is allowed, please delete the existing stack dimension first",
       "maxCategoryDimensions": "Maximum 2 category dimensions are allowed"
     }
+  },
+  "renameSuccess": "Renamed successfully",
+  "renameError": "Failed to rename",
+  "shareNotPublished": "This dashboard has not been published yet",
+  "shareCopySuccess": "Share link copied",
+  "shareCopyError": "Failed to copy",
+  "publishSuccess": "Published successfully",
+  "unpublishSuccess": "Unpublished successfully",
+  "operationFailed": "Operation failed",
+  "selectTime": "Select Time",
+  "startHour": "Start Hour",
+  "endHour": "End Hour",
+  "dynamicUpdate": "Dynamic Update (Auto-calculate based on current time)",
+  "cancel": "Cancel",
+  "confirm": "Confirm",
+  "yearUnit": " ",
+  "monthUnit": " ",
+  "shortcut": {
+    "last_7": "Last 7 Days",
+    "last_30": "Last 30 Days",
+    "last_90": "Last 90 Days",
+    "last_180": "Last 180 Days"
+  },
+  "selectComponentToStart": "Select a component to start building your dashboard",
+  "saveSuccess": "Saved successfully",
+  "saveFailed": "Failed to save",
+  "saving": "Saving...",
+  "unsaved": "Unsaved",
+  "saved": "Saved",
+  "addChart": "Add Chart",
+  "addQueryComponent": "Add Query Component",
+  "fullScreen": "Full Screen",
+  "saveAndPublish": "Save and Publish",
+  "save": "Save",
+  "prompt": "Prompt",
+  "unsavedChangesWarning": "You have unsaved changes. Are you sure you want to leave?",
+  "saveAndLeave": "Save and Leave",
+  "leaveWithoutSaving": "Leave without Saving",
+  "copyToTargetSuccess": "Copied to target dashboard",
+  "copyFailed": "Failed to copy",
+  "confirmDeleteComponent": "Are you sure you want to delete the component \"{{name}}\"?",
+  "delete": "Delete",
+  "nameRequired": "Name cannot be empty",
+  "charLimit200": "Character limit: 1-200 characters",
+  "rename": "Rename",
+  "duplicate": "Duplicate",
+  "copyTo": "Copy to",
+  "noOtherDashboards": "No other dashboards available",
+  "createFailed": "Failed to create, please try again",
+  "maxLimitReached": "Maximum of {{count}} dashboards allowed",
+  "untitledDashboard": "Untitled Dashboard",
+  "dashboardCopyName": "{{title}} Copy",
+  "confirmDeleteDashboard": "Are you sure you want to delete {{title}}? This action cannot be undone.",
+  "dashboardList": "Dashboards",
+  "addDashboard": "Add Dashboard",
+  "expandList": "Expand List",
+  "collapseList": "Collapse List",
+  "noMatchingDashboards": "No matching dashboards found",
+  "noDashboards": "No dashboards yet",
+  "default": "Default",
+  "setAsDefault": "Set as Default",
+  "alreadyDefault": "Already Default",
+  "share": "Share",
+  "selectADashboard": "Please select a dashboard",
+  "createdBy": "Created by",
+  "createTime": "Create Time",
+  "lastUpdateTime": "Last Update Time",
+  "publish": "Publish",
+  "unpublish": "Unpublish",
+  "editDashboard": "Edit Dashboard",
+  "editAfterUnpublish": "Unpublish to enable editing",
+  "updatingCharts": "Updating charts",
+  "noDataInChart": "No data available in this chart",
+  "selectDate": "Select Date",
+  "query": "Query",
+  "chart": {
+    "barChart": "Bar Chart",
+    "basicBarChart": "Basic Bar Chart",
+    "stackedBarChart": "Stacked Bar Chart",
+    "groupedBarChart": "Grouped Bar Chart",
+    "horizontalBarChart": "Horizontal Bar Chart",
+    "basicHorizontalBarChart": "Basic Horizontal Bar Chart",
+    "stackedHorizontalBarChart": "Stacked Horizontal Bar Chart",
+    "groupedHorizontalBarChart": "Grouped Horizontal Bar Chart",
+    "lineChart": "Line Chart",
+    "basicLineChart": "Basic Line Chart",
+    "stackedLineChart": "Stacked Line Chart",
+    "areaChart": "Area Chart",
+    "stackedAreaChart": "Stacked Area Chart",
+    "pieChart": "Pie Chart",
+    "donutChart": "Donut Chart",
+    "others": "Others",
+    "metricCard": "Metric Card"
   }
 }
