@@ -13,9 +13,9 @@ from langchain_core.tools import BaseTool
 from loguru import logger
 
 from bisheng.api.services.knowledge_imp import decide_vectorstores, async_read_chunk_text
-from bisheng.api.services.linsight.sop_manage import SOPManageService
+from bisheng.linsight.domain.services.sop_manage import SOPManageService
 from bisheng.api.services.workstation import WorkStationService
-from bisheng.api.v1.schema.linsight_schema import LinsightQuestionSubmitSchema, DownloadFilesSchema, \
+from bisheng.linsight.domain.schemas.linsight_schema import LinsightQuestionSubmitSchema, DownloadFilesSchema, \
     SubmitFileSchema
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
@@ -30,11 +30,11 @@ from bisheng.core.cache.utils import save_file_to_folder, CACHE_DIR
 from bisheng.core.logger import trace_id_var
 from bisheng.core.prompts.manager import get_prompt_manager
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
-from bisheng.database.models import LinsightSessionVersion
 from bisheng.database.models.flow import FlowType
-from bisheng.database.models.linsight_execute_task import LinsightExecuteTaskDao
-from bisheng.database.models.linsight_session_version import LinsightSessionVersionDao, SessionVersionStatusEnum
-from bisheng.database.models.linsight_sop import LinsightSOPRecord
+from bisheng.linsight.domain.models.linsight_execute_task import LinsightExecuteTaskDao
+from bisheng.linsight.domain.models.linsight_session_version import LinsightSessionVersionDao, SessionVersionStatusEnum, \
+    LinsightSessionVersion
+from bisheng.linsight.domain.models.linsight_sop import LinsightSOPRecord
 from bisheng.database.models.session import MessageSessionDao, MessageSession
 from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.knowledge.domain.models.knowledge import KnowledgeRead, KnowledgeTypeEnum

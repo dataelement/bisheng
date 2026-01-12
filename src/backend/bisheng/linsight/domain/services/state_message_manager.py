@@ -6,12 +6,12 @@ from typing import List, Dict, Any, Optional
 from loguru import logger
 from pydantic import BaseModel, Field
 
-from bisheng.api.v1.schema.linsight_schema import UserInputEventSchema
+from bisheng.linsight.domain.schemas.linsight_schema import UserInputEventSchema
 from bisheng.common.errcode.http_error import ServerError
 from bisheng.core.cache.redis_manager import get_redis_client_sync, get_redis_client
-from bisheng.database.models import LinsightExecuteTask
-from bisheng.database.models.linsight_execute_task import ExecuteTaskStatusEnum, LinsightExecuteTaskDao
-from bisheng.database.models.linsight_session_version import LinsightSessionVersion, LinsightSessionVersionDao
+from bisheng.linsight.domain.models.linsight_execute_task import ExecuteTaskStatusEnum, LinsightExecuteTaskDao, \
+    LinsightExecuteTask
+from bisheng.linsight.domain.models.linsight_session_version import LinsightSessionVersion, LinsightSessionVersionDao
 from bisheng.utils.util import retry_async
 from bisheng_langchain.linsight.event import BaseEvent
 

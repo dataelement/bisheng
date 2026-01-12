@@ -10,20 +10,20 @@ from langchain_core.language_models import BaseChatModel
 from loguru import logger
 
 from bisheng.api.services.invite_code.invite_code import InviteCodeService
-from bisheng.api.services.linsight.workbench_impl import LinsightWorkbenchImpl
-from bisheng.api.v1.schema.linsight_schema import UserInputEventSchema
+from bisheng.linsight.domain.services.workbench_impl import LinsightWorkbenchImpl
+from bisheng.linsight.domain.schemas.linsight_schema import UserInputEventSchema
 from bisheng.common.services.config_service import settings
 from bisheng.core.cache.utils import create_cache_folder_async, CACHE_DIR
 from bisheng.core.external.http_client.http_client_manager import get_http_client
 from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models import LinsightExecuteTask
-from bisheng.database.models.linsight_execute_task import LinsightExecuteTaskDao, ExecuteTaskStatusEnum, \
+from bisheng.linsight.domain.models.linsight_execute_task import LinsightExecuteTaskDao, ExecuteTaskStatusEnum, \
     ExecuteTaskTypeEnum
-from bisheng.database.models.linsight_session_version import LinsightSessionVersionDao, SessionVersionStatusEnum, \
+from bisheng.linsight.domain.models.linsight_session_version import LinsightSessionVersionDao, SessionVersionStatusEnum, \
     LinsightSessionVersion
-from bisheng.linsight import utils as linsight_execute_utils
-from bisheng.linsight.state_message_manager import LinsightStateMessageManager, MessageData, MessageEventType
+from bisheng.linsight.domain import utils as linsight_execute_utils
+from bisheng.linsight.domain.services.state_message_manager import LinsightStateMessageManager, MessageData, MessageEventType
 from bisheng.llm.domain.services import LLMService
 from bisheng.tool.domain.services.tool import ToolServices
 from bisheng_langchain.linsight.agent import LinsightAgent

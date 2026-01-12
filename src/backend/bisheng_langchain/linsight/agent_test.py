@@ -4,7 +4,7 @@ import os
 from langchain_community.chat_models import ChatTongyi
 from pydantic import SecretStr
 
-from bisheng.api.services.linsight.workbench_impl import LinsightWorkbenchImpl
+from bisheng.linsight.domain.services.workbench_impl import LinsightWorkbenchImpl
 from bisheng.api.services.workstation import WorkStationService
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.tool.domain.services.executor import ToolExecutor
