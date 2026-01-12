@@ -4,7 +4,8 @@
 import { Button } from "@/components/bs-ui/button"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog"
 import { Input } from "@/components/bs-ui/input"
-import { ChevronDown, ChevronLeft, ChevronRight, GripVertical, X } from "lucide-react"
+import { ChevronDown, GripVertical, ListIndentDecrease, ListIndentIncrease, X } from "lucide-react"
+
 import { useCallback, useMemo, useState } from "react"
 
 import { Label } from "@/components/bs-ui/label"
@@ -530,14 +531,14 @@ export function ComponentConfigDrawer() {
               <CollapseLabel
                 label={t("componentConfigDrawer.basicConfig")}
                 onClick={() => toggleCollapse('basic')}
-                icon={<ChevronRight />}
+                icon={<ListIndentDecrease className="w-4 h-4" />}
               />
             ) : (
               <div className="flex-1 flex flex-col overflow-hidden">
                 <PanelHeader
                   title={t("componentConfigDrawer.basicConfig")}
                   onCollapse={() => toggleCollapse('basic')}
-                  icon={<ChevronLeft />}
+                  icon={<ListIndentIncrease className="w-4 h-4" />}
                 />
 
                 <div className="flex-1 overflow-y-auto pl-4 pr-4 pb-6 pt-4 space-y-6">
@@ -562,13 +563,21 @@ export function ComponentConfigDrawer() {
                                 <div className="relative w-full group">
                                   <div className="flex h-[28px] w-full items-center justify-between rounded-md border border-gray-300 bg-white px-3 py-2 text-sm transition-colors hover:border-gray-400 cursor-pointer">
                                     {/* 文本区域 */}
-                                    <div className="flex-1">
+                                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                                      <img
+                                        src={`${__APP_ENV__.BASE_URL}/assets/dashboard/${chartType}.png`}
+                                        className="w-4 h-4 shrink-0"
+                                        alt={chartType}
+                                      />
                                       <span className="truncate text-gray-700">
-                                        {t(`chart.${ChartGroupItems
-                                          .flatMap(item => item.data)
-                                          .find(item => item.type === chartType)?.label}`) || t("componentConfigDrawer.selectChartType")}
+                                        {t(
+                                          `chart.${ChartGroupItems
+                                            .flatMap(item => item.data)
+                                            .find(item => item.type === chartType)?.label}`
+                                        ) || t("componentConfigDrawer.selectChartType")}
                                       </span>
                                     </div>
+
                                     {/* ChevronDown */}
                                     <ChevronDown className="h-4 w-4 text-gray-500 flex-shrink-0" />
                                   </div>
@@ -792,14 +801,14 @@ export function ComponentConfigDrawer() {
               <CollapseLabel
                 label={t("componentConfigDrawer.dataSelection")}
                 onClick={() => toggleCollapse('data')}
-                icon={<ChevronLeft />}
+                icon={<ListIndentDecrease className="w-4 h-4" />}
               />
             ) : (
               <div className="flex-1 flex flex-col overflow-hidden">
                 <PanelHeader
                   title={t("componentConfigDrawer.dataSelection")}
                   onCollapse={() => toggleCollapse('data')}
-                  icon={<ChevronRight />}
+                  icon={<ListIndentIncrease className="w-4 h-4" />}
                 />
                 <div className="flex-1 overflow-auto">
                   <DatasetSelector

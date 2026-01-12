@@ -4,7 +4,7 @@ import { Input } from "@/components/bs-ui/input"
 import { Label } from "@/components/bs-ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select"
 import { getDatasets, MetricConfig } from "@/controllers/API/dashboard"
-import { Calendar, ChevronDown, ChevronRight, Clock3, Hash, Search, Type } from "lucide-react"
+import { Calendar, ChevronDown, ChevronRight, ChevronUp, Clock3, Hash, Search, Type } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import { useQuery } from "react-query"
 import { useTranslation } from "react-i18next"
@@ -195,7 +195,7 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
                             {dimensionsExpanded ? (
                                 <ChevronDown className="h-4 w-4" />
                             ) : (
-                                <ChevronRight className="h-4 w-4" />
+                                <ChevronUp className="h-4 w-4" />
                             )}
                         </button>
 
@@ -265,7 +265,7 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
                             {metricsExpanded ? (
                                 <ChevronDown className="h-4 w-4" />
                             ) : (
-                                <ChevronRight className="h-4 w-4" />
+                                <ChevronUp className="h-4 w-4" />
                             )}
                         </button>
                         {metricsExpanded && (

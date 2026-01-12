@@ -101,6 +101,7 @@ const SearchPanne = ({
         page_num: page,
         page_size: pageSize
       };
+      console.log(type, 7877);
 
       switch (type) {
         case 'flow':
@@ -111,8 +112,8 @@ const SearchPanne = ({
           return getGroupResourcesApi({ ...param, resource_type: 4 });
         case 'assistant':
           return getGroupResourcesApi({ ...param, resource_type: 3 });
-        // case 'board':
-        //   return getGroupResourcesApi({ ...param, resource_type: 6 });
+        case 'board':
+          return getGroupResourcesApi({ ...param, resource_type: 6 });
         default:
           return getGroupResourcesApi({ ...param, resource_type: 1 });
       }
@@ -160,7 +161,6 @@ const SearchPanne = ({
 
   return <>
     <div className="mt-6 flex flex-col items-start relative gap-3">
-      {/* <p className="text-xl font-bold">{title}</p> */}
       {type === 'board' && (
         <div className="flex flex-col gap-4 w-full">
           {/* 允许创建看板开关 */}
@@ -177,40 +177,6 @@ const SearchPanne = ({
               </p>
             </div>
           </div>
-
-          {/* 看板使用/管理权限表格 */}
-          <Table className="mt-2">
-            <TableHeader>
-              <TableRow>
-                <TableHead>{t(nameKey)}</TableHead>
-                <TableHead className="text-center w-[175px]">{t('system.usePermission')}</TableHead>
-                <TableHead className="text-center w-[175px]">{t('system.managePermission')}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {data.map((el: any) => {
-                const id = Number(el.id);
-                return (
-                  <TableRow key={id}>
-                    <TableCell className="font-medium">{t(el.name)}</TableCell>
-                    <TableCell className="text-center">
-                      <Switch
-                        checked={useChecked(id)}
-                        onCheckedChange={(bln) => onUseChange(id, bln)}
-                      />
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <Switch
-                        disabled={!appConfig.isPro}
-                        checked={manageChecked(id)}
-                        onCheckedChange={(bln) => onManageChange(id, bln)}
-                      />
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
         </div>
       )}
 

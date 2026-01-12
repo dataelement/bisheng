@@ -2,7 +2,7 @@
 "use client"
 
 import { Button } from "@/components/bs-ui/button"
-import { ChevronLeft, ChevronRight } from "lucide-react"
+import { ListIndentDecrease, ListIndentIncrease } from "lucide-react"
 import { useEffect, useState } from "react"
 import { useEditorDashboardStore } from "@/store/dashboardStore"
 import { useTranslation } from "react-i18next"
@@ -66,14 +66,14 @@ export function DashboardConfigPanel({ collapsed = false, onCollapse }: Dashboar
           <CollapseLabel
             label={t("configPanel.title")}
             onClick={onCollapse}
-            icon={<ChevronRight />}
+            icon={<ListIndentDecrease className="w-4 h-4" />}
           />
         ) : (
           <div className="flex-1 flex flex-col overflow-hidden">
             <PanelHeader
               title={t("configPanel.title")}
               onCollapse={onCollapse}
-              icon={<ChevronLeft />}
+              icon={<ListIndentIncrease className="w-4 h-4" />}
             />
 
             <div className="flex-1 overflow-y-auto px-2 pb-6 pt-4 space-y-6">

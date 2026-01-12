@@ -20,7 +20,7 @@
         },
         "setDefault": "设置为默认值",
         "datePicker": {
-            "placeholder": "选择{{displayType}}",
+            "placeholder": "选择时间",
             "single": "时间",
             "range": "时间范围"
         },
