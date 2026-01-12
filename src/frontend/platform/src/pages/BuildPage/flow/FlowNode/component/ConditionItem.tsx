@@ -142,14 +142,14 @@ const Item = ({ nodeId, item, index, del, required, varErrors, onUpdateItem, onD
                             className={`${required && !item.right_value && 'border-red-500'} h-8`}
                         />
                     )}
-                    {del && (
-                        <Trash2
-                            size={18}
-                            onClick={() => onDeleteItem(index)}
-                            className="min-w-5 hover:text-red-600 cursor-pointer hover-reveal-child"
-                        />
-                    )}
                 </>
+            )}
+            {del && (
+                <Trash2
+                    size={18}
+                    onClick={() => onDeleteItem(index)}
+                    className="min-w-5 hover:text-red-600 cursor-pointer hover-reveal-child"
+                />
             )}
         </div>
     );

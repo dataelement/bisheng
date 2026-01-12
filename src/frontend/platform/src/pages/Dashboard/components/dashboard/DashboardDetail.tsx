@@ -67,11 +67,11 @@ export function DashboardDetail({
         const trimmedTitle = title.trim()
 
         if (!trimmedTitle || !dashboard) {
-            setTitle(dashboard?.title || "")
-            return toast({
-                description: t('nameRequired'),
-                variant: "error",
-            })
+            return setTitle(dashboard?.title || "")
+            // return toast({
+            //     description: t('nameRequired'),
+            //     variant: "error",
+            // })
         }
 
         if (trimmedTitle.length > 200) {
