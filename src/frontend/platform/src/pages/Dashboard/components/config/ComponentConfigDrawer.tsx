@@ -22,28 +22,8 @@ import { DimensionBlock } from "./DimensionBlock"
 import { FilterConditionDialog } from "./FilterConditionDialog"
 import { StyleConfigPanel } from "./StyleConfigPanel"
 import { useChartState } from "./useChartState"
+import { generateUUID } from "@/components/bs-ui/utils"
 
-// 图表类型选项
-export const CHART_TYPES: {
-  label: string;
-  value: ChartType;
-  hasStack: boolean;
-}[] = [
-    { label: "基础柱状图", value: ChartType.Bar, hasStack: false },
-    { label: "堆叠柱状图", value: ChartType.StackedBar, hasStack: true },
-    { label: "组合柱状图", value: ChartType.GroupedBar, hasStack: false },
-    { label: "基础条形图", value: ChartType.HorizontalBar, hasStack: false },
-    { label: "堆叠条形图", value: ChartType.StackedHorizontalBar, hasStack: true },
-    { label: "组合条形图", value: ChartType.GroupedHorizontalBar, hasStack: false },
-    { label: "分组条形图", value: ChartType.GroupedHorizontalBar, hasStack: false },
-    { label: "基础折线图", value: ChartType.Line, hasStack: false },
-    { label: "堆叠折线图", value: ChartType.StackedLine, hasStack: true },
-    { label: "基础面积图", value: ChartType.Area, hasStack: false },
-    { label: "堆叠面积图", value: ChartType.StackedArea, hasStack: true },
-    { label: "饼状图", value: ChartType.Pie, hasStack: false },
-    { label: "环状图", value: ChartType.Donut, hasStack: false },
-    { label: "指标卡", value: ChartType.Metric, hasStack: false },
-  ];
 
 export function ComponentConfigDrawer() {
   const { t } = useTranslation("dashboard")
@@ -152,6 +132,7 @@ export function ComponentConfigDrawer() {
           displayName: field.displayName || field.fieldName,
           originalName: field.displayName || field.fieldName,
           fieldType: field.role,
+          timeGranularity: field.timeGranularity,
           sort: null
         }
         chartState.setCategoryDimensions(prev => [...prev, newDimension])
@@ -171,6 +152,7 @@ export function ComponentConfigDrawer() {
           displayName: field.displayName || field.fieldName,
           originalName: field.displayName || field.fieldName,
           fieldType: field.role,
+          timeGranularity: field.timeGranularity,
           sort: null
         }
         chartState.setStackDimensions(prev => [...prev, newDimension])
@@ -212,7 +194,7 @@ export function ComponentConfigDrawer() {
           return
         }
 
-        // 🚫 多个虚拟指标
+        // 多个虚拟指标
         if (currentIsVirtual && hasVirtualMetric) {
           toast({
             description: t("componentConfigDrawer.toast.multipleVirtualMetric"),
@@ -403,7 +385,7 @@ export function ComponentConfigDrawer() {
     refreshChart(editingComponent.id)
 
     toast({
-      description: t("componentConfigDrawer.toast.chartUpdated"),
+      description: t("componentConfigDrawer.dialog.chartUpdated"),
       variant: "success"
     })
   }, [

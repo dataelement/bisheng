@@ -80,11 +80,22 @@
       "displayNameRequired": "Display Name *",
       "enterDisplayName": "Enter display name",
       "cancel": "Cancel",
-      "confirm": "Confirm"
+      "confirm": "Confirm",
+      "chartUpdated": "Chart updated"
     },
     "dashboard": {
 
     },
+    "validation": {
+  "validationFailed": "Validation failed",
+  "chartTypeRequired": "Please select a chart type",
+  "categoryRequired": "Please add at least one category dimension",
+  "metricRequired": "Please add at least one metric",
+  "datasetRequired": "Please select a dataset",
+  "stackRequired": "Please add a stack dimension for stacked charts",
+  "invalidCategoryFields": "Invalid category dimension fields",
+  "invalidMetricFields": "Invalid metric fields"
+},
     "toast": {
       "fieldAlreadyExists": "Field already exists in {{section}}",
       "dimensionLimitReached": "Dimension limit reached",

@@ -46,7 +46,7 @@ type MetricFormat = {
   suffix?: string
   thousandSeparator: boolean
 }
-export function DimensionBlock({ 
+export function DimensionBlock({
   isDimension,
   dimensions = [],
   maxDimensions,
@@ -62,7 +62,7 @@ export function DimensionBlock({
   invalidIds
 }: DimensionBlockProps) {
   const { t } = useTranslation("dashboard")
-  
+
   const [hoveredDimension, setHoveredDimension] = useState<string | null>(null)
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
   const [hoveredMenuItem, setHoveredMenuItem] = useState<{
@@ -70,28 +70,28 @@ export function DimensionBlock({
     menuType: 'sort' | 'aggregation' | 'format'
   } | null>(null)
   const [selectedDimensionId, setSelectedDimensionId] = useState<string | null>(null)
-const [editingMetric, setEditingMetric] = useState<DimensionItem | null>(null)
-const [formatDialogOpen, setFormatDialogOpen] = useState(false)
-const [localFormat, setLocalFormat] = useState<MetricFormat | null>(null)
+  const [editingMetric, setEditingMetric] = useState<DimensionItem | null>(null)
+  const [formatDialogOpen, setFormatDialogOpen] = useState(false)
+  const [localFormat, setLocalFormat] = useState<MetricFormat | null>(null)
 
   // 获取字段样式
-const getFieldTypeStyle = (dimension: DimensionItem) => {
-  const isSelected = selectedDimensionId === dimension.id
+  const getFieldTypeStyle = (dimension: DimensionItem) => {
+    const isSelected = selectedDimensionId === dimension.id
 
-  const bgColor = isSelected
-    ? dimension.fieldType === 'dimension'
-      ? 'bg-blue-100'
-      : 'bg-[#E7F8FA]'
-    : dimension.fieldType === 'dimension'
-      ? 'bg-blue-50'
-      : 'bg-[#E7F8FA]'
+    const bgColor = isSelected
+      ? dimension.fieldType === 'dimension'
+        ? 'bg-blue-100'
+        : 'bg-[#E7F8FA]'
+      : dimension.fieldType === 'dimension'
+        ? 'bg-blue-50'
+        : 'bg-[#E7F8FA]'
 
-  const borderColor = dimension.fieldType === 'dimension' ? 'border-blue-300' : 'border-[#88E1EB]'
+    const borderColor = dimension.fieldType === 'dimension' ? 'border-blue-300' : 'border-[#88E1EB]'
 
-  const invalidStyle = invalidIds?.has(dimension.id) ? 'border-red-500 bg-red-50' : ''
+    const invalidStyle = invalidIds?.has(dimension.id) ? 'border-red-500 bg-red-50' : ''
 
-  return `${bgColor} border ${borderColor} ${invalidStyle} hover:bg-opacity-80 transition-colors`
-}
+    return `${bgColor} border ${borderColor} ${invalidStyle} hover:bg-opacity-80 transition-colors`
+  }
 
 
   // 选项配置
@@ -107,13 +107,6 @@ const getFieldTypeStyle = (dimension: DimensionItem) => {
     { label: t('dimensionBlock.sort.none'), value: null },
     { label: t('dimensionBlock.sort.asc'), value: 'asc' },
     { label: t('dimensionBlock.sort.desc'), value: 'desc' }
-  ]
-
-  const formatOptions = [
-    { label: '默认格式', value: 'default' },
-    { label: '数字格式', value: 'number' },
-    { label: '百分比', value: 'percent' },
-    { label: '货币格式', value: 'currency' }
   ]
 
   // 设置按钮点击
@@ -158,16 +151,16 @@ const getFieldTypeStyle = (dimension: DimensionItem) => {
               onMouseEnter={() => setHoveredDimension(dimension.id)}
               onMouseLeave={() => setHoveredDimension(null)}
             >
-          <div
-            className={`
+              <div
+                className={`
               flex items-center justify-between gap-2 p-1 rounded-md border h-[28px]
               ${getFieldTypeStyle(dimension)}
               ${selectedDimensionId === dimension.id ? (dimension.fieldType === 'dimension' ? 'bg-blue-100' : 'bg-[#E7F8FA]') : ''}
               ${invalidIds?.has(dimension.id) ? 'border-red-500 bg-red-50' : ''}
               hover:bg-opacity-80 transition-colors
             `}
-            onClick={() => setSelectedDimensionId(dimension.id)}
-          >
+                onClick={() => setSelectedDimensionId(dimension.id)}
+              >
 
                 {/* 字段名称 */}
                 <div className="min-w-0 flex-1">
@@ -178,18 +171,18 @@ const getFieldTypeStyle = (dimension: DimensionItem) => {
                 <div className={`flex items-center gap-1 ${hoveredDimension === dimension.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 transition-opacity'}`}>
                   {/* 设置按钮 */}
                   <div className="relative">
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
+                    <Button
+                      variant="ghost"
+                      size="icon"
                       className="h-6 w-6 p-0"
                       onClick={(e) => handleSettingsClick(dimension.id, e)}
                     >
                       <Settings className="h-3 w-3" />
                     </Button>
-                    
+
                     {/* 菜单 */}
                     {openMenuId === dimension.id && (
-                      <div 
+                      <div
                         className="absolute right-full top-0 mr-1 bg-white border rounded-md shadow-lg z-20 p-2 min-w-[120px]"
                         onClick={(e) => e.stopPropagation()}
                         onMouseLeave={() => setHoveredMenuItem(null)}
@@ -199,17 +192,17 @@ const getFieldTypeStyle = (dimension: DimensionItem) => {
                           <>
                             {/* 排序 */}
                             <div className="relative">
-                              <div 
+                              <div
                                 className={`flex items-center justify-between px-2 py-1 text-xs rounded cursor-pointer ${hoveredMenuItem?.dimensionId === dimension.id && hoveredMenuItem?.menuType === 'sort' ? 'bg-gray-100' : 'hover:bg-gray-100'}`}
                                 onMouseEnter={() => handleMenuItemHover(dimension.id, 'sort')}
                               >
                                 <span>{t('dimensionBlock.menu.sort')}</span>
                                 <ChevronRight className="h-3 w-3" />
                               </div>
-                              
+
                               {/* 排序子菜单 */}
                               {hoveredMenuItem?.dimensionId === dimension.id && hoveredMenuItem?.menuType === 'sort' && (
-                                <div 
+                                <div
                                   className="absolute left-full top-0 ml-1 bg-white border rounded-md shadow-lg z-30 p-2 min-w-[90px]"
                                   onMouseEnter={() => handleMenuItemHover(dimension.id, 'sort')}
                                   onMouseLeave={() => setHoveredMenuItem(null)}
@@ -231,9 +224,9 @@ const getFieldTypeStyle = (dimension: DimensionItem) => {
                                 </div>
                               )}
                             </div>
-                            
+
                             <div className="h-px bg-gray-200 my-1"></div>
-                            
+
                             {/* 编辑显示名称 */}
                             <button
                               className="block w-full text-left px-2 py-1 text-xs hover:bg-gray-100 rounded"
@@ -250,17 +243,17 @@ const getFieldTypeStyle = (dimension: DimensionItem) => {
                             {/* 指标菜单 */}
                             {/* 汇总方式 */}
                             <div className="relative">
-                              <div 
+                              <div
                                 className={`flex items-center justify-between px-2 py-1 text-xs rounded cursor-pointer ${hoveredMenuItem?.dimensionId === dimension.id && hoveredMenuItem?.menuType === 'aggregation' ? 'bg-gray-100' : 'hover:bg-gray-100'}`}
                                 onMouseEnter={() => handleMenuItemHover(dimension.id, 'aggregation')}
                               >
                                 <span>{t('dimensionBlock.menu.aggregation')}</span>
                                 <ChevronRight className="h-3 w-3" />
                               </div>
-                              
+
                               {/* 汇总方式子菜单 */}
                               {hoveredMenuItem?.dimensionId === dimension.id && hoveredMenuItem?.menuType === 'aggregation' && (
-                                <div 
+                                <div
                                   className="absolute left-full top-0 ml-1 bg-white border rounded-md shadow-lg z-30 p-2 min-w-[80px]"
                                   onMouseEnter={() => handleMenuItemHover(dimension.id, 'aggregation')}
                                   onMouseLeave={() => setHoveredMenuItem(null)}
@@ -282,20 +275,20 @@ const getFieldTypeStyle = (dimension: DimensionItem) => {
                                 </div>
                               )}
                             </div>
-                            
+
                             {/* 排序 */}
                             <div className="relative mt-1">
-                              <div 
+                              <div
                                 className={`flex items-center justify-between px-2 py-1 text-xs rounded cursor-pointer ${hoveredMenuItem?.dimensionId === dimension.id && hoveredMenuItem?.menuType === 'sort' ? 'bg-gray-100' : 'hover:bg-gray-100'}`}
                                 onMouseEnter={() => handleMenuItemHover(dimension.id, 'sort')}
                               >
                                 <span>{t('dimensionBlock.menu.sort')}</span>
                                 <ChevronRight className="h-3 w-3" />
                               </div>
-                              
+
                               {/* 排序子菜单 */}
                               {hoveredMenuItem?.dimensionId === dimension.id && hoveredMenuItem?.menuType === 'sort' && (
-                                <div 
+                                <div
                                   className="absolute left-full top-0 ml-1 bg-white border rounded-md shadow-lg z-30 p-2 min-w-[90px]"
                                   onMouseEnter={() => handleMenuItemHover(dimension.id, 'sort')}
                                   onMouseLeave={() => setHoveredMenuItem(null)}
@@ -317,13 +310,13 @@ const getFieldTypeStyle = (dimension: DimensionItem) => {
                                 </div>
                               )}
                             </div>
-                            
+
                             {/* 数值格式 */}
                             <button
                               className="flex items-center justify-between w-full px-2 py-1 text-xs rounded hover:bg-gray-100"
                               onClick={() => {
                                 setEditingMetric(dimension)
-                                 setLocalFormat(
+                                setLocalFormat(
                                   dimension.numberFormat || {
                                     type: 'number',
                                     decimalPlaces: 0,
@@ -339,9 +332,9 @@ const getFieldTypeStyle = (dimension: DimensionItem) => {
                               <span>{t('dimensionBlock.menu.format')}</span>
                             </button>
 
-                            
+
                             <div className="h-px bg-gray-200 my-1"></div>
-                            
+
                             {/* 编辑显示名称 */}
                             <button
                               className="block w-full text-left px-2 py-1 text-xs hover:bg-gray-100 rounded"
@@ -370,11 +363,11 @@ const getFieldTypeStyle = (dimension: DimensionItem) => {
                   </Button>
                 </div>
               </div>
-              
+
               {/* 点击外部关闭菜单 */}
               {openMenuId === dimension.id && (
-                <div 
-                  className="fixed inset-0 z-10" 
+                <div
+                  className="fixed inset-0 z-10"
                   onClick={() => {
                     setOpenMenuId(null)
                     setHoveredMenuItem(null)
@@ -387,225 +380,225 @@ const getFieldTypeStyle = (dimension: DimensionItem) => {
       ) : (
         <div className={`
           border border-dashed rounded-md px-3 py-2
-          ${isDragOver 
-            ? 'border-primary bg-blue-50' 
+          ${isDragOver
+            ? 'border-primary bg-blue-50'
             : 'border-gray-300 bg-gray-50'
           }
         `}>
           <div className="text-sm text-gray-400">
-            {isDimension 
-              ? t('dimensionBlock.prompt.dragDimensionHere') 
+            {isDimension
+              ? t('dimensionBlock.prompt.dragDimensionHere')
               : t('dimensionBlock.prompt.dragMetricHere')}
           </div>
         </div>
       )}
-{editingMetric && localFormat && (
-<Dialog
-  open={formatDialogOpen}
-  onOpenChange={(open) => {
-    setFormatDialogOpen(open)
-    if (!open) {
-      setEditingMetric(null)
-      setLocalFormat(null)
-    }
-  }}
->
-  <DialogContent className="sm:max-w-[520px]">
-    <DialogHeader>
-      <DialogTitle>{t('dimensionBlock.dialog.formatTitle')}</DialogTitle>
-    </DialogHeader>
-    
-    <div className="space-y-6 py-4">
-      {/* 格式类型 */}
-      <div>
-        <div className="text-sm font-medium mb-2">{t('dimensionBlock.dialog.formatType')}</div>
-        <RadioGroup
-          value={localFormat.type}
-          onValueChange={(value) => 
-            setLocalFormat({ 
-              ...localFormat, 
-              type: value as any,
-              unit: value === 'percent' ? undefined : localFormat.unit,
-              thousandSeparator: value === 'percent' ? false : localFormat.thousandSeparator
-            })
-          }
-          className="flex gap-6"
-        >
-          {[
-            { label: t('dimensionBlock.dialog.formatTypes.number'), value: 'number' },
-            { label: t('dimensionBlock.dialog.formatTypes.percent'), value: 'percent' },
-            { label: t('dimensionBlock.dialog.formatTypes.duration'), value: 'duration' },
-            { label: t('dimensionBlock.dialog.formatTypes.storage'), value: 'storage' }
-          ].map(item => (
-            <div key={item.value} className="flex items-center space-x-2">
-              <RadioGroupItem value={item.value} id={`format-${item.value}`} />
-              <Label htmlFor={`format-${item.value}`} className="text-sm cursor-pointer">
-                {item.label}
-              </Label>
-            </div>
-          ))}
-        </RadioGroup>
-      </div>
-
-      {/* 小数位数 - 默认0，上限5 */}
-      <div>
-        <div className="text-sm font-medium mb-2">{t('dimensionBlock.dialog.decimalPlaces')}</div>
-        <Input
-          type="number"
-          min={0}
-          max={5}
-          step={1}
-          value={localFormat.decimalPlaces}
-          onChange={(e) => {
-            const val = Number(e.target.value);
-            if(val >=0 && val <=5) {
-              setLocalFormat({...localFormat, decimalPlaces: val })
+      {editingMetric && localFormat && (
+        <Dialog
+          open={formatDialogOpen}
+          onOpenChange={(open) => {
+            setFormatDialogOpen(open)
+            if (!open) {
+              setEditingMetric(null)
+              setLocalFormat(null)
             }
           }}
-          className="w-full"
-        />
-      </div>
+        >
+          <DialogContent className="sm:max-w-[520px]">
+            <DialogHeader>
+              <DialogTitle>{t('dimensionBlock.dialog.formatTitle')}</DialogTitle>
+            </DialogHeader>
 
-      {/* 百分比 隐藏 单位+千分符；其他格式正常显示 */}
-      {localFormat.type !== 'percent' && (
-        <>
-          {/* 单位 - 不同格式对应不同下拉选项 */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <div className="text-sm font-medium mb-2">{t('dimensionBlock.dialog.unit')}</div>
-              <Select
-                value={localFormat.unit || "none"}
-                onValueChange={(value) => {
-                  let unitVal = value === "none" ? "" : value;
-                  setLocalFormat({ ...localFormat, unit: unitVal })
+            <div className="space-y-6 py-4">
+              {/* 格式类型 */}
+              <div>
+                <div className="text-sm font-medium mb-2">{t('dimensionBlock.dialog.formatType')}</div>
+                <RadioGroup
+                  value={localFormat.type}
+                  onValueChange={(value) =>
+                    setLocalFormat({
+                      ...localFormat,
+                      type: value as any,
+                      unit: value === 'percent' ? undefined : localFormat.unit,
+                      thousandSeparator: value === 'percent' ? false : localFormat.thousandSeparator
+                    })
+                  }
+                  className="flex gap-6"
+                >
+                  {[
+                    { label: t('dimensionBlock.dialog.formatTypes.number'), value: 'number' },
+                    { label: t('dimensionBlock.dialog.formatTypes.percent'), value: 'percent' },
+                    { label: t('dimensionBlock.dialog.formatTypes.duration'), value: 'duration' },
+                    { label: t('dimensionBlock.dialog.formatTypes.storage'), value: 'storage' }
+                  ].map(item => (
+                    <div key={item.value} className="flex items-center space-x-2">
+                      <RadioGroupItem value={item.value} id={`format-${item.value}`} />
+                      <Label htmlFor={`format-${item.value}`} className="text-sm cursor-pointer">
+                        {item.label}
+                      </Label>
+                    </div>
+                  ))}
+                </RadioGroup>
+              </div>
+
+              {/* 小数位数 - 默认0，上限5 */}
+              <div>
+                <div className="text-sm font-medium mb-2">{t('dimensionBlock.dialog.decimalPlaces')}</div>
+                <Input
+                  type="number"
+                  min={0}
+                  max={5}
+                  step={1}
+                  value={localFormat.decimalPlaces}
+                  onChange={(e) => {
+                    const val = Number(e.target.value);
+                    if (val >= 0 && val <= 5) {
+                      setLocalFormat({ ...localFormat, decimalPlaces: val })
+                    }
+                  }}
+                  className="w-full"
+                />
+              </div>
+
+              {/* 百分比 隐藏 单位+千分符；其他格式正常显示 */}
+              {localFormat.type !== 'percent' && (
+                <>
+                  {/* 单位 - 不同格式对应不同下拉选项 */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <div className="text-sm font-medium mb-2">{t('dimensionBlock.dialog.unit')}</div>
+                      <Select
+                        value={localFormat.unit || "none"}
+                        onValueChange={(value) => {
+                          let unitVal = value === "none" ? "" : value;
+                          setLocalFormat({ ...localFormat, unit: unitVal })
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder={t('dimensionBlock.dialog.selectUnit')} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {localFormat.type === 'number' && (
+                            <>
+                              <SelectItem value="none">{t('dimensionBlock.dialog.none')}</SelectItem>
+                              <SelectItem value="Thousand">Thousand (K)</SelectItem>
+                              <SelectItem value="Million">Million (M)</SelectItem>
+                              <SelectItem value="Billion">Billion (B)</SelectItem>
+                            </>
+                          )}
+                          {localFormat.type === 'duration' && (
+                            <>
+                              <SelectItem value="ms">ms</SelectItem>
+                              <SelectItem value="s">s</SelectItem>
+                              <SelectItem value="min">min</SelectItem>
+                              <SelectItem value="hour">hour</SelectItem>
+                            </>
+                          )}
+                          {localFormat.type === 'storage' && (
+                            <>
+                              <SelectItem value="B">B</SelectItem>
+                              <SelectItem value="KB">KB</SelectItem>
+                              <SelectItem value="MB">MB</SelectItem>
+                              <SelectItem value="GB">GB</SelectItem>
+                              <SelectItem value="TB">TB</SelectItem>
+                            </>
+                          )}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div>
+                      <div className="text-sm font-medium mb-2">{t('dimensionBlock.dialog.suffix')}</div>
+                      <Input
+                        placeholder={t('dimensionBlock.dialog.enterSuffix')}
+                        value={localFormat.suffix || ""}
+                        onChange={(e) =>
+                          setLocalFormat({ ...localFormat, suffix: e.target.value })
+                        }
+                        className="w-full"
+                      />
+                    </div>
+                  </div>
+
+                  {/* 千分符 */}
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      checked={localFormat.thousandSeparator}
+                      onCheckedChange={(checked) =>
+                        setLocalFormat({
+                          ...localFormat,
+                          thousandSeparator: checked as boolean
+                        })
+                      }
+                      id="thousand-separator"
+                    />
+                    <label htmlFor="thousand-separator" className="text-sm cursor-pointer">
+                      {t('dimensionBlock.dialog.thousandSeparator')}
+                    </label>
+                  </div>
+                </>
+              )}
+
+              {/* 百分比 只显示后缀输入框 */}
+              {localFormat.type === 'percent' && (
+                <div>
+                  <div className="text-sm font-medium mb-2">{t('dimensionBlock.dialog.suffix')}</div>
+                  <Input
+                    placeholder={t('dimensionBlock.dialog.enterSuffix')}
+                    value={localFormat.suffix || ""}
+                    onChange={(e) =>
+                      setLocalFormat({ ...localFormat, suffix: e.target.value })
+                    }
+                    className="w-full"
+                  />
+                </div>
+              )}
+
+              {/* 示例 - 匹配需求默认示例 */}
+              <div className="text-sm text-muted-foreground">
+                {t('dimensionBlock.dialog.example')}: {
+                  localFormat.type === 'percent' ? '99%' :
+                    localFormat.type === 'duration' ? '2000000' :
+                      localFormat.type === 'storage' ? '2000000' : '20000'
+                }
+              </div>
+            </div>
+
+            {/* Footer */}
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setFormatDialogOpen(false)
+                  setEditingMetric(null)
+                  setLocalFormat(null)
                 }}
               >
-                <SelectTrigger>
-                  <SelectValue placeholder={t('dimensionBlock.dialog.selectUnit')} />
-                </SelectTrigger>
-                <SelectContent>
-                  {localFormat.type === 'number' && (
-                    <>
-                      <SelectItem value="none">{t('dimensionBlock.dialog.none')}</SelectItem>
-                      <SelectItem value="Thousand">Thousand (K)</SelectItem>
-                      <SelectItem value="Million">Million (M)</SelectItem>
-                      <SelectItem value="Billion">Billion (B)</SelectItem>
-                    </>
-                  )}
-                  {localFormat.type === 'duration' && (
-                    <>
-                      <SelectItem value="ms">ms</SelectItem>
-                      <SelectItem value="s">s</SelectItem>
-                      <SelectItem value="min">min</SelectItem>
-                      <SelectItem value="hour">hour</SelectItem>
-                    </>
-                  )}
-                  {localFormat.type === 'storage' && (
-                    <>
-                      <SelectItem value="B">B</SelectItem>
-                      <SelectItem value="KB">KB</SelectItem>
-                      <SelectItem value="MB">MB</SelectItem>
-                      <SelectItem value="GB">GB</SelectItem>
-                      <SelectItem value="TB">TB</SelectItem>
-                    </>
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
+                {t('chartSelector.buttons.cancel')}
+              </Button>
+              <Button
+                onClick={() => {
+                  if (!editingMetric || !localFormat) return
 
-            <div>
-              <div className="text-sm font-medium mb-2">{t('dimensionBlock.dialog.suffix')}</div>
-              <Input
-                placeholder={t('dimensionBlock.dialog.enterSuffix')}
-                value={localFormat.suffix || ""}
-                onChange={(e) =>
-                  setLocalFormat({ ...localFormat, suffix: e.target.value })
-                }
-                className="w-full"
-              />
-            </div>
-          </div>
+                  const formatToSave: MetricFormat = {
+                    type: localFormat.type,
+                    decimalPlaces: localFormat.decimalPlaces,
+                    thousandSeparator: localFormat.type === 'percent' ? false : localFormat.thousandSeparator,
+                    unit: localFormat.type === 'percent' ? undefined : (localFormat.unit === "" ? undefined : localFormat.unit),
+                    suffix: localFormat.suffix === "" ? undefined : localFormat.suffix
+                  }
 
-          {/* 千分符 */}
-          <div className="flex items-center gap-2">
-            <Checkbox
-              checked={localFormat.thousandSeparator}
-              onCheckedChange={(checked) =>
-                setLocalFormat({
-                  ...localFormat,
-                  thousandSeparator: checked as boolean
-                })
-              }
-              id="thousand-separator"
-            />
-            <label htmlFor="thousand-separator" className="text-sm cursor-pointer">
-              {t('dimensionBlock.dialog.thousandSeparator')}
-            </label>
-          </div>
-        </>
+                  onFormatChange?.(editingMetric.id, formatToSave)
+                  setFormatDialogOpen(false)
+                  setEditingMetric(null)
+                  setLocalFormat(null)
+                }}
+              >
+                {t('chartSelector.buttons.save')}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       )}
-      
-      {/* 百分比 只显示后缀输入框 */}
-      {localFormat.type === 'percent' && (
-        <div>
-          <div className="text-sm font-medium mb-2">{t('dimensionBlock.dialog.suffix')}</div>
-          <Input
-            placeholder={t('dimensionBlock.dialog.enterSuffix')}
-            value={localFormat.suffix || ""}
-            onChange={(e) =>
-              setLocalFormat({ ...localFormat, suffix: e.target.value })
-            }
-            className="w-full"
-          />
-        </div>
-      )}
-
-      {/* 示例 - 匹配需求默认示例 */}
-      <div className="text-sm text-muted-foreground">
-        {t('dimensionBlock.dialog.example')}: {
-          localFormat.type === 'percent' ? '99%' : 
-          localFormat.type === 'duration' ? '2000000' : 
-          localFormat.type === 'storage' ? '2000000' : '20000'
-        }
-      </div>
-    </div>
-
-    {/* Footer */}
-    <DialogFooter>
-      <Button
-        variant="outline"
-        onClick={() => {
-          setFormatDialogOpen(false)
-          setEditingMetric(null)
-          setLocalFormat(null)
-        }}
-      >
-        {t('chartSelector.buttons.cancel')}
-      </Button>
-      <Button
-        onClick={() => {
-          if (!editingMetric || !localFormat) return
-
-          const formatToSave: MetricFormat = {
-            type: localFormat.type,
-            decimalPlaces: localFormat.decimalPlaces,
-            thousandSeparator: localFormat.type === 'percent' ? false : localFormat.thousandSeparator,
-            unit: localFormat.type === 'percent' ? undefined : (localFormat.unit === "" ? undefined : localFormat.unit),
-            suffix: localFormat.suffix === "" ? undefined : localFormat.suffix
-          }
-          
-          onFormatChange?.(editingMetric.id, formatToSave)
-          setFormatDialogOpen(false)
-          setEditingMetric(null)
-          setLocalFormat(null)
-        }}
-      >
-        {t('chartSelector.buttons.save')}
-      </Button>
-    </DialogFooter>
-  </DialogContent>
-</Dialog>
-)}
     </div>
   )
 }

@@ -3,7 +3,6 @@
 
 import { useState, useMemo, useEffect, useCallback, useRef } from "react"
 import { ChartType, ComponentStyleConfig, DataConfig } from "../../types/dataConfig"
-import { CHART_TYPES } from "./ComponentConfigDrawer"
 import { generateUUID } from "@/components/bs-ui/utils"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
 import { useComponentEditorStore, useEditorDashboardStore } from "@/store/dashboardStore"
@@ -35,7 +34,8 @@ export function useChartState(initialComponent: any) {
     setStyleConfigState(newConfig);
 
   }, [initialComponent, updateEditingComponent, refreshChart]);
-  
+
+  const isStackedChart = (type: ChartType) => type.startsWith('stacked-')
   // 初始化逻辑
   useEffect(() => {
     const componentId = initialComponent?.id
@@ -65,10 +65,6 @@ export function useChartState(initialComponent: any) {
       if (dc) {
         console.log('数据配置:', dc)
 
-        // 判断是否为堆叠图表
-        const isStackChart = CHART_TYPES.find(item => item.value === newChartType)?.hasStack || false
-        console.log('是否为堆叠图表:', isStackChart)
-
         // 1. 初始化普通维度（类别轴）
         if (dc.dimensions && dc.dimensions.length > 0) {
           const formattedCategoryDims = dc.dimensions.map((dim, index) => ({
@@ -77,7 +73,8 @@ export function useChartState(initialComponent: any) {
             name: dim.fieldCode,
             displayName: dim.displayName || dim.fieldName,
             originalName: dim.fieldName,
-            sort: dim.sort || 'none',
+            sort: dim.sort || null,
+            timeGranularity: dim.timeGranularity || null,
             sortPriority: 0,
             fieldType: 'dimension'
           }))
@@ -94,6 +91,7 @@ export function useChartState(initialComponent: any) {
             displayName: dc.stackDimension.displayName || dc.stackDimension.fieldName,
             originalName: dc.stackDimension.fieldName,
             sort: dc.stackDimension.sort || null,
+            timeGranularity: dc.timeGranularity || null,
             sortPriority: 0,
             fieldType: 'dimension'
           }
@@ -175,44 +173,61 @@ export function useChartState(initialComponent: any) {
   // 更新 sortPriorityOrder
   useEffect(() => {
     const allFields = [
-      ...categoryDimensions.map(d => ({ ...d, section: 'category' as const })),
-      ...stackDimensions.map(d => ({ ...d, section: 'stack' as const })),
-      ...valueDimensions.map(d => ({ ...d, section: 'value' as const }))
+      ...categoryDimensions.map(d => ({ ...d, section: 'category' })),
+      ...stackDimensions.map(d => ({ ...d, section: 'stack' })),
+      ...valueDimensions.map(d => ({ ...d, section: 'value' }))
     ]
 
-    const newOrder = allFields.map(field => field.id)
-    setSortPriorityOrder(newOrder)
-  }, [categoryDimensions.length, stackDimensions.length, valueDimensions.length])
+    const timeField = allFields.find(
+      f => f.name === 'timestamp' || f.fieldId === 'timestamp'
+    )
+
+    const otherFields = allFields.filter(
+      f => f !== timeField
+    )
+
+    const orderedFields = timeField
+      ? [timeField, ...otherFields]
+      : otherFields
+
+    setSortPriorityOrder(orderedFields.map(f => f.id))
+  }, [
+    categoryDimensions.length,
+    stackDimensions.length,
+    valueDimensions.length
+  ])
+
 
   const currentChartHasStack = useMemo(() => {
-    const chart = CHART_TYPES.find(item => item.value === chartType)
-    return chart?.hasStack || false
+    return isStackedChart(chartType)
   }, [chartType])
+
 
   // 图表类型切换
   const handleChartTypeChange = useCallback((value: ChartType) => {
-    const selectedChart = CHART_TYPES.find(item => item.value === value)
-    const isNewStackChart = selectedChart?.hasStack || false
+    const isNewStackChart = isStackedChart(value)
     const isCurrentStackChart = currentChartHasStack
 
     setChartType(value)
-    setTitle(selectedChart?.label || '')
 
-    // 如果从堆叠切换到非堆叠，需要处理堆叠维度
+    // 从堆叠 → 非堆叠：清理 stack 维度
     if (isCurrentStackChart && !isNewStackChart && stackDimensions.length > 0) {
-      // 如果有堆叠维度，可以将其移动到类别维度（如果类别维度有空位）
       const stackDim = stackDimensions[0]
+
       if (categoryDimensions.length < 2) {
-        // 将堆叠维度移动到类别维度
-        setCategoryDimensions(prev => [...prev, {
-          ...stackDim,
-          id: `category_${Date.now()}`,
-          section: 'category'
-        }])
+        setCategoryDimensions(prev => [
+          ...prev,
+          {
+            ...stackDim,
+            id: `category_${Date.now()}`,
+          }
+        ])
       }
+
       setStackDimensions([])
     }
   }, [stackDimensions, categoryDimensions, currentChartHasStack])
+
 
   // 拖拽相关方法
   const handleDragOver = useCallback((e: React.DragEvent, section: 'category' | 'stack' | 'value') => {
@@ -285,6 +300,7 @@ export function useChartState(initialComponent: any) {
         originalName,
         sort: null,
         sortPriority: 0,
+        timeGranularity: data.timeGranularity,
         fieldType
       }
 
@@ -346,11 +362,11 @@ export function useChartState(initialComponent: any) {
     setSortPriorityOrder(newOrder)
     setDraggingId(null)
   }, [draggingId, sortPriorityOrder])
-  
+
   const handleAddFilter = useCallback(() => {
     setFilterGroup({
       logic: 'and',
-      conditions: [{ 
+      conditions: [{
         id: generateUUID(6),
         fieldId: '',
         fieldCode: '',
@@ -375,7 +391,7 @@ export function useChartState(initialComponent: any) {
       fieldCode: dim.name,
       displayName: dim.displayName,
       sort: dim.sort,
-      timeGranularity: null
+      timeGranularity: dim.timeGranularity || null
     }))
 
     const stackDimension = stackDimensions.length > 0 ? {
@@ -384,7 +400,7 @@ export function useChartState(initialComponent: any) {
       fieldCode: stackDimensions[0].name,
       displayName: stackDimensions[0].displayName,
       sort: stackDimensions[0].sort,
-      timeGranularity: null
+      timeGranularity: stackDimensions[0].timeGranularity || null
     } : undefined
 
     const metrics = valueDimensions.map(metric => ({
@@ -396,27 +412,27 @@ export function useChartState(initialComponent: any) {
       isVirtual: false,
       aggregation: metric.aggregation || 'sum',
       numberFormat: metric.numberFormat || {
-          type: 'number' as const, 
-          decimalPlaces: 2, 
-          unit: undefined, 
-          suffix: undefined, 
-          thousandSeparator: true 
-        }
+        type: 'number' as const,
+        decimalPlaces: 2,
+        unit: undefined,
+        suffix: undefined,
+        thousandSeparator: true
+      }
     }))
-    
+
     // 4. 构建字段顺序 - 按照 sortPriorityOrder 排序
     const allFields = [
-      ...categoryDimensions.map(d => ({ 
-        ...d, 
-        type: 'dimension' as const 
+      ...categoryDimensions.map(d => ({
+        ...d,
+        type: 'dimension' as const
       })),
-      ...stackDimensions.map(d => ({ 
-        ...d, 
-        type: 'stack_dimension' as const 
+      ...stackDimensions.map(d => ({
+        ...d,
+        type: 'stack_dimension' as const
       })),
-      ...valueDimensions.map(m => ({ 
-        ...m, 
-        type: 'metric' as const 
+      ...valueDimensions.map(m => ({
+        ...m,
+        type: 'metric' as const
       }))
     ]
 
@@ -424,16 +440,16 @@ export function useChartState(initialComponent: any) {
     const sortedFields = [...allFields].sort((a, b) => {
       const indexA = sortPriorityOrder.indexOf(a.id)
       const indexB = sortPriorityOrder.indexOf(b.id)
-      
+
       // 如果都在排序列表中，按照列表顺序排序
       if (indexA !== -1 && indexB !== -1) {
         return indexA - indexB
       }
-      
+
       // 如果有一个不在列表中，不在列表的排在后面
       if (indexA === -1 && indexB !== -1) return 1
       if (indexA !== -1 && indexB === -1) return -1
-      
+
       // 都不在列表中，保持原有顺序
       return 0
     })
@@ -443,10 +459,9 @@ export function useChartState(initialComponent: any) {
       fieldId: field.fieldId,
       fieldType: field.type
     }))
-    
+
     // 5. 构建筛选条件
     const filters = filterGroup ? filterGroup.conditions.map((condition, index) => {
-      console.log(condition,8989999)
       return {
         id: condition.id || `filter_${Date.now()}_${index}`, // 确保有 fieldId
         fieldId: condition.fieldCode || '',

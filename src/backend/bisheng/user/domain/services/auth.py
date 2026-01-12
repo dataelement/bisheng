@@ -15,7 +15,7 @@ from bisheng.common.exceptions.auth import JWTDecodeError
 from bisheng.common.services.config_service import settings
 from bisheng.database.constants import AdminRole
 from bisheng.database.models.group import GroupDao
-from bisheng.database.models.role_access import AccessType, RoleAccessDao
+from bisheng.database.models.role_access import AccessType, RoleAccessDao, WebMenuResource
 from bisheng.database.models.user_group import UserGroupDao
 from ..models.user import User
 from ..models.user_role import UserRoleDao
@@ -329,8 +329,9 @@ class LoginUser(BaseModel):
                 role = 'group_admin'
             else:
                 role = role_ids
-        # Get a list of a user's menu bar permissions
-        web_menu = await RoleAccessDao.aget_role_access(role_ids, AccessType.WEB_MENU)
-        web_menu = list(set([one.third_id for one in web_menu]))
-
+            # Get a list of a user's menu bar permissions
+            web_menu = await RoleAccessDao.aget_role_access(role_ids, AccessType.WEB_MENU)
+            web_menu = list(set([one.third_id for one in web_menu]))
+        else:
+            web_menu = [one.value for one in WebMenuResource]
         return role, web_menu

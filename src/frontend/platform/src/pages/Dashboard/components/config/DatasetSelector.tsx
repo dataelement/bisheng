@@ -16,6 +16,7 @@ export interface DatasetField {
     role: "dimension" | "metric"
     enumValues?: string[]
     isVirtual?: boolean
+    timeGranularity?: string
 }
 
 interface DatasetSelectorProps {
@@ -36,19 +37,19 @@ const TIME_ICONS: Record<string, JSX.Element> = {
 }
 
 const getFieldTypeIcon = (type: 'string' | 'number' | 'date') => {
-  switch (type) {
-    case 'date':
-      return <Calendar className="h-4 w-4 text-blue-500" />
-    case 'number':
-      return <Hash className="h-4 w-4 text-blue-500" />
-    case 'string':
-      return <Type className="h-4 w-4 text-blue-500" />
-  }
+    switch (type) {
+        case 'date':
+            return <Calendar className="h-4 w-4 text-blue-500" />
+        case 'number':
+            return <Hash className="h-4 w-4 text-blue-500" />
+        case 'string':
+            return <Type className="h-4 w-4 text-blue-500" />
+    }
 }
 
 // 判断是否为虚拟指标
 const isVirtualMetric = (metric: MetricConfig): boolean => {
-    
+
     return metric.is_virtual
 }
 
@@ -85,19 +86,21 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
     const handleDragStart = (e: React.DragEvent, data: any, fieldType: 'dimension' | 'metric') => {
         e.dataTransfer.effectAllowed = 'copy'
         const dragData = {
-            id: data.field,
-            name: data.name,
-            displayName: data.name,
-            fieldId: data.field,
-            fieldCode: data.field,
-            fieldType
+            id: data.fieldCode,
+            name: data.displayName,
+            displayName: data.displayName,
+            fieldId: data.fieldId,
+            fieldCode: data.fieldCode,
+            fieldType,
+            timeGranularity: data.timeGranularity,
         }
+
         e.dataTransfer.setData('application/json', JSON.stringify(dragData))
         if (onDragStart) {
             onDragStart(e, dragData)
         }
     }
-    
+
     const toggleTimeExpanded = (field: string) => {
         setTimeExpandedMap(prev => ({ ...prev, [field]: !prev[field] }))
     }
@@ -123,7 +126,7 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
 
         return [...dimensions, ...metrics]
     }, [selectedDataset])
-    
+
     useEffect(() => {
         if (selectedDataset && onFieldsLoaded) {
             onFieldsLoaded(datasetFields)
@@ -201,11 +204,13 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
                                 {selectedDataset.schema_config.dimensions.map((dimension) => {
                                     if (dimension.time_granularitys && dimension.time_granularitys.length > 0) {
                                         return dimension.time_granularitys.map((g) => {
+                                            const displayName = `${dimension.name}(${getTimeGranularityLabel(g)})`
                                             const field: DatasetField = {
                                                 fieldCode: dimension.field,
-                                                displayName: dimension.name,
+                                                displayName,
                                                 fieldType: "date",
                                                 role: "dimension",
+                                                timeGranularity: g,
                                             }
                                             return (
                                                 <div
@@ -272,7 +277,7 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
                                         displayName: metric.name,
                                         fieldType: "number",
                                         role: "metric" as const,
-                                        isVirtual: metric.is_virtual 
+                                        isVirtual: metric.is_virtual
                                     }
                                     return (
                                         <div
