@@ -262,7 +262,6 @@ export function useChartState(initialComponent: any) {
         setDragOverSection(null)
         return
       }
-      console.log(data, 888);
 
       const fieldId = data.id || data.name || `field_${Date.now()}`
       const name = data.name || data.displayName || fieldId
@@ -447,7 +446,6 @@ export function useChartState(initialComponent: any) {
 
     // 5. 构建筛选条件
     const filters = filterGroup ? filterGroup.conditions.map((condition, index) => {
-      console.log(condition, 8989999)
       return {
         id: condition.id || `filter_${Date.now()}_${index}`, // 确保有 fieldId
         fieldId: condition.fieldCode || '',

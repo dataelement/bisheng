@@ -83,7 +83,6 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
 
     // 处理拖拽开始
     const handleDragStart = (e: React.DragEvent, data: any, fieldType: 'dimension' | 'metric') => {
-        console.log(data, e, fieldType, 8888);
 
         e.dataTransfer.effectAllowed = 'copy'
         const dragData = {
@@ -94,8 +93,6 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
             fieldCode: data.fieldCode,
             fieldType
         }
-        console.log(dragData, 7878);
-
         e.dataTransfer.setData('application/json', JSON.stringify(dragData))
         if (onDragStart) {
             onDragStart(e, dragData)
