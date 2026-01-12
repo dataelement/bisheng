@@ -3,6 +3,7 @@ import json
 import os
 from typing import List
 
+from bisheng.telemetry_search.domain.init_dataset import init_dashboard_datasets
 from loguru import logger
 from sqlmodel import select, update
 
@@ -16,7 +17,6 @@ from bisheng.database.models.group import Group, DefaultGroup
 from bisheng.database.models.role import Role
 from bisheng.database.models.role_access import RoleAccess, AccessType, WebMenuResource
 from bisheng.database.models.template import Template
-from bisheng.telemetry_search.domain.init_dataset import init_dashboard_datasets
 from bisheng.tool.domain.models.gpts_tools import GptsTools
 from bisheng.tool.domain.models.gpts_tools import GptsToolsType
 from bisheng.user.domain.models.user import User
@@ -49,6 +49,10 @@ async def init_default_data():
                                    third_id=WebMenuResource.KNOWLEDGE.value),
                         RoleAccess(role_id=DefaultRole, type=AccessType.WEB_MENU.value,
                                    third_id=WebMenuResource.MODEL.value),
+                        RoleAccess(role_id=DefaultRole, type=AccessType.WEB_MENU.value,
+                                   third_id=WebMenuResource.BACKEND.value),
+                        RoleAccess(role_id=DefaultRole, type=AccessType.WEB_MENU.value,
+                                   third_id=WebMenuResource.FRONTEND.value),
                     ])
                     await session.commit()
                 # Add Default User Group
