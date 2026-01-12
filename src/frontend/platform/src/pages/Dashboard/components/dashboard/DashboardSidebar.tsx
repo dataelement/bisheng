@@ -72,9 +72,9 @@ export function DashboardSidebar({
             queryClient.invalidateQueries({ queryKey: [DashboardsQueryKey] })
             navigator(`/dashboard/${res.id}`)
         },
-        onError: () => {
+        onError: (msg: string) => {
             toast({
-                description: t('createFailed'),
+                description: msg,
                 variant: "error",
             })
         },
@@ -97,7 +97,8 @@ export function DashboardSidebar({
         onSuccess: (newDashboard) => {
             queryClient.invalidateQueries({ queryKey: [DashboardsQueryKey] })
             onSelect(newDashboard.id)
-            // 跳转编辑页
+            // jump to new dashboard
+            navigator(`/dashboard/${newDashboard.id}`)
         },
         onError: () => {
             toast({
@@ -118,7 +119,7 @@ export function DashboardSidebar({
         const newTitle = generateUniqueName(dashboards, 'title', t('dashboardCopyName', { title: dashboard.title }), '(x)')
         if (newTitle.length > 200) {
             return toast({
-                description: t('charLimit200'),
+                description: t('charLimit200b'),
                 variant: "error",
             })
         }
@@ -196,14 +197,14 @@ export function DashboardSidebar({
                 <div className="flex flex-col p-2 gap-2">
                     <div className="relative">
                         <SearchInput
-                            placeholder="Search..."
+                            placeholder={t('system.boardName', { ns: 'bs' })}
                             value={searchQuery}
                             onChange={handleSearch}
                             onKeyDown={handleKeyDown}
                         />
                     </div>
 
-                    <div className="flex-1 overflow-y-auto space-y-1">
+                    <div className="overflow-y-auto space-y-1 h-[calc(100vh-174px)]">
                         {filteredDashboards.length === 0 ? (
                             <div className="text-center text-muted-foreground text-sm py-8">
                                 {searchQuery ? t('noMatchingDashboards') : t('noDashboards')}

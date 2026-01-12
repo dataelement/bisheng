@@ -16,6 +16,9 @@ import { ComponentStyleConfig } from "../../types/dataConfig"
 import { useTranslation } from "react-i18next"
 import { colorSchemes } from "../../colorSchemes"
 import { useComponentEditorStore } from "@/store/dashboardStore"
+import { SketchPicker } from 'react-color';
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/bs-ui/popover"
+import { cn } from "@/utils"
 
 const themeColors = ["#4ac5ff", "#3dd598", "#f7ba0b", "#ff7d4d", "#5c6bc0"]
 
@@ -94,18 +97,41 @@ function TextFormat({
 
       {/* 颜色 */}
       {setColor && (
-        <div className="relative shrink-0 mr-2">
-          <Input
-            type="color"
-            className="absolute inset-0 opacity-0 cursor-pointer"
-            value={color}
-            onChange={(e) => setColor(e.target.value)}
-          />
-          <div
-            className="w-6 h-6 rounded"
-            style={{ backgroundColor: color }}
-          />
-        </div>
+        <Select
+        >
+          <SelectTrigger className="w-[56px] h-7 px-2 text-xs border-0 ">
+            <div className="size-4 border-[#EBECF0]">
+              <div
+                className="h-full w-full rounded shadow-sm border"
+                style={{ backgroundColor: color }}
+              />
+            </div>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent className="border-none shadow-none">
+            <SketchPicker
+              color={color}
+              presetColors={[
+                '#D9E3F0', '#F47373', '#697689', '#37D67A',
+                '#2CCCE4', '#555555', '#dce775', '#ff8a65', '#ba68c8'
+              ]}
+              onChangeComplete={(e) => setColor(e.hex)}
+            />
+          </SelectContent>
+        </Select>
+
+        //   <div className="relative shrink-0 mr-2">
+        //   <Input
+        //     type="color"
+        //     className="absolute inset-0 opacity-0 cursor-pointer"
+        //     value={color}
+        //     onChange={(e) => setColor(e.target.value)}
+        //   />
+        //   <div
+        //     className="w-6 h-6 rounded"
+        //     style={{ backgroundColor: color }}
+        //   />
+        // </div>
       )}
 
       {/* 对齐 */}
@@ -405,12 +431,40 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
         }
 
         <FormBlock label={t('styleConfigPanel.labels.bgColor')}>
-          <Input
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                className={cn(
+                  "w-full h-[32px] p-1 justify-start font-normal",
+                  !localConfig.bgColor && "text-muted-foreground"
+                )}
+              >
+                <div className="size-5">
+                  <div
+                    className="h-full w-full border rounded-sm"
+                    style={{ backgroundColor: localConfig.bgColor }}
+                  />
+                </div>
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0 border-none shadow-none bg-transparent">
+              <SketchPicker
+                color={localConfig.bgColor}
+                presetColors={[
+                  '#D9E3F0', '#F47373', '#697689', '#37D67A',
+                  '#2CCCE4', '#555555', '#dce775', '#ff8a65', '#ba68c8'
+                ]}
+                onChangeComplete={(e) => handleChange("bgColor", e.hex)}
+              />
+            </PopoverContent>
+          </Popover>
+          {/* <Input
             type="color"
             className="h-9 p-1"
             value={localConfig.bgColor}
             onChange={(e) => handleChange("bgColor", e.target.value)}
-          />
+          /> */}
         </FormBlock>
       </CollapsibleBlock>
 

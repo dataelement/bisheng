@@ -8,8 +8,9 @@ import {
     setDefaultDashboard,
     updateDashboardTitle
 } from "@/controllers/API/dashboard"
+import { useEditorDashboardStore } from "@/store/dashboardStore"
 import { copyText } from "@/utils"
-import { useContext, useState } from "react"
+import { useContext } from "react"
 import { useTranslation } from "react-i18next"
 import { useMutation, useQuery, useQueryClient } from "react-query"
 import { useNavigate } from "react-router-dom"
@@ -21,7 +22,7 @@ import { DashboardQueryKey, DashboardsQueryKey } from "./hook"
 export default function DashboardPage() {
     const { t } = useTranslation("dashboard")
     const { appConfig } = useContext(locationContext)
-    const [selectedId, setSelectedId] = useState<string | null>(null)
+    const [selectedId, setSelectedId] = useEditorDashboardStore(state => [state.currentDashboardId, state.setCurrentDashboardId])
     const { toast } = useToast()
     const queryClient = useQueryClient()
 
@@ -32,8 +33,9 @@ export default function DashboardPage() {
 
     const updateMutation = useMutation({
         mutationFn: ({ id, title }: { id: string; title: string }) => updateDashboardTitle(id, title),
-        onSuccess: () => {
+        onSuccess: (a, {id}) => {
             queryClient.invalidateQueries({ queryKey: [DashboardsQueryKey] })
+            queryClient.invalidateQueries({ queryKey: [DashboardQueryKey, id] })
             toast({
                 description: t('renameSuccess'),
                 variant: "success",
@@ -93,6 +95,7 @@ export default function DashboardPage() {
     const { data: selectedDashboard, isLoading } = useQuery({
         queryKey: [DashboardQueryKey, selectedId],
         queryFn: () => getDashboard(selectedId),
+        enabled: !!selectedId,
     })
 
     // Auto-select first dashboard if none selected

@@ -21,6 +21,7 @@ interface EditorState {
     isSaving: boolean;
     // Currently edited dashboard
     currentDashboard: Dashboard | null;
+    currentDashboardId: string;
     // Layout configuration
     layouts: LayoutItem[];
     // Chart refresh triggers: each chart has its own trigger counter and query params
@@ -38,6 +39,7 @@ interface EditorState {
     setIsSaving: (value: boolean) => void;
     // Set current dashboard
     setCurrentDashboard: (dashboard: Dashboard | null) => void;
+    setCurrentDashboardId: (id: string) => void;
     updateCurrentDashboard: (dashboard: Dashboard) => void;
     // Update layout configuration
     setLayouts: (layouts: LayoutItem[]) => void;
@@ -69,6 +71,7 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
     hasUnsavedChanges: false,
     isSaving: false,
     currentDashboard: null,
+    currentDashboardId: '',
     layouts: [],
     chartRefreshTriggers: {},
     queryComponentParams: {},
@@ -87,6 +90,7 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
             chartRefreshTriggers: {} // Reset triggers when dashboard changes
         })
     },
+    setCurrentDashboardId: (id) => set({ currentDashboardId: id }),
     updateCurrentDashboard: (dashboard) => {
         set({ currentDashboard: dashboard })
     },
@@ -113,8 +117,8 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
             i: componentId,
             x: 0,
             y: maxY,
-            w: 6,
-            h: 6,
+            w: ChartType.Metric === component.type ? 4 : 8,
+            h: [ChartType.Query, ChartType.Metric].includes(component.type) ? 3 : 5,
             minW: 2,
             minH: 2,
             maxH: 24,
