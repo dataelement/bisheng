@@ -43,6 +43,7 @@ export interface ComponentStyleConfig {
   titleBold: boolean
   titleItalic: boolean
   titleUnderline: boolean
+  titleStrikethrough: boolean
   titleAlign: "left" | "center" | "right"
   titleColor?: string
 
@@ -52,6 +53,7 @@ export interface ComponentStyleConfig {
   xAxisBold: boolean
   xAxisItalic: boolean
   xAxisUnderline: boolean
+  xAxisStrikethrough: boolean
   xAxisAlign: "left" | "center" | "right"
   xAxisColor?: string 
 
@@ -62,6 +64,7 @@ export interface ComponentStyleConfig {
   yAxisItalic: boolean
   yAxisUnderline: boolean
   yAxisAlign: "left" | "center" | "right"
+  yAxisStrikethrough: boolean
   yAxisColor?: string 
 
   // 图例
@@ -70,6 +73,7 @@ export interface ComponentStyleConfig {
   legendBold: boolean
   legendItalic: boolean
   legendUnderline: boolean
+  legendStrikethrough: boolean
   legendAlign: "left" | "center" | "right"
   legendColor?: string 
 
@@ -80,6 +84,7 @@ export interface ComponentStyleConfig {
   subtitleBold: boolean
   subtitleItalic: boolean
   subtitleUnderline: boolean
+  subtitleStrikethrough: boolean
   subtitleAlign: "left" | "center" | "right"
   subtitleColor?: string 
 
@@ -88,6 +93,7 @@ export interface ComponentStyleConfig {
   metricBold: boolean
   metricItalic: boolean
   metricUnderline: boolean
+  metricStrikethrough: boolean
   metricAlign: "left" | "center" | "right"
   metricColor?: string 
 
@@ -130,6 +136,7 @@ export interface DashboardComponent {
  * Dashboard 组件数据配置类型定义
  */
 // 图表类型
+
 export enum ChartType {
   /** 基础柱状图 */
   Bar = 'bar',

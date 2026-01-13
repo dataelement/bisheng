@@ -438,10 +438,13 @@ export function ComponentConfigDrawer() {
     </div>
   ), [])
 
-  const CollapseLabel = useCallback(({ label, onClick, icon }: any) => (
-    <div className="h-full flex flex-col items-center justify-center cursor-pointer hover:bg-accent/50 transition-colors" onClick={onClick}>
-      <div className="writing-mode-vertical text-sm font-medium py-4">{label}</div>
-      <div className="mt-2">{icon}</div>
+  const CollapseLabel = useCallback(({ label, onClick, icon, styleLabel }: any) => (
+    <div className="h-full flex flex-col items-center cursor-pointer hover:bg-accent/50 transition-colors" onClick={onClick}>
+      <div className="m-[18px]">{icon}</div>
+      <div className="w-full h-[2px] bg-gray-100 mb-4"></div>
+      <div className="writing-mode-vertical text-sm font-medium tracking-[6px]">{label}</div>
+      <div className="writing-mode-vertical mt-4 text-sm font-medium tracking-[6px]">{styleLabel}</div>
+
     </div>
   ), [])
 
@@ -532,6 +535,7 @@ export function ComponentConfigDrawer() {
             {configCollapsed.basic ? (
               <CollapseLabel
                 label={t("componentConfigDrawer.basicConfig")}
+                styleLabel={t("componentConfigDrawer.styleConfigTab")}
                 onClick={() => toggleCollapse('basic')}
                 icon={<ListIndentDecrease className="w-4 h-4" />}
               />
@@ -542,16 +546,16 @@ export function ComponentConfigDrawer() {
                   onCollapse={() => toggleCollapse('basic')}
                   icon={<ListIndentIncrease className="w-4 h-4" />}
                 />
-
                 <div className="flex-1 overflow-y-auto pl-4 pr-4 pb-6 pt-4 space-y-6">
-                  {/* Tabs */}
-                  <div className="flex gap-6 border-b text-sm">
-                    <Tab active={configTab === "basic"} onClick={() => setConfigTab("basic")}>
-                      {t("componentConfigDrawer.basicConfigTab")}
-                    </Tab>
-                    <Tab active={configTab === "style"} onClick={() => setConfigTab("style")}>
-                      {t("componentConfigDrawer.styleConfigTab")}
-                    </Tab>
+                  <div className="border-b -mx-4 px-4">
+                    <div className="flex gap-6 text-sm">
+                      <Tab active={configTab === "basic"} onClick={() => setConfigTab("basic")}>
+                        {t("componentConfigDrawer.basicConfigTab")}
+                      </Tab>
+                      <Tab active={configTab === "style"} onClick={() => setConfigTab("style")}>
+                        {t("componentConfigDrawer.styleConfigTab")}
+                      </Tab>
+                    </div>
                   </div>
 
                   {configTab === "basic" ? (
@@ -784,21 +788,25 @@ export function ComponentConfigDrawer() {
                       </Button>
                     </>
                   ) : (
-                    <StyleConfigPanel config={styleConfig} type={editingComponent.type} onChange={(newConfig) => {
-                      chartState.setStyleConfig(newConfig)
-                      if (editingComponent) {
-                        updateEditingComponent({
-                          style_config: newConfig
-                        })
-                      }
-                    }}
-                      key={editingComponent.id} />
+                    <StyleConfigPanel
+                      config={editingComponent?.style_config || styleConfig}
+                      type={editingComponent.type}
+                      onChange={(newConfig) => {
+                        chartState.setStyleConfig(newConfig)
+                        if (editingComponent) {
+                          updateEditingComponent({
+                            style_config: newConfig
+                          })
+                        }
+                      }}
+                      key={editingComponent.id}
+                    />
                   )}
                 </div>
               </div>
             )}
           </div>
-          <div className={`flex flex-col h-full transition-all duration-300 ${configCollapsed.data ? "w-12 shrink-0" : "w-[200px]"}`}>
+          <div className={`flex flex-col h-full transition-all duration-300 ${configCollapsed.data ? "w-12 shrink-0" : "w-[160px]"}`}>
             {configCollapsed.data ? (
               <CollapseLabel
                 label={t("componentConfigDrawer.dataSelection")}

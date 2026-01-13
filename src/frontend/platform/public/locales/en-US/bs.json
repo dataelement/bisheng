@@ -150,7 +150,7 @@
     "flowAuthorization": "Flow",
     "skillName": "Skill Name",
     "creator": "Creator",
-    "usePermission": "Use Permission",
+    "usePermission": "View Permission",
     "managePermission": "Manage Permission",
     "roleNamePrompt": "Role name cannot exceed 50 characters",
     "roleNameRequired": "Role name is required",
