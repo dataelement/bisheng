@@ -9,7 +9,7 @@ import { Input } from "@/components/bs-ui/input"
 import { Separator } from "@/components/bs-ui/separator"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
 import { updateDashboard } from "@/controllers/API/dashboard"
-import { useEditorDashboardStore } from "@/store/dashboardStore"
+import { useComponentEditorStore, useEditorDashboardStore } from "@/store/dashboardStore"
 import { ArrowLeft, FunnelIcon, Grid2X2PlusIcon } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -32,6 +32,7 @@ export function EditorHeader({
     const { t } = useTranslation("dashboard")
     const { currentDashboard, hasUnsavedChanges, isSaving, layouts,
         reset, setIsSaving, setHasUnsavedChanges, addComponentToLayout } = useEditorDashboardStore()
+    const { editingComponent } = useComponentEditorStore()
     const [isEditingTitle, setIsEditingTitle] = useState(false)
     const [title, setTitle] = useState(dashboard?.title || "")
     const inputRef = useRef<HTMLInputElement>(null)
@@ -53,7 +54,13 @@ export function EditorHeader({
 
     // Save mutation
     const saveMutation = useMutation({
-        mutationFn: (data: any) => updateDashboard(data.id, { ...data.dashboard, layout_config: { layouts } }),
+        mutationFn: ({ id, dashboard }: any) => updateDashboard(id, {
+            ...dashboard,
+            components: editingComponent ? dashboard.components.map(com =>
+                com.id === editingComponent.id ? editingComponent : com
+            ) : dashboard.components,
+            layout_config: { layouts }
+        }),
         onMutate: () => {
             setIsSaving(true)
         },
@@ -157,26 +164,28 @@ export function EditorHeader({
     }
 
     // Handle save
-    const handleSave = () => {
-        if (!hasUnsavedChanges) {
-            return
-        }
+    const handleSave = async () => {
+        // if (!hasUnsavedChanges) {
+        //     return
+        // }
+        // config -> crrentcompontent
+        const querySave = document.querySelector('#query_save')
+        const configSave = document.querySelector('#config_save')
+        querySave?.click()
+        configSave?.click()
 
-        saveMutation.mutate({
-            id: currentDashboard?.id,
-            dashboard: currentDashboard
-        })
+        setTimeout(async () => {
+            await saveMutation.mutate({
+                id: currentDashboard?.id,
+                dashboard: currentDashboard
+            })
+        }, 300);
     }
 
     // Handle publish
     const handlePublish = async () => {
         // If has unsaved changes, save first
-        if (hasUnsavedChanges) {
-            await saveMutation.mutateAsync({
-                id: currentDashboard?.id,
-                dashboard: currentDashboard
-            })
-        }
+        await handleSave()
 
         publish(dashboard.id, false)
         navigator(`/dashboard?selected=${dashboardId}`)
@@ -247,7 +256,7 @@ export function EditorHeader({
                 <Button variant="outline" disabled={isPublishing} onClick={handlePublish}>
                     {t('saveAndPublish')}
                 </Button>
-                <Button onClick={handleSave} disabled={isSaving}>
+                <Button onClick={handleSave} disabled={saveMutation.isLoading}>
                     {t('save')}
                 </Button>
             </div>

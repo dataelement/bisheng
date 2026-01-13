@@ -3,6 +3,7 @@ import json
 import os
 import re
 import time
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 import aiofiles
@@ -563,7 +564,7 @@ def add_file_embedding(
 
     file_url = minio_client.get_share_link_sync(db_file.object_name, clear_host=False)
     filepath, _ = file_download(file_url)
-    file_ext = db_file.file_name.split(".")[-1].lower()
+    file_ext = Path(db_file.file_name).suffix.lower()
 
     # Convert split_rule string to dict if needed
     excel_rule = ExcelRule()

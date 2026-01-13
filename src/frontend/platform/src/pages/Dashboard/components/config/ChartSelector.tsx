@@ -148,7 +148,7 @@ export default function ChartSelector({
   }
 
   /* 保存 */
-  const handleSave = () => {
+  const handleSave = (e) => {
     let finalStartDate = ""
     let finalEndDate = ""
 
@@ -210,7 +210,7 @@ export default function ChartSelector({
       }
     }
 
-    toast({
+    e.isTrusted && toast({
       variant: 'success',
       description: t("chartSelector.messages.saveSuccess"),
     })
@@ -386,7 +386,7 @@ export default function ChartSelector({
           <Button variant="outline" onClick={onCancel}>
             {t("chartSelector.buttons.cancel")}
           </Button>
-          <Button onClick={handleSave}>
+          <Button id="query_save" onClick={handleSave}>
             {t("chartSelector.buttons.save")}
           </Button>
         </div>

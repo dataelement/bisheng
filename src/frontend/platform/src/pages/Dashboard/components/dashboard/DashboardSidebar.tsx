@@ -204,7 +204,7 @@ export function DashboardSidebar({
                         />
                     </div>
 
-                    <div className="overflow-y-auto space-y-1 h-[calc(100vh-174px)]">
+                    <div className="overflow-y-auto space-y-2 h-[calc(100vh-174px)]">
                         {filteredDashboards.length === 0 ? (
                             <div className="text-center text-muted-foreground text-sm py-8">
                                 {searchQuery ? t('noMatchingDashboards') : t('noDashboards')}

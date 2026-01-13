@@ -315,7 +315,7 @@ export function ComponentConfigDrawer() {
 
   // 更新图表
   // 更新图表 - 添加校验
-  const handleUpdateChart = useCallback(() => {
+  const handleUpdateChart = useCallback((e) => {
     if (!editingComponent) return
 
     if (editingComponent.type !== 'query' && editingComponent.type !== 'metric') {
@@ -383,12 +383,14 @@ export function ComponentConfigDrawer() {
       dataset_code: editingComponent.dataset_code
     })
 
-    refreshChart(editingComponent.id)
+    if (e.isTrusted) {
+      refreshChart(editingComponent.id)
 
-    toast({
-      description: t("componentConfigDrawer.dialog.chartUpdated"),
-      variant: "success"
-    })
+      toast({
+        description: t("componentConfigDrawer.dialog.chartUpdated"),
+        variant: "success"
+      })
+    }
   }, [
     editingComponent,
     chartType,
@@ -514,10 +516,10 @@ export function ComponentConfigDrawer() {
               data_config: queryConfig
             })
 
-            const dashboardStore = useEditorDashboardStore.getState();
-            dashboardStore.updateComponent(editingComponent.id, {
-              data_config: queryConfig
-            })
+            // const dashboardStore = useEditorDashboardStore.getState();
+            // dashboardStore.updateComponent(editingComponent.id, {
+            //   data_config: queryConfig
+            // })
 
             // 刷新查询组件
             refreshChart(editingComponent.id)
@@ -777,7 +779,7 @@ export function ComponentConfigDrawer() {
                         </RadioGroup>
                       </FormBlock>}
 
-                      <Button className="w-full h-10 mt-4" onClick={handleUpdateChart}>
+                      <Button id="config_save" className="w-full h-10 mt-4" onClick={handleUpdateChart}>
                         {t("componentConfigDrawer.updateChartData")}
                       </Button>
                     </>
