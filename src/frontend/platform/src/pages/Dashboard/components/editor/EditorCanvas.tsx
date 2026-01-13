@@ -167,8 +167,9 @@ export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanv
         })
     }
 
+    const [isDragging, setIsDragging] = useState(false);
     const gridBackgroundStyle = useMemo(() => {
-        if (isPreviewMode || !width || !mounted) return {};
+        if (isPreviewMode || !width || !mounted || !isDragging) return {};
 
         const cols = 24;
         const rowHeight = 32;
@@ -212,13 +213,13 @@ export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanv
         `;
 
         return {
-            backgroundImage: `url("data:image/svg+xml,${encodeURIComponent(svgString)}")`,
+            backgroundImage: document.fullscreenElement ? '' : `url("data:image/svg+xml,${encodeURIComponent(svgString)}")`,
             backgroundRepeat: 'repeat',
             backgroundAttachment: 'local',
-            backgroundPosition: `${0}px ${0}px`,
+            backgroundPosition: `${0}px ${0}px`
             // height: '100%'
         };
-    }, [width, isPreviewMode, mounted, currentDashboard?.style_config.theme]);
+    }, [width, isPreviewMode, mounted, currentDashboard?.style_config.theme, isDragging]);
 
 
     // loading
@@ -266,6 +267,10 @@ export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanv
                                     // handle: ".drag-handle",
                                     cancel: ".no-drag,input"
                                 }}
+                                onDragStart={() => setIsDragging(true)}
+                                onResizeStart={() => setIsDragging(true)}
+                                onDragStop={() => setIsDragging(false)}
+                                onResizeStop={() => setIsDragging(false)}
                                 resizeConfig={
                                     {
                                         enabled: !isPreviewMode,
@@ -275,7 +280,7 @@ export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanv
                                 compactor={verticalCompactor}
                             >
                                 {currentDashboard.components.map((component) => (
-                                    <div key={component.id} className="drag-handle">
+                                    <div key={component.id} className={`drag-handle`}>
                                         <ComponentWrapper
                                             dashboards={dashboards}
                                             component={component}

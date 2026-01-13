@@ -99,7 +99,7 @@ export function ComponentWrapper({
 
     return (
         <div
-            className={cn(`group relative w-full h-full rounded-md overflow-visible transition-all border ${!isPreviewMode && isSelected ? 'border border-primary' : ''
+            className={cn(`group relative w-full h-full rounded-md overflow-visible transition-all border ${!isPreviewMode && isSelected ? 'component-select border border-primary' : ''
                 }`,
                 !componentData.style_config.bgColor && 'dark:bg-gray-900',
                 !componentData.style_config.bgColor && 'bg-background',

@@ -48,7 +48,7 @@ export function ChartContainer({ isPreviewMode, isDark, component }: ChartContai
   // Loading state
   if (isLoading) {
     return (
-      <div className="relative w-full h-64 flex items-center justify-center overflow-hidden rounded-xl border border-[#f0f7ff] bg-[#f8fbff]">
+      <div className="relative w-full h-full flex items-center justify-center overflow-hidden rounded-xl border border-[#f0f7ff] bg-[#f8fbff]">
         <div
           className="absolute inset-0 animate-shimmer"
           style={{
@@ -59,7 +59,7 @@ export function ChartContainer({ isPreviewMode, isDark, component }: ChartContai
 
         <div className="relative z-10 bg-white px-6 py-2 rounded-md backdrop-blur-sm">
           <div className="flex items-center gap-3">
-            <span className="text-[#8da9ff] font-medium text-lg tracking-wider animate-pulse">
+            <span className="text-[#8da9ff] font-medium text-lg tracking-wider animate-pulse break-keep">
               {t('updatingCharts')}
             </span>
           </div>
@@ -71,7 +71,7 @@ export function ChartContainer({ isPreviewMode, isDark, component }: ChartContai
           100% { background-position: -200% 0; }
         }
         .animate-shimmer {
-          animation: shimmer 3s infinite linear;
+          animation: shimmer 2s infinite linear;
         }
       `}</style>
       </div>

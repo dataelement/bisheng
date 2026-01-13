@@ -152,7 +152,7 @@ export function DashboardDetail({
                                     </div>
                                 }
                                 side={'bottom'}>
-                                <CircleAlert color="#999" size={16} className="cursor-pointer" />
+                                <CircleAlert color="#999" size={16} className="cursor-pointer rotate-180" />
                             </Tip>
                         </>}
                     </div>

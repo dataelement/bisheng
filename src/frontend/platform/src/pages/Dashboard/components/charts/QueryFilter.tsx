@@ -64,7 +64,7 @@ export function QueryFilter({ isDark, component, isPreviewMode = false }: QueryF
             </div>
 
             {/* query btn */}
-            <div className="w-full flex flex-1 gap-2 items-center select-none">
+            <div className="no-drag w-full flex flex-1 gap-2 items-center select-none">
                 <AdvancedDatePicker
                     granularity={map[queryConditions.timeGranularity]}
                     mode={queryConditions.displayType}

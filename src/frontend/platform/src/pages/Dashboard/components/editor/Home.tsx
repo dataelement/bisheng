@@ -36,7 +36,7 @@ export default function Home() {
                                 item.type === ChartType.Bar && 'ml-10',
                             )}>
                             <img src={`${__APP_ENV__.BASE_URL}/assets/dashboard/${item.type}.png`} className="w-8 h-8 mb-2" />
-                            <span className="text-[12px] text-gray-600 whitespace-nowrap">{t(`chart.${item.label}`)}</span>
+                            <span className="text-[12px] text-gray-600 text-center">{t(`chart.${item.label}`)}</span>
                         </div>
                     ))}
                 </div>

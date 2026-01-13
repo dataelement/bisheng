@@ -66,6 +66,13 @@
     opacity: 0;
 }
 
+.react-grid-item .component-select~.react-resizable-handle.react-resizable-handle-sw,
+.react-grid-item .component-select~.react-resizable-handle.react-resizable-handle-nw,
+.react-grid-item .component-select~.react-resizable-handle.react-resizable-handle-se,
+.react-grid-item .component-select~.react-resizable-handle.react-resizable-handle-ne {
+    opacity: 1;
+}
+
 .react-grid-item>.react-resizable-handle::after {
     content: normal;
 }
