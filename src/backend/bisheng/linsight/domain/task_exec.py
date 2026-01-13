@@ -17,9 +17,8 @@ from bisheng.core.cache.utils import create_cache_folder_async, CACHE_DIR
 from bisheng.core.external.http_client.http_client_manager import get_http_client
 from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
-from bisheng.database.models import LinsightExecuteTask
 from bisheng.linsight.domain.models.linsight_execute_task import LinsightExecuteTaskDao, ExecuteTaskStatusEnum, \
-    ExecuteTaskTypeEnum
+    ExecuteTaskTypeEnum, LinsightExecuteTask
 from bisheng.linsight.domain.models.linsight_session_version import LinsightSessionVersionDao, SessionVersionStatusEnum, \
     LinsightSessionVersion
 from bisheng.linsight.domain import utils as linsight_execute_utils
