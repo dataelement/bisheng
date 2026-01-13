@@ -55,7 +55,7 @@ class RedisClient:
             self.connection = redis.StrictRedis(connection_pool=self.pool)
             self.async_connection: AsyncRedis = redis.asyncio.Redis.from_pool(self.async_pool)
 
-    def set(self, key, value, expiration=3600):
+    def set(self, key, value, expiration=3600, enx=None):
         try:
             if pickled := pickle.dumps(value):
                 self.cluster_nodes(key)

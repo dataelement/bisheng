@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState } from "react";
+import { useCallback, useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../../components/bs-ui/button";
 import { Input, SearchInput } from "../../../components/bs-ui/input";
@@ -40,6 +40,7 @@ interface SearchPanneProps {
   manageChecked?: (id: any) => boolean;
   isPermissionTable?: boolean;
   role_id?: any;
+  showTab?: boolean;
 }
 
 const enum MenuType {
@@ -56,11 +57,11 @@ const enum MenuType {
 
 
 const MENU_LIST = [
+  { id: MenuType.BOARD, name: 'menu.board', user_name: '-' },
   { id: MenuType.BUILD, name: 'menu.skills', user_name: '-' },
   { id: MenuType.KNOWLEDGE, name: 'menu.knowledge', user_name: '-' },
   { id: MenuType.MODEL, name: 'menu.models', user_name: '-' },
   { id: MenuType.EVALUATION, name: 'menu.evaluation', user_name: '-' },
-  { id: MenuType.BOARD, name: 'menu.board', user_name: '-' },
 ];
 
 const SearchPanne = ({
@@ -375,26 +376,37 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
         useMenu: Array.from(menuSet),
       };
     });
+    if (!checked && activeTab === 'board') {
+      setActiveTab('menu');
+    }
   };
 
 
   const switches = usePermissionSwitchLogic(form, setForm);
-
   useEffect(() => {
     if (id !== -1) {
       getRolePermissionsApi(id).then(res => {
         const initData = initPermissionData(res.data);
 
+        const hasAdminSpace = initData.useMenu.includes(MenuType.BACKEND);
+        const hasCreateBoard = initData.useMenu.includes(MenuType.CREATE_DASHBOARD);
+
         setForm(prev => ({
           ...prev,
           ...initData,
-          allowCreateBoard: initData.useMenu.includes(MenuType.CREATE_DASHBOARD),
+          allowCreateBoard: hasCreateBoard,
         }));
 
         setSpacePermissions({
           workspace: initData.useMenu.includes(MenuType.FRONTEND),
-          admin: initData.useMenu.includes(MenuType.BACKEND),
+          admin: hasAdminSpace,
         });
+
+        if (!hasAdminSpace) {
+          setActiveTab('assistant');
+        } else {
+          setActiveTab('menu');
+        }
       });
     }
   }, [id]);
@@ -402,7 +414,20 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
 
   const roleId = id === -1 ? 0 : id;
 
-  const PERMISSION_TABS = ['menu', 'assistant', 'skill', 'flow', 'knowledge', 'tool', 'board'];
+  const getPermissionTabs = useCallback(() => {
+    const tabs = ['assistant', 'flow', 'skill', 'knowledge', 'tool'];
+
+    if (spacePermissions.admin) {
+      tabs.unshift('menu');
+      const hasBoardMenuPermission = form.useMenu.includes(MenuType.BOARD);
+      const canShowBoardTab = form.allowCreateBoard && hasBoardMenuPermission;
+      if (canShowBoardTab) {
+        tabs.push('board');
+      }
+    }
+
+    return tabs;
+  }, [spacePermissions.admin, form.allowCreateBoard, form.useMenu]);
 
   const renderPermissionPanne = (type) => {
     const config = getSearchPanneConfig(type, form, switches, t, groupId, roleId, handleAllowCreateBoardChange);
@@ -446,6 +471,9 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
 
     setSpacePermissions(next);
     syncSpaceToMenu(next);
+    if (key === 'admin' && !checked && (activeTab === 'menu' || activeTab === 'board')) {
+      setActiveTab('assistant');
+    }
   };
 
   const handleSave = async () => {
@@ -492,8 +520,8 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
       updateRolePermissionsApi({ role_id: roleIdLocal, access_id: sanitizeIds(form.manageFlows) as any, type: 10 as any }),
       updateRolePermissionsApi({ role_id: roleIdLocal, access_id: sanitizeIds(form.manageTools) as any, type: 8 as any }),
       updateRolePermissionsApi({ role_id: roleIdLocal, access_id: sanitizeIds(menuPermissionsToSave) as any, type: 99 as any }),
-      updateRolePermissionsApi({ role_id: roleIdLocal, access_id: sanitizeIds(form.useBoards) as any, type: 11 as any }),
-      updateRolePermissionsApi({ role_id: roleIdLocal, access_id: sanitizeIds(form.manageBoards) as any, type: 12 as any }),
+      updateRolePermissionsApi({ role_id: roleIdLocal, access_id: sanitizeIds(form.useBoards) as any, type: 12 as any }),
+      updateRolePermissionsApi({ role_id: roleIdLocal, access_id: sanitizeIds(form.manageBoards) as any, type: 11 as any }),
 
     ]);
     message({
@@ -573,8 +601,12 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
 
       {/* 权限 Tabs */}
       <div className="flex gap-6 border-b mt-10">
-        {PERMISSION_TABS.map(tab => (
-          <button key={tab} onClick={() => setActiveTab(tab)} className={`pb-2 text-sm ${activeTab === tab ? 'border-b-2 border-primary font-semibold' : 'text-muted-foreground'}`}>
+        {getPermissionTabs().map(tab => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={`pb-2 text-sm ${activeTab === tab ? 'border-b-2 border-primary font-semibold' : 'text-muted-foreground'}`}
+          >
             {t(`system.${tab}Authorization`)}
           </button>
         ))}

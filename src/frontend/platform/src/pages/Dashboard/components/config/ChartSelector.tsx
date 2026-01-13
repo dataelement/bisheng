@@ -154,8 +154,8 @@ export default function ChartSelector({
 
     if (timeFilter && timeFilter.startTime) {
       // 将时间戳转换为日期字符串
-      const startDateObj = new Date(timeFilter.startTime * 1000)
-      const endDateObj = new Date(timeFilter.endTime * 1000)
+      const startDateObj = new Date(timeFilter)
+      const endDateObj = new Date(timeFilter)
 
       // 根据时间粒度格式化
       const year = startDateObj.getFullYear()

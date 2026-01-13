@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { ChevronDown, AlignLeft, AlignCenter, AlignRight, ChevronUp, Bold, Italic, Underline, Strikethrough } from "lucide-react"
 import { Button } from "@/components/bs-ui/button"
 import { Input } from "@/components/bs-ui/input"
@@ -19,8 +19,6 @@ import { useComponentEditorStore } from "@/store/dashboardStore"
 import { SketchPicker } from 'react-color';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/bs-ui/popover"
 import { cn } from "@/utils"
-
-const themeColors = ["#4ac5ff", "#3dd598", "#f7ba0b", "#ff7d4d", "#5c6bc0"]
 
 interface StyleConfigPanelProps {
   config: ComponentStyleConfig
@@ -41,7 +39,9 @@ interface TextFormatProps {
   align: "left" | "center" | "right"
   setAlign: (align: "left" | "center" | "right") => void
   color?: string
-  setColor?: (color: string) => void
+  setColor?: (color: string) => void,
+  underline?: boolean
+  setUnderline?: (underline: boolean) => void
 }
 
 function TextFormat({
@@ -56,7 +56,9 @@ function TextFormat({
   align,
   setAlign,
   color = "#000000",
-  setColor
+  setColor,
+  underline = false,
+  setUnderline = () => { }
 }: TextFormatProps) {
   const { t } = useTranslation("dashboard")
 
@@ -71,9 +73,8 @@ function TextFormat({
   return (
     <div
       className="
-      flex items-center gap-1
+      flex items-center
       w-[244px] h-8
-      px-1
       border rounded-md
       overflow-hidden
     "
@@ -83,7 +84,7 @@ function TextFormat({
         value={String(fontSize)}
         onValueChange={(v) => setFontSize(Number(v))}
       >
-        <SelectTrigger className="w-[56px] h-7 px-2 text-xs border-0 ">
+        <SelectTrigger className="w-[50px] h-7 px-2 text-xs border-0 ">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -99,7 +100,7 @@ function TextFormat({
       {setColor && (
         <Select
         >
-          <SelectTrigger className="w-[56px] h-7 px-2 text-xs border-0 ">
+          <SelectTrigger className="w-[50px] h-7 px-2 text-xs border-0 ">
             <div className="size-4 border-[#EBECF0]">
               <div
                 className="h-full w-full rounded shadow-sm border"
@@ -164,6 +165,9 @@ function TextFormat({
         <IconBtn active={italic} onClick={() => setItalic(!italic)}>
           <Italic className="w-3.5 h-3.5" />
         </IconBtn>
+        <IconBtn active={underline} onClick={() => setUnderline(!underline)}>
+          <Underline className="w-3.5 h-3.5" />
+        </IconBtn>
         <IconBtn
           active={strikethrough}
           onClick={() => setStrikethrough(!strikethrough)}
@@ -207,6 +211,7 @@ const FULL_DEFAULT_STYLE_CONFIG: ComponentStyleConfig = {
   titleBold: false,
   titleItalic: false,
   titleUnderline: false,
+  titleStrikethrough: false,
   titleAlign: "left",
   titleColor: "#000000",
 
@@ -215,6 +220,7 @@ const FULL_DEFAULT_STYLE_CONFIG: ComponentStyleConfig = {
   xAxisBold: false,
   xAxisItalic: false,
   xAxisUnderline: false,
+  xAxisStrikethrough: false,
   xAxisAlign: "center",
   xAxisColor: "#000000",
 
@@ -223,6 +229,7 @@ const FULL_DEFAULT_STYLE_CONFIG: ComponentStyleConfig = {
   yAxisBold: false,
   yAxisItalic: false,
   yAxisUnderline: false,
+  yAxisStrikethrough: false,
   yAxisAlign: "center",
   yAxisColor: "#000000",
 
@@ -231,12 +238,14 @@ const FULL_DEFAULT_STYLE_CONFIG: ComponentStyleConfig = {
   legendBold: false,
   legendItalic: false,
   legendUnderline: false,
+  legendStrikethrough: false,
   legendAlign: "left",
   legendColor: "#000000",
 
   showSubtitle: false,
   subtitle: "",
   subtitleFontSize: 14,
+  subtitleStrikethrough: false,
   subtitleBold: false,
   subtitleItalic: false,
   subtitleUnderline: false,
@@ -247,6 +256,7 @@ const FULL_DEFAULT_STYLE_CONFIG: ComponentStyleConfig = {
   metricBold: false,
   metricItalic: false,
   metricUnderline: false,
+  metricStrikethrough: false,
   metricAlign: "center",
   metricColor: "#000000",
 
@@ -277,7 +287,10 @@ function CollapsibleBlock({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between bg-gray-50 rounded-md h-[28px] w-[244px]">
+      <div
+        className="flex items-center justify-between bg-gray-50 rounded-md h-[28px] w-[244px] cursor-pointer"
+        onClick={onCollapse}
+      >
         <div className="flex items-center">
           <div className="h-3 w-[3px] bg-blue-500 ml-2 rounded-[2px]"></div>
           <label className="text-sm font-medium text-black ml-2">{title}</label>
@@ -321,18 +334,40 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
 
   const [collapsedSections, setCollapsedSections] = useState({
     color: false,
-    title: false,
-    axis: false,
-    legend: false
+    title: true,
+    axis: true,
+    legend: true,
+    chartOptions: false
   })
 
   const editingComponent = useComponentEditorStore(state => state.editingComponent)
+  console.log(editingComponent, 9991110);
+
   const updateEditingComponent = useComponentEditorStore(state => state.updateEditingComponent)
-  const localConfig = {
-    ...FULL_DEFAULT_STYLE_CONFIG,
-    ...(editingComponent?.style_config || config),
-    themeColor: (editingComponent?.style_config?.themeColor || config.themeColor || colorSchemes[0]?.id || FULL_DEFAULT_STYLE_CONFIG.themeColor),
-  }
+  const firstDimension = editingComponent?.data_config?.dimensions?.[0]
+  const firstMetric = editingComponent?.data_config?.metrics?.[0]
+  const localConfig = useMemo(() => {
+    const componentConfig = editingComponent?.style_config || config
+
+    // 准备基础配置
+    const baseConfig = {
+      ...FULL_DEFAULT_STYLE_CONFIG,
+      ...config,
+      ...componentConfig,
+      themeColor: (componentConfig.themeColor || config.themeColor || colorSchemes[0]?.id || FULL_DEFAULT_STYLE_CONFIG.themeColor),
+    }
+
+    // 如果轴标题为空，设置默认值
+    if (!baseConfig.xAxisTitle && firstDimension?.fieldName) {
+      baseConfig.xAxisTitle = firstDimension.fieldName
+    }
+
+    if (!baseConfig.yAxisTitle && firstMetric?.fieldName) {
+      baseConfig.yAxisTitle = firstMetric.fieldName
+    }
+
+    return baseConfig
+  }, [editingComponent?.style_config, config, firstDimension, firstMetric])
   const [initialized, setInitialized] = useState(false)
 
   useEffect(() => {
@@ -442,7 +477,7 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
               >
                 <div className="size-5">
                   <div
-                    className="h-full w-full border rounded-sm"
+                    className="h-full w-full border rounded-[4px]"
                     style={{ backgroundColor: localConfig.bgColor }}
                   />
                 </div>
@@ -490,8 +525,10 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
             setBold={(v) => handleChange("titleBold", v)}
             italic={localConfig.titleItalic}
             setItalic={(v) => handleChange("titleItalic", v)}
-            strikethrough={localConfig.titleUnderline} // 使用 strikethrough 代替 underline
-            setStrikethrough={(v) => handleChange("titleUnderline", v)}
+            underline={localConfig.titleUnderline || false}
+            setUnderline={(v) => handleChange("titleUnderline", v)}
+            strikethrough={localConfig.titleStrikethrough || false}
+            setStrikethrough={(v) => handleChange("titleStrikethrough", v)}
             align={localConfig.titleAlign}
             setAlign={(v) => handleChange("titleAlign", v)}
             color={localConfig.titleColor || localConfig.themeColor}
@@ -517,8 +554,10 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
                   setBold={(v) => handleChange("metricBold", v)}
                   italic={localConfig.metricItalic || false}
                   setItalic={(v) => handleChange("metricItalic", v)}
-                  strikethrough={localConfig.metricUnderline || false}
-                  setStrikethrough={(v) => handleChange("metricUnderline", v)}
+                  underline={localConfig.metricUnderline || false}
+                  setUnderline={(v) => handleChange("metricUnderline", v)}
+                  strikethrough={localConfig.metricStrikethrough || false}
+                  setStrikethrough={(v) => handleChange("metricStrikethrough", v)}
                   align={localConfig.metricAlign || "center"}
                   setAlign={(v) => handleChange("metricAlign", v)}
                   color={localConfig.metricColor || localConfig.themeColor}
@@ -558,8 +597,10 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
                       setBold={(v) => handleChange("subtitleBold", v)}
                       italic={localConfig.subtitleItalic || false}
                       setItalic={(v) => handleChange("subtitleItalic", v)}
-                      strikethrough={localConfig.subtitleUnderline || false}
-                      setStrikethrough={(v) => handleChange("subtitleUnderline", v)}
+                      underline={localConfig.subtitleUnderline || false}
+                      setUnderline={(v) => handleChange("subtitleUnderline", v)}
+                      strikethrough={localConfig.subtitleStrikethrough || false}
+                      setStrikethrough={(v) => handleChange("subtitleStrikethrough", v)}
                       align={localConfig.subtitleAlign || "center"}
                       setAlign={(v) => handleChange("subtitleAlign", v)}
                       color={localConfig.subtitleColor || localConfig.themeColor}
@@ -593,8 +634,10 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
                     setBold={(v) => handleChange("xAxisBold", v)}
                     italic={localConfig.xAxisItalic || false}
                     setItalic={(v) => handleChange("xAxisItalic", v)}
-                    strikethrough={localConfig.xAxisUnderline || false}
-                    setStrikethrough={(v) => handleChange("xAxisUnderline", v)}
+                    underline={localConfig.xAxisUnderline || false}
+                    setUnderline={(v) => handleChange("xAxisUnderline", v)}
+                    strikethrough={localConfig.xAxisStrikethrough || false}
+                    setStrikethrough={(v) => handleChange("xAxisStrikethrough", v)}
                     align={localConfig.xAxisAlign || "center"}
                     setAlign={(v) => handleChange("xAxisAlign", v)}
                     color={localConfig.xAxisColor || localConfig.themeColor}
@@ -619,8 +662,10 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
                       setBold={(v) => handleChange("yAxisBold", v)}
                       italic={localConfig.yAxisItalic || false}
                       setItalic={(v) => handleChange("yAxisItalic", v)}
-                      strikethrough={localConfig.yAxisUnderline || false}
-                      setStrikethrough={(v) => handleChange("yAxisUnderline", v)}
+                      underline={localConfig.yAxisUnderline || false}
+                      setUnderline={(v) => handleChange("yAxisUnderline", v)}
+                      strikethrough={localConfig.yAxisStrikethrough || false}
+                      setStrikethrough={(v) => handleChange("yAxisStrikethrough", v)}
                       align={localConfig.yAxisAlign || "center"}
                       setAlign={(v) => handleChange("yAxisAlign", v)}
                       color={localConfig.yAxisColor || localConfig.themeColor}
@@ -664,8 +709,10 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
                   setBold={(v) => handleChange("legendBold", v)}
                   italic={localConfig.legendItalic}
                   setItalic={(v) => handleChange("legendItalic", v)}
-                  strikethrough={localConfig.legendUnderline}
-                  setStrikethrough={(v) => handleChange("legendUnderline", v)}
+                  underline={localConfig.legendUnderline}
+                  setUnderline={(v) => handleChange("legendUnderline", v)}
+                  strikethrough={localConfig.legendStrikethrough || false}
+                  setStrikethrough={(v) => handleChange("legendStrikethrough", v)}
                   align={localConfig.legendAlign}
                   setAlign={(v) => handleChange("legendAlign", v)}
                   color={localConfig.legendColor || localConfig.themeColor}
@@ -675,10 +722,12 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
             </CollapsibleBlock>
 
             {/* 图表选项 */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <label className="text-sm font-medium text-black">{t('styleConfigPanel.sections.chartOptions')}</label>
-              </div>
+            <CollapsibleBlock
+              title={t('styleConfigPanel.sections.chartOptions')}
+              isOpen={false}
+              collapsed={collapsedSections.chartOptions}
+              onCollapse={() => toggleSection('chartOptions')}
+            >
               <div className="grid grid-cols-2 gap-3 w-[244px]">
                 <label className="flex items-center gap-2 text-sm">
                   <Checkbox
@@ -709,7 +758,7 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
                   {t('styleConfigPanel.options.gridLine')}
                 </label>
               </div>
-            </div>
+            </CollapsibleBlock>
           </>
       }
     </div>
