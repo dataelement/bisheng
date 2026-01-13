@@ -352,7 +352,7 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
 
   const [form, setForm] = useState({
     name,
-    useSkills: [], useLibs: [], useAssistant: [], useFlows: [], useTools: [], useMenu: [MenuType.BUILD, MenuType.KNOWLEDGE],
+    useSkills: [], useLibs: [], useAssistant: [], useFlows: [], useTools: [], useMenu: [MenuType.BUILD, MenuType.KNOWLEDGE, MenuType.BOARD],
     manageLibs: [], manageAssistants: [], manageSkills: [], manageFlows: [], manageTools: [], useBoards: [], manageBoards: [],
     allowCreateBoard: false,
   });
@@ -420,7 +420,7 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
     if (spacePermissions.admin) {
       tabs.unshift('menu');
       const hasBoardMenuPermission = form.useMenu.includes(MenuType.BOARD);
-      const canShowBoardTab = form.allowCreateBoard && hasBoardMenuPermission;
+      const canShowBoardTab = hasBoardMenuPermission;
       if (canShowBoardTab) {
         tabs.push('board');
       }

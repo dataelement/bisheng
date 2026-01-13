@@ -157,7 +157,7 @@
     "managePermission": "管理权限",
     "roleNamePrompt": "角色名称不能超过50字符",
     "roleNameRequired": "角色名称不可为空",
-    "atLeastOneSpaceRequired": "至少保留一个空间可访问",
+    "atLeastOneSpaceRequired": "至少需要保留一个空间可访问",
     "groupNameExists": "用户组名称不可重复",
     "groupNamePrompt": "用户组名称不能超过30字符",
     "groupNameRequired": "用户组名称不可为空",
