@@ -96,7 +96,7 @@ export function DashboardListItem({
     return (
         <div
             className={cn(
-                "group flex items-center justify-between px-2 py-[6px] rounded-md cursor-pointer hover:bg-[#002FFF]/10 transition-colors",
+                "group flex items-center justify-between px-2 py-[6px] rounded-lg cursor-pointer hover:bg-[#002FFF]/10 transition-colors",
                 selected && "bg-[#002FFF]/10",
             )}
             onClick={onSelect}
@@ -122,7 +122,7 @@ export function DashboardListItem({
 
             <DropdownMenu>
                 <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                    <Button variant="ghost" size="icon" className="h-5 w-7 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Button variant="ghost" size="icon" className="h-5 w-0 group-hover:w-auto">
                         <MoreHorizontal className="h-4 w-4" />
                     </Button>
                 </DropdownMenuTrigger>
@@ -131,7 +131,7 @@ export function DashboardListItem({
                     {appConfig.isPro && <DropdownMenuItem disabled={dashboard.is_default} onClick={() => onDefault(dashboard.id)}>{dashboard.is_default ? t('alreadyDefault') : t('setAsDefault')}</DropdownMenuItem>}
                     {dashboard.write && appConfig.isPro && <DropdownMenuItem onClick={() => onDuplicate(dashboard)}>{t('duplicate')}</DropdownMenuItem>}
                     <DropdownMenuItem onClick={() => onShare(dashboard.id)}>{t('share')}</DropdownMenuItem>
-                    {dashboard.write && appConfig.isPro && <DropdownMenuItem className="text-destructive" onClick={() => onDelete(dashboard.id)}>
+                    {dashboard.write && appConfig.isPro && <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => onDelete(dashboard.id)}>
                         {t('delete')}
                     </DropdownMenuItem>}
                 </DropdownMenuContent>

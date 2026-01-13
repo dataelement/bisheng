@@ -364,9 +364,9 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
     }
 
     // 只更新全局状态
-    updateEditingComponent({
-      style_config: newConfig
-    })
+    // updateEditingComponent({
+    //   style_config: newConfig
+    // })
 
     // 通知父组件
     onChange(newConfig)

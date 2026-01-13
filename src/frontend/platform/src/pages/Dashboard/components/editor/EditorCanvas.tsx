@@ -208,7 +208,7 @@ export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanv
             backgroundRepeat: 'repeat',
             backgroundAttachment: 'local',
             backgroundPosition: `${0}px ${0}px`,
-            height: '100%'
+            // height: '100%'
         };
     }, [width, isPreviewMode, mounted, currentDashboard?.style_config.theme]);
 

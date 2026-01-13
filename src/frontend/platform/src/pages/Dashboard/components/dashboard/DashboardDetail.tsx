@@ -124,7 +124,7 @@ export function DashboardDetail({
                                 onBlur={handleBlur}
                                 onKeyDown={handleKeyDown}
                                 boxClassName="w-auto"
-                                className="max-w-96 text-xl font-semibold h-6 px-2 py-1 border-primary"
+                                className="max-w-96 text-base font-semibold h-6 px-2 py-1 border-primary"
                             />
                         ) : (
                             <h1

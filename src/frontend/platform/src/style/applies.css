@@ -15,6 +15,25 @@
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1;
   }
+    ::-webkit-scrollbar-thumb {
+    background-color: transparent;
+  }
+
+  
+  *:hover::-webkit-scrollbar-thumb {
+    background-color: rgba(156, 163, 175, 0.5); /* gray-400 with opacity */
+    border-radius: 9999px;
+  }
+
+  /* Firefox */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+  }
+
+  *:hover {
+    scrollbar-color: rgb(156 163 175 / 0.5) transparent;
+  }
 }
 
 
