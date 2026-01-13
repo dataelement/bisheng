@@ -96,7 +96,7 @@ const privateRouter = [
       { path: "dashboard", element: <Dashboard /> },
     ],
   },
-  { path: "dashboard/:id", element: <EditorPage />, errorElement: <RouteErrorBoundary />, permission: 'dashboard', },
+  { path: "dashboard/:id", element: <EditorPage />, errorElement: <RouteErrorBoundary />, permission: 'board', },
   { path: "dashboard/share/:boardId", element: <SharePage />, errorElement: <RouteErrorBoundary /> },
   { path: "model/doc", element: <Doc />, errorElement: <RouteErrorBoundary /> },
   {

@@ -46,6 +46,7 @@ export const ChatToolDown = ({
     setSearchType("");
   }, []);
 
+  if (!linsi && !config?.webSearch.enabled) return null;
   if (linsi) return <LinsiTools tools={tools} setTools={setTools} />;
 
   return (

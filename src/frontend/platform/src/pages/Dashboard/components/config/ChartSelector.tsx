@@ -12,7 +12,7 @@ import {
 import { Checkbox } from "@/components/bs-ui/checkBox"
 import { useComponentEditorStore, useEditorDashboardStore } from "@/store/dashboardStore"
 import { AdvancedDatePicker } from "../AdvancedDatePicker"
-import { ChevronRight, ChevronLeft } from "lucide-react"
+import { ListIndentIncrease, ListIndentDecrease } from "lucide-react"
 import { toast } from "@/components/bs-ui/toast/use-toast"
 import { useTranslation } from "react-i18next"
 
@@ -244,7 +244,7 @@ export default function ChartSelector({
             {t("chartSelector.messages.collapse")}
           </div>
           <div className="mt-2">
-            <ChevronRight className="h-4 w-4" />
+            <ListIndentDecrease className="h-4 w-4" />
           </div>
         </div>
       </div>
@@ -261,7 +261,8 @@ export default function ChartSelector({
           </h3>
         </div>
         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setCollapsed(true)}>
-          <ChevronLeft className="h-4 w-4" />
+          <ListIndentIncrease className="h-4 w-4" />
+
         </Button>
       </div>
 

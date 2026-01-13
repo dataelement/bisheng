@@ -4,7 +4,7 @@ import { Input } from "@/components/bs-ui/input"
 import { Label } from "@/components/bs-ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select"
 import { getDatasets, MetricConfig } from "@/controllers/API/dashboard"
-import { Calendar, ChevronDown, ChevronRight, Clock3, Hash, Search, Type } from "lucide-react"
+import { Calendar, ChevronDown, ChevronRight, ChevronUp, Clock3, Hash, Search, Type } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import { useQuery } from "react-query"
 import { useTranslation } from "react-i18next"
@@ -195,7 +195,7 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
                             {dimensionsExpanded ? (
                                 <ChevronDown className="h-4 w-4" />
                             ) : (
-                                <ChevronRight className="h-4 w-4" />
+                                <ChevronUp className="h-4 w-4" />
                             )}
                         </button>
 
@@ -243,7 +243,7 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
                                             key={dimension.field}
                                             className="flex items-center gap-2 p-2 rounded hover:bg-accent/30 cursor-move transition-colors"
                                             draggable
-                                            onDragStart={(e) => handleDragStart(e, dimension, 'dimension')}
+                                            onDragStart={(e) => handleDragStart(e, field, 'dimension')}
                                             onClick={(e) => { e.stopPropagation(); onFieldClick?.(field) }}
                                         >
                                             {getFieldTypeIcon(field.fieldType)}
@@ -265,7 +265,7 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
                             {metricsExpanded ? (
                                 <ChevronDown className="h-4 w-4" />
                             ) : (
-                                <ChevronRight className="h-4 w-4" />
+                                <ChevronUp className="h-4 w-4" />
                             )}
                         </button>
                         {metricsExpanded && (
@@ -284,7 +284,7 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
                                             key={index}
                                             className="flex items-center gap-2 p-2 rounded hover:bg-accent/30 cursor-move transition-colors"
                                             draggable
-                                            onDragStart={(e) => handleDragStart(e, metric, 'metric')}
+                                            onDragStart={(e) => handleDragStart(e, field, 'metric')}
                                             onClick={(e) => {
                                                 e.stopPropagation()
                                                 onFieldClick?.(field)

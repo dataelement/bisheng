@@ -121,33 +121,26 @@ export const ChatKnowledge = ({
     });
   };
   useEffect(() => {
-    if (searchType === "knowledgeSearch") {
-      // 检查是否已经包含个人知识库
-      const hasPersonalKb = selectedOrgKbs.some(
-        (kb) => kb.id === PERSONAL_KB.id
-      );
-      if (!hasPersonalKb && enableOrgKb) {
-        setSelectedOrgKbs((prev) => [...prev, PERSONAL_KB]);
-      } else {
-        setSelectedOrgKbs([PERSONAL_KB]);
-      }
-    } else {
-      // 关闭个人知识库时移除
-      setSelectedOrgKbs((prev) =>
-        prev.filter((kb) => kb.id !== PERSONAL_KB.id)
-      );
-    }
-  }, [searchType, setSelectedOrgKbs]);
+    setSelectedOrgKbs((prev) => {
+      const filtered = prev.filter((kb) => kb.id !== PERSONAL_KB.id);
+      return searchType === "knowledgeSearch" ? [...filtered, PERSONAL_KB] : filtered;
+    });
+  }, [searchType]);
+
   useEffect(() => {
     if (!enableOrgKb) {
+      // 仅删除组织 KB
       setSelectedOrgKbs((prev) =>
-        prev.filter((kb) => kb.id === PERSONAL_KB.id)
+        prev.filter((kb) => kb.id === PERSONAL_KB.id || kb.id === PERSONAL_KB.id)
       );
     }
   }, [enableOrgKb, setSelectedOrgKbs]);
+
   useEffect(() => {
-    setSelectedOrgKbs([]);
-    setEnableOrgKb(false);
+    if (!selectedOrgKbs.length && !enableOrgKb) {
+      setSelectedOrgKbs([]);
+      setEnableOrgKb(false);
+    }
   }, []);
 
   return (

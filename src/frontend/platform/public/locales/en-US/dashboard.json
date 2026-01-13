@@ -87,15 +87,15 @@
 
     },
     "validation": {
-  "validationFailed": "Validation failed",
-  "chartTypeRequired": "Please select a chart type",
-  "categoryRequired": "Please add at least one category dimension",
-  "metricRequired": "Please add at least one metric",
-  "datasetRequired": "Please select a dataset",
-  "stackRequired": "Please add a stack dimension for stacked charts",
-  "invalidCategoryFields": "Invalid category dimension fields",
-  "invalidMetricFields": "Invalid metric fields"
-},
+      "validationFailed": "Validation failed",
+      "chartTypeRequired": "Please select a chart type",
+      "categoryRequired": "Please add at least one category dimension",
+      "metricRequired": "Please add at least one metric",
+      "datasetRequired": "Please select a dataset",
+      "stackRequired": "Please add a stack dimension for stacked charts",
+      "invalidCategoryFields": "Invalid category dimension fields",
+      "invalidMetricFields": "Invalid metric fields"
+    },
     "toast": {
       "fieldAlreadyExists": "Field already exists in {{section}}",
       "dimensionLimitReached": "Dimension limit reached",
@@ -345,6 +345,7 @@
   "delete": "Delete",
   "nameRequired": "Name cannot be empty",
   "charLimit200": "Character limit: 1-200 characters",
+  "charLimit200b": "The name cannot exceed 200 characters ",
   "rename": "Rename",
   "duplicate": "Duplicate",
   "copyTo": "Copy to",

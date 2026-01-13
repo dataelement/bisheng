@@ -30,6 +30,7 @@ export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanv
     const {
         currentDashboard,
         setCurrentDashboard,
+        setCurrentDashboardId,
         layouts,
         setLayouts,
         duplicateComponent: duplicateComponentInStore,
@@ -48,6 +49,8 @@ export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanv
         queryFn: getDashboards,
         // enabled: isHovered // Only fetch when hovered
     })
+
+    const theme = currentDashboard?.style_config?.theme
 
     // Mutation for copying component to another dashboard
     const copyToMutation = useMutation({
@@ -72,6 +75,7 @@ export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanv
     useEffect(() => {
         if (dashboard) {
             setCurrentDashboard(dashboard)
+            setCurrentDashboardId(dashboard.id)
         }
     }, [dashboard, setCurrentDashboard])
 
@@ -170,7 +174,7 @@ export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanv
         const patternWidth = cellWidth + marginX;
         const patternHeight = rowHeight + marginY;
 
-        const strokeColor = currentDashboard.style_config.theme === 'dark' ? "#666" : "rgba(0, 0, 0, 0.08)"; // 虚线颜色
+        const strokeColor = theme === 'dark' ? "#666" : "rgba(0, 0, 0, 0.08)"; // 虚线颜色
         const dashArray = "4, 3"; // 虚线步长
         const borderRadius = 10; // 圆角
 
@@ -230,9 +234,9 @@ export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanv
                 <div
                     id="edit-charts-panne"
                     ref={containerRef}
-                    className={cn("flex-1 overflow-auto", currentDashboard.style_config.theme)}
+                    className={cn("flex-1 overflow-auto", theme)}
                     style={{
-                        backgroundColor: currentDashboard.style_config.theme === 'dark' ? '#1a1a1a' : '#f5f5f5',
+                        backgroundColor: theme === 'dark' ? '#1a1a1a' : '#f5f5f5',
                     }}
                 >
                     <div className="mx-auto relative" style={{
@@ -267,7 +271,7 @@ export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanv
                                         <ComponentWrapper
                                             dashboards={dashboards}
                                             component={component}
-                                            isDark={currentDashboard.style_config.theme === 'dark'}
+                                            isDark={theme === 'dark'}
                                             isPreviewMode={isPreviewMode}
                                             onDuplicate={handleDuplicate}
                                             onCopyTo={handleCopyTo}

@@ -11,6 +11,7 @@ import { QueryFilter } from "../charts/QueryFilter"
 import "./index.css"
 import { cn } from "@/utils"
 import { useTranslation } from "react-i18next"
+import Tip from "@/components/bs-ui/tooltip/tip"
 
 interface ComponentWrapperProps {
     component: DashboardComponent
@@ -62,10 +63,10 @@ export function ComponentWrapper({
 
         if (!trimmedTitle) {
             setTitle(component.title)
-            toast({
-                description: t('nameRequired'),
-                variant: "error",
-            })
+            // toast({
+            //     description: t('nameRequired'),
+            //     variant: "error",
+            // })
             return
         }
 
@@ -180,7 +181,9 @@ export function ComponentWrapper({
                                                                 onCopyTo(componentData, dashboard.id)
                                                             }}
                                                         >
-                                                            {dashboard.title}
+                                                            <Tip content={dashboard.title} styleClasses="max-w-60 max-h-60 overflow-auto bg-black no-scrollbar">
+                                                                <div className="max-w-60 truncate">{dashboard.title}</div>
+                                                            </Tip>
                                                         </DropdownMenuItem>
                                                     ))
                                             )}

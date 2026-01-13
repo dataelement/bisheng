@@ -345,6 +345,7 @@
   "delete": "削除",
   "nameRequired": "名前は空欄にできません",
   "charLimit200": "文字数は1〜200文字の範囲で入力してください",
+  "charLimit200b": "名前は200文字以内にしてください",
   "rename": "名前を変更",
   "duplicate": "複製",
   "copyTo": "先にコピー",

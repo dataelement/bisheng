@@ -111,8 +111,8 @@ const SearchPanne = ({
           return getGroupResourcesApi({ ...param, resource_type: 4 });
         case 'assistant':
           return getGroupResourcesApi({ ...param, resource_type: 3 });
-        // case 'board':
-        //   return getGroupResourcesApi({ ...param, resource_type: 6 });
+        case 'board':
+          return getGroupResourcesApi({ ...param, resource_type: 6 });
         default:
           return getGroupResourcesApi({ ...param, resource_type: 1 });
       }
@@ -160,7 +160,6 @@ const SearchPanne = ({
 
   return <>
     <div className="mt-6 flex flex-col items-start relative gap-3">
-      {/* <p className="text-xl font-bold">{title}</p> */}
       {type === 'board' && (
         <div className="flex flex-col gap-4 w-full">
           {/* 允许创建看板开关 */}
@@ -177,40 +176,6 @@ const SearchPanne = ({
               </p>
             </div>
           </div>
-
-          {/* 看板使用/管理权限表格 */}
-          <Table className="mt-2">
-            <TableHeader>
-              <TableRow>
-                <TableHead>{t(nameKey)}</TableHead>
-                <TableHead className="text-center w-[175px]">{t('system.usePermission')}</TableHead>
-                <TableHead className="text-center w-[175px]">{t('system.managePermission')}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {data.map((el: any) => {
-                const id = Number(el.id);
-                return (
-                  <TableRow key={id}>
-                    <TableCell className="font-medium">{t(el.name)}</TableCell>
-                    <TableCell className="text-center">
-                      <Switch
-                        checked={useChecked(id)}
-                        onCheckedChange={(bln) => onUseChange(id, bln)}
-                      />
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <Switch
-                        disabled={!appConfig.isPro}
-                        checked={manageChecked(id)}
-                        onCheckedChange={(bln) => onManageChange(id, bln)}
-                      />
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
         </div>
       )}
 
@@ -386,7 +351,7 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
 
   const [form, setForm] = useState({
     name,
-    useSkills: [], useLibs: [], useAssistant: [], useFlows: [], useTools: [], useMenu: [MenuType.BUILD, MenuType.KNOWLEDGE, MenuType.MODEL, MenuType.EVALUATION, MenuType.BOARD],
+    useSkills: [], useLibs: [], useAssistant: [], useFlows: [], useTools: [], useMenu: [MenuType.BUILD, MenuType.KNOWLEDGE],
     manageLibs: [], manageAssistants: [], manageSkills: [], manageFlows: [], manageTools: [], useBoards: [], manageBoards: [],
     allowCreateBoard: false,
   });
@@ -555,33 +520,48 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
       {/* 空间授权 - 完全独立于菜单权限 */}
       <div className="mt-10">
         <div className="items-center relative">
-          <p className="text-xl font-bold">{t('空间授权')}</p>
-          <p className="text-sm text-[#8F959E]">{t('选择该角色可以访问的空间')}</p>
+          <p className="text-xl font-bold">{t('system.spaceAuthorization')}</p>
+          <p className="text-sm text-[#8F959E]">
+            {t('system.spaceAuthorizationDesc')}
+          </p>
         </div>
+
         <div className="w-full">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>{t('空间名称')}</TableHead>
-                <TableHead className="text-right w-[75px]">{t('system.viewPermission')}</TableHead>
+                <TableHead>{t('system.spaceName')}</TableHead>
+                <TableHead className="text-right w-[75px]">
+                  {t('system.viewPermission')}
+                </TableHead>
               </TableRow>
             </TableHeader>
+
             <TableBody>
               <TableRow>
-                <TableCell className="font-medium">{t('工作台')}</TableCell>
+                <TableCell className="font-medium">
+                  {t('system.workspace')}
+                </TableCell>
                 <TableCell className="text-center">
                   <Switch
                     checked={spacePermissions.workspace}
-                    onCheckedChange={(bln) => handleSpacePermissionChange('workspace', bln)}
+                    onCheckedChange={(bln) =>
+                      handleSpacePermissionChange('workspace', bln)
+                    }
                   />
                 </TableCell>
               </TableRow>
+
               <TableRow>
-                <TableCell className="font-medium">{t('管理后台')}</TableCell>
+                <TableCell className="font-medium">
+                  {t('system.adminSpace')}
+                </TableCell>
                 <TableCell className="text-center">
                   <Switch
                     checked={spacePermissions.admin}
-                    onCheckedChange={(bln) => handleSpacePermissionChange('admin', bln)}
+                    onCheckedChange={(bln) =>
+                      handleSpacePermissionChange('admin', bln)
+                    }
                   />
                 </TableCell>
               </TableRow>
@@ -589,6 +569,7 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
           </Table>
         </div>
       </div>
+
 
       {/* 权限 Tabs */}
       <div className="flex gap-6 border-b mt-10">
