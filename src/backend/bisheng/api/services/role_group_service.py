@@ -3,7 +3,6 @@ import json
 from datetime import datetime
 from typing import List, Any, Dict, Optional
 
-from bisheng.telemetry_search.domain.services.dashboard import DashboardService
 from fastapi import Request, HTTPException
 from fastapi.encoders import jsonable_encoder
 from loguru import logger
@@ -23,6 +22,7 @@ from bisheng.database.models.group_resource import GroupResourceDao, ResourceTyp
 from bisheng.database.models.role import RoleDao
 from bisheng.database.models.user_group import UserGroupCreate, UserGroupDao, UserGroupRead
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+from bisheng.telemetry_search.domain.services.dashboard import DashboardService
 from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
 from bisheng.user.domain.models.user import User, UserDao
 from bisheng.user.domain.models.user_role import UserRoleDao
@@ -367,6 +367,11 @@ class RoleGroupService():
             one_dict["name"] = one.title
             one_dict["user_name"] = user_map.get(one.user_id, one.user_id)
             res.append(one_dict)
+        if page_size and page_num:
+            start_index = (page_num - 1) * page_size
+            end_index = start_index + page_size
+            paged_res = res[start_index:end_index]
+            return paged_res, len(res)
         return res, len(res)
 
     def get_manage_resources(self, login_user: UserPayload, keyword: str, page: int, page_size: int) -> (list, int):
