@@ -26,6 +26,46 @@
     right: -3px;
 }
 
+.react-grid-item>.react-resizable-handle.react-resizable-handle-n {
+    left: 10px;
+    width: calc(100% - 20px);
+    border-radius: 0;
+    transform: rotate(0);
+    margin: 0;
+    top: -3px;
+    opacity: 0;
+}
+
+.react-grid-item>.react-resizable-handle.react-resizable-handle-s {
+    left: 10px;
+    width: calc(100% - 20px);
+    border-radius: 0;
+    transform: rotate(0);
+    margin: 0;
+    bottom: -3px;
+    opacity: 0;
+}
+
+.react-grid-item>.react-resizable-handle.react-resizable-handle-w {
+    left: -3px;
+    top: 10px;
+    transform: rotate(0);
+    height: calc(100% - 20px);
+    border-radius: 0;
+    margin: 0;
+    opacity: 0;
+}
+
+.react-grid-item>.react-resizable-handle.react-resizable-handle-e {
+    right: -3px;
+    top: 10px;
+    transform: rotate(0);
+    height: calc(100% - 20px);
+    border-radius: 0;
+    margin: 0;
+    opacity: 0;
+}
+
 .react-grid-item>.react-resizable-handle::after {
     content: normal;
 }

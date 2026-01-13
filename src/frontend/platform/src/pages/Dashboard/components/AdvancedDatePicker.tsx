@@ -225,7 +225,7 @@ export function AdvancedDatePicker({
         <Button
           variant={"outline"}
           className={cn(
-            "w-92 justify-start text-left font-normal dark:text-gray-200",
+            "w-92 flex-1 justify-start text-left font-normal dark:text-gray-200",
             !value && "text-muted-foreground"
           )}
         >

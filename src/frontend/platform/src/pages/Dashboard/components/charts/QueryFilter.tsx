@@ -61,6 +61,10 @@ export function QueryFilter({ isDark, component, isPreviewMode = false }: QueryF
             {/* date zone */}
             <div className="flex flex-col gap-2 pr-24">
                 <label className={cn("text-sm font-medium", "dark:text-gray-400")}>{t('selectDate')}</label>
+            </div>
+
+            {/* query btn */}
+            <div className="w-full flex flex-1 gap-2 items-center select-none">
                 <AdvancedDatePicker
                     granularity={map[queryConditions.timeGranularity]}
                     mode={queryConditions.displayType}
@@ -71,11 +75,7 @@ export function QueryFilter({ isDark, component, isPreviewMode = false }: QueryF
                         setFilter(val);
                     }}
                 />
-            </div>
-
-            {/* query btn */}
-            <div className="absolute bottom-4 right-4">
-                <Button onClick={handleQuery} size="sm" className="gap-1">
+                <Button onClick={handleQuery} className=" gap-1">
                     <Search className="h-4 w-4" />
                     {t('query')}
                 </Button>

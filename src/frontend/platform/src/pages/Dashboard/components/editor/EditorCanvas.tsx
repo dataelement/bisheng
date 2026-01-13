@@ -159,6 +159,14 @@ export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanv
         })
     }
 
+    const handleRename = (id, title) => {
+        setCurrentDashboard({
+            ...currentDashboard,
+            components: currentDashboard.components.map(component =>
+                component.id === id ? { ...component, title } : component)
+        })
+    }
+
     const gridBackgroundStyle = useMemo(() => {
         if (isPreviewMode || !width || !mounted) return {};
 
@@ -234,7 +242,7 @@ export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanv
                 <div
                     id="edit-charts-panne"
                     ref={containerRef}
-                    className={cn("flex-1 overflow-auto", theme)}
+                    className={cn("flex-1 overflow-auto min-w-[1000px] no-scrollbar", theme)}
                     style={{
                         backgroundColor: theme === 'dark' ? '#1a1a1a' : '#f5f5f5',
                     }}
@@ -261,7 +269,7 @@ export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanv
                                 resizeConfig={
                                     {
                                         enabled: !isPreviewMode,
-                                        handles: ["sw", "nw", "se", "ne"]
+                                        handles: ["sw", "nw", "se", "ne", "s", "n", "e", "w"]
                                     }}
                                 onLayoutChange={handleLayoutChange}
                                 compactor={verticalCompactor}
@@ -276,6 +284,7 @@ export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanv
                                             onDuplicate={handleDuplicate}
                                             onCopyTo={handleCopyTo}
                                             onDelete={handleDelete}
+                                            onRename={handleRename}
                                         />
                                     </div>
                                 ))}
