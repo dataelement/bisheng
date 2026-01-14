@@ -35,13 +35,14 @@ export function ComponentWrapper({
     const [isEditing, setIsEditing] = useState(false)
     const inputRef = useRef<HTMLInputElement>(null)
     const { toast } = useToast()
-    const [title, setTitle] = useState(component.title)
+    const [title, setTitle] = useState('')
     const { copyFromDashboard, editingComponent, updateEditingComponent } = useComponentEditorStore();
     const isSelected = editingComponent?.id === component.id
     const componentData = isSelected ? editingComponent : component
 
     useEffect(() => {
         console.log('componentData :>> ', componentData);
+        setTitle(component.title)
     }, [editingComponent, component])
 
     useEffect(() => {

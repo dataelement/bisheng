@@ -15,7 +15,7 @@ import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useMutation, useQueryClient } from "react-query"
 import { useNavigate } from "react-router-dom"
-import { usePublishDashboard } from "../../hook"
+import { DashboardQueryKey, DashboardsQueryKey, usePublishDashboard } from "../../hook"
 import { ChartType, Dashboard } from "../../types/dataConfig"
 import ComponentPicker from "./ComponentPicker"
 
@@ -66,8 +66,9 @@ export function EditorHeader({
         },
         onSuccess: (a, { autoSave }, c) => {
             setHasUnsavedChanges(false)
-            queryClient.invalidateQueries({ queryKey: ["dashboard", dashboardId] })
-            queryClient.invalidateQueries({ queryKey: ["dashboards"] })
+            // refrensh react-query
+            queryClient.invalidateQueries({ queryKey: [DashboardQueryKey, Number(dashboardId)] })
+            queryClient.invalidateQueries({ queryKey: [DashboardsQueryKey] })
             // autosave not require toast
             !autoSave && toast({
                 description: t('saveSuccess'),

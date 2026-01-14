@@ -39,10 +39,14 @@ export function DashboardListItem({
     const { t } = useTranslation("dashboard")
 
     const [isEditing, setIsEditing] = useState(false)
-    const [title, setTitle] = useState(dashboard.title)
+    const [title, setTitle] = useState('')
     const inputRef = useRef<HTMLInputElement>(null)
     const { toast } = useToast()
     const { appConfig } = useContext(locationContext)
+
+    useEffect(() => {
+        setTitle(dashboard.title)
+    }, [dashboard])
 
     useEffect(() => {
         if (isEditing && inputRef.current) {
