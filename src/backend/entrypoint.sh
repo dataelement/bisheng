@@ -60,8 +60,7 @@ elif [ "$start_mode" = "worker" ]; then
     start_beat
 
     echo "All workers started successfully."
-#    celery -A bisheng.worker.main beat -l info
 else
-    echo "Invalid start mode. Use 'api' or 'worker'."
+    echo "Invalid start mode. Use api、worker、knowledge、workflow、beat、default、linsight."
     exit 1
 fi
