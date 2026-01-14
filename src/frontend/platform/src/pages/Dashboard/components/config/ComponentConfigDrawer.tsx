@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Input } from "@/components/bs-ui/input"
 import { ChevronDown, GripVertical, ListIndentDecrease, ListIndentIncrease, X } from "lucide-react"
 
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 
 import { Label } from "@/components/bs-ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/bs-ui/radio"
@@ -59,11 +59,13 @@ export function ComponentConfigDrawer() {
   const [filter, setFilter] = useState<any>([])
   // 使用自定义Hook管理所有图表状态
   const chartState = useChartState(editingComponent)
+  const [isMetricCard, setIsMetricCard] = useState(true)
 
   // 从Hook中解构状态和方法
   const {
     chartType,
     title,
+    setTitle,
     styleConfig,
     categoryDimensions,
     stackDimensions,
@@ -242,7 +244,13 @@ export function ComponentConfigDrawer() {
         .map(d => d.id)
     )
   }, [datasetFields, categoryDimensions, stackDimensions, valueDimensions])
-
+  useEffect(() => {
+    if (chartType === 'metric') {
+      setIsMetricCard(false)
+    } else {
+      setIsMetricCard(true)
+    }
+  }, [chartType])
   // 数据集改变
   const handleDatasetChange = useCallback((datasetCode: string) => {
     if (editingComponent) {
@@ -328,7 +336,7 @@ export function ComponentConfigDrawer() {
       }
     }
 
-    if (editingComponent.type !== 'metric') {
+    if (editingComponent.type !== 'metric' && isMetricCard) {
       if (categoryDimensions.length === 0) {
         toast({
           description: t("componentConfigDrawer.validation.categoryRequired"),
@@ -565,7 +573,18 @@ export function ComponentConfigDrawer() {
                           <>
                             {/* chart type */}
                             <FormBlock label={t("componentConfigDrawer.chartType")} required>
-                              <ComponentPicker onSelect={(data) => handleChartTypeChange(data.type)} maxHeight={500}>
+                              <ComponentPicker onSelect={(data) => {
+                                // 更新图表类型
+                                handleChartTypeChange(data.type);
+
+                                // 自动将选中的图表名称设置为标题
+                                const chartLabel = ChartGroupItems
+                                  .flatMap(item => item.data)
+                                  .find(item => item.type === data.type)?.label;
+                                if (chartLabel) {
+                                  setTitle(t(`chart.${chartLabel}`));
+                                }
+                              }} maxHeight={500}>
                                 <div className="relative w-full group">
                                   <div className="flex h-[28px] w-full items-center justify-between rounded-md border border-gray-300 bg-white px-3 py-2 text-sm transition-colors hover:border-gray-400 cursor-pointer">
                                     {/* 文本区域 */}
@@ -591,52 +610,56 @@ export function ComponentConfigDrawer() {
                               </ComponentPicker>
                             </FormBlock>
                             {/* 类别轴 / 维度 */}
-                            <CollapsibleBlock
-                              title={t("componentConfigDrawer.categoryAxis")}
-                              required
-                              collapsed={configCollapsed.category}
-                              onCollapse={() => toggleCollapse('category')}
-                            >
-                              <DimensionBlock
-                                invalidIds={invalidFieldIds}
-                                isDimension={true}
-                                dimensions={categoryDimensions}
-                                maxDimensions={2}
-                                isDragOver={dragOverSection === 'category'}
-                                onDragOver={(e) => handleDragOver(e, 'category')}
-                                onDragLeave={handleDragLeave}
-                                onDrop={(e) => handleDrop(e, 'category')}
-                                onDelete={(dimensionId) => handleDeleteDimension('category', dimensionId)}
-                                onSortChange={(dimensionId, sortValue) => handleSortChange('category', dimensionId, sortValue)}
-                                onEditDisplayName={(dimensionId, originalName, displayName) =>
-                                  openEditDialog('category', dimensionId, originalName, displayName)
-                                }
-                              />
-                            </CollapsibleBlock>
+                            {isMetricCard && (
+                              <>
+                                <CollapsibleBlock
+                                  title={t("componentConfigDrawer.categoryAxis")}
+                                  required
+                                  collapsed={configCollapsed.category}
+                                  onCollapse={() => toggleCollapse('category')}
+                                >
+                                  <DimensionBlock
+                                    invalidIds={invalidFieldIds}
+                                    isDimension={true}
+                                    dimensions={categoryDimensions}
+                                    maxDimensions={2}
+                                    isDragOver={dragOverSection === 'category'}
+                                    onDragOver={(e) => handleDragOver(e, 'category')}
+                                    onDragLeave={handleDragLeave}
+                                    onDrop={(e) => handleDrop(e, 'category')}
+                                    onDelete={(dimensionId) => handleDeleteDimension('category', dimensionId)}
+                                    onSortChange={(dimensionId, sortValue) => handleSortChange('category', dimensionId, sortValue)}
+                                    onEditDisplayName={(dimensionId, originalName, displayName) =>
+                                      openEditDialog('category', dimensionId, originalName, displayName)
+                                    }
+                                  />
+                                </CollapsibleBlock>
 
-                            {/* 堆叠项 / 维度 */}
-                            {currentChartHasStack && (
-                              <CollapsibleBlock
-                                title={t("componentConfigDrawer.stackItem")}
-                                collapsed={configCollapsed.stack}
-                                onCollapse={() => toggleCollapse('stack')}
-                              >
-                                <DimensionBlock
-                                  invalidIds={invalidFieldIds}
-                                  isDimension={true}
-                                  dimensions={stackDimensions}
-                                  isDragOver={dragOverSection === 'stack'}
-                                  onDragOver={(e) => handleDragOver(e, 'stack')}
-                                  onDragLeave={handleDragLeave}
-                                  onDrop={(e) => handleDrop(e, 'stack')}
-                                  onDelete={(dimensionId) => handleDeleteDimension('stack', dimensionId)}
-                                  onSortChange={(dimensionId, sortValue) => handleSortChange('stack', dimensionId, sortValue)}
-                                  onEditDisplayName={(dimensionId, originalName, displayName) =>
-                                    openEditDialog('stack', dimensionId, originalName, displayName)
-                                  }
-                                />
-                              </CollapsibleBlock>
+                                {currentChartHasStack && (
+                                  <CollapsibleBlock
+                                    title={t("componentConfigDrawer.stackItem")}
+                                    collapsed={configCollapsed.stack}
+                                    onCollapse={() => toggleCollapse('stack')}
+                                  >
+                                    <DimensionBlock
+                                      invalidIds={invalidFieldIds}
+                                      isDimension={true}
+                                      dimensions={stackDimensions}
+                                      isDragOver={dragOverSection === 'stack'}
+                                      onDragOver={(e) => handleDragOver(e, 'stack')}
+                                      onDragLeave={handleDragLeave}
+                                      onDrop={(e) => handleDrop(e, 'stack')}
+                                      onDelete={(dimensionId) => handleDeleteDimension('stack', dimensionId)}
+                                      onSortChange={(dimensionId, sortValue) => handleSortChange('stack', dimensionId, sortValue)}
+                                      onEditDisplayName={(dimensionId, originalName, displayName) =>
+                                        openEditDialog('stack', dimensionId, originalName, displayName)
+                                      }
+                                    />
+                                  </CollapsibleBlock>
+                                )}
+                              </>
                             )}
+
                           </>
                         )
                       }
@@ -666,7 +689,7 @@ export function ComponentConfigDrawer() {
                       </CollapsibleBlock>
 
                       {/* 排序优先级 */}
-                      {editingComponent.type !== 'metric' && <CollapsibleBlock title={t("componentConfigDrawer.sortPriority")}>
+                      {(editingComponent.type !== 'metric' && isMetricCard) && <CollapsibleBlock title={t("componentConfigDrawer.sortPriority")}>
                         <div className="space-y-1 border rounded-md p-[2px]">
                           {sortPriorityFields.length === 0 ? (
                             <div className="text-xs text-muted-foreground text-center py-2">
@@ -754,7 +777,7 @@ export function ComponentConfigDrawer() {
                       </FormBlock>
 
                       {/* 结果显示 */}
-                      {editingComponent.type !== 'metric' && <FormBlock label={t("componentConfigDrawer.resultsDisplay")}>
+                      {(editingComponent.type !== 'metric' && isMetricCard) && <FormBlock label={t("componentConfigDrawer.resultsDisplay")}>
                         <RadioGroup
                           value={limitType}
                           onValueChange={(value: "all" | "limit") => setLimitType(value)}
@@ -783,9 +806,9 @@ export function ComponentConfigDrawer() {
                         </RadioGroup>
                       </FormBlock>}
 
-                      <Button id="config_save" className="w-full h-10 mt-4" onClick={handleUpdateChart}>
+                      {/* <Button id="config_save" className="w-full h-10 mt-4" onClick={handleUpdateChart}>
                         {t("componentConfigDrawer.updateChartData")}
-                      </Button>
+                      </Button> */}
                     </>
                   ) : (
                     <StyleConfigPanel
@@ -803,6 +826,17 @@ export function ComponentConfigDrawer() {
                     />
                   )}
                 </div>
+                {/* 底部固定更新按钮（不随滚动） */}
+                <div className="px-4 py-3 border-t bg-background">
+                  <Button
+                    id="config_save"
+                    className="w-full h-10"
+                    onClick={handleUpdateChart}
+                  >
+                    {t("componentConfigDrawer.updateChartData")}
+                  </Button>
+                </div>
+
               </div>
             )}
           </div>
