@@ -229,7 +229,8 @@
       "atLeastOneCondition": "Please configure at least one valid filter condition"
     },
     "toast": {
-      "fetchEnumFailed": "Failed to fetch enum values, please try again later"
+      "fetchEnumFailed": "Failed to fetch enum values, please try again later",
+      "saveSuccess": "Filter condition saved successfully"
     },
     "enumSelect": {
       "placeholder": "Please select",
@@ -294,6 +295,7 @@
     },
     "fieldTypes": {
       "dimension": "Dimension",
+      "noFields": "No fields available",
       "metric": "Metric"
     },
     "warn": {

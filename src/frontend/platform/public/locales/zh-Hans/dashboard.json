@@ -180,6 +180,7 @@
         },
         "filterTypes": {
             "conditional": "条件筛选",
+            "noFields": "暂无字段",
             "enum": "枚举筛选"
         },
         "operators": {
@@ -207,7 +208,8 @@
             "atLeastOneCondition": "请至少配置一个有效的筛选条件"
         },
         "toast": {
-            "fetchEnumFailed": "获取枚举值失败，请稍后重试"
+            "fetchEnumFailed": "获取枚举值失败，请稍后重试",
+            "saveSuccess": "保存成功"
         },
         "enumSelect": {
             "placeholder": "请选择",

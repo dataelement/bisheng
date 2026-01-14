@@ -15,6 +15,8 @@ import { AdvancedDatePicker } from "../AdvancedDatePicker"
 import { ListIndentIncrease, ListIndentDecrease } from "lucide-react"
 import { toast } from "@/components/bs-ui/toast/use-toast"
 import { useTranslation } from "react-i18next"
+import { useQuery } from "react-query"
+import { getDatasets } from "@/controllers/API/dashboard"
 
 /* ================== 类型 ================== */
 export interface ChartLinkConfig {
@@ -49,7 +51,10 @@ export default function ChartSelector({
   // 从 store 获取当前 dashboard 和组件
   const { currentDashboard } = useEditorDashboardStore()
   const { editingComponent } = useComponentEditorStore()
-
+  const { data: allDatasets = [], isLoading: datasetsLoading } = useQuery({
+    queryKey: ['datasets'],
+    queryFn: () => getDatasets()
+  })
   useEffect(() => {
     const config = editingComponent?.data_config
 
@@ -121,14 +126,20 @@ export default function ChartSelector({
       )
       .map(component => ({
         id: component.id,
+        type: component.type,
         name: component.title || t("chartSelector.unnamedChart"),
         dataset: component.dataset_code || t("chartSelector.noDataset")
       }))
     : []
 
-  // 获取当前编辑的组件名称
-  const componentName = editingComponent?.title || t("chartSelector.unnamedChart")
+  const getDatasetName = (datasetCode: string): string => {
+    if (!datasetCode || !allDatasets || allDatasets.length === 0) {
+      return t("chartSelector.noDataset")
+    }
 
+    const dataset = allDatasets.find(d => d.dataset_code === datasetCode)
+    return dataset?.dataset_name || datasetCode
+  }
   /* 单选 */
   const toggleChart = (id: string) => {
     setSelectedCharts(prev =>
@@ -244,13 +255,20 @@ export default function ChartSelector({
                   checked={selectedCharts.includes(chart.id)}
                   onCheckedChange={() => toggleChart(chart.id)}
                 />
-                <span className="text-sm">
+                <span className="text-sm flex">
+                  <img
+                    src={`${__APP_ENV__.BASE_URL}/assets/dashboard/${chart.type}.png`}
+                    className="w-4 h-4 shrink-0 mt-0.5 mr-1"
+                    alt={chart.type}
+                  />
                   {chart.name}
-                  {chart.dataset && (
-                    <span className="text-muted-foreground ml-1">
-                      ({chart.dataset})
-                    </span>
-                  )}
+                  {
+                    chart.dataset && (
+                      <span className="text-muted-foreground text-xs ml-4 mt-0.5">
+                        {getDatasetName(chart.dataset)}
+                      </span>
+                    )
+                  }
                 </span>
               </div>
             ))

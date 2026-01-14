@@ -200,6 +200,7 @@
     },
     "filterTypes": {
       "conditional": "条件フィルター",
+      "noFields": "フィールドがありません",
       "enum": "列挙フィルター"
     },
     "operators": {
@@ -229,7 +230,9 @@
     "toast": {
       "fetchEnumFailed": "列挙値の取得に失敗しました。後で再試行してください",
       "virtualMetricConflict": "仮想メトリックと通常のメトリックを同時に追加することはできません",
-      "multipleVirtualMetric": "複数の仮想メトリックを同時に追加することはできません"
+      "multipleVirtualMetric": "複数の仮想メトリックを同時に追加することはできません",
+      "saveSuccess":"保存に成功しました"
+      
     },
     "enumSelect": {
       "placeholder": "選択してください",
