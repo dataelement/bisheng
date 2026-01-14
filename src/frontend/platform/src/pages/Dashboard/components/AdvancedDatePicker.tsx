@@ -219,6 +219,11 @@ export function AdvancedDatePicker({
     { label: t('shortcut.last_180'), days: 180, key: "last_180" },
   ];
 
+  const handleClear = () => {
+    setDateRange(undefined);
+    onChange(undefined)
+  }
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -354,7 +359,7 @@ export function AdvancedDatePicker({
 
           {/* Footer Action */}
           <div className="flex justify-end gap-2  px-3 mb-3">
-            <Button className="h-6" variant="ghost" size="sm" onClick={() => setOpen(false)}>{t('cancel')}</Button>
+            <Button className="h-6" variant="ghost" size="sm" onClick={handleClear}>{t('clear')}</Button>
             <Button className="h-6" size="sm" onClick={handleConfirm}>{t('confirm')}</Button>
           </div>
 

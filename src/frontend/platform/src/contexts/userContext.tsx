@@ -121,7 +121,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
             // 是否有访问后台权限
             if (/^(\/\w+)?\/chat/.test(location.pathname)) return // 排除免登陆
 
-            if (!web_menu.includes('backend')) {
+            if (res.role !== 'admin' && !web_menu.includes('backend')) {
                 location.href = `${location.origin}/workspace/c/new?error=90001`;
                 return;
             }

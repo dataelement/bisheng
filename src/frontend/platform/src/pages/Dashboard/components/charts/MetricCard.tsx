@@ -157,9 +157,9 @@ export function MetricCard({ data, dataConfig, styleConfig }: MetricCardProps) {
     <div className="flex items-end justify-between h-full">
       <div className='flex flex-col h-full justify-between'>
         {/* subtitle */}
-        {styleConfig.showSubtitle && subTitle && (
+        {styleConfig.showSubtitle && subTitle ? (
           <div style={subtitleStyle}>{subTitle}</div>
-        )}
+        ) : <div></div>}
         {/* title */}
         <div style={titleStyle}>{indicatorName}</div>
       </div>

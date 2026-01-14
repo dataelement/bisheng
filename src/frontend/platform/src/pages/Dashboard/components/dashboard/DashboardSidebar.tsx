@@ -19,6 +19,7 @@ import { DashboardsQueryKey } from "../../hook"
 import { Dashboard } from "../../types/dataConfig"
 import { DashboardListItem } from "./DashboardListItem"
 import { useTranslation } from "react-i18next"
+import { ExpandIcon } from "@/components/bs-icons/expand"
 
 interface DashboardSidebarProps {
     dashboards: Dashboard[]
@@ -185,10 +186,10 @@ export function DashboardSidebar({
                 <Button
                     variant={isCollapsed ? "outline" : "ghost"}
                     size="icon"
-                    className={"absolute top-2 z-10 bg-background" + (isCollapsed ? " -right-4 size-8" : " right-2")}
+                    className={"absolute top-2 z-10 hover:text-primary bg-background" + (isCollapsed ? " -right-4 size-8" : " right-2")}
                     onClick={() => setIsCollapsed(!isCollapsed)}
                 >
-                    {isCollapsed ? <ListIndentIncrease className="h-4 w-4" /> : <ListIndentDecrease className="h-4 w-4" />}
+                    {isCollapsed ? <ExpandIcon className="h-4 w-4 hover:text-primary" /> : <ExpandIcon className="h-4 w-4 rotate-180" />}
                 </Button>
             </Tip>
 

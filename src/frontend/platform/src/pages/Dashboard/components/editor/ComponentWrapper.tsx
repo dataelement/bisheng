@@ -3,7 +3,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSub, D
 import { Input } from "@/components/bs-ui/input"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
 import { useComponentEditorStore } from "@/store/dashboardStore"
-import { Copy, Edit3, MoreHorizontal, MoreVerticalIcon, Trash2 } from "lucide-react"
+import { Copy, Edit3, GripHorizontalIcon, MoreHorizontal, MoreVerticalIcon, Trash2 } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { ChartType, Dashboard, DashboardComponent } from "../../types/dataConfig"
 import { ChartContainer } from "../charts/ChartContainer"
@@ -98,9 +98,32 @@ export function ComponentWrapper({
         }
     }
 
+    const createTitleStyle = (config) => {
+        const defaultConfig = {
+            titleFontSize: 14,
+            titleColor: "#111",
+            titleAlign: "left",
+            titleBold: false,
+            titleItalic: false,
+            titleUnderline: false,
+            ...config  // 用户配置覆盖默认值
+        };
+        return {
+            fontSize: `${defaultConfig.titleFontSize}px`,
+            color: defaultConfig.titleColor,
+            textAlign: defaultConfig.titleAlign,
+            fontWeight: defaultConfig.titleBold ? 'bold' : 'normal',
+            fontStyle: defaultConfig.titleItalic ? 'italic' : 'normal',
+            textDecoration: defaultConfig.titleUnderline ? 'underline' : 'none',
+            // 确保span能够应用text-align（如果需要）
+            display: 'inline-block',
+            width: '100%'
+        };
+    };
+
     return (
         <div
-            className={cn(`group relative w-full h-full rounded-md overflow-visible transition-all border ${!isPreviewMode && isSelected ? 'component-select border border-primary' : ''
+            className={cn(`relative w-full h-full rounded-md overflow-visible transition-all border ${!isPreviewMode && isSelected ? 'component-select border border-primary' : ''
                 }`,
                 !componentData.style_config.bgColor && 'dark:bg-gray-900',
                 !componentData.style_config.bgColor && 'bg-background',
@@ -213,7 +236,7 @@ export function ComponentWrapper({
             <div className="w-full h-full p-2">
                 {/* Component title with rename ability - hidden for query type */}
                 {!['query', 'metric'].includes(component.type) && (
-                    <div className="mb-2">
+                    <div className="group mb-2 relative">
                         {isEditing ? (
                             <Input
                                 ref={inputRef}
@@ -225,10 +248,21 @@ export function ComponentWrapper({
                                 onClick={(e) => e.stopPropagation()}
                             />
                         ) : (
-                            <h3 className={cn("no-drag text-sm font-medium truncate cursor-pointer block",
+                            <h3 className={cn("text-sm font-medium truncate",
                                 "dark:text-gray-400"
-                            )} onDoubleClick={() => setIsEditing(true)}>{title}</h3>
+                            )} onDoubleClick={() => setIsEditing(true)}>
+                                <span className="no-drag cursor-pointer" style={createTitleStyle(componentData.style_config)}>{title}</span>
+                            </h3>
                         )}
+                        {!isPreviewMode && <GripHorizontalIcon
+                            className={cn(
+                                "absolute -top-1 left-1/2 -translate-x-1/2 text-gray-400 transition-opacity",
+                                "opacity-0",
+                                "group-hover:opacity-100",
+                                "group-has-[.no-drag:hover]:opacity-0"
+                            )}
+                            size={16}
+                        />}
                     </div>
                 )}
 

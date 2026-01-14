@@ -318,6 +318,7 @@
   "endHour": "終了時間",
   "dynamicUpdate": "動的更新 (次回表示時に現在時刻から自動計算)",
   "cancel": "キャンセル",
+  "clear": "クリア",
   "confirm": "確定",
   "yearUnit": "年",
   "monthUnit": "月",
@@ -380,6 +381,7 @@
   "noDataInChart": "このチャートにはデータがありません",
   "selectDate": "日付を選択",
   "query": "照会",
+  "dashboardOffline": "このダッシュボードは現在オフラインです",
   "chart": {
     "barChart": "棒グラフ",
     "basicBarChart": "基本棒グラフ",

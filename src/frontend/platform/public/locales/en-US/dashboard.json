@@ -317,6 +317,7 @@
   "endHour": "End Hour",
   "dynamicUpdate": "Dynamic Update (Auto-calculate based on current time)",
   "cancel": "Cancel",
+  "clear": "Clear",
   "confirm": "Confirm",
   "yearUnit": " ",
   "monthUnit": " ",
@@ -379,6 +380,7 @@
   "noDataInChart": "No data available in this chart",
   "selectDate": "Select Date",
   "query": "Query",
+  "dashboardOffline": "This dashboard is offline",
   "chart": {
     "barChart": "Column",
     "basicBarChart": "Basic Bar",

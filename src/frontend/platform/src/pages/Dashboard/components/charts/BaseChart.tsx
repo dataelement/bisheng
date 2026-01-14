@@ -166,15 +166,18 @@ const getPieChartOption = (
 
   return {
     backgroundColor: styleConfig.bgColor,
-    title: buildTitleOption(styleConfig),
+    // title: buildTitleOption(styleConfig),
     legend: buildLegendOption(styleConfig),
     tooltip: buildTooltipOption('item', tooltipFormatter),
     series: series.map((s) => ({
       name: s.name,
+      left: styleConfig.legendPosition === 'left' && 100,
+      right: styleConfig.legendPosition === 'right' && 100,
+      bottom: styleConfig.legendPosition === 'bottom' && 40,
       type: 'pie',
       radius: isDonut ? ['40%', '70%'] : '70%',
       avoidLabelOverlap: true,
-      itemStyle: { borderRadius: 10, borderColor: '#fff', borderWidth: 2 },
+      itemStyle: { borderRadius: 0, borderColor: '#fff', borderWidth: 2 },
       label: {
         show: styleConfig.showDataLabel ?? true,
         formatter: '{b}: {d}%',
@@ -259,10 +262,15 @@ const getCartesianChartOption = (
 
   return {
     backgroundColor: styleConfig.bgColor,
-    title: buildTitleOption(styleConfig),
+    // title: buildTitleOption(styleConfig),
     legend: buildLegendOption(styleConfig, series.map(s => s.name)),
     tooltip: buildTooltipOption('axis', tooltipFormatter),
-    grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+    grid: {
+      left: styleConfig.legendPosition === 'left' ? 100 : '3%',
+      right: styleConfig.legendPosition === 'right' ? 100 : '3%',
+      bottom: '3%',
+      containLabel: true
+    },
     xAxis: isHorizontal ? valueAxis : categoryAxis,
     yAxis: isHorizontal ? categoryAxis : valueAxis,
     series: cartesianSeries,
@@ -285,7 +293,7 @@ const getTextStyle = (config: {
  * gen (Title)
  */
 const buildTitleOption = (styleConfig: ComponentStyleConfig) => {
-  if (!styleConfig.title) return undefined;
+  // if (!styleConfig.title) return undefined;
 
   const titleOption: any = {
     text: styleConfig.title,
@@ -297,16 +305,6 @@ const buildTitleOption = (styleConfig: ComponentStyleConfig) => {
       color: styleConfig.titleColor,
     }),
   };
-
-  if (styleConfig.showSubtitle && styleConfig.subtitle) {
-    titleOption.subtext = styleConfig.subtitle;
-    titleOption.subtextStyle = getTextStyle({
-      fontSize: styleConfig.subtitleFontSize,
-      bold: styleConfig.subtitleBold,
-      italic: styleConfig.subtitleItalic,
-      color: styleConfig.subtitleColor,
-    });
-  }
   return titleOption;
 };
 
@@ -333,6 +331,13 @@ const buildLegendOption = (styleConfig: ComponentStyleConfig, seriesNames?: stri
       italic: styleConfig.legendItalic,
       color: styleConfig.legendColor,
     }),
+    type: 'scroll',
+    itemHeight: 6,
+    itemWidth: 6,
+    icon: 'circle',
+    itemStyle: {
+      borderWidth: 0,
+    },
   };
 };
 
