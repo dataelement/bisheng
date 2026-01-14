@@ -153,7 +153,7 @@
     "flowAuthorization": "工作流权限",
     "skillName": "技能名称",
     "creator": "创建人",
-    "usePermission": "查看权限",
+    "usePermission": "使用权限",
     "managePermission": "管理权限",
     "roleNamePrompt": "角色名称不能超过50字符",
     "roleNameRequired": "角色名称不可为空",

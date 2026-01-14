@@ -122,13 +122,15 @@ const SearchPanne = ({
 
   const renderPermissionTable = () => {
     if (!isPermissionTable) return children?.(data) || null;
-
+    const isMenuOrBoard = type === 'menu' || type === 'board';
     return (
       <Table>
         <TableHeader>
           <TableRow>
             <TableHead>{t(nameKey)}</TableHead>
-            <TableHead className="text-center w-[175px]">{t('system.usePermission')}</TableHead>
+            <TableHead className="text-center w-[175px]">
+              {!isMenuOrBoard ? t('system.usePermission') : t('system.viewPermission')}
+            </TableHead>
             {isPermissionTable && type !== 'menu' && (
               <TableHead className="text-right w-[75px]">{t('system.managePermission')}</TableHead>
             )}
@@ -352,7 +354,7 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
 
   const [form, setForm] = useState({
     name,
-    useSkills: [], useLibs: [], useAssistant: [], useFlows: [], useTools: [], useMenu: [MenuType.BUILD, MenuType.KNOWLEDGE, MenuType.BOARD],
+    useSkills: [], useLibs: [], useAssistant: [], useFlows: [], useTools: [], useMenu: [MenuType.BUILD, MenuType.KNOWLEDGE],
     manageLibs: [], manageAssistants: [], manageSkills: [], manageFlows: [], manageTools: [], useBoards: [], manageBoards: [],
     allowCreateBoard: false,
   });
