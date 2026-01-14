@@ -21,12 +21,13 @@ interface ComponentWrapperProps {
     onDuplicate: (component: DashboardComponent) => void
     onCopyTo: (component: DashboardComponent, targetDashboardId: string) => void
     onDelete: (componentId: string) => void
+    onRename: (componentId: string, newTitle: string) => void
 }
 
 // 组件包装器，用于处理选中状态
 export function ComponentWrapper({
     dashboards, component, isPreviewMode, isDark,
-    onDuplicate, onCopyTo, onDelete
+    onDuplicate, onCopyTo, onDelete, onRename
 }: ComponentWrapperProps) {
     const { t } = useTranslation("dashboard")
 
@@ -34,13 +35,14 @@ export function ComponentWrapper({
     const [isEditing, setIsEditing] = useState(false)
     const inputRef = useRef<HTMLInputElement>(null)
     const { toast } = useToast()
-    const [title, setTitle] = useState(component.title)
+    const [title, setTitle] = useState('')
     const { copyFromDashboard, editingComponent, updateEditingComponent } = useComponentEditorStore();
     const isSelected = editingComponent?.id === component.id
     const componentData = isSelected ? editingComponent : component
 
     useEffect(() => {
         console.log('componentData :>> ', componentData);
+        setTitle(component.title)
     }, [editingComponent, component])
 
     useEffect(() => {
@@ -81,6 +83,7 @@ export function ComponentWrapper({
 
         if (trimmedTitle !== component.title) {
             setTitle(trimmedTitle)
+            onRename(component.id, trimmedTitle)
             updateEditingComponent({ title: trimmedTitle })
         }
     }
@@ -97,10 +100,11 @@ export function ComponentWrapper({
 
     return (
         <div
-            className={cn(`group relative w-full h-full rounded-md overflow-visible transition-all hover:border hover:border-primary hover:shadow-md ${!isPreviewMode && isSelected ? 'border border-primary' : ''
+            className={cn(`group relative w-full h-full rounded-md overflow-visible transition-all border ${!isPreviewMode && isSelected ? 'component-select border border-primary' : ''
                 }`,
-                'dark:bg-gray-900 dark:border dark:border-gray-600 shadow-sm',
-                !componentData.style_config.bgColor && 'bg-background'
+                !componentData.style_config.bgColor && 'dark:bg-gray-900',
+                !componentData.style_config.bgColor && 'bg-background',
+                !isPreviewMode && 'hover:border-primary hover:shadow-md'
             )}
             onClick={handleClick}
             onMouseEnter={() => setIsHovered(true)}
@@ -221,7 +225,7 @@ export function ComponentWrapper({
                                 onClick={(e) => e.stopPropagation()}
                             />
                         ) : (
-                            <h3 className={cn("no-drag text-sm font-medium truncate cursor-pointer inline-block",
+                            <h3 className={cn("no-drag text-sm font-medium truncate cursor-pointer block",
                                 "dark:text-gray-400"
                             )} onDoubleClick={() => setIsEditing(true)}>{title}</h3>
                         )}

@@ -106,7 +106,6 @@ export default function Files({ onPreview }) {
     const { id } = useParams()
 
     const { isEditable, setEditable } = useKnowledgeStore();
-    const [dialogOpen, setDialogOpen] = useState(false)
     const { page, pageSize, data: datalist, total, loading, setPage, search, reload, filterData } = useTable({ cancelLoadingWhenReload: true }, (param) =>
         readFileByLibDatabase({ ...param, id, name: param.keyword }).then(res => {
             setEditable(res.writeable)
@@ -346,7 +345,7 @@ export default function Files({ onPreview }) {
                 <div className="absolute top-[-62px] left-0 right-0 flex justify-center items-center p-2 border-b z-10">
                     <div className="flex items-center">
                         <div className="flex gap-2">
-                            <Tip content={!isEditable && 'No operation permission'} side='bottom'>
+                            <Tip content={!isEditable && t('noOperationPermission')} side='bottom'>
                                 <Button
                                     variant="outline"
                                     onClick={handleBatchDelete}
@@ -358,7 +357,7 @@ export default function Files({ onPreview }) {
                                 </Button>
                             </Tip>
                             {hasSelectedFailedFiles && (
-                                <Tip content={!isEditable && 'No operation permission'} side='bottom'>
+                                <Tip content={!isEditable && t('noOperationPermission')} side='bottom'>
                                     <Button
                                         variant="outline"
                                         onClick={handleBatchRetry}
@@ -576,11 +575,11 @@ export default function Files({ onPreview }) {
                                 <TableCell className="text-right">
                                     <div className="flex items-center justify-end gap-1">
                                         {el.status === 3 && (
-                                            <Tip content={isEditable && 'No operation permission'} side='top'>
+                                            <Tip content={!isEditable && t('noOperationPermission')} side='top'>
                                                 <Button
                                                     variant="ghost"
                                                     size="icon"
-                                                    disabled={isEditable}
+                                                    disabled={!isEditable}
                                                     onClick={(e) => {
                                                         e.stopPropagation();
                                                         handleRetry([el]); // Single retry passes complete object
@@ -593,7 +592,7 @@ export default function Files({ onPreview }) {
                                             </Tip>
                                         )}
                                         <Tip
-                                            content={!isEditable && 'No operation permission'}
+                                            content={!isEditable && t('noOperationPermission')}
                                             side='top'
                                             styleClasses="-translate-x-6"
                                         >

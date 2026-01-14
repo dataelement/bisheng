@@ -185,14 +185,14 @@ export function AdvancedDatePicker({
 
   // --- Display Formatting ---
   const getDisplayValue = () => {
-    if (!value?.startTime) return "";
+    if (!dateRange?.from) return "";
     // if (selectedShortcut) return shortcuts.find((s) => s.key === selectedShortcut)?.label;
     if (selectedShortcut) {
       return t(`shortcut.${selectedShortcut}`);
     }
 
-    const start = new Date(value.startTime * 1000);
-    const end = new Date(value.endTime * 1000);
+    const start = new Date(dateRange.from);
+    const end = new Date(dateRange.to);
 
     // Formatting templates
     let fmt = "yyyy/MM/dd";
@@ -225,7 +225,7 @@ export function AdvancedDatePicker({
         <Button
           variant={"outline"}
           className={cn(
-            "w-92 justify-start text-left font-normal dark:text-gray-200",
+            "w-92 flex-1 justify-start text-left font-normal dark:text-gray-200",
             !value && "text-muted-foreground"
           )}
         >
@@ -234,7 +234,7 @@ export function AdvancedDatePicker({
         </Button>
       </PopoverTrigger>
       <PopoverContent className={cn("w-auto p-0", isDark && 'dark bg-gray-950 border-gray-600')} align="start">
-        <div className="flex flex-col">
+        <div className="no-drag flex flex-col">
 
           {/* Calendar Area */}
           <div className="flex">

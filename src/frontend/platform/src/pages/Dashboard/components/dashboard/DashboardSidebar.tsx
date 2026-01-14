@@ -168,7 +168,7 @@ export function DashboardSidebar({
         <div
             className={cn(
                 "relative h-full bg-background transition-all duration-300 rounded-tl-md",
-                isCollapsed ? "w-0" : "w-44  border-r",
+                isCollapsed ? "w-0" : "w-44 border-r",
             )}
         >
             {

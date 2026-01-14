@@ -15,7 +15,7 @@ import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useMutation, useQueryClient } from "react-query"
 import { useNavigate } from "react-router-dom"
-import { usePublishDashboard } from "../../hook"
+import { DashboardQueryKey, DashboardsQueryKey, usePublishDashboard } from "../../hook"
 import { ChartType, Dashboard } from "../../types/dataConfig"
 import ComponentPicker from "./ComponentPicker"
 
@@ -27,11 +27,11 @@ interface EditorHeaderProps {
 
 export function EditorHeader({
     dashboard,
-    dashboardId,
+    dashboardId
 }: EditorHeaderProps) {
     const { t } = useTranslation("dashboard")
     const { currentDashboard, hasUnsavedChanges, isSaving, layouts,
-        reset, setIsSaving, setHasUnsavedChanges, addComponentToLayout } = useEditorDashboardStore()
+        reset, setIsSaving, setHasUnsavedChanges, updateCurrentDashboard, addComponentToLayout } = useEditorDashboardStore()
     const { editingComponent } = useComponentEditorStore()
     const [isEditingTitle, setIsEditingTitle] = useState(false)
     const [title, setTitle] = useState(dashboard?.title || "")
@@ -66,8 +66,9 @@ export function EditorHeader({
         },
         onSuccess: (a, { autoSave }, c) => {
             setHasUnsavedChanges(false)
-            queryClient.invalidateQueries({ queryKey: ["dashboard", dashboardId] })
-            queryClient.invalidateQueries({ queryKey: ["dashboards"] })
+            // refrensh react-query
+            queryClient.invalidateQueries({ queryKey: [DashboardQueryKey, Number(dashboardId)] })
+            queryClient.invalidateQueries({ queryKey: [DashboardsQueryKey] })
             // autosave not require toast
             !autoSave && toast({
                 description: t('saveSuccess'),
@@ -120,17 +121,17 @@ export function EditorHeader({
     }
 
     const handleTitleBlur = () => {
-        // setIsEditingTitle(false)
-        // const trimmedTitle = title.trim()
+        setIsEditingTitle(false)
+        const trimmedTitle = title.trim()
 
-        // if (!trimmedTitle || !dashboard) {
-        //     setTitle(dashboard?.title || "")
-        //     return
-        // }
+        if (!trimmedTitle) {
+            return setTitle(dashboard?.title || "")
+        }
 
-        // if (trimmedTitle !== dashboard.title) {
-        //     onTitleChange(trimmedTitle)
-        // }
+        if (trimmedTitle !== dashboard.title) {
+            setTitle(trimmedTitle)
+            updateCurrentDashboard({ ...currentDashboard, title: trimmedTitle })
+        }
     }
 
     const handleTitleKeyDown = (e: React.KeyboardEvent) => {
@@ -202,7 +203,7 @@ export function EditorHeader({
         <header className="h-16 border-b bg-background flex items-center justify-between px-4 py-3.5">
             {/* Left section */}
             <div className="flex items-center gap-4">
-                <Button variant="outline" size="icon" onClick={handleExit}>
+                <Button variant="outline" size="icon" className="min-w-9" onClick={handleExit}>
                     <ArrowLeft className="h-4 w-4" />
                 </Button>
                 <Separator orientation="vertical" className="bg-slate-300 h-4"></Separator>
@@ -213,18 +214,18 @@ export function EditorHeader({
                         onChange={(e) => setTitle(e.target.value)}
                         onBlur={handleTitleBlur}
                         onKeyDown={handleTitleKeyDown}
-                        className="text-sm font-medium h-6 px-2 py-0"
+                        className="text-sm font-medium h-6 px-2 py-0 border-primary"
                     />
                 ) : (
                     <h1
                         className="max-w-96 font-medium truncate cursor-pointer transition-colors"
-                        title={dashboard?.title}
-                    // onDoubleClick={handleTitleDoubleClick}
+                        title={title}
+                        onDoubleClick={() => setIsEditingTitle(true)}
                     >
-                        {dashboard?.title}
+                        {title}
                     </h1>
                 )}
-                <Badge variant="outline" className=" font-normal bg-gray-100">{getSaveStatus()}</Badge>
+                <Badge variant="outline" className="break-keep font-normal bg-gray-100">{getSaveStatus()}</Badge>
             </div>
 
             {/* Middle section */}

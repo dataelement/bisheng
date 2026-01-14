@@ -155,8 +155,8 @@
     --card-foreground: 213 31% 80%;
     /* hsl(213 31% 91%) */
 
-    --white: white
-    --border: 216 24% 17%;
+    --white: white;
+    --border: 225 5% 27%;
     /* hsl(216 34% 17%) */
     --input: 0 0% 100%;
     /* hsl(216 34% 17%) */

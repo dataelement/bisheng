@@ -90,8 +90,8 @@ export default function ChartSelector({
 
             if (startTime && endTime) {
               setTimeFilter({
-                startTime: Math.floor(startTime / 1000),
-                endTime: Math.floor(endTime / 1000)
+                startTime: startTime,
+                endTime: endTime
               })
             } else {
               setTimeFilter(null)
@@ -148,56 +148,10 @@ export default function ChartSelector({
   }
 
   /* 保存 */
-  const handleSave = (e) => {
-    let finalStartDate = ""
-    let finalEndDate = ""
+  const handleSave = () => {
 
-    if (timeFilter && timeFilter.startTime) {
-      // 将时间戳转换为日期字符串
-      const startDateObj = new Date(timeFilter)
-      const endDateObj = new Date(timeFilter)
-
-      // 根据时间粒度格式化
-      const year = startDateObj.getFullYear()
-      const month = String(startDateObj.getMonth() + 1).padStart(2, '0')
-      const day = String(startDateObj.getDate()).padStart(2, '0')
-      const hour = String(startDateObj.getHours()).padStart(2, '0')
-
-      if (timeGranularity === t("chartSelector.granularities.yearMonth")) {
-        finalStartDate = `${year}-${month}`
-        finalEndDate = `${year}-${month}`
-      } else if (timeGranularity === t("chartSelector.granularities.yearMonthDayHour")) {
-        const endYear = endDateObj.getFullYear()
-        const endMonth = String(endDateObj.getMonth() + 1).padStart(2, '0')
-        const endDay = String(endDateObj.getDate()).padStart(2, '0')
-        const endHour = String(endDateObj.getHours()).padStart(2, '0')
-
-        if (displayType === t("chartSelector.displayTypes.time")) {
-          // 时间点模式
-          finalStartDate = `${year}-${month}-${day} ${hour}:00`
-          finalEndDate = `${year}-${month}-${day} ${hour}:00`
-        } else {
-          // 时间范围模式
-          finalStartDate = `${year}-${month}-${day} ${hour}:00`
-          finalEndDate = `${endYear}-${endMonth}-${endDay} ${endHour}:00`
-        }
-      } else {
-        // 年月日
-        if (displayType === t("chartSelector.displayTypes.time")) {
-          // 时间点模式
-          finalStartDate = `${year}-${month}-${day}`
-          finalEndDate = `${year}-${month}-${day}`
-        } else {
-          // 时间范围模式
-          const endYear = endDateObj.getFullYear()
-          const endMonth = String(endDateObj.getMonth() + 1).padStart(2, '0')
-          const endDay = String(endDateObj.getDate()).padStart(2, '0')
-
-          finalStartDate = `${year}-${month}-${day}`
-          finalEndDate = `${endYear}-${endMonth}-${endDay}`
-        }
-      }
-    }
+    const startDateObj = new Date(timeFilter.startTime * 1000)
+    const endDateObj = new Date(timeFilter.endTime * 1000)
 
     const config: ChartLinkConfig = {
       chartIds: selectedCharts,
@@ -205,12 +159,12 @@ export default function ChartSelector({
       timeGranularity,
       isDefault,
       dateRange: {
-        start: finalStartDate,
-        end: finalEndDate
+        start: timeFilter.startTime,  // 直接传秒级时间戳
+        end: timeFilter.endTime       // 直接传秒级时间戳
       }
     }
 
-    e.isTrusted && toast({
+    toast({
       variant: 'success',
       description: t("chartSelector.messages.saveSuccess"),
     })
@@ -386,7 +340,7 @@ export default function ChartSelector({
           <Button variant="outline" onClick={onCancel}>
             {t("chartSelector.buttons.cancel")}
           </Button>
-          <Button id="query_save" onClick={handleSave}>
+          <Button onClick={handleSave}>
             {t("chartSelector.buttons.save")}
           </Button>
         </div>

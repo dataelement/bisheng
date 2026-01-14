@@ -6,7 +6,6 @@ import { useTranslation } from "react-i18next";
 
 const ExcelPreview = ({ filePath }) => {
   const { t } = useTranslation('knowledge');
-console.log(filePath,3);
 
   // ---------------------- State Management ----------------------
   const [loading, setLoading] = useState(true);
@@ -19,19 +18,19 @@ console.log(filePath,3);
   const tableContainerRef = useRef(null);
   const getFileExtension = (filePath) => {
     if (!filePath) return "";
-    
+
     const withoutQuery = filePath.split('?')[0];
-    
+
     const parts = withoutQuery.split('.');
     if (parts.length < 2) return "";
-    
+
     const ext = parts.pop()?.toLowerCase() || "";
-    
+
     const validExtensions = ['csv', 'xlsx', 'xls', 'txt'];
     if (validExtensions.includes(ext)) {
       return ext;
     }
-    
+
     return "";
   };
   // ---------------------- File Type Detection ----------------------
@@ -81,322 +80,203 @@ console.log(filePath,3);
     return mimeTypes[ext] || 'image/png';
   };
 
-  // ---------------------- 辅助函数：解析cellimages.xml ----------------------
-  const parseCellImagesXml = (xmlString) => {
-    const positions = [];
-    try {
-      const parser = new DOMParser();
-      const xmlDoc = parser.parseFromString(xmlString, 'text/xml');
-      
-      // 尝试不同的节点名称
-      const imageNodes = xmlDoc.getElementsByTagName('cellImage') || 
-                        xmlDoc.getElementsByTagName('drawing') ||
-                        xmlDoc.getElementsByTagName('picture') ||
-                        xmlDoc.getElementsByTagName('xdr:twoCellAnchor') ||
-                        xmlDoc.getElementsByTagName('xdr:oneCellAnchor');
-      
-      for (let i = 0; i < imageNodes.length; i++) {
-        const node = imageNodes[i];
-        
-        // 尝试获取单元格位置
-        let cellAddress = null;
-        let imageId = null;
-        
-        // 方法1: 从cellImage节点获取
-        if (node.tagName === 'cellImage') {
-          cellAddress = node.getAttribute('r');
-          imageId = node.getAttribute('imageId') || node.getAttribute('id') || node.getAttribute('r:id');
-        }
-        // 方法2: 从drawing节点获取
-        else if (node.tagName === 'drawing' || node.tagName === 'picture') {
-          cellAddress = node.getAttribute('cell');
-          imageId = node.getAttribute('r:id') || node.getAttribute('id');
-        }
-        // 方法3: 从xdr命名空间的节点获取（Excel绘图对象）
-        else if (node.tagName.includes('Anchor')) {
-          // 尝试从from节点获取起始位置
-          const from = node.getElementsByTagName('xdr:from')[0];
-          if (from) {
-            const colNode = from.getElementsByTagName('xdr:col')[0];
-            const rowNode = from.getElementsByTagName('xdr:row')[0];
-            if (colNode && rowNode) {
-              const col = parseInt(colNode.textContent, 10);
-              const row = parseInt(rowNode.textContent, 10) + 1; // Excel行从1开始
-              const colLetter = numberToColumnLetters(col);
-              cellAddress = `${colLetter}${row}`;
-            }
-          }
-          
-          // 获取图片引用
-          const pic = node.getElementsByTagName('xdr:pic')[0];
-          if (pic) {
-            const blip = pic.getElementsByTagName('a:blip')[0];
-            if (blip) {
-              imageId = blip.getAttribute('r:embed') || blip.getAttribute('embed');
-            }
-          }
-        }
-        
-        if (cellAddress && imageId) {
-          positions.push({
-            cellAddress: cellAddress,
-            imageId: imageId.replace('rId', '') // 移除rId前缀
+  // ---------------------- 提取图片和位置 ----------------------
+  const extractImagesWithPositions = async (workbook: any) => {
+    const images: any[] = [];
+    const imagePositions: Record<string, string[]> = {};
+
+    const zip = workbook._zip;
+
+    // Step 1: 解析 media 文件
+    zip.forEach((relativePath, zipEntry) => {
+      if (relativePath.startsWith("xl/media/") && !zipEntry.dir) {
+        const ext = relativePath.split(".").pop()?.toLowerCase() || "";
+        if (["png", "jpg", "jpeg", "gif", "bmp", "tiff", "tif", "jfif"].includes(ext)) {
+          const id = relativePath.split("/").pop(); // image1.png
+          images.push({
+            id,           // 用 media 文件名作为 id
+            path: relativePath,
+            ext,
+            base64Promise: zipEntry.async("base64"),
           });
         }
       }
-    } catch (e) {
-      console.warn('Failed to parse cellimages.xml:', e);
+    });
+
+    // Step 2: 解析 drawings XML
+    const drawingFiles = Object.keys(zip.files).filter(p => p.startsWith("xl/drawings/") && p.endsWith(".xml"));
+    for (const drawingPath of drawingFiles) {
+      try {
+        const xmlStr = await zip.file(drawingPath).async("text");
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(xmlStr, "text/xml");
+        const anchors = xmlDoc.getElementsByTagName("xdr:twoCellAnchor");
+
+        // Step 2a: 先解析 rels 文件
+        const relsPath = drawingPath.replace("drawings/", "drawings/_rels/") + ".rels";
+        const rIdMap: Record<string, string> = {}; // rId -> media filename
+        if (zip.file(relsPath)) {
+          const relsXml = await zip.file(relsPath).async("text");
+          const relsDoc = parser.parseFromString(relsXml, "text/xml");
+          const relationships = relsDoc.getElementsByTagName("Relationship");
+          for (let j = 0; j < relationships.length; j++) {
+            const r = relationships[j];
+            const id = r.getAttribute("Id");
+            const target = r.getAttribute("Target"); // e.g. ../media/image1.png
+            if (id && target) {
+              rIdMap[id] = target.split("/").pop(); // image1.png
+            }
+          }
+        }
+
+        // Step 2b: 遍历 anchors
+        for (let i = 0; i < anchors.length; i++) {
+          const anchor = anchors[i];
+          const from = anchor.getElementsByTagName("xdr:from")[0];
+          const pic = anchor.getElementsByTagName("xdr:pic")[0];
+          if (!from || !pic) continue;
+
+          const colNode = from.getElementsByTagName("xdr:col")[0];
+          const rowNode = from.getElementsByTagName("xdr:row")[0];
+          const blip = pic.getElementsByTagName("a:blip")[0];
+          if (!colNode || !rowNode || !blip) continue;
+
+          const col = parseInt(colNode.textContent || "0", 10);
+          const row = parseInt(rowNode.textContent || "0", 10);
+          const cellAddress = numberToColumnLetters(col) + (row + 1);
+
+          const rId = blip.getAttribute("r:embed");
+          if (!rId || !rIdMap[rId]) continue;
+
+          // 找到对应图片
+          const mediaFileName = rIdMap[rId];
+          const img = images.find(img => img.id === mediaFileName);
+          if (img) {
+            if (!imagePositions[cellAddress]) imagePositions[cellAddress] = [];
+            imagePositions[cellAddress].push(img.id);
+          }
+        }
+      } catch (e) {
+        console.warn("解析 drawing xml 失败:", e);
+      }
     }
-    
-    console.log('Parsed image positions:', positions);
-    return positions;
+
+    // Step 3: 等待 base64
+    for (let img of images) {
+      img.base64 = await img.base64Promise;
+      delete img.base64Promise;
+      img.mimeType = getMimeType(img.ext);
+    }
+
+    return { images, imagePositions };
   };
+
+
+  // ---------------------- 获取单元格对应的图片 ----------------------
+  const getCellImage = (rowIndex, colIndex, cellContent) => {
+    const cellAddress = `${numberToColumnLetters(colIndex)}${rowIndex + 1}`;
+    const imageIds = imagePositions[cellAddress];
+
+    // 1️⃣ 根据单元格地址查找
+    if (imageIds?.length) {
+      const foundImage = images.find(img => imageIds.includes(img.id));
+      if (foundImage) return foundImage;
+    }
+
+    // 2️⃣ 根据 DISPIMG 公式查找
+    if (cellContent && typeof cellContent === 'string' && cellContent.startsWith('=DISPIMG')) {
+      const imageId = extractImageIdFromFormula(cellContent);
+      if (imageId) {
+        const imageById = images.find(img =>
+          img.path.includes(imageId) || img.rId === imageId || img.id === imageId
+        );
+        if (imageById) return imageById;
+
+        // 找不到的话返回第一张图片占位
+        if (images.length > 0) return images[0];
+      }
+    }
+
+    return null;
+  };
+
+
 
   // ---------------------- Data Fetching and Parsing ----------------------
   useEffect(() => {
     const fetchAndParseFile = async () => {
       try {
         setLoading(true);
-        setImages([]); // 重置图片
-        setImagePositions({}); // 重置图片位置
+        setImages([]);
+        setImagePositions({});
+        setExcelData({});
+        setSheets([]);
+        setActiveSheet("");
+
         if (!filePath) throw new Error(t('filePathEmpty'));
 
         const response = await fetch(filePath);
         if (!response.ok) throw new Error(`${t('fileLoadFailed')}: ${response.status}`);
-        console.log(`File loaded successfully: ${response}`);
 
         const arrayBuffer = await response.arrayBuffer();
-        
+
         if (isCSV) {
+          // ---------------- CSV ----------------
           if (arrayBuffer.byteLength === 0) throw new Error(t('fileContentEmpty'));
 
           const uint8Array = new Uint8Array(arrayBuffer);
           let decodedStr = "";
 
-          // Try multiple encodings
           const encodings = ["utf-8", "gbk", "gb2312", "gb18030", "big5", "shift_jis"];
           for (const encoding of encodings) {
             try {
-              const decoder = new TextDecoder(encoding, { fatal: true });
-              decodedStr = decoder.decode(uint8Array);
+              decodedStr = new TextDecoder(encoding, { fatal: true }).decode(uint8Array);
               if (decodedStr.charCodeAt(0) === 0xfeff) decodedStr = decodedStr.slice(1);
               break;
             } catch (e) { continue; }
           }
-
           if (!decodedStr) decodedStr = new TextDecoder().decode(uint8Array);
+
           const csvData = parseCSV(decodedStr);
           const cleanedData = cleanData(csvData);
-
           setExcelData({ "Sheet1": cleanedData });
           setSheets(["Sheet1"]);
           setActiveSheet("Sheet1");
 
-        } else if (isExcel) {
-          // 并行处理：SheetJS处理数据 + xlsx-populate处理图片
-          await Promise.all([
-            // 1. 使用SheetJS读取数据（保持原有逻辑）
-            (async () => {
-              if (arrayBuffer.byteLength === 0) throw new Error(t('excelContentEmpty'));
-              const workbook = XLSX.read(arrayBuffer, {
-                type: "array",
-                cellText: true,
-                cellDates: true,
-                raw: false,
-                dense: true
-              });
+        } else if (isXLSX || fileExt === "xls") {
+          // ---------------- Excel ----------------
+          let workbook;
+          try {
+            workbook = await XlsxPopulate.fromDataAsync(arrayBuffer);
+          } catch (e) {
+            console.error("XlsxPopulate解析失败:", e);
+            throw new Error(t('excelParseFailed'));
+          }
 
-              const sheetNames = workbook.SheetNames || [];
-              const safeSheets = sheetNames;
-              const parsedData = {};
+          // 解析表格数据
+          const sheetNames = workbook.sheets().map((s: any) => s.name());
+          const parsedData: Record<string, any[][]> = {};
+          sheetNames.forEach(sheetName => {
+            const sheet = workbook.sheet(sheetName);
+            const usedRange = sheet.usedRange();
+            parsedData[sheetName] = cleanData(usedRange?.value() || [[]]);
+          });
+          setExcelData(parsedData);
+          setSheets(sheetNames);
+          setActiveSheet(sheetNames[0] || "");
 
-              safeSheets.forEach(sheetName => {
-                try {
-                  const worksheet = workbook.Sheets[sheetName];
-                  if (!worksheet) {
-                    parsedData[sheetName] = [];
-                    return;
-                  }
-
-                  const range = XLSX.utils.decode_range(worksheet['!ref'] || "A1");
-                  worksheet['!ref'] = XLSX.utils.encode_range(range);
-
-                  const sheetData = XLSX.utils.sheet_to_json(worksheet, {
-                    header: 1,
-                    defval: "",
-                    blankrows: false,
-                    raw: false
-                  });
-                  
-                  const cleanedData = cleanData(
-                    sheetData.map(row => Array.isArray(row) ? row : [])
-                  );
-
-                  parsedData[sheetName] = cleanedData;
-                } catch (sheetErr) {
-                  console.error(`Failed to parse Sheet ${sheetName}:`, sheetErr);
-                  parsedData[sheetName] = [[t('sheetParseError')]];
-                }
-              });
-
-              setExcelData(parsedData);
-              setSheets(safeSheets);
-              setActiveSheet(safeSheets[0] || "");
-            })(),
-
-            // 2. 使用xlsx-populate提取图片（新增）
-            (async () => {
-              try {
-                // 只处理xlsx文件（xls格式支持有限）
-                if (isXLSX) {
-                  const workbook = await XlsxPopulate.fromDataAsync(arrayBuffer);
-                  const extractedImages = [];
-                  const positionMap = {};
-                  
-                  console.log('Workbook loaded:', workbook);
-                  console.log('Number of sheets:', workbook.sheets().length);
-                  
-                  // 直接访问内部的 JSZip 对象来提取图片
-                  const zip = workbook._zip;
-                  console.log('Zip files:', Object.keys(zip.files));
-                  
-                  // 查找所有图片文件（通常存储在xl/media/目录下）
-                  const mediaFiles = [];
-                  zip.forEach((relativePath, zipEntry) => {
-                    if (relativePath.startsWith('xl/media/') && 
-                        !zipEntry.dir && 
-                        ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'jfif', 'tiff', 'tif'].some(ext => 
-                          relativePath.toLowerCase().endsWith(`.${ext}`)
-                        )) {
-                      mediaFiles.push({
-                        path: relativePath,
-                        name: zipEntry.name,
-                        ext: relativePath.split('.').pop().toLowerCase(),
-                        zipEntry: zipEntry
-                      });
-                    }
-                  });
-                  
-                  console.log('Found media files:', mediaFiles);
-                  
-                  // 提取图片数据
-                  for (const file of mediaFiles) {
-                    try {
-                      const content = await zip.file(file.path).async('base64');
-                      const imageIndex = extractedImages.length;
-                      extractedImages.push({
-                        id: `image_${imageIndex}`,
-                        sheet: 'Sheet1', // 默认，可以后续尝试关联具体工作表
-                        base64: content,
-                        mimeType: getMimeType(file.ext),
-                        path: file.path,
-                        fileName: file.name.split('/').pop(),
-                        ext: file.ext
-                      });
-                    } catch (e) {
-                      console.warn(`Failed to extract image ${file.path}:`, e);
-                    }
-                  }
-                  
-                  // 尝试解析 cellimages.xml 获取图片位置信息
-                  try {
-                    const cellImagesXml = await zip.file('xl/cellimages.xml')?.async('string');
-                    if (cellImagesXml) {
-                      console.log('Found cellimages.xml, length:', cellImagesXml.length);
-                      const positions = parseCellImagesXml(cellImagesXml);
-                      
-                      // 将位置信息映射到图片
-                      positions.forEach(pos => {
-                        // 查找匹配的图片（通过文件名或路径）
-                        const matchedImage = extractedImages.find(img => {
-                          // 尝试通过多种方式匹配
-                          return img.path.includes(pos.imageId) ||
-                                 img.fileName.includes(pos.imageId) ||
-                                 pos.imageId.includes(img.ext) ||
-                                 img.id === `image_${pos.imageId}`;
-                        });
-                        
-                        if (matchedImage && pos.cellAddress) {
-                          // 更新图片的工作表信息
-                          matchedImage.cellAddress = pos.cellAddress;
-                          
-                          // 构建位置映射
-                          if (!positionMap[pos.cellAddress]) {
-                            positionMap[pos.cellAddress] = [];
-                          }
-                          positionMap[pos.cellAddress].push(matchedImage.id);
-                        }
-                      });
-                    }
-                  } catch (e) {
-                    console.warn('Failed to parse cellimages.xml:', e);
-                    
-                    // 尝试解析其他可能的位置文件
-                    try {
-                      // 查找所有可能包含位置信息的文件
-                      const drawingFiles = [];
-                      zip.forEach((relativePath, zipEntry) => {
-                        if (relativePath.includes('drawing') && relativePath.endsWith('.xml') && !zipEntry.dir) {
-                          drawingFiles.push(relativePath);
-                        }
-                      });
-                      
-                      console.log('Found drawing files:', drawingFiles);
-                      
-                      // 尝试解析每个drawing文件
-                      for (const drawingPath of drawingFiles) {
-                        try {
-                          const drawingXml = await zip.file(drawingPath)?.async('string');
-                          if (drawingXml) {
-                            const positions = parseCellImagesXml(drawingXml);
-                            console.log(`Parsed positions from ${drawingPath}:`, positions);
-                          }
-                        } catch (drawingErr) {
-                          console.warn(`Failed to parse ${drawingPath}:`, drawingErr);
-                        }
-                      }
-                    } catch (drawingSearchErr) {
-                      console.warn('Failed to search for drawing files:', drawingSearchErr);
-                    }
-                  }
-                  
-                  // 如果没有从XML解析到位置，尝试通过工作表关系查找
-                  if (extractedImages.length > 0 && Object.keys(positionMap).length === 0) {
-                    console.log('No position info found in XML, trying to map by sheet relationships...');
-                    
-                    // 遍历所有工作表，检查是否有drawing关系
-                    workbook.sheets().forEach(sheet => {
-                      try {
-                        const sheetRels = sheet._relationships;
-                        if (sheetRels && sheetRels._node && sheetRels._node.children) {
-                          console.log(`Relationships for sheet ${sheet.name()}:`, sheetRels._node.children);
-                        }
-                      } catch (e) {
-                        console.warn(`Failed to get relationships for sheet ${sheet.name()}:`, e);
-                      }
-                    });
-                  }
-                  
-                  setImages(extractedImages);
-                  setImagePositions(positionMap);
-                  
-                  if (extractedImages.length > 0) {
-                    console.log(`通过xlsx-populate提取到 ${extractedImages.length} 张图片`, extractedImages);
-                    console.log('图片位置映射:', positionMap);
-                  }
-                }
-              } catch (populateErr) {
-                console.warn('Failed to extract images with xlsx-populate:', populateErr);
-                // 不影响主要功能，图片提取失败不会阻止表格显示
-              }
-            })()
-          ]);
+          // 提取图片
+          const { images, imagePositions } = await extractImagesWithPositions(workbook);
+          setImages(images);
+          setImagePositions(imagePositions);
+          console.log(`[ExcelPreview] 提取到 ${images.length} 张图片`);
 
         } else {
           throw new Error(t('unsupportedType', { type: fileExt }));
         }
 
         setError(null);
+
       } catch (err) {
         console.error("File parsing failed:", err);
         setError(err.message || t('unknownError'));
@@ -411,6 +291,8 @@ console.log(filePath,3);
       setError(t('filePathEmpty'));
     }
   }, [filePath, t]);
+
+
 
   // ---------------------- CSV Parsing Function ----------------------
   const parseCSV = (csvStr) => {
@@ -503,16 +385,16 @@ console.log(filePath,3);
     // 将Excel单元格地址如 "A1" 转换为行列索引
     const match = address.match(/^([A-Z]+)(\d+)$/);
     if (!match) return null;
-    
+
     const colLetters = match[1];
     const rowNum = parseInt(match[2], 10);
-    
+
     // 转换列字母为列索引（0-based）
     let colNum = 0;
     for (let i = 0; i < colLetters.length; i++) {
       colNum = colNum * 26 + (colLetters.charCodeAt(i) - 64);
     }
-    
+
     return { row: rowNum - 1, col: colNum - 1 }; // 转换为0-based索引
   };
 
@@ -520,7 +402,7 @@ console.log(filePath,3);
   const getCellDimensions = () => {
     // 根据屏幕尺寸调整单元格尺寸
     let cellWidth, cellHeight, headerHeight;
-    
+
     switch (screenSize) {
       case "small":
         cellWidth = 100;
@@ -537,14 +419,14 @@ console.log(filePath,3);
         cellHeight = 40;
         headerHeight = 50;
     }
-    
+
     return { cellWidth, cellHeight, headerHeight };
   };
 
   // ---------------------- 从DISPIMG公式中提取图片ID ----------------------
   const extractImageIdFromFormula = (formula) => {
     if (!formula || typeof formula !== 'string') return null;
-    
+
     // 尝试多种匹配模式
     const patterns = [
       /DISPIMG\("([^"]+)"\)/i,
@@ -552,60 +434,30 @@ console.log(filePath,3);
       /DISPIMG\("([^"]+)",\s*\d+\)/i,
       /DISPIMG\('([^']+)',\s*\d+\)/i
     ];
-    
+
     for (const pattern of patterns) {
       const match = formula.match(pattern);
       if (match && match[1]) {
         return match[1];
       }
     }
-    
+
     return null;
   };
 
-  // ---------------------- 获取单元格对应的图片 ----------------------
-  const getCellImage = (rowIndex, colIndex, cellContent) => {
-    // 方法1: 通过单元格地址查找
-    const cellAddress = `${numberToColumnLetters(colIndex)}${rowIndex + 1}`;
-    const imageIds = imagePositions[cellAddress];
-    
-    if (imageIds && imageIds.length > 0) {
-      return images.find(img => img.id === imageIds[0]);
-    }
-    
-    // 方法2: 通过DISPIMG公式查找
-    if (cellContent && typeof cellContent === 'string' && cellContent.startsWith('=DISPIMG')) {
-      const imageId = extractImageIdFromFormula(cellContent);
-      if (imageId) {
-        // 尝试通过图片ID查找
-        const imageById = images.find(img => 
-          img.path.includes(imageId) ||
-          img.fileName.includes(imageId) ||
-          imageId.includes(img.ext) ||
-          (img.id && img.id.includes(imageId))
-        );
-        
-        if (imageById) return imageById;
-        
-        // 如果没有找到，返回第一张图片作为占位
-        if (images.length > 0) return images[0];
-      }
-    }
-    
-    return null;
-  };
+
 
   // ---------------------- 渲染表格内容 ----------------------
   const renderContent = () => {
     const sheetData = excelData[activeSheet];
     if (!Array.isArray(sheetData) || sheetData.length === 0) {
       return (
-        <div 
-        className="flex items-center justify-center text-gray-500"
-        style={{
-          minHeight: screenSize === "small" ? "520px" : "684px"
-        }}
-      >
+        <div
+          className="flex items-center justify-center text-gray-500"
+          style={{
+            minHeight: screenSize === "small" ? "520px" : "684px"
+          }}
+        >
           {t('currentSheetNoData')}
         </div>
       );
@@ -620,7 +472,7 @@ console.log(filePath,3);
       if (displayData.length > 0 && columnCount > 0) {
         // Fixed width for row number column
         widths.push(60);
-        
+
         for (let i = 0; i < columnCount; i++) {
           const maxLength = displayData.reduce((max, row) => {
             const cell = row[i] || "";
@@ -659,9 +511,9 @@ console.log(filePath,3);
           <div className="min-w-full">
             <table className="min-w-full border-collapse">
               <thead className="bg-gray-50">
-                 {/* Column letters row */}
+                {/* Column letters row */}
                 <tr>
-                  <th 
+                  <th
                     className="border border-gray-200 bg-gray-100 text-gray-600 text-xs font-medium"
                     style={{
                       minWidth: "60px",
@@ -686,10 +538,10 @@ console.log(filePath,3);
                     </th>
                   ))}
                 </tr>
-                
+
                 {/* Data header row */}
                 <tr>
-                  <th 
+                  <th
                     className="border border-gray-200 bg-gray-50 text-gray-700 text-xs font-medium"
                     style={{
                       minWidth: "60px",
@@ -725,16 +577,15 @@ console.log(filePath,3);
               <tbody className="bg-white divide-y divide-gray-200">
                 {displayData.slice(1).map((row, rowIndex) => {
                   const actualRowIndex = rowIndex + 1; // 因为slice(1)，实际行索引要+1
-                  
+
                   return (
                     <tr
                       key={rowIndex}
-                      className={`hover:bg-blue-50 transition-colors duration-150 ${
-                        rowIndex % 2 === 0 ? "bg-white" : "bg-gray-50/30"
-                      }`}
+                      className={`hover:bg-blue-50 transition-colors duration-150 ${rowIndex % 2 === 0 ? "bg-white" : "bg-gray-50/30"
+                        }`}
                     >
                       {/* 行号单元格 */}
-                      <td 
+                      <td
                         className="border border-gray-200 bg-gray-50 text-gray-600 text-xs font-medium text-center sticky left-0 z-5"
                         style={{
                           minWidth: "60px",
@@ -745,12 +596,12 @@ console.log(filePath,3);
                       >
                         {actualRowIndex}
                       </td>
-                      
+
                       {/* 数据单元格 */}
                       {row.map((cell, cellIndex) => {
                         const cellImage = getCellImage(actualRowIndex, cellIndex, cell);
                         const isImageCell = cellImage !== null;
-                        
+
                         return (
                           <td
                             key={cellIndex}
@@ -767,7 +618,7 @@ console.log(filePath,3);
                             }}
                           >
                             {isImageCell && cellImage ? (
-                              <div 
+                              <div
                                 className="flex items-center justify-center p-1 h-full"
                                 style={{
                                   minHeight: "100px",
@@ -826,7 +677,7 @@ console.log(filePath,3);
                           </td>
                         );
                       })}
-                      
+
                       {/* 填充空单元格 */}
                       {Array.from({
                         length: Math.max(0, columnCount - row.length)
@@ -852,30 +703,29 @@ console.log(filePath,3);
   };
 
   // ---------------------- Render Sheet Tabs ----------------------
-const renderSheetTabs = () => {
-  if (sheets.length <= 0) return null;
+  const renderSheetTabs = () => {
+    if (sheets.length <= 0) return null;
 
-  return (
-    <div className="border-t border-gray-300 bg-gray-100 px-2 py-2 flex items-start">
-      <div className="flex space-x-1 flex-wrap gap-1.5"> 
-        {sheets.map((sheet) => (
-          <button
-            key={sheet}
-            className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors duration-150 whitespace-nowrap ${
-              activeSheet === sheet
-                ? "bg-white text-blue-600 border border-gray-300 shadow-sm" 
+    return (
+      <div className="border-t border-gray-300 bg-gray-100 px-2 py-2 flex items-start">
+        <div className="flex space-x-1 flex-wrap gap-1.5">
+          {sheets.map((sheet) => (
+            <button
+              key={sheet}
+              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors duration-150 whitespace-nowrap ${activeSheet === sheet
+                ? "bg-white text-blue-600 border border-gray-300 shadow-sm"
                 : "bg-gray-200 text-gray-700 border border-transparent hover:bg-gray-300"
-            }`}
-            onClick={() => setActiveSheet(sheet)}
-            title={sheet}
-          >
-            {sheet.length > 15 ? `${sheet.substring(0, 12)}...` : sheet}
-          </button>
-        ))}
+                }`}
+              onClick={() => setActiveSheet(sheet)}
+              title={sheet}
+            >
+              {sheet.length > 15 ? `${sheet.substring(0, 12)}...` : sheet}
+            </button>
+          ))}
+        </div>
       </div>
-    </div>
-  );
-};
+    );
+  };
 
   // ---------------------- Loading/Error States ----------------------
   if (loading) {

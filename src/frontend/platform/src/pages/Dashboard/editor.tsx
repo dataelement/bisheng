@@ -11,7 +11,7 @@ export default function EditorPage() {
     const dashboardId = params.id as string
 
     const { data: dashboard, isLoading } = useQuery({
-        queryKey: [DashboardQueryKey, dashboardId],
+        queryKey: [DashboardQueryKey, Number(dashboardId)],
         queryFn: () => getDashboard(dashboardId),
     })
 

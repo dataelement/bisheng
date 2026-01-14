@@ -122,13 +122,15 @@ const SearchPanne = ({
 
   const renderPermissionTable = () => {
     if (!isPermissionTable) return children?.(data) || null;
-
+    const isMenuOrBoard = type === 'menu' || type === 'board';
     return (
       <Table>
         <TableHeader>
           <TableRow>
             <TableHead>{t(nameKey)}</TableHead>
-            <TableHead className="text-center w-[175px]">{t('system.usePermission')}</TableHead>
+            <TableHead className="text-center w-[175px]">
+              {!isMenuOrBoard ? t('system.usePermission') : t('system.viewPermission')}
+            </TableHead>
             {isPermissionTable && type !== 'menu' && (
               <TableHead className="text-right w-[75px]">{t('system.managePermission')}</TableHead>
             )}
@@ -282,10 +284,10 @@ const initPermissionData = (resData) => {
       case 9: initData.useFlows.push(String(item.third_id)); break;
       case 10: initData.manageFlows.push(String(item.third_id)); break;
       case 11:
-        initData.manageBoards.push(Number(item.third_id));
+        initData.useBoards.push(Number(item.third_id));
         break;
       case 12:
-        initData.useBoards.push(Number(item.third_id));
+        initData.manageBoards.push(Number(item.third_id));
         break;
 
       case 99: initData.useMenu.push(String(item.third_id)); break;
@@ -420,7 +422,7 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
     if (spacePermissions.admin) {
       tabs.unshift('menu');
       const hasBoardMenuPermission = form.useMenu.includes(MenuType.BOARD);
-      const canShowBoardTab = form.allowCreateBoard && hasBoardMenuPermission;
+      const canShowBoardTab = hasBoardMenuPermission;
       if (canShowBoardTab) {
         tabs.push('board');
       }
@@ -520,8 +522,8 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
       updateRolePermissionsApi({ role_id: roleIdLocal, access_id: sanitizeIds(form.manageFlows) as any, type: 10 as any }),
       updateRolePermissionsApi({ role_id: roleIdLocal, access_id: sanitizeIds(form.manageTools) as any, type: 8 as any }),
       updateRolePermissionsApi({ role_id: roleIdLocal, access_id: sanitizeIds(menuPermissionsToSave) as any, type: 99 as any }),
-      updateRolePermissionsApi({ role_id: roleIdLocal, access_id: sanitizeIds(form.useBoards) as any, type: 12 as any }),
-      updateRolePermissionsApi({ role_id: roleIdLocal, access_id: sanitizeIds(form.manageBoards) as any, type: 11 as any }),
+      updateRolePermissionsApi({ role_id: roleIdLocal, access_id: sanitizeIds(form.useBoards) as any, type: 11 as any }),
+      updateRolePermissionsApi({ role_id: roleIdLocal, access_id: sanitizeIds(form.manageBoards) as any, type: 12 as any }),
 
     ]);
     message({

@@ -367,7 +367,7 @@
         "lineChart": "折线图",
         "basicLineChart": "基础折线图",
         "stackedLineChart": "堆叠折线图",
-        "areaChart": "面积图",
+        "areaChart": "基础面积图",
         "stackedAreaChart": "堆叠面积图",
         "pieChart": "饼图",
         "donutChart": "环形图",

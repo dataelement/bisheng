@@ -39,10 +39,14 @@ export function DashboardListItem({
     const { t } = useTranslation("dashboard")
 
     const [isEditing, setIsEditing] = useState(false)
-    const [title, setTitle] = useState(dashboard.title)
+    const [title, setTitle] = useState('')
     const inputRef = useRef<HTMLInputElement>(null)
     const { toast } = useToast()
     const { appConfig } = useContext(locationContext)
+
+    useEffect(() => {
+        setTitle(dashboard.title)
+    }, [dashboard])
 
     useEffect(() => {
         if (isEditing && inputRef.current) {
@@ -60,13 +64,8 @@ export function DashboardListItem({
         let trimmedTitle = title.trim()
 
         if (!trimmedTitle) {
-            trimmedTitle = t('untitledDashboard')
-            // setTitle(dashboard.title)
-            // toast({
-            //     description: "名称不能为空",
-            //     variant: "error",
-            // })
-            // return
+            // trimmedTitle = t('untitledDashboard')
+            return setTitle(dashboard.title)
         }
 
         if (trimmedTitle.length > 200) {
@@ -96,8 +95,8 @@ export function DashboardListItem({
     return (
         <div
             className={cn(
-                "group flex items-center justify-between px-2 py-[6px] rounded-lg cursor-pointer hover:bg-[#002FFF]/10 transition-colors",
-                selected && "bg-[#002FFF]/10",
+                "group flex items-center justify-between px-2 py-[6px] rounded-lg cursor-pointer transition-colors",
+                selected ? "bg-[#002FFF]/10" : "hover:bg-[#f5f2f2f2]",
             )}
             onClick={onSelect}
         >
@@ -118,7 +117,7 @@ export function DashboardListItem({
                     </div>
                 )}
             </div>
-            {dashboard.is_default && <Badge variant="outline" className="border border-primary text-primary scale-75">{t('default')}</Badge>}
+            {dashboard.is_default && <Badge variant="outline" className="border border-primary rounded-sm py-0 px-1 text-primary scale-75">{t('default')}</Badge>}
 
             <DropdownMenu>
                 <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>

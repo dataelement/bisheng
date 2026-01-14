@@ -307,7 +307,8 @@ class AgentNode(BaseNode):
             # Handler Call Log
             one_ret.extend(self.parse_tool_log(self._tool_invoke_list[index]))
             if self._log_reasoning_content[index]:
-                one_ret.append({"key": "Thinking about content", "value": self._log_reasoning_content[index], "type": "params"})
+                one_ret.append(
+                    {"key": "Thinking about content", "value": self._log_reasoning_content[index], "type": "params"})
             one_ret.append({"key": f'{self.id}.{k}', "value": v, "type": "variable"})
             ret.append(one_ret)
             index += 1
@@ -334,6 +335,9 @@ class AgentNode(BaseNode):
                 })
         if tool_invoke_info:
             for one in tool_invoke_info.values():
+                # knowledge_retriever_tool belong into rag logic，not show in tool log
+                if one["name"] == "knowledge_retriever_tool":
+                    continue
                 ret.append({
                     "key": one["name"],
                     "value": f"Tool Input:\n {one['input']}, Tool Output:\n {one['output']}",
