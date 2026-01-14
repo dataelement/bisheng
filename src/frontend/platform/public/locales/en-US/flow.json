@@ -398,7 +398,7 @@
       "system_prompt": {
         "label": "System Prompt",
         "placeholder": "Agent persona description",
-        "value": "You are an intelligent AI assistant, skilled at solving user problems by invoking appropriate tools (if any) based on user needs.\nThe current time is {{#Start/current_time#}}"
+        "value": "You are an intelligent AI assistant, skilled at solving user problems by invoking appropriate tools (if any) based on user needs.\nThe current time is {{#start/current_time#}}"
       },
       "user_prompt": {
         "label": "User Prompt",

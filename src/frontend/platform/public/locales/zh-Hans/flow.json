@@ -399,7 +399,7 @@
       "system_prompt": {
         "label": "系统提示词",
         "placeholder": "助手画像",
-        "value": "你是一个智能 AI 助手，擅长根据用户需求，调用合适的工具（如有的话）解决用户问题。\n当前时间是 {{#开始/current_time#}}"
+        "value": "你是一个智能 AI 助手，擅长根据用户需求，调用合适的工具（如有的话）解决用户问题。\n当前时间是 {{#start/current_time#}}"
       },
       "user_prompt": {
         "label": "用户提示词",
