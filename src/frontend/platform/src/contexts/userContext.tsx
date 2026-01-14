@@ -114,12 +114,36 @@ export function UserProvider({ children }: { children: ReactNode }) {
         // 获取用户信息
         getUserInfo().then(res => {
             setUser(res.user_id ? res : null)
-            localStorage.setItem('UUR_INFO', res.user_id ? String(res.user_id) : '')
-            if (res.user_id) loadComponents()
+            const { user_id, web_menu = [] } = res;
+
+            localStorage.setItem('UUR_INFO', user_id ? String(user_id) : '');
+            if (user_id) loadComponents();
             // 是否有访问后台权限
             if (/^(\/\w+)?\/chat/.test(location.pathname)) return // 排除免登陆
-            if (res.role !== 'admin' && !res.web_menu.includes('backend')) {
-                location.href = `${location.origin}/workspace/c/new?error=90001`  // workspace useErrorPrompt
+
+            if (!web_menu.includes('backend')) {
+                location.href = `${location.origin}/workspace/c/new?error=90001`;
+                return;
+            }
+
+            // Jump to the route based on permissions 
+            if (res.role !== 'admin' && location.pathname === '/dashboard') {
+                const MENU_ROUTE_MAP = [
+                    { key: 'board', path: '/dashboard' },
+                    { key: 'build', path: '/build/apps' },
+                    { key: 'knowledge', path: '/filelib' },
+                    { key: 'model', path: '/model/management' },
+                    { key: 'evaluation', path: '/evaluation' },
+                    { key: 'label', path: '/label' }, // 兜底选项放在最后
+                ];
+                const target = MENU_ROUTE_MAP.find(item => web_menu.includes(item.key));
+                if (target) {
+                    if (target.path === '/dashboard') return;
+
+                    location.href = `${location.origin}${target.path}`;
+                } else {
+                    location.href = `${location.origin}/label`;
+                }
             }
         }).catch(e => {
             setUser(null)

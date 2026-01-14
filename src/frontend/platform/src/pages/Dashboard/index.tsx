@@ -33,7 +33,7 @@ export default function DashboardPage() {
 
     const updateMutation = useMutation({
         mutationFn: ({ id, title }: { id: string; title: string }) => updateDashboardTitle(id, title),
-        onSuccess: (a, {id}) => {
+        onSuccess: (a, { id }) => {
             queryClient.invalidateQueries({ queryKey: [DashboardsQueryKey] })
             queryClient.invalidateQueries({ queryKey: [DashboardQueryKey, id] })
             toast({
@@ -64,7 +64,8 @@ export default function DashboardPage() {
     }
 
     const handleShare = async (id: string) => {
-        if (selectedDashboard?.status === "draft") {
+        const _selectedDashboard = dashboards.find((d) => d.id === id)
+        if (_selectedDashboard?.status === "draft") {
             toast({
                 description: t('shareNotPublished'),
                 variant: "error",
@@ -73,7 +74,7 @@ export default function DashboardPage() {
         }
 
         try {
-            const link = `${location.origin}${__APP_ENV__.BASE_URL}/dashboard/share/${btoa(selectedDashboard.id)}`
+            const link = `${location.origin}${__APP_ENV__.BASE_URL}/dashboard/share/${btoa(_selectedDashboard.id)}`
             await copyText(link)
             toast({
                 description: t('shareCopySuccess'),
