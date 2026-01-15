@@ -159,7 +159,7 @@ export default function ChartSelector({
   }
 
   /* 保存 */
-  const handleSave = () => {
+  const handleSave = (e) => {
 
     const startDateObj = new Date(timeFilter.startTime * 1000)
     const endDateObj = new Date(timeFilter.endTime * 1000)
@@ -175,7 +175,7 @@ export default function ChartSelector({
       }
     }
 
-    toast({
+    e.isTrusted && toast({
       variant: 'success',
       description: t("chartSelector.messages.saveSuccess"),
     })
@@ -358,7 +358,7 @@ export default function ChartSelector({
           <Button variant="outline" onClick={onCancel}>
             {t("chartSelector.buttons.cancel")}
           </Button>
-          <Button onClick={handleSave}>
+          <Button id="query_save" onClick={handleSave}>
             {t("chartSelector.buttons.save")}
           </Button>
         </div>

@@ -329,67 +329,75 @@ export function ComponentConfigDrawer() {
     setConfigCollapsed(prev => ({ ...prev, [section]: !prev[section] }))
   }, [])
 
-  // 更新图表
-  // 更新图表 - 添加校验
-  const handleUpdateChart = useCallback((e) => {
-    if (!editingComponent) return
-
+  const validateChartConfig = ({
+    editingComponent,
+    chartType,
+    isMetricCard,
+    categoryDimensions,
+    valueDimensions,
+    stackDimensions,
+    currentChartHasStack,
+    invalidFieldIds
+  }) => {
     if (editingComponent.type !== 'query' && editingComponent.type !== 'metric') {
-      if (!chartType) {
-        toast({
-          description: t("componentConfigDrawer.validation.chartTypeRequired"),
-          variant: "error"
-        })
-        return
-      }
+      if (!chartType) return { isValid: false, errorKey: 'chartTypeRequired' };
     }
 
     if (editingComponent.type !== 'metric' && isMetricCard) {
       if (categoryDimensions.length === 0) {
-        toast({
-          description: t("componentConfigDrawer.validation.categoryRequired"),
-          variant: "error"
-        })
-        return
-      } else if (categoryDimensions.some(dim => invalidFieldIds.has(dim.id))) {
-        toast({
-          description: t("componentConfigDrawer.validation.invalidCategoryFields"),
-          variant: "error"
-        })
-        return
+        return { isValid: false, errorKey: 'categoryRequired' };
+      }
+      if (categoryDimensions.some(dim => invalidFieldIds.has(dim.id))) {
+        return { isValid: false, errorKey: 'invalidCategoryFields' };
       }
     }
 
     if (valueDimensions.length === 0) {
-      toast({
-        description: t("componentConfigDrawer.validation.metricRequired"),
-        variant: "error"
-      })
-      return
-    } else if (valueDimensions.some(dim => invalidFieldIds.has(dim.id))) {
-      toast({
-        description: t("componentConfigDrawer.validation.invalidMetricFields"),
-        variant: "error"
-      })
-      return
+      return { isValid: false, errorKey: 'metricRequired' };
+    }
+    if (valueDimensions.some(dim => invalidFieldIds.has(dim.id))) {
+      return { isValid: false, errorKey: 'invalidMetricFields' };
     }
 
     if (!editingComponent.dataset_code) {
-      toast({
-        description: t("componentConfigDrawer.validation.datasetRequired"),
-        variant: "error"
-      })
-      return
+      return { isValid: false, errorKey: 'datasetRequired' };
     }
 
     if (currentChartHasStack && stackDimensions.length === 0) {
-      toast({
-        description: t("componentConfigDrawer.validation.stackRequired"),
-        variant: "error"
-      })
-      return
+      return { isValid: false, errorKey: 'stackRequired' };
     }
+
+    return { isValid: true };
+  };
+  // 更新图表 - 添加校验
+  const handleUpdateChart = useCallback((e) => {
+    if (!editingComponent) return
+
+    if (e.isTrusted) {
+      const { isValid, errorKey } = validateChartConfig({
+        editingComponent,
+        chartType,
+        isMetricCard,
+        categoryDimensions,
+        valueDimensions,
+        stackDimensions,
+        currentChartHasStack,
+        invalidFieldIds
+      });
+
+      if (!isValid) {
+        if (errorKey) {
+          toast({
+            description: t(`componentConfigDrawer.validation.${errorKey}`),
+            variant: "error"
+          });
+        }
+        return;
+      }
+    }
+
     const dataConfig = getDataConfig(limitType, limitValue, editingComponent.data_config?.timeFilter)
+    dataConfig.isConfigured = e.isTrusted
 
     updateEditingComponent({
       data_config: dataConfig,

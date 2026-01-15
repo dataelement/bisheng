@@ -501,7 +501,8 @@ export function useChartState(initialComponent: any) {
       resultLimit: {
         limitType: limitType === "limit" ? "limited" as const : "all" as const,
         ...(limitType === "limit" && { limit: Number(limitValue) })
-      }
+      },
+      isConfigured: true,
     }
   }, [categoryDimensions, stackDimensions, valueDimensions, filterGroup])
 
