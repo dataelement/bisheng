@@ -128,10 +128,11 @@ const SearchPanne = ({
         <TableHeader>
           <TableRow>
             <TableHead>{t(nameKey)}</TableHead>
+            {type === 'board' && <TableHead>{t('system.creator')}</TableHead>}
             <TableHead className="text-center w-[175px]">
               {!isMenuOrBoard ? t('system.usePermission') : t('system.viewPermission')}
             </TableHead>
-            {isPermissionTable && type !== 'menu' && (
+            {isPermissionTable && type !== 'menu' && !appConfig.isPro && (
               <TableHead className="text-right w-[75px]">{t('system.managePermission')}</TableHead>
             )}
           </TableRow>
@@ -140,13 +141,14 @@ const SearchPanne = ({
           {data.map((el: any) => (
             <TableRow key={el.id}>
               <TableCell className="font-medium">{t(el.name)}</TableCell>
+              {type === 'board' && <TableCell>{el.user_name}</TableCell>}
               <TableCell className="text-center">
                 <Switch
                   checked={useChecked(el.id)}
                   onCheckedChange={(bln) => onUseChange(el.id, bln)}
                 />
               </TableCell>
-              {type !== 'menu' && (
+              {type !== 'menu' && !appConfig.isPro && (
                 <TableCell className="text-center">
                   <Switch
                     checked={manageChecked(el.id)}
@@ -163,7 +165,7 @@ const SearchPanne = ({
 
   return <>
     <div className="mt-6 flex flex-col items-start relative gap-3">
-      {type === 'board' && (
+      {type === 'board' && !appConfig.isPro && (
         <div className="flex flex-col gap-4 w-full">
           {/* 允许创建看板开关 */}
           <div className="flex items-center gap-2">
