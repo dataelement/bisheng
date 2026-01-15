@@ -211,7 +211,7 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
                     }
                     const searchStr = map[type]
                     if (!currentValue.includes(searchStr)) {
-                        targetParam.value = currentValue === '\n' ? searchStr : currentValue + searchStr;
+                        targetParam.value = currentValue === '\n' ? searchStr : `${currentValue}\n${searchStr}`;
                     }
                 }
             }

@@ -161,7 +161,7 @@ export function DashboardDetail({
                 <div className="flex items-center gap-2">
                     <ButtonGroup>
                         <Button variant="outline" size="sm" onClick={handleFullscreen}>{t('fullScreen')}</Button>
-                        {dashboard.write && <Button variant="outline" size="sm" onClick={() => publish(dashboard.id, isPublished)}>{isPublished ? t('unpublish') : t('publish')}</Button>}
+                        {appConfig.isPro && dashboard.write && <Button variant="outline" size="sm" onClick={() => publish(dashboard.id, isPublished)}>{isPublished ? t('unpublish') : t('publish')}</Button>}
                         <Button variant="outline" size="sm" onClick={() => onShare(dashboard.id)}>{t('share')}</Button>
                     </ButtonGroup>
 

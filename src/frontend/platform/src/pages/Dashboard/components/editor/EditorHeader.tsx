@@ -166,7 +166,7 @@ export function EditorHeader({
     }
 
     // Handle save
-    const handleSave = async () => {
+    const handleSave = async (e?) => {
         // if (!hasUnsavedChanges) {
         //     return
         // }
@@ -179,7 +179,8 @@ export function EditorHeader({
         setTimeout(async () => {
             await saveMutation.mutate({
                 id: currentDashboard?.id,
-                dashboard: currentDashboard
+                dashboard: currentDashboard,
+                autoSave: !e
             })
         }, 300);
     }
