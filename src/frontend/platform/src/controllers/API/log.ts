@@ -29,7 +29,7 @@ export async function getLogsApi({ page, pageSize, userIds, groupId = '', start,
 // 系统模块
 export async function getModulesApi(): Promise<{ data: any[] }> {
     return {
-        data: [{ name: 'log.chat', value: 'chat' }, { name: 'log.build', value: 'build' }, { name: 'log.knowledge', value: 'knowledge' }, { name: 'log.system', value: 'system' }]
+        data: [{ name: 'log.chat', value: 'chat' }, { name: 'log.build', value: 'build' }, { name: 'log.knowledge', value: 'knowledge' }, { name: 'log.system', value: 'system' },{ name: 'log.dashboard', value: 'dashboard' }]
     }
 }
 
@@ -55,7 +55,10 @@ const actions = [
     { name: 'log.userLogin', value: 'user_login' },
     { name: 'log.add_tool', value: 'add_tool' },
     { name: 'log.update_tool', value: 'update_tool' },
-    { name: 'log.delete_tool', value: 'delete_tool' }
+    { name: 'log.delete_tool', value: 'delete_tool' },
+    { name: 'log.create_dashboard', value: 'create_dashboard' },
+    { name: 'log.update_dashboard', value: 'update_dashboard' },
+    { name: 'log.delete_dashboard', value: 'delete_dashboard' }
 ];
 
 // 全部操作行为
@@ -70,6 +73,7 @@ export async function getActionsByModuleApi(moduleId) {
         case 'build': return actions.filter(a => a.value.includes('build'))
         case 'knowledge': return actions.filter(a => a.value.includes('knowledge') || a.value.includes('file'))
         case 'system': return actions.filter(a => a.value.includes('user') || a.value.includes('role'))
+        case 'dashboard': return actions.filter(a => a.value.includes('dashboard'))
     }
 }
 
