@@ -52,14 +52,14 @@ export function ChartContainer({ isPreviewMode, isDark, component }: ChartContai
         <div
           className="absolute inset-0 animate-shimmer"
           style={{
-            background: 'linear-gradient(90deg, rgba(191, 219, 253, 0.2) 30%,  #fff 50%, rgba(191, 219, 253, 0.2) 70%)',
+            background: 'linear-gradient(90deg, rgba(191, 219, 253, 0.01) 30%,  #fff 50%, rgba(191, 219, 253, 0.01) 70%)',
             backgroundSize: '200% 100%',
           }}
         />
 
         <div className="relative z-10 bg-white px-6 py-2 rounded-md backdrop-blur-sm">
           <div className="flex items-center gap-3">
-            <span className="text-[#8da9ff] font-medium text-lg tracking-wider animate-pulse break-keep">
+            <span className="text-[#8da9ff] font-medium text-lg tracking-wider break-keep">
               {t('updatingCharts')}
             </span>
           </div>
@@ -71,7 +71,7 @@ export function ChartContainer({ isPreviewMode, isDark, component }: ChartContai
           100% { background-position: -200% 0; }
         }
         .animate-shimmer {
-          animation: shimmer 2s infinite linear;
+          animation: shimmer 3s infinite linear;
         }
       `}</style>
       </div>

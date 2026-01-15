@@ -114,16 +114,16 @@ function EnumMultiSelect({
   const [hasMore, setHasMore] = useState(true)
   const pageSize = 100
 
-  const fetchEnumValues = async (code: string,pageNum = 1) => {
+  const fetchEnumValues = async (code: string, pageNum = 1) => {
     setLoading(true)
     try {
-     const response = await getFieldEnums({
+      const response = await getFieldEnums({
         dataset_code,
         field: code,
         page: pageNum,
         pageSize
       })
-     const result = response.data?.data || []
+      const result = response.data?.data || []
       if (pageNum === 1) {
         setValues(result)
       } else {
@@ -133,7 +133,7 @@ function EnumMultiSelect({
       setHasMore(result.length === pageSize)
     } catch (error) {
       console.error("获取枚举值失败:", error)
-       toast({
+      toast({
         description: t('filterConditionDialog.toast.fetchEnumFailed'),
         variant: "error"
       })
@@ -151,7 +151,7 @@ function EnumMultiSelect({
   const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
     const element = e.currentTarget
     const isAtBottom = element.scrollHeight - element.scrollTop === element.clientHeight
-    
+
     if (isAtBottom && hasMore && !loading) {
       const nextPage = page + 1
       setPage(nextPage)
@@ -188,7 +188,7 @@ function EnumMultiSelect({
   const handleClearSearch = () => {
     setSearch("")
   }
- return (
+  return (
     <div className="relative flex-1">
       <Button
         type="button"
@@ -253,7 +253,7 @@ function EnumMultiSelect({
                 </div>
               )}
 
-              <div 
+              <div
                 className="max-h-60 overflow-auto"
                 onScroll={handleScroll}
               >
@@ -431,7 +431,7 @@ export function FilterConditionDialog({
   }
 
   const handleFieldChange = (id: string, fieldCode: string) => {
-    const field = filteredFields.find(f => f.fieldCode === fieldCode)    
+    const field = filteredFields.find(f => f.fieldCode === fieldCode)
     const isEnum = isEnumField(fieldCode)
 
     let defaultOperator: FilterOperator
@@ -443,7 +443,7 @@ export function FilterConditionDialog({
     updateCondition(id, {
       fieldCode,
       fieldType: field?.fieldType,
-      fieldId: field?.fieldId || fieldCode, 
+      fieldId: field?.fieldId || fieldCode,
       fieldName: field?.displayName,
       filterType: isEnum ? "enum" : "conditional",
       operator: draft.conditions.find(c => c.id === id)?.operator ?? defaultOperator,
@@ -500,14 +500,18 @@ export function FilterConditionDialog({
       conditions: draft.conditions
         .filter(c => c.fieldCode && c.value !== undefined)
         .map(c => ({
-        id: c.id,
-        fieldId: c.fieldId,
-        fieldCode: c.fieldCode,
-        fieldName: c.fieldName,
-        operator: c.operator,
-        value: c.value,
-        filterType: c.filterType
+          id: c.id,
+          fieldId: c.fieldId,
+          fieldCode: c.fieldCode,
+          fieldName: c.fieldName,
+          operator: c.operator,
+          value: c.value,
+          filterType: c.filterType
         }))
+    })
+    toast({
+      description: t('filterConditionDialog.toast.saveSuccess'),
+      variant: "success"
     })
 
     onOpenChange(false)
@@ -562,11 +566,20 @@ export function FilterConditionDialog({
                         <SelectValue placeholder={t('filterConditionDialog.placeholders.selectField')} />
                       </SelectTrigger>
                       <SelectContent>
-                        {filteredFields.map(f => (
-                          <SelectItem key={f.fieldCode} value={f.fieldCode}>
-                            {f.displayName}
-                          </SelectItem>
-                        ))}
+                        {filteredFields.length > 0 ? (
+                          filteredFields.map(f => {
+                            const displayText = f.displayName || "暂无";
+                            return (
+                              <SelectItem key={f.fieldCode} value={f.fieldCode}>
+                                {displayText}
+                              </SelectItem>
+                            )
+                          })
+                        ) : (
+                          <div className="px-2 py-4 text-sm text-muted-foreground text-center">
+                            {t('filterConditionDialog.filterTypes.noFields')}
+                          </div>
+                        )}
                       </SelectContent>
                     </Select>
 
@@ -581,7 +594,7 @@ export function FilterConditionDialog({
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="conditional">{t('filterConditionDialog.filterTypes.conditional')}</SelectItem>
-                          <SelectItem value="enum">{t('filterConditionDialog.filterTypes.enum')}</SelectItem>
+                          {c.fieldType !== "string" && <SelectItem value="enum">{t('filterConditionDialog.filterTypes.enum')}</SelectItem>}
                         </SelectContent>
                       </Select>
                     )}
@@ -594,7 +607,7 @@ export function FilterConditionDialog({
                           value={c.operator}
                           onValueChange={v => handleOperatorChange(c.id, v as FilterOperator)}
                         >
-                          <SelectTrigger className="w-[120px] h-8">
+                          <SelectTrigger className="w-[160px] h-8">
                             <SelectValue placeholder={t('filterConditionDialog.placeholders.operator')} />
                           </SelectTrigger>
                           <SelectContent>
@@ -660,7 +673,7 @@ export function FilterConditionDialog({
                     {c.fieldCode && c.filterType === "enum" && (
                       <div className="flex-1">
                         <EnumMultiSelect
-                          dataset_code={dataset_code} 
+                          dataset_code={dataset_code}
                           fieldCode={c.fieldCode}
                           selected={(c.value as string[]) || []}
                           onChange={selected => updateCondition(c.id, { value: selected })}

@@ -18,6 +18,7 @@ import { useNavigate } from "react-router-dom"
 import { DashboardQueryKey, DashboardsQueryKey, usePublishDashboard } from "../../hook"
 import { ChartType, Dashboard } from "../../types/dataConfig"
 import ComponentPicker from "./ComponentPicker"
+import { FilterIcon, GridAddIcon } from "@/components/bs-icons/dashboard"
 
 
 interface EditorHeaderProps {
@@ -165,7 +166,7 @@ export function EditorHeader({
     }
 
     // Handle save
-    const handleSave = async () => {
+    const handleSave = async (e?) => {
         // if (!hasUnsavedChanges) {
         //     return
         // }
@@ -178,7 +179,8 @@ export function EditorHeader({
         setTimeout(async () => {
             await saveMutation.mutate({
                 id: currentDashboard?.id,
-                dashboard: currentDashboard
+                dashboard: currentDashboard,
+                autoSave: !e
             })
         }, 300);
     }
@@ -232,16 +234,16 @@ export function EditorHeader({
             <div className="flex items-center gap-4">
                 {/* Add Component */}
                 <ComponentPicker onSelect={addComponentToLayout}>
-                    <Button variant="outline" size="sm" className="gap-2">
-                        <Grid2X2PlusIcon size="14" />
+                    <Button variant="outline" size="sm" className="gap-1.5">
+                        <GridAddIcon className="size-4" />
                         {t('addChart')}
                     </Button>
                 </ComponentPicker>
-                <Button variant="outline" size="sm" className="gap-2" onClick={() => addComponentToLayout({
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => addComponentToLayout({
                     title: "",
                     type: ChartType.Query
                 })}>
-                    <FunnelIcon size="14" />
+                    <FilterIcon className="size-4" />
                     {t('addQueryComponent')}
                 </Button>
             </div>

@@ -4,6 +4,7 @@ from typing import Dict, List, Optional
 
 from fastapi import (APIRouter, BackgroundTasks, Body, File, Form, HTTPException, Query, Request,
                      UploadFile)
+from loguru import logger
 from starlette.responses import FileResponse
 
 from bisheng.api.services import knowledge_imp
@@ -13,20 +14,18 @@ from bisheng.api.services.knowledge_imp import (decide_vectorstores, delete_es, 
 from bisheng.api.v1.schemas import (ChunkInput, KnowledgeFileOne, KnowledgeFileProcess,
                                     resp_200, resp_500, ExcelRule)
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
-from bisheng.common.services import telemetry_service
-from bisheng.core.logger import trace_id_var
-from bisheng.open_endpoints.domain.schemas.filelib import APIAddQAParam, APIAppendQAParam, QueryQAParam
-from bisheng.open_endpoints.domain.utils import get_default_operator
-from bisheng.core.cache.utils import file_download, save_download_file
 from bisheng.common.errcode.http_error import ServerError
+from bisheng.common.services import telemetry_service
+from bisheng.common.services.config_service import settings
+from bisheng.core.cache.utils import file_download, save_download_file
+from bisheng.core.logger import trace_id_var
+from bisheng.database.models.message import ChatMessageDao
+from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.knowledge.domain.models.knowledge import (KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum,
                                                        KnowledgeUpdate)
 from bisheng.knowledge.domain.models.knowledge_file import (QAKnoweldgeDao, QAKnowledgeUpsert)
-from bisheng.database.models.message import ChatMessageDao
-from bisheng.interface.embeddings.custom import FakeEmbedding
-from bisheng.common.services.config_service import settings
-from loguru import logger
-
+from bisheng.open_endpoints.domain.schemas.filelib import APIAddQAParam, APIAppendQAParam, QueryQAParam
+from bisheng.open_endpoints.domain.utils import get_default_operator
 from bisheng.utils.util import sync_func_to_async
 
 # build router
@@ -153,13 +152,13 @@ def delete_file_batch_api(request: Request, file_ids: List[int]):
 def get_filelist(request: Request,
                  knowledge_id: int,
                  keyword: str = None,
-                 status: Optional[int] = None,
+                 status: List[int] = Query(default=None),
                  page_size: int = 10,
                  page_num: int = 1):
     """ Get knowledge base file information. """
     login_user = get_default_operator()
     data, total, flag = KnowledgeService.get_knowledge_files(request, login_user, knowledge_id,
-                                                             keyword, [status], page_num, page_size)
+                                                             keyword, status, page_num, page_size)
     return resp_200(data={'data': data, 'total': total, 'writeable': flag})
 
 

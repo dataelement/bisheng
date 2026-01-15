@@ -94,7 +94,7 @@ export async function copyComponentTo(component: DashboardComponent, targetId: s
     }
 
     targetDashboard.layout_config.layouts.push(newLayoutItem)
-    return await updateDashboard2(targetId, targetDashboard)
+    return await updateDashboard(targetId, targetDashboard)
 }
 
 // Dataset related types and APIs

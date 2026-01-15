@@ -180,6 +180,7 @@
         },
         "filterTypes": {
             "conditional": "条件筛选",
+            "noFields": "暂无字段",
             "enum": "枚举筛选"
         },
         "operators": {
@@ -207,7 +208,8 @@
             "atLeastOneCondition": "请至少配置一个有效的筛选条件"
         },
         "toast": {
-            "fetchEnumFailed": "获取枚举值失败，请稍后重试"
+            "fetchEnumFailed": "获取枚举值失败，请稍后重试",
+            "saveSuccess": "保存成功"
         },
         "enumSelect": {
             "placeholder": "请选择",
@@ -293,6 +295,7 @@
     "endHour": "结束小时",
     "dynamicUpdate": "动态更新 (下次查看时自动根据当前时间推算)",
     "cancel": "取消",
+    "clear": "清空",
     "confirm": "确定",
     "yearUnit": "年",
     "monthUnit": "月",
@@ -355,6 +358,7 @@
     "noDataInChart": "当前图表无数据",
     "selectDate": "选择日期",
     "query": "查询",
+    "dashboardOffline": "该看板已下线",
     "chart": {
         "barChart": "柱状图",
         "basicBarChart": "基础柱状图",

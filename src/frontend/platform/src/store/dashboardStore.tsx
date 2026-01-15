@@ -3,6 +3,7 @@ import { generateUUID } from "@/components/bs-ui/utils"
 import { ChartType, createDefaultDataConfig, Dashboard, DashboardComponent, LayoutItem, QueryConfig } from "@/pages/Dashboard/types/dataConfig"
 import { DatePickerValue } from "@/pages/Dashboard/components/AdvancedDatePicker";
 import { cloneDeep, isEqual } from "lodash-es";
+import { getDefaultMetricStyle } from "@/pages/Dashboard/colorSchemes";
 
 // Chart refresh information
 interface ChartRefreshInfo {
@@ -137,7 +138,7 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
                     dashboard_id: get().currentDashboard?.id || '',
                     dataset_code: '',
                     data_config: createDefaultDataConfig(component.type),
-                    style_config: {},
+                    style_config: component.type === ChartType.Metric ? getDefaultMetricStyle('Metric', 'Description') : {},
                     create_time: '',
                     update_time: ''
                 }]

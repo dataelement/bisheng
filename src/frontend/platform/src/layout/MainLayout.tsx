@@ -73,10 +73,10 @@ export default function MainLayout() {
         <div className="bg-background-main w-full h-screen">
             <div className="flex justify-between h-[64px] bg-background-main relative z-[21]">
                 <div className="flex h-9 my-[14px]">
-                    <Link className="inline-block" to='/'>
+                    <div className="inline-block" >
                         {/* @ts-ignore */}
                         <img src={__APP_ENV__.BASE_URL + '/assets/bisheng/login-logo-small.png'} className="w-[104px] ml-[38px] rounded dark:w-[104px]" alt="" />
-                    </Link>
+                    </div>
                 </div>
                 <div>
                     <HeaderMenu />

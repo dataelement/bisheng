@@ -32,25 +32,37 @@ export function initNode(node, nds, t) {
         }
         return node;
     }
-
+    const nodeMap = new Map(nds.map(n => [n.data.type, n.data]));
     node.group_params.forEach(group => {
         group.params.forEach(param => {
-            if (param.type === "var_textarea" && typeof param.value === "string") {
-                if (param.value) {
-                    param.value = t(`node.${node.type}.${param.key}.value`)
-                }
-                // Replace expressions by inserting the node id dynamically
-                param.value = param.value.replace(/{{#([^/]*\/)?(.*?)#}}/g, (match, prefix = '', expression) => {
-                    if (param.varZh) {
-                        param.varZh[`${prefix}${id}.${expression}`] = `${prefix}${expression}`
-                    } else {
-                        param.varZh = {
-                            [`${prefix}${id}.${expression}`]: `${prefix}${expression}`
-                        }
-                    }
-                    return `{{#${prefix}${id}.${expression}#}}`;
-                });
+            if (param.type !== "var_textarea" || typeof param.value !== "string" || !param.value) {
+                return;
             }
+
+            const translationKey = `node.${node.type}.${param.key}.value`;
+            param.value = t(translationKey);
+
+            // Replace expressions by inserting the node id dynamically
+            param.value = param.value.replace(/{{#([^/]*\/)?(.*?)#}}/g, (match, prefixMatch = '', expression) => {
+                let targetId = id;
+                let targetName = '';
+                if (prefixMatch) {
+                    const typePrefix = prefixMatch.replace('/', '');
+                    const targetNode = nodeMap.get(typePrefix);
+
+                    if (targetNode) {
+                        targetId = targetNode.id;
+                        targetName = `${targetNode.name}/`;
+                    } else {
+                        return match;
+                    }
+                }
+
+                param.varZh = param.varZh ?? {};
+                param.varZh[`${targetId}.${expression}`] = `${targetName}${expression}`;
+
+                return `{{#${targetId}.${expression}#}}`;
+            });
         });
     });
 

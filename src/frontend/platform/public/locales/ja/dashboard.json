@@ -200,6 +200,7 @@
     },
     "filterTypes": {
       "conditional": "条件フィルター",
+      "noFields": "フィールドがありません",
       "enum": "列挙フィルター"
     },
     "operators": {
@@ -229,7 +230,9 @@
     "toast": {
       "fetchEnumFailed": "列挙値の取得に失敗しました。後で再試行してください",
       "virtualMetricConflict": "仮想メトリックと通常のメトリックを同時に追加することはできません",
-      "multipleVirtualMetric": "複数の仮想メトリックを同時に追加することはできません"
+      "multipleVirtualMetric": "複数の仮想メトリックを同時に追加することはできません",
+      "saveSuccess":"保存に成功しました"
+      
     },
     "enumSelect": {
       "placeholder": "選択してください",
@@ -315,6 +318,7 @@
   "endHour": "終了時間",
   "dynamicUpdate": "動的更新 (次回表示時に現在時刻から自動計算)",
   "cancel": "キャンセル",
+  "clear": "クリア",
   "confirm": "確定",
   "yearUnit": "年",
   "monthUnit": "月",
@@ -377,6 +381,7 @@
   "noDataInChart": "このチャートにはデータがありません",
   "selectDate": "日付を選択",
   "query": "照会",
+  "dashboardOffline": "このダッシュボードは現在オフラインです",
   "chart": {
     "barChart": "棒グラフ",
     "basicBarChart": "基本棒グラフ",

@@ -118,6 +118,7 @@ export default function VarInput({
         console.log('!!!value :>> ', value);
         // if (valueRef.current && valueRef.current === value) return
         textareaRef.current.innerHTML = parseToHTML(value || '')[0];
+        setFullVarInputValue(value)
         placeholderInit();
     }, [value]);
 

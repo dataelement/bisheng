@@ -226,7 +226,8 @@ class RagUtils(BaseNode):
             max_content=self._max_chunk_size,
             rrf_weights=[self._vector_weight, self._keyword_weight],
             rrf_remove_zero_score=True,
-            rerank=self._rerank_model
+            rerank=self._rerank_model,
+            sort_by_source_and_index=True
         )
         finally_docs = knowledge_retriever_tool.invoke(input={"query": question})
         all_file_id = set([one.metadata.get("document_id") for one in finally_docs])
