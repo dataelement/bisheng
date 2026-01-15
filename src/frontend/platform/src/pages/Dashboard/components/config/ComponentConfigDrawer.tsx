@@ -818,6 +818,7 @@ export function ComponentConfigDrawer() {
                         chartState.setStyleConfig(newConfig)
                         if (editingComponent) {
                           updateEditingComponent({
+                            title: newConfig.title,
                             style_config: newConfig
                           })
                         }
@@ -827,7 +828,7 @@ export function ComponentConfigDrawer() {
                   )}
                 </div>
                 {/* 底部固定更新按钮（不随滚动） */}
-                <div className="px-4 py-3 border-t bg-background">
+                {configTab !== "style" && <div className="px-4 py-3 border-t bg-background">
                   <Button
                     id="config_save"
                     className="w-full h-10"
@@ -835,7 +836,7 @@ export function ComponentConfigDrawer() {
                   >
                     {t("componentConfigDrawer.updateChartData")}
                   </Button>
-                </div>
+                </div>}
 
               </div>
             )}

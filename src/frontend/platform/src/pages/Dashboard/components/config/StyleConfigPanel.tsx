@@ -341,7 +341,6 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
   })
 
   const editingComponent = useComponentEditorStore(state => state.editingComponent)
-  console.log(editingComponent, 9991110);
 
   const updateEditingComponent = useComponentEditorStore(state => state.updateEditingComponent)
   const firstDimension = editingComponent?.data_config?.dimensions?.[0]
@@ -372,6 +371,7 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
 
   useEffect(() => {
     if (editingComponent && !editingComponent.style_config && !initialized) {
+
       updateEditingComponent({
         style_config: {
           ...FULL_DEFAULT_STYLE_CONFIG,
