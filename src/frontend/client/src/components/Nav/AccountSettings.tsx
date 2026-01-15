@@ -90,7 +90,7 @@ function AccountSettings() {
           </div>
         </DropdownMenuTrigger>
         <DropdownMenuContent className='w-60 rounded-2xl'>
-          {user?.plugins?.includes('backend') && <a href={"/" + __APP_ENV__.BISHENG_HOST} target='_blank'>
+          {user?.plugins?.includes('backend') && <a href={__APP_ENV__.BISHENG_HOST} target='_blank'>
             <DropdownMenuItem className='select-item text-sm font-normal'>
               <GanttChartIcon className="icon-md" />
               {localize('com_nav_admin_panel')}

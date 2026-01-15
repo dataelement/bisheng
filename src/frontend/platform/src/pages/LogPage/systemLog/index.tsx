@@ -152,13 +152,13 @@ export default function SystemLog() {
                             <TableCell>{log.id}</TableCell>
                             <TableCell><div className="max-w-[200px] break-all truncate-multiline">{log.operator_name}</div></TableCell>
                             <TableCell>{log.create_time.replace('T', ' ')}</TableCell>
-                            <TableCell>{t(`log.${log.system_id}`)}</TableCell>
-                            <TableCell>{t(`log.${log.event_type}`)}</TableCell>
-                            <TableCell>{t(`log.${log.object_type}`)}</TableCell>
-                            <TableCell><div className="max-w-[200px] break-all truncate-multiline">{log.object_name || t('log.none')}</div></TableCell>
+                            <TableCell>{t(`log.systemIdEnum.${log.system_id}`)}</TableCell>
+                            <TableCell>{t(`log.eventTypeEnum.${log.event_type}`)}</TableCell>
+                            <TableCell>{t(`log.objectTypeEnum.${log.object_type}`)}</TableCell>
+                            <TableCell><div className="max-w-[200px] break-all truncate-multiline">{log.object_name || t('log.objectTypeEnum.none')}</div></TableCell>
                             <TableCell>{log.ip_address}</TableCell>
                             <TableCell className="max-w-[250px]">
-                                <div className="whitespace-pre-line break-all">{log.note?.replace('编辑后', `\n编辑后`) || t('log.none')}</div>
+                                <div className="whitespace-pre-line break-all">{log.note?.replace('编辑后', `\n编辑后`) || t('log.objectTypeEnum.none')}</div>
                             </TableCell>
                         </TableRow>
                     ))}

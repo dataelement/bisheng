@@ -26,6 +26,12 @@ export const usePublishDashboard = () => {
             ),
         onSuccess: (_, variables) => {
             queryClient.invalidateQueries({ queryKey: [DashboardQueryKey, variables.id] });
+            queryClient.setQueryData([DashboardsQueryKey], (old) => {
+                return old.map(el => el.id === variables.id ? {
+                    ...el,
+                    status: variables.published ? DashboardStatus.Draft : DashboardStatus.Published
+                } : el);
+            });
             toast({
                 description: variables.published ? t('unpublishSuccess') : t('publishSuccess'),
                 variant: "success"

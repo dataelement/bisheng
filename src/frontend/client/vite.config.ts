@@ -10,7 +10,7 @@ import { viteStaticCopy } from 'vite-plugin-static-copy';
 
 const app_env = {
   BASE_URL: '/workspace',
-  BISHENG_HOST: 'build/apps'
+  BISHENG_HOST: '/'
 }
 // https://vitejs.dev/config/
 export default defineConfig(({ command }) => ({

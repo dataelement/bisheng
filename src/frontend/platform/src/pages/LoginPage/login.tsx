@@ -69,17 +69,16 @@ export const LoginPage = () => {
             ).then((res: any) => {
                 window.self === window.top ? localStorage.removeItem('ws_token') : localStorage.setItem('ws_token', res.access_token)
                 localStorage.setItem('isLogin', '1')
-                // const path = location.href.indexOf('from=workspace') === -1 ? '' : '/workspace'
                 const pathname = localStorage.getItem('LOGIN_PATHNAME')
                 if (pathname) {
                     // After the login session expires, redirect back to the login page. After successful login, redirect back to the page before login. 
                     localStorage.removeItem('LOGIN_PATHNAME')
                     location.href = pathname
                 } else {
-                    const path = import.meta.env.DEV ? '/dashboard' : '/workspace'
-                    location.href = location.pathname === '/' ? location.origin + path : location.href
+                    const path = import.meta.env.DEV ? '/' : '/workspace'
+                    const rootUrl = `${location.origin}${__APP_ENV__.BASE_URL}${path}`
+                    location.href = `${__APP_ENV__.BASE_URL}${location.pathname}` === '/' ? rootUrl : location.href
                 }
-                // location.href = __APP_ENV__.BASE_URL + '/'
             }), (error) => {
                 if (error.indexOf('过期') !== -1) { // 有时间改为 code 判断
                     localStorage.setItem('account', mail)

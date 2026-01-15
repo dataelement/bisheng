@@ -271,9 +271,10 @@ export default function Paragraphs({ fileId, onBack }) {
 
     useEffect(() => {
         // Check if current path is adjust page and doesn't have valid state data
-        if (location.pathname.startsWith('/filelib/adjust/') && !window.history.state?.isAdjustMode) {
+        const pathName = location.pathname.replace(__APP_ENV__.BASE_URL, '')
+        if (pathName.startsWith('/filelib/adjust/') && !window.history.state?.isAdjustMode) {
             // Extract ID (e.g., extract 2066 from /filelib/adjust/2066)
-            const adjustId = location.pathname.split('/')[3];
+            const adjustId = pathName.split('/')[3];
             if (adjustId) {
                 // Redirect to corresponding filelib page
                 navigate(`/filelib/${adjustId}`, { replace: true });

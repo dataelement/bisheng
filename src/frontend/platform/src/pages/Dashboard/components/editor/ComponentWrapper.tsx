@@ -117,7 +117,8 @@ export function ComponentWrapper({
             textDecoration: defaultConfig.titleUnderline ? 'underline' : 'none',
             // 确保span能够应用text-align（如果需要）
             display: 'inline-block',
-            width: '100%'
+            maxWidth: '85%',
+            // width: '100%'
         };
     };
 
@@ -151,7 +152,7 @@ export function ComponentWrapper({
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className={isDark && 'dark border-gray-700'}>
-                            {[ChartType.Metric, ChartType.Query].includes(component.type) ? (
+                            {ChartType.Query === component.type ? (
                                 // Query component: only duplicate and delete
                                 <>
                                     <DropdownMenuItem onClick={(e) => {
@@ -175,13 +176,15 @@ export function ComponentWrapper({
                             ) : (
                                 // Other components: full menu
                                 <>
-                                    <DropdownMenuItem onClick={(e) => {
-                                        e.stopPropagation()
-                                        setIsEditing(true)
-                                    }}>
-                                        <Edit3 className="h-4 w-4 mr-2" />
-                                        {t('rename')}
-                                    </DropdownMenuItem>
+                                    {
+                                        ChartType.Metric !== component.type && <DropdownMenuItem onClick={(e) => {
+                                            e.stopPropagation()
+                                            setIsEditing(true)
+                                        }}>
+                                            <Edit3 className="h-4 w-4 mr-2" />
+                                            {t('rename')}
+                                        </DropdownMenuItem>
+                                    }
                                     <DropdownMenuItem onClick={(e) => {
                                         e.stopPropagation()
                                         onDuplicate(componentData)
@@ -251,7 +254,7 @@ export function ComponentWrapper({
                             <h3 className={cn("text-sm font-medium truncate",
                                 "dark:text-gray-400"
                             )} onDoubleClick={() => setIsEditing(true)}>
-                                <span className="no-drag cursor-pointer" style={createTitleStyle(componentData.style_config)}>{title}</span>
+                                <span className="no-drag cursor-pointer truncate" style={createTitleStyle(componentData.style_config)}>{title}</span>
                             </h3>
                         )}
                         {!isPreviewMode && <GripHorizontalIcon

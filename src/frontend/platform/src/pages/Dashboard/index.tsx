@@ -33,9 +33,11 @@ export default function DashboardPage() {
 
     const updateMutation = useMutation({
         mutationFn: ({ id, title }: { id: string; title: string }) => updateDashboardTitle(id, title),
-        onSuccess: (a, { id }) => {
-            queryClient.invalidateQueries({ queryKey: [DashboardsQueryKey] })
+        onSuccess: (a, { id, title }) => {
+            // queryClient.invalidateQueries({ queryKey: [DashboardsQueryKey] })
             queryClient.invalidateQueries({ queryKey: [DashboardQueryKey, id] })
+            queryClient.setQueryData([DashboardsQueryKey], (old) =>
+                old.map(el => el.id === id ? { ...el, title } : el));
             toast({
                 description: t('renameSuccess'),
                 variant: "success",
@@ -52,7 +54,9 @@ export default function DashboardPage() {
     const setDefaultMutation = useMutation({
         mutationFn: (id: string) => setDefaultDashboard(id),
         onSuccess: (a, id) => {
-            queryClient.invalidateQueries({ queryKey: [DashboardsQueryKey] })
+            // queryClient.invalidateQueries({ queryKey: [DashboardsQueryKey] })
+            queryClient.setQueryData([DashboardsQueryKey], (old) =>
+                old.map(el => ({ ...el, is_default: el.id === id })));
             queryClient.invalidateQueries({ queryKey: [DashboardQueryKey, id] })
         },
         onError: () => {

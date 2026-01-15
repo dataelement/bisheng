@@ -46,7 +46,7 @@ export default function RunLog({ node, children }) {
                         label = key[key.length - 1]
                         //  t(`node.${node.type}.${key[key.length - 1]}.label`)
                     } else if (item.type === 'tool') {
-                        label = keyMap[item.key]
+                        label = keyMap[item.key] || item.key
                     } else if (item.key === 'output_msg') {
                         label = item.key
                     } else if (item.key === 'error') {

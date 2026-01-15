@@ -65,11 +65,17 @@ export function EditorHeader({
         onMutate: () => {
             setIsSaving(true)
         },
-        onSuccess: (a, { autoSave }, c) => {
+        onSuccess: (a, { autoSave, dashboard }, c) => {
             setHasUnsavedChanges(false)
             // refrensh react-query
             queryClient.invalidateQueries({ queryKey: [DashboardQueryKey, Number(dashboardId)] })
-            queryClient.invalidateQueries({ queryKey: [DashboardsQueryKey] })
+            queryClient.setQueryData([DashboardsQueryKey], (old) =>
+                old.map(el => el.id === dashboard.id ? {
+                    ...el,
+                    title: dashboard.title,
+                    status: dashboard.status,
+                } : el));
+            // queryClient.invalidateQueries({ queryKey: [DashboardsQueryKey] })
             // autosave not require toast
             !autoSave && toast({
                 description: t('saveSuccess'),
@@ -240,7 +246,7 @@ export function EditorHeader({
                     </Button>
                 </ComponentPicker>
                 <Button variant="outline" size="sm" className="gap-1.5" onClick={() => addComponentToLayout({
-                    title: "",
+                    title: t('selectDate'),
                     type: ChartType.Query
                 })}>
                     <FilterIcon className="size-4" />

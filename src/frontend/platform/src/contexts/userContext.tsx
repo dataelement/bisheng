@@ -126,8 +126,11 @@ export function UserProvider({ children }: { children: ReactNode }) {
                 return;
             }
 
+            const BASE_URL = __APP_ENV__.BASE_URL
+            const pathName = location.pathname.replace(BASE_URL, '');
+            
             // Jump to the route based on permissions 
-            if (res.role !== 'admin' && location.pathname === '/dashboard') {
+            if (res.role !== 'admin' && pathName === '/') {
                 const MENU_ROUTE_MAP = [
                     { key: 'board', path: '/dashboard' },
                     { key: 'build', path: '/build/apps' },
@@ -138,11 +141,22 @@ export function UserProvider({ children }: { children: ReactNode }) {
                 ];
                 const target = MENU_ROUTE_MAP.find(item => web_menu.includes(item.key));
                 if (target) {
-                    if (target.path === '/dashboard') return;
-
-                    location.href = `${location.origin}${target.path}`;
+                    history.pushState(null, '', BASE_URL + target.path);
                 } else {
-                    location.href = `${location.origin}/label`;
+                    history.pushState(null, '', BASE_URL + '/label');
+                }
+            } else {
+                // 403
+                const MENU_KEY_MAP = {
+                    '/dashboard': 'board',
+                    '/build/apps': 'build',
+                    '/filelib': 'knowledge',
+                    '/model/management': 'model',
+                    '/evaluation': 'evaluation',
+                }
+                const menuName = MENU_KEY_MAP[pathName]
+                if (menuName && res.role !== 'admin' && !web_menu.includes(menuName)) {
+                    history.pushState(null, '', BASE_URL + '/403');
                 }
             }
         }).catch(e => {
