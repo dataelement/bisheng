@@ -277,7 +277,16 @@ export function useChartState(initialComponent: any) {
         setDragOverSection(null)
         return
       }
-
+      //指标维度只能有一个
+      if (section === 'value' && valueDimensions.length >= 1) {
+        console.warn('指标维度只能有一个，请先删除现有的指标维度')
+        toast({
+          description: t('useChartState.warn.metricLimitReached'),
+          variant: "warning",
+        })
+        setDragOverSection(null)
+        return
+      }
       const fieldId = data.id || data.name || `field_${Date.now()}`
       const name = data.name || data.displayName || fieldId
 

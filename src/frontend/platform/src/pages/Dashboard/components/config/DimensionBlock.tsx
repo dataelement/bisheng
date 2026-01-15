@@ -58,6 +58,7 @@ export function DimensionBlock({
   onSortChange,
   onEditDisplayName,
   onAggregationChange,
+  isMetricCard,
   onFormatChange,
   invalidIds
 }: DimensionBlockProps) {
@@ -95,12 +96,16 @@ export function DimensionBlock({
 
 
   // 选项配置
+  const isVirtualMetric = (dimension: DimensionItem) => {
+    return dimension.fieldType === 'metric' && dimension.isVirtual === true;
+  };
   const aggregationOptions = [
     { label: t('dimensionBlock.aggregation.sum'), value: 'sum' },
-    { label: t('dimensionBlock.aggregation.avg'), value: 'avg' },
-    { label: t('dimensionBlock.aggregation.count'), value: 'count' },
+    { label: t('dimensionBlock.aggregation.avg'), value: 'average' },
     { label: t('dimensionBlock.aggregation.max'), value: 'max' },
-    { label: t('dimensionBlock.aggregation.min'), value: 'min' }
+    { label: t('dimensionBlock.aggregation.min'), value: 'min' },
+    { label: t('dimensionBlock.aggregation.count'), value: 'count' },
+    { label: t('dimensionBlock.aggregation.distinctCount'), value: 'distinct_count' },
   ]
 
   const sortOptions = [
@@ -242,7 +247,8 @@ export function DimensionBlock({
                           <>
                             {/* 指标菜单 */}
                             {/* 汇总方式 */}
-                            <div className="relative">
+
+                            {!isVirtualMetric(dimension) && dimension.fieldType === 'metric' && <div className="relative">
                               <div
                                 className={`flex items-center justify-between px-2 py-1 text-xs rounded cursor-pointer ${hoveredMenuItem?.dimensionId === dimension.id && hoveredMenuItem?.menuType === 'aggregation' ? 'bg-gray-100' : 'hover:bg-gray-100'}`}
                                 onMouseEnter={() => handleMenuItemHover(dimension.id, 'aggregation')}
@@ -254,15 +260,21 @@ export function DimensionBlock({
                               {/* 汇总方式子菜单 */}
                               {hoveredMenuItem?.dimensionId === dimension.id && hoveredMenuItem?.menuType === 'aggregation' && (
                                 <div
-                                  className="absolute left-full top-0 ml-1 bg-white border rounded-md shadow-lg z-30 p-2 min-w-[80px]"
+                                  className="absolute left-full top-0 ml-1 bg-white border rounded-md shadow-lg z-30 p-2 min-w-[90px]"
                                   onMouseEnter={() => handleMenuItemHover(dimension.id, 'aggregation')}
                                   onMouseLeave={() => setHoveredMenuItem(null)}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    e.preventDefault();
+                                  }}
                                 >
                                   {aggregationOptions.map((option) => (
                                     <button
                                       key={option.value}
                                       className={`flex items-center justify-between w-full px-2 py-1 text-xs rounded ${dimension.aggregation === option.value ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-100'}`}
-                                      onClick={() => {
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        e.preventDefault();
                                         onAggregationChange?.(dimension.id, option.value)
                                         setOpenMenuId(null)
                                         setHoveredMenuItem(null)
@@ -274,10 +286,12 @@ export function DimensionBlock({
                                   ))}
                                 </div>
                               )}
-                            </div>
+                            </div>}
 
-                            {/* 排序 */}
-                            <div className="relative mt-1">
+                            {/* 排序  //指标卡不显示排序*/}
+
+
+                            {isMetricCard && <div className="relative mt-1">
                               <div
                                 className={`flex items-center justify-between px-2 py-1 text-xs rounded cursor-pointer ${hoveredMenuItem?.dimensionId === dimension.id && hoveredMenuItem?.menuType === 'sort' ? 'bg-gray-100' : 'hover:bg-gray-100'}`}
                                 onMouseEnter={() => handleMenuItemHover(dimension.id, 'sort')}
@@ -309,7 +323,7 @@ export function DimensionBlock({
                                   ))}
                                 </div>
                               )}
-                            </div>
+                            </div>}
 
                             {/* 数值格式 */}
                             <button

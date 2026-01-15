@@ -203,7 +203,7 @@ export default function Paragraphs({ fileId, onBack }) {
             let finalPreviewUrl = '';
 
             // Check if there are valid preview_url and original_url
-            const hasPreviewUrl = typeof res.preview_url === 'string' && res.preview_url.trim() !== '';
+            const hasPreviewUrl = typeof res.preview_url === 'string';
             const hasOriginalUrl = typeof res.original_url === 'string' && res.original_url.trim() !== '';
 
             if (currentFile) {

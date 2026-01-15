@@ -80,7 +80,8 @@
         "toast": {
             "fieldAlreadyExists": "字段已存在于{{section}}中",
             "dimensionLimitReached": "当前维度数量已达到上限",
-            "metricLimitReached": "当前图表最多只能选择 {{count}} 个指标",
+            "metricReached": "不支持拖拽维度至指标",
+            "metricLimitReached": "当前指标数量已达到上限",
             "virtualMetricConflict": "无法同时添加虚拟指标和非虚拟指标",
             "multipleVirtualMetric": "无法同时添加多个虚拟指标"
         },
@@ -131,7 +132,8 @@
             "avg": "平均",
             "count": "计数",
             "max": "最大值",
-            "min": "最小值"
+            "min": "最小值",
+            "distinctCount":"去重计数"
         },
         "sort": {
             "none": "无",
@@ -228,13 +230,13 @@
             "axisTitle": "轴标题",
             "legend": "图例",
             "metricValue": "指标数值",
-            "subtitle": "副标题",
+            "subtitle": "指标副标题",
             "chartOptions": "图表选项"
         },
         "labels": {
             "themeColor": "主题颜色",
             "bgColor": "背景颜色",
-            "titleContent": "标题内容",
+            "titleContent": "文本内容",
             "textFormat": "文本格式",
             "textContent": "文本内容",
             "xAxisTitleContent": "X 轴标题内容",
@@ -257,7 +259,7 @@
             "right": "右侧"
         },
         "buttons": {
-            "show": "显示"
+            "show": "显示该项"
         },
         "options": {
             "legend": "图例",
@@ -279,6 +281,7 @@
         "warn": {
             "invalidFieldType": "字段类型 {{fieldType}} 不能拖拽到 {{section}} 区域",
             "maxStackDimension": "堆叠维度只能有一个，请先删除现有的堆叠维度",
+            "metricLimitReached": "当前指标数量已达到上限",
             "maxCategoryDimensions": "类别维度最多只能有 2 个"
         }
     },

@@ -119,7 +119,7 @@ export function ComponentConfigDrawer() {
     }
 
     if (field.role === 'dimension') {
-      if (categoryDimensions.length < 2) {
+      if (categoryDimensions.length < 2 && isMetricCard) {
         if (isFieldAlreadyAdded(safeFieldId, 'category')) {
           toast({
             description: t("componentConfigDrawer.toast.fieldAlreadyExists", {
@@ -139,7 +139,7 @@ export function ComponentConfigDrawer() {
           sort: null
         }
         chartState.setCategoryDimensions(prev => [...prev, newDimension])
-      } else if (currentChartHasStack && stackDimensions.length === 0) {
+      } else if (currentChartHasStack && stackDimensions.length === 0 && isMetricCard) {
         if (isFieldAlreadyAdded(safeFieldId, 'stack')) {
           toast({
             description: t("componentConfigDrawer.toast.fieldAlreadyExists", {
@@ -160,10 +160,18 @@ export function ComponentConfigDrawer() {
         }
         chartState.setStackDimensions(prev => [...prev, newDimension])
       } else {
-        toast({
-          description: t("componentConfigDrawer.toast.dimensionLimitReached"),
-          variant: "warning"
-        })
+        if (!isMetricCard) {
+          toast({
+            description: t("componentConfigDrawer.toast.metricReached"),
+            variant: "warning"
+          })
+        } else {
+          toast({
+            description: t("componentConfigDrawer.toast.dimensionLimitReached"),
+            variant: "warning"
+          })
+        }
+
       }
     } else if (field.role === 'metric') {
       const maxMetricCount = getMaxMetricCount(chartType)
@@ -455,7 +463,15 @@ export function ComponentConfigDrawer() {
 
     </div>
   ), [])
-
+  const handleAggregationChange = useCallback((dimensionId: string, aggregation: string) => {
+    chartState.setValueDimensions(prev =>
+      prev.map(d =>
+        d.id === dimensionId
+          ? { ...d, aggregation }
+          : d
+      )
+    );
+  }, [chartState]);
   const Tab = useCallback(({ active, children, onClick }: any) => (
     <div className={`pb-2 cursor-pointer transition-colors ${active ? "border-b-2 border-primary text-primary font-medium" : "text-muted-foreground hover:text-foreground"}`} onClick={onClick}>
       {children}
@@ -672,6 +688,8 @@ export function ComponentConfigDrawer() {
                         onCollapse={() => toggleCollapse('value')}
                       >
                         <DimensionBlock
+                          onAggregationChange={handleAggregationChange}
+                          isMetricCard={isMetricCard}
                           invalidIds={invalidFieldIds}
                           isDimension={false}
                           dimensions={valueDimensions}

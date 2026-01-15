@@ -86,6 +86,7 @@
     "toast": {
       "fieldAlreadyExists": "フィールドは既に{{section}}に存在します",
       "dimensionLimitReached": "ディメンションの上限に達しました",
+      "metricReached": "メトリックの上限に達しました",
       "metricLimitReached": "このグラフでは最大 {{count}} 個の指標まで選択できます",
       "virtualMetricConflict": "仮想指標と通常の指標を同時に追加することはできません",
       "multipleVirtualMetric": "複数の仮想指標を同時に追加することはできません"
@@ -150,7 +151,8 @@
       "avg": "平均",
       "count": "カウント",
       "max": "最大値",
-      "min": "最小値"
+      "min": "最小値",
+      "aggregation":"ユニークカウント"
     },
     "sort": {
       "none": "なし",

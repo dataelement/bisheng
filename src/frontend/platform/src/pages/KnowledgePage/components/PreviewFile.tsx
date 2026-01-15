@@ -47,14 +47,14 @@ export default function PreviewFile({
 
   const targetFile = matchedRawFile || file;
   let fileParseType = '';
-  if(step === 2){
+  if (step === 2) {
     fileParseType = resultFiles[0].isEtl4lm
-  }else if(step === 3 && etl){
+  } else if (step === 3 && etl) {
     fileParseType = etl
   } else {
     fileParseType = targetFile.fileType;
   }
-  
+
   const fileName = targetFile.name || file.fileName || file.name;
   const suffix = useMemo(() => {
     return fileName?.split('.').pop()?.toLowerCase() || '';
@@ -270,7 +270,7 @@ export default function PreviewFile({
       case 'xlsx':
       case 'xls':
       case 'csv':
-        return(
+        return (
           <div>
             <ExcelPreview filePath={previewUrl || url} />
           </div>
@@ -337,7 +337,7 @@ export default function PreviewFile({
         <span className="text-primary cursor-pointer" onClick={handleOvergap}>{t('overwriteSegment')}</span>
       </div>
     </div>
-    <div className={`relative ${['csv', 'xlsx','xls'].includes(file.suffix)? '':"overflow-y-auto"}  ${edit ? 'h-[calc(100vh-206px)]' : 'h-[calc(100vh-284px)]'}`}>
+    <div className={`relative ${['csv', 'xlsx', 'xls'].includes(file.suffix) ? '' : "overflow-y-auto"}  ${edit ? 'h-[calc(100vh-206px)]' : 'h-[calc(100vh-284px)]'}`}>
       {render(file.suffix)}
     </div>
   </div>
