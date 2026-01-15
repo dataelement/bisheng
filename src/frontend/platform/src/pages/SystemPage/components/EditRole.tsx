@@ -132,7 +132,7 @@ const SearchPanne = ({
             <TableHead className="text-center w-[175px]">
               {!isMenuOrBoard ? t('system.usePermission') : t('system.viewPermission')}
             </TableHead>
-            {isPermissionTable && type !== 'menu' && !appConfig.isPro && (
+            {isPermissionTable && type !== 'menu' && appConfig.isPro && (
               <TableHead className="text-right w-[75px]">{t('system.managePermission')}</TableHead>
             )}
           </TableRow>
@@ -148,7 +148,7 @@ const SearchPanne = ({
                   onCheckedChange={(bln) => onUseChange(el.id, bln)}
                 />
               </TableCell>
-              {type !== 'menu' && !appConfig.isPro && (
+              {type !== 'menu' && appConfig.isPro && (
                 <TableCell className="text-center">
                   <Switch
                     checked={manageChecked(el.id)}
@@ -165,13 +165,12 @@ const SearchPanne = ({
 
   return <>
     <div className="mt-6 flex flex-col items-start relative gap-3">
-      {type === 'board' && !appConfig.isPro && (
+      {type === 'board' && appConfig.isPro && (
         <div className="flex flex-col gap-4 w-full">
           {/* 允许创建看板开关 */}
           <div className="flex items-center gap-2">
             <Switch
               checked={!!allowCreateBoard}
-              disabled={!appConfig.isPro}
               onCheckedChange={(val) => onAllowCreateBoardChange?.(val)}
             />
             <div className="flex flex-col items-start gap-1">
