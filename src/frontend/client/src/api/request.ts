@@ -128,7 +128,7 @@ customAxios.interceptors.response.use(
 
       if (import.meta.env.MODE === 'production') {
         localStorage.setItem('LOGIN_PATHNAME', location.pathname)
-        location.href = `${location.origin}/${__APP_ENV__.BISHENG_HOST}?from=workspace`
+        location.href = `${location.origin}${__APP_ENV__.BISHENG_HOST}`
       }
       // } else {
       //   if (location.pathname.indexOf('login') === -1) {

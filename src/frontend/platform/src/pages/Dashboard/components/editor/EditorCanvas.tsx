@@ -57,7 +57,7 @@ export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanv
         mutationFn: ({ component, targetId }: { component: DashboardComponent; targetId: string, }) =>
             copyComponentTo(component, targetId, layouts.find(e => e.i === component.id)),
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: [DashboardsQueryKey] })
+            // queryClient.invalidateQueries({ queryKey: [DashboardsQueryKey] })
             toast({
                 description: t('copyToTargetSuccess'),
                 variant: "success",

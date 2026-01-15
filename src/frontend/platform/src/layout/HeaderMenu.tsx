@@ -7,7 +7,6 @@ import { NavLink, useLocation } from "react-router-dom";
 export default function HeaderMenu({ }) {
     const { t } = useTranslation()
     const location = useLocation();
-    console.log('location.pathname :>> ', location.pathname);
 
     const { user } = useContext(userContext);
     // 系统管理员(超管、组超管)
@@ -15,7 +14,7 @@ export default function HeaderMenu({ }) {
         return ['admin', 'group_admin'].includes(user.role)
     }, [user])
 
-    if (['/build/apps', '/build/tools', '/build/client'].includes(location.pathname)) {
+    if (['/build/apps', '/build/tools', '/build/client'].includes(location.pathname.replace(__APP_ENV__.BASE_URL, ''))) {
         return <div className="build-tab flex justify-center h-[65px] items-center relative">
             {/* <div className="px-4">
                 <NavLink to={'build/assist'} className="group flex gap-2 items-center px-8 py-2 rounded-md navlink">
@@ -44,7 +43,7 @@ export default function HeaderMenu({ }) {
         </div>
     }
 
-    if (['/model/management', '/model/finetune'].includes(location.pathname)) {
+    if (['/model/management', '/model/finetune'].includes(location.pathname.replace(__APP_ENV__.BASE_URL, ''))) {
         return <div className="build-tab flex justify-center h-[65px] items-center relative">
             <div className="px-4">
                 <NavLink to={'model/management'} className="group flex gap-2 items-center px-8 py-2 rounded-md navlink">
