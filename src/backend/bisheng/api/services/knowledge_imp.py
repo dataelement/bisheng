@@ -682,6 +682,17 @@ def add_file_embedding(
         logger.info(
             f"upload_preview_file_over file={db_file.id} tmp_object_name={tmp_preview_file}, preview_object_name={preview_object_name}"
         )
+    elif file_ext == ".docx":
+        # special logic for docx replace original file
+        filepath_dir = os.path.dirname(filepath)
+        docx_fixed_path = os.path.join(filepath_dir, "tmp")
+        docx_fixed_path = os.path.join(docx_fixed_path, os.path.basename(filepath))
+        if os.path.exists(docx_fixed_path):
+            # replace original docx file
+            minio_client.put_object_sync(
+                bucket_name=minio_client.bucket,
+                object_name=db_file.object_name,
+                file=docx_fixed_path)
 
 
 def add_text_into_vector(
