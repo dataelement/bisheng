@@ -298,7 +298,7 @@ function CollapsibleBlock({
         <div className="flex items-center gap-2 mr-2">
           {rightContent}
           {!isOpen && (
-            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onCollapse}>
+            <Button variant="ghost" size="icon" className="h-6 w-6">
               {collapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
             </Button>
           )}
@@ -355,7 +355,9 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
       ...componentConfig,
       themeColor: (componentConfig.themeColor || config.themeColor || colorSchemes[0]?.id || FULL_DEFAULT_STYLE_CONFIG.themeColor),
     }
-
+    if (baseConfig.title === "") {
+      baseConfig.title = editingComponent?.data_config?.metrics?.[0]?.fieldName
+    }
     // 如果轴标题为空，设置默认值
     if (!baseConfig.xAxisTitle && firstDimension?.fieldName) {
       baseConfig.xAxisTitle = firstDimension.fieldName

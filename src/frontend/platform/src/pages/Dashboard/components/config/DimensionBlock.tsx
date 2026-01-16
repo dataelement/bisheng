@@ -74,7 +74,7 @@ export function DimensionBlock({
   const [editingMetric, setEditingMetric] = useState<DimensionItem | null>(null)
   const [formatDialogOpen, setFormatDialogOpen] = useState(false)
   const [localFormat, setLocalFormat] = useState<MetricFormat | null>(null)
-
+  const [hoveredIcon, setHoveredIcon] = useState<string | null>(null)
   // 获取字段样式
   const getFieldTypeStyle = (dimension: DimensionItem) => {
     const isSelected = selectedDimensionId === dimension.id
@@ -179,10 +179,16 @@ export function DimensionBlock({
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-6 w-6 p-0"
+                      className="h-6 w-6 p-0 hover:bg-transparent"
                       onClick={(e) => handleSettingsClick(dimension.id, e)}
+                      onMouseEnter={() => setHoveredIcon(dimension.id)}
+                      onMouseLeave={() => setHoveredIcon(null)}
                     >
-                      <Settings className="h-3 w-3" />
+                      {hoveredIcon === dimension.id || openMenuId === dimension.id ? (
+                        <img src="/assets/dashboard/setting.svg" alt="设置" className="h-3 w-3 object-contain" />
+                      ) : (
+                        <Settings className="h-3 w-3" />
+                      )}
                     </Button>
 
                     {/* 菜单 */}

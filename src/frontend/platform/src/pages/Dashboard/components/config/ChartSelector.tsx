@@ -342,7 +342,7 @@ export default function ChartSelector({
           </div>
 
           {/* 时间范围 */}
-          <div className="space-y-1">
+          <div className="space-y-1 flex flex-1 w-full">
             <AdvancedDatePicker
               granularity={getGranularity()}
               mode={getMode()}
