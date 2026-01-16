@@ -240,11 +240,11 @@ class InputNode(BaseNode):
                 new_metadata.append(metadata)
 
             # Uploaded tomilvusAndes
-            logger.debug(f'workflow_add_vectordb file={key} file_name={file_name}')
+            logger.debug(f'workflow_add_vectordb file={key} file_name={file_name} file_id={file_id}')
             # Depositmilvus
             self._vector_client.add_texts(texts=texts, metadatas=new_metadata)
 
-            logger.debug(f'workflow_add_es file={key} file_name={file_name}')
+            logger.debug(f'workflow_add_es file={key} file_name={file_name} file_id={file_id}')
             # Deposites
             self._es_client.add_texts(texts=texts, metadatas=new_metadata)
 
