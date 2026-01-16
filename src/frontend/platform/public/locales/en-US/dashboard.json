@@ -365,7 +365,7 @@
   "expandList": "Expand List",
   "collapseList": "Collapse List",
   "noMatchingDashboards": "No matching dashboards found",
-  "noDashboards": "No dashboards yet",
+  "noDashboards": "No dashboards available",
   "default": "Default",
   "setAsDefault": "Set as Default",
   "alreadyDefault": "Already Default",

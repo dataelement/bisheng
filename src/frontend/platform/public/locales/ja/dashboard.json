@@ -366,7 +366,7 @@
   "expandList": "リストを展開",
   "collapseList": "リストを折りたたむ",
   "noMatchingDashboards": "該当する看板が見つかりません",
-  "noDashboards": "看板がありません",
+  "noDashboards": "ダッシュボードはありません",
   "default": "デフォルト",
   "setAsDefault": "デフォルトに設定",
   "alreadyDefault": "デフォルト設定済み",
