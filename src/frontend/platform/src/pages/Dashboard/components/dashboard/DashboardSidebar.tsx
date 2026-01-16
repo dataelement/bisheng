@@ -24,6 +24,8 @@ import { ExpandIcon } from "@/components/bs-icons/expand"
 interface DashboardSidebarProps {
     dashboards: Dashboard[]
     selectedId: string | null
+    isCollapsed: boolean
+    setIsCollapsed: (isCollapsed: boolean) => void
     onSelect: (id: string) => void
     onRename: (id: string, newTitle: string) => void
     onDefault: (id: string) => void
@@ -33,6 +35,8 @@ interface DashboardSidebarProps {
 export function DashboardSidebar({
     dashboards,
     selectedId,
+    isCollapsed,
+    setIsCollapsed,
     onSelect,
     onRename,
     onDefault,
@@ -41,7 +45,6 @@ export function DashboardSidebar({
     const { t } = useTranslation("dashboard")
 
     const [searchQuery, setSearchQuery] = useState("")
-    const [isCollapsed, setIsCollapsed] = useState(false)
     const { user } = useContext(userContext);
 
     const canCreate = useMemo(() => {
@@ -182,15 +185,17 @@ export function DashboardSidebar({
                     }
                 </div>
             }
-            <Tip content={isCollapsed ? t('expandList') : t('collapseList')}>
-                <Button
-                    variant={isCollapsed ? "outline" : "ghost"}
-                    size="icon"
-                    className={"absolute top-2 z-10 hover:text-primary bg-background" + (isCollapsed ? " -right-4 size-8" : " right-2")}
-                    onClick={() => setIsCollapsed(!isCollapsed)}
-                >
-                    {isCollapsed ? <ExpandIcon className="h-4 w-4 hover:text-primary" /> : <ExpandIcon className="h-4 w-4 rotate-180" />}
-                </Button>
+            <Tip content={t('collapseList')}>
+                {
+                    !isCollapsed && <Button
+                        variant="ghost"
+                        size="icon"
+                        className={"absolute top-2 z-10 hover:text-primary bg-background right-2"}
+                        onClick={() => setIsCollapsed(!isCollapsed)}
+                    >
+                        <ExpandIcon className="h-4 w-4 rotate-180" />
+                    </Button>
+                }
             </Tip>
 
 

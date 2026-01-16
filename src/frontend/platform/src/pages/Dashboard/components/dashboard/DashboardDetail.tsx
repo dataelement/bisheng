@@ -15,10 +15,13 @@ import { useTranslation } from "react-i18next"
 import { DashboardStatus, usePublishDashboard } from "../../hook"
 import { Dashboard } from "../../types/dataConfig"
 import { EditorCanvas } from "../editor/EditorCanvas"
+import { ExpandIcon } from "@/components/bs-icons/expand"
 
 interface DashboardDetailProps {
     dashboard: Dashboard | null
     isLoading: boolean
+    isCollapsed: boolean
+    setIsCollapsed: (isCollapsed: boolean) => void
     onRename: (id: string, newTitle: string) => void
     onShare: (id: string) => void
     onDefault: (id: string) => void
@@ -28,6 +31,8 @@ interface DashboardDetailProps {
 export function DashboardDetail({
     dashboard,
     isLoading,
+    isCollapsed,
+    setIsCollapsed,
     onRename,
     onDefault,
     onShare,
@@ -112,10 +117,20 @@ export function DashboardDetail({
     console.log('dashboard :>> ', dashboard);
 
     return (
-        <div className="flex-1 flex flex-col h-full">
+        <div className="flex-1 flex flex-col h-full min-w-0">
             <div className="border-b px-4 py-3 h-[52px] flex items-center justify-between">
                 <div className="flex items-center gap-4 flex-1 min-w-0">
                     <div className="flex-1 min-w-0 flex items-center">
+                        {isCollapsed && <Tip content={t('expandList')}>
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className={"hover:text-primary bg-background mr-4"}
+                                onClick={() => setIsCollapsed(!isCollapsed)}
+                            >
+                                <ExpandIcon className="h-4 w-4 hover:text-primary" />
+                            </Button>
+                        </Tip>}
                         {isEditingTitle ? (
                             <Input
                                 ref={inputRef}

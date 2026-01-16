@@ -161,8 +161,8 @@ export default function ChartSelector({
   /* 保存 */
   const handleSave = (e) => {
 
-    const startDateObj = new Date(timeFilter.startTime * 1000)
-    const endDateObj = new Date(timeFilter.endTime * 1000)
+    // const startDateObj = new Date(timeFilter.startTime * 1000)
+    // const endDateObj = new Date(timeFilter.endTime * 1000)
 
     const config: ChartLinkConfig = {
       chartIds: selectedCharts,
