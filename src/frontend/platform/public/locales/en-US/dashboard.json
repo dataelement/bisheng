@@ -99,6 +99,7 @@
     "toast": {
       "fieldAlreadyExists": "Field already exists in {{section}}",
       "dimensionLimitReached": "Dimension limit reached",
+      "metricReached": "Metric limit reached",
       "metricLimitReached": "This chart can have at most {{count}} metrics",
       "virtualMetricConflict": "Virtual metrics cannot be used together with non-virtual metrics",
       "multipleVirtualMetric": "Multiple virtual metrics are not allowed"
@@ -146,7 +147,8 @@
     "menu": {
       "sort": "Sort",
       "aggregation": "Aggregation",
-      "format": "NumberFormat"
+      "format": "NumberFormat",
+      "distinctCount":"Distinct Count"
     },
     "aggregation": {
       "sum": "Sum",
@@ -363,7 +365,7 @@
   "expandList": "Expand List",
   "collapseList": "Collapse List",
   "noMatchingDashboards": "No matching dashboards found",
-  "noDashboards": "No dashboards yet",
+  "noDashboards": "No dashboards available",
   "default": "Default",
   "setAsDefault": "Set as Default",
   "alreadyDefault": "Already Default",

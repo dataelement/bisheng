@@ -138,7 +138,7 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
                     dashboard_id: get().currentDashboard?.id || '',
                     dataset_code: '',
                     data_config: createDefaultDataConfig(component.type),
-                    style_config: component.type === ChartType.Metric ? getDefaultMetricStyle('Metric', 'Description') : {},
+                    style_config: component.type === ChartType.Metric ? getDefaultMetricStyle('', '') : {},
                     create_time: '',
                     update_time: ''
                 }]

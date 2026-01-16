@@ -85,7 +85,7 @@ export function DashboardConfigPanel({ collapsed = false, onCollapse }: Dashboar
                 <div className="grid grid-cols-2 gap-4">
                   {/* 浅色主题 */}
                   <div
-                    className={`border rounded-lg p-3 cursor-pointer transition-all ${dashboardTheme === 'light' ? 'border-primary ring-2 ring-primary/20 bg-primary/5' : 'border-gray-200 hover:border-gray-300'}`}
+                    className={`border rounded-lg p-3 cursor-pointer hover:border-primary transition-all ${dashboardTheme === 'light' ? 'border-primary ring-2 ring-primary/20 bg-primary/5' : 'border-gray-200 hover:border-gray-300'}`}
                     onClick={() => handleThemeChange('light')}
                   >
                     <div className="aspect-square bg-gradient-to-br from-gray-50 h-[96px] w-[180px] to-gray-100 rounded border mb-2">
@@ -98,7 +98,7 @@ export function DashboardConfigPanel({ collapsed = false, onCollapse }: Dashboar
 
                   {/* 深色主题 */}
                   <div
-                    className={`border rounded-lg p-3 cursor-pointer transition-all ${dashboardTheme === 'dark' ? 'border-primary ring-2 ring-primary/20 bg-primary/5' : 'border-gray-200 hover:border-gray-300'}`}
+                    className={`border rounded-lg p-3 cursor-pointer transition-all hover:border-primary ${dashboardTheme === 'dark' ? 'border-primary ring-2 ring-primary/20 bg-primary/5' : 'border-gray-200 hover:border-gray-300'}`}
                     onClick={() => handleThemeChange('dark')}
                   >
                     <div className="aspect-square bg-gradient-to-br  h-[96px] w-[180px] from-gray-800 to-gray-900 rounded border mb-2">

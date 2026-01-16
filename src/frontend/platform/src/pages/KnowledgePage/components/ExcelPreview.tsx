@@ -296,8 +296,6 @@ const ExcelPreview = ({ filePath }) => {
 
   // ---------------------- CSV Parsing Function ----------------------
   const parseCSV = (csvStr) => {
-    console.log(csvStr, 2);
-
     try {
       if (!csvStr || typeof csvStr !== "string") return [];
       const lines = csvStr.split(/\r?\n/).filter(line => line.trim() !== "");

@@ -239,7 +239,7 @@ export function useChartState(initialComponent: any) {
     setDragOverSection(null)
   }, [])
 
-  const handleDrop = useCallback((e: React.DragEvent, section: 'category' | 'stack' | 'value') => {
+  const handleDrop = useCallback((e: React.DragEvent, section: 'category' | 'stack' | 'value', isMetricCard) => {
     e.preventDefault()
     e.stopPropagation()
 
@@ -259,10 +259,17 @@ export function useChartState(initialComponent: any) {
         (fieldType === 'dimension' && section === 'value')
       ) {
         console.warn(`字段类型 ${fieldTypeText} 不能拖拽到 ${sectionText} 区域`)
-        toast({
-          description: t('useChartState.warn.invalidFieldType', { fieldType: fieldTypeText, section: sectionText }),
-          variant: "warning",
-        })
+        if (!isMetricCard) {
+          toast({
+            description: t("componentConfigDrawer.toast.metricReached"),
+            variant: "warning"
+          })
+        } else {
+          toast({
+            description: t('useChartState.warn.invalidFieldType', { fieldType: fieldTypeText, section: sectionText }),
+            variant: "warning",
+          })
+        }
         setDragOverSection(null)
         return
       }
@@ -277,7 +284,16 @@ export function useChartState(initialComponent: any) {
         setDragOverSection(null)
         return
       }
-
+      //指标维度只能有一个
+      if (section === 'value' && valueDimensions.length >= 1) {
+        console.warn('指标维度只能有一个，请先删除现有的指标维度')
+        toast({
+          description: t('useChartState.warn.metricLimitReached'),
+          variant: "warning",
+        })
+        setDragOverSection(null)
+        return
+      }
       const fieldId = data.id || data.name || `field_${Date.now()}`
       const name = data.name || data.displayName || fieldId
 
@@ -492,7 +508,8 @@ export function useChartState(initialComponent: any) {
       resultLimit: {
         limitType: limitType === "limit" ? "limited" as const : "all" as const,
         ...(limitType === "limit" && { limit: Number(limitValue) })
-      }
+      },
+      isConfigured: true,
     }
   }, [categoryDimensions, stackDimensions, valueDimensions, filterGroup])
 

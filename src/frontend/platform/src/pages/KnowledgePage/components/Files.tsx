@@ -55,7 +55,7 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({ status, remark
             }
         }
         return remark
-    }, [remark])
+    }, [remark, t])
 
     // 如果状态不在定义中，返回 null 或默认 UI
     if (!config) return null;

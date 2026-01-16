@@ -5,7 +5,7 @@ import { LoadingIcon } from "@/components/bs-icons/loading";
 const DocxPreview = ({ filePath }) => {
     // 检查文件路径是否以.doc结尾（不区分大小写）
     const isDocFile = filePath.toLowerCase().endsWith('.doc');
-    
+
     const [htmlContent, setHtmlContent] = useState("");
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -18,8 +18,8 @@ const DocxPreview = ({ filePath }) => {
                 <div className="text-center">
                     <img
                         className="size-52 block"
-                        src={__APP_ENV__.BASE_URL + "/assets/knowledge/damage.svg"} 
-                        alt="文件不支持预览" 
+                        src={__APP_ENV__.BASE_URL + "/assets/knowledge/damage.svg"}
+                        alt="文件不支持预览"
                     />
                     <p>此文件类型不支持预览</p>
                 </div>
@@ -111,4 +111,3 @@ const DocxPreview = ({ filePath }) => {
 };
 
 export default DocxPreview;
-    

@@ -16,6 +16,7 @@ import { locationContext } from "./contexts/locationContext";
 import { userContext } from "./contexts/userContext";
 import { getAdminRouter, getPrivateRouter, publicRouter } from "./routes";
 import { LoadingIcon } from "./components/bs-icons/loading";
+import { useToast } from "./components/bs-ui/toast/use-toast";
 
 export default function App() {
   let { setCurrent, setShowSideBar, setIsStackedOpen } = useContext(locationContext);
@@ -177,6 +178,15 @@ export default function App() {
     if (user && ['admin', 'group_admin'].includes(user.role)) return getAdminRouter()
     return user?.user_id ? getPrivateRouter(user.web_menu) : null
   }, [user])
+
+  // url error toast
+  const { toast } = useToast()
+  useEffect(() => {
+    if (window.url_error) {
+      toast({ description: t(`errors.${window.url_error}`), variant: 'error' });
+      delete window.url_error
+    }
+  }, [])
 
   return (
     //need parent component with width and height

@@ -128,7 +128,7 @@ const SearchPanne = ({
         <TableHeader>
           <TableRow>
             <TableHead>{t(nameKey)}</TableHead>
-            {type === 'board' && <TableHead>{t('system.creator')}</TableHead>}
+            {type !== 'menu' && <TableHead>{t('system.creator')}</TableHead>}
             <TableHead className="text-center w-[175px]">
               {!isMenuOrBoard ? t('system.usePermission') : t('system.viewPermission')}
             </TableHead>
@@ -141,7 +141,7 @@ const SearchPanne = ({
           {data.map((el: any) => (
             <TableRow key={el.id}>
               <TableCell className="font-medium">{t(el.name)}</TableCell>
-              {type === 'board' && <TableCell>{el.user_name}</TableCell>}
+              {type !== 'menu' && <TableCell>{el.user_name}</TableCell>}
               <TableCell className="text-center">
                 <Switch
                   checked={useChecked(el.id)}

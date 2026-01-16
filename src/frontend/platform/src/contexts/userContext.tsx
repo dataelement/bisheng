@@ -89,6 +89,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
         })
     }
 
+    
     useLayoutEffect(() => {
         // 链接ar参数存cookie（免登录接口）
         const cookie = location.search.match(/(?<=token=)[^&]+/g)?.[0]
@@ -97,6 +98,13 @@ export function UserProvider({ children }: { children: ReactNode }) {
             localStorage.setItem('isLogin', '1')
             location.href = location.origin + location.pathname;
             return
+        }
+        // record workspace auth
+        const search = location.search;
+        const params = new URLSearchParams(search);
+        const error = params.get('error');
+        if (error) {
+            window.url_error = error;
         }
 
         // 异地登录强制退出
@@ -128,9 +136,9 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
             const BASE_URL = __APP_ENV__.BASE_URL
             const pathName = location.pathname.replace(BASE_URL, '');
-            
+
             // Jump to the route based on permissions 
-            if (res.role !== 'admin' && pathName === '/') {
+            if (pathName === '/admin') {
                 const MENU_ROUTE_MAP = [
                     { key: 'board', path: '/dashboard' },
                     { key: 'build', path: '/build/apps' },

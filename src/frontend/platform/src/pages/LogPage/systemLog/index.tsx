@@ -29,7 +29,7 @@ const useModules = () => {
 
 export default function SystemLog() {
     const { t } = useTranslation()
-    const { users, selectedRef, loadUsers, searchUser } = useUsers()
+    const { users, loadUsers } = useUsers()
     const { groups, loadData } = useGroups()
     const { modules, loadModules } = useModules()
     const { page, pageSize, loading, data: logs, total, setPage, filterData } = useTable({ pageSize: 20 }, (param) =>
@@ -76,8 +76,8 @@ export default function SystemLog() {
                         options={users}
                         value={keys.userIds}
                         placeholder={t('log.selectUser')}
-                        onLoad={loadUsers}
-                        onSearch={(key) => { searchUser(key); selectedRef.current = keys.userIds }}
+                        // onLoad={loadUsers}
+                        // onSearch={(key) => { searchUser(key); selectedRef.current = keys.userIds }}
                         onChange={(values) => setKeys({ ...keys, userIds: values })}
                     ></MultiSelect>
                 </div>

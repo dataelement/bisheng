@@ -219,7 +219,8 @@ class WorkStationService(BaseService):
                 vector_retriever=multi_milvus_retriever,
                 elastic_retriever=multi_es_retriever,
                 max_content=max_token,
-                rrf_remove_zero_score=True
+                rrf_remove_zero_score=True,
+                sort_by_source_and_index=True
             )
 
             finally_docs = await knowledge_retriever_tool.ainvoke({"query": question})

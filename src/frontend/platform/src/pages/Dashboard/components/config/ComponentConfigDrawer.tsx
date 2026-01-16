@@ -119,7 +119,7 @@ export function ComponentConfigDrawer() {
     }
 
     if (field.role === 'dimension') {
-      if (categoryDimensions.length < 2) {
+      if (categoryDimensions.length < 2 && isMetricCard) {
         if (isFieldAlreadyAdded(safeFieldId, 'category')) {
           toast({
             description: t("componentConfigDrawer.toast.fieldAlreadyExists", {
@@ -139,7 +139,7 @@ export function ComponentConfigDrawer() {
           sort: null
         }
         chartState.setCategoryDimensions(prev => [...prev, newDimension])
-      } else if (currentChartHasStack && stackDimensions.length === 0) {
+      } else if (currentChartHasStack && stackDimensions.length === 0 && isMetricCard) {
         if (isFieldAlreadyAdded(safeFieldId, 'stack')) {
           toast({
             description: t("componentConfigDrawer.toast.fieldAlreadyExists", {
@@ -160,10 +160,18 @@ export function ComponentConfigDrawer() {
         }
         chartState.setStackDimensions(prev => [...prev, newDimension])
       } else {
-        toast({
-          description: t("componentConfigDrawer.toast.dimensionLimitReached"),
-          variant: "warning"
-        })
+        if (!isMetricCard) {
+          toast({
+            description: t("componentConfigDrawer.toast.metricReached"),
+            variant: "warning"
+          })
+        } else {
+          toast({
+            description: t("componentConfigDrawer.toast.dimensionLimitReached"),
+            variant: "warning"
+          })
+        }
+
       }
     } else if (field.role === 'metric') {
       const maxMetricCount = getMaxMetricCount(chartType)
@@ -321,67 +329,75 @@ export function ComponentConfigDrawer() {
     setConfigCollapsed(prev => ({ ...prev, [section]: !prev[section] }))
   }, [])
 
-  // 更新图表
-  // 更新图表 - 添加校验
-  const handleUpdateChart = useCallback((e) => {
-    if (!editingComponent) return
-
+  const validateChartConfig = ({
+    editingComponent,
+    chartType,
+    isMetricCard,
+    categoryDimensions,
+    valueDimensions,
+    stackDimensions,
+    currentChartHasStack,
+    invalidFieldIds
+  }) => {
     if (editingComponent.type !== 'query' && editingComponent.type !== 'metric') {
-      if (!chartType) {
-        toast({
-          description: t("componentConfigDrawer.validation.chartTypeRequired"),
-          variant: "error"
-        })
-        return
-      }
+      if (!chartType) return { isValid: false, errorKey: 'chartTypeRequired' };
     }
 
     if (editingComponent.type !== 'metric' && isMetricCard) {
       if (categoryDimensions.length === 0) {
-        toast({
-          description: t("componentConfigDrawer.validation.categoryRequired"),
-          variant: "error"
-        })
-        return
-      } else if (categoryDimensions.some(dim => invalidFieldIds.has(dim.id))) {
-        toast({
-          description: t("componentConfigDrawer.validation.invalidCategoryFields"),
-          variant: "error"
-        })
-        return
+        return { isValid: false, errorKey: 'categoryRequired' };
+      }
+      if (categoryDimensions.some(dim => invalidFieldIds.has(dim.id))) {
+        return { isValid: false, errorKey: 'invalidCategoryFields' };
       }
     }
 
     if (valueDimensions.length === 0) {
-      toast({
-        description: t("componentConfigDrawer.validation.metricRequired"),
-        variant: "error"
-      })
-      return
-    } else if (valueDimensions.some(dim => invalidFieldIds.has(dim.id))) {
-      toast({
-        description: t("componentConfigDrawer.validation.invalidMetricFields"),
-        variant: "error"
-      })
-      return
+      return { isValid: false, errorKey: 'metricRequired' };
+    }
+    if (valueDimensions.some(dim => invalidFieldIds.has(dim.id))) {
+      return { isValid: false, errorKey: 'invalidMetricFields' };
     }
 
     if (!editingComponent.dataset_code) {
-      toast({
-        description: t("componentConfigDrawer.validation.datasetRequired"),
-        variant: "error"
-      })
-      return
+      return { isValid: false, errorKey: 'datasetRequired' };
     }
 
     if (currentChartHasStack && stackDimensions.length === 0) {
-      toast({
-        description: t("componentConfigDrawer.validation.stackRequired"),
-        variant: "error"
-      })
-      return
+      return { isValid: false, errorKey: 'stackRequired' };
     }
+
+    return { isValid: true };
+  };
+  // 更新图表 - 添加校验
+  const handleUpdateChart = useCallback((e) => {
+    if (!editingComponent) return
+
+    if (e.isTrusted) {
+      const { isValid, errorKey } = validateChartConfig({
+        editingComponent,
+        chartType,
+        isMetricCard,
+        categoryDimensions,
+        valueDimensions,
+        stackDimensions,
+        currentChartHasStack,
+        invalidFieldIds
+      });
+
+      if (!isValid) {
+        if (errorKey) {
+          toast({
+            description: t(`componentConfigDrawer.validation.${errorKey}`),
+            variant: "error"
+          });
+        }
+        return;
+      }
+    }
+
     const dataConfig = getDataConfig(limitType, limitValue, editingComponent.data_config?.timeFilter)
+    dataConfig.isConfigured = e.isTrusted
 
     updateEditingComponent({
       data_config: dataConfig,
@@ -455,7 +471,15 @@ export function ComponentConfigDrawer() {
 
     </div>
   ), [])
-
+  const handleAggregationChange = useCallback((dimensionId: string, aggregation: string) => {
+    chartState.setValueDimensions(prev =>
+      prev.map(d =>
+        d.id === dimensionId
+          ? { ...d, aggregation }
+          : d
+      )
+    );
+  }, [chartState]);
   const Tab = useCallback(({ active, children, onClick }: any) => (
     <div className={`pb-2 cursor-pointer transition-colors ${active ? "border-b-2 border-primary text-primary font-medium" : "text-muted-foreground hover:text-foreground"}`} onClick={onClick}>
       {children}
@@ -626,7 +650,7 @@ export function ComponentConfigDrawer() {
                                     isDragOver={dragOverSection === 'category'}
                                     onDragOver={(e) => handleDragOver(e, 'category')}
                                     onDragLeave={handleDragLeave}
-                                    onDrop={(e) => handleDrop(e, 'category')}
+                                    onDrop={(e) => handleDrop(e, 'category', isMetricCard)}
                                     onDelete={(dimensionId) => handleDeleteDimension('category', dimensionId)}
                                     onSortChange={(dimensionId, sortValue) => handleSortChange('category', dimensionId, sortValue)}
                                     onEditDisplayName={(dimensionId, originalName, displayName) =>
@@ -648,7 +672,7 @@ export function ComponentConfigDrawer() {
                                       isDragOver={dragOverSection === 'stack'}
                                       onDragOver={(e) => handleDragOver(e, 'stack')}
                                       onDragLeave={handleDragLeave}
-                                      onDrop={(e) => handleDrop(e, 'stack')}
+                                      onDrop={(e) => handleDrop(e, 'stack', isMetricCard)}
                                       onDelete={(dimensionId) => handleDeleteDimension('stack', dimensionId)}
                                       onSortChange={(dimensionId, sortValue) => handleSortChange('stack', dimensionId, sortValue)}
                                       onEditDisplayName={(dimensionId, originalName, displayName) =>
@@ -672,13 +696,15 @@ export function ComponentConfigDrawer() {
                         onCollapse={() => toggleCollapse('value')}
                       >
                         <DimensionBlock
+                          onAggregationChange={handleAggregationChange}
+                          isMetricCard={isMetricCard}
                           invalidIds={invalidFieldIds}
                           isDimension={false}
                           dimensions={valueDimensions}
                           isDragOver={dragOverSection === 'value'}
                           onDragOver={(e) => handleDragOver(e, 'value')}
                           onDragLeave={handleDragLeave}
-                          onDrop={(e) => handleDrop(e, 'value')}
+                          onDrop={(e) => handleDrop(e, 'value', isMetricCard)}
                           onDelete={(dimensionId) => handleDeleteDimension('value', dimensionId)}
                           onSortChange={(dimensionId, sortValue) => handleSortChange('value', dimensionId, sortValue)}
                           onEditDisplayName={(dimensionId, originalName, displayName) =>

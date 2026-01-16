@@ -197,6 +197,7 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
     }
 
     // update system prompt
+    const hackCountRef = useRef(0)
     const handleAddSysPrompt = (type: 'knowledge' | 'sql') => {
         node.group_params.forEach(group => {
             if (group.params && Array.isArray(group.params)) {
@@ -211,7 +212,9 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
                     }
                     const searchStr = map[type]
                     if (!currentValue.includes(searchStr)) {
-                        targetParam.value = currentValue === '\n' ? searchStr : `${currentValue}\n${searchStr}`;
+                        hackCountRef.current++
+                        const hackSpace = hackCountRef.current % 2 === 0 ? ' ' : '' // Avoid React's refresh mechanism 
+                        targetParam.value = currentValue === '\n' ? searchStr : `${currentValue}\n${searchStr}${hackSpace}`;
                     }
                 }
             }
