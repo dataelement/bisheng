@@ -239,7 +239,7 @@ export function useChartState(initialComponent: any) {
     setDragOverSection(null)
   }, [])
 
-  const handleDrop = useCallback((e: React.DragEvent, section: 'category' | 'stack' | 'value') => {
+  const handleDrop = useCallback((e: React.DragEvent, section: 'category' | 'stack' | 'value', isMetricCard) => {
     e.preventDefault()
     e.stopPropagation()
 
@@ -259,10 +259,17 @@ export function useChartState(initialComponent: any) {
         (fieldType === 'dimension' && section === 'value')
       ) {
         console.warn(`字段类型 ${fieldTypeText} 不能拖拽到 ${sectionText} 区域`)
-        toast({
-          description: t('useChartState.warn.invalidFieldType', { fieldType: fieldTypeText, section: sectionText }),
-          variant: "warning",
-        })
+        if (!isMetricCard) {
+          toast({
+            description: t("componentConfigDrawer.toast.metricReached"),
+            variant: "warning"
+          })
+        } else {
+          toast({
+            description: t('useChartState.warn.invalidFieldType', { fieldType: fieldTypeText, section: sectionText }),
+            variant: "warning",
+          })
+        }
         setDragOverSection(null)
         return
       }

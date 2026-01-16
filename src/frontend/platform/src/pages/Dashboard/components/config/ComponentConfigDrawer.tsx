@@ -650,7 +650,7 @@ export function ComponentConfigDrawer() {
                                     isDragOver={dragOverSection === 'category'}
                                     onDragOver={(e) => handleDragOver(e, 'category')}
                                     onDragLeave={handleDragLeave}
-                                    onDrop={(e) => handleDrop(e, 'category')}
+                                    onDrop={(e) => handleDrop(e, 'category', isMetricCard)}
                                     onDelete={(dimensionId) => handleDeleteDimension('category', dimensionId)}
                                     onSortChange={(dimensionId, sortValue) => handleSortChange('category', dimensionId, sortValue)}
                                     onEditDisplayName={(dimensionId, originalName, displayName) =>
@@ -672,7 +672,7 @@ export function ComponentConfigDrawer() {
                                       isDragOver={dragOverSection === 'stack'}
                                       onDragOver={(e) => handleDragOver(e, 'stack')}
                                       onDragLeave={handleDragLeave}
-                                      onDrop={(e) => handleDrop(e, 'stack')}
+                                      onDrop={(e) => handleDrop(e, 'stack', isMetricCard)}
                                       onDelete={(dimensionId) => handleDeleteDimension('stack', dimensionId)}
                                       onSortChange={(dimensionId, sortValue) => handleSortChange('stack', dimensionId, sortValue)}
                                       onEditDisplayName={(dimensionId, originalName, displayName) =>
@@ -704,7 +704,7 @@ export function ComponentConfigDrawer() {
                           isDragOver={dragOverSection === 'value'}
                           onDragOver={(e) => handleDragOver(e, 'value')}
                           onDragLeave={handleDragLeave}
-                          onDrop={(e) => handleDrop(e, 'value')}
+                          onDrop={(e) => handleDrop(e, 'value', isMetricCard)}
                           onDelete={(dimensionId) => handleDeleteDimension('value', dimensionId)}
                           onSortChange={(dimensionId, sortValue) => handleSortChange('value', dimensionId, sortValue)}
                           onEditDisplayName={(dimensionId, originalName, displayName) =>
