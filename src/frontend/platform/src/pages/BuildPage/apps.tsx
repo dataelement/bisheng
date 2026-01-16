@@ -66,7 +66,7 @@ const TypeNames = {
 }
 export default function apps() {
     const { t, i18n } = useTranslation()
-    useErrorPrompt();
+    // useErrorPrompt();
 
     useEffect(() => {
         i18n.loadNamespaces('flow');
