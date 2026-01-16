@@ -55,10 +55,9 @@ export default function PreviewFile({
     fileParseType = targetFile.fileType;
   }
 
-  const fileName = targetFile.name || file.fileName || file.name;
   const suffix = useMemo(() => {
-    return fileName?.split('.').pop()?.toLowerCase() || '';
-  }, [fileName]);
+    return urlState.url?.split('?')[0].split('/').pop()?.split('.')[1].toLowerCase() || '';
+  }, [urlState.url]);
 
   const isUnsType = useMemo(() => {
     return fileParseType === 'uns' ||
@@ -219,18 +218,13 @@ export default function PreviewFile({
   // 9. 渲染逻辑（统一与ParagraphEdit的fileView逻辑）
   const render = () => {
     const { url, load } = urlState;
-    const previewFileUrl = targetFile.url;
 
-    // 强制uns类型的Excel文件使用pdf预览
-    const renderType = (fileParseType === 'etl4lm' || fileParseType === 'un_etl4lm') && ['ppt', 'pptx'].includes(suffix)
-      ? 'pdf'
-      : suffix;
     // 加载状态处理
     if (!load && !url) return <div className="flex justify-center items-center h-full text-gray-400">预览失败</div>;
     if (!url) return <div className="flex justify-center items-center h-full text-gray-400"><LoadingIcon /></div>;
 
     // 新版文件预览
-    switch (renderType) {
+    switch (suffix) {
       case 'ppt':
       case 'pptx': return <div className="flex justify-center items-center h-full text-gray-400">
         <div className="text-center">

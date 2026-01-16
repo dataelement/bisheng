@@ -71,6 +71,7 @@ export default function FilesUpload() {
     setResultFiles(files);
 
     const _repeatFiles = files.filter(e => e.repeat);
+
     if (_repeatFiles.length) {
       setRepeatFiles(_repeatFiles.map(file => ({
         ...file,
@@ -397,7 +398,7 @@ export default function FilesUpload() {
 
             {/* Step 4: Data processing */}
             {currentStep === 4 && (
-              <FileUploadStep4 data={resultFiles} hasRepeat={repeatFiles.length > 0}/>
+              <FileUploadStep4 data={resultFiles} hasRepeat={repeatFiles.length > 0} />
             )}
           </div>
         </div>
