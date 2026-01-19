@@ -49,6 +49,7 @@ type MetricFormat = {
 export function DimensionBlock({
   isDimension,
   dimensions = [],
+  isStack,
   maxDimensions,
   isDragOver = false,
   onDragOver,
@@ -97,6 +98,8 @@ export function DimensionBlock({
 
   // 选项配置
   const isVirtualMetric = (dimension: DimensionItem) => {
+    console.log(12312312312312312, dimension);
+
     return dimension.fieldType === 'metric' && dimension.isVirtual === true;
   };
   const aggregationOptions = [
@@ -127,7 +130,6 @@ export function DimensionBlock({
       setHoveredMenuItem({ dimensionId, menuType })
     }
   }
-
   return (
     <div className="space-y-3"
       onDragOver={(e) => {
@@ -196,51 +198,58 @@ export function DimensionBlock({
                       <div
                         className="absolute right-full top-0 mr-1 bg-white border rounded-md shadow-lg z-20 p-2 min-w-[120px]"
                         onClick={(e) => e.stopPropagation()}
-                        onMouseLeave={() => setHoveredMenuItem(null)}
+
                       >
                         {/* 维度菜单 */}
                         {dimension.fieldType === 'dimension' ? (
                           <>
                             {/* 排序 */}
-                            <div className="relative">
-                              <div
-                                className={`flex items-center justify-between px-2 py-1 text-xs rounded cursor-pointer ${hoveredMenuItem?.dimensionId === dimension.id && hoveredMenuItem?.menuType === 'sort' ? 'bg-gray-100' : 'hover:bg-gray-100'}`}
-                                onMouseEnter={() => handleMenuItemHover(dimension.id, 'sort')}
-                              >
-                                <span>{t('dimensionBlock.menu.sort')}</span>
-                                <ChevronRight className="h-3 w-3" />
-                              </div>
+                            {isStack !== "stack" &&
+                              <>
+                                <div className="relative">
+                                  <div
+                                    className={`flex items-center justify-between px-2 py-1 text-xs rounded cursor-pointer ${hoveredMenuItem?.dimensionId === dimension.id && hoveredMenuItem?.menuType === 'sort' ? 'bg-gray-100' : 'hover:bg-gray-100'}`}
+                                    onMouseEnter={() => handleMenuItemHover(dimension.id, 'sort')}
+                                  >
+                                    <span>{t('dimensionBlock.menu.sort')}</span>
+                                    <ChevronRight className="h-3 w-3" />
+                                  </div>
 
-                              {/* 排序子菜单 */}
-                              {hoveredMenuItem?.dimensionId === dimension.id && hoveredMenuItem?.menuType === 'sort' && (
-                                <div
-                                  className="absolute left-full top-0 ml-1 bg-white border rounded-md shadow-lg z-30 p-2 min-w-[90px]"
-                                  onMouseEnter={() => handleMenuItemHover(dimension.id, 'sort')}
-                                  onMouseLeave={() => setHoveredMenuItem(null)}
-                                >
-                                  {sortOptions.map((option) => (
-                                    <button
-                                      key={option.value}
-                                      className={`flex items-center justify-between w-full px-2 py-1 text-xs rounded ${dimension.sort === option.value ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-100'}`}
-                                      onClick={() => {
-                                        onSortChange?.(dimension.id, option.value as null | 'asc' | 'desc')
-                                        setOpenMenuId(null)
-                                        setHoveredMenuItem(null)
-                                      }}
+                                  {/* 排序子菜单 */}
+                                  {hoveredMenuItem?.dimensionId === dimension.id && hoveredMenuItem?.menuType === 'sort' && (
+                                    <div
+                                      className="absolute left-full top-0 ml-1 bg-white border rounded-md shadow-lg z-30 p-2 min-w-[90px]"
+                                      onMouseEnter={() => handleMenuItemHover(dimension.id, 'sort')}
+                                      onMouseLeave={() => setHoveredMenuItem(null)}
                                     >
-                                      <span>{option.label}</span>
-                                      {dimension.sort === option.value && <Check className="h-3 w-3" />}
-                                    </button>
-                                  ))}
+                                      {sortOptions.map((option) => (
+                                        <button
+                                          key={option.value}
+                                          className={`flex items-center justify-between w-full px-2 py-1 text-xs rounded ${dimension.sort === option.value ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-100'}`}
+                                          onClick={() => {
+                                            onSortChange?.(dimension.id, option.value as null | 'asc' | 'desc')
+                                            setOpenMenuId(null)
+                                            setHoveredMenuItem(null)
+                                          }}
+                                        >
+                                          <span>{option.label}</span>
+                                          {dimension.sort === option.value && <Check className="h-3 w-3" />}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )}
                                 </div>
-                              )}
-                            </div>
 
-                            <div className="h-px bg-gray-200 my-1"></div>
+                                <div className="h-px bg-gray-200 my-1"></div>
+                              </>
+                            }
 
                             {/* 编辑显示名称 */}
                             <button
                               className="block w-full text-left px-2 py-1 text-xs hover:bg-gray-100 rounded"
+                              onMouseEnter={() => {
+                                setHoveredMenuItem(null);
+                              }}
                               onClick={() => {
                                 onEditDisplayName(dimension.id, dimension.originalName, dimension.displayName)
                                 setOpenMenuId(null)
@@ -334,6 +343,9 @@ export function DimensionBlock({
                             {/* 数值格式 */}
                             <button
                               className="flex items-center justify-between w-full px-2 py-1 text-xs rounded hover:bg-gray-100"
+                              onMouseEnter={() => {
+                                setHoveredMenuItem(null);
+                              }}
                               onClick={() => {
                                 setEditingMetric(dimension)
                                 setLocalFormat(
@@ -358,6 +370,9 @@ export function DimensionBlock({
                             {/* 编辑显示名称 */}
                             <button
                               className="block w-full text-left px-2 py-1 text-xs hover:bg-gray-100 rounded"
+                              onMouseEnter={() => {
+                                setHoveredMenuItem(null);
+                              }}
                               onClick={() => {
                                 onEditDisplayName(dimension.id, dimension.originalName, dimension.displayName)
                                 setOpenMenuId(null)
@@ -487,7 +502,10 @@ export function DimensionBlock({
                     <div>
                       <div className="text-sm font-medium mb-2">{t('dimensionBlock.dialog.unit')}</div>
                       <Select
-                        value={localFormat.unit || "none"}
+                        value={localFormat.unit ||
+                          (localFormat.type === 'storage' ? 'B' :
+                            localFormat.type === 'duration' ? 'ms' :
+                              'none')}
                         onValueChange={(value) => {
                           let unitVal = value === "none" ? "" : value;
                           setLocalFormat({ ...localFormat, unit: unitVal })

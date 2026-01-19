@@ -60,6 +60,7 @@ export function ComponentConfigDrawer() {
   // 使用自定义Hook管理所有图表状态
   const chartState = useChartState(editingComponent)
   const [isMetricCard, setIsMetricCard] = useState(true)
+  console.log(editingComponent, 3434343434);
 
   // 从Hook中解构状态和方法
   const {
@@ -206,13 +207,13 @@ export function ComponentConfigDrawer() {
         }
 
         // 多个虚拟指标
-        if (currentIsVirtual && hasVirtualMetric) {
-          toast({
-            description: t("componentConfigDrawer.toast.multipleVirtualMetric"),
-            variant: "warning"
-          })
-          return
-        }
+        // if (currentIsVirtual && hasVirtualMetric) {
+        //   toast({
+        //     description: t("componentConfigDrawer.toast.multipleVirtualMetric"),
+        //     variant: "warning"
+        //   })
+        //   return
+        // }
       }
 
       if (isFieldAlreadyAdded(safeFieldId, 'value')) {
@@ -363,9 +364,9 @@ export function ComponentConfigDrawer() {
       return { isValid: false, errorKey: 'datasetRequired' };
     }
 
-    if (currentChartHasStack && stackDimensions.length === 0) {
-      return { isValid: false, errorKey: 'stackRequired' };
-    }
+    // if (currentChartHasStack && stackDimensions.length === 0) {
+    //   return { isValid: false, errorKey: 'stackRequired' };
+    // }
 
     return { isValid: true };
   };
@@ -398,7 +399,9 @@ export function ComponentConfigDrawer() {
 
     const dataConfig = getDataConfig(limitType, limitValue, editingComponent.data_config?.timeFilter)
     dataConfig.isConfigured = e.isTrusted
-
+    if (styleConfig.title === '' && editingComponent?.data_config?.metrics?.[0]?.fieldName) {
+      styleConfig.title = editingComponent?.data_config?.metrics?.[0]?.fieldName
+    }
     updateEditingComponent({
       data_config: dataConfig,
       type: chartType,
@@ -668,6 +671,7 @@ export function ComponentConfigDrawer() {
                                     <DimensionBlock
                                       invalidIds={invalidFieldIds}
                                       isDimension={true}
+                                      isStack={'stack'}
                                       dimensions={stackDimensions}
                                       isDragOver={dragOverSection === 'stack'}
                                       onDragOver={(e) => handleDragOver(e, 'stack')}

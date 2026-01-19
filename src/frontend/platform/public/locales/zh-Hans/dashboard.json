@@ -78,7 +78,7 @@
             "confirm": "确认"
         },
         "toast": {
-            "fieldAlreadyExists": "字段已存在于{{section}}中",
+            "fieldAlreadyExists": "该字段已存在",
             "dimensionLimitReached": "当前维度数量已达到上限",
             "metricReached": "不支持拖拽维度至指标",
             "metricLimitReached": "当前指标数量已达到上限",
@@ -279,10 +279,11 @@
             "metric": "指标"
         },
         "warn": {
-            "invalidFieldType": "字段类型 {{fieldType}} 不能拖拽到 {{section}} 区域",
-            "maxStackDimension": "堆叠维度只能有一个，请先删除现有的堆叠维度",
+            "invalidFieldType": "不支持拖拽{{fieldType}}至{{section}}",
+            "maxStackDimension": "当前维度数量已达到上限",
             "metricLimitReached": "当前指标数量已达到上限",
-            "maxCategoryDimensions": "类别维度最多只能有 2 个"
+            "maxCategoryDimensions": "类别维度最多只能有 2 个",
+            "fieldExists":"该字段已添加"
         }
     },
     "renameSuccess": "已重命名",

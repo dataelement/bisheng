@@ -303,7 +303,8 @@
     "warn": {
       "invalidFieldType": "Field type {{fieldType}} cannot be dragged to {{section}} area",
       "maxStackDimension": "Only one stack dimension is allowed, please delete the existing stack dimension first",
-      "maxCategoryDimensions": "Maximum 2 category dimensions are allowed"
+      "maxCategoryDimensions": "Maximum 2 category dimensions are allowed",
+      "fieldExists": "This field has already been added"
     }
   },
   "renameSuccess": "Renamed successfully",

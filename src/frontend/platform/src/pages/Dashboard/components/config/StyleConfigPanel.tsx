@@ -722,7 +722,7 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
                 />
               </FormBlock>
             </CollapsibleBlock>
-
+            {console.log(editingComponent, editingComponent?.type, 454545454)}
             {/* 图表选项 */}
             <CollapsibleBlock
               title={t('styleConfigPanel.sections.chartOptions')}
@@ -738,13 +738,13 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
                   />
                   {t('styleConfigPanel.options.legend')}
                 </label>
-                <label className="flex items-center gap-2 text-sm">
+                {editingComponent.type !== "donut" && editingComponent.type !== "pie" && <label className="flex items-center gap-2 text-sm">
                   <Checkbox
                     checked={localConfig.showAxis}
                     onCheckedChange={(v) => handleChange("showAxis", v)}
                   />
                   {t('styleConfigPanel.options.axis')}
-                </label>
+                </label>}
                 <label className="flex items-center gap-2 text-sm">
                   <Checkbox
                     checked={localConfig.showDataLabel}
@@ -752,13 +752,14 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
                   />
                   {t('styleConfigPanel.options.dataLabel')}
                 </label>
-                <label className="flex items-center gap-2 text-sm">
+
+                {editingComponent.type !== "donut" && editingComponent.type !== "pie" && <label className="flex items-center gap-2 text-sm">
                   <Checkbox
                     checked={localConfig.showGrid}
                     onCheckedChange={(v) => handleChange("showGrid", v)}
                   />
                   {t('styleConfigPanel.options.gridLine')}
-                </label>
+                </label>}
               </div>
             </CollapsibleBlock>
           </>

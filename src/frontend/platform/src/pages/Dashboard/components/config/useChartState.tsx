@@ -35,7 +35,8 @@ export function useChartState(initialComponent: any) {
 
   }, [initialComponent, updateEditingComponent, refreshChart]);
 
-  const isStackedChart = (type: ChartType) => type.startsWith('stacked-')
+  const isStackedChart = (type: ChartType) =>
+    type.startsWith('stacked-') || type.startsWith('grouped-');
   // 初始化逻辑
   useEffect(() => {
     const componentId = initialComponent?.id
@@ -98,7 +99,6 @@ export function useChartState(initialComponent: any) {
           setStackDimensions([formattedStackDim])
           console.log('设置堆叠维度:', formattedStackDim)
         }
-
         // 3. 初始化指标（value）
         if (dc.metrics && dc.metrics.length > 0) {
           const valueDims = dc.metrics.map((metric, index) => ({
@@ -110,6 +110,7 @@ export function useChartState(initialComponent: any) {
             sort: metric.sort || null,
             sortPriority: 0,
             fieldType: 'metric',
+            isVirtual: metric.isVirtual || false,
             aggregation: metric.aggregation || 'sum',
             numberFormat: metric.numberFormat || {
               type: 'number',
@@ -284,8 +285,10 @@ export function useChartState(initialComponent: any) {
         setDragOverSection(null)
         return
       }
+      const STACKED_CHART_TYPES = new Set(['stacked-bar', 'stacked-horizontal-bar', 'stacked-line']);
+      const maxMetricCount = STACKED_CHART_TYPES.has(chartType) ? 3 : 1;
       //指标维度只能有一个
-      if (section === 'value' && valueDimensions.length >= 1) {
+      if (section === 'value' && valueDimensions.length >= maxMetricCount) {
         console.warn('指标维度只能有一个，请先删除现有的指标维度')
         toast({
           description: t('useChartState.warn.metricLimitReached'),
@@ -303,7 +306,15 @@ export function useChartState(initialComponent: any) {
       if (section === 'value') currentDimensions = valueDimensions
 
       const alreadyExists = currentDimensions.some(dim => dim.fieldId === fieldId)
-      if (alreadyExists) return
+      if (alreadyExists) {
+        console.warn('该字段已存在')
+        toast({
+          description: t('useChartState.warn.fieldExists'),
+          variant: "warning",
+        })
+        setDragOverSection(null)
+        return
+      }
 
       const displayName = data.displayName || name
       const originalName = data.name || name
@@ -425,7 +436,7 @@ export function useChartState(initialComponent: any) {
       fieldCode: metric.name,
       displayName: metric.displayName,
       sort: metric.sort,
-      isVirtual: false,
+      isVirtual: metric.isVirtual,
       aggregation: metric.aggregation || 'sum',
       numberFormat: metric.numberFormat || {
         type: 'number' as const,

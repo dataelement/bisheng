@@ -304,7 +304,8 @@
     "warn": {
       "invalidFieldType": "フィールドタイプ {{fieldType}} を {{section}} エリアにドラッグすることはできません",
       "maxStackDimension": "スタックディメンションは1つだけ許可されます。既存のスタックディメンションを先に削除してください",
-      "maxCategoryDimensions": "カテゴリーディメンションは最大2つまで許可されます"
+      "maxCategoryDimensions": "カテゴリーディメンションは最大2つまで許可されます",
+      "fieldExists": "このフィールドは既に追加されています"
     }
   },
   "renameSuccess": "名前を変更しました",
