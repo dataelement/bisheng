@@ -70,6 +70,7 @@
         "dialog": {
             "chartUpdated": "图表已更新",
             "editDisplayName": "编辑显示名称",
+            "displayRequired":"名称不能为空",
             "originalName": "原始名称",
             "displayName": "显示名称",
             "displayNameRequired": "显示名称 *",

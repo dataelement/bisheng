@@ -76,6 +76,7 @@
     "dialog": {
       "editDisplayName": "Edit Name",
       "originalName": "Original Name",
+       "displayRequired": "Name cannot be empty",
       "displayName": "Display Name",
       "displayNameRequired": "Display Name *",
       "enterDisplayName": "Enter display name",

@@ -46,7 +46,16 @@
     "customStyle": "カスタムスタイル",
     "basicConfigTab": "基本設定",
     "styleConfigTab": "カスタムスタイル",
-
+  "validation": {
+    "validationFailed": "検証に失敗しました",
+    "chartTypeRequired": "グラフタイプを選択してください",
+    "categoryRequired": "少なくとも1つのカテゴリーディメンションを追加してください",
+    "metricRequired": "少なくとも1つのメトリックを追加してください",
+    "datasetRequired": "データセットを選択してください",
+    "stackRequired": "積み上げグラフにはスタックディメンションが必要です",
+    "invalidCategoryFields": "カテゴリーディメンションに無効なフィールドがあります",
+    "invalidMetricFields": "メトリックに無効なフィールドがあります"
+  },
     "chartType": "グラフタイプ",
     "selectChartType": "グラフタイプを選択",
 
@@ -76,6 +85,7 @@
     "dialog": {
       "editDisplayName": "表示名を編集",
       "originalName": "元の名前",
+       "displayRequired": "名前を入力してください",
       "displayName": "表示名",
       "displayNameRequired": "表示名 *",
       "enterDisplayName": "表示名を入力してください",
@@ -98,16 +108,7 @@
       "value": "メトリックエリア"
     }
   },
-  "validation": {
-    "validationFailed": "検証に失敗しました",
-    "chartTypeRequired": "グラフタイプを選択してください",
-    "categoryRequired": "少なくとも1つのカテゴリーディメンションを追加してください",
-    "metricRequired": "少なくとも1つのメトリックを追加してください",
-    "datasetRequired": "データセットを選択してください",
-    "stackRequired": "積み上げグラフにはスタックディメンションが必要です",
-    "invalidCategoryFields": "カテゴリーディメンションに無効なフィールドがあります",
-    "invalidMetricFields": "メトリックに無効なフィールドがあります"
-  },
+
   "configPanel": {
     "title": "ダッシュボード設定",
     "dashboardStyle": "ダッシュボードスタイル",

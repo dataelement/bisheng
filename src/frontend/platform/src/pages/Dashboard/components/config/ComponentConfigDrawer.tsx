@@ -60,7 +60,6 @@ export function ComponentConfigDrawer() {
   // 使用自定义Hook管理所有图表状态
   const chartState = useChartState(editingComponent)
   const [isMetricCard, setIsMetricCard] = useState(true)
-  console.log(editingComponent, 3434343434);
 
   // 从Hook中解构状态和方法
   const {
@@ -118,8 +117,20 @@ export function ComponentConfigDrawer() {
           return false
       }
     }
-
+    const isFieldInCategoryOrStack = (fieldId: string) => {
+      return (
+        categoryDimensions.some(dim => dim.fieldId === fieldId) ||
+        stackDimensions.some(dim => dim.fieldId === fieldId)
+      )
+    }
     if (field.role === 'dimension') {
+      if (isFieldInCategoryOrStack(safeFieldId)) {
+        toast({
+          description: t("useChartState.warn.fieldExists"),
+          variant: "warning"
+        })
+        return
+      }
       if (categoryDimensions.length < 2 && isMetricCard) {
         if (isFieldAlreadyAdded(safeFieldId, 'category')) {
           toast({
@@ -141,6 +152,13 @@ export function ComponentConfigDrawer() {
         }
         chartState.setCategoryDimensions(prev => [...prev, newDimension])
       } else if (currentChartHasStack && stackDimensions.length === 0 && isMetricCard) {
+        if (isFieldInCategoryOrStack(safeFieldId)) {
+          toast({
+            description: t("useChartState.warn.fieldExists"),
+            variant: "warning"
+          })
+          return
+        }
         if (isFieldAlreadyAdded(safeFieldId, 'stack')) {
           toast({
             description: t("componentConfigDrawer.toast.fieldAlreadyExists", {
@@ -190,21 +208,21 @@ export function ComponentConfigDrawer() {
       }
 
       if (valueDimensions.length > 0) {
-        if (currentIsVirtual && !hasVirtualMetric) {
-          toast({
-            description: t("componentConfigDrawer.toast.virtualMetricConflict"),
-            variant: "warning"
-          })
-          return
-        }
+        // if (currentIsVirtual && !hasVirtualMetric) {
+        //   toast({
+        //     description: t("componentConfigDrawer.toast.virtualMetricConflict"),
+        //     variant: "warning"
+        //   })
+        //   return
+        // }
 
-        if (!currentIsVirtual && hasVirtualMetric) {
-          toast({
-            description: t("componentConfigDrawer.toast.virtualMetricConflict"),
-            variant: "warning"
-          })
-          return
-        }
+        // if (!currentIsVirtual && hasVirtualMetric) {
+        //   toast({
+        //     description: t("componentConfigDrawer.toast.virtualMetricConflict"),
+        //     variant: "warning"
+        //   })
+        //   return
+        // }
 
         // 多个虚拟指标
         // if (currentIsVirtual && hasVirtualMetric) {
@@ -293,6 +311,14 @@ export function ComponentConfigDrawer() {
 
   const saveDisplayName = useCallback(() => {
     if (editingDimension) {
+      const trimmedName = editingDimension.displayName?.trim();
+      if (!trimmedName) {
+        toast({
+          description: t("componentConfigDrawer.dialog.displayRequired"),
+          variant: "error"
+        });
+        return;
+      }
       // 更新对应的维度显示名称
       const updateDimensions = (prev: any[]) =>
         prev.map(d => d.id === editingDimension.id ? { ...d, displayName: editingDimension.displayName } : d)
@@ -608,8 +634,71 @@ export function ComponentConfigDrawer() {
                                 const chartLabel = ChartGroupItems
                                   .flatMap(item => item.data)
                                   .find(item => item.type === data.type)?.label;
-                                if (chartLabel) {
-                                  setTitle(t(`chart.${chartLabel}`));
+
+                                // 判断用户是否自定义过标题
+                                const userCustomizedTitle = editingComponent.title !== styleConfig.title;
+                                const newTitle = userCustomizedTitle ? editingComponent.title : (chartLabel ? t(`chart.${chartLabel}`) : title);
+
+                                if (!userCustomizedTitle && chartLabel) {
+                                  setTitle(newTitle);
+                                }
+
+                                // 立即触发图表更新
+                                if (editingComponent) {
+                                  // 使用当前实际的限制配置
+                                  const currentLimitType = limitType;
+                                  const currentLimitValue = limitValue;
+
+                                  // 获取当前数据配置
+                                  const dataConfig = getDataConfig(currentLimitType, currentLimitValue, editingComponent.data_config?.timeFilter);
+
+                                  // 根据新图表类型调整配置
+                                  const STACKED_CHART_TYPES = new Set<ChartType>([
+                                    ChartType.StackedBar,
+                                    ChartType.StackedHorizontalBar,
+                                    ChartType.StackedLine
+                                  ]);
+
+                                  const isNewChartStacked = STACKED_CHART_TYPES.has(data.type);
+                                  const isCurrentChartStacked = currentChartHasStack;
+
+                                  let updatedDataConfig = { ...dataConfig };
+
+                                  // 处理堆叠维度
+                                  if (isCurrentChartStacked && !isNewChartStacked) {
+                                    // 从堆叠图切换到非堆叠图：移除堆叠维度配置
+                                    updatedDataConfig = {
+                                      ...updatedDataConfig,
+                                      stackDimension: undefined,
+                                      // 保持其他维度不变
+                                      dimensions: updatedDataConfig.dimensions || [],
+                                      metrics: updatedDataConfig.metrics || []
+                                    };
+                                  } else if (!isCurrentChartStacked && isNewChartStacked) {
+                                    // 从非堆叠图切换到堆叠图：清空堆叠维度（用户需要手动添加）
+                                    updatedDataConfig = {
+                                      ...updatedDataConfig,
+                                      stackDimension: undefined, // 清空堆叠维度
+                                      // 保持其他维度不变
+                                      dimensions: updatedDataConfig.dimensions || [],
+                                      metrics: updatedDataConfig.metrics || []
+                                    };
+                                  }
+
+                                  // 更新组件配置
+                                  updateEditingComponent({
+                                    type: data.type,
+                                    data_config: updatedDataConfig,
+                                    title: newTitle,
+                                    style_config: {
+                                      ...styleConfig,
+                                      title: newTitle // 同时更新styleConfig中的标题
+                                    },
+                                    dataset_code: editingComponent.dataset_code
+                                  });
+
+                                  // 刷新图表
+                                  refreshChart(editingComponent.id);
                                 }
                               }} maxHeight={500}>
                                 <div className="relative w-full group">
@@ -730,7 +819,7 @@ export function ComponentConfigDrawer() {
                               <div
                                 key={field.id}
                                 draggable
-                                onMouseDown={() => setDraggingId(field.id)}
+                                onMouseDown={() => { }}
                                 onDragStart={(e) => {
                                   setDraggingId(field.id)
                                   e.dataTransfer.effectAllowed = 'move'
