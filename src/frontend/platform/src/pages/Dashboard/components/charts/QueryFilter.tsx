@@ -70,6 +70,7 @@ export function QueryFilter({ isDark, component, isPreviewMode = false }: QueryF
                     mode={queryConditions.displayType}
                     isDark={isDark}
                     value={filter}
+                    placeholder={t('selectTime')}
                     onChange={(val) => {
                         console.log("Day Range Change:", val);
                         setFilter(val);

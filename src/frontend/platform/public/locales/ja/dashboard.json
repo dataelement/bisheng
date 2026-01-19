@@ -382,7 +382,7 @@
   "editDashboard": "看板を編集",
   "editAfterUnpublish": "編集するには公開を中止してください",
   "updatingCharts": "チャートを更新中",
-  "noDataInChart": "このチャートにはデータがありません",
+  "noDataInChart": "チャートデータなし",
   "selectDate": "日付を選択",
   "query": "照会",
   "dashboardOffline": "このダッシュボードは現在オフラインです",
