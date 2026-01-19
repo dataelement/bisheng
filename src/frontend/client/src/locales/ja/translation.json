@@ -687,6 +687,7 @@
   "kbLimitReached": "ナレッジベースの数が上限（最大50件）に達しました",
   "com_tools_knowledge_base_search": "ナレッジベース検索",
   "com_tools_knowledge_rebuilding": "個人ナレッジの embedding モデルが変更されました。再構築中のため、しばらくしてからお試しください",
+  "com_tools_knowledge_upload_remark": "検知した重複ファイルは自動的にスキップされます",
   "com_tools_no_more": "これ以上のデータはありません",
   "com_tools_no_results": "結果が見つかりませんでした",
   "com_ui_edit": "編集",
