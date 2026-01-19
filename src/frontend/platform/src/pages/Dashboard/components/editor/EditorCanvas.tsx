@@ -241,12 +241,13 @@ export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanv
         <>
             <div className="flex h-full">
                 <div
+                    id="edit-charts-panne"
                     className={cn("flex-1 overflow-auto no-scrollbar", theme)}
                     style={{
                         backgroundColor: theme === 'dark' ? '#1a1a1a' : '#f5f5f5',
                     }}
                 >
-                    <div id="edit-charts-panne"
+                    <div
                         ref={containerRef}
                         className="min-w-[1000px]">
                         <div className="mx-auto relative" style={{

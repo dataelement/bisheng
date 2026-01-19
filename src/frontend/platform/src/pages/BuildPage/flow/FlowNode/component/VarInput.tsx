@@ -116,7 +116,9 @@ export default function VarInput({
 
     useEffect(() => {
         console.log('!!!value :>> ', value);
-        // if (valueRef.current && valueRef.current === value) return
+        if (valueRef.current && valueRef.current !== value) {
+            valueRef.current = value;
+        }
         textareaRef.current.innerHTML = parseToHTML(value || '')[0];
         setFullVarInputValue(value)
         placeholderInit();

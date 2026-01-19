@@ -57,14 +57,14 @@ export function QueryFilter({ isDark, component, isPreviewMode = false }: QueryF
     }, [queryConditions.defaultValue, queryConditions.defaultValue])
 
     return (
-        <div className="w-full h-full p-4 flex flex-col gap-3 relative">
+        <div className="w-full h-full p-4 py-0 flex flex-col gap-3 relative">
             {/* date zone */}
-            <div className="flex flex-col gap-2 pr-24">
+            {/* <div className="flex flex-col gap-2 pr-24">
                 <label className={cn("text-sm font-medium", "dark:text-gray-400")}>{t('selectDate')}</label>
-            </div>
+            </div> */}
 
             {/* query btn */}
-            <div className="no-drag w-full flex flex-1 gap-2 items-center select-none">
+            <div className="no-drag w-full flex flex-1 gap-4 items-center select-none">
                 <AdvancedDatePicker
                     granularity={map[queryConditions.timeGranularity]}
                     mode={queryConditions.displayType}

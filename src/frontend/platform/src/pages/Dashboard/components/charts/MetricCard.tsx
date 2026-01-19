@@ -164,7 +164,7 @@ export function MetricCard({ data, dataConfig, styleConfig }: MetricCardProps) {
         <div style={titleStyle}>{indicatorName}</div>
       </div>
       {/* value */}
-      <div style={metricStyle}>
+      <div style={metricStyle} className='leading-[1.2em]'>
         {formatValue}
         {displayUnit && <span className="text-xl ml-2 text-muted-foreground">{displayUnit}</span>}
       </div>
