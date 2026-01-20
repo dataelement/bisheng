@@ -323,8 +323,8 @@ export function FilterConditionDialog({
       return dimension.displayName;
     }
 
-    const field = fields.find(f => f.fieldCode === fieldCode);
-    return field?.displayName || fieldCode || t('filterConditionDialog.placeholders.noName');
+    // const field = fields.find(f => f.fieldCode === fieldCode);
+    return t(fieldCode) || t('filterConditionDialog.placeholders.noName');
   }, [dimensions, fields, t]);
   // 过滤掉时间字段
   const filteredFields = useMemo(() => {

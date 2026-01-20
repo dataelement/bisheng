@@ -71,7 +71,7 @@
         "dialog": {
             "chartUpdated": "图表已更新",
             "editDisplayName": "编辑显示名称",
-            "displayRequired":"名称不能为空",
+            "displayRequired": "名称不能为空",
             "originalName": "原始名称",
             "displayName": "显示名称",
             "displayNameRequired": "显示名称 *",
@@ -135,7 +135,7 @@
             "count": "计数",
             "max": "最大值",
             "min": "最小值",
-            "distinctCount":"去重计数"
+            "distinctCount": "去重计数"
         },
         "sort": {
             "none": "无",
@@ -285,7 +285,7 @@
             "maxStackDimension": "当前维度数量已达到上限",
             "metricLimitReached": "当前指标数量已达到上限",
             "maxCategoryDimensions": "类别维度最多只能有 2 个",
-            "fieldExists":"该字段已添加"
+            "fieldExists": "该字段已添加"
         }
     },
     "renameSuccess": "已重命名",
@@ -383,5 +383,81 @@
         "donutChart": "环形图",
         "others": "其他",
         "metricCard": "指标卡"
-    }
+    },
+
+    "mid_user_increment": "用户行为指标表",
+    "timestamp": {
+        "year": "时间(年)",
+        "month": "时间(月)",
+        "week": "时间(周)",
+        "day": "时间(日)"
+    },
+    "user_group_infos": {
+        "user_group_id": "用户组ID",
+        "user_group_name": "用户组名称"
+    },
+    "total_user_count": "总用户数",
+    "new_user_count": "新增用户数",
+    "mid_active_user": "活跃用户表",
+    "active_user_count": "活跃用户数",
+    "mid_app_increment": "应用数量表",
+    "user_id": "用户ID",
+    "user_name": "用户名称",
+    "app_type": "应用类型",
+    "total_app_count": "总应用数",
+    "new_app_count": "新增应用数",
+    "mid_sessions_increment": "会话数量表",
+    "app_id": "应用ID",
+    "app_name": "应用名称",
+    "source": "来源类型（平台/API）",
+    "session_count": "会话次数",
+    "platform_user_count": "使用人数",
+    "api_call_count": "API调用次数",
+    "mid_session_run_dtl": "会话运行时长表",
+    "duration_seconds": "会话运行时长",
+    "max_concurrent_sessions": "最大同时在线会话数",
+    "mid_tool_call_dtl": "工具调用时长表",
+    "tool_name": "工具名称",
+    "tool_id": "工具ID",
+    "tool_type": "工具类型",
+    "tool_call_count": "工具调用次数",
+    "tool_call_success_count": "工具调用成功次数",
+    "tool_call_success_rate": "工具调用成功率",
+    "mid_knowledge_increment": "知识库存量表",
+    "total_document_knowledge_base_count": "总文档知识库数",
+    "total_qa_knowledge_base_count": "总QA知识库数",
+    "new_document_knowledge_base_count": "新增文档知识库数",
+    "new_qa_knowledge_base_count": "新增QA知识库数",
+    "mid_knowledge_file_increment": "知识库文件统计表",
+    "total_file_count": "总文件数",
+    "total_qa_count": "总QA对数",
+    "file_size": "文件大小",
+    "mid_doc_parse_dtl": "文件解析事件表",
+    "parse_type": "解析类型",
+    "status": "文件最终状态",
+    "doc_parse_count": "文档上传次数",
+    "doc_parse_success_count": "文档入库成功次数",
+    "doc_parse_success_rate": "文档入库成功率",
+    "etl_parse_count": "ETL处理次数",
+    "etl_parse_success_count": "ETL处理成功次数",
+    "etl_parse_success_rate": "ETL处理成功率",
+    "mid_model_call_dtl": "模型调用事件表",
+    "user_role_infos": {
+        "role_id": "角色ID",
+        "role_name": "角色名称"
+    },
+    "model_id": "模型ID",
+    "model_type": "模型类型",
+    "model_name": "模型名称",
+    "model_server_id": "服务方ID",
+    "model_server_name": "服务方名称",
+    "total_token": "Token消耗量",
+    "model_call_count": "模型调用次数",
+    "model_call_success_rate": "模型调用成功率",
+    "max_concurrent_llm_sessions": "最大LLM并发数",
+    "avg_first_token_cost_time": "平均首Token响应延迟",
+    "mid_user_interact_dtl": "用户反馈指标表",
+    "like_count": "点赞次数",
+    "dislike_count": "点踩次数",
+    "copy_count": "复制次数"
 }
