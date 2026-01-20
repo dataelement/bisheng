@@ -281,7 +281,8 @@ const getCartesianChartOption = (
     grid: {
       left: styleConfig.legendPosition === 'left' ? 100 : '3%',
       right: styleConfig.legendPosition === 'right' ? 100 : '3%',
-      bottom: '3%',
+      top: styleConfig.legendPosition === 'top' ? 60 : 28,
+      bottom: styleConfig.legendPosition === 'bottom' ? 40 : 0,
       containLabel: true
     },
     xAxis: isHorizontal ? valueAxis : categoryAxis,

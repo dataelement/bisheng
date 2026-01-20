@@ -69,8 +69,8 @@ export default function DashboardPage() {
     }
 
     const handleShare = async (id: string) => {
-        const _selectedDashboard = dashboards.find((d) => d.id === id)
-        if (_selectedDashboard?.status === "draft") {
+        // const _selectedDashboard = dashboards.find((d) => d.id === id)
+        if (selectedDashboard?.status === "draft") {
             toast({
                 description: t('shareNotPublished'),
                 variant: "error",
@@ -79,7 +79,7 @@ export default function DashboardPage() {
         }
 
         try {
-            const link = `${location.origin}${__APP_ENV__.BASE_URL}/dashboard/share/${btoa(_selectedDashboard.id)}`
+            const link = `${location.origin}${__APP_ENV__.BASE_URL}/dashboard/share/${btoa(selectedDashboard.id)}`
             await copyText(link)
             toast({
                 description: t('shareCopySuccess'),

@@ -169,7 +169,7 @@ export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanv
 
     const [isDragging, setIsDragging] = useState(false);
     const gridBackgroundStyle = useMemo(() => {
-        if (isPreviewMode || !width || !mounted || !isDragging) return {};
+        // if (isPreviewMode || !width || !mounted || !isDragging) return {};
 
         const cols = 24;
         const rowHeight = 32;
@@ -249,8 +249,8 @@ export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanv
                 >
                     <div
                         ref={containerRef}
-                        className="min-w-[1000px]">
-                        <div className="mx-auto relative" style={{
+                        className="min-w-[1000px] min-h-full">
+                        <div className="mx-auto min-h-full relative" style={{
                             ...gridBackgroundStyle,
                         }}>
                             {mounted && (
