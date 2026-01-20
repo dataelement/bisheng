@@ -329,7 +329,7 @@ export function FilterConditionDialog({
   // 过滤掉时间字段
   const filteredFields = useMemo(() => {
     console.log('原始字段数据:', fields)
-
+    if (!dataset_code) return []
     return fields.filter(field => {
       if (!field || !field.fieldCode || !field.displayName) {
         console.log('发现无效字段:', field)
@@ -580,7 +580,7 @@ export function FilterConditionDialog({
                       <SelectTrigger className="w-[160px] h-8">
                         <SelectValue placeholder={t('filterConditionDialog.placeholders.selectField')} />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="max-h-60 overflow-y-auto">
                         {filteredFields.length > 0 ? (
                           filteredFields.map(f => {
                             const displayText = getFieldDisplayName(f.fieldCode) || "暂无";
@@ -609,7 +609,7 @@ export function FilterConditionDialog({
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="conditional">{t('filterConditionDialog.filterTypes.conditional')}</SelectItem>
-                          {c.fieldType !== "string" && <SelectItem value="enum">{t('filterConditionDialog.filterTypes.enum')}</SelectItem>}
+                          {c.fieldType === "string" && <SelectItem value="enum">{t('filterConditionDialog.filterTypes.enum')}</SelectItem>}
                         </SelectContent>
                       </Select>
                     )}

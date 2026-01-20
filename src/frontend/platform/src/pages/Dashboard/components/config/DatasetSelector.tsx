@@ -152,7 +152,7 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
                         {/* 搜索框 */}
                         <div className="px-2 py-1.5">
                             <div className="relative">
-                                <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground z-10" />
                                 <Input
                                     placeholder={t("datasetSelector.searchDataset")}
                                     value={searchTerm}
