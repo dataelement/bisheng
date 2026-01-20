@@ -147,56 +147,64 @@ export function useChartState(initialComponent: any) {
   // 计算属性
   const sortPriorityFields = useMemo(() => {
     const allFields = [
-      ...categoryDimensions.map(d => ({ ...d, section: 'category' as const })),
-      ...stackDimensions.map(d => ({ ...d, section: 'stack' as const })),
-      ...valueDimensions.map(d => ({ ...d, section: 'value' as const }))
+      ...categoryDimensions,
+      // ...stackDimensions,
+      ...valueDimensions
     ]
 
-    const uniqueFields = new Map()
-    allFields.forEach(field => {
-      if (!uniqueFields.has(field.fieldId)) {
-        uniqueFields.set(field.fieldId, field)
-      }
+    // 用 Map 保证 fieldId 唯一
+    const uniqueFields = new Map<string, any>()
+    allFields.forEach(f => {
+      if (!uniqueFields.has(f.id)) uniqueFields.set(f.id, f)
     })
 
-    const uniqueFieldsArray = Array.from(uniqueFields.values())
-
-    return uniqueFieldsArray.sort((a, b) => {
-      const indexA = sortPriorityOrder.indexOf(a.id)
-      const indexB = sortPriorityOrder.indexOf(b.id)
-      if (indexA === -1 && indexB === -1) return 0
-      if (indexA === -1) return 1
-      if (indexB === -1) return -1
-      return indexA - indexB
-    })
+    return sortPriorityOrder
+      .map(id => uniqueFields.get(id))
+      .filter(Boolean) as typeof allFields
   }, [categoryDimensions, stackDimensions, valueDimensions, sortPriorityOrder])
+
 
   // 更新 sortPriorityOrder
   useEffect(() => {
     const allFields = [
-      ...categoryDimensions.map(d => ({ ...d, section: 'category' })),
-      ...stackDimensions.map(d => ({ ...d, section: 'stack' })),
-      ...valueDimensions.map(d => ({ ...d, section: 'value' }))
+      ...categoryDimensions,
+      ...stackDimensions,
+      ...valueDimensions
     ]
 
-    const timeField = allFields.find(
-      f => f.name === 'timestamp' || f.fieldId === 'timestamp'
-    )
+    if (sortPriorityOrder.length === 0) {
+      const timeField = allFields.find(
+        f => f.name === 'timestamp' || f.fieldId === 'timestamp'
+      )
 
-    const otherFields = allFields.filter(
-      f => f !== timeField
-    )
+      const otherFields = allFields.filter(f => f !== timeField)
 
-    const orderedFields = timeField
-      ? [timeField, ...otherFields]
-      : otherFields
+      const orderedFields = timeField ? [timeField, ...otherFields] : otherFields
 
-    setSortPriorityOrder(orderedFields.map(f => f.id))
-  }, [
-    categoryDimensions.length,
-    stackDimensions.length,
-    valueDimensions.length
-  ])
+      setSortPriorityOrder(orderedFields.map(f => f.id))
+      return
+    }
+
+    const existingFieldIds = new Set(sortPriorityOrder)
+    const newFields = allFields.filter(f => !existingFieldIds.has(f.id))
+
+    if (newFields.length > 0) {
+      const newTimeField = newFields.find(
+        f => f.name === 'timestamp' || f.fieldId === 'timestamp'
+      )
+
+      const otherNewFields = newFields.filter(f => f !== newTimeField)
+
+      if (newTimeField) {
+        setSortPriorityOrder(prev => [newTimeField.id, ...prev])
+      }
+
+      if (otherNewFields.length > 0) {
+        setSortPriorityOrder(prev => [...prev, ...otherNewFields.map(f => f.id)])
+      }
+    }
+  }, [categoryDimensions, stackDimensions, valueDimensions])
+
 
 
   const currentChartHasStack = useMemo(() => {
@@ -249,6 +257,90 @@ export function useChartState(initialComponent: any) {
 
     try {
       const data = JSON.parse(dataStr)
+
+      // 检查是否是已存在的维度移动（从其他区域拖过来的）
+      if (data.isExistingDimension && data.sourceSection) {
+        const sourceSection = data.sourceSection;
+        const fieldId = data.fieldId;
+
+        // 不允许同区域内移动
+        if (sourceSection === section) {
+          setDragOverSection(null);
+          return;
+        }
+
+        // 特殊处理：从类别维度拖到堆叠维度
+        if (sourceSection === 'category' && section === 'stack') {
+          // 检查堆叠维度是否已满
+          if (stackDimensions.length >= 1) {
+            toast({
+              description: t('useChartState.warn.maxStackDimension'),
+              variant: "warning",
+            });
+            setDragOverSection(null);
+            return;
+          }
+
+          // 从类别维度中查找要移动的维度
+          const dimensionToMoveIndex = categoryDimensions.findIndex(dim => dim.id === data.id || dim.fieldId === fieldId);
+          if (dimensionToMoveIndex === -1) {
+            setDragOverSection(null);
+            return;
+          }
+
+          const dimensionToMove = categoryDimensions[dimensionToMoveIndex];
+
+          // 从类别维度中移除
+          const updatedCategoryDimensions = categoryDimensions.filter((_, index) => index !== dimensionToMoveIndex);
+
+          // 添加到堆叠维度
+          const movedDimension = {
+            ...dimensionToMove,
+            id: `stack_${Date.now()}_${fieldId}`, // 生成新的ID
+          };
+
+          setCategoryDimensions(updatedCategoryDimensions);
+          setStackDimensions([movedDimension]);
+
+          setDragOverSection(null);
+          return;
+        }
+
+        // 特殊处理：从堆叠维度拖到类别维度
+        if (sourceSection === 'stack' && section === 'category') {
+          // 检查类别维度是否已满
+          if (categoryDimensions.length >= 2) {
+            toast({
+              description: t('useChartState.warn.maxCategoryDimensions'),
+              variant: "warning",
+            });
+            setDragOverSection(null);
+            return;
+          }
+
+          // 从堆叠维度中查找要移动的维度
+          const dimensionToMove = stackDimensions.find(dim => dim.id === data.id || dim.fieldId === fieldId);
+          if (!dimensionToMove) {
+            setDragOverSection(null);
+            return;
+          }
+
+          // 添加到类别维度
+          const movedDimension = {
+            ...dimensionToMove,
+            id: `category_${Date.now()}_${fieldId}`, // 生成新的ID
+          };
+
+          // 清空堆叠维度
+          setStackDimensions([]);
+          setCategoryDimensions(prev => [...prev, movedDimension]);
+
+          setDragOverSection(null);
+          return;
+        }
+      }
+
+      // 原有的新字段拖拽逻辑保持不变
       const fieldType = data.fieldType || 'dimension'
 
       // 转换section和fieldType为国际化文本
@@ -285,8 +377,10 @@ export function useChartState(initialComponent: any) {
         setDragOverSection(null)
         return
       }
+
       const STACKED_CHART_TYPES = new Set(['stacked-bar', 'stacked-horizontal-bar', 'stacked-line']);
       const maxMetricCount = STACKED_CHART_TYPES.has(chartType) ? 3 : 1;
+
       //指标维度只能有一个
       if (section === 'value' && valueDimensions.length >= maxMetricCount) {
         console.warn('指标维度只能有一个，请先删除现有的指标维度')
@@ -297,6 +391,7 @@ export function useChartState(initialComponent: any) {
         setDragOverSection(null)
         return
       }
+
       const fieldId = data.id || data.name || `field_${Date.now()}`
       const name = data.name || data.displayName || fieldId
 
@@ -314,6 +409,35 @@ export function useChartState(initialComponent: any) {
         })
         setDragOverSection(null)
         return
+      }
+
+      if (section === 'category' || section === 'stack') {
+        // 如果拖拽到分类维度，检查是否已在堆叠维度中存在
+        if (section === 'category') {
+          const existsInStack = stackDimensions.some(dim => dim.fieldId === fieldId)
+          if (existsInStack) {
+            console.warn('该字段已在堆叠维度中添加')
+            toast({
+              description: t("useChartState.warn.fieldExists"),
+              variant: "warning"
+            })
+            setDragOverSection(null)
+            return
+          }
+        }
+
+        const otherCategories = categoryDimensions.filter(dim =>
+          section === 'stack' || dim.fieldId !== fieldId
+        )
+        if (otherCategories.some(dim => dim.fieldId === fieldId)) {
+          console.warn('该字段已在其他分类维度中添加')
+          toast({
+            description: t("useChartState.warn.fieldExists"),
+            variant: "warning",
+          })
+          setDragOverSection(null)
+          return
+        }
       }
 
       const displayName = data.displayName || name
@@ -353,7 +477,7 @@ export function useChartState(initialComponent: any) {
     } catch (error) {
       console.error('拖拽数据解析失败:', error)
     }
-  }, [categoryDimensions, stackDimensions, valueDimensions, toast, t])
+  }, [categoryDimensions, stackDimensions, valueDimensions, toast, t, chartType])
 
   const handleDeleteDimension = useCallback((section: 'category' | 'stack' | 'value', dimensionId: string) => {
     if (section === 'category') {
@@ -407,7 +531,7 @@ export function useChartState(initialComponent: any) {
   }, [])
 
   const handleDeleteFilter = useCallback(() => {
-    setFilterGroup(null)
+    setFilterGroup({ logic: "and", conditions: [] });
   }, [])
 
   // 获取数据配置

@@ -98,8 +98,6 @@ export function DimensionBlock({
 
   // 选项配置
   const isVirtualMetric = (dimension: DimensionItem) => {
-    console.log(12312312312312312, dimension);
-
     return dimension.fieldType === 'metric' && dimension.isVirtual === true;
   };
   const aggregationOptions = [
@@ -154,7 +152,31 @@ export function DimensionBlock({
           {dimensions.map((dimension) => (
             <div
               key={dimension.id}
-              className="relative group"
+              draggable={dimension.fieldType === 'dimension'}
+              // 在 DimensionBlock.tsx 中修改 onDragStart 部分
+              onDragStart={(e) => {
+                if (dimension.fieldType !== 'dimension') return
+
+                e.stopPropagation()
+                e.dataTransfer.effectAllowed = 'move'
+
+                const dragData = {
+                  id: dimension.id,
+                  fieldId: dimension.fieldId,
+                  name: dimension.name,
+                  displayName: dimension.displayName || dimension.name,
+                  originalName: dimension.originalName || dimension.name,
+                  fieldType: dimension.fieldType,
+                  timeGranularity: dimension.timeGranularity || null,
+                  isExistingDimension: true,
+                  sourceSection: isStack === 'stack' ? 'stack' : 'category'
+                }
+                e.dataTransfer.setData('application/json', JSON.stringify(dragData))
+              }}
+              className={`relative group ${dimension.fieldType === 'dimension'
+                ? 'cursor-move'
+                : 'cursor-default'
+                }`}
               onMouseEnter={() => setHoveredDimension(dimension.id)}
               onMouseLeave={() => setHoveredDimension(null)}
             >
@@ -171,7 +193,11 @@ export function DimensionBlock({
 
                 {/* 字段名称 */}
                 <div className="min-w-0 flex-1">
-                  <span className="text-sm font-medium truncate">{dimension.displayName}</span>
+                  <span className="text-sm font-medium truncate">
+                    {dimension.displayName && dimension.displayName.length > 15
+                      ? `${dimension.displayName.substring(0, 15)}...`
+                      : dimension.displayName}
+                  </span>
                 </div>
 
                 {/* 操作按钮 */}
@@ -275,7 +301,7 @@ export function DimensionBlock({
                               {/* 汇总方式子菜单 */}
                               {hoveredMenuItem?.dimensionId === dimension.id && hoveredMenuItem?.menuType === 'aggregation' && (
                                 <div
-                                  className="absolute left-full top-0 ml-1 bg-white border rounded-md shadow-lg z-30 p-2 min-w-[90px]"
+                                  className="absolute left-full top-0 ml-1 bg-white border rounded-md shadow-lg z-30 p-2 min-w-[120px]"
                                   onMouseEnter={() => handleMenuItemHover(dimension.id, 'aggregation')}
                                   onMouseLeave={() => setHoveredMenuItem(null)}
                                   onClick={(e) => {
@@ -351,7 +377,7 @@ export function DimensionBlock({
                                 setLocalFormat(
                                   dimension.numberFormat || {
                                     type: 'number',
-                                    decimalPlaces: 0,
+                                    decimalPlaces: 2,
                                     unit: '',
                                     suffix: '',
                                     thousandSeparator: false

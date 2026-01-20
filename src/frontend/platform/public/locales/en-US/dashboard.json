@@ -52,6 +52,7 @@
 
     "categoryAxis": "Category Axis / Dimension",
     "stackItem": "Stack Item / Dimension",
+    "subCategory": "Sub-category / Dimension",
     "valueAxis": "Value Axis / Metric",
 
     "sortPriority": "Sort Priority",
@@ -155,6 +156,7 @@
       "sum": "Sum",
       "avg": "Average",
       "count": "Count",
+      "distinctCount":"Distinct Ct",
       "max": "Max",
       "min": "Min"
     },
@@ -305,6 +307,7 @@
       "invalidFieldType": "Field type {{fieldType}} cannot be dragged to {{section}} area",
       "maxStackDimension": "Only one stack dimension is allowed, please delete the existing stack dimension first",
       "maxCategoryDimensions": "Maximum 2 category dimensions are allowed",
+      "metricLimitReached": "The current number of metrics has reached the limit",
       "fieldExists": "This field has already been added"
     }
   },

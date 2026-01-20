@@ -25,7 +25,7 @@
     },
     "setDefault": "デフォルト値として設定",
     "datePicker": {
-      "placeholder": "{{displayType}}を選択",
+      "placeholder": "時間を選択",
       "single": "時間",
       "range": "時間範囲"
     },
@@ -61,6 +61,7 @@
 
     "categoryAxis": "カテゴリ軸 / ディメンション",
     "stackItem": "積み上げ項目 / ディメンション",
+    "subCategory": "サブカテゴリ / ディメンション",
     "valueAxis": "値軸 / メトリック",
 
     "sortPriority": "ソート優先順位",
@@ -90,14 +91,15 @@
       "displayNameRequired": "表示名 *",
       "enterDisplayName": "表示名を入力してください",
       "cancel": "キャンセル",
-      "confirm": "確認"
+      "confirm": "確認",
+      "chartUpdated": "グラフが更新されました"
     },
 
     "toast": {
       "fieldAlreadyExists": "フィールドは既に{{section}}に存在します",
       "dimensionLimitReached": "ディメンションの上限に達しました",
       "metricReached": "メトリックの上限に達しました",
-      "metricLimitReached": "このグラフでは最大 {{count}} 個の指標まで選択できます",
+      "metricLimitReached": "現在のメトリクス数は上限に達しました",
       "virtualMetricConflict": "仮想指標と通常の指標を同時に追加することはできません",
       "multipleVirtualMetric": "複数の仮想指標を同時に追加することはできません"
     },
@@ -305,6 +307,7 @@
     "warn": {
       "invalidFieldType": "フィールドタイプ {{fieldType}} を {{section}} エリアにドラッグすることはできません",
       "maxStackDimension": "スタックディメンションは1つだけ許可されます。既存のスタックディメンションを先に削除してください",
+      "metricLimitReached": "現在のメトリクス数は上限に達しました",
       "maxCategoryDimensions": "カテゴリーディメンションは最大2つまで許可されます",
       "fieldExists": "このフィールドは既に追加されています"
     }

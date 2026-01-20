@@ -43,6 +43,7 @@
         "selectChartType": "选择图表类型",
         "categoryAxis": "类别轴 / 维度",
         "stackItem": "堆叠项 / 维度",
+        "subCategory": "子类别项 / 维度",
         "valueAxis": "值轴 / 指标",
         "sortPriority": "排序优先级",
         "sortHint": "添加维度或指标后可调整排序优先级",
@@ -271,9 +272,9 @@
     },
     "useChartState": {
         "sections": {
-            "category": "类别维度",
-            "stack": "堆叠维度",
-            "value": "指标维度"
+            "category": "维度",
+            "stack": "维度",
+            "value": "指标"
         },
         "fieldTypes": {
             "dimension": "维度",

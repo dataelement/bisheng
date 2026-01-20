@@ -424,8 +424,12 @@ export function ComponentConfigDrawer() {
     }
 
     const dataConfig = getDataConfig(limitType, limitValue, editingComponent.data_config?.timeFilter)
-    if (styleConfig.title === '' && editingComponent?.data_config?.metrics?.[0]?.fieldName) {
-      styleConfig.title = editingComponent?.data_config?.metrics?.[0]?.fieldName
+    dataConfig.isConfigured = e.isTrusted
+
+    if (
+      styleConfig.title === '' && dataConfig?.metrics?.[0]?.fieldName
+    ) {
+      styleConfig.title = dataConfig.metrics[0].fieldName
     }
     updateEditingComponent({
       data_config: dataConfig,
@@ -461,7 +465,8 @@ export function ComponentConfigDrawer() {
     toast,
     t
   ])
-
+  const isStackedChart = (type: ChartType) =>
+    type.startsWith('grouped-');
   // 时间范围改变
   const handleTimeFilterChange = useCallback((val: any) => {
     console.log("Day Range Change:", val);
@@ -699,7 +704,7 @@ export function ComponentConfigDrawer() {
                                   // 刷新图表
                                   refreshChart(editingComponent.id);
                                 }
-                              }} maxHeight={500}>
+                              }} maxHeight={400}>
                                 <div className="relative w-full group">
                                   <div className="flex h-[28px] w-full items-center justify-between rounded-md border border-gray-300 bg-white px-3 py-2 text-sm transition-colors hover:border-gray-400 cursor-pointer">
                                     {/* 文本区域 */}
@@ -752,7 +757,7 @@ export function ComponentConfigDrawer() {
 
                                 {currentChartHasStack && (
                                   <CollapsibleBlock
-                                    title={t("componentConfigDrawer.stackItem")}
+                                    title={isStackedChart(chartType) ? t("componentConfigDrawer.subCategory") : t("componentConfigDrawer.stackItem")}
                                     collapsed={configCollapsed.stack}
                                     onCollapse={() => toggleCollapse('stack')}
                                   >
@@ -830,7 +835,7 @@ export function ComponentConfigDrawer() {
                                   e.preventDefault()
                                   const sourceId = e.dataTransfer.getData('text/plain')
                                   if (!sourceId) return
-                                  chartState.handleDropSortPriority(field)
+                                  handleDropSortPriority(field)
                                 }}
                                 className={`flex items-center gap-2 px-3 py-2 h-[28px] border rounded-md bg-muted/20 ${draggingId === field.id ? 'opacity-50' : ''}`}
                               >
@@ -1031,6 +1036,7 @@ export function ComponentConfigDrawer() {
         onChange={handleSaveFilter}
         fields={datasetFields}
         dataset_code={editingComponent?.dataset_code}
+        dimensions={[...categoryDimensions, ...stackDimensions, ...valueDimensions]}
       />
     </div>
   )
