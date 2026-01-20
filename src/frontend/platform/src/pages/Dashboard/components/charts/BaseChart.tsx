@@ -207,7 +207,7 @@ const getCartesianChartOption = (
   const tooltipFormatter = (params: any[]) => {
     let res = params[0].name.replaceAll('\n', '<br/>') + '<br/>';
     params.forEach((item) => {
-      res += `${item.marker} ${item.seriesName}: <b>${unitConversion(item.value, dataConfig).join('')}</b><br/>`;
+      res += item.value === undefined ? '' : `${item.marker} ${item.seriesName}: <b>${unitConversion(item.value, dataConfig).join('')}</b><br/>`;
     });
     return res;
   };

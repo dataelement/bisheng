@@ -171,21 +171,66 @@ export async function queryChartData(params: {
         }))
     });
 
-    const metricsData = params.component.data_config.metrics.map(e => e.displayName)
+    function transformToEcharts(data) {
+        const { value, dimensions } = data;
 
-    const hasDuidie = false
-    let duidieweidu = [] // 表字段去重值
-    const nameSet = new Set()
-    resData.dimensions = resData.dimensions.map((name) => {
-        hasDuidie && nameSet.add(name.pop())
-        return name.join('\n')
-    })
+        const groups = [];
+        const users = [];
+        const dataMap = {};
 
-    if (hasDuidie) {
-        duidieweidu = Array.from(nameSet)
+        dimensions.forEach((dim, index) => {
+            const userName = dim[dim.length - 1];
+            const groupName = dim.slice(0, -1).join('\n');
+            const val = value[index][0];
+
+            if (!groups.includes(groupName)) {
+                groups.push(groupName);
+            }
+            if (!users.includes(userName)) {
+                users.push(userName);
+            }
+
+            if (!dataMap[groupName]) {
+                dataMap[groupName] = {};
+            }
+            dataMap[groupName][userName] = val;
+        });
+
+        const series = users.map(user => {
+            return {
+                name: user,
+                data: groups.map(group => {
+                    return dataMap[group][user] !== undefined ? dataMap[group][user] : null;
+                })
+            };
+        });
+
+        return {
+            xAxisData: groups,
+            series: series
+        };
     }
 
-    console.log('query params :>> ', params);
+    const isStacked = params.component.data_config.stackDimension?.fieldId
+    let metricsData = []
+    let dimensions = []
+
+    if (isStacked) {
+        const { xAxisData, series } = transformToEcharts(resData)
+        dimensions = xAxisData
+        metricsData = series
+    } else {
+        dimensions = resData.dimensions.map((name) => {
+            return name.join('\n')
+        })
+        metricsData = params.component.data_config.metrics.map(e => e.displayName)
+        metricsData = metricsData.map((name, index) => ({
+            name: name,
+            data: resData.value.map(el => el[index])
+        }))
+    }
+
+    // console.log('query params :>> ', dimensions, metricsData);
 
     const chartType = params.component.type
 
@@ -202,11 +247,9 @@ export async function queryChartData(params: {
         case ChartType.StackedLine:
         case ChartType.StackedArea:
             return {
-                dimensions: resData.dimensions,
-                series: (hasDuidie ? duidieweidu : metricsData).map((name, index) => ({
-                    name: name,
-                    data: resData.value.map(el => el[index])
-                }))
+                dimensions: dimensions, // xAxis.data
+                // legend && series(chart line) 
+                series: metricsData
             }
         case ChartType.Pie:
         case ChartType.Donut:
@@ -215,7 +258,7 @@ export async function queryChartData(params: {
                 series: [
                     {
                         name: '',
-                        data: resData.dimensions.map((name, index) => ({
+                        data: dimensions.map((name, index) => ({
                             name: name,
                             value: resData.value[index][0]
                         }))
@@ -226,11 +269,11 @@ export async function queryChartData(params: {
             return {
                 value: resData.value[0][0],
                 title: metricsData[0],
-                unit: '元',
+                unit: '',
                 trend: {
-                    value: 12.5,
+                    value: 0,
                     direction: 'up',
-                    label: '较上月'
+                    label: ''
                 },
                 format: {
                     decimalPlaces: 2,
