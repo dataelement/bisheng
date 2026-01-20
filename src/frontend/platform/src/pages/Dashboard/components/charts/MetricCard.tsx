@@ -65,7 +65,8 @@ export const unitConversion = (value, dataConfig) => {
   }
 
   // 处理后缀
-  const finalUnit = suffix || unitLabel;
+  const finalUnit = unitLabel + (suffix || '');
+  // const finalUnit = suffix || unitLabel;
 
   return [result, finalUnit];
 }
@@ -154,19 +155,19 @@ export function MetricCard({ data, dataConfig, styleConfig }: MetricCardProps) {
   })
 
   return (
-    <div className="flex items-end justify-between h-full">
-      <div className='flex flex-col h-full justify-between'>
-        {/* subtitle */}
-        {styleConfig.showSubtitle && subTitle ? (
-          <div style={subtitleStyle}>{subTitle}</div>
-        ) : <div></div>}
+    <div className="h-full flex flex-col justify-between select-none">
+      {/* subtitle */}
+      {styleConfig.showSubtitle && subTitle ? (
+        <div style={subtitleStyle}>{subTitle}</div>
+      ) : <div></div>}
+      <div className='flex justify-between items-end'>
         {/* title */}
-        <div style={titleStyle}>{indicatorName}</div>
-      </div>
-      {/* value */}
-      <div style={metricStyle} className='leading-[1.2em]'>
-        {formatValue}
-        {displayUnit && <span className="text-xl ml-2 text-muted-foreground">{displayUnit}</span>}
+        <div style={titleStyle} className=' truncate'>{indicatorName}</div>
+        {/* value */}
+        <div style={metricStyle} className='leading-[1.2em]'>
+          {formatValue}
+          {displayUnit && <span className="text-xl ml-2 text-muted-foreground">{displayUnit}</span>}
+        </div>
       </div>
 
 

@@ -121,7 +121,7 @@ export function DashboardListItem({
 
             <DropdownMenu>
                 <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                    <Button variant="ghost" size="icon" className="h-5 w-0 group-hover:w-auto">
+                    <Button variant="ghost" size="icon" className={`h-5 w-0 ${isEditing ? "" : "group-hover:w-5"}`}>
                         <MoreHorizontal className="h-4 w-4" />
                     </Button>
                 </DropdownMenuTrigger>

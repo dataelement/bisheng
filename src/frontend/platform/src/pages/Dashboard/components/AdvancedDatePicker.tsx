@@ -140,7 +140,7 @@ export function AdvancedDatePicker({
   };
 
   const handleConfirm = () => {
-    if (!dateRange?.from) return;
+    if (!dateRange?.from) return setOpen(false);
 
     let finalStart = new Date(dateRange.from);
     let finalEnd = dateRange.to ? new Date(dateRange.to) : new Date(dateRange.from);
