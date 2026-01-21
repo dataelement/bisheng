@@ -329,7 +329,8 @@ export function FilterConditionDialog({
   // 过滤掉时间字段
   const filteredFields = useMemo(() => {
     console.log('原始字段数据:', fields)
-    if (!dataset_code) return []
+    if (!dataset_code || !dimensions || !fields) return []
+
     return fields.filter(field => {
       if (!field || !field.fieldCode || !field.displayName) {
         console.log('发现无效字段:', field)
@@ -348,8 +349,14 @@ export function FilterConditionDialog({
 
       return !isTimeField
     })
-  }, [fields, dimensions, t])
-
+  }, [fields, dimensions, dataset_code, t])
+  useEffect(() => {
+    setInitialized(false)
+    setDraft({
+      logic: "and",
+      conditions: [createEmptyCondition()]
+    })
+  }, [dataset_code])
   useEffect(() => {
     if (!open) return
     if (fields.length === 0) return  // 确保字段加载完成
@@ -597,7 +604,6 @@ export function FilterConditionDialog({
                         )}
                       </SelectContent>
                     </Select>
-
                     {/* 第二个下拉框：筛选类型 */}
                     {c.fieldCode && (
                       <Select
@@ -609,7 +615,7 @@ export function FilterConditionDialog({
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="conditional">{t('filterConditionDialog.filterTypes.conditional')}</SelectItem>
-                          {c.fieldType === "string" && <SelectItem value="enum">{t('filterConditionDialog.filterTypes.enum')}</SelectItem>}
+                          {c.fieldType !== "number" && <SelectItem value="enum">{t('filterConditionDialog.filterTypes.enum')}</SelectItem>}
                         </SelectContent>
                       </Select>
                     )}
