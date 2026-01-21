@@ -428,7 +428,7 @@
     "total_qa_knowledge_base_count": "总QA知识库数",
     "new_document_knowledge_base_count": "新增文档知识库数",
     "new_qa_knowledge_base_count": "新增QA知识库数",
-    "mid_knowledge_file_increment": "知识库文件统计表",
+    "mid_knowledge_file_increment": "知识库文件存量表",
     "total_file_count": "总文件数",
     "total_qa_count": "总QA对数",
     "file_size": "文件大小",

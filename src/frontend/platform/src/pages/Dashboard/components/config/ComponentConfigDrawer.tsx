@@ -424,7 +424,7 @@ export function ComponentConfigDrawer() {
     }
 
     const dataConfig = getDataConfig(limitType, limitValue, editingComponent.data_config?.timeFilter)
-    dataConfig.isConfigured = e.isTrusted
+    // dataConfig.isConfigured = e.isTrusted
 
     if (
       styleConfig.title === '' && dataConfig?.metrics?.[0]?.fieldName
