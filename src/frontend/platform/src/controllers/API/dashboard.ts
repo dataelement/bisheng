@@ -206,9 +206,9 @@ export async function queryChartData(params: {
             .map(({ queryComponentParams: p }) => ({
                 type: p.shortcutKey ? TimeRangeType.RECENT_DAYS : TimeRangeType.CUSTOM,
                 mode: p.isDynamic ? TimeRangeMode.Dynamic : TimeRangeMode.Fixed,
-                recent_days: p.shortcutKey ? Number(p.shortcutKey.replace('last_', '')) : undefined,
-                start_date: p.startTime,
-                end_date: p.endTime,
+                recentDays: p.shortcutKey ? Number(p.shortcutKey.replace('last_', '')) : undefined,
+                startDate: p.startTime,
+                endDate: p.endTime,
             }))
     });
 
