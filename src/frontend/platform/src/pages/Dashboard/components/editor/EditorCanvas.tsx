@@ -5,32 +5,30 @@ import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
 import { copyComponentTo, getDashboards } from "@/controllers/API/dashboard"
 import { useComponentEditorStore, useEditorDashboardStore } from "@/store/dashboardStore"
+import { cn } from "@/utils"
 import { useEffect, useMemo, useRef, useState } from "react"
 import ReactGridLayout, { Layout, verticalCompactor } from "react-grid-layout"
 import "react-grid-layout/css/styles.css"
+import { useTranslation } from "react-i18next"
 import { useMutation, useQuery, useQueryClient } from "react-query"
 import "react-resizable/css/styles.css"
 import { DashboardsQueryKey } from "../../hook"
-import { Dashboard, DashboardComponent } from "../../types/dataConfig"
+import { DashboardComponent } from "../../types/dataConfig"
 import { ComponentConfigDrawer } from "../config/ComponentConfigDrawer"
 import { ComponentWrapper } from "./ComponentWrapper"
 import Home from "./Home"
 import "./index.css"
-import { cn } from "@/utils"
-import { useTranslation } from "react-i18next"
 
 interface EditorCanvasProps {
     isPreviewMode?: boolean
     isLoading: boolean
-    dashboard: Dashboard | null
 }
 
-export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanvasProps) {
+export function EditorCanvas({ isLoading, isPreviewMode }: EditorCanvasProps) {
     const { width, containerRef, mounted } = useContainerWidth()
     const {
         currentDashboard,
         setCurrentDashboard,
-        setCurrentDashboardId,
         layouts,
         setLayouts,
         duplicateComponent: duplicateComponentInStore,
@@ -70,14 +68,6 @@ export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanv
             })
         },
     })
-
-    // 当dashboard变化时，更新store
-    useEffect(() => {
-        if (dashboard) {
-            setCurrentDashboard(dashboard)
-            setCurrentDashboardId(dashboard.id)
-        }
-    }, [dashboard, setCurrentDashboard])
 
     // When the page loads, it automatically refreshes according to the query component configuration 
     useEffect(() => {
@@ -169,7 +159,7 @@ export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanv
 
     const [isDragging, setIsDragging] = useState(false);
     const gridBackgroundStyle = useMemo(() => {
-        // if (isPreviewMode || !width || !mounted || !isDragging) return {};
+        if (isPreviewMode || !width || !mounted || !isDragging) return {};
 
         const cols = 24;
         const rowHeight = 32;
@@ -249,8 +239,8 @@ export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanv
                 >
                     <div
                         ref={containerRef}
-                        className="min-w-[1000px] min-h-full">
-                        <div className="mx-auto min-h-full relative" style={{
+                        className="min-w-[1000px] h-screen">
+                        <div className="mx-auto min-h-full" style={{
                             ...gridBackgroundStyle,
                         }}>
                             {mounted && (

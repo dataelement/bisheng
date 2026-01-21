@@ -412,7 +412,8 @@
     "year": "Time(Year)",
     "month": "Time(Month)",
     "week": "Time(Week)",
-    "day": "Time(Day)"
+    "day": "Time(Day)",
+    "hour": "Time(Hour)"
   },
   "user_group_infos": {
     "user_group_id": "User Group ID",

@@ -225,11 +225,16 @@ const getCartesianChartOption = (
       interval: 'auto',
       formatter: function (value) {
         if (!value) return '';
-        const len = value.length;
-        if (len > 10) {
-          return value.slice(0, 10) + '...';
-        }
-        return value;
+        const lines = value.split('\n');
+
+        const processedLines = lines.map(line => {
+          if (line.length > 10) {
+            return line.slice(0, 10) + '...';
+          }
+          return line;
+        });
+
+        return processedLines.join('\n');
       },
       hideOverlap: true,
       // interval: 0,

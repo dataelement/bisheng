@@ -204,7 +204,7 @@ export function DashboardDetail({
             </div>
 
             <div id="view-panne" className="flex-1 overflow-auto">
-                <EditorCanvas isPreviewMode isLoading={isLoading} dashboard={dashboard || null} />
+                <EditorCanvas isPreviewMode isLoading={isLoading} />
             </div>
         </div>
     )

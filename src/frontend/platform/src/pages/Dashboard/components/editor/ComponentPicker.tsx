@@ -1,6 +1,6 @@
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/bs-ui/popover';
 import { cn } from '@/utils';
-import React, { useState } from 'react';
+import React, { memo, useState } from 'react';
 import { ChartType } from '../../types/dataConfig';
 import { useTranslation } from 'react-i18next';
 
@@ -59,7 +59,7 @@ interface ComponentPickerProps {
     className?: string;
 }
 
-const ComponentPicker = ({ children, className, onSelect, maxHeight = 500 }: ComponentPickerProps) => {
+const ComponentPicker = memo(({ children, className, onSelect, maxHeight = 500 }: ComponentPickerProps) => {
     const { t } = useTranslation("dashboard")
     const [open, setOpen] = useState(false);
 
@@ -110,6 +110,6 @@ const ComponentPicker = ({ children, className, onSelect, maxHeight = 500 }: Com
             </PopoverContent>
         </Popover>
     );
-};
+});
 
 export default ComponentPicker;

@@ -1,5 +1,7 @@
 "use client"
 import { getDashboard } from "@/controllers/API/dashboard"
+import { useEditorDashboardStore } from "@/store/dashboardStore"
+import { useEffect } from "react"
 import { useQuery } from "react-query"
 import { useNavigate, useParams } from "react-router-dom"
 import { EditorCanvas } from "./components/editor/EditorCanvas"
@@ -10,6 +12,11 @@ export default function EditorPage() {
     const params = useParams()
     const dashboardId = params.id as string
     const navigate = useNavigate()
+    const {
+        currentDashboard,
+        setCurrentDashboardId: setSelectedId,
+        setCurrentDashboard,
+    } = useEditorDashboardStore()
 
     const { data: dashboard, isLoading } = useQuery({
         queryKey: [DashboardQueryKey, Number(dashboardId)],
@@ -20,6 +27,14 @@ export default function EditorPage() {
         navigate("404")
     }
 
+    useEffect(() => {
+        // Edit mode is synchronized only once to avoid repeated rendering 
+        if (!currentDashboard && dashboard) {
+            setCurrentDashboard(dashboard)
+            setSelectedId(dashboard.id)
+        }
+    }, [dashboard, setCurrentDashboard])
+
     // undo redo
     useEditorShortcuts()
 
@@ -28,11 +43,11 @@ export default function EditorPage() {
     return (
         <div className="h-screen flex flex-col">
             <EditorHeader
-                dashboard={dashboard || null}
+                dashboard={currentDashboard}
                 dashboardId={dashboardId}
             />
             <div className="h-[calc(100vh-64px)]">
-                <EditorCanvas isLoading={isLoading} dashboard={dashboard || null} />
+                <EditorCanvas isLoading={isLoading} />
             </div>
         </div>
     )

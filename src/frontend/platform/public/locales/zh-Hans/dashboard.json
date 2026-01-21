@@ -390,7 +390,8 @@
         "year": "时间(年)",
         "month": "时间(月)",
         "week": "时间(周)",
-        "day": "时间(日)"
+        "day": "时间(日)",
+        "hour": "时间(小时)"
     },
     "user_group_infos": {
         "user_group_id": "用户组ID",

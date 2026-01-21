@@ -22,7 +22,12 @@ import { DashboardQueryKey, DashboardsQueryKey } from "./hook"
 export default function DashboardPage() {
     const { t } = useTranslation("dashboard")
     const { appConfig } = useContext(locationContext)
-    const [selectedId, setSelectedId] = useEditorDashboardStore(state => [state.currentDashboardId, state.setCurrentDashboardId])
+
+    const {
+        currentDashboardId: selectedId,
+        setCurrentDashboardId: setSelectedId,
+        setCurrentDashboard,
+    } = useEditorDashboardStore()
     const { toast } = useToast()
     const queryClient = useQueryClient()
     const [isCollapsed, setIsCollapsed] = useState(false)
@@ -107,6 +112,14 @@ export default function DashboardPage() {
     useEffect(() => {
         return () => setSelectedId("")
     }, [])
+
+    // dashboard reactquery to store
+    useEffect(() => {
+        if (selectedDashboard) {
+            setCurrentDashboard(selectedDashboard)
+            setSelectedId(selectedDashboard.id)
+        }
+    }, [selectedDashboard, setCurrentDashboard])
 
     // Auto-select first dashboard if none selected
     if (!selectedId && dashboards.length > 0) {

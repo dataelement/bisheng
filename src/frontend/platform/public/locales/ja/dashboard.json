@@ -413,7 +413,8 @@
     "year": "時間(年)",
     "month": "時間(月)",
     "week": "時間(週)",
-    "day": "時間(日)"
+    "day": "時間(日)",
+    "hour": "時間(時)"
   },
   "user_group_infos": {
     "user_group_id": "ユーザーグループID",
