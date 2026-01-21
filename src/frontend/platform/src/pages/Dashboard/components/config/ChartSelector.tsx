@@ -161,8 +161,6 @@ export default function ChartSelector({
   /* 保存 */
   const handleSave = (e) => {
 
-    const startDateObj = new Date(timeFilter.startTime * 1000)
-    const endDateObj = new Date(timeFilter.endTime * 1000)
 
     const config: ChartLinkConfig = {
       chartIds: selectedCharts,
@@ -170,8 +168,8 @@ export default function ChartSelector({
       timeGranularity,
       isDefault,
       dateRange: {
-        start: timeFilter.startTime,  // 直接传秒级时间戳
-        end: timeFilter.endTime       // 直接传秒级时间戳
+        start: timeFilter?.startTime ?? "",
+        end: timeFilter?.endTime ?? ""
       }
     }
 

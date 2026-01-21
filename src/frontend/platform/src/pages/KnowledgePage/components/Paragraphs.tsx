@@ -7,7 +7,7 @@ import AutoPagination from '@/components/bs-ui/pagination/autoPagination';
 import { toast } from "@/components/bs-ui/toast/use-toast";
 import Tip from "@/components/bs-ui/tooltip/tip";
 import ShadTooltip from "@/components/ShadTooltipComponent";
-import { addMetadata, delChunkApi, getFileBboxApi, getFilePathApi, getKnowledgeChunkApi, getKnowledgeDetailApi, getMetaFile, saveUserMetadataApi, updateChunkApi } from '@/controllers/API';
+import { addMetadata, delChunkApi, getFileBboxApi, getFilePathApi, getKnowledgeChunkApi, getKnowledgeDetailApi, getMetaFile, readFileByLibDatabase, saveUserMetadataApi, updateChunkApi } from '@/controllers/API';
 import { captureAndAlertRequestErrorHoc } from '@/controllers/request';
 import { useTable } from '@/util/hook';
 import { ArrowLeft, ClipboardPenLine, FileText } from 'lucide-react';
@@ -101,7 +101,50 @@ export default function Paragraphs({ fileId, onBack }) {
         file_ids: selectedFileId ? [selectedFileId] : [],
         unInitData: true
     }), [selectedFileId]);
+    // 在 Paragraphs 组件中添加
+    const fetchAllFiles = useCallback(async () => {
+        try {
+            const res = await readFileByLibDatabase({
+                id: id,
+                page: 1,
+                pageSize: 1000, // 获取足够多的文件
+                name: '',
+                status: 2
+            });
 
+            const filesData = res?.data || [];
+            setRawFiles(filesData);
+            console.log('Fetched all files:', filesData.length);
+
+            // 如果有传入的 fileId，确保 currentFile 被设置
+            if (fileId && filesData.length > 0 && !currentFile) {
+                const foundFile = filesData.find(f => String(f.id) === String(fileId));
+                if (foundFile) {
+                    setCurrentFile({
+                        label: foundFile.file_name || '',
+                        value: fileId,
+                        id: foundFile.id || '',
+                        name: foundFile.file_name || '',
+                        size: foundFile.size || 0,
+                        type: foundFile.file_name?.split('.').pop() || '',
+                        filePath: '',
+                        suffix: foundFile.file_name?.split('.').pop() || '',
+                        fileType: foundFile.parse_type || 'unknown',
+                        fullData: foundFile || {},
+                    });
+                }
+            }
+        } catch (error) {
+            console.error('Failed to fetch all files:', error);
+        }
+    }, [id, fileId, currentFile]);
+
+    // 在组件初始化时调用
+    useEffect(() => {
+        if (id) {
+            fetchAllFiles();
+        }
+    }, [id, fetchAllFiles]);
     const {
         page,
         pageSize,
@@ -199,43 +242,25 @@ export default function Paragraphs({ fileId, onBack }) {
 
             // Get current selected file information
             const currentFile = rawFiles.find(f => String(f.id) === String(fileId));
+
             let finalUrl = '';
             let finalPreviewUrl = '';
 
             // Check if there are valid preview_url and original_url
-            const hasPreviewUrl = typeof res.preview_url === 'string';
+            const hasPreviewUrl = typeof res.preview_url === 'string' && res.preview_url.trim() !== '';
             const hasOriginalUrl = typeof res.original_url === 'string' && res.original_url.trim() !== '';
 
             if (currentFile) {
-
-                // Determine if it's UNS or LOCAL type
-                const isUnsOrLocal = currentFile.parse_type === "uns" || currentFile.parse_type === "local";
-
-                if (isUnsOrLocal) {
-                    // UNS or LOCAL type: select URL based on whether bbox is valid
-                    const isBboxesValid = hasChunkBboxes;
-                    const isBboxesEmpty = !hasChunkBboxes;
-                    if (!isBboxesEmpty && hasPreviewUrl) {
-                        // Has valid bbox and preview_url → use preview_url
-                        finalUrl = res.preview_url.trim();
-                        finalPreviewUrl = res.preview_url.trim();
-                    } else {
-                        // No valid bbox (empty array/string) or no preview_url → force use original_url
-                        finalUrl = hasOriginalUrl ? res.original_url.trim() : '';
-                        finalPreviewUrl = finalUrl;
-                    }
+                if (hasPreviewUrl) {
+                    // Has preview_url → prioritize use
+                    finalUrl = res.preview_url.trim();
+                    finalPreviewUrl = res.preview_url.trim();
                 } else {
-                    // Other types: prioritize preview_url, fallback to original_url
-                    if (hasPreviewUrl) {
-                        // Has preview_url → prioritize use
-                        finalUrl = res.preview_url.trim();
-                        finalPreviewUrl = res.preview_url.trim();
-                    } else {
-                        // No preview_url → use original_url or alternative URL
-                        finalUrl = hasOriginalUrl ? res.original_url.trim() : '';
-                        finalPreviewUrl = finalUrl;
-                    }
+                    // No preview_url → use original_url or alternative URL
+                    finalUrl = hasOriginalUrl ? res.original_url.trim() : '';
+                    finalPreviewUrl = finalUrl;
                 }
+                // }
             } else {
                 // If current file not found, use default strategy
                 finalUrl = hasPreviewUrl ? res.preview_url.trim() : (hasOriginalUrl ? res.original_url.trim() : '');

@@ -200,14 +200,14 @@ const getCartesianChartOption = (
   const { dimensions, series } = data;
   const isHorizontal = chartType.includes('horizontal');
   const isStacked = chartType.includes('stacked');
-  const isLineOrArea = chartType.includes('line') || chartType === 'area';
-  const isArea = chartType === 'area' || chartType === 'stacked-line'; // Depending on logic
+  const isLineOrArea = chartType.includes('line') || chartType.includes('area');
+  const isArea = chartType.includes('area') || chartType === 'stacked-line'; // Depending on logic
 
   // Tooltip
   const tooltipFormatter = (params: any[]) => {
     let res = params[0].name.replaceAll('\n', '<br/>') + '<br/>';
     params.forEach((item) => {
-      res += `${item.marker} ${item.seriesName}: <b>${unitConversion(item.value, dataConfig).join('')}</b><br/>`;
+      res += item.value === undefined ? '' : `${item.marker} ${item.seriesName}: <b>${unitConversion(item.value, dataConfig).join('')}</b><br/>`;
     });
     return res;
   };
@@ -221,7 +221,20 @@ const getCartesianChartOption = (
     data: dimensions,
     show: styleConfig.showAxis ?? true,
     axisLabel: {
-      rotate: dimensions.length > 10 ? 45 : 0,
+      rotate: 0,
+      interval: 'auto',
+      formatter: function (value) {
+        if (!value) return '';
+        const len = value.length;
+        if (len > 10) {
+          return value.slice(0, 10) + '...';
+        }
+        return value;
+      },
+      hideOverlap: true,
+      // interval: 0,
+      // hideOverlap: true,
+      // overflow: 'break'
       // ...axisLabelStyle,
     },
     name: styleConfig.xAxisTitle || ''
@@ -268,7 +281,8 @@ const getCartesianChartOption = (
     grid: {
       left: styleConfig.legendPosition === 'left' ? 100 : '3%',
       right: styleConfig.legendPosition === 'right' ? 100 : '3%',
-      bottom: '3%',
+      top: styleConfig.legendPosition === 'top' ? 60 : 28,
+      bottom: styleConfig.legendPosition === 'bottom' ? 40 : 0,
       containLabel: true
     },
     xAxis: isHorizontal ? valueAxis : categoryAxis,

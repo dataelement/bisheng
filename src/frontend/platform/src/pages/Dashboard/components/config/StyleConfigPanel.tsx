@@ -355,9 +355,9 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
       ...componentConfig,
       themeColor: (componentConfig.themeColor || config.themeColor || colorSchemes[0]?.id || FULL_DEFAULT_STYLE_CONFIG.themeColor),
     }
-    if (baseConfig.title === "") {
-      baseConfig.title = editingComponent?.data_config?.metrics?.[0]?.fieldName
-    }
+    // if (baseConfig.title === "") {
+    //   baseConfig.title = editingComponent?.data_config?.metrics?.[0]?.fieldName
+    // }
     // 如果轴标题为空，设置默认值
     if (!baseConfig.xAxisTitle && firstDimension?.fieldName) {
       baseConfig.xAxisTitle = firstDimension.fieldName
@@ -372,18 +372,25 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
   const [initialized, setInitialized] = useState(false)
 
   useEffect(() => {
-    if (editingComponent && !editingComponent.style_config && !initialized) {
+    if (!editingComponent || initialized) return
 
+    const styleConfig = editingComponent.style_config ?? {}
+
+    if (styleConfig.title === undefined) {
       updateEditingComponent({
         style_config: {
           ...FULL_DEFAULT_STYLE_CONFIG,
-          ...config,
-          themeColor: config.themeColor || colorSchemes[0]?.id || FULL_DEFAULT_STYLE_CONFIG.themeColor,
-        }
+          ...styleConfig,
+          title:
+            editingComponent.data_config?.metrics?.[0]?.fieldName ?? "",
+        },
       })
-      setInitialized(true)
     }
-  }, [editingComponent, config, updateEditingComponent, initialized])
+
+    setInitialized(true)
+  }, [editingComponent, initialized, updateEditingComponent])
+
+
 
   const toggleSection = (section: keyof typeof collapsedSections) => {
     setCollapsedSections(prev => ({
@@ -722,7 +729,7 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
                 />
               </FormBlock>
             </CollapsibleBlock>
-
+            {console.log(editingComponent, editingComponent?.type, 454545454)}
             {/* 图表选项 */}
             <CollapsibleBlock
               title={t('styleConfigPanel.sections.chartOptions')}
@@ -738,13 +745,13 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
                   />
                   {t('styleConfigPanel.options.legend')}
                 </label>
-                <label className="flex items-center gap-2 text-sm">
+                {editingComponent.type !== "donut" && editingComponent.type !== "pie" && <label className="flex items-center gap-2 text-sm">
                   <Checkbox
                     checked={localConfig.showAxis}
                     onCheckedChange={(v) => handleChange("showAxis", v)}
                   />
                   {t('styleConfigPanel.options.axis')}
-                </label>
+                </label>}
                 <label className="flex items-center gap-2 text-sm">
                   <Checkbox
                     checked={localConfig.showDataLabel}
@@ -752,13 +759,14 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
                   />
                   {t('styleConfigPanel.options.dataLabel')}
                 </label>
-                <label className="flex items-center gap-2 text-sm">
+
+                {editingComponent.type !== "donut" && editingComponent.type !== "pie" && <label className="flex items-center gap-2 text-sm">
                   <Checkbox
                     checked={localConfig.showGrid}
                     onCheckedChange={(v) => handleChange("showGrid", v)}
                   />
                   {t('styleConfigPanel.options.gridLine')}
-                </label>
+                </label>}
               </div>
             </CollapsibleBlock>
           </>

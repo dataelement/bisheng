@@ -117,8 +117,20 @@ export function ComponentConfigDrawer() {
           return false
       }
     }
-
+    const isFieldInCategoryOrStack = (fieldId: string) => {
+      return (
+        categoryDimensions.some(dim => dim.fieldId === fieldId) ||
+        stackDimensions.some(dim => dim.fieldId === fieldId)
+      )
+    }
     if (field.role === 'dimension') {
+      if (isFieldInCategoryOrStack(safeFieldId)) {
+        toast({
+          description: t("useChartState.warn.fieldExists"),
+          variant: "warning"
+        })
+        return
+      }
       if (categoryDimensions.length < 2 && isMetricCard) {
         if (isFieldAlreadyAdded(safeFieldId, 'category')) {
           toast({
@@ -140,6 +152,13 @@ export function ComponentConfigDrawer() {
         }
         chartState.setCategoryDimensions(prev => [...prev, newDimension])
       } else if (currentChartHasStack && stackDimensions.length === 0 && isMetricCard) {
+        if (isFieldInCategoryOrStack(safeFieldId)) {
+          toast({
+            description: t("useChartState.warn.fieldExists"),
+            variant: "warning"
+          })
+          return
+        }
         if (isFieldAlreadyAdded(safeFieldId, 'stack')) {
           toast({
             description: t("componentConfigDrawer.toast.fieldAlreadyExists", {
@@ -189,30 +208,30 @@ export function ComponentConfigDrawer() {
       }
 
       if (valueDimensions.length > 0) {
-        if (currentIsVirtual && !hasVirtualMetric) {
-          toast({
-            description: t("componentConfigDrawer.toast.virtualMetricConflict"),
-            variant: "warning"
-          })
-          return
-        }
+        // if (currentIsVirtual && !hasVirtualMetric) {
+        //   toast({
+        //     description: t("componentConfigDrawer.toast.virtualMetricConflict"),
+        //     variant: "warning"
+        //   })
+        //   return
+        // }
 
-        if (!currentIsVirtual && hasVirtualMetric) {
-          toast({
-            description: t("componentConfigDrawer.toast.virtualMetricConflict"),
-            variant: "warning"
-          })
-          return
-        }
+        // if (!currentIsVirtual && hasVirtualMetric) {
+        //   toast({
+        //     description: t("componentConfigDrawer.toast.virtualMetricConflict"),
+        //     variant: "warning"
+        //   })
+        //   return
+        // }
 
         // 多个虚拟指标
-        if (currentIsVirtual && hasVirtualMetric) {
-          toast({
-            description: t("componentConfigDrawer.toast.multipleVirtualMetric"),
-            variant: "warning"
-          })
-          return
-        }
+        // if (currentIsVirtual && hasVirtualMetric) {
+        //   toast({
+        //     description: t("componentConfigDrawer.toast.multipleVirtualMetric"),
+        //     variant: "warning"
+        //   })
+        //   return
+        // }
       }
 
       if (isFieldAlreadyAdded(safeFieldId, 'value')) {
@@ -292,6 +311,14 @@ export function ComponentConfigDrawer() {
 
   const saveDisplayName = useCallback(() => {
     if (editingDimension) {
+      const trimmedName = editingDimension.displayName?.trim();
+      if (!trimmedName) {
+        toast({
+          description: t("componentConfigDrawer.dialog.displayRequired"),
+          variant: "error"
+        });
+        return;
+      }
       // 更新对应的维度显示名称
       const updateDimensions = (prev: any[]) =>
         prev.map(d => d.id === editingDimension.id ? { ...d, displayName: editingDimension.displayName } : d)
@@ -363,9 +390,9 @@ export function ComponentConfigDrawer() {
       return { isValid: false, errorKey: 'datasetRequired' };
     }
 
-    if (currentChartHasStack && stackDimensions.length === 0) {
-      return { isValid: false, errorKey: 'stackRequired' };
-    }
+    // if (currentChartHasStack && stackDimensions.length === 0) {
+    //   return { isValid: false, errorKey: 'stackRequired' };
+    // }
 
     return { isValid: true };
   };
@@ -397,8 +424,13 @@ export function ComponentConfigDrawer() {
     }
 
     const dataConfig = getDataConfig(limitType, limitValue, editingComponent.data_config?.timeFilter)
-    dataConfig.isConfigured = e.isTrusted
+    // dataConfig.isConfigured = e.isTrusted
 
+    if (
+      styleConfig.title === '' && dataConfig?.metrics?.[0]?.fieldName
+    ) {
+      styleConfig.title = dataConfig.metrics[0].fieldName
+    }
     updateEditingComponent({
       data_config: dataConfig,
       type: chartType,
@@ -433,7 +465,8 @@ export function ComponentConfigDrawer() {
     toast,
     t
   ])
-
+  const isStackedChart = (type: ChartType) =>
+    type.startsWith('grouped-');
   // 时间范围改变
   const handleTimeFilterChange = useCallback((val: any) => {
     console.log("Day Range Change:", val);
@@ -605,10 +638,73 @@ export function ComponentConfigDrawer() {
                                 const chartLabel = ChartGroupItems
                                   .flatMap(item => item.data)
                                   .find(item => item.type === data.type)?.label;
-                                if (chartLabel) {
-                                  setTitle(t(`chart.${chartLabel}`));
+
+                                // 判断用户是否自定义过标题
+                                const userCustomizedTitle = editingComponent.title !== styleConfig.title;
+                                const newTitle = userCustomizedTitle ? editingComponent.title : (chartLabel ? t(`chart.${chartLabel}`) : title);
+
+                                if (!userCustomizedTitle && chartLabel) {
+                                  setTitle(newTitle);
                                 }
-                              }} maxHeight={500}>
+
+                                // 立即触发图表更新
+                                if (editingComponent) {
+                                  // 使用当前实际的限制配置
+                                  const currentLimitType = limitType;
+                                  const currentLimitValue = limitValue;
+
+                                  // 获取当前数据配置
+                                  const dataConfig = getDataConfig(currentLimitType, currentLimitValue, editingComponent.data_config?.timeFilter);
+
+                                  // 根据新图表类型调整配置
+                                  const STACKED_CHART_TYPES = new Set<ChartType>([
+                                    ChartType.StackedBar,
+                                    ChartType.StackedHorizontalBar,
+                                    ChartType.StackedLine
+                                  ]);
+
+                                  const isNewChartStacked = STACKED_CHART_TYPES.has(data.type);
+                                  const isCurrentChartStacked = currentChartHasStack;
+
+                                  let updatedDataConfig = { ...dataConfig };
+
+                                  // 处理堆叠维度
+                                  if (isCurrentChartStacked && !isNewChartStacked) {
+                                    // 从堆叠图切换到非堆叠图：移除堆叠维度配置
+                                    updatedDataConfig = {
+                                      ...updatedDataConfig,
+                                      stackDimension: undefined,
+                                      // 保持其他维度不变
+                                      dimensions: updatedDataConfig.dimensions || [],
+                                      metrics: updatedDataConfig.metrics || []
+                                    };
+                                  } else if (!isCurrentChartStacked && isNewChartStacked) {
+                                    // 从非堆叠图切换到堆叠图：清空堆叠维度（用户需要手动添加）
+                                    updatedDataConfig = {
+                                      ...updatedDataConfig,
+                                      stackDimension: undefined, // 清空堆叠维度
+                                      // 保持其他维度不变
+                                      dimensions: updatedDataConfig.dimensions || [],
+                                      metrics: updatedDataConfig.metrics || []
+                                    };
+                                  }
+
+                                  // 更新组件配置
+                                  updateEditingComponent({
+                                    type: data.type,
+                                    data_config: updatedDataConfig,
+                                    title: newTitle,
+                                    style_config: {
+                                      ...styleConfig,
+                                      title: newTitle // 同时更新styleConfig中的标题
+                                    },
+                                    dataset_code: editingComponent.dataset_code
+                                  });
+
+                                  // 刷新图表
+                                  refreshChart(editingComponent.id);
+                                }
+                              }} maxHeight={400}>
                                 <div className="relative w-full group">
                                   <div className="flex h-[28px] w-full items-center justify-between rounded-md border border-gray-300 bg-white px-3 py-2 text-sm transition-colors hover:border-gray-400 cursor-pointer">
                                     {/* 文本区域 */}
@@ -661,13 +757,14 @@ export function ComponentConfigDrawer() {
 
                                 {currentChartHasStack && (
                                   <CollapsibleBlock
-                                    title={t("componentConfigDrawer.stackItem")}
+                                    title={isStackedChart(chartType) ? t("componentConfigDrawer.subCategory") : t("componentConfigDrawer.stackItem")}
                                     collapsed={configCollapsed.stack}
                                     onCollapse={() => toggleCollapse('stack')}
                                   >
                                     <DimensionBlock
                                       invalidIds={invalidFieldIds}
                                       isDimension={true}
+                                      isStack={'stack'}
                                       dimensions={stackDimensions}
                                       isDragOver={dragOverSection === 'stack'}
                                       onDragOver={(e) => handleDragOver(e, 'stack')}
@@ -726,7 +823,7 @@ export function ComponentConfigDrawer() {
                               <div
                                 key={field.id}
                                 draggable
-                                onMouseDown={() => setDraggingId(field.id)}
+                                onMouseDown={() => { }}
                                 onDragStart={(e) => {
                                   setDraggingId(field.id)
                                   e.dataTransfer.effectAllowed = 'move'
@@ -738,7 +835,7 @@ export function ComponentConfigDrawer() {
                                   e.preventDefault()
                                   const sourceId = e.dataTransfer.getData('text/plain')
                                   if (!sourceId) return
-                                  chartState.handleDropSortPriority(field)
+                                  handleDropSortPriority(field)
                                 }}
                                 className={`flex items-center gap-2 px-3 py-2 h-[28px] border rounded-md bg-muted/20 ${draggingId === field.id ? 'opacity-50' : ''}`}
                               >
@@ -939,6 +1036,7 @@ export function ComponentConfigDrawer() {
         onChange={handleSaveFilter}
         fields={datasetFields}
         dataset_code={editingComponent?.dataset_code}
+        dimensions={[...categoryDimensions, ...stackDimensions, ...valueDimensions]}
       />
     </div>
   )

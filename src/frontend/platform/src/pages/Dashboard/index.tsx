@@ -10,7 +10,7 @@ import {
 } from "@/controllers/API/dashboard"
 import { useEditorDashboardStore } from "@/store/dashboardStore"
 import { copyText } from "@/utils"
-import { useContext } from "react"
+import { useContext, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useMutation, useQuery, useQueryClient } from "react-query"
 import { useNavigate } from "react-router-dom"
@@ -25,6 +25,7 @@ export default function DashboardPage() {
     const [selectedId, setSelectedId] = useEditorDashboardStore(state => [state.currentDashboardId, state.setCurrentDashboardId])
     const { toast } = useToast()
     const queryClient = useQueryClient()
+    const [isCollapsed, setIsCollapsed] = useState(false)
 
     const { data: dashboards = [] } = useQuery({
         queryKey: [DashboardsQueryKey],
@@ -68,8 +69,8 @@ export default function DashboardPage() {
     }
 
     const handleShare = async (id: string) => {
-        const _selectedDashboard = dashboards.find((d) => d.id === id)
-        if (_selectedDashboard?.status === "draft") {
+        // const _selectedDashboard = dashboards.find((d) => d.id === id)
+        if (selectedDashboard?.status === "draft") {
             toast({
                 description: t('shareNotPublished'),
                 variant: "error",
@@ -78,7 +79,7 @@ export default function DashboardPage() {
         }
 
         try {
-            const link = `${location.origin}${__APP_ENV__.BASE_URL}/dashboard/share/${btoa(_selectedDashboard.id)}`
+            const link = `${location.origin}${__APP_ENV__.BASE_URL}/dashboard/share/${btoa(selectedDashboard.id)}`
             await copyText(link)
             toast({
                 description: t('shareCopySuccess'),
@@ -103,6 +104,10 @@ export default function DashboardPage() {
         enabled: !!selectedId,
     })
 
+    useEffect(() => {
+        return () => setSelectedId("")
+    }, [])
+
     // Auto-select first dashboard if none selected
     if (!selectedId && dashboards.length > 0) {
         const defaultDashboard = dashboards.find((d) => d.is_default)
@@ -112,6 +117,8 @@ export default function DashboardPage() {
     return (
         <div className="h-full flex">
             {appConfig.isPro && <DashboardSidebar
+                isCollapsed={isCollapsed}
+                setIsCollapsed={setIsCollapsed}
                 dashboards={dashboards}
                 selectedId={selectedId}
                 onSelect={setSelectedId}
@@ -121,6 +128,8 @@ export default function DashboardPage() {
             />
             }
             <DashboardDetail
+                isCollapsed={isCollapsed}
+                setIsCollapsed={setIsCollapsed}
                 dashboard={selectedDashboard}
                 isLoading={isLoading}
                 onRename={handleRename}

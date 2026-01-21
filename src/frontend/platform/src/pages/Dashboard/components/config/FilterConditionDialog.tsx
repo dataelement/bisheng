@@ -303,18 +303,33 @@ export function FilterConditionDialog({
   value,
   onChange,
   fields,
-  dataset_code = ""
+  dataset_code = "",
+  dimensions = []
 }: Props) {
   const { t } = useTranslation("dashboard")
   const [draft, setDraft] = useState<FilterGroup>({
     logic: "and",
     conditions: [createEmptyCondition()]
   })
-  const [error, setError] = useState<string | null>(null)
+  const [initialized, setInitialized] = useState(false)
 
+  const [error, setError] = useState<string | null>(null)
+  const getFieldDisplayName = useCallback((fieldCode: string) => {
+    const dimension = dimensions.find(dim =>
+      dim.fieldId === fieldCode || dim.name === fieldCode
+    );
+
+    if (dimension?.displayName) {
+      return dimension.displayName;
+    }
+
+    // const field = fields.find(f => f.fieldCode === fieldCode);
+    return t(fieldCode) || t('filterConditionDialog.placeholders.noName');
+  }, [dimensions, fields, t]);
   // 过滤掉时间字段
   const filteredFields = useMemo(() => {
     console.log('原始字段数据:', fields)
+    if (!dataset_code || !dimensions || !fields) return []
 
     return fields.filter(field => {
       if (!field || !field.fieldCode || !field.displayName) {
@@ -334,12 +349,18 @@ export function FilterConditionDialog({
 
       return !isTimeField
     })
-  }, [fields, t])
-
+  }, [fields, dimensions, dataset_code, t])
+  useEffect(() => {
+    setInitialized(false)
+    setDraft({
+      logic: "and",
+      conditions: [createEmptyCondition()]
+    })
+  }, [dataset_code])
   useEffect(() => {
     if (!open) return
     if (fields.length === 0) return  // 确保字段加载完成
-
+    if (initialized) return
     const safeValue = value || { logic: "and", conditions: [] }
 
     const newConditions = (safeValue.conditions || []).map(c => {
@@ -367,7 +388,8 @@ export function FilterConditionDialog({
       conditions: newConditions.length > 0 ? newConditions : [createEmptyCondition()]
     })
     setError(null)
-  }, [open, value, fields])
+    setInitialized(true)
+  }, [open, value, fields, initialized])
 
 
   const isEnumField = useCallback((fieldCode: string) => {
@@ -565,10 +587,10 @@ export function FilterConditionDialog({
                       <SelectTrigger className="w-[160px] h-8">
                         <SelectValue placeholder={t('filterConditionDialog.placeholders.selectField')} />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="max-h-60 overflow-y-auto">
                         {filteredFields.length > 0 ? (
                           filteredFields.map(f => {
-                            const displayText = f.displayName || "暂无";
+                            const displayText = getFieldDisplayName(f.fieldCode) || "暂无";
                             return (
                               <SelectItem key={f.fieldCode} value={f.fieldCode}>
                                 {displayText}
@@ -582,7 +604,6 @@ export function FilterConditionDialog({
                         )}
                       </SelectContent>
                     </Select>
-
                     {/* 第二个下拉框：筛选类型 */}
                     {c.fieldCode && (
                       <Select
@@ -594,7 +615,7 @@ export function FilterConditionDialog({
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="conditional">{t('filterConditionDialog.filterTypes.conditional')}</SelectItem>
-                          {c.fieldType !== "string" && <SelectItem value="enum">{t('filterConditionDialog.filterTypes.enum')}</SelectItem>}
+                          {c.fieldType !== "number" && <SelectItem value="enum">{t('filterConditionDialog.filterTypes.enum')}</SelectItem>}
                         </SelectContent>
                       </Select>
                     )}

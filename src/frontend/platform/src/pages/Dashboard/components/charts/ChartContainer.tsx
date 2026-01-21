@@ -80,7 +80,7 @@ export function ChartContainer({ isPreviewMode, isDark, component }: ChartContai
 
   // No data
   // if (error || !component.data_config.isConfigured) {
-  if (error || component.data_config.isConfigured || !data) {
+  if (error || !component.data_config.isConfigured || !data) {
     return (
       <div className="flex items-center justify-center h-full relative">
         {component.type === ChartType.Metric && <h3 className="absolute top-0 left-0 text-sm font-medium truncate dark:text-gray-400">

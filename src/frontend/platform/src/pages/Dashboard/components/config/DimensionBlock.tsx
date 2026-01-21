@@ -49,6 +49,7 @@ type MetricFormat = {
 export function DimensionBlock({
   isDimension,
   dimensions = [],
+  isStack,
   maxDimensions,
   isDragOver = false,
   onDragOver,
@@ -127,7 +128,6 @@ export function DimensionBlock({
       setHoveredMenuItem({ dimensionId, menuType })
     }
   }
-
   return (
     <div className="space-y-3"
       onDragOver={(e) => {
@@ -152,7 +152,31 @@ export function DimensionBlock({
           {dimensions.map((dimension) => (
             <div
               key={dimension.id}
-              className="relative group"
+              draggable={dimension.fieldType === 'dimension'}
+              // 在 DimensionBlock.tsx 中修改 onDragStart 部分
+              onDragStart={(e) => {
+                if (dimension.fieldType !== 'dimension') return
+
+                e.stopPropagation()
+                e.dataTransfer.effectAllowed = 'move'
+
+                const dragData = {
+                  id: dimension.id,
+                  fieldId: dimension.fieldId,
+                  name: dimension.name,
+                  displayName: dimension.displayName || dimension.name,
+                  originalName: dimension.originalName || dimension.name,
+                  fieldType: dimension.fieldType,
+                  timeGranularity: dimension.timeGranularity || null,
+                  isExistingDimension: true,
+                  sourceSection: isStack === 'stack' ? 'stack' : 'category'
+                }
+                e.dataTransfer.setData('application/json', JSON.stringify(dragData))
+              }}
+              className={`relative group ${dimension.fieldType === 'dimension'
+                ? 'cursor-move'
+                : 'cursor-default'
+                }`}
               onMouseEnter={() => setHoveredDimension(dimension.id)}
               onMouseLeave={() => setHoveredDimension(null)}
             >
@@ -169,7 +193,11 @@ export function DimensionBlock({
 
                 {/* 字段名称 */}
                 <div className="min-w-0 flex-1">
-                  <span className="text-sm font-medium truncate">{dimension.displayName}</span>
+                  <span className="text-sm font-medium truncate">
+                    {dimension.displayName && dimension.displayName.length > 15
+                      ? `${dimension.displayName.substring(0, 15)}...`
+                      : dimension.displayName}
+                  </span>
                 </div>
 
                 {/* 操作按钮 */}
@@ -196,51 +224,58 @@ export function DimensionBlock({
                       <div
                         className="absolute right-full top-0 mr-1 bg-white border rounded-md shadow-lg z-20 p-2 min-w-[120px]"
                         onClick={(e) => e.stopPropagation()}
-                        onMouseLeave={() => setHoveredMenuItem(null)}
+
                       >
                         {/* 维度菜单 */}
                         {dimension.fieldType === 'dimension' ? (
                           <>
                             {/* 排序 */}
-                            <div className="relative">
-                              <div
-                                className={`flex items-center justify-between px-2 py-1 text-xs rounded cursor-pointer ${hoveredMenuItem?.dimensionId === dimension.id && hoveredMenuItem?.menuType === 'sort' ? 'bg-gray-100' : 'hover:bg-gray-100'}`}
-                                onMouseEnter={() => handleMenuItemHover(dimension.id, 'sort')}
-                              >
-                                <span>{t('dimensionBlock.menu.sort')}</span>
-                                <ChevronRight className="h-3 w-3" />
-                              </div>
+                            {isStack !== "stack" &&
+                              <>
+                                <div className="relative">
+                                  <div
+                                    className={`flex items-center justify-between px-2 py-1 text-xs rounded cursor-pointer ${hoveredMenuItem?.dimensionId === dimension.id && hoveredMenuItem?.menuType === 'sort' ? 'bg-gray-100' : 'hover:bg-gray-100'}`}
+                                    onMouseEnter={() => handleMenuItemHover(dimension.id, 'sort')}
+                                  >
+                                    <span>{t('dimensionBlock.menu.sort')}</span>
+                                    <ChevronRight className="h-3 w-3" />
+                                  </div>
 
-                              {/* 排序子菜单 */}
-                              {hoveredMenuItem?.dimensionId === dimension.id && hoveredMenuItem?.menuType === 'sort' && (
-                                <div
-                                  className="absolute left-full top-0 ml-1 bg-white border rounded-md shadow-lg z-30 p-2 min-w-[90px]"
-                                  onMouseEnter={() => handleMenuItemHover(dimension.id, 'sort')}
-                                  onMouseLeave={() => setHoveredMenuItem(null)}
-                                >
-                                  {sortOptions.map((option) => (
-                                    <button
-                                      key={option.value}
-                                      className={`flex items-center justify-between w-full px-2 py-1 text-xs rounded ${dimension.sort === option.value ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-100'}`}
-                                      onClick={() => {
-                                        onSortChange?.(dimension.id, option.value as null | 'asc' | 'desc')
-                                        setOpenMenuId(null)
-                                        setHoveredMenuItem(null)
-                                      }}
+                                  {/* 排序子菜单 */}
+                                  {hoveredMenuItem?.dimensionId === dimension.id && hoveredMenuItem?.menuType === 'sort' && (
+                                    <div
+                                      className="absolute left-full top-0 ml-1 bg-white border rounded-md shadow-lg z-30 p-2 min-w-[90px]"
+                                      onMouseEnter={() => handleMenuItemHover(dimension.id, 'sort')}
+                                      onMouseLeave={() => setHoveredMenuItem(null)}
                                     >
-                                      <span>{option.label}</span>
-                                      {dimension.sort === option.value && <Check className="h-3 w-3" />}
-                                    </button>
-                                  ))}
+                                      {sortOptions.map((option) => (
+                                        <button
+                                          key={option.value}
+                                          className={`flex items-center justify-between w-full px-2 py-1 text-xs rounded ${dimension.sort === option.value ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-100'}`}
+                                          onClick={() => {
+                                            onSortChange?.(dimension.id, option.value as null | 'asc' | 'desc')
+                                            setOpenMenuId(null)
+                                            setHoveredMenuItem(null)
+                                          }}
+                                        >
+                                          <span>{option.label}</span>
+                                          {dimension.sort === option.value && <Check className="h-3 w-3" />}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )}
                                 </div>
-                              )}
-                            </div>
 
-                            <div className="h-px bg-gray-200 my-1"></div>
+                                <div className="h-px bg-gray-200 my-1"></div>
+                              </>
+                            }
 
                             {/* 编辑显示名称 */}
                             <button
                               className="block w-full text-left px-2 py-1 text-xs hover:bg-gray-100 rounded"
+                              onMouseEnter={() => {
+                                setHoveredMenuItem(null);
+                              }}
                               onClick={() => {
                                 onEditDisplayName(dimension.id, dimension.originalName, dimension.displayName)
                                 setOpenMenuId(null)
@@ -266,7 +301,7 @@ export function DimensionBlock({
                               {/* 汇总方式子菜单 */}
                               {hoveredMenuItem?.dimensionId === dimension.id && hoveredMenuItem?.menuType === 'aggregation' && (
                                 <div
-                                  className="absolute left-full top-0 ml-1 bg-white border rounded-md shadow-lg z-30 p-2 min-w-[90px]"
+                                  className="absolute left-full top-0 ml-1 bg-white border rounded-md shadow-lg z-30 p-2 min-w-[120px]"
                                   onMouseEnter={() => handleMenuItemHover(dimension.id, 'aggregation')}
                                   onMouseLeave={() => setHoveredMenuItem(null)}
                                   onClick={(e) => {
@@ -334,12 +369,15 @@ export function DimensionBlock({
                             {/* 数值格式 */}
                             <button
                               className="flex items-center justify-between w-full px-2 py-1 text-xs rounded hover:bg-gray-100"
+                              onMouseEnter={() => {
+                                setHoveredMenuItem(null);
+                              }}
                               onClick={() => {
                                 setEditingMetric(dimension)
                                 setLocalFormat(
                                   dimension.numberFormat || {
                                     type: 'number',
-                                    decimalPlaces: 0,
+                                    decimalPlaces: 2,
                                     unit: '',
                                     suffix: '',
                                     thousandSeparator: false
@@ -358,6 +396,9 @@ export function DimensionBlock({
                             {/* 编辑显示名称 */}
                             <button
                               className="block w-full text-left px-2 py-1 text-xs hover:bg-gray-100 rounded"
+                              onMouseEnter={() => {
+                                setHoveredMenuItem(null);
+                              }}
                               onClick={() => {
                                 onEditDisplayName(dimension.id, dimension.originalName, dimension.displayName)
                                 setOpenMenuId(null)
@@ -487,7 +528,10 @@ export function DimensionBlock({
                     <div>
                       <div className="text-sm font-medium mb-2">{t('dimensionBlock.dialog.unit')}</div>
                       <Select
-                        value={localFormat.unit || "none"}
+                        value={localFormat.unit ||
+                          (localFormat.type === 'storage' ? 'B' :
+                            localFormat.type === 'duration' ? 'ms' :
+                              'none')}
                         onValueChange={(value) => {
                           let unitVal = value === "none" ? "" : value;
                           setLocalFormat({ ...localFormat, unit: unitVal })

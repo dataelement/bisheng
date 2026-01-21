@@ -1129,7 +1129,7 @@
     "actionBehavior": "Action Behavior",
     "createChat": "Create chat",
     "deleteChat": "Delete chat",
-    "createBuild": "Create build",
+    "createBuild": "Create Agent",
     "updateBuild": "Update build",
     "deleteBuild": "Delete build",
     "createKnowledge": "Create knowledge base",

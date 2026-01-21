@@ -116,11 +116,23 @@ export default function VarInput({
 
     useEffect(() => {
         console.log('!!!value :>> ', value);
-        // if (valueRef.current && valueRef.current === value) return
-        textareaRef.current.innerHTML = parseToHTML(value || '')[0];
+        if (valueRef.current && valueRef.current !== value) {
+            valueRef.current = value;
+        }
+        if (!full) {
+            textareaRef.current.innerHTML = parseToHTML(value || '')[0];
+        }
         setFullVarInputValue(value)
         placeholderInit();
     }, [value]);
+
+    // firefox hack
+    useEffect(() => {
+        if (full) {
+            textareaRef.current.innerHTML = parseToHTML(value || '')[0];
+            placeholderInit();
+        }
+    }, [])
 
     // Update Preset Questions 
     const [updateVariable] = useUpdateVariableState()

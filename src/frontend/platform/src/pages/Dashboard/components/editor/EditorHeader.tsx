@@ -2,6 +2,7 @@
 
 import type React from "react"
 
+import { FilterIcon, GridAddIcon } from "@/components/bs-icons/dashboard"
 import { Badge } from "@/components/bs-ui/badge"
 import { Button } from "@/components/bs-ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog"
@@ -10,7 +11,7 @@ import { Separator } from "@/components/bs-ui/separator"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
 import { updateDashboard } from "@/controllers/API/dashboard"
 import { useComponentEditorStore, useEditorDashboardStore } from "@/store/dashboardStore"
-import { ArrowLeft, FunnelIcon, Grid2X2PlusIcon } from "lucide-react"
+import { ArrowLeft } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useMutation, useQueryClient } from "react-query"
@@ -18,7 +19,6 @@ import { useNavigate } from "react-router-dom"
 import { DashboardQueryKey, DashboardsQueryKey, usePublishDashboard } from "../../hook"
 import { ChartType, Dashboard } from "../../types/dataConfig"
 import ComponentPicker from "./ComponentPicker"
-import { FilterIcon, GridAddIcon } from "@/components/bs-icons/dashboard"
 
 
 interface EditorHeaderProps {
@@ -31,7 +31,7 @@ export function EditorHeader({
     dashboardId
 }: EditorHeaderProps) {
     const { t } = useTranslation("dashboard")
-    const { currentDashboard, hasUnsavedChanges, isSaving, layouts,
+    const { currentDashboard, hasUnsavedChanges, lastChangeTime, isSaving, layouts,
         reset, setIsSaving, setHasUnsavedChanges, updateCurrentDashboard, addComponentToLayout } = useEditorDashboardStore()
     const { editingComponent } = useComponentEditorStore()
     const [isEditingTitle, setIsEditingTitle] = useState(false)
@@ -96,30 +96,13 @@ export function EditorHeader({
     // Publish mutation
     const { publish, isPublishing } = usePublishDashboard()
 
-    // Auto-save every 10 seconds
-    const autoSaveTimerRef = useRef<NodeJS.Timeout>()
-    useEffect(() => {
-        const startAutoSave = () => {
-            autoSaveTimerRef.current = setInterval(() => {
-                if (hasUnsavedChanges && !isSaving) {
-                    console.log("Auto-saving dashboard...")
-                    saveMutation.mutate({
-                        autoSave: true,
-                        id: currentDashboard?.id,
-                        dashboard: currentDashboard
-                    })
-                }
-            }, 10000)
-        }
-
-        startAutoSave()
-
-        return () => {
-            if (autoSaveTimerRef.current) {
-                clearInterval(autoSaveTimerRef.current)
-            }
-        }
-    }, [hasUnsavedChanges, isSaving, saveMutation])
+    useDashboardAutoSave({
+        currentDashboard,
+        isSaving,
+        hasUnsavedChanges,
+        lastChangeTime,
+        saveMutation
+    })
 
     const getSaveStatus = () => {
         if (isSaving) return t('saving')
@@ -291,4 +274,44 @@ export function EditorHeader({
             </Dialog>
         </header>
     )
+}
+
+
+export function useDashboardAutoSave({
+    currentDashboard,
+    isSaving,
+    hasUnsavedChanges,
+    lastChangeTime,
+    saveMutation
+}) {
+    // --- Save at a fixed frequency of 15 seconds (Guaranteed Plan ) ---
+    useEffect(() => {
+        const idleTimer = setInterval(() => {
+            if (hasUnsavedChanges && !isSaving) {
+                console.log("Auto-saving dashboard...")
+                saveMutation.mutate({
+                    autoSave: true,
+                    id: currentDashboard?.id,
+                    dashboard: currentDashboard
+                })
+            }
+        }, 15000)
+
+        return () => clearInterval(idleTimer)
+    }, [hasUnsavedChanges, isSaving])
+
+    // --- Save after 2 seconds of inactivity (Idle/Debounce ) ---
+    useEffect(() => {
+        if (hasUnsavedChanges && !isSaving) {
+            const idleTimer = setTimeout(() => {
+                console.log("Log: 2s Idle Auto-save triggered.")
+                saveMutation.mutate({
+                    autoSave: true,
+                    id: currentDashboard?.id,
+                    dashboard: currentDashboard
+                })
+            }, 2000)
+            return () => clearTimeout(idleTimer)
+        }
+    }, [hasUnsavedChanges, isSaving, lastChangeTime, saveMutation])
 }

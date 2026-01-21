@@ -94,6 +94,11 @@ export default function DataTableKnowledge<TData, TValue>({
             message: res.status_message,
             severity: NotificationSeverity.ERROR,
           })
+        } else if (res.data.remark) {
+          showToast({
+            message: localize('com_tools_knowledge_upload_remark'),
+            severity: NotificationSeverity.ERROR,
+          })
         }
       }
     } catch (error) {

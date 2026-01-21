@@ -687,6 +687,7 @@
   "kbLimitReached": "知识库数量已达上限（最多50个）",
   "com_tools_knowledge_base_search": "搜索知识库名称",
   "com_tools_knowledge_rebuilding": "个人知识库 embedding 模型已更换，正在重建知识库，请稍后再试",
+  "com_tools_knowledge_upload_remark": "检测到重复文件，重复文件自动跳过",
   "com_tools_no_more": "没有更多了",
   "com_tools_no_results": "暂无相关数据",
   "com_ui_edit": "编辑",

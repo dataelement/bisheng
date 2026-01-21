@@ -18,6 +18,7 @@ interface HistoryState {
 interface EditorState {
     // Whether there are unsaved changes
     hasUnsavedChanges: boolean;
+    lastChangeTime: number;
     // Whether currently saving
     isSaving: boolean;
     // Currently edited dashboard
@@ -70,6 +71,7 @@ interface EditorState {
 let isInternalOperation = false; // Flag to prevent snapshot loops
 export const useEditorDashboardStore = create<EditorState>((set, get) => ({
     hasUnsavedChanges: false,
+    lastChangeTime: 0,
     isSaving: false,
     currentDashboard: null,
     currentDashboardId: '',
@@ -106,7 +108,11 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
         debugLog('layouts')
 
         saveSnapshot();
-        set({ layouts: newLayouts, hasUnsavedChanges: true })
+        set({
+            layouts: newLayouts,
+            hasUnsavedChanges: true,
+            lastChangeTime: Date.now()
+        })
     },
     addComponentToLayout: (component) => {
         const { layouts, saveSnapshot } = get()
@@ -130,6 +136,7 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
         set({
             layouts: [...layouts, newLayout],
             hasUnsavedChanges: true,
+            lastChangeTime: Date.now(),
             currentDashboard: {
                 ...get().currentDashboard!,
                 components: [...get().currentDashboard!.components, {
@@ -156,7 +163,8 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
         debugLog('removeComponent')
         set({
             layouts: layouts.filter(l => l.i !== componentId),
-            hasUnsavedChanges: true
+            hasUnsavedChanges: true,
+            lastChangeTime: Date.now()
         })
 
         isInternalOperation = true
@@ -185,7 +193,8 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
                 ...currentDashboard,
                 components: updatedComponents
             },
-            hasUnsavedChanges: true
+            hasUnsavedChanges: true,
+            lastChangeTime: Date.now()
         })
     },
     // Duplicate component
@@ -217,7 +226,8 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
                 components: [...currentDashboard.components, newComponent]
             },
             layouts: [...layouts, newLayoutItem],
-            hasUnsavedChanges: true
+            hasUnsavedChanges: true,
+            lastChangeTime: Date.now()
         })
 
         isInternalOperation = true
@@ -236,7 +246,8 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
                 components: currentDashboard.components.filter(c => c.id !== componentId)
             },
             layouts: layouts.filter(l => l.i !== componentId),
-            hasUnsavedChanges: true
+            hasUnsavedChanges: true,
+            lastChangeTime: Date.now()
         })
 
         isInternalOperation = true
@@ -460,7 +471,8 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
                 past: newPast,
                 future: [currentSnapshot, ...history.future]
             },
-            hasUnsavedChanges: true
+            hasUnsavedChanges: true,
+            lastChangeTime: Date.now()
         })
         setTimeout(() => isInternalOperation = false, 100)
     },
@@ -486,7 +498,8 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
                 past: [...history.past, currentSnapshot],
                 future: newFuture
             },
-            hasUnsavedChanges: true
+            hasUnsavedChanges: true,
+            lastChangeTime: Date.now()
         })
         setTimeout(() => isInternalOperation = false, 100)
     }

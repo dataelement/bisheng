@@ -152,7 +152,7 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
                         {/* 搜索框 */}
                         <div className="px-2 py-1.5">
                             <div className="relative">
-                                <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground z-10" />
                                 <Input
                                     placeholder={t("datasetSelector.searchDataset")}
                                     value={searchTerm}
@@ -174,7 +174,7 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
                         ) : (
                             filteredDatasets.map((dataset) => (
                                 <SelectItem key={dataset.dataset_code} value={dataset.dataset_code}>
-                                    {dataset.dataset_name}
+                                    {t(dataset.dataset_code)}
                                 </SelectItem>
                             ))
                         )}
@@ -204,7 +204,7 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
                                 {selectedDataset.schema_config.dimensions.map((dimension) => {
                                     if (dimension.time_granularitys && dimension.time_granularitys.length > 0) {
                                         return dimension.time_granularitys.map((g) => {
-                                            const displayName = `${dimension.name}(${getTimeGranularityLabel(g)})`
+                                            const displayName = t(`${dimension.field}.${g}`)
                                             const field: DatasetField = {
                                                 fieldCode: dimension.field,
                                                 displayName,
@@ -222,8 +222,7 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
                                                 >
                                                     {TIME_ICONS[g]}
                                                     <span className="text-sm flex-1">
-                                                        {dimension.name}
-                                                        {g ? ` (${getTimeGranularityLabel(g)})` : ""}
+                                                        {displayName}
                                                     </span>
                                                 </div>
                                             )
@@ -233,7 +232,7 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
                                     // 普通非时间字段
                                     const field: DatasetField = {
                                         fieldCode: dimension.field,
-                                        displayName: dimension.name,
+                                        displayName: t(dimension.field),
                                         fieldType: dimension.type === "integer" ? "number" : "string",
                                         role: "dimension",
                                     }
@@ -247,7 +246,7 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
                                             onClick={(e) => { e.stopPropagation(); onFieldClick?.(field) }}
                                         >
                                             {getFieldTypeIcon(field.fieldType)}
-                                            <span className="text-sm flex-1">{dimension.name}</span>
+                                            <span className="text-sm flex-1">{t(dimension.field)}</span>
                                         </div>
                                     )
                                 })}
@@ -274,7 +273,7 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
                                     const isVirtual = isVirtualMetric(metric)
                                     const field: DatasetField = {
                                         fieldCode: metric.field,
-                                        displayName: metric.name,
+                                        displayName: t(metric.field),
                                         fieldType: "number",
                                         role: "metric" as const,
                                         isVirtual: metric.is_virtual
@@ -294,7 +293,7 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
                                                 <Hash className="h-4 w-4" />
                                             </div>
                                             <span className="text-sm flex-1 flex items-center gap-1">
-                                                {metric.name}
+                                                {t(metric.field)}
                                                 {isVirtual && <span className="text-muted-foreground text-xs">{t("datasetSelector.virtualMetric")}</span>}
                                             </span>
                                         </div>

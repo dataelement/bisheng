@@ -42,8 +42,8 @@ export function ComponentWrapper({
 
     useEffect(() => {
         console.log('componentData :>> ', componentData);
-        setTitle(component.title)
-    }, [editingComponent, component])
+        setTitle(componentData.title)
+    }, [editingComponent])
 
     useEffect(() => {
         if (isEditing && inputRef.current) {

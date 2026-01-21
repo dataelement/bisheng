@@ -1,14 +1,16 @@
 "use client"
 
 import { MetricDataResponse } from '@/pages/Dashboard/types/chartData'
-import { ArrowDown, ArrowUp, Minus } from 'lucide-react'
+import { ArrowDown, ArrowUp, GripHorizontalIcon, Minus } from 'lucide-react'
 import { useMemo } from 'react'
 import { ComponentStyleConfig, DataConfig } from '../../types/dataConfig'
+import { cn } from '@/utils'
 
 interface MetricCardProps {
   data: MetricDataResponse
   dataConfig?: DataConfig
   styleConfig: ComponentStyleConfig
+  isPreviewMode?: boolean
 }
 
 export const unitConversion = (value, dataConfig) => {
@@ -65,12 +67,13 @@ export const unitConversion = (value, dataConfig) => {
   }
 
   // 处理后缀
-  const finalUnit = suffix || unitLabel;
+  const finalUnit = unitLabel + (suffix || '');
+  // const finalUnit = suffix || unitLabel;
 
   return [result, finalUnit];
 }
 
-export function MetricCard({ data, dataConfig, styleConfig }: MetricCardProps) {
+export function MetricCard({ data, isPreviewMode, dataConfig, styleConfig }: MetricCardProps) {
 
   const indicatorName = styleConfig.title
   const subTitle = styleConfig.subtitle
@@ -154,22 +157,30 @@ export function MetricCard({ data, dataConfig, styleConfig }: MetricCardProps) {
   })
 
   return (
-    <div className="flex items-end justify-between h-full">
-      <div className='flex flex-col h-full justify-between'>
-        {/* subtitle */}
-        {styleConfig.showSubtitle && subTitle ? (
-          <div style={subtitleStyle}>{subTitle}</div>
-        ) : <div></div>}
+    <div className="group h-full flex flex-col justify-between select-none">
+      {/* subtitle */}
+      {styleConfig.showSubtitle && subTitle ? (
+        <div style={subtitleStyle}>{subTitle}</div>
+      ) : <div></div>}
+      <div className='flex justify-between items-end'>
         {/* title */}
-        <div style={titleStyle}>{indicatorName}</div>
-      </div>
-      {/* value */}
-      <div style={metricStyle}>
-        {formatValue}
-        {displayUnit && <span className="text-xl ml-2 text-muted-foreground">{displayUnit}</span>}
+        <div style={titleStyle} className=' truncate'>{indicatorName}</div>
+        {/* value */}
+        <div style={metricStyle} className='leading-[1.2em]'>
+          {formatValue}
+          {displayUnit && <span className="text-xl ml-2 text-muted-foreground">{displayUnit}</span>}
+        </div>
       </div>
 
-
+      {!isPreviewMode && <GripHorizontalIcon
+        className={cn(
+          "absolute top-1 left-1/2 -translate-x-1/2 text-gray-400 transition-opacity",
+          "opacity-0",
+          "group-hover:opacity-100",
+          "group-has-[.no-drag:hover]:opacity-0"
+        )}
+        size={16}
+      />}
       {/* 趋势信息 */}
       {/* {trend && (
         <div className="flex items-center gap-1 text-sm">

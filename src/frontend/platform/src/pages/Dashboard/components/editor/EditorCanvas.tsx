@@ -169,7 +169,7 @@ export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanv
 
     const [isDragging, setIsDragging] = useState(false);
     const gridBackgroundStyle = useMemo(() => {
-        if (isPreviewMode || !width || !mounted || !isDragging) return {};
+        // if (isPreviewMode || !width || !mounted || !isDragging) return {};
 
         const cols = 24;
         const rowHeight = 32;
@@ -242,59 +242,62 @@ export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanv
             <div className="flex h-full">
                 <div
                     id="edit-charts-panne"
-                    ref={containerRef}
-                    className={cn("flex-1 overflow-auto min-w-[1000px] no-scrollbar", theme)}
+                    className={cn("flex-1 overflow-auto no-scrollbar", theme)}
                     style={{
                         backgroundColor: theme === 'dark' ? '#1a1a1a' : '#f5f5f5',
                     }}
                 >
-                    <div className="mx-auto relative" style={{
-                        ...gridBackgroundStyle,
-                    }}>
-                        {mounted && (
-                            <ReactGridLayout
-                                className="layout"
-                                layout={layouts}
-                                width={width}
-                                gridConfig={{
-                                    cols: 24,
-                                    rowHeight: 32,
-                                    margin: [8, 8],
-                                    containerPadding: [16, 16]
-                                }}
-                                dragConfig={{
-                                    enabled: !isPreviewMode,
-                                    // handle: ".drag-handle",
-                                    cancel: ".no-drag,input"
-                                }}
-                                onDragStart={() => setIsDragging(true)}
-                                onResizeStart={() => setIsDragging(true)}
-                                onDragStop={() => setIsDragging(false)}
-                                onResizeStop={() => setIsDragging(false)}
-                                resizeConfig={
-                                    {
-                                        enabled: !isPreviewMode,
-                                        handles: ["sw", "nw", "se", "ne", "s", "n", "e", "w"]
+                    <div
+                        ref={containerRef}
+                        className="min-w-[1000px] min-h-full">
+                        <div className="mx-auto min-h-full relative" style={{
+                            ...gridBackgroundStyle,
+                        }}>
+                            {mounted && (
+                                <ReactGridLayout
+                                    className="layout"
+                                    layout={layouts}
+                                    width={width}
+                                    gridConfig={{
+                                        cols: 24,
+                                        rowHeight: 32,
+                                        margin: [8, 8],
+                                        containerPadding: [16, 16]
                                     }}
-                                onLayoutChange={handleLayoutChange}
-                                compactor={verticalCompactor}
-                            >
-                                {currentDashboard.components.map((component) => (
-                                    <div key={component.id} className={`drag-handle`}>
-                                        <ComponentWrapper
-                                            dashboards={dashboards}
-                                            component={component}
-                                            isDark={theme === 'dark'}
-                                            isPreviewMode={isPreviewMode}
-                                            onDuplicate={handleDuplicate}
-                                            onCopyTo={handleCopyTo}
-                                            onDelete={handleDelete}
-                                            onRename={handleRename}
-                                        />
-                                    </div>
-                                ))}
-                            </ReactGridLayout>
-                        )}
+                                    dragConfig={{
+                                        enabled: !isPreviewMode,
+                                        // handle: ".drag-handle",
+                                        cancel: ".no-drag,input"
+                                    }}
+                                    onDragStart={() => setIsDragging(true)}
+                                    onResizeStart={() => setIsDragging(true)}
+                                    onDragStop={() => setIsDragging(false)}
+                                    onResizeStop={() => setIsDragging(false)}
+                                    resizeConfig={
+                                        {
+                                            enabled: !isPreviewMode,
+                                            handles: ["sw", "nw", "se", "ne", "s", "n", "e", "w"]
+                                        }}
+                                    onLayoutChange={handleLayoutChange}
+                                    compactor={verticalCompactor}
+                                >
+                                    {currentDashboard.components.map((component) => (
+                                        <div key={component.id} className={`drag-handle`}>
+                                            <ComponentWrapper
+                                                dashboards={dashboards}
+                                                component={component}
+                                                isDark={theme === 'dark'}
+                                                isPreviewMode={isPreviewMode}
+                                                onDuplicate={handleDuplicate}
+                                                onCopyTo={handleCopyTo}
+                                                onDelete={handleDelete}
+                                                onRename={handleRename}
+                                            />
+                                        </div>
+                                    ))}
+                                </ReactGridLayout>
+                            )}
+                        </div>
                     </div>
                 </div>
                 {/* drawer */}

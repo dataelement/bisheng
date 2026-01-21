@@ -1120,9 +1120,7 @@
     "createDashboard":"新建看板",
     "deleteDashboard":"删除看板",
     "updateDashboard":"修改看板",
-  
-
-   
+    "createBuild": "新建应用",
     "create_chat": "新建会话",
     "delete_chat": "删除会话",
     "create_build": "新建应用",

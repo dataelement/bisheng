@@ -152,40 +152,72 @@ import {
 } from '@/pages/Dashboard/types/chartData';
 import { cloneDeep } from "lodash-es";
 
+function transformStackedData(resData: any) {
+    const { value, dimensions: rawDimensions } = resData;
+    const groups: string[] = [];
+    const seriesKeys: string[] = [];
+    const dataMap: Record<string, Record<string, number>> = {};
+
+    rawDimensions.forEach((dim: string[], index: number) => {
+        const seriesName = dim[dim.length - 1];
+        const groupName = dim.slice(0, -1).join('\n');
+        const val = value[index][0];
+
+        if (!groups.includes(groupName)) groups.push(groupName);
+        if (!seriesKeys.includes(seriesName)) seriesKeys.push(seriesName);
+
+        if (!dataMap[groupName]) dataMap[groupName] = {};
+        dataMap[groupName][seriesName] = val;
+    });
+
+    const series = seriesKeys.map(name => ({
+        name,
+        data: groups.map(group => dataMap[group][name] ?? null)
+    }));
+
+    return { dimensions: groups, series };
+}
+
+function transformNormalData(resData: any, component: DashboardComponent) {
+    const dimensions = resData.dimensions.map((name: string[]) => name.join('\n'));
+    const metrics = component.data_config.metrics || [];
+    const series = metrics.map((m, idx) => ({
+        name: m.displayName.length > 24 ? m.displayName.slice(0, 24) + '...' : m.displayName,
+        data: resData.value.map((val: any[]) => val[idx])
+    }));
+
+    return { dimensions, series };
+}
+
 export async function queryChartData(params: {
     useId: boolean,
     component: DashboardComponent,
     dashboardId: string
     queryParams?: any
 }): Promise<QueryDataResponse> {
+    const { component, useId, dashboardId, queryParams } = params;
+
     const resData = await axios.post(`/api/v1/telemetry/dashboard/component/query`, {
-        dashboard_id: params.dashboardId,
-        component_data: params.useId ? undefined : params.component,
-        component_id: params.useId ? params.component.id : undefined,
-        time_filters: params.queryParams.filter(p => p.queryComponentParams).map(({ queryComponentParams: p }) => ({
-            type: p.type,
-            mode: p.isDynamic ? TimeRangeMode.Dynamic : TimeRangeMode.Fixed,
-            recentDays: p.shortcutKey ? Number(p.shortcutKey.replace('last_', '')) : undefined,
-            startDate: p.startTime,
-            endDate: p.endTime,
-        }))
+        dashboard_id: dashboardId,
+        component_data: useId ? undefined : component,
+        component_id: useId ? component.id : undefined,
+        time_filters: queryParams
+            .filter(p => p.queryComponentParams)
+            .map(({ queryComponentParams: p }) => ({
+                type: p.type,
+                mode: p.isDynamic ? TimeRangeMode.Dynamic : TimeRangeMode.Fixed,
+                recentDays: p.shortcutKey ? Number(p.shortcutKey.replace('last_', '')) : undefined,
+                startDate: p.startTime,
+                endDate: p.endTime,
+            }))
     });
 
-    const metricsData = params.component.data_config.metrics.map(e => e.displayName)
+    const isStacked = !!component.data_config.stackDimension?.fieldId;
+    const { dimensions, series } = isStacked
+        ? transformStackedData(resData)
+        : transformNormalData(resData, component);
 
-    const hasDuidie = false
-    let duidieweidu = [] // 表字段去重值
-    const nameSet = new Set()
-    resData.dimensions = resData.dimensions.map((name) => {
-        hasDuidie && nameSet.add(name.pop())
-        return name.join('\n')
-    })
-
-    if (hasDuidie) {
-        duidieweidu = Array.from(nameSet)
-    }
-
-    console.log('query params :>> ', params);
+    // console.log('query params :>> ', dimensions, series);
 
     const chartType = params.component.type
 
@@ -202,11 +234,8 @@ export async function queryChartData(params: {
         case ChartType.StackedLine:
         case ChartType.StackedArea:
             return {
-                dimensions: resData.dimensions,
-                series: (hasDuidie ? duidieweidu : metricsData).map((name, index) => ({
-                    name: name,
-                    data: resData.value.map(el => el[index])
-                }))
+                dimensions,// xAxis.data
+                series // legend && series(chart line) 
             }
         case ChartType.Pie:
         case ChartType.Donut:
@@ -215,7 +244,7 @@ export async function queryChartData(params: {
                 series: [
                     {
                         name: '',
-                        data: resData.dimensions.map((name, index) => ({
+                        data: dimensions.map((name, index) => ({
                             name: name,
                             value: resData.value[index][0]
                         }))
@@ -224,19 +253,12 @@ export async function queryChartData(params: {
             }
         case ChartType.Metric:
             return {
-                value: resData.value[0][0],
-                title: metricsData[0],
-                unit: '元',
-                trend: {
-                    value: 12.5,
-                    direction: 'up',
-                    label: '较上月'
-                },
-                format: {
-                    decimalPlaces: 2,
-                    thousandSeparator: true
-                }
-            }
+                value: resData.value[0]?.[0] ?? 0,
+                title: series[0]?.name || '',
+                unit: '',
+                trend: { value: 0, direction: 'up', label: '' },
+                format: { decimalPlaces: 2, thousandSeparator: true }
+            };
     }
 }
 
