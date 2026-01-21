@@ -511,9 +511,20 @@ export function DimensionBlock({
                   step={1}
                   value={localFormat.decimalPlaces}
                   onChange={(e) => {
-                    const val = Number(e.target.value);
-                    if (val >= 0 && val <= 5) {
-                      setLocalFormat({ ...localFormat, decimalPlaces: val })
+                    const val = e.target.value;
+                    if (val === '') {
+                      setLocalFormat({ ...localFormat, decimalPlaces: undefined })
+                    } else {
+                      const numVal = Number(val);
+                      if (numVal >= 0 && numVal <= 5) {
+                        setLocalFormat({ ...localFormat, decimalPlaces: numVal })
+                      }
+                    }
+                  }}
+                  onBlur={(e) => {
+                    const val = e.target.value;
+                    if (val === '' || isNaN(Number(val))) {
+                      setLocalFormat({ ...localFormat, decimalPlaces: 2 })
                     }
                   }}
                   className="w-full"

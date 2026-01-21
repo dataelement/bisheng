@@ -60,7 +60,7 @@
 
     "filter": "Filter",
     "addFilterCondition": "Add Filter Condition",
-    "filterConditionsAdded": "{{count}} filter conditions added",
+    "filterConditionsAdded": "Filter conditions added",
     "filterLogicHint": " ({{logic}})",
 
     "timeRange": "Time Range",

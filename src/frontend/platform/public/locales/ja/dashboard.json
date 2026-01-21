@@ -69,7 +69,7 @@
 
     "filter": "フィルター",
     "addFilterCondition": "フィルター条件を追加",
-    "filterConditionsAdded": "フィルター条件 {{count}} 個を追加",
+    "filterConditionsAdded": "フィルター条件を追加済み",
     "filterLogicHint": " ({{logic}})",
 
     "timeRange": "時間範囲",
