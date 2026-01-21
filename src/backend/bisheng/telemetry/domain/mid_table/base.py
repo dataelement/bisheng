@@ -9,24 +9,53 @@ from bisheng.common.services import telemetry_service
 from bisheng.core.search.elasticsearch.manager import get_es_connection, get_es_connection_sync
 
 common_properties = {
-    "user_id": {"type": "integer"},
-    "user_name": {"type": "keyword"},
+    "user_id": {"type": "keyword",
+                "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}}},
+    "user_name": {"type": "keyword",
+                  "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}}},
     "user_group_infos": {
         "type": "object",
         "properties": {
-            "user_group_id": {"type": "integer"},
-            "user_group_name": {"type": "keyword", "fields": {"text": {"type": "text"}}}
+            "user_group_id": {"type": "keyword",
+                              "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}}},
+            "user_group_name": {"type": "keyword",
+                                "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}}}
         }
     },
     "user_role_infos": {
         "type": "object",
         "properties": {
-            "role_id": {"type": "integer"},
-            "role_name": {"type": "keyword", "fields": {"text": {"type": "text"}}},
-            "group_id": {"type": "integer"}
+            "role_id": {"type": "keyword",
+                        "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}}},
+            "role_name": {"type": "keyword", "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}}},
+            "group_id": {"type": "keyword",
+                         "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}}},
         }
     },
     "timestamp": {"type": "date", "format": "strict_date_optional_time||epoch_second"},
+}
+common_settings = {
+    "analysis": {
+        "tokenizer": {
+            "single_char_tokenizer": {
+                "type": "ngram",
+                "min_gram": 1,
+                "max_gram": 1,
+                "token_chars": [
+                    "letter",
+                    "digit",
+                    "punctuation",
+                    "symbol"
+                ]
+            }
+        },
+        "analyzer": {
+            "single_char_analyzer": {
+                "type": "custom",
+                "tokenizer": "single_char_tokenizer"
+            }
+        }
+    }
 }
 
 
@@ -56,7 +85,8 @@ class BaseMidTable(BaseModel):
             if not exists:
                 # Incoming body Applications Mapping
                 await self._es_client.indices.create(index=self._index_name,
-                                                     body={"mappings": {"properties": mappings}})
+                                                     body={"settings": common_settings,
+                                                           "mappings": {"properties": mappings}})
         except es_exceptions.RequestError as e:
             # Ignore on concurrency creation "resource_already_exists_exception"
             if "resource_already_exists_exception" not in str(e):
@@ -75,7 +105,8 @@ class BaseMidTable(BaseModel):
             if not exists:
                 # Incoming body Applications Mapping
                 self._es_client_sync.indices.create(index=self._index_name,
-                                                    body={"mappings": {"properties": mappings}})
+                                                    body={"settings": common_settings,
+                                                          "mappings": {"properties": mappings}})
         except es_exceptions.RequestError as e:
             # Ignore on concurrency creation "resource_already_exists_exception"
             if "resource_already_exists_exception" not in str(e):

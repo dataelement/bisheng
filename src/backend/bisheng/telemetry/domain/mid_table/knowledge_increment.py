@@ -10,7 +10,7 @@ class KnowledgeIncrementRecord(BaseRecord):
 class KnowledgeIncrement(BaseMidTable):
     _index_name = 'mid_knowledge_increment'
     _mappings = {
-        "knowledge_id": {"type": "integer"},
-        "knowledge_name": {"type": "keyword", "fields": {"text": {"type": "text"}}},
-        "knowledge_type": {"type": "integer"},
+        "knowledge_id": {"type": "keyword", "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}}},
+        "knowledge_name": {"type": "keyword", "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}}},
+        "knowledge_type": {"type": "keyword", "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}}},
     }
