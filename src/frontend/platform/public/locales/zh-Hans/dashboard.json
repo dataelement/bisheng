@@ -299,7 +299,7 @@
     "selectTime": "选择时间",
     "startHour": "开始小时",
     "endHour": "结束小时",
-    "dynamicUpdate": "动态更新 (下次查看时自动根据当前时间推算)",
+    "dynamicUpdate": "动态更新",
     "cancel": "取消",
     "clear": "清空",
     "confirm": "确定",

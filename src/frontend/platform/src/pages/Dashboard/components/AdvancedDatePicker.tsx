@@ -339,21 +339,21 @@ export function AdvancedDatePicker({
                     {sc.label}
                   </Button>
                 ))}
+                {/* Dynamic Checkbox - Appears only when a shortcut is active */}
+                {selectedShortcut && (
+                  <div className="flex items-center space-x-1 px-1">
+                    <Checkbox
+                      id="dynamic-mode"
+                      checked={isDynamic}
+                      onCheckedChange={(c) => setIsDynamic(c as boolean)}
+                    />
+                    <Label htmlFor="dynamic-mode" className="text-xs cursor-pointer">
+                      {t('dynamicUpdate')}
+                    </Label>
+                  </div>
+                )}
               </div>
 
-              {/* Dynamic Checkbox - Appears only when a shortcut is active */}
-              {selectedShortcut && (
-                <div className="flex items-center space-x-2 px-1 mt-2">
-                  <Checkbox
-                    id="dynamic-mode"
-                    checked={isDynamic}
-                    onCheckedChange={(c) => setIsDynamic(c as boolean)}
-                  />
-                  <Label htmlFor="dynamic-mode" className="text-xs cursor-pointer">
-                    {t('dynamicUpdate')}
-                  </Label>
-                </div>
-              )}
             </div>
           )}
 

@@ -322,7 +322,7 @@
   "selectTime": "Select Time",
   "startHour": "Start Hour",
   "endHour": "End Hour",
-  "dynamicUpdate": "Dynamic Update (Auto-calculate based on current time)",
+  "dynamicUpdate": "Dynamic Update",
   "cancel": "Cancel",
   "clear": "Clear",
   "confirm": "Confirm",

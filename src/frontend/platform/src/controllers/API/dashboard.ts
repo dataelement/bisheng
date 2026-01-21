@@ -1,7 +1,7 @@
 // Mock API functions for dashboard operations
 
 import { generateUUID } from "@/components/bs-ui/utils";
-import { ChartType, Dashboard, DashboardComponent, LayoutItem, TimeRangeMode } from "@/pages/Dashboard/types/dataConfig";
+import { ChartType, Dashboard, DashboardComponent, LayoutItem, TimeRangeMode, TimeRangeType } from "@/pages/Dashboard/types/dataConfig";
 import axios from "../request";
 
 // Simulate API delay
@@ -202,13 +202,13 @@ export async function queryChartData(params: {
         component_data: useId ? undefined : component,
         component_id: useId ? component.id : undefined,
         time_filters: queryParams
-            .filter(p => p.queryComponentParams)
+            .filter(p => p.queryComponentParams) // all
             .map(({ queryComponentParams: p }) => ({
-                type: p.type,
+                type: p.shortcutKey ? TimeRangeType.RECENT_DAYS : TimeRangeType.CUSTOM,
                 mode: p.isDynamic ? TimeRangeMode.Dynamic : TimeRangeMode.Fixed,
-                recentDays: p.shortcutKey ? Number(p.shortcutKey.replace('last_', '')) : undefined,
-                startDate: p.startTime,
-                endDate: p.endTime,
+                recent_days: p.shortcutKey ? Number(p.shortcutKey.replace('last_', '')) : undefined,
+                start_date: p.startTime,
+                end_date: p.endTime,
             }))
     });
 

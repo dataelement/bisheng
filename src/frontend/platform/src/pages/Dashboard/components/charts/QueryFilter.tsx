@@ -39,7 +39,9 @@ export function QueryFilter({ isDark, component, isPreviewMode = false }: QueryF
         console.log('filter :>> ', filter);
     }, [filter])
     useEffect(() => {
+        // set default filter
         const { type, mode, recentDays, startDate, endDate } = queryConditions.defaultValue
+        if (filter) return // not need reset
         if (queryConditions.defaultValue) {
             if (type === TimeRangeType.ALL) {
                 setQueryComponentParams(component.id, undefined)
@@ -54,7 +56,7 @@ export function QueryFilter({ isDark, component, isPreviewMode = false }: QueryF
             setFilter(datePickerVal)
             setQueryComponentParams(component.id, datePickerVal)
         }
-    }, [queryConditions.defaultValue, queryConditions.defaultValue])
+    }, [queryConditions.defaultValue])
 
     return (
         <div className="group w-full h-full p-4 py-0 flex flex-col gap-3 relative">
@@ -75,6 +77,7 @@ export function QueryFilter({ isDark, component, isPreviewMode = false }: QueryF
                         onChange={(val) => {
                             console.log("Day Range Change:", val);
                             setFilter(val);
+                            setQueryComponentParams(component.id, val)
                         }}
                     />
                     <Button onClick={handleQuery} className=" gap-1">
