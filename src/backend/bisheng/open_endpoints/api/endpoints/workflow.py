@@ -55,7 +55,7 @@ async def invoke_workflow(request: Request,
         unique_id = session_id
     start_time = time.time()
     logger.debug(f'invoke_workflow: {workflow_id}, {session_id}')
-    workflow = RedisCallback(unique_id, workflow_id, chat_id, login_user.user_id)
+    workflow = RedisCallback(unique_id, workflow_id, chat_id, login_user.user_id, source="api")
 
     # 查询工作流状态
     status_info = workflow.get_workflow_status()
@@ -141,7 +141,7 @@ async def stop_workflow(request: Request,
     login_user = get_default_operator()
     chat_id = session_id.split('_', 1)[0]
     unique_id = session_id
-    workflow = RedisCallback(unique_id, workflow_id, chat_id, str(login_user.user_id))
+    workflow = RedisCallback(unique_id, workflow_id, chat_id, login_user.user_id, source="api")
     workflow.set_workflow_stop()
     return resp_200()
 

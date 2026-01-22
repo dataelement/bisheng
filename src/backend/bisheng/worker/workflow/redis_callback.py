@@ -30,7 +30,7 @@ from bisheng.workflow.common.workflow import WorkflowStatus
 
 class RedisCallback(BaseCallback):
 
-    def __init__(self, unique_id: str, workflow_id: str, chat_id: str, user_id: int):
+    def __init__(self, unique_id: str, workflow_id: str, chat_id: str, user_id: int, **kwargs):
         super(RedisCallback, self).__init__()
         # 异步任务的唯一ID
         self.unique_id = unique_id
@@ -39,6 +39,7 @@ class RedisCallback(BaseCallback):
         self.user_id = user_id
         self.workflow = None
         self.create_session = False
+        self.source = kwargs.get('source', 'platform')  # only platform or api
 
         self.redis_client = get_redis_client_sync()
         self.workflow_data_key = f'workflow:{unique_id}:data'
@@ -409,7 +410,7 @@ class RedisCallback(BaseCallback):
                                                  event_data=NewMessageSessionEventData(
                                                      session_id=self.chat_id,
                                                      app_id=self.workflow_id,
-                                                     source="platform",
+                                                     source=self.source,
                                                      app_name=db_workflow.name,
                                                      app_type=ApplicationTypeEnum.WORKFLOW
                                                  )
