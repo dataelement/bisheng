@@ -1,3 +1,4 @@
+import json
 import os
 import shutil
 import tempfile
@@ -6,17 +7,21 @@ from enum import Enum
 from typing import Any, List
 from urllib.parse import urlparse, unquote
 
+from json_repair import json_repair
+from langchain_core.messages import SystemMessage, HumanMessage
 from loguru import logger
 
 from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.knowledge_imp import read_chunk_text
 from bisheng.api.v1.schemas import FileProcessBase
 from bisheng.chat.types import IgnoreException
+from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.errcode.knowledge import KnowledgeFileNotSupportedError
 from bisheng.core.cache.utils import file_download
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.llm.domain.services import LLMService
 from bisheng.utils import generate_uuid
+from bisheng.workflow.callback.event import GuideQuestionData
 from bisheng.workflow.nodes.base import BaseNode
 from bisheng.workflow.nodes.input.const import InputFileMetadata
 
@@ -79,13 +84,55 @@ class InputNode(BaseNode):
             one['value'], _ = self.parse_msg_with_variables(one['value'])
         return form_input_info
 
+    def handle_recommended_questions(self):
+        recommended_questions_flag = self.node_params.get('recommended_questions_flag', False)
+        if not recommended_questions_flag:
+            return
+        recommended_llm = self.node_params.get('recommended_llm', 0)
+        recommended_system_prompt = self.node_params.get('recommended_system_prompt', '')
+        recommended_history_num = self.node_params.get('recommended_history_num', 3)
+        if not recommended_llm or not recommended_system_prompt or not recommended_history_num:
+            logger.debug(f"{self.name} recommended questions config incomplete")
+            return
+        chat_history = self.graph_state.get_history_memory(recommended_history_num)
+        if not chat_history:
+            logger.debug(f"{self.name} recommended questions chat history is empty")
+            return
+
+        llm_obj = LLMService.get_bisheng_llm_sync(model_id=recommended_llm,
+                                                  app_id=self.workflow_id,
+                                                  app_name=self.workflow_name,
+                                                  app_type=ApplicationTypeEnum.WORKFLOW,
+                                                  user_id=self.user_id)
+
+        result = llm_obj.invoke([SystemMessage(content=recommended_system_prompt), HumanMessage(content=chat_history)])
+        result = result.content
+        try:
+            result = json.loads(result)
+        except json.decoder.JSONDecodeError:
+            logger.debug("received non-json response from LLM, try json repair")
+            result = json_repair.loads(result, skip_json_loads=True)
+        logger.debug(f"received response from LLM, result is {result}")
+        if not isinstance(result, dict):
+            return
+        questions = []
+        for key, value in result.items():
+            if isinstance(value, list):
+                questions = value
+                break
+        if not questions:
+            return
+        self.callback_manager.on_guide_question(data=GuideQuestionData(node_id=self.id, name=self.name,
+                                                                       unique_id=generate_uuid(),
+                                                                       guide_question=questions[:3]))
+
     def _run(self, unique_id: str):
         if self.is_dialog_input():
             # Input in the form of a dialog
             result = self.parse_upload_file("dialog_files", {
                 "key": "dialog_files",
                 "file_content": "dialog_files_content",
-                "file_path": "dialog_files_path",
+                "file_path": "dialog_file_paths",
                 "image_file": "dialog_image_files",
                 "file_parse_mode": self.node_params.get("file_parse_mode", ParseModeEnum.EXTRACT_TEXT),
                 "file_content_size": self.node_params.get("dialog_files_content_size", 15000)
@@ -93,7 +140,7 @@ class InputNode(BaseNode):
             res = {
                 'user_input': self.node_params['user_input'],
                 'dialog_files_content': result.get("dialog_files_content", ""),
-                'dialog_files_path': result.get("dialog_files_path", []),
+                'dialog_file_paths': result.get("dialog_file_paths", []),
                 'dialog_image_files': result.get("dialog_image_files", []),
             }
             self.graph_state.save_context(content=f'{res["dialog_files_content"]}\n{res["user_input"]}',
