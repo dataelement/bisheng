@@ -396,7 +396,7 @@ export function FilterConditionDialog({
 
     setDraft({
       logic: safeValue.logic ?? "and",
-      conditions: newConditions // 不自动添加空条件
+      conditions: newConditions.length > 0 ? newConditions : [createEmptyCondition()] // 不自动添加空条件
     })
     setError(null)
     // setInitialized(true)
@@ -417,8 +417,8 @@ export function FilterConditionDialog({
         return true
       }
       if (!c.fieldCode) {
-        setError(t('filterConditionDialog.errors.selectField'))
-        return false
+        // setError(t('filterConditionDialog.errors.selectField'))
+        return true
       }
 
       if (!c.operator) {
@@ -463,7 +463,7 @@ export function FilterConditionDialog({
       const newConditions = prev.conditions.filter(c => c.id !== id)
       return {
         ...prev,
-        conditions: newConditions
+        conditions: [createEmptyCondition()]
       }
     })
   }

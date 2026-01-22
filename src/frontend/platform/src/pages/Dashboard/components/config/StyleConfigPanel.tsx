@@ -84,7 +84,7 @@ function TextFormat({
         value={String(fontSize)}
         onValueChange={(v) => setFontSize(Number(v))}
       >
-        <SelectTrigger className="w-[50px] h-7 px-2 text-xs border-0 ">
+        <SelectTrigger className="w-[50px] h-7 px-2 text-xs border-0 bg-white">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -100,7 +100,7 @@ function TextFormat({
       {setColor && (
         <Select
         >
-          <SelectTrigger className="w-[50px] h-7 px-2 text-xs border-0 ">
+          <SelectTrigger className="w-[50px] h-7 px-2 text-xs border-0 bg-white">
             <div className="size-4 border-[#EBECF0]">
               <div
                 className="h-full w-full rounded shadow-sm border"
@@ -140,7 +140,7 @@ function TextFormat({
         value={align}
         onValueChange={(v) => setAlign(v as "left" | "center" | "right")}
       >
-        <SelectTrigger className="w-10 h-7 px-1 border-0 shadow-none">
+        <SelectTrigger className="w-10 h-7 px-1 border-0 shadow-none bg-white">
           <SelectValue asChild>{alignIcon}</SelectValue>
         </SelectTrigger>
 
@@ -279,6 +279,7 @@ export function StyleConfigPanel({ config, onChange, type, FULL_DEFAULT_STYLE_CO
   })
 
   const editingComponent = useComponentEditorStore(state => state.editingComponent)
+  console.log(editingComponent, 78712312389);
 
   const updateEditingComponent = useComponentEditorStore(state => state.updateEditingComponent)
   const firstDimension = editingComponent?.data_config?.dimensions?.[0]
@@ -322,7 +323,6 @@ export function StyleConfigPanel({ config, onChange, type, FULL_DEFAULT_STYLE_CO
     if (!editingComponent || initialized) return
 
     const styleConfig = editingComponent.style_config ?? {}
-
     if (styleConfig.title === undefined && editingComponent.type === "metric") {
       updateEditingComponent({
         style_config: {
@@ -332,10 +332,19 @@ export function StyleConfigPanel({ config, onChange, type, FULL_DEFAULT_STYLE_CO
             editingComponent.data_config?.metrics?.[0]?.fieldName ?? "",
         },
       })
+    } else {
+      updateEditingComponent({
+        style_config: {
+          ...FULL_DEFAULT_STYLE_CONFIG,
+          ...styleConfig,
+          title:
+            editingComponent.title ?? "",
+        },
+      })
     }
 
     setInitialized(true)
-  }, [editingComponent, initialized, updateEditingComponent])
+  }, [editingComponent?.id])
 
 
 
@@ -380,7 +389,6 @@ export function StyleConfigPanel({ config, onChange, type, FULL_DEFAULT_STYLE_CO
                 handleChange("themeColor", id); // 直接存 id
               }}
             >
-              {console.log(colorSchemes[0].colors.light, 43242342)}
               <SelectTrigger className="w-full h-8">
                 <SelectValue>
                   <div className="flex gap-[1px]">

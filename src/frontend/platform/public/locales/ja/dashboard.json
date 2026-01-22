@@ -90,6 +90,7 @@
       "displayName": "表示名",
       "displayNameRequired": "表示名 *",
       "enterDisplayName": "表示名を入力してください",
+      "displayMaxLength": "表示名は15文字以内で入力してください",
       "cancel": "キャンセル",
       "confirm": "確認",
       "chartUpdated": "グラフが更新されました"

@@ -202,18 +202,14 @@ export function DimensionBlock({
                         onMouseLeave={() => setHoveredIcon(null)}
                         onClick={(e) => e.stopPropagation()} // 防止触发父级选中
                       >
-                        {hoveredIcon === dimension.id ? (
-                          <img src="/assets/dashboard/setting.svg" alt="设置" className="h-3 w-3 object-contain" />
-                        ) : (
-                          <Settings className="h-3 w-3" />
-                        )}
+                        <img src="/assets/dashboard/setting.svg" alt="设置" className="h-3 w-3 object-contain" />
                       </Button>
                     </DropdownMenuTrigger>
 
                     <DropdownMenuContent
                       className="w-40"
                       align="start"
-                      side="right"
+                      side="left"
                       onClick={(e) => e.stopPropagation()}
                     >
                       {/* --- 维度菜单 --- */}
@@ -418,15 +414,27 @@ export function DimensionBlock({
               <div>
                 <div className="text-sm font-medium mb-2">{t('dimensionBlock.dialog.decimalPlaces')}</div>
                 <Input
-                  type="number" min={0} max={5} step={1}
+                  type="number"
+                  min={0}
+                  max={5}
+                  step={1}
                   value={localFormat.decimalPlaces}
-                  onChange={(e) => {
-                    const val = e.target.value;
+                  onInput={(e) => {
+                    const input = e.target as HTMLInputElement;
+                    const val = input.value;
+
                     if (val === '') {
                       setLocalFormat({ ...localFormat, decimalPlaces: undefined })
                     } else {
                       const numVal = Number(val);
-                      if (numVal >= 0 && numVal <= 5) {
+                      // 限制在 0-5 范围内
+                      if (numVal > 5) {
+                        input.value = '5';
+                        setLocalFormat({ ...localFormat, decimalPlaces: 5 })
+                      } else if (numVal < 0) {
+                        input.value = '0';
+                        setLocalFormat({ ...localFormat, decimalPlaces: 0 })
+                      } else {
                         setLocalFormat({ ...localFormat, decimalPlaces: numVal })
                       }
                     }
