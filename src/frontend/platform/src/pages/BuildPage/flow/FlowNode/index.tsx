@@ -16,6 +16,7 @@ import RunLog from './RunLog';
 import { RunTest } from './RunTest';
 import { useUpdateVariableState } from './flowNodeStore';
 import { useTranslation } from 'react-i18next';
+import ParameterSubGroup from './ParameterSubGroup';
 
 export const CustomHandle = ({ id = '', node, isLeft = false, className = '' }) => {
     const [openLeft, setOpenLeft] = useState(false);
@@ -322,8 +323,16 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
                                     })
                                 })
                             }} />}
-                        {node.group_params.map(group =>
-                            <ParameterGroup
+                        {node.group_params.map(group => group.groupKey ?
+                            <ParameterSubGroup
+                                key={group.groupKey}
+                                node={node}
+                                cate={group}
+                                onStatusChange={((key, obj) => paramValidateEntities.current[key] = obj)}
+                                onVarEvent={((key, obj) => varValidateEntities.current[key] = obj)}
+                                tab={currentTab}
+                            />
+                            : <ParameterGroup
                                 nodeId={node.id}
                                 key={group.name}
                                 tab={currentTab}

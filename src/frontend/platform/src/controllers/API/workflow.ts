@@ -258,7 +258,7 @@ const workflowTemplate = [
         },
         "group_params": [
             {
-                "name": "",
+                "name": "接收文本",
                 "params": [
                     {
                         "key": "user_input",
@@ -266,6 +266,24 @@ const workflowTemplate = [
                         "label": "true",
                         "type": "var",
                         "tab": "dialog_input"
+                    }
+                ]
+            },
+            {
+                "name": "",
+                "groupKey": "inputfile",
+                "params": [
+                    {
+                        "groupTitle": true,
+                        "key": "user_inputfile",
+                        "tab": "dialog_input",
+                        "value": true
+                    },
+                    {
+                        "key": "file_parse_mode",
+                        "type": "select_parsemode",
+                        "tab": "dialog_input",
+                        "value": "extract_text"
                     },
                     {
                         "key": "dialog_files_content",
@@ -296,7 +314,58 @@ const workflowTemplate = [
                         "type": "var",
                         "tab": "dialog_input",
                         "help": "true"
+                    }
+                ]
+            },
+            {
+                "name": "",
+                "groupKey": "custom",
+                "params": [
+                    {
+                        "groupTitle": true,
+                        "key": "recommended_questions_flag",
+                        "label": "true",
+                        "hidden": "true",
+                        "tab": "dialog_input",
+                        "help": "true",
+                        "value": false
                     },
+                    {
+                        "key": "recommended_llm",
+                        "label": "true",
+                        "type": "bisheng_model",
+                        "tab": "dialog_input",
+                        "value": "",
+                        "required": true,
+                        "placeholder": "true"
+                    },
+                    {
+                        "key": "recommended_system_prompt",
+                        "label": "true",
+                        "tab": "dialog_input",
+                        "type": "var_textarea",
+                        "value": "true",
+                        "placeholder": "true",
+                        "required": true
+                    },
+                    {
+                        "key": "recommended_history_num",
+                        "label": "true",
+                        "type": "slide",
+                        "tab": "dialog_input",
+                        "help": "true",
+                        "scope": [
+                            0,
+                            2
+                        ],
+                        "step": 0.1,
+                        "value": 0.7
+                    }
+                ]
+            },
+            {
+                "name": "",
+                "params": [
                     {
                         "key": "form_input",
                         "global": "item:form_input",
