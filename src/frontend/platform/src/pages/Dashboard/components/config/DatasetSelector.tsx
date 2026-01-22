@@ -76,7 +76,6 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
             (d.description && d.description.toLowerCase().includes(searchLower))
         )
     }, [allDatasets, searchTerm])
-
     // 获取选中的数据集详情
     const selectedDataset = useMemo(() => {
         return allDatasets.find(d => d.dataset_code === selectedDatasetCode)
@@ -112,7 +111,7 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
             fieldCode: d.field,
             fieldId: d.field,
             displayName: d.name,
-            fieldType: d.type === "date" ? "date" : d.type === "integer" ? "number" : "string",
+            fieldType: d.field_type,
             role: "dimension" as const
         }))
 
@@ -120,7 +119,8 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
             fieldCode: m.field,
             fieldId: m.field,
             displayName: m.name,
-            fieldType: "number",
+            fieldType: m.field_type,
+            isVirtual: m.is_virtual,
             role: "metric" as const
         }))
 

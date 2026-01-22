@@ -1,6 +1,6 @@
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/bs-ui/popover';
 import { cn } from '@/utils';
-import React, { useState } from 'react';
+import React, { memo, useState } from 'react';
 import { ChartType } from '../../types/dataConfig';
 import { useTranslation } from 'react-i18next';
 
@@ -112,4 +112,4 @@ const ComponentPicker = ({ children, className, onSelect, maxHeight = 500 }: Com
     );
 };
 
-export default ComponentPicker;
+export default memo(ComponentPicker);

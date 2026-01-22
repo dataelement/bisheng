@@ -158,7 +158,7 @@ function TextFormat({
       </Select>
 
       {/* 样式 */}
-      <div className="flex">
+      <div className="flex w-[102px]">
         <IconBtn active={bold} onClick={() => setBold(!bold)}>
           <Bold className="w-3.5 h-3.5" />
         </IconBtn>
@@ -202,69 +202,7 @@ function IconBtn({
   )
 }
 
-const FULL_DEFAULT_STYLE_CONFIG: ComponentStyleConfig = {
-  themeColor: "#4ac5ff",
-  bgColor: "#ffffff",
 
-  title: "",
-  titleFontSize: 14,
-  titleBold: false,
-  titleItalic: false,
-  titleUnderline: false,
-  titleStrikethrough: false,
-  titleAlign: "left",
-  titleColor: "#000000",
-
-  xAxisTitle: "",
-  xAxisFontSize: 14,
-  xAxisBold: false,
-  xAxisItalic: false,
-  xAxisUnderline: false,
-  xAxisStrikethrough: false,
-  xAxisAlign: "center",
-  xAxisColor: "#000000",
-
-  yAxisTitle: "",
-  yAxisFontSize: 14,
-  yAxisBold: false,
-  yAxisItalic: false,
-  yAxisUnderline: false,
-  yAxisStrikethrough: false,
-  yAxisAlign: "center",
-  yAxisColor: "#000000",
-
-  legendPosition: "bottom",
-  legendFontSize: 14,
-  legendBold: false,
-  legendItalic: false,
-  legendUnderline: false,
-  legendStrikethrough: false,
-  legendAlign: "left",
-  legendColor: "#000000",
-
-  showSubtitle: false,
-  subtitle: "",
-  subtitleFontSize: 14,
-  subtitleStrikethrough: false,
-  subtitleBold: false,
-  subtitleItalic: false,
-  subtitleUnderline: false,
-  subtitleAlign: "center",
-  subtitleColor: "#000000",
-
-  metricFontSize: 14,
-  metricBold: false,
-  metricItalic: false,
-  metricUnderline: false,
-  metricStrikethrough: false,
-  metricAlign: "center",
-  metricColor: "#000000",
-
-  showLegend: true,
-  showAxis: true,
-  showDataLabel: true,
-  showGrid: true,
-}
 
 
 // 内联的折叠区块组件
@@ -328,7 +266,7 @@ function FormBlock({ label, children }: {
   )
 }
 
-export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelProps) {
+export function StyleConfigPanel({ config, onChange, type, FULL_DEFAULT_STYLE_CONFIG }: StyleConfigPanelProps) {
 
   const { t } = useTranslation("dashboard")
 
@@ -353,7 +291,16 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
       ...FULL_DEFAULT_STYLE_CONFIG,
       ...config,
       ...componentConfig,
-      themeColor: (componentConfig.themeColor || config.themeColor || colorSchemes[0]?.id || FULL_DEFAULT_STYLE_CONFIG.themeColor),
+      themeColor: (() => {
+        const id =
+          componentConfig.themeColor ??
+          config.themeColor
+
+        // 如果不存在 or 不合法 → 用第一个
+        return colorSchemes.some(s => s.id === id)
+          ? id
+          : colorSchemes[0].id
+      })(),
     }
     // if (baseConfig.title === "") {
     //   baseConfig.title = editingComponent?.data_config?.metrics?.[0]?.fieldName
@@ -376,7 +323,7 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
 
     const styleConfig = editingComponent.style_config ?? {}
 
-    if (styleConfig.title === undefined) {
+    if (styleConfig.title === undefined && editingComponent.type === "metric") {
       updateEditingComponent({
         style_config: {
           ...FULL_DEFAULT_STYLE_CONFIG,
@@ -433,10 +380,11 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
                 handleChange("themeColor", id); // 直接存 id
               }}
             >
+              {console.log(colorSchemes[0].colors.light, 43242342)}
               <SelectTrigger className="w-full h-8">
                 <SelectValue>
                   <div className="flex gap-[1px]">
-                    {(colorSchemes.find(s => s.id === localConfig.themeColor)?.colors.light.slice(0, 5) || ["#000000"]).map((color, idx) => (
+                    {(colorSchemes.find(s => s.id === localConfig.themeColor)?.colors.light.slice(0, 5) || [colorSchemes[0].colors.light]).map((color, idx) => (
                       <div
                         key={idx}
                         className={`
@@ -519,7 +467,7 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
         onCollapse={() => toggleSection('title')}
         isOpen={type === 'metric'}
       >
-        <FormBlock label={t('styleConfigPanel.labels.titleContent')}>
+        <FormBlock label={type === 'metric' ? t('styleConfigPanel.labels.textContent') : t('styleConfigPanel.labels.titleContent')}>
           <Input
             placeholder={t('styleConfigPanel.placeholders.enterTitle')}
             value={localConfig.title || ""}
@@ -745,13 +693,6 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
                   />
                   {t('styleConfigPanel.options.legend')}
                 </label>
-                {editingComponent.type !== "donut" && editingComponent.type !== "pie" && <label className="flex items-center gap-2 text-sm">
-                  <Checkbox
-                    checked={localConfig.showAxis}
-                    onCheckedChange={(v) => handleChange("showAxis", v)}
-                  />
-                  {t('styleConfigPanel.options.axis')}
-                </label>}
                 <label className="flex items-center gap-2 text-sm">
                   <Checkbox
                     checked={localConfig.showDataLabel}
@@ -759,6 +700,14 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
                   />
                   {t('styleConfigPanel.options.dataLabel')}
                 </label>
+                {editingComponent.type !== "donut" && editingComponent.type !== "pie" && <label className="flex items-center gap-2 text-sm">
+                  <Checkbox
+                    checked={localConfig.showAxis}
+                    onCheckedChange={(v) => handleChange("showAxis", v)}
+                  />
+                  {t('styleConfigPanel.options.axis')}
+                </label>}
+
 
                 {editingComponent.type !== "donut" && editingComponent.type !== "pie" && <label className="flex items-center gap-2 text-sm">
                   <Checkbox

@@ -60,7 +60,7 @@
 
     "filter": "Filter",
     "addFilterCondition": "Add Filter Condition",
-    "filterConditionsAdded": "{{count}} filter conditions added",
+    "filterConditionsAdded": "Filter conditions added",
     "filterLogicHint": " ({{logic}})",
 
     "timeRange": "Time Range",
@@ -322,7 +322,7 @@
   "selectTime": "Select Time",
   "startHour": "Start Hour",
   "endHour": "End Hour",
-  "dynamicUpdate": "Dynamic Update (Auto-calculate based on current time)",
+  "dynamicUpdate": "Dynamic Update",
   "cancel": "Cancel",
   "clear": "Clear",
   "confirm": "Confirm",
@@ -412,7 +412,8 @@
     "year": "Time(Year)",
     "month": "Time(Month)",
     "week": "Time(Week)",
-    "day": "Time(Day)"
+    "day": "Time(Day)",
+    "hour": "Time(Hour)"
   },
   "user_group_infos": {
     "user_group_id": "User Group ID",

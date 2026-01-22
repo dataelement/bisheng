@@ -125,8 +125,8 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
             x: 0,
             y: maxY,
             w: ChartType.Metric === component.type ? 4 : 8,
-            h: [ChartType.Query, ChartType.Metric].includes(component.type) ? 3 : 5,
-            minW: 2,
+            h: [ChartType.Query, ChartType.Metric].includes(component.type) ? 2 : 5,
+            minW: ChartType.Query === component.type ? 7 : 3,
             minH: 2,
             maxH: 24,
             maxW: 24
@@ -186,14 +186,14 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
             return c
         })
 
-        console.log('【savechange】 :>> updateComponent');
+        debugLog('updateComponent')
 
         set({
             currentDashboard: {
                 ...currentDashboard,
                 components: updatedComponents
             },
-            hasUnsavedChanges: true,
+            // hasUnsavedChanges: true,
             lastChangeTime: Date.now()
         })
     },
@@ -329,7 +329,10 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
             // Combine all query parameters 
             const allQueryParams = [
                 ...currentQueryParams,
-                ...otherLinkedQueries.map(qc => (queryComponentParams[qc.id] || {}))
+                ...otherLinkedQueries.map(qc => ({
+                    queryComponentId: qc.id,
+                    queryComponentParams: queryComponentParams[qc.id]
+                }))
             ]
 
             const currentInfo = updatedTriggers[chartId] || { trigger: 0, queryParams: [] }
@@ -510,6 +513,7 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
 interface ComponentEditorState {
     // The "Shadow" state: stores a copy of the component currently being edited
     editingComponent: DashboardComponent | null;
+    hasChange: boolean;
 
     // Internal helper to push changes to the main store
     _internalSync: () => void;
@@ -531,14 +535,15 @@ interface ComponentEditorState {
 }
 export const useComponentEditorStore = create<ComponentEditorState>((set, get) => ({
     editingComponent: null,
+    hasChange: false,
 
     /**
      * Private-style helper to synchronize the shadow state 
      * back to the primary Dashboard store.
      */
     _internalSync: () => {
-        const { editingComponent } = get();
-        if (editingComponent) {
+        const { hasChange, editingComponent } = get();
+        if (hasChange && editingComponent) {
             const dashboardStore = useEditorDashboardStore.getState();
             dashboardStore.updateComponent(editingComponent.id, editingComponent);
         }
@@ -548,7 +553,8 @@ export const useComponentEditorStore = create<ComponentEditorState>((set, get) =
         const { editingComponent } = get();
         if (editingComponent) {
             set({
-                editingComponent: { ...editingComponent, ...data }
+                editingComponent: { ...editingComponent, ...data },
+                hasChange: true
             });
         }
     },
@@ -570,19 +576,20 @@ export const useComponentEditorStore = create<ComponentEditorState>((set, get) =
         if (nextComponent) {
             // 3. Create a deep copy for the shadow state
             const deepCopy = JSON.parse(JSON.stringify(nextComponent)) as DashboardComponent;
-            set({ editingComponent: deepCopy });
+            set({ editingComponent: deepCopy, hasChange: false });
         }
     },
 
     clear: (force) => {
         const { editingComponent, _internalSync } = get();
+        if (!editingComponent) return;
 
         // Save pending changes before closing
         if (!force && editingComponent) {
             _internalSync();
         }
 
-        set({ editingComponent: null });
+        set({ editingComponent: null, hasChange: true });
     },
 }));
 

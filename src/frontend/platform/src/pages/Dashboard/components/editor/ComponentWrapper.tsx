@@ -106,18 +106,24 @@ export function ComponentWrapper({
             titleBold: false,
             titleItalic: false,
             titleUnderline: false,
+            titleStrikethrough: false,
             ...config  // 用户配置覆盖默认值
         };
+
         return {
             fontSize: `${defaultConfig.titleFontSize}px`,
             color: defaultConfig.titleColor,
             textAlign: defaultConfig.titleAlign,
             fontWeight: defaultConfig.titleBold ? 'bold' : 'normal',
             fontStyle: defaultConfig.titleItalic ? 'italic' : 'normal',
-            textDecoration: defaultConfig.titleUnderline ? 'underline' : 'none',
+            textDecoration: [
+                defaultConfig.titleUnderline ? 'underline' : '',
+                defaultConfig.titleStrikethrough ? 'line-through' : ''
+            ].filter(Boolean).join(' ') || 'none',
             // 确保span能够应用text-align（如果需要）
             display: 'inline-block',
             maxWidth: '85%',
+            lineHeight: 1,
             // width: '100%'
         };
     };
@@ -251,9 +257,12 @@ export function ComponentWrapper({
                                 onClick={(e) => e.stopPropagation()}
                             />
                         ) : (
-                            <h3 className={cn("text-sm font-medium truncate",
-                                "dark:text-gray-400"
-                            )} onDoubleClick={() => setIsEditing(true)}>
+                            <h3
+                                className={cn("text-sm font-medium truncate",
+                                    "dark:text-gray-400"
+                                )}
+                                style={{ textAlign: componentData.style_config?.titleAlign }}
+                                onDoubleClick={() => setIsEditing(true)}>
                                 <span className="no-drag cursor-pointer truncate" style={createTitleStyle(componentData.style_config)}>{title}</span>
                             </h3>
                         )}
@@ -270,7 +279,7 @@ export function ComponentWrapper({
                 )}
 
                 {/* Component content */}
-                <div className={['query', 'metric'].includes(component.type) ? 'h-full overflow-hidden' : 'h-[calc(100%-2.5rem)] overflow-hidden no-drag cursor-default'}>
+                <div className={['query', 'metric'].includes(component.type) ? 'h-full' : 'h-[calc(100%-2.5rem)] no-drag cursor-default'}>
                     {component.type === 'query' ? (
                         <QueryFilter isDark={isDark} component={componentData} isPreviewMode={isPreviewMode} />
                     ) : (

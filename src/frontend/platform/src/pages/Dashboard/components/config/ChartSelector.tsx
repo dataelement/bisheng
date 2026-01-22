@@ -340,7 +340,7 @@ export default function ChartSelector({
           </div>
 
           {/* 时间范围 */}
-          <div className="space-y-1 flex flex-1 w-full">
+          {isDefault && <div className="space-y-1 flex flex-1 w-full">
             <AdvancedDatePicker
               granularity={getGranularity()}
               mode={getMode()}
@@ -348,7 +348,7 @@ export default function ChartSelector({
               onChange={(val) => setTimeFilter(val)}
               placeholder={t("chartSelector.datePicker.placeholder")}
             />
-          </div>
+          </div>}
         </div>
 
         {/* 底部按钮 */}

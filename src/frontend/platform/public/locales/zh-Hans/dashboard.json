@@ -49,11 +49,11 @@
         "sortHint": "添加维度或指标后可调整排序优先级",
         "filter": "筛选",
         "addFilterCondition": "添加筛选条件",
-        "filterConditionsAdded": "已添加 {{count}} 个筛选条件",
+        "filterConditionsAdded": "已添加筛选条件",
         "filterLogicHint": " ({{logic}})",
         "timeRange": "时间范围",
         "selectTimeRange": "选择时间范围",
-        "resultsDisplay": "结果显示",
+        "resultsDisplay": "显示数据",
         "allResults": "全部",
         "limitResults": "条",
         "updateChartData": "更新图表数据",
@@ -80,7 +80,7 @@
             "confirm": "确认"
         },
         "toast": {
-            "fieldAlreadyExists": "该字段已存在",
+            "fieldAlreadyExists": "该字段已添加",
             "dimensionLimitReached": "当前维度数量已达到上限",
             "metricReached": "不支持拖拽维度至指标",
             "metricLimitReached": "当前指标数量已达到上限",
@@ -238,7 +238,7 @@
         "labels": {
             "themeColor": "主题颜色",
             "bgColor": "背景颜色",
-            "titleContent": "文本内容",
+            "titleContent": "标题内容",
             "textFormat": "文本格式",
             "textContent": "文本内容",
             "xAxisTitleContent": "X 轴标题内容",
@@ -246,7 +246,7 @@
             "yAxisTitleContent": "Y 轴标题内容",
             "yAxisTextFormat": "Y 轴文本格式",
             "legendPosition": "图例位置",
-            "legendTextFormat": "图例文本格式"
+            "legendTextFormat": "文本格式"
         },
         "placeholders": {
             "enterTitle": "请输入标题",
@@ -299,7 +299,7 @@
     "selectTime": "选择时间",
     "startHour": "开始小时",
     "endHour": "结束小时",
-    "dynamicUpdate": "动态更新 (下次查看时自动根据当前时间推算)",
+    "dynamicUpdate": "动态更新",
     "cancel": "取消",
     "clear": "清空",
     "confirm": "确定",
@@ -390,7 +390,8 @@
         "year": "时间(年)",
         "month": "时间(月)",
         "week": "时间(周)",
-        "day": "时间(日)"
+        "day": "时间(日)",
+        "hour": "时间(小时)"
     },
     "user_group_infos": {
         "user_group_id": "用户组ID",

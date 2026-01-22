@@ -69,7 +69,7 @@
 
     "filter": "フィルター",
     "addFilterCondition": "フィルター条件を追加",
-    "filterConditionsAdded": "フィルター条件 {{count}} 個を追加",
+    "filterConditionsAdded": "フィルター条件を追加済み",
     "filterLogicHint": " ({{logic}})",
 
     "timeRange": "時間範囲",
@@ -323,7 +323,7 @@
   "selectTime": "時間を選択",
   "startHour": "開始時間",
   "endHour": "終了時間",
-  "dynamicUpdate": "動的更新 (次回表示時に現在時刻から自動計算)",
+  "dynamicUpdate": "動的更新",
   "cancel": "キャンセル",
   "clear": "クリア",
   "confirm": "確定",
@@ -413,7 +413,8 @@
     "year": "時間(年)",
     "month": "時間(月)",
     "week": "時間(週)",
-    "day": "時間(日)"
+    "day": "時間(日)",
+    "hour": "時間(時)"
   },
   "user_group_infos": {
     "user_group_id": "ユーザーグループID",
