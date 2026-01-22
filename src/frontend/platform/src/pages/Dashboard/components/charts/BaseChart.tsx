@@ -307,26 +307,6 @@ const getTextStyle = (config: {
   return style;
 };
 
-
-/**
- * gen (Title)
- */
-const buildTitleOption = (styleConfig: ComponentStyleConfig) => {
-  // if (!styleConfig.title) return undefined;
-
-  const titleOption: any = {
-    text: styleConfig.title,
-    left: styleConfig.titleAlign || 'center',
-    textStyle: getTextStyle({
-      fontSize: styleConfig.titleFontSize,
-      bold: styleConfig.titleBold,
-      italic: styleConfig.titleItalic,
-      color: styleConfig.titleColor,
-    }),
-  };
-  return titleOption;
-};
-
 /**
  * gen (Legend)
  */
@@ -367,6 +347,7 @@ const buildTooltipOption = (type: 'axis' | 'item', formatter: (params: any) => s
   return {
     trigger: type,
     axisPointer: type === 'axis' ? { type: 'shadow' } : undefined,
+    appendToBody: true,
     formatter,
   };
 };
