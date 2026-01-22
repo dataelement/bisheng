@@ -14,7 +14,7 @@ common_properties = {
     "user_name": {"type": "keyword",
                   "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}}},
     "user_group_infos": {
-        "type": "object",
+        "type": "nested",
         "properties": {
             "user_group_id": {"type": "keyword",
                               "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}}},
@@ -23,7 +23,7 @@ common_properties = {
         }
     },
     "user_role_infos": {
-        "type": "object",
+        "type": "nested",
         "properties": {
             "role_id": {"type": "keyword",
                         "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}}},
