@@ -616,13 +616,13 @@ export function FilterConditionDialog({
                         <SelectTrigger className="w-[160px] h-8">
                           <SelectValue placeholder={t('filterConditionDialog.placeholders.selectField')} />
                         </SelectTrigger>
-                        <SelectContent className="max-h-40 overflow-y-auto min-w-[160px]">
+                        <SelectContent className=" overflow-y-auto w-[160px]">
                           {filteredFields.length > 0 ? (
                             filteredFields.map(f => {
                               const displayText = getFieldDisplayName(f.fieldCode) || "暂无";
                               return (
                                 <SelectItem key={f.fieldCode} value={f.fieldCode} className="truncate">
-                                  <span className="truncate block max-w-[140px]" title={displayText}>
+                                  <span className="truncate block w-[80px]" title={displayText}>
                                     {displayText}
                                   </span>
                                 </SelectItem>

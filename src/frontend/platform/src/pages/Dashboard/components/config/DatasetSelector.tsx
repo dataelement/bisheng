@@ -53,7 +53,7 @@ const isVirtualMetric = (metric: MetricConfig): boolean => {
     return metric.is_virtual
 }
 
-export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragStart, onFieldsLoaded, onFieldClick }: DatasetSelectorProps) {
+export function DatasetSelector({ selectedDatasetCode, isMetricCard, onDatasetChange, onDragStart, onFieldsLoaded, onFieldClick }: DatasetSelectorProps) {
     const { t } = useTranslation("dashboard")
     const [searchTerm, setSearchTerm] = useState("")
     const [dimensionsExpanded, setDimensionsExpanded] = useState(true)
@@ -186,7 +186,7 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
             {selectedDataset && (
                 <div className="flex-1 overflow-y-auto">
                     {/* 维度区域 */}
-                    <div className="border-b">
+                    {!isMetricCard && <div className="border-b">
                         <button
                             className="w-full px-4 py-3 flex items-center justify-between hover:bg-accent/50 transition-colors"
                             onClick={() => setDimensionsExpanded(!dimensionsExpanded)}
@@ -252,7 +252,7 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
                                 })}
                             </div>
                         )}
-                    </div>
+                    </div>}
 
                     {/* 指标区域 */}
                     <div>

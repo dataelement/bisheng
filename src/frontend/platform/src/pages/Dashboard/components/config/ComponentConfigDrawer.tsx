@@ -92,8 +92,6 @@ export function ComponentConfigDrawer() {
   const { t } = useTranslation("dashboard")
   const { editingComponent, updateEditingComponent } = useComponentEditorStore();
   const { refreshChart } = useEditorDashboardStore();
-  console.log(editingComponent, 312312312312);
-
   // 折叠状态
   const [configCollapsed, setConfigCollapsed] = useState({
     basic: false,
@@ -166,7 +164,6 @@ export function ComponentConfigDrawer() {
     if (editingComponent) {
       // 从组件配置中获取时间范围
       const timeFilter = editingComponent.data_config?.timeFilter;
-
       if (timeFilter) {
         let shortcutKey;
         if (timeFilter.type === 'recent_days' && timeFilter.recentDays) {
@@ -510,8 +507,7 @@ export function ComponentConfigDrawer() {
   // 更新图表 - 添加校验
   const handleUpdateChart = useCallback((e) => {
     if (!editingComponent) return
-    console.log('更新图表 - 当前 sortPriorityOrder:', chartState.sortPriorityOrder)
-    console.log('更新图表 - 当前 sortPriorityFields:', sortPriorityFields.map(f => ({ id: f.id, name: f.displayName })))
+
     if (e.isTrusted) {
       const { isValid, errorKey } = validateChartConfig({
         editingComponent,
@@ -625,7 +621,7 @@ export function ComponentConfigDrawer() {
 
   const CollapseLabel = useCallback(({ label, onClick, icon, styleLabel }: any) => (
     <div className="h-full flex flex-col items-center cursor-pointer hover:bg-accent/50 transition-colors" onClick={onClick}>
-      <div className="m-[18px]">{icon}</div>
+      <div className="m-[20px]">{icon}</div>
       <div className="w-full h-[2px] bg-gray-100 mb-4"></div>
       <div className="writing-mode-vertical text-sm font-medium tracking-[6px]">{label}</div>
       <div className="writing-mode-vertical mt-4 text-sm font-medium tracking-[6px]">{styleLabel}</div>
@@ -720,7 +716,9 @@ export function ComponentConfigDrawer() {
             // 刷新查询组件
             refreshChart(editingComponent.id)
           }}
-          onCancel={() => console.log('取消')}
+          onCancel={() => {
+            updateEditingComponent(null)
+          }}
         />
       ) : (
         <>
@@ -785,9 +783,6 @@ export function ComponentConfigDrawer() {
                                   const userCustomizedTitle = editingComponent.title !== currentChartDisplayName && editingComponent.title !== '';
                                   newTitle = userCustomizedTitle ? editingComponent.title : (chartLabel ? t(`chart.${chartLabel}`) : title);
                                 }
-
-                                console.log(isMetricChart, chartLabel, newTitle, title, 21313123123);
-
                                 if (!isMetricChart && chartLabel) {
                                   setTitle(newTitle);
                                 }
@@ -1154,6 +1149,7 @@ export function ComponentConfigDrawer() {
                 />
                 <div className="flex-1 overflow-auto">
                   <DatasetSelector
+                    isMetricCard={editingComponent?.type === 'metric'}
                     selectedDatasetCode={editingComponent.dataset_code}
                     onDatasetChange={handleDatasetChange}
                     onDragStart={handleDragStart}
