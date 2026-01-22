@@ -126,7 +126,7 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
             y: maxY,
             w: ChartType.Metric === component.type ? 4 : 8,
             h: [ChartType.Query, ChartType.Metric].includes(component.type) ? 2 : 5,
-            minW: 2,
+            minW: ChartType.Query === component.type ? 7 : 3,
             minH: 2,
             maxH: 24,
             maxW: 24

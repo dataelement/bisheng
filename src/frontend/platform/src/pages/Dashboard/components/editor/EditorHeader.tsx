@@ -12,7 +12,7 @@ import { useToast } from "@/components/bs-ui/toast/use-toast"
 import { updateDashboard } from "@/controllers/API/dashboard"
 import { useComponentEditorStore, useEditorDashboardStore } from "@/store/dashboardStore"
 import { ArrowLeft } from "lucide-react"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useMutation, useQueryClient } from "react-query"
 import { useNavigate } from "react-router-dom"
@@ -223,10 +223,12 @@ export function EditorHeader({
             <div className="flex items-center gap-4">
                 {/* Add Component */}
                 <ComponentPicker onSelect={addComponentToLayout}>
-                    <Button variant="outline" size="sm" className="gap-1.5">
-                        <GridAddIcon className="size-4" />
-                        {t('addChart')}
-                    </Button>
+                    {useMemo(() => (
+                        <Button variant="outline" size="sm" className="gap-1.5">
+                            <GridAddIcon className="size-4" />
+                            {t('addChart')}
+                        </Button>
+                    ), [t])}
                 </ComponentPicker>
                 <Button variant="outline" size="sm" className="gap-1.5" onClick={() => addComponentToLayout({
                     title: t('selectDate'),

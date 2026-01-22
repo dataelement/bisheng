@@ -28,9 +28,9 @@ export default function EditorPage() {
     }
 
     useEffect(() => {
-        // Edit mode is synchronized only once to avoid repeated rendering 
-        if (!currentDashboard && dashboard) {
-            setCurrentDashboard(dashboard)
+        if (dashboard) {
+            // Edit mode is synchronized only once to avoid repeated rendering 
+            currentDashboard?.id !== dashboard.id && setCurrentDashboard(dashboard)
             setSelectedId(dashboard.id)
         }
     }, [dashboard, setCurrentDashboard])

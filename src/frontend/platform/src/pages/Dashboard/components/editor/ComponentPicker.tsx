@@ -59,7 +59,7 @@ interface ComponentPickerProps {
     className?: string;
 }
 
-const ComponentPicker = memo(({ children, className, onSelect, maxHeight = 500 }: ComponentPickerProps) => {
+const ComponentPicker = ({ children, className, onSelect, maxHeight = 500 }: ComponentPickerProps) => {
     const { t } = useTranslation("dashboard")
     const [open, setOpen] = useState(false);
 
@@ -110,6 +110,6 @@ const ComponentPicker = memo(({ children, className, onSelect, maxHeight = 500 }
             </PopoverContent>
         </Popover>
     );
-});
+};
 
-export default ComponentPicker;
+export default memo(ComponentPicker);
