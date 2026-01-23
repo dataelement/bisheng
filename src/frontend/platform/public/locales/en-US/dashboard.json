@@ -5,6 +5,7 @@
 
     "selectCharts": "Select Linked Charts",
     "selectAll": "Select All",
+    "unSelectAll":"Deselect All",
     "unnamedChart": "Unnamed Chart",
     "noDataset": "No dataset",
 

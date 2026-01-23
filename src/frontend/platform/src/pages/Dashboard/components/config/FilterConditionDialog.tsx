@@ -112,25 +112,45 @@ function EnumMultiSelect({
   const [loading, setLoading] = useState(false)
   const [page, setPage] = useState(1)
   const [hasMore, setHasMore] = useState(true)
-  const pageSize = 100
+  const pageSize = 20
+  const [searchMode, setSearchMode] = useState(false)
+  const [searchLoading, setSearchLoading] = useState(false)
+  const [fetchedValues, setFetchedValues] = useState<string[]>([])
 
-  const fetchEnumValues = async (code: string, pageNum = 1) => {
-    setLoading(true)
+  const fetchEnumValues = async (code: string, pageNum = 1, searchText = "") => {
+    const isSearch = !!searchText.trim()
+    const currentLoading = isSearch ? setSearchLoading : setLoading
+
+    currentLoading(true)
     try {
       const response = await getFieldEnums({
         dataset_code,
         field: code,
         page: pageNum,
-        pageSize
+        pageSize,
+        keywords: searchText
       })
       const result = response.enums || []
+
       if (pageNum === 1) {
         setValues(result)
+        if (searchText) {
+          setFetchedValues(result)
+        }
       } else {
-        setValues(prev => [...prev, ...result])
+        setValues(prev => {
+          const newValues = [...prev, ...result]
+          if (searchText) {
+            setFetchedValues(newValues)
+          }
+          return newValues
+        })
       }
-
       setHasMore(result.length === pageSize)
+
+      if (isSearch) {
+        setSearchMode(true)
+      }
     } catch (error) {
       console.error("获取枚举值失败:", error)
       toast({
@@ -139,25 +159,43 @@ function EnumMultiSelect({
       })
       setValues([])
     } finally {
-      setLoading(false)
+      currentLoading(false)
     }
   }
-  useEffect(() => {
-    if (isOpen && fieldCode && dataset_code) {
+
+  // 使用防抖处理搜索
+  const handleSearch = useCallback((searchText: string) => {
+    setSearch(searchText)
+    if (searchText.trim()) {
       setPage(1)
-      fetchEnumValues(fieldCode, 1)
+      setFetchedValues([])
+      fetchEnumValues(fieldCode, 1, searchText)
+    } else {
+      setSearchMode(false)
+      setPage(1)
+      setFetchedValues([])
+      fetchEnumValues(fieldCode, 1, "")
+    }
+  }, [fieldCode, dataset_code])
+
+  useEffect(() => {
+    if (isOpen && fieldCode && dataset_code && !search) {
+      setPage(1)
+      fetchEnumValues(fieldCode, 1, "")
     }
   }, [isOpen, fieldCode, dataset_code])
+
   const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
     const element = e.currentTarget
-    const isAtBottom = element.scrollHeight - element.scrollTop === element.clientHeight
+    const isAtBottom = element.scrollHeight - element.scrollTop <= element.clientHeight + 10
 
-    if (isAtBottom && hasMore && !loading) {
+    if (isAtBottom && hasMore && !loading && !searchLoading) {
       const nextPage = page + 1
       setPage(nextPage)
-      fetchEnumValues(fieldCode, nextPage)
+      fetchEnumValues(fieldCode, nextPage, search)
     }
-  }, [hasMore, loading, page, fieldCode, dataset_code])
+  }, [hasMore, loading, searchLoading, page, fieldCode, dataset_code, search])
+
   const filteredValues = useMemo(() => {
     if (!search.trim()) return values
     return values.filter(value =>
@@ -165,14 +203,29 @@ function EnumMultiSelect({
     )
   }, [values, search])
 
-  const allSelected = selected.length === values.length && values.length > 0
+  const allSelected = useMemo(() => {
+    const currentValues = filteredValues
+    return currentValues.length > 0 && currentValues.every(val => selected.includes(val))
+  }, [selected, filteredValues])
   const handleToggleAll = () => {
+    const currentValues = filteredValues
+
+    if (currentValues.length === 0) return
+
+    const allSelected = currentValues.every(val => selected.includes(val))
+
     if (allSelected) {
-      onChange([])
+      // 取消全选：从selected中移除所有当前显示的值
+      const newSelected = selected.filter(val => !currentValues.includes(val))
+      onChange(newSelected)
     } else {
-      onChange([...values])
+      // 全选：添加所有当前显示的值
+      const valuesToAdd = currentValues.filter(val => !selected.includes(val))
+      const newSelected = [...selected, ...valuesToAdd]
+      onChange(newSelected)
     }
   }
+
 
   const handleToggleValue = (value: string) => {
     const newSelected = selected.includes(value)
@@ -185,47 +238,58 @@ function EnumMultiSelect({
     e.stopPropagation()
     onChange(selected.filter(v => v !== value))
   }
+
   const handleClearSearch = () => {
     setSearch("")
+    if (searchMode) {
+      setPage(1)
+      fetchEnumValues(fieldCode, 1, "")
+      setSearchMode(false)
+    }
   }
+
   return (
     <div className="relative flex-1">
-      <Button
-        type="button"
-        variant="outline"
-        className="w-full h-8 justify-between px-3"
+      <div
+        className="w-full min-h-8 border border-input bg-background rounded-md flex items-center justify-between px-3 py-1 cursor-pointer hover:bg-accent hover:text-accent-foreground"
         onClick={() => setIsOpen(!isOpen)}
       >
-        <div className="flex flex-wrap flex-1 gap-1 overflow-hidden">
+        <div className="flex flex-1 min-h-0 overflow-hidden mr-2">
           {selected.length > 0 ? (
-            selected.map(value => (
-              <Badge
-                key={value}
-                variant="secondary"
-                className="flex items-center gap-1 px-2 py-0 text-xs h-5"
-              >
-                {value}
-                <X
-                  className="h-3 w-3 cursor-pointer"
-                  onClick={e => handleRemoveTag(value, e)}
-                />
-              </Badge>
-            ))
+            <div className="flex-1 overflow-y-auto" style={{ maxHeight: '80px' }}>
+              <div className="flex flex-wrap gap-1 py-0.5">
+                {selected.map(value => (
+                  <Badge
+                    key={value}
+                    variant="secondary"
+                    className="flex-shrink-0 flex items-center gap-1 px-2 py-0 text-xs h-5"
+                  >
+                    <span className="overflow-hidden w-28 truncate" title={value}>
+                      {value}
+                    </span>
+                    <X
+                      className="h-3 w-3 cursor-pointer"
+                      onClick={e => handleRemoveTag(value, e)}
+                    />
+                  </Badge>
+                ))}
+              </div>
+            </div>
           ) : (
-            <span className="text-muted-foreground">{placeholder || t('filterConditionDialog.enumSelect.placeholder')}</span>
+            <span className="text-sm text-gray-500 py-0.5">{placeholder || t('filterConditionDialog.enumSelect.placeholder')}</span>
           )}
         </div>
-        <ChevronDown className={`h-4 w-4 transition-transform ${isOpen ? "rotate-180" : ""}`} />
-      </Button>
+        <ChevronDown className={`h-4 w-4 transition-transform flex-shrink-0 ${isOpen ? "rotate-180" : ""}`} />
+      </div>
 
       {isOpen && (
-        <div className="absolute z-50 w-full mt-1 bg-background border rounded-md shadow-lg">
+        <div className="absolute z-50 w-full mt-1 bg-background border rounded-md shadow-lg top-full">
           <div className="p-2 border-b">
             <div className="relative">
               <Input
                 placeholder={t('filterConditionDialog.enumSelect.searchPlaceholder')}
                 value={search}
-                onChange={e => setSearch(e.target.value)}
+                onChange={e => handleSearch(e.target.value)}
                 className="h-8 pr-8"
                 onClick={e => e.stopPropagation()}
               />
@@ -248,7 +312,7 @@ function EnumMultiSelect({
                 <div className="px-3 py-2 border-b">
                   <div className="flex items-center space-x-2 cursor-pointer" onClick={handleToggleAll}>
                     <Checkbox checked={allSelected} />
-                    <span className="text-sm">{t('filterConditionDialog.enumSelect.selectAll')}</span>
+                    <span className="text-sm">{allSelected ? t("chartSelector.unSelectAll") : t("chartSelector.selectAll")}</span>
                   </div>
                 </div>
               )}
@@ -269,7 +333,7 @@ function EnumMultiSelect({
                         <span className="text-sm">{value}</span>
                       </div>
                     ))}
-                    {loading && page > 1 && (
+                    {(loading || searchLoading) && page > 1 && (
                       <div className="px-3 py-2 text-sm text-muted-foreground text-center">
                         {t('filterConditionDialog.enumSelect.loadingMore')}
                       </div>
@@ -415,7 +479,7 @@ export function FilterConditionDialog({
     })
 
     setDraft({
-      logic: filtersLogic ?? "and",
+      logic: safeValue.logic || filtersLogic || "and",
       conditions: newConditions.length > 0 ? newConditions : [createEmptyCondition()]
     })
     setError(null)
@@ -708,7 +772,7 @@ export function FilterConditionDialog({
                             <SelectTrigger className="w-[160px] h-8">
                               <SelectValue placeholder={t('filterConditionDialog.placeholders.operator')} />
                             </SelectTrigger>
-                            <SelectContent>
+                            <SelectContent className=" overflow-y-auto w-[160px] max-h-[240px]">
                               {c.fieldType === "string" ? (
                                 <>
                                   <SelectItem value="equals">{t('filterConditionDialog.operators.equals')}</SelectItem>
@@ -726,8 +790,8 @@ export function FilterConditionDialog({
                                   <SelectItem value="greater_than_or_equal">{t('filterConditionDialog.operators.greaterThanOrEqual')}</SelectItem>
                                   <SelectItem value="less_than">{t('filterConditionDialog.operators.lessThan')}</SelectItem>
                                   <SelectItem value="less_than_or_equal">{t('filterConditionDialog.operators.lessThanOrEqual')}</SelectItem>
-                                  <SelectItem value="is_empty">{t('filterConditionDialog.operators.isEmpty')}</SelectItem>
-                                  <SelectItem value="is_not_empty">{t('filterConditionDialog.operators.isNotEmpty')}</SelectItem>
+                                  {/* <SelectItem value="is_empty">{t('filterConditionDialog.operators.isEmpty')}</SelectItem>
+                                  <SelectItem value="is_not_empty">{t('filterConditionDialog.operators.isNotEmpty')}</SelectItem> */}
                                 </>
                               ) : null}
                             </SelectContent>

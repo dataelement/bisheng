@@ -4,6 +4,7 @@
         "componentName": "组件：{{componentName}}",
         "selectCharts": "选择关联图表",
         "selectAll": "全选",
+        "unSelectAll":"取消全选",
         "unnamedChart": "未命名图表",
         "noDataset": "未设置数据集",
         "config": "查询条件配置",

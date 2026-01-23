@@ -27,6 +27,8 @@ export interface ChartLinkConfig {
   dateRange: {
     start: string
     end: string
+    shortcutKey?: string
+    isDynamic?: boolean
   }
 }
 
@@ -38,7 +40,6 @@ interface ChartSelectorProps {
 /* ================== 组件 ================== */
 export default function ChartSelector({
   onSave,
-  // onCancel
 }: ChartSelectorProps) {
   const { t } = useTranslation("dashboard")
   const [selectedCharts, setSelectedCharts] = useState<string[]>([])
@@ -87,16 +88,25 @@ export default function ChartSelector({
           setIsDefault(queryCond.hasDefaultValue)
         }
 
-        // 处理时间范围
-        if (queryCond.hasDefaultValue && queryCond.defaultValue?.type === 'custom') {
+        // 处理时间范围 - 修改这里
+        if (queryCond.hasDefaultValue) {
           try {
             const startTime = queryCond.defaultValue.startDate
             const endTime = queryCond.defaultValue.endDate
+            const mode = queryCond.defaultValue.mode || "fixed"
+
+            // 处理shortcutKey
+            let shortcutKey = ''
+            if (queryCond.defaultValue.type === 'recent_days') {
+              shortcutKey = `last_${queryCond.defaultValue.shortcutKey}`
+            }
 
             if (startTime && endTime) {
               setTimeFilter({
                 startTime: startTime,
-                endTime: endTime
+                endTime: endTime,
+                shortcutKey: shortcutKey,
+                isDynamic: mode === "dynamic"
               })
             } else {
               setTimeFilter(null)
@@ -155,11 +165,20 @@ export default function ChartSelector({
           try {
             const startTime = queryCond.defaultValue.startDate
             const endTime = queryCond.defaultValue.endDate
+            const mode = queryCond.defaultValue.mode || "fixed"
+
+            // 处理shortcutKey
+            let shortcutKey = ''
+            if (queryCond.defaultValue.type === 'recent_days' && queryCond.defaultValue.recentDays) {
+              shortcutKey = `last_${queryCond.defaultValue.recentDays}`
+            }
 
             if (startTime && endTime) {
               setTimeFilter({
                 startTime: startTime,
-                endTime: endTime
+                endTime: endTime,
+                shortcutKey: shortcutKey,
+                isDynamic: mode === "dynamic"
               })
             } else {
               setTimeFilter(null)
@@ -234,7 +253,9 @@ export default function ChartSelector({
       isDefault,
       dateRange: {
         start: timeFilter?.startTime ?? "",
-        end: timeFilter?.endTime ?? ""
+        end: timeFilter?.endTime ?? "",
+        shortcutKey: timeFilter?.shortcutKey,
+        isDynamic: timeFilter?.isDynamic
       }
     }
 
@@ -290,7 +311,6 @@ export default function ChartSelector({
         </div>
         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setCollapsed(true)}>
           <ListIndentIncrease className="h-4 w-4" />
-
         </Button>
       </div>
 

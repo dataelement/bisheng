@@ -463,6 +463,18 @@ export function ComponentConfigDrawer() {
   }, [filterGroup, handleAddFilter])
 
   const handleSaveFilter = useCallback((newFilterGroup: any) => {
+    if (editingComponent) {
+      // 获取当前的数据配置
+      const currentDataConfig = editingComponent.data_config || {}
+
+      updateEditingComponent({
+        data_config: {
+          ...currentDataConfig,
+          filters: newFilterGroup.conditions,
+          filtersLogic: newFilterGroup.logic
+        }
+      })
+    }
     setFilterGroup(newFilterGroup)
     setFilterDialogOpen(false)
   }, [])
@@ -698,7 +710,8 @@ export function ComponentConfigDrawer() {
                   chartLinkConfig.timeGranularity === "年月日时" ? "year_month_day_hour" : "year_month_day",
                 hasDefaultValue: chartLinkConfig.isDefault,
                 defaultValue: chartLinkConfig.isDefault ? {
-                  type: 'custom' as const,
+                  type: chartLinkConfig.dateRange.shortcutKey ? "recent_days" : "custom",
+                  shortcutKey: chartLinkConfig.dateRange.shortcutKey ? parseInt(chartLinkConfig.dateRange.shortcutKey.replace('last_', '')) : undefined,
                   startDate: new Date(chartLinkConfig.dateRange.start).getTime(),
                   endDate: new Date(chartLinkConfig.dateRange.end).getTime()
                 } : {

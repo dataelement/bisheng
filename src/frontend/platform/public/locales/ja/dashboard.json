@@ -5,6 +5,7 @@
 
     "selectCharts": "関連グラフを選択",
     "selectAll": "すべて選択",
+    "unSelectAll":"すべて選択解除",
     "unnamedChart": "無名グラフ",
     "noDataset": "データセット未設定",
 
