@@ -279,7 +279,12 @@ export function ComponentWrapper({
                 )}
 
                 {/* Component content */}
-                <div className={['query', 'metric'].includes(component.type) ? 'h-full' : 'h-[calc(100%-20px)] no-drag cursor-default'}>
+                <div
+                    className={['query', 'metric'].includes(component.type) ? '' : ` no-drag cursor-default`}
+                    style={{
+                        height: ['query', 'metric'].includes(component.type) ? '100%' : `calc(100% - ${(componentData.style_config?.titleFontSize || 0) + 10}px)`
+                    }}
+                >
                     {component.type === 'query' ? (
                         <QueryFilter isDark={isDark} component={componentData} isPreviewMode={isPreviewMode} />
                     ) : (
