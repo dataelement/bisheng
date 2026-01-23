@@ -363,7 +363,7 @@ export function FilterConditionDialog({
   useEffect(() => {
     if (!open) return
     if (fields.length === 0) return
-    // if (initialized) return
+
     const safeValue = value || { logic: "and", conditions: [] }
 
     const newConditions = (safeValue.conditions || []).map(c => {
@@ -379,28 +379,36 @@ export function FilterConditionDialog({
 
       let operator: FilterOperator
       if (c.operator) operator = c.operator
-      else if (isEnum) operator = "enum_in"
+      else if (isEnum) operator = "in"  // 修改这里：枚举筛选用 "in"
       else if (field?.fieldType === "string") operator = "equals"
       else operator = "equals"
+
+      // 处理空值操作符的回显
+      let valueToSet = c.value ?? (isEnum ? [] : "")
+
+      // 如果是空值操作符，不需要值
+      if (c.operator && ["is_empty", "is_not_empty"].includes(c.operator)) {
+        valueToSet = ""
+      }
 
       return {
         id: c.id ?? generateUUID(6),
         fieldCode: fieldCode ?? "",
         fieldId: c.fieldId,
         fieldType: field?.fieldType,
+        fieldName: field?.displayName,
         operator,
-        value: c.value ?? (isEnum ? [] : ""),
+        value: valueToSet,
         filterType: c.filterType || (isEnum ? "enum" : "conditional")
       }
     })
 
     setDraft({
       logic: safeValue.logic ?? "and",
-      conditions: newConditions.length > 0 ? newConditions : [createEmptyCondition()] // 不自动添加空条件
+      conditions: newConditions.length > 0 ? newConditions : [createEmptyCondition()]
     })
     setError(null)
-    // setInitialized(true)
-  }, [open, value, fields, initialized])
+  }, [open, value, fields])
 
 
 
@@ -467,30 +475,31 @@ export function FilterConditionDialog({
       }
     })
   }
-
   const handleFieldChange = (id: string, fieldCode: string) => {
     const field = filteredFields.find(f => f.fieldCode === fieldCode)
     const isEnum = isEnumField(fieldCode)
 
     let defaultOperator: FilterOperator
-    if (isEnum) defaultOperator = "enum_in"
-    else if (field?.fieldType === "string") defaultOperator = "equals"
-    else defaultOperator = "equals"
+    let defaultFilterType: "conditional" | "enum"
 
+    if (isEnum) {
+      defaultFilterType = "enum"
+      defaultOperator = "in"
+    } else {
+      defaultFilterType = "conditional"
+      defaultOperator = "equals"
+    }
 
     updateCondition(id, {
       fieldCode,
       fieldType: field?.fieldType,
       fieldId: field?.fieldId || fieldCode,
       fieldName: field?.displayName,
-      filterType: isEnum ? "enum" : "conditional",
-      operator: draft.conditions.find(c => c.id === id)?.operator ?? defaultOperator,
-      value: draft.conditions.find(c => c.id === id)?.value ?? (isEnum ? [] : "")
+      filterType: defaultFilterType,
+      operator: defaultOperator,
+      value: isEnum ? [] : ""
     })
-
-
   }
-
   const handleFilterTypeChange = (id: string, filterType: "conditional" | "enum") => {
     const condition = draft.conditions.find(c => c.id === id)
     if (!condition || !condition.fieldCode) return
@@ -512,7 +521,11 @@ export function FilterConditionDialog({
     if (isEnum) {
       updateCondition(id, { operator, value: [] })
     } else {
-      updateCondition(id, { operator, value: undefined })
+      if (!operatorNeedsValue(operator)) {
+        updateCondition(id, { operator, value: "" })
+      } else {
+        updateCondition(id, { operator, value: condition?.value || "" })
+      }
     }
   }
 
@@ -545,19 +558,40 @@ export function FilterConditionDialog({
       return
     }
     // 确保返回的数据结构正确
-    onChange({
-      logic: draft.logic,
-      conditions: draft.conditions
-        .filter(c => c.fieldCode && c.value !== undefined)
-        .map(c => ({
+
+    const transformedConditions = draft.conditions
+      .filter(c => c.fieldCode && c.value !== undefined)
+      .map(c => {
+        // 如果是枚举筛选，直接使用 "in"
+        if (c.filterType === "enum") {
+          return {
+            id: c.id,
+            fieldId: c.fieldId,
+            fieldCode: c.fieldCode,
+            fieldName: c.fieldName,
+            operator: "in", // 枚举筛选固定用 in
+            value: c.value,
+            filterType: c.filterType
+          }
+        }
+
+        // 条件筛选：使用用户选择的操作符
+        return {
           id: c.id,
           fieldId: c.fieldId,
           fieldCode: c.fieldCode,
           fieldName: c.fieldName,
-          operator: c.operator,
+          operator: c.operator, // 使用用户选择的操作符
           value: c.value,
           filterType: c.filterType
-        }))
+        }
+      })
+
+    console.log('保存的条件:', transformedConditions)
+
+    onChange({
+      logic: draft.logic,
+      conditions: transformedConditions
     })
     toast({
       description: t('filterConditionDialog.toast.saveSuccess'),

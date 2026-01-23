@@ -327,9 +327,8 @@ export function StyleConfigPanel({ config, onChange, type, FULL_DEFAULT_STYLE_CO
         style_config: {
           ...FULL_DEFAULT_STYLE_CONFIG,
           ...styleConfig,
-          title:
-            editingComponent.data_config?.metrics?.[0]?.fieldName ?? "",
         },
+        title: editingComponent.data_config?.metrics?.[0]?.fieldName ?? "",
       })
     } else {
       updateEditingComponent({

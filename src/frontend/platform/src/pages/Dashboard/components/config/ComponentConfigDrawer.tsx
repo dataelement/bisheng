@@ -541,13 +541,12 @@ export function ComponentConfigDrawer() {
     if (dataConfig?.metrics?.[0]?.fieldName && !isMetricCard) {
       finalStyleConfig.title = dataConfig.metrics[0].fieldName
     } else {
-      finalStyleConfig.title = title
+      finalStyleConfig.title = ''
     }
-
     updateEditingComponent({
       data_config: dataConfig,
       type: chartType,
-      title: finalStyleConfig.title,
+      title: finalStyleConfig.title || dataConfig.metrics[0].fieldName,
       style_config: finalStyleConfig,
       dataset_code: editingComponent.dataset_code
     })
@@ -826,18 +825,28 @@ export function ComponentConfigDrawer() {
                                       metrics: updatedDataConfig.metrics || []
                                     };
                                   }
-
-                                  // 更新组件配置
-                                  updateEditingComponent({
-                                    type: data.type,
-                                    data_config: updatedDataConfig,
-                                    title: newTitle,
-                                    style_config: {
-                                      ...styleConfig,
-                                      title: newTitle // 同时更新styleConfig中的标题
-                                    },
-                                    dataset_code: editingComponent.dataset_code
-                                  });
+                                  if (data.type === 'metric') {
+                                    updateEditingComponent({
+                                      type: data.type,
+                                      data_config: updatedDataConfig,
+                                      title: newTitle,
+                                      style_config: {
+                                        ...styleConfig
+                                      },
+                                      dataset_code: editingComponent.dataset_code
+                                    });
+                                  } else {
+                                    updateEditingComponent({
+                                      type: data.type,
+                                      data_config: updatedDataConfig,
+                                      title: newTitle,
+                                      style_config: {
+                                        ...styleConfig,
+                                        title: newTitle
+                                      },
+                                      dataset_code: editingComponent.dataset_code
+                                    });
+                                  }
 
                                   // 刷新图表
                                   refreshChart(editingComponent.id);

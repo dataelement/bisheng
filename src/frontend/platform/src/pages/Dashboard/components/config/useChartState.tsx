@@ -150,6 +150,7 @@ export function useChartState(initialComponent: any) {
             conditions: dc.filters.map(filter => ({
               id: filter.id || generateUUID(6),
               fieldId: filter.fieldId,
+              fieldName: filter.fieldName,
               fieldType: filter.fieldType || 'string',
               filterType: filter.filterType || 'conditional',
               operator: filter.operator || 'eq',
@@ -662,7 +663,7 @@ export function useChartState(initialComponent: any) {
     const filters = filterGroup ? filterGroup.conditions.map((condition, index) => {
       return {
         id: condition.id || `filter_${Date.now()}_${index}`, // 确保有 fieldId
-        fieldId: condition.fieldCode || '',
+        fieldId: condition.fieldId || '',
         fieldName: condition.fieldName || '',
         fieldType: condition.fieldType || 'string',
         operator: condition.operator || 'eq',
