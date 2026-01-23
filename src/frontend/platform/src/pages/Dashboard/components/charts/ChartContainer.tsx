@@ -82,11 +82,11 @@ export function ChartContainer({ isPreviewMode, isDark, component }: ChartContai
   // if (error || !component.data_config.isConfigured) {
   if (error || !component.data_config.isConfigured || !data) {
     return (
-      <div className={`flex items-center justify-center h-full relative ${component.type === ChartType.Metric && 'pt-4'}`}>
+      <div className={`flex items-center justify-center h-full overflow-hidden relative ${component.type === ChartType.Metric && 'pt-4'}`}>
         {component.type === ChartType.Metric && <h3 className="absolute top-0 left-0 text-sm font-medium truncate dark:text-gray-400">
           <span className="no-drag cursor-pointer">{component.title}</span>
         </h3>}
-        <img src={`${__APP_ENV__.BASE_URL}/assets/dashboard/ept-${component.type}.png`} className="w-full max-h-full max-w-60" />
+        <img src={`${__APP_ENV__.BASE_URL}/assets/dashboard/ept-${component.type}.png`} className="max-w-60 max-h-full" />
         <div className='flex size-full absolute justify-center items-center'>
           <span className="text-sm bg-gray-50/80 px-2 py-1 text-primary truncate">{t('noDataInChart')}</span>
         </div>

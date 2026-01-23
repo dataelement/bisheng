@@ -215,7 +215,14 @@ const getCartesianChartOption = (
   };
 
   //  Axis
-  const axisLabelStyle = { ...getTextStyle({ fontSize: styleConfig.xAxisFontSize, color: styleConfig.xAxisColor }) };
+  const xAxisTitleStyle = getTextStyle({
+    fontSize: styleConfig.xAxisFontSize,
+    color: styleConfig.xAxisColor
+  });
+  const yAxisTitleStyle = getTextStyle({
+    fontSize: styleConfig.yAxisFontSize,
+    color: styleConfig.yAxisColor
+  });
 
   // (Category Axis)
   const categoryAxis = {
@@ -228,24 +235,18 @@ const getCartesianChartOption = (
       formatter: function (value) {
         if (!value) return '';
         const lines = value.split('\n');
-
-        const processedLines = lines.map(line => {
-          if (line.length > 10) {
-            return line.slice(0, 10) + '...';
-          }
-          return line;
-        });
-
-        return processedLines.join('\n');
+        return lines.map(line => line.length > 10 ? line.slice(0, 10) + '...' : line).join('\n');
       },
       hideOverlap: true,
+      color: '#666'
       // interval: 0,
       // hideOverlap: true,
       // overflow: 'break'
       // ...axisLabelStyle,
     },
     name: styleConfig.xAxisTitle || '',
-    nameLocation: 'center'
+    nameLocation: 'center',
+    nameTextStyle: xAxisTitleStyle
   };
 
   // (Value Axis)
@@ -254,22 +255,52 @@ const getCartesianChartOption = (
     show: styleConfig.showAxis ?? true,
     axisLabel: {
       formatter: (val: any) => unitConversion(val, dataConfig).join(''),
-      ...axisLabelStyle,
+      color: '#666'
     },
     splitLine: { show: styleConfig.showGrid ?? true },
     name: styleConfig.yAxisTitle || '',
     nameLocation: 'center',
-    nameRotate: isHorizontal ? 0 : 90
+    nameRotate: isHorizontal ? 0 : 90,
+    nameTextStyle: yAxisTitleStyle
   };
 
+  const lastValueIndexes = dimensions.map((_, dimIdx) => {
+    let lastIdx = -1;
+    for (let sIdx = series.length - 1; sIdx >= 0; sIdx--) {
+      const val = series[sIdx].data[dimIdx];
+      // 只有当值存在且大于 0 时，才认为是这一列的“顶端”
+      if (val !== null && val !== undefined && val > 0) {
+        lastIdx = sIdx;
+        break;
+      }
+    }
+    return lastIdx;
+  });
   // Series
-  const cartesianSeries = series.map((s) => {
+  const cartesianSeries = series.map((s, index) => {
+    const processedData = s.data.map((val, dimIdx) => {
+      const isTopItem = lastValueIndexes[dimIdx] === index;
+
+      // 如果是顶端项，则单独给该 data item 设置样式
+      if (!isLineOrArea && isStacked && isTopItem) {
+        return {
+          value: val,
+          itemStyle: {
+            borderRadius: isHorizontal ? [0, 4, 4, 0] : [4, 4, 0, 0]
+          }
+        };
+      }
+      return val;
+    });
+
     const item: any = {
       name: s.name,
-      data: s.data,
+      data: processedData,
       type: isLineOrArea ? 'line' : 'bar',
       itemStyle: {
-        borderRadius: !isLineOrArea ? (isHorizontal ? [0, 2, 2, 0] : [2, 2, 0, 0]) : 0
+        borderRadius: (!isLineOrArea && !isStacked)
+          ? (isHorizontal ? [0, 4, 4, 0] : [4, 4, 0, 0])
+          : 0
       }
     };
 
@@ -283,21 +314,30 @@ const getCartesianChartOption = (
     return item;
   });
 
-  const dimensionLength = styleConfig.xAxisTitle ? dataConfig.dimensions.length : 1
-  const bottom = (styleConfig.legendPosition === 'bottom' ? 44 : 0) + dimensionLength * 13;
+  let grid = {
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    // containLabel: true,
+  }
+  if (styleConfig.showLegend) {
+    const titleBottom = (styleConfig.xAxisTitle ? 18 : 0) + ((dataConfig.dimensions.length - 1) * 10);
+    const bottom = (styleConfig.legendPosition === 'bottom' ? 44 : 0) + titleBottom;
+    grid = {
+      left: styleConfig.legendPosition === 'left' ? 160 : 0,
+      right: styleConfig.legendPosition === 'right' ? 100 : 0,
+      top: styleConfig.legendPosition === 'top' ? 40 : 0,
+      bottom,
+    }
+  }
 
   return {
     backgroundColor: styleConfig.bgColor,
     // title: buildTitleOption(styleConfig),
     legend: buildLegendOption(styleConfig, series.map(s => s.name)),
     tooltip: buildTooltipOption('axis', tooltipFormatter),
-    grid: {
-      left: styleConfig.legendPosition === 'left' ? 160 : 0,
-      right: styleConfig.legendPosition === 'right' ? 100 : 0,
-      top: styleConfig.legendPosition === 'top' ? 40 : 0,
-      bottom,
-      // containLabel: true,
-    },
+    grid,
     xAxis: isHorizontal ? valueAxis : categoryAxis,
     yAxis: isHorizontal ? categoryAxis : valueAxis,
     series: cartesianSeries,

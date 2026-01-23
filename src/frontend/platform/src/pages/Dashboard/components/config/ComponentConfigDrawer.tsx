@@ -29,13 +29,13 @@ const FULL_DEFAULT_STYLE_CONFIG: ComponentStyleConfig = {
   bgColor: "",
 
   title: "",
-  titleFontSize: 14,
-  titleBold: false,
+  titleFontSize: 16,
+  titleBold: true,
   titleItalic: false,
   titleUnderline: false,
   titleStrikethrough: false,
   titleAlign: "left",
-  titleColor: "#000000",
+  titleColor: "",
 
   xAxisTitle: "",
   xAxisFontSize: 14,
@@ -56,13 +56,13 @@ const FULL_DEFAULT_STYLE_CONFIG: ComponentStyleConfig = {
   yAxisColor: "#000000",
 
   legendPosition: "bottom",
-  legendFontSize: 14,
+  legendFontSize: 12,
   legendBold: false,
   legendItalic: false,
   legendUnderline: false,
   legendStrikethrough: false,
   legendAlign: "left",
-  legendColor: "#000000",
+  legendColor: "#999",
 
   showSubtitle: false,
   subtitle: "",
@@ -72,7 +72,7 @@ const FULL_DEFAULT_STYLE_CONFIG: ComponentStyleConfig = {
   subtitleItalic: false,
   subtitleUnderline: false,
   subtitleAlign: "center",
-  subtitleColor: "#000000",
+  subtitleColor: "",
 
   metricFontSize: 14,
   metricBold: false,
@@ -84,7 +84,7 @@ const FULL_DEFAULT_STYLE_CONFIG: ComponentStyleConfig = {
 
   showLegend: true,
   showAxis: true,
-  showDataLabel: true,
+  showDataLabel: false,
   showGrid: true,
 }
 

@@ -358,7 +358,7 @@
   "charLimit200": "Character limit: 1-200 characters",
   "charLimit200b": "The name cannot exceed 200 characters ",
   "rename": "Rename",
-  "duplicate": "Duplicate",
+  "duplicate": "Copy",
   "copyTo": "Copy to",
   "noOtherDashboards": "No other dashboards available",
   "createFailed": "Failed to create, please try again",

@@ -100,10 +100,10 @@ export function ComponentWrapper({
 
     const createTitleStyle = (config) => {
         const defaultConfig = {
-            titleFontSize: 14,
-            titleColor: "#111",
+            titleFontSize: 16,
+            titleColor: "",
             titleAlign: "left",
-            titleBold: false,
+            titleBold: true,
             titleItalic: false,
             titleUnderline: false,
             titleStrikethrough: false,

@@ -54,7 +54,7 @@ export default function AppTempSheet({ children, onCustomCreate, onSelect }) {
             {children}
         </SheetTrigger>
         <SheetContent className="sm:min-w-[966px] ">
-            <div className="flex h-full" onClick={e => e.stopPropagation()}>
+            <div className="app-sheet flex h-full" onClick={e => e.stopPropagation()}>
                 <div className="w-fit p-6">
                     <SheetTitle>{t('appTemplate')}</SheetTitle>
                     <SheetDescription>{t('chooseTemplateOrCreateBlank')}</SheetDescription>
@@ -65,7 +65,7 @@ export default function AppTempSheet({ children, onCustomCreate, onSelect }) {
                             className={`flex items-center gap-2 px-4 py-2 rounded-md cursor-pointer hover:bg-muted-foreground/10 transition-all duration-200 mb-2 ${type === AppType.FLOW && 'bg-muted-foreground/10'}`}
                             onClick={() => setType(AppType.FLOW)}
                         >
-                            <FlowIcon />
+                            <FlowIcon/>
                             <span>{t('workflow')}</span>
                         </div>
                         <div
