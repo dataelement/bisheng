@@ -26,8 +26,8 @@ import { useChartState } from "./useChartState"
 import { generateUUID } from "@/components/bs-ui/utils"
 const FULL_DEFAULT_STYLE_CONFIG: ComponentStyleConfig = {
   themeColor: "professional-blue",
-  bgColor: "#ffffff",
-
+  bgColor: "",
+  
   title: "",
   titleFontSize: 14,
   titleBold: false,

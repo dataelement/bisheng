@@ -205,7 +205,9 @@ const getCartesianChartOption = (
 
   // Tooltip
   const tooltipFormatter = (params: any[]) => {
-    let res = params[0].name.replaceAll('\n', '<br/>') + '<br/>';
+    const originName = params[0]?.name || '';
+    const shortName = originName.replace(/(.{50})/g, '$1<br/>');
+    let res = shortName.replaceAll('\n', '<br/>') + '<br/>';
     params.forEach((item) => {
       res += item.value === undefined ? '' : `${item.marker} ${item.seriesName}: <b>${unitConversion(item.value, dataConfig).join('')}</b><br/>`;
     });
@@ -284,8 +286,8 @@ const getCartesianChartOption = (
     legend: buildLegendOption(styleConfig, series.map(s => s.name)),
     tooltip: buildTooltipOption('axis', tooltipFormatter),
     grid: {
-      left: styleConfig.legendPosition === 'left' ? 100 : '3%',
-      right: styleConfig.legendPosition === 'right' ? 100 : '3%',
+      left: styleConfig.legendPosition === 'left' ? 100 : '1%',
+      right: styleConfig.legendPosition === 'right' ? 100 : '1%',
       top: styleConfig.legendPosition === 'top' ? 60 : 28,
       bottom: styleConfig.legendPosition === 'bottom' ? 40 : 0,
       containLabel: true
@@ -348,6 +350,9 @@ const buildTooltipOption = (type: 'axis' | 'item', formatter: (params: any) => s
     trigger: type,
     axisPointer: type === 'axis' ? { type: 'shadow' } : undefined,
     appendToBody: true,
+    confine: true,
+    enterable: true,
+    extraCssText: 'max-height: 500px; overflow-y: auto;',
     formatter,
   };
 };
