@@ -217,19 +217,21 @@ const getCartesianChartOption = (
   //  Axis
   const xAxisTitleStyle = getTextStyle({
     fontSize: styleConfig.xAxisFontSize,
-    color: styleConfig.xAxisColor
+    color: styleConfig.xAxisColor,
+    bold: styleConfig.xAxisBold
   });
   const yAxisTitleStyle = getTextStyle({
     fontSize: styleConfig.yAxisFontSize,
-    color: styleConfig.yAxisColor
+    color: styleConfig.yAxisColor,
+    bold: styleConfig.yAxisBold
   });
 
   // (Category Axis)
   const categoryAxis = {
     type: 'category',
     data: dimensions,
-    show: styleConfig.showAxis ?? true,
     axisLabel: {
+      show: styleConfig.showAxis ?? true,
       rotate: 0,
       interval: 'auto',
       formatter: function (value) {
@@ -245,21 +247,21 @@ const getCartesianChartOption = (
       // ...axisLabelStyle,
     },
     name: styleConfig.xAxisTitle || '',
-    nameLocation: 'center',
+    nameLocation: styleConfig.xAxisAlign === 'right' ? 'end' : styleConfig.xAxisAlign === 'left' ? 'start' : 'center',
     nameTextStyle: xAxisTitleStyle
   };
 
   // (Value Axis)
   const valueAxis = {
     type: 'value',
-    show: styleConfig.showAxis ?? true,
     axisLabel: {
+      show: styleConfig.showAxis ?? true,
       formatter: (val: any) => unitConversion(val, dataConfig).join(''),
       color: '#666'
     },
     splitLine: { show: styleConfig.showGrid ?? true },
     name: styleConfig.yAxisTitle || '',
-    nameLocation: 'center',
+    nameLocation: styleConfig.yAxisAlign === 'right' ? 'end' : styleConfig.yAxisAlign === 'left' ? 'start' : 'center',
     nameRotate: isHorizontal ? 0 : 90,
     nameTextStyle: yAxisTitleStyle
   };
@@ -297,6 +299,7 @@ const getCartesianChartOption = (
       name: s.name,
       data: processedData,
       type: isLineOrArea ? 'line' : 'bar',
+      symbol: 'none',
       itemStyle: {
         borderRadius: (!isLineOrArea && !isStacked)
           ? (isHorizontal ? [0, 4, 4, 0] : [4, 4, 0, 0])
@@ -309,7 +312,7 @@ const getCartesianChartOption = (
     }
     if (isStacked) item.stack = 'total';
     if (isArea) item.areaStyle = {};
-    if (isLineOrArea) item.smooth = true;
+    // if (isLineOrArea) item.smooth = true;
 
     return item;
   });
@@ -362,12 +365,22 @@ const buildLegendOption = (styleConfig: ComponentStyleConfig, seriesNames?: stri
   if (styleConfig.showLegend === false) return undefined;
 
   const pos = styleConfig.legendPosition || 'top';
+  const align = styleConfig.legendAlign || 'auto';
+  const isVertical = pos === 'left' || pos === 'right';
   // computed
-  const orient = pos === 'left' || pos === 'right' ? 'vertical' : 'horizontal';
-  const top = pos === 'top' ? 0 : pos === 'bottom' ? 'auto' : 'center';
-  const bottom = pos === 'bottom' ? 0 : 'auto';
-  const left = pos === 'left' ? 0 : pos === 'center' ? 'center' : 'auto';
-  const right = pos === 'right' ? 0 : 'auto';
+  const orient = isVertical ? 'vertical' : 'horizontal';
+  const top = !isVertical
+    ? (pos === 'top' ? 0 : 'auto')
+    : (align === 'left' ? 0 : (align === 'right' ? 'auto' : 'center'));
+  const bottom = !isVertical
+    ? (pos === 'bottom' ? 0 : 'auto')
+    : (align === 'right' ? 0 : 'auto');
+  const left = isVertical
+    ? (pos === 'left' ? 0 : 'auto')
+    : (align === 'left' ? 0 : (align === 'right' ? 'auto' : 'center'));
+  const right = isVertical
+    ? (pos === 'right' ? 0 : 'auto')
+    : (align === 'right' ? 0 : 'auto');
 
   return {
     data: seriesNames, // Pie chart doesn't strictly need this, but Cartesian does

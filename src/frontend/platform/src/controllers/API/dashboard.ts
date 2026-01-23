@@ -212,6 +212,8 @@ export async function queryChartData(params: {
             }))
     });
 
+    if (!resData?.value?.length) return null
+
     const isStacked = !!component.data_config.stackDimension?.fieldId;
     const { dimensions, series } = isStacked
         ? transformStackedData(resData)
@@ -221,7 +223,7 @@ export async function queryChartData(params: {
 
     const chartType = params.component.type
 
-    // 根据图表类型返回对应的 mock 数据
+    // 根据图表类型返回对应的 数据
     switch (chartType) {
         case ChartType.Bar:
         case ChartType.StackedBar:

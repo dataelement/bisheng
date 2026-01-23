@@ -301,7 +301,7 @@ export default function ChartSelector({
   }
 
   return (
-    <div className="border-r flex flex-col h-full w-[420px] shrink-0 bg-background relative">
+    <div className="border-r flex flex-col h-full w-[440px] shrink-0 bg-background relative">
       {/* 标题区域 */}
       <div className="px-4 py-3 border-b flex items-center justify-between bg-muted/20">
         <div>
