@@ -74,7 +74,7 @@ function TextFormat({
     <div
       className="
       flex items-center
-      w-[244px] h-8
+      w-[230px] h-8
       border rounded-md
       overflow-hidden
     "
@@ -84,7 +84,7 @@ function TextFormat({
         value={String(fontSize)}
         onValueChange={(v) => setFontSize(Number(v))}
       >
-        <SelectTrigger className="w-[50px] h-7 px-2 text-xs border-0 ">
+        <SelectTrigger className="w-[50px] h-7 px-2 text-xs border-0 bg-white">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -100,7 +100,7 @@ function TextFormat({
       {setColor && (
         <Select
         >
-          <SelectTrigger className="w-[50px] h-7 px-2 text-xs border-0 ">
+          <SelectTrigger className="w-[50px] h-7 px-2 text-xs border-0 bg-white -m-1">
             <div className="size-4 border-[#EBECF0]">
               <div
                 className="h-full w-full rounded shadow-sm border"
@@ -140,39 +140,39 @@ function TextFormat({
         value={align}
         onValueChange={(v) => setAlign(v as "left" | "center" | "right")}
       >
-        <SelectTrigger className="w-10 h-7 px-1 border-0 shadow-none">
+        <SelectTrigger className="w-10 h-7 px-1 border-0 shadow-none bg-white">
           <SelectValue asChild>{alignIcon}</SelectValue>
         </SelectTrigger>
 
         <SelectContent>
           <SelectItem value="left" className="flex justify-center">
-            <AlignLeft className="w-4 h-4" />
+            <AlignLeft className="w-3 h-3" />
           </SelectItem>
           <SelectItem value="center" className="flex justify-center">
-            <AlignCenter className="w-4 h-4" />
+            <AlignCenter className="w-3 h-3" />
           </SelectItem>
           <SelectItem value="right" className="flex justify-center">
-            <AlignRight className="w-4 h-4" />
+            <AlignRight className="w-3 h-3" />
           </SelectItem>
         </SelectContent>
       </Select>
 
       {/* 样式 */}
-      <div className="flex w-[102px]">
+      <div className="flex w-[88px] m-1 gap-1">
         <IconBtn active={bold} onClick={() => setBold(!bold)}>
-          <Bold className="w-3.5 h-3.5" />
+          <Bold className="w-3 h-3" />
         </IconBtn>
         <IconBtn active={italic} onClick={() => setItalic(!italic)}>
-          <Italic className="w-3.5 h-3.5" />
+          <Italic className="w-3 h-3" />
         </IconBtn>
         <IconBtn active={underline} onClick={() => setUnderline(!underline)}>
-          <Underline className="w-3.5 h-3.5" />
+          <Underline className="w-3 h-3" />
         </IconBtn>
         <IconBtn
           active={strikethrough}
           onClick={() => setStrikethrough(!strikethrough)}
         >
-          <Strikethrough className="w-3.5 h-3.5" />
+          <Strikethrough className="w-3 h-3" />
         </IconBtn>
       </div>
     </div>
@@ -195,7 +195,7 @@ function IconBtn({
       variant="ghost"
       size="sm"
       onClick={onClick}
-      className={`w-7 h-7 px-0 rounded-none ${active ? "bg-blue-100 text-blue-600" : ""}`}
+      className={`w-7 h-5 px-0 rounded-[3px] ${active ? "bg-blue-100 text-blue-600" : ""}`}
     >
       {children}
     </Button>
@@ -226,7 +226,7 @@ function CollapsibleBlock({
   return (
     <div className="space-y-3">
       <div
-        className="flex items-center justify-between bg-gray-50 rounded-md h-[28px] w-[244px] cursor-pointer"
+        className="flex items-center justify-between bg-gray-50 rounded-md h-[28px] w-[228px] cursor-pointer"
         onClick={onCollapse}
       >
         <div className="flex items-center">
@@ -243,7 +243,7 @@ function CollapsibleBlock({
         </div>
       </div>
       {(isOpen || !collapsed) && (
-        <div className="w-[244px]">
+        <div className="w-[228px]">
           {children}
         </div>
       )}
@@ -259,7 +259,7 @@ function FormBlock({ label, children }: {
   return (
     <div className="space-y-2">
       <label className="text-sm font-medium">{label}</label>
-      <div className="w-[244px]">
+      <div className="w-[228px]">
         {children}
       </div>
     </div>
@@ -322,7 +322,6 @@ export function StyleConfigPanel({ config, onChange, type, FULL_DEFAULT_STYLE_CO
     if (!editingComponent || initialized) return
 
     const styleConfig = editingComponent.style_config ?? {}
-
     if (styleConfig.title === undefined && editingComponent.type === "metric") {
       updateEditingComponent({
         style_config: {
@@ -332,10 +331,19 @@ export function StyleConfigPanel({ config, onChange, type, FULL_DEFAULT_STYLE_CO
             editingComponent.data_config?.metrics?.[0]?.fieldName ?? "",
         },
       })
+    } else {
+      updateEditingComponent({
+        style_config: {
+          ...FULL_DEFAULT_STYLE_CONFIG,
+          ...styleConfig,
+          title:
+            editingComponent.title ?? "",
+        },
+      })
     }
 
     setInitialized(true)
-  }, [editingComponent, initialized, updateEditingComponent])
+  }, [editingComponent?.id])
 
 
 
@@ -380,7 +388,6 @@ export function StyleConfigPanel({ config, onChange, type, FULL_DEFAULT_STYLE_CO
                 handleChange("themeColor", id); // 直接存 id
               }}
             >
-              {console.log(colorSchemes[0].colors.light, 43242342)}
               <SelectTrigger className="w-full h-8">
                 <SelectValue>
                   <div className="flex gap-[1px]">

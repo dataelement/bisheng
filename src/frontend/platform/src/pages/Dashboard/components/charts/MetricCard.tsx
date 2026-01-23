@@ -116,6 +116,7 @@ export function MetricCard({ data, isPreviewMode, dataConfig, styleConfig }: Met
     bold?: boolean
     italic?: boolean
     underline?: boolean
+    strikethrough?: boolean
     color?: string
     align?: 'left' | 'center' | 'right'
   }) => {
@@ -124,7 +125,10 @@ export function MetricCard({ data, isPreviewMode, dataConfig, styleConfig }: Met
     if (config.bold) style.fontWeight = 'bold'
     if (config.italic) style.fontStyle = 'italic'
     if (config.color) style.color = config.color
-    if (config.underline) style.textDecoration = 'underline'
+    style.textDecoration = [
+      config.underline ? 'underline' : '',
+      config.strikethrough ? 'line-through' : ''
+    ].filter(Boolean).join(' ') || 'none'
     if (config.align) style.textAlign = config.align
     return style
   }
@@ -134,6 +138,7 @@ export function MetricCard({ data, isPreviewMode, dataConfig, styleConfig }: Met
     bold: styleConfig.subtitleBold,
     italic: styleConfig.subtitleItalic,
     underline: styleConfig.subtitleUnderline,
+    strikethrough: styleConfig.subtitleStrikethrough,
     color: styleConfig.subtitleColor,
     align: styleConfig.subtitleAlign
   })
@@ -143,6 +148,7 @@ export function MetricCard({ data, isPreviewMode, dataConfig, styleConfig }: Met
     bold: styleConfig.titleBold,
     italic: styleConfig.titleItalic,
     underline: styleConfig.titleUnderline,
+    strikethrough: styleConfig.titleStrikethrough,
     color: styleConfig.titleColor,
     align: styleConfig.titleAlign
   })
@@ -152,6 +158,7 @@ export function MetricCard({ data, isPreviewMode, dataConfig, styleConfig }: Met
     bold: styleConfig.metricBold,
     italic: styleConfig.metricItalic,
     underline: styleConfig.metricUnderline,
+    strikethrough: styleConfig.metricStrikethrough,
     color: styleConfig.metricColor,
     align: styleConfig.metricAlign
   })
@@ -164,9 +171,9 @@ export function MetricCard({ data, isPreviewMode, dataConfig, styleConfig }: Met
       ) : <div></div>}
       <div className='flex justify-between items-end'>
         {/* title */}
-        <div style={titleStyle} className=' truncate'>{indicatorName}</div>
+        <div style={titleStyle} className='w-1/2 truncate'>{indicatorName}</div>
         {/* value */}
-        <div style={metricStyle} className='leading-[1.2em]'>
+        <div style={metricStyle} className='w-1/2 leading-[1.2em] truncate pr-1'>
           {formatValue}
           {displayUnit && <span className="text-xl ml-2 text-muted-foreground">{displayUnit}</span>}
         </div>

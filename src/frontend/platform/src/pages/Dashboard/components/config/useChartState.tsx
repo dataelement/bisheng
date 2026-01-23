@@ -38,6 +38,7 @@ export function useChartState(initialComponent: any) {
   const isStackedChart = (type: ChartType) =>
     type.startsWith('stacked-') || type.startsWith('grouped-');
   // 初始化逻辑
+  // 在 useEffect 初始化中添加 sortPriorityOrder 的初始化
   useEffect(() => {
     const componentId = initialComponent?.id
     const currentId = editingComponentIdRef.current
@@ -53,40 +54,53 @@ export function useChartState(initialComponent: any) {
       setStackDimensions([])
       setValueDimensions([])
       setFilterGroup(null)
+      // 清空排序顺序
+      setSortPriorityOrder([])
 
       const dc = initialComponent.data_config
       const newChartType = initialComponent.type || 'bar'
 
       setChartType(newChartType)
       setTitle(initialComponent.title || '')
-
       setStyleConfigState(initialComponent.style_config || {})
 
       // 初始化维度数据
       if (dc) {
         console.log('数据配置:', dc)
 
+        const newCategoryDimensions: any[] = []
+        const newStackDimensions: any[] = []
+        const newValueDimensions: any[] = []
+        const fieldIdToComponentId = new Map<string, string>()
+
         // 1. 初始化普通维度（类别轴）
         if (dc.dimensions && dc.dimensions.length > 0) {
-          const formattedCategoryDims = dc.dimensions.map((dim, index) => ({
-            id: `category_${index}_${Date.now()}`,
-            fieldId: dim.fieldId,
-            name: dim.fieldCode,
-            displayName: dim.displayName || dim.fieldName,
-            originalName: dim.fieldName,
-            sort: dim.sort || null,
-            timeGranularity: dim.timeGranularity || null,
-            sortPriority: 0,
-            fieldType: 'dimension'
-          }))
+          const formattedCategoryDims = dc.dimensions.map((dim, index) => {
+            const componentId = `category_${index}_${Date.now()}`
+            fieldIdToComponentId.set(dim.fieldId, componentId)
+            return {
+              id: componentId,
+              fieldId: dim.fieldId,
+              name: dim.fieldCode,
+              displayName: dim.displayName || dim.fieldName,
+              originalName: dim.fieldName,
+              sort: dim.sort || null,
+              timeGranularity: dim.timeGranularity || null,
+              sortPriority: 0,
+              fieldType: 'dimension'
+            }
+          })
+          newCategoryDimensions.push(...formattedCategoryDims)
           setCategoryDimensions(formattedCategoryDims)
           console.log('设置类别维度:', formattedCategoryDims)
         }
 
         // 2. 初始化堆叠维度
         if (dc.stackDimension) {
+          const componentId = `stack_0_${Date.now()}`
+          fieldIdToComponentId.set(dc.stackDimension.fieldId, componentId)
           const formattedStackDim = {
-            id: `stack_0_${Date.now()}`,
+            id: componentId,
             fieldId: dc.stackDimension.fieldId,
             name: dc.stackDimension.fieldCode,
             displayName: dc.stackDimension.displayName || dc.stackDimension.fieldName,
@@ -96,28 +110,35 @@ export function useChartState(initialComponent: any) {
             sortPriority: 0,
             fieldType: 'dimension'
           }
+          newStackDimensions.push(formattedStackDim)
           setStackDimensions([formattedStackDim])
           console.log('设置堆叠维度:', formattedStackDim)
         }
+
         // 3. 初始化指标（value）
         if (dc.metrics && dc.metrics.length > 0) {
-          const valueDims = dc.metrics.map((metric, index) => ({
-            id: `value_${index}_${Date.now()}`,
-            fieldId: metric.fieldId,
-            name: metric.fieldCode,
-            displayName: metric.displayName || metric.fieldName,
-            originalName: metric.fieldName,
-            sort: metric.sort || null,
-            sortPriority: 0,
-            fieldType: 'metric',
-            isVirtual: metric.isVirtual || false,
-            aggregation: metric.aggregation || 'sum',
-            numberFormat: metric.numberFormat || {
-              type: 'number',
-              decimalPlaces: 2,
-              thousandSeparator: true
+          const valueDims = dc.metrics.map((metric, index) => {
+            const componentId = `value_${index}_${Date.now()}`
+            fieldIdToComponentId.set(metric.fieldId, componentId)
+            return {
+              id: componentId,
+              fieldId: metric.fieldId,
+              name: metric.fieldCode,
+              displayName: metric.displayName || metric.fieldName,
+              originalName: metric.fieldName,
+              sort: metric.sort || null,
+              sortPriority: 0,
+              fieldType: 'metric',
+              isVirtual: metric.isVirtual || false,
+              aggregation: metric.aggregation || 'sum',
+              numberFormat: metric.numberFormat || {
+                type: 'number',
+                decimalPlaces: 2,
+                thousandSeparator: true
+              }
             }
-          }))
+          })
+          newValueDimensions.push(...valueDims)
           setValueDimensions(valueDims)
           console.log('设置指标维度:', valueDims)
         }
@@ -136,6 +157,31 @@ export function useChartState(initialComponent: any) {
             }))
           })
         }
+
+        // 5. 初始化字段顺序
+        let fieldOrderIds: string[] = []
+
+        if (dc.fieldOrder && dc.fieldOrder.length > 0) {
+          // 如果 data_config 中有 fieldOrder，使用其中的 fieldId 映射到 componentId
+          fieldOrderIds = dc.fieldOrder
+            .map(item => fieldIdToComponentId.get(item.fieldId))
+            .filter(Boolean) as string[]
+          console.log('使用 data_config.fieldOrder 映射后的 componentIds:', fieldOrderIds)
+        }
+
+        // 如果没有 fieldOrder 或映射失败，使用默认顺序
+        if (fieldOrderIds.length === 0) {
+          const allComponentIds = [
+            ...newCategoryDimensions.map(d => d.id),
+            ...newStackDimensions.map(d => d.id),
+            ...newValueDimensions.map(d => d.id)
+          ]
+          fieldOrderIds = allComponentIds
+          console.log('使用默认字段顺序:', fieldOrderIds)
+        }
+
+        setSortPriorityOrder(fieldOrderIds)
+        console.log('设置 sortPriorityOrder:', fieldOrderIds)
       }
     }
 
@@ -608,7 +654,8 @@ export function useChartState(initialComponent: any) {
     // 构建 fieldOrder
     const fieldOrder = sortedFields.map(field => ({
       fieldId: field.fieldId,
-      fieldType: field.type
+      fieldType: field.type,
+      displayName: field.displayName,
     }))
 
     // 5. 构建筛选条件
@@ -646,7 +693,7 @@ export function useChartState(initialComponent: any) {
       },
       isConfigured: true,
     }
-  }, [categoryDimensions, stackDimensions, valueDimensions, filterGroup])
+  }, [categoryDimensions, stackDimensions, valueDimensions, filterGroup, sortPriorityOrder])
 
   // 返回对象
   return {

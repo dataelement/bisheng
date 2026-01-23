@@ -80,7 +80,7 @@ export default function FileUploadStep1({ hidden, onNext, onSave, initialFiles }
             <Button disabled={loading || !finish} onClick={() => {
                 onNext(filesRef.current)
             }} >
-                {fileCount ? <span>{t('totalFiles', { count: fileCount })}</span> : null} {t('nextStep')}</Button>
+                {fileCount ? <span>{t('totalFiles', { count: fileCount })}</span> : null}&nbsp;{t('nextStep')}</Button>
         </div>
     </div>
 

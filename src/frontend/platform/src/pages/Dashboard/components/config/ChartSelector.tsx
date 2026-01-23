@@ -38,7 +38,7 @@ interface ChartSelectorProps {
 /* ================== 组件 ================== */
 export default function ChartSelector({
   onSave,
-  onCancel
+  // onCancel
 }: ChartSelectorProps) {
   const { t } = useTranslation("dashboard")
   const [selectedCharts, setSelectedCharts] = useState<string[]>([])
@@ -117,7 +117,9 @@ export default function ChartSelector({
       setTimeFilter(null)
     }
   }, [editingComponent, t])
-
+  const onCancel = () => {
+    setCollapsed(!collapsed)
+  }
   // 获取所有非查询类型的图表组件
   const charts = currentDashboard
     ? currentDashboard.components

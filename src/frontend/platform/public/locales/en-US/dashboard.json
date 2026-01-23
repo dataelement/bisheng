@@ -81,6 +81,7 @@
       "displayName": "Display Name",
       "displayNameRequired": "Display Name *",
       "enterDisplayName": "Enter display name",
+      "displayMaxLength": "Display name cannot exceed 15 characters",
       "cancel": "Cancel",
       "confirm": "Confirm",
       "chartUpdated": "Chart updated"

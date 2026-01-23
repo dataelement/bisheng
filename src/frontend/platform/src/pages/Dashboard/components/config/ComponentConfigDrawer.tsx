@@ -92,8 +92,6 @@ export function ComponentConfigDrawer() {
   const { t } = useTranslation("dashboard")
   const { editingComponent, updateEditingComponent } = useComponentEditorStore();
   const { refreshChart } = useEditorDashboardStore();
-  console.log(editingComponent, 312312312312);
-
   // 折叠状态
   const [configCollapsed, setConfigCollapsed] = useState({
     basic: false,
@@ -171,7 +169,7 @@ export function ComponentConfigDrawer() {
         if (timeFilter.type === 'recent_days' && timeFilter.recentDays) {
           shortcutKey = `last_${timeFilter.recentDays}`;
         } else {
-          shortcutKey = timeFilter.type;
+          shortcutKey = '';
         }
 
         setFilter({
@@ -578,6 +576,8 @@ export function ComponentConfigDrawer() {
     stackDimensions,
     currentChartHasStack,
     invalidFieldIds,
+    sortPriorityFields,
+    chartState.sortPriorityOrder,
     toast,
     t
   ])
@@ -621,7 +621,7 @@ export function ComponentConfigDrawer() {
 
   const CollapseLabel = useCallback(({ label, onClick, icon, styleLabel }: any) => (
     <div className="h-full flex flex-col items-center cursor-pointer hover:bg-accent/50 transition-colors" onClick={onClick}>
-      <div className="m-[18px]">{icon}</div>
+      <div className="m-[20px]">{icon}</div>
       <div className="w-full h-[2px] bg-gray-100 mb-4"></div>
       <div className="writing-mode-vertical text-sm font-medium tracking-[6px]">{label}</div>
       <div className="writing-mode-vertical mt-4 text-sm font-medium tracking-[6px]">{styleLabel}</div>
@@ -716,11 +716,13 @@ export function ComponentConfigDrawer() {
             // 刷新查询组件
             refreshChart(editingComponent.id)
           }}
-          onCancel={() => console.log('取消')}
+          onCancel={() => {
+            updateEditingComponent(null)
+          }}
         />
       ) : (
         <>
-          <div className={`border-r flex flex-col h-full transition-all duration-300 ${configCollapsed.basic ? "w-12" : "w-[280px]"} shrink-0`}>
+          <div className={`border-r flex flex-col h-full transition-all duration-300 ${configCollapsed.basic ? "w-12" : "w-[260px]"} shrink-0`}>
             {configCollapsed.basic ? (
               <CollapseLabel
                 label={t("componentConfigDrawer.basicConfig")}
@@ -758,7 +760,9 @@ export function ComponentConfigDrawer() {
                                 // 更新图表类型
                                 handleChartTypeChange(data.type);
 
-                                // 自动将选中的图表名称设置为标题
+                                // 判断是否是指标卡
+                                const isMetricChart = data.type === 'metric';
+
                                 const chartLabel = ChartGroupItems
                                   .flatMap(item => item.data)
                                   .find(item => item.type === data.type)?.label;
@@ -769,11 +773,17 @@ export function ComponentConfigDrawer() {
                                   .find(item => item.type === chartType)?.label;
                                 const currentChartDisplayName = currentChartLabel ? t(`chart.${currentChartLabel}`) : '';
 
-                                // 判断用户是否自定义过标题
-                                const userCustomizedTitle = editingComponent.title !== currentChartDisplayName && editingComponent.title !== '';
-                                const newTitle = userCustomizedTitle ? editingComponent.title : (chartLabel ? t(`chart.${chartLabel}`) : title);
+                                let newTitle = title;
 
-                                if (!userCustomizedTitle && chartLabel) {
+                                if (isMetricChart) {
+                                  if (valueDimensions.length > 0) {
+                                    newTitle = valueDimensions[0].displayName;
+                                  }
+                                } else {
+                                  const userCustomizedTitle = editingComponent.title !== currentChartDisplayName && editingComponent.title !== '';
+                                  newTitle = userCustomizedTitle ? editingComponent.title : (chartLabel ? t(`chart.${chartLabel}`) : title);
+                                }
+                                if (!isMetricChart && chartLabel) {
                                   setTitle(newTitle);
                                 }
 
@@ -942,7 +952,7 @@ export function ComponentConfigDrawer() {
                       {/* 排序优先级 */}
                       {(editingComponent.type !== 'metric' && isMetricCard) && <CollapsibleBlock title={t("componentConfigDrawer.sortPriority")}>
                         <div className="space-y-1 border rounded-md p-[2px]">
-                          {sortPriorityFields.length === 0 ? (
+                          {sortPriorityFields?.length === 0 ? (
                             <div className="text-xs text-muted-foreground text-center py-2">
                               {t("componentConfigDrawer.sortHint")}
                             </div>
@@ -983,7 +993,7 @@ export function ComponentConfigDrawer() {
 
                         {!filterGroup || filterGroup.conditions.length === 0 ? (
                           <div
-                            className="text-sm text-muted-foreground text-center w-[236px] h-[36px] py-2 border rounded-md bg-muted/20 cursor-pointer hover:bg-muted/30 transition-colors"
+                            className="text-sm text-muted-foreground text-center w-[216px] h-[36px] py-2 border rounded-md bg-muted/20 cursor-pointer hover:bg-muted/30 transition-colors"
                             onClick={handleEditFilter}
                           >
                             <div className="inline-flex items-center h-[20px] px-2 text-xs">
@@ -991,17 +1001,14 @@ export function ComponentConfigDrawer() {
                             </div>
                           </div>
                         ) : (
-                          <div className="space-y-2 bg-blue-100 rounded-md border-blue-300">
+                          <div className="space-y-2 bg-blue-100 rounded-md border-blue-300 group">
                             <div className="flex items-center justify-between p-2 border rounded-md bg-muted/20 hover:bg-muted/40">
                               <div className="flex items-center gap-2">
                                 <span className="text-sm font-medium text-blue-700">
                                   {t("componentConfigDrawer.filterConditionsAdded", { count: filterGroup.conditions.length })}
-                                  {filterGroup.conditions.length > 1 && t("componentConfigDrawer.filterLogicHint", {
-                                    logic: (filterGroup.logic?.toUpperCase() || 'AND')
-                                  })}
                                 </span>
                               </div>
-                              <div className="flex items-center gap-1">
+                              <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center gap-1">
                                 <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleEditFilter}>
                                   <PencilLine className="h-3 w-3" />
                                 </Button>
@@ -1126,7 +1133,7 @@ export function ComponentConfigDrawer() {
               </div>
             )}
           </div>
-          <div className={`flex flex-col h-full transition-all duration-300 ${configCollapsed.data ? "w-12 shrink-0" : "w-[160px]"}`}>
+          <div className={`flex flex-col h-full transition-all duration-300 ${configCollapsed.data ? "w-12 shrink-0" : "w-[180px]"}`}>
             {configCollapsed.data ? (
               <CollapseLabel
                 label={t("componentConfigDrawer.dataSelection")}
@@ -1142,6 +1149,7 @@ export function ComponentConfigDrawer() {
                 />
                 <div className="flex-1 overflow-auto">
                   <DatasetSelector
+                    isMetricCard={editingComponent?.type === 'metric'}
                     selectedDatasetCode={editingComponent.dataset_code}
                     onDatasetChange={handleDatasetChange}
                     onDragStart={handleDragStart}
@@ -1176,7 +1184,14 @@ export function ComponentConfigDrawer() {
                 value={editingDimension?.displayName || ''}
                 onChange={(e) => setEditingDimension(prev => prev ? { ...prev, displayName: e.target.value } : null)}
                 placeholder={t("componentConfigDrawer.dialog.enterDisplayName")}
+                maxLength={15}
+                className={(editingDimension?.displayName?.length || 0) >= 15 ? 'border-red-500 focus-visible:ring-red-500' : ''}
               />
+              {(editingDimension?.displayName?.length || 0) >= 15 && (
+                <div className="text-xs text-red-500 mt-1">
+                  {t("componentConfigDrawer.dialog.displayMaxLength", { max: 15 })}
+                </div>
+              )}
             </div>
           </div>
           <DialogFooter>

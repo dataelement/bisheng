@@ -243,7 +243,7 @@ def execute_workflow_get_answer(workflow_info: FlowVersion, evaluation: Evaluati
     unique_id = generate_uuid()
     workflow_id = evaluation.unique_id
     chat_id = ""
-    user_id = str(evaluation.user_id)
+    user_id = evaluation.user_id
     workflow = RedisCallback(unique_id, workflow_id, chat_id, user_id)
     workflow.set_workflow_data(workflow_info.data)
     workflow.set_workflow_status(WorkflowStatus.WAITING.value)

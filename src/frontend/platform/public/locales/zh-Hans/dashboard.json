@@ -76,6 +76,7 @@
             "displayName": "显示名称",
             "displayNameRequired": "显示名称 *",
             "enterDisplayName": "请输入显示名称",
+            "displayMaxLength": "显示名称长度不能超过 15 个字符",
             "cancel": "取消",
             "confirm": "确认"
         },

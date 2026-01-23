@@ -31,7 +31,7 @@ export type Partition = {
   [key in string]: { text: string, type: string, part_id: string }
 }
 export default function PreviewResult({
-  showPreview, previewCount, rules,resultFiles, step, applyEachCell, cellGeneralConfig, kId, handlePreviewResult, onDeleteFile
+  showPreview, previewCount, rules, resultFiles, step, applyEachCell, cellGeneralConfig, kId, handlePreviewResult, onDeleteFile
 }: IProps) {
   const { id } = useParams()
 
@@ -39,7 +39,7 @@ export default function PreviewResult({
   const [partitions, setPartitions] = useState<Partition>(null) // 当前文件分区
   const [selectId, setSelectId] = useState(''); // 当前选择文件id
   const [syncChunksSelectId, setSelectIdSyncChunks] = useState(''); // 当前选择文件id(与chunk更新保持同步)
-  const [etl,setEtl] = useState<string>('')
+  const [etl, setEtl] = useState<string>('')
   useEffect(() => {
     const file = rules.fileList[0]
     setSelectId(file.id)
@@ -77,7 +77,7 @@ export default function PreviewResult({
 
     // 合并配置（与原逻辑一致）
     const { fileList, pageHeaderFooter, chunkOverlap, chunkSize, enableFormula, forceOcr, knowledgeId, retainImages, separator, separatorRule } = rules;
-    const currentFile = fileList.find(file => file.id === selectId);    
+    const currentFile = fileList.find(file => file.id === selectId);
     let preview_url;
     if (showPreview) {
       preview_url = currentFile.previewUrl || currentFile?.filePath;
@@ -191,7 +191,6 @@ export default function PreviewResult({
   }
 
   return (<div className={cn("h-full flex gap-2 justify-center", "w-full")}>
-
     {(step === 3 || step === 2 && !previewCount) && currentFile && !loading && <PreviewFile
       urlState={fileViewUrl}
       file={currentFile}
