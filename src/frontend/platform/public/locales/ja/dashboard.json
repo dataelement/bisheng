@@ -156,7 +156,7 @@
       "count": "カウント",
       "max": "最大値",
       "min": "最小値",
-      "aggregation": "ユニークカウント"
+      "distinctCount": "ユニークカウント"
     },
     "sort": {
       "none": "なし",

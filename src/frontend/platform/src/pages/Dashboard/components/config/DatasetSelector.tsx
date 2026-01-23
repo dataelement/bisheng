@@ -200,7 +200,7 @@ export function DatasetSelector({ selectedDatasetCode, isMetricCard, onDatasetCh
                         </button>
 
                         {dimensionsExpanded && (
-                            <div className="px-4 pb-3 space-y-2">
+                            <div className="px-4 pb-2 space-y-0">
                                 {selectedDataset.schema_config.dimensions.map((dimension) => {
                                     if (dimension.time_granularitys && dimension.time_granularitys.length > 0) {
                                         return dimension.time_granularitys.map((g) => {

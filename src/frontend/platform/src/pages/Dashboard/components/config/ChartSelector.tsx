@@ -217,7 +217,7 @@ export default function ChartSelector({
   }
 
   return (
-    <div className="border-r flex flex-col h-full w-[420px] shrink-0 bg-background">
+    <div className="border-r flex flex-col h-full w-[420px] shrink-0 bg-background relative">
       {/* 标题区域 */}
       <div className="px-4 py-3 border-b flex items-center justify-between bg-muted/20">
         <div>
@@ -250,7 +250,7 @@ export default function ChartSelector({
           {/* 单个图表 */}
           {charts.length > 0 ? (
             charts.map(chart => (
-              <div key={chart.id} className="flex items-center gap-2 pl-4">
+              <div key={chart.id} className="flex items-center gap-2">
                 <Checkbox
                   checked={selectedCharts.includes(chart.id)}
                   onCheckedChange={() => toggleChart(chart.id)}
@@ -354,13 +354,23 @@ export default function ChartSelector({
         </div>
 
         {/* 底部按钮 */}
-        <div className="flex justify-end gap-2 pt-2">
-          <Button variant="outline" onClick={onCancel}>
-            {t("chartSelector.buttons.cancel")}
-          </Button>
-          <Button id="query_save" onClick={handleSave}>
-            {t("chartSelector.buttons.save")}
-          </Button>
+        <div className="border-t bg-background p-4 absolute bottom-0 left-0 right-0">
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={onCancel}
+              className="flex-1"
+            >
+              {t("chartSelector.buttons.cancel")}
+            </Button>
+            <Button
+              id="query_save"
+              onClick={handleSave}
+              className="flex-1"
+            >
+              {t("chartSelector.buttons.save")}
+            </Button>
+          </div>
         </div>
       </div>
     </div>
