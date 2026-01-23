@@ -86,7 +86,7 @@ class WorkflowClient(BaseClient):
             await self.init_history()
             unique_id = f'{self.chat_id}_async_task_id'
         logger.debug(f'init workflow with unique_id: {unique_id}, workflow_id: {workflow_id}, chat_id: {self.chat_id}')
-        self.workflow = RedisCallback(unique_id, workflow_id, self.chat_id, str(self.user_id))
+        self.workflow = RedisCallback(unique_id, workflow_id, self.chat_id, self.user_id)
         # JudgingworkflowWhether it is online, if it is not online, close the currentwebsocketLinks
         workflow_db = FlowDao.get_flow_by_id(workflow_id)
         if workflow_db.status != FlowStatus.ONLINE.value and self.chat_id:
@@ -138,11 +138,11 @@ class WorkflowClient(BaseClient):
                 return
 
             # Start a newworkflow
-            self.workflow = RedisCallback(unique_id, workflow_id, self.chat_id, str(self.user_id))
+            self.workflow = RedisCallback(unique_id, workflow_id, self.chat_id, self.user_id)
             await self.workflow.async_set_workflow_data(workflow_data)
             await self.workflow.async_set_workflow_status(WorkflowStatus.WAITING.value)
             # Start asynchronous task
-            execute_workflow.delay(unique_id, workflow_id, self.chat_id, str(self.user_id))
+            execute_workflow.delay(unique_id, workflow_id, self.chat_id, self.user_id)
             await self.send_response('processing', 'begin', '')
             await self.workflow_run()
         except Exception as e:
