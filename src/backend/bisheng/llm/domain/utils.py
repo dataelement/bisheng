@@ -72,7 +72,7 @@ class TelemetryCallback(BaseCallbackHandler):
 
     def __init__(self, start_time: float):
         self.start_time = start_time
-        self.first_token_time: Optional[int] = None
+        self.first_token_time: Optional[int] = 0
 
     def on_llm_new_token(
             self,
@@ -83,7 +83,7 @@ class TelemetryCallback(BaseCallbackHandler):
             parent_run_id: Optional[UUID] = None,
             **kwargs: Any,
     ) -> Any:
-        if self.first_token_time is None:
+        if not self.first_token_time:
             self.first_token_time = int((time.time() - self.start_time) * 1000)
 
 
