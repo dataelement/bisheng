@@ -657,7 +657,7 @@ export function FilterConditionDialog({
                         value={c.fieldCode}
                         onValueChange={v => handleFieldChange(c.id, v)}
                       >
-                        <SelectTrigger className="w-[160px] h-8">
+                        <SelectTrigger className="w-[120px] h-8">
                           <SelectValue placeholder={t('filterConditionDialog.placeholders.selectField')} />
                         </SelectTrigger>
                         <SelectContent className=" overflow-y-auto w-[160px]">

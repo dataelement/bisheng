@@ -1053,65 +1053,7 @@ export function ComponentConfigDrawer() {
                       </FormBlock>
 
 
-                      {/* 结果显示 */}
-                      {(editingComponent.type !== 'metric' && isMetricCard) &&
-                        <div>
-                          <RadioGroup
-                            value={limitType}
-                            onValueChange={(value: "all" | "limit") => setLimitType(value)}
-                            className="flex justify-between gap-4"
-                          >
-                            <div className=" text-sm font-medium mt-1">
-                              {t("componentConfigDrawer.resultsDisplay")}
-                            </div>
-                            <div className="flex">
-                              <div className="flex items-center space-x-2 mr-1">
-                                <RadioGroupItem value="all" id="limit-all" />
-                                <Label htmlFor="limit-all" className="text-sm cursor-pointer whitespace-nowrap">
-                                  {t("componentConfigDrawer.allResults")}
-                                </Label>
-                              </div>
-                              <div className="flex items-center space-x-2">
-                                <RadioGroupItem value="limit" id="limit-limit" />
-                                <div className="flex items-center gap-2">
-                                  <Input
-                                    className="w-16 h-7 text-sm appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                                    type="number"
-                                    value={limitValue}
-                                    disabled={limitType !== "limit"}
-                                    onChange={(e) => {
-                                      const value = e.target.value;
-                                      if (value === '' || /^\d+$/.test(value)) {
-                                        const num = parseInt(value);
-                                        if (value === '' || (num >= 1 && num <= 1000)) {
-                                          setLimitValue(value);
-                                        }
-                                      }
-                                    }}
-                                    onBlur={(e) => {
-                                      const value = e.target.value;
-                                      const num = parseInt(value);
-                                      if (value === '' || isNaN(num)) {
-                                        setLimitValue('1');
-                                      } else if (num < 1) {
-                                        setLimitValue('1');
-                                      } else if (num > 1000) {
-                                        setLimitValue('1000');
-                                      } else {
-                                        setLimitValue(num.toString());
-                                      }
-                                    }}
-                                    min={1}
-                                    max={1000}
-                                    placeholder="1000"
-                                  />
-                                </div>
-                              </div>
-                            </div>
 
-                          </RadioGroup>
-                        </div>
-                      }
 
                       {/* <Button id="config_save" className="w-full h-10 mt-4" onClick={handleUpdateChart}>
                         {t("componentConfigDrawer.updateChartData")}
@@ -1137,6 +1079,65 @@ export function ComponentConfigDrawer() {
                 </div>
                 {/* 底部固定更新按钮（不随滚动） */}
                 {configTab !== "style" && <div className="px-4 py-3 border-t bg-background">
+                  {/* 结果显示 */}
+                  {(editingComponent.type !== 'metric' && isMetricCard) &&
+                    <div>
+                      <RadioGroup
+                        value={limitType}
+                        onValueChange={(value: "all" | "limit") => setLimitType(value)}
+                        className="flex justify-between gap-4"
+                      >
+                        <div className=" text-sm font-medium mt-1">
+                          {t("componentConfigDrawer.resultsDisplay")}
+                        </div>
+                        <div className="flex">
+                          <div className="flex items-center space-x-2 mr-1">
+                            <RadioGroupItem value="all" id="limit-all" />
+                            <Label htmlFor="limit-all" className="text-sm cursor-pointer whitespace-nowrap">
+                              {t("componentConfigDrawer.allResults")}
+                            </Label>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="limit" id="limit-limit" />
+                            <div className="flex items-center gap-2">
+                              <Input
+                                className="w-16 h-7 text-sm appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                type="number"
+                                value={limitValue}
+                                disabled={limitType !== "limit"}
+                                onChange={(e) => {
+                                  const value = e.target.value;
+                                  if (value === '' || /^\d+$/.test(value)) {
+                                    const num = parseInt(value);
+                                    if (value === '' || (num >= 1 && num <= 1000)) {
+                                      setLimitValue(value);
+                                    }
+                                  }
+                                }}
+                                onBlur={(e) => {
+                                  const value = e.target.value;
+                                  const num = parseInt(value);
+                                  if (value === '' || isNaN(num)) {
+                                    setLimitValue('1');
+                                  } else if (num < 1) {
+                                    setLimitValue('1');
+                                  } else if (num > 1000) {
+                                    setLimitValue('1000');
+                                  } else {
+                                    setLimitValue(num.toString());
+                                  }
+                                }}
+                                min={1}
+                                max={1000}
+                                placeholder="1000"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                      </RadioGroup>
+                    </div>
+                  }
                   <Button
                     id="config_save"
                     className="w-full h-10"
