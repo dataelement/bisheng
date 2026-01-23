@@ -27,7 +27,7 @@ import { generateUUID } from "@/components/bs-ui/utils"
 const FULL_DEFAULT_STYLE_CONFIG: ComponentStyleConfig = {
   themeColor: "professional-blue",
   bgColor: "",
-  
+
   title: "",
   titleFontSize: 14,
   titleBold: false,
@@ -386,6 +386,13 @@ export function ComponentConfigDrawer() {
       setIsMetricCard(true)
     }
   }, [chartType])
+  editingComponent?.dataset_code
+  useEffect(() => {
+    setFilterGroup({
+      logic: "and",
+      conditions: []
+    })
+  }, [editingComponent?.dataset_code])
   // 数据集改变
   const handleDatasetChange = useCallback((datasetCode: string) => {
     if (editingComponent) {

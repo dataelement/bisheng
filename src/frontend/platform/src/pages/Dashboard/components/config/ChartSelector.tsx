@@ -118,6 +118,69 @@ export default function ChartSelector({
     }
   }, [editingComponent, t])
   const onCancel = () => {
+    // 重置到编辑前的状态
+    const config = editingComponent?.data_config
+
+    if (config && 'linkedComponentIds' in config) {
+      setSelectedCharts(config.linkedComponentIds || [])
+
+      if (config.queryConditions) {
+        const queryCond = config.queryConditions
+
+        if (queryCond.displayType) {
+          const displayTypeValue = queryCond.displayType === "single"
+            ? t("chartSelector.displayTypes.time", "时间")
+            : t("chartSelector.displayTypes.timeRange", "时间范围")
+          setDisplayType(displayTypeValue)
+        }
+
+        // 映射时间粒度
+        if (queryCond.timeGranularity) {
+          let timeGranularityValue = t("chartSelector.granularities.yearMonthDay", "年月日")
+          if (queryCond.timeGranularity === "year_month") {
+            timeGranularityValue = t("chartSelector.granularities.yearMonth", "年月")
+          } else if (queryCond.timeGranularity === "year_month_day_hour") {
+            timeGranularityValue = t("chartSelector.granularities.yearMonthDayHour", "年月日时")
+          }
+          setTimeGranularity(timeGranularityValue)
+        }
+
+        // 设置默认值
+        if (queryCond.hasDefaultValue !== undefined) {
+          setIsDefault(queryCond.hasDefaultValue)
+        }
+
+        // 处理时间范围
+        if (queryCond.hasDefaultValue && queryCond.defaultValue?.type === 'custom') {
+          try {
+            const startTime = queryCond.defaultValue.startDate
+            const endTime = queryCond.defaultValue.endDate
+
+            if (startTime && endTime) {
+              setTimeFilter({
+                startTime: startTime,
+                endTime: endTime
+              })
+            } else {
+              setTimeFilter(null)
+            }
+          } catch (error) {
+            setTimeFilter(null)
+          }
+        } else {
+          setTimeFilter(null)
+        }
+      }
+    } else {
+      // 重置为默认值
+      setSelectedCharts([])
+      setDisplayType(t("chartSelector.displayTypes.timeRange"))
+      setTimeGranularity(t("chartSelector.granularities.yearMonthDay"))
+      setIsDefault(false)
+      setTimeFilter(null)
+    }
+
+    // 收起面板
     setCollapsed(!collapsed)
   }
   // 获取所有非查询类型的图表组件

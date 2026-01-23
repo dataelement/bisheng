@@ -306,12 +306,12 @@ export function StyleConfigPanel({ config, onChange, type, FULL_DEFAULT_STYLE_CO
     //   baseConfig.title = editingComponent?.data_config?.metrics?.[0]?.fieldName
     // }
     // 如果轴标题为空，设置默认值
-    if (!baseConfig.xAxisTitle && firstDimension?.fieldName) {
-      baseConfig.xAxisTitle = firstDimension.fieldName
+    if (baseConfig.xAxisTitle === undefined && firstDimension?.fieldName) {
+      baseConfig.xAxisTitle = firstDimension.fieldName;
     }
 
-    if (!baseConfig.yAxisTitle && firstMetric?.fieldName) {
-      baseConfig.yAxisTitle = firstMetric.fieldName
+    if (baseConfig.yAxisTitle === undefined && firstMetric?.fieldName) {
+      baseConfig.yAxisTitle = firstMetric.fieldName;
     }
 
     return baseConfig
@@ -683,7 +683,6 @@ export function StyleConfigPanel({ config, onChange, type, FULL_DEFAULT_STYLE_CO
                 />
               </FormBlock>
             </CollapsibleBlock>
-            {console.log(editingComponent, editingComponent?.type, 454545454)}
             {/* 图表选项 */}
             <CollapsibleBlock
               title={t('styleConfigPanel.sections.chartOptions')}

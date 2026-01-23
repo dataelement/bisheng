@@ -354,6 +354,16 @@ export function FilterConditionDialog({
     })
   }, [fields, dimensions, dataset_code, t])
   useEffect(() => {
+    if (!open) {
+      // 关闭对话框时重置状态
+      setDraft({
+        logic: "and",
+        conditions: [createEmptyCondition()]
+      })
+      setError(null)
+    }
+  }, [open])
+  useEffect(() => {
     setInitialized(false)
     setDraft({
       logic: "and",

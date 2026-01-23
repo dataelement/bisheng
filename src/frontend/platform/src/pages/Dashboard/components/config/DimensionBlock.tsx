@@ -381,17 +381,30 @@ export function DimensionBlock({
             <div className="space-y-6 py-4">
               <div>
                 <div className="text-sm font-medium mb-2">{t('dimensionBlock.dialog.formatType')}</div>
-                {/* ... RadioGroup ... */}
                 <RadioGroup
                   value={localFormat.type}
-                  onValueChange={(value) =>
+                  onValueChange={(value) => {
+                    const newType = value as any;
+                    let newUnit = localFormat.unit;
+                    let newThousandSeparator = localFormat.thousandSeparator;
+                    if (newType === 'storage') {
+                      newUnit = 'B';
+                    } else if (newType === 'duration') {
+                      newUnit = 'ms';
+                    } else if (newType === 'percent') {
+                      newUnit = undefined;
+                      newThousandSeparator = false;
+                    } else {
+                      newUnit = localFormat.unit || '';
+                    }
+
                     setLocalFormat({
                       ...localFormat,
-                      type: value as any,
-                      unit: value === 'percent' ? undefined : localFormat.unit,
-                      thousandSeparator: value === 'percent' ? false : localFormat.thousandSeparator
+                      type: newType,
+                      unit: newUnit,
+                      thousandSeparator: newThousandSeparator
                     })
-                  }
+                  }}
                   className="flex gap-6"
                 >
                   {[
