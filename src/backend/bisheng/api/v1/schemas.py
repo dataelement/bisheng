@@ -360,6 +360,7 @@ class WSModel(BaseModel):
     id: str
     name: Optional[str] = None
     displayName: Optional[str] = None
+    visual: Optional[bool] = False
 
 
 class WSPrompt(BaseModel):
@@ -376,12 +377,12 @@ class LinsightConfig(BaseModel):
     """
     Ideas Management Configuration
     """
+    linsight_entry: bool = Field(default=True, description='Whether to open the Ideas entrance')
     input_placeholder: str = Field(..., description='Input Box Prompt')
     tools: Optional[List[Dict]] = Field(None, description='List of optional tools for Ideas')
 
 
 class WorkstationConfig(BaseModel):
-    menuShow: bool = Field(default=True, description='Whether to show the left menu bar')
     maxTokens: Optional[int] = Field(default=1500, description='MaxtokenQuantity')
     sidebarIcon: Optional[Icon] = None
     assistantIcon: Optional[Icon] = None

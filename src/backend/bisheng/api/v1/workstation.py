@@ -1,8 +1,9 @@
 import asyncio
+import base64
 import json
 import time
 from datetime import datetime
-from typing import Optional, Union, List
+from typing import Optional, Union, List, Type, Tuple
 from urllib.parse import unquote
 from uuid import uuid4
 
@@ -33,7 +34,7 @@ from bisheng.common.schemas.telemetry.event_data_schema import NewMessageSession
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings as bisheng_settings
 from bisheng.core.cache.redis_manager import get_redis_client
-from bisheng.core.cache.utils import file_download, save_download_file, save_uploaded_file
+from bisheng.core.cache.utils import file_download, save_download_file, save_uploaded_file, async_file_download
 from bisheng.core.logger import trace_id_var
 from bisheng.core.prompts.manager import get_prompt_manager
 from bisheng.database.models.flow import FlowType
@@ -52,6 +53,8 @@ titleInstruction = 'a concise, 5-word-or-less title for the conversation, using 
 promptSearch = '用户的问题是：%s \
 判断用户的问题是否需要联网搜索，如果需要返回数字1，如果不需要返回数字0。只返回1或0，不要返回其他信息。\
 如果问题涉及到实时信息、最新事件或特定数据库查询等超出你知识截止日期（2024年7月）的内容，就需要进行联网搜索来获取最新信息。'
+
+visual_model_file_types = ['png', 'jpg', 'jpeg', 'webp', 'gif']
 
 
 # Customizable JSON Serializer
@@ -304,12 +307,11 @@ async def webSearch(query: str, user_id: int):
     return search_res, search_list
 
 
-def getFileContent(filepath: str, invoke_user_id: int):
+async def getFileContent(filepath_local: str, file_name, invoke_user_id: int):
     """
     Get file contents
     """
-    filepath_local, file_name = file_download(filepath)
-    raw_texts, _, _, _ = knowledge_imp.read_chunk_text(
+    raw_texts, _, _, _ = await knowledge_imp.async_read_chunk_text(
         invoke_user_id,
         filepath_local,
         file_name,
@@ -387,7 +389,7 @@ async def _initialize_chat(data: APIChatCompletion, login_user: UserPayload):
         app_type=ApplicationTypeEnum.DAILY_CHAT,
         user_id=login_user.user_id)
 
-    return wsConfig, conversation, message, bishengllm, model_info.displayName, is_new_conversation
+    return wsConfig, conversation, message, bishengllm, model_info, is_new_conversation
 
 
 async def _log_telemetry_events(user_id: str, conversation_id: str, start_time: float):
@@ -426,7 +428,7 @@ async def chat_completions(
 ):
     start_time = time.time()
     try:
-        wsConfig, conversation, message, bishengllm, modelName, is_new_conv = await _initialize_chat(data, login_user)
+        wsConfig, conversation, message, bishengllm, model_info, is_new_conv = await _initialize_chat(data, login_user)
         conversationId = conversation.chat_id
         conversation_id_for_telemetry = conversationId
     except (BaseErrorCode, ValueError) as e:
@@ -456,7 +458,7 @@ async def chat_completions(
         index = 0
         stepId = None
         source_document = None
-
+        image_bases64 = []
         try:
             # Prepare prompt based on different modes (search, knowledge base, files)
             if data.search_enabled:
@@ -498,7 +500,37 @@ async def chat_completions(
 
             elif data.files:
                 logger.info(f'Using file content for prompt.')
-                file_contents = [getFileContent(file.get('filepath'), login_user.user_id) for file in data.files]
+
+                download_files: List[Tuple[str, str]] = [await async_file_download(file.get('filepath')) for file in
+                                                         data.files]
+
+                visual_files = []
+
+                # 常规解析的文件列表
+                conventional_files = []
+
+                if model_info.visual:
+                    for (filepath, filename) in download_files:
+                        file_ext = filename.split('.')[-1].lower()
+                        if file_ext in visual_model_file_types:
+                            visual_files.append((filepath, filename))
+                        else:
+                            conventional_files.append((filepath, filename))
+                else:
+                    conventional_files = download_files
+
+                if visual_files:
+                    for (filepath, filename) in visual_files:
+                        with open(filepath, 'rb') as f:
+                            image_data = f.read()
+                            image_base64 = f"data:image/{filename.split('.')[-1].lower()};base64," + base64.b64encode(
+                                image_data).decode('utf-8')
+                            image_bases64.append(image_base64)
+
+                file_contents = [await getFileContent(filepath_local=filepath,
+                                                      file_name=filename,
+                                                      invoke_user_id=login_user.user_id)
+                                 for (filepath, filename) in conventional_files]
                 file_context = '\n'.join(file_contents)[:max_token]
                 prompt = wsConfig.fileUpload.prompt.format(file_content=file_context, question=data.text)
 
@@ -511,7 +543,16 @@ async def chat_completions(
 
             # Prepare message history and call LLM
             history_messages = (await WorkStationService.get_chat_history(conversationId, 8))[:-1]
-            inputs = [*history_messages, HumanMessage(content=prompt)]
+            content = [
+                {'type': 'text', 'text': prompt},
+            ]
+
+            for img_base64 in image_bases64:
+                content.append({'type': 'image_url', 'image_url': {
+                    'url': img_base64
+                }})
+
+            inputs = [*history_messages, HumanMessage(content=content)]
             if wsConfig.systemPrompt:
                 system_content = wsConfig.systemPrompt.format(cur_date=datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
                 inputs.insert(0, SystemMessage(content=system_content))
@@ -552,7 +593,7 @@ async def chat_completions(
 
         # Send final message and generate title if needed
         yield await final_message(conversation, conversation.flow_name, message, final_content_for_db,
-                                  error, modelName, source_document)
+                                  error, model_info.displayName, source_document)
 
         if is_new_conv:
             asyncio.create_task(
