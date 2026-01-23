@@ -60,6 +60,12 @@ def set_logger_config(logger_config: LoggerConf):
     logging.root.handlers = [InterceptHandler()]
     logging.root.setLevel(logger_config.level)
 
+    # Set specific loggers to INFO level to reduce verbosity
+    logging.getLogger("uvicorn.access").setLevel(logging.INFO)
+    logging.getLogger("elastic_transport").setLevel(logging.INFO)
+    logging.getLogger("elasticsearch").setLevel(logging.INFO)
+    logging.getLogger("urllib3").setLevel(logging.INFO)
+
     # Block all existing loggers
     for name in logging.root.manager.loggerDict.keys():
         logging_logger = logging.getLogger(name)
@@ -83,5 +89,7 @@ def set_logger_config(logger_config: LoggerConf):
         log_file.parent.mkdir(parents=True, exist_ok=True)
         filter_func = handler.pop('filter', None)
         logger.add(**handler, filter=TraceIdFilter(filter_func))
+
+
 
     logger.debug(f'Logger set up with log level: {logger_config.level}')
