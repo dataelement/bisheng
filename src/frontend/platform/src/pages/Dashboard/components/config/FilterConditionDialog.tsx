@@ -482,7 +482,7 @@ export function FilterConditionDialog({
       const newConditions = prev.conditions.filter(c => c.id !== id)
       return {
         ...prev,
-        conditions: [createEmptyCondition()]
+        conditions: newConditions.length > 0 ? newConditions : [createEmptyCondition()]
       }
     })
   }
@@ -661,7 +661,7 @@ export function FilterConditionDialog({
                         <SelectTrigger className="w-[120px] h-8">
                           <SelectValue placeholder={t('filterConditionDialog.placeholders.selectField')} />
                         </SelectTrigger>
-                        <SelectContent className=" overflow-y-auto w-[160px]">
+                        <SelectContent className=" overflow-y-auto w-[160px] max-h-[200px]">
                           {filteredFields.length > 0 ? (
                             filteredFields.map(f => {
                               const displayText = getFieldDisplayName(f.fieldCode) || "暂无";
