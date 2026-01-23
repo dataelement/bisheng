@@ -692,6 +692,7 @@ export function useChartState(initialComponent: any) {
         limitType: limitType === "limit" ? "limited" as const : "all" as const,
         ...(limitType === "limit" && { limit: Number(limitValue) })
       },
+      filtersLogic: filterGroup?.logic || 'and',
       isConfigured: true,
     }
   }, [categoryDimensions, stackDimensions, valueDimensions, filterGroup, sortPriorityOrder])

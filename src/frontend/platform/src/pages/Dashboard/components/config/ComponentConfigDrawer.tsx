@@ -387,18 +387,19 @@ export function ComponentConfigDrawer() {
     }
   }, [chartType])
   editingComponent?.dataset_code
-  useEffect(() => {
-    setFilterGroup({
-      logic: "and",
-      conditions: []
-    })
-  }, [editingComponent?.dataset_code])
   // 数据集改变
   const handleDatasetChange = useCallback((datasetCode: string) => {
     if (editingComponent) {
       updateEditingComponent({ dataset_code: datasetCode })
+      // 只有当数据集真正改变时才重置
+      if (editingComponent.dataset_code !== datasetCode) {
+        setFilterGroup({
+          logic: "and",
+          conditions: []
+        })
+      }
     }
-  }, [editingComponent, updateEditingComponent])
+  }, [editingComponent, updateEditingComponent, setFilterGroup])
 
   // 拖拽开始
   const handleDragStart = useCallback((e: React.DragEvent, data: any) => {
@@ -1230,6 +1231,7 @@ export function ComponentConfigDrawer() {
         onChange={handleSaveFilter}
         fields={datasetFields}
         dataset_code={editingComponent?.dataset_code}
+        filtersLogic={editingComponent?.data_config.filtersLogic}
         dimensions={[...categoryDimensions, ...stackDimensions, ...valueDimensions]}
       />
     </div>

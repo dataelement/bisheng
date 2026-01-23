@@ -304,7 +304,8 @@ export function FilterConditionDialog({
   onChange,
   fields,
   dataset_code = "",
-  dimensions = []
+  dimensions = [],
+  filtersLogic
 }: Props) {
   const { t } = useTranslation("dashboard")
   const [draft, setDraft] = useState<FilterGroup>({
@@ -414,7 +415,7 @@ export function FilterConditionDialog({
     })
 
     setDraft({
-      logic: safeValue.logic ?? "and",
+      logic: filtersLogic ?? "and",
       conditions: newConditions.length > 0 ? newConditions : [createEmptyCondition()]
     })
     setError(null)
