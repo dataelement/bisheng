@@ -244,7 +244,7 @@ export function ComponentWrapper({
 
             <div className="w-full h-full p-2">
                 {/* Component title with rename ability - hidden for query type */}
-                {!['query', 'metric'].includes(component.type) && (
+                {!['query', 'metric'].includes(componentData.type) && (
                     <div className="group mb-2 relative">
                         {isEditing ? (
                             <Input
@@ -280,12 +280,12 @@ export function ComponentWrapper({
 
                 {/* Component content */}
                 <div
-                    className={['query', 'metric'].includes(component.type) ? '' : ` no-drag cursor-default`}
+                    className={['query', 'metric'].includes(componentData.type) ? '' : ` no-drag cursor-default`}
                     style={{
-                        height: ['query', 'metric'].includes(component.type) ? '100%' : `calc(100% - ${(componentData.style_config?.titleFontSize || 0) + 10}px)`
+                        height: ['query', 'metric'].includes(componentData.type) ? '100%' : `calc(100% - ${(componentData.style_config?.titleFontSize || 0) + 10}px)`
                     }}
                 >
-                    {component.type === 'query' ? (
+                    {componentData.type === 'query' ? (
                         <QueryFilter isDark={isDark} component={componentData} isPreviewMode={isPreviewMode} />
                     ) : (
                         <ChartContainer isDark={isDark} component={componentData} isPreviewMode={isPreviewMode} />

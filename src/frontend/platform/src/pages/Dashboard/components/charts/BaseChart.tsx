@@ -244,7 +244,8 @@ const getCartesianChartOption = (
       // overflow: 'break'
       // ...axisLabelStyle,
     },
-    name: styleConfig.xAxisTitle || ''
+    name: styleConfig.xAxisTitle || '',
+    nameLocation: 'center'
   };
 
   // (Value Axis)
@@ -256,7 +257,9 @@ const getCartesianChartOption = (
       ...axisLabelStyle,
     },
     splitLine: { show: styleConfig.showGrid ?? true },
-    name: styleConfig.yAxisTitle || ''
+    name: styleConfig.yAxisTitle || '',
+    nameLocation: 'center',
+    nameRotate: isHorizontal ? 0 : 90
   };
 
   // Series
@@ -280,17 +283,20 @@ const getCartesianChartOption = (
     return item;
   });
 
+  const dimensionLength = styleConfig.xAxisTitle ? dataConfig.dimensions.length : 1
+  const bottom = (styleConfig.legendPosition === 'bottom' ? 44 : 0) + dimensionLength * 13;
+
   return {
     backgroundColor: styleConfig.bgColor,
     // title: buildTitleOption(styleConfig),
     legend: buildLegendOption(styleConfig, series.map(s => s.name)),
     tooltip: buildTooltipOption('axis', tooltipFormatter),
     grid: {
-      left: styleConfig.legendPosition === 'left' ? 100 : '1%',
-      right: styleConfig.legendPosition === 'right' ? 100 : '1%',
-      top: styleConfig.legendPosition === 'top' ? 60 : 28,
-      bottom: styleConfig.legendPosition === 'bottom' ? 40 : 0,
-      containLabel: true
+      left: styleConfig.legendPosition === 'left' ? 160 : 0,
+      right: styleConfig.legendPosition === 'right' ? 100 : 0,
+      top: styleConfig.legendPosition === 'top' ? 40 : 0,
+      bottom,
+      // containLabel: true,
     },
     xAxis: isHorizontal ? valueAxis : categoryAxis,
     yAxis: isHorizontal ? categoryAxis : valueAxis,
@@ -319,9 +325,9 @@ const buildLegendOption = (styleConfig: ComponentStyleConfig, seriesNames?: stri
   // computed
   const orient = pos === 'left' || pos === 'right' ? 'vertical' : 'horizontal';
   const top = pos === 'top' ? 0 : pos === 'bottom' ? 'auto' : 'center';
-  const bottom = pos === 'bottom' ? 10 : 'auto';
-  const left = pos === 'left' ? 10 : pos === 'center' ? 'center' : 'auto';
-  const right = pos === 'right' ? 10 : 'auto';
+  const bottom = pos === 'bottom' ? 0 : 'auto';
+  const left = pos === 'left' ? 0 : pos === 'center' ? 'center' : 'auto';
+  const right = pos === 'right' ? 0 : 'auto';
 
   return {
     data: seriesNames, // Pie chart doesn't strictly need this, but Cartesian does
