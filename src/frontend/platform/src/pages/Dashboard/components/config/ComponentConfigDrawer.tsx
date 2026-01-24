@@ -1154,7 +1154,7 @@ export function ComponentConfigDrawer() {
                   }
                   <Button
                     id="config_save"
-                    className="w-full h-10"
+                    className="w-full h-10 mt-[12px]"
                     onClick={handleUpdateChart}
                   >
                     {t("componentConfigDrawer.updateChartData")}
