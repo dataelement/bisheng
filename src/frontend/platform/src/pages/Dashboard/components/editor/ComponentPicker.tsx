@@ -64,7 +64,7 @@ const ComponentPicker = ({ children, className, onSelect, maxHeight = 500 }: Com
     const [open, setOpen] = useState(false);
 
     const handleItemClick = (item) => {
-        onSelect({ ...item, title: t(`chart.${item.label}`) });
+        onSelect({ ...item, title: item.type === ChartType.Metric ? '' : t(`chart.${item.label}`) });
         setOpen(false);
     };
 

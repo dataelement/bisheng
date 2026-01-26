@@ -83,7 +83,7 @@ export function ComponentWrapper({
 
         if (trimmedTitle !== component.title) {
             setTitle(trimmedTitle)
-            onRename(component.id, trimmedTitle)
+            // onRename(component.id, trimmedTitle)
             updateEditingComponent({ title: trimmedTitle })
         }
     }
@@ -130,6 +130,7 @@ export function ComponentWrapper({
 
     return (
         <div
+            id={component.id}
             className={cn(`relative w-full h-full rounded-md overflow-visible transition-all border ${!isPreviewMode && isSelected ? 'component-select border border-primary' : ''
                 }`,
                 !componentData.style_config.bgColor && 'dark:bg-gray-900',

@@ -113,7 +113,9 @@ export function EditorCanvas({ isLoading, isPreviewMode }: EditorCanvasProps) {
             const isInsideContainer = containerRef.current?.contains(target);
             const isDragHandle = target.closest('.drag-handle');
             if (isInsideContainer && !isDragHandle) {
-                clearComponentEditorStore();
+                setTimeout(() => {
+                    clearComponentEditorStore();
+                }, 0);
             }
         };
 
@@ -232,7 +234,7 @@ export function EditorCanvas({ isLoading, isPreviewMode }: EditorCanvasProps) {
             <div className="flex h-full">
                 <div
                     id="edit-charts-panne"
-                    className={cn("flex-1 overflow-auto no-scrollbar", theme)}
+                    className={cn("flex-1 relative overflow-auto no-scrollbar", theme)}
                     style={{
                         backgroundColor: theme === 'dark' ? '#1a1a1a' : '#f5f5f5',
                     }}

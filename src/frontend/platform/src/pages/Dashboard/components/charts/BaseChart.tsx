@@ -61,6 +61,7 @@ export function BaseChart({ isDark, data, chartType, dataConfig, styleConfig }: 
   }, [])
 
   // Initialize and update the chart.
+  const [screenFull, setScreenFull] = useState(false)
   useEffect(() => {
     if (!echartsLibRef.current || !domRef.current || isLoading) return
 
@@ -94,7 +95,7 @@ export function BaseChart({ isDark, data, chartType, dataConfig, styleConfig }: 
         chartRef.current = null
       }
     }
-  }, [echartsLibRef.current, data, chartType, dataConfig, styleConfig, isLoading, isDark])
+  }, [screenFull, echartsLibRef.current, data, chartType, dataConfig, styleConfig, isLoading, isDark])
 
   // resize
   useEffect(() => {
@@ -118,6 +119,21 @@ export function BaseChart({ isDark, data, chartType, dataConfig, styleConfig }: 
       window.removeEventListener('resize', handleResize)
     }
   }, [chartRef.current])
+
+  // screen full
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setScreenFull(!screenFull)
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+    };
+  }, []);
 
   if (isLoading) {
     return (
@@ -201,7 +217,7 @@ const getCartesianChartOption = (
   const isHorizontal = chartType.includes('horizontal');
   const isStacked = chartType.includes('stacked');
   const isLineOrArea = chartType.includes('line') || chartType.includes('area');
-  const isArea = chartType.includes('area') || chartType === 'stacked-line'; // Depending on logic
+  const isArea = chartType.includes('area')
 
   // Tooltip
   const tooltipFormatter = (params: any[]) => {
@@ -299,7 +315,8 @@ const getCartesianChartOption = (
       name: s.name,
       data: processedData,
       type: isLineOrArea ? 'line' : 'bar',
-      symbol: 'none',
+      symbol: 'circle',
+      symbolSize: 0,
       itemStyle: {
         borderRadius: (!isLineOrArea && !isStacked)
           ? (isHorizontal ? [0, 4, 4, 0] : [4, 4, 0, 0])
@@ -308,7 +325,12 @@ const getCartesianChartOption = (
     };
 
     if (styleConfig.showDataLabel) {
-      item.label = { show: true, position: isLineOrArea ? 'top' : 'inside' };
+      item.label = {
+        show: true,
+        position: 'top',
+        fontSize: 10,
+        color: "#666",
+      };
     }
     if (isStacked) item.stack = 'total';
     if (isArea) item.areaStyle = {};
@@ -407,11 +429,12 @@ const buildLegendOption = (styleConfig: ComponentStyleConfig, seriesNames?: stri
 const buildTooltipOption = (type: 'axis' | 'item', formatter: (params: any) => string) => {
   return {
     trigger: type,
-    axisPointer: type === 'axis' ? { type: 'shadow' } : undefined,
-    appendToBody: true,
     confine: true,
+    axisPointer: type === 'axis' ? { type: 'shadow' } : undefined,
     enterable: true,
     extraCssText: 'max-height: 500px; overflow-y: auto;',
-    formatter,
+    appendToBody: !document.fullscreenElement,
+    // renderMode: 'html',
+    formatter
   };
 };
