@@ -73,6 +73,7 @@ class InputNode(BaseNode):
 
     def get_input_schema(self) -> Any:
         if self.is_dialog_input():
+            self.handle_recommended_questions()
             user_input_info = self.node_data.get_variable_info('user_input')
             user_input_info.value = [
                 self.node_data.get_variable_info('dialog_files_content'),
@@ -104,14 +105,18 @@ class InputNode(BaseNode):
                                                   app_name=self.workflow_name,
                                                   app_type=ApplicationTypeEnum.WORKFLOW,
                                                   user_id=self.user_id)
-
-        result = llm_obj.invoke([SystemMessage(content=recommended_system_prompt), HumanMessage(content=chat_history)])
+        user_prompt = f"# Current Conversation Context\n{chat_history}"
+        result = llm_obj.invoke([SystemMessage(content=recommended_system_prompt), HumanMessage(content=user_prompt)])
         result = result.content
         try:
             result = json.loads(result)
         except json.decoder.JSONDecodeError:
             logger.debug("received non-json response from LLM, try json repair")
-            result = json_repair.loads(result, skip_json_loads=True)
+            try:
+                result = json_repair.loads(result, skip_json_loads=True)
+            except Exception as e:
+                logger.error(f"json repair failed: {e}")
+                return
         logger.debug(f"received response from LLM, result is {result}")
         if not isinstance(result, dict):
             return
