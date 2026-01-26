@@ -564,6 +564,7 @@ export function FilterConditionDialog({
       defaultFilterType = "conditional"
       defaultOperator = "equals"
     }
+    console.log(field, 8888999);
 
     updateCondition(id, {
       fieldCode,
@@ -646,7 +647,8 @@ export function FilterConditionDialog({
             fieldName: c.fieldName,
             operator: "in", // 枚举筛选固定用 in
             value: c.value,
-            filterType: c.filterType
+            filterType: c.filterType,
+            fieldType: c.fieldType
           }
         }
 
@@ -658,7 +660,9 @@ export function FilterConditionDialog({
           fieldName: c.fieldName,
           operator: c.operator, // 使用用户选择的操作符
           value: c.value,
-          filterType: c.filterType
+          filterType: c.filterType,
+          fieldType: c.fieldType
+
         }
       })
 
@@ -800,32 +804,17 @@ export function FilterConditionDialog({
                           {/* 值输入 */}
                           {c.operator && operatorNeedsValue(c.operator) && (
                             <>
-                              {c.fieldType === "number" ? (
-                                <Input
-                                  className="flex-1 min-w-[120px] h-8"
-                                  type="number"
-                                  step="any"
-                                  placeholder={t('filterConditionDialog.placeholders.enterNumber')}
-                                  value={c.value ?? ""}
-                                  onChange={e =>
-                                    updateCondition(c.id, {
-                                      value: e.target.value === "" ? "" : Number(e.target.value)
-                                    })
-                                  }
-                                />
-                              ) : (
-                                <Input
-                                  className="flex-1 min-w-[120px] h-8"
-                                  type="text"
-                                  placeholder={t('filterConditionDialog.placeholders.enterValue')}
-                                  value={c.value ?? ""}
-                                  onChange={e =>
-                                    updateCondition(c.id, {
-                                      value: e.target.value
-                                    })
-                                  }
-                                />
-                              )}
+                              <Input
+                                className="flex-1 min-w-[120px] h-8"
+                                type="text"
+                                placeholder={t('filterConditionDialog.placeholders.enterNumber')}
+                                value={c.value ?? ""}
+                                onChange={e =>
+                                  updateCondition(c.id, {
+                                    value: e.target.value
+                                  })
+                                }
+                              />
                             </>
                           )}
                         </>

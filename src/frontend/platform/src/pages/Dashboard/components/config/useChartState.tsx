@@ -2,14 +2,14 @@
 "use client"
 
 import { useState, useMemo, useEffect, useCallback, useRef } from "react"
-import { ChartType, ComponentStyleConfig, DataConfig } from "../../types/dataConfig"
+import { ChartType, ComponentStyleConfig, DashboardComponent, DataConfig } from "../../types/dataConfig"
 import { generateUUID } from "@/components/bs-ui/utils"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
 import { useComponentEditorStore, useEditorDashboardStore } from "@/store/dashboardStore"
 import { useTranslation } from "react-i18next"
 
 
-export function useChartState(initialComponent: any) {
+export function useChartState(initialComponent: DashboardComponent) {
   const { t } = useTranslation("dashboard")
   const editingComponentIdRef = useRef<string | null>(null)
 
@@ -189,7 +189,7 @@ export function useChartState(initialComponent: any) {
     if (!initialComponent) {
       editingComponentIdRef.current = null
     }
-  }, [initialComponent?.id])
+  }, [initialComponent?.id, initialComponent?.type])
 
   // 计算属性
   const sortPriorityFields = useMemo(() => {

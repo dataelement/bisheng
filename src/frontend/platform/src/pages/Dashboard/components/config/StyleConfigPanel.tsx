@@ -483,7 +483,7 @@ export function StyleConfigPanel({ config, onChange, type, FULL_DEFAULT_STYLE_CO
           <TextFormat
             fontSize={localConfig.titleFontSize}
             setFontSize={(v) => handleChange("titleFontSize", v)}
-            bold={localConfig.titleBold}
+            bold={localConfig.titleBold || false}
             setBold={(v) => handleChange("titleBold", v)}
             italic={localConfig.titleItalic}
             setItalic={(v) => handleChange("titleItalic", v)}

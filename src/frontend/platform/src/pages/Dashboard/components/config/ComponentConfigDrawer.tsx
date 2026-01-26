@@ -29,13 +29,13 @@ const FULL_DEFAULT_STYLE_CONFIG: ComponentStyleConfig = {
   bgColor: "",
 
   title: "",
-  titleFontSize: 16,
-  titleBold: true,
+  titleFontSize: 14,
+  titleBold: false,
   titleItalic: false,
   titleUnderline: false,
   titleStrikethrough: false,
   titleAlign: "left",
-  titleColor: "",
+  titleColor: "#000000",
 
   xAxisTitle: "",
   xAxisFontSize: 14,
@@ -56,13 +56,13 @@ const FULL_DEFAULT_STYLE_CONFIG: ComponentStyleConfig = {
   yAxisColor: "#000000",
 
   legendPosition: "bottom",
-  legendFontSize: 12,
+  legendFontSize: 14,
   legendBold: false,
   legendItalic: false,
   legendUnderline: false,
   legendStrikethrough: false,
   legendAlign: "left",
-  legendColor: "#999",
+  legendColor: "#000000",
 
   showSubtitle: false,
   subtitle: "",
@@ -72,7 +72,7 @@ const FULL_DEFAULT_STYLE_CONFIG: ComponentStyleConfig = {
   subtitleItalic: false,
   subtitleUnderline: false,
   subtitleAlign: "center",
-  subtitleColor: "",
+  subtitleColor: "#000000",
 
   metricFontSize: 14,
   metricBold: false,
@@ -833,7 +833,14 @@ export function ComponentConfigDrawer() {
                                   const isCurrentChartStacked = currentChartHasStack;
 
                                   let updatedDataConfig = { ...dataConfig };
-
+                                  if (isMetricChart) {
+                                    updatedDataConfig = {
+                                      ...updatedDataConfig,
+                                      stackDimension: undefined,
+                                      dimensions: updatedDataConfig.dimensions || [],
+                                      metrics: updatedDataConfig.metrics[0] ? [updatedDataConfig.metrics[0]] : []
+                                    }
+                                  }
                                   // 处理堆叠维度
                                   if (isCurrentChartStacked && !isNewChartStacked) {
                                     // 从堆叠图切换到非堆叠图：移除堆叠维度配置
@@ -847,12 +854,18 @@ export function ComponentConfigDrawer() {
                                     // 从非堆叠图切换到堆叠图：清空堆叠维度
                                     updatedDataConfig = {
                                       ...updatedDataConfig,
-                                      stackDimension: undefined, // 清空堆叠维度
+                                      stackDimension: undefined,
                                       dimensions: updatedDataConfig.dimensions || [],
                                       metrics: updatedDataConfig.metrics || []
                                     };
                                   }
                                   if (data.type === 'metric') {
+                                    const firstMetric = valueDimensions[0] ? { ...valueDimensions[0] } : null;
+
+                                    // 更新 chartState
+                                    chartState.setValueDimensions(firstMetric ? [firstMetric] : []);
+                                    chartState.setCategoryDimensions([]);
+                                    chartState.setStackDimensions([]);
                                     updateEditingComponent({
                                       type: data.type,
                                       data_config: updatedDataConfig,
@@ -877,6 +890,7 @@ export function ComponentConfigDrawer() {
 
                                   // 刷新图表
                                   refreshChart(editingComponent.id);
+
                                 }
                               }} maxHeight={400}>
                                 <div className="relative w-full group">
