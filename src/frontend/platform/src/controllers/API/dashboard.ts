@@ -265,12 +265,12 @@ export async function queryChartData(params: {
 }
 
 // 获取字段枚举列表
-export async function getFieldEnums({ dataset_code, field, page, pageSize = 20, keywords = "" }: {
+export async function getFieldEnums({ dataset_code, field, page, pageSize = 20, keyword = "" }: {
     dataset_code: string
     field: string
     page: number
     pageSize?: number
-    keywords?: string
+    keyword?: string
 }): Promise<any> {
     return await axios.get(`/api/v1/telemetry/dashboard/dataset/field/enums`, {
         params: {
@@ -278,7 +278,7 @@ export async function getFieldEnums({ dataset_code, field, page, pageSize = 20, 
             field,
             page,
             size: pageSize,
-            keywords
+            keyword
         }
     });
 }

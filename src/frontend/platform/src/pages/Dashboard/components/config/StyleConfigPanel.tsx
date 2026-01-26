@@ -270,15 +270,11 @@ export function StyleConfigPanel({ config, onChange, type, FULL_DEFAULT_STYLE_CO
 
   const { t } = useTranslation("dashboard")
 
-  const [collapsedSections, setCollapsedSections] = useState({
-    color: false,
-    title: true,
-    axis: true,
-    legend: true,
-    chartOptions: false
-  })
 
   const editingComponent = useComponentEditorStore(state => state.editingComponent)
+
+  const collapsedSections = useComponentEditorStore(state => state.collapsedSections)
+  const setCollapsedSection = useComponentEditorStore(state => state.setCollapsedSection)
 
   const updateEditingComponent = useComponentEditorStore(state => state.updateEditingComponent)
   const firstDimension = editingComponent?.data_config?.dimensions?.[0]
@@ -347,10 +343,7 @@ export function StyleConfigPanel({ config, onChange, type, FULL_DEFAULT_STYLE_CO
 
 
   const toggleSection = (section: keyof typeof collapsedSections) => {
-    setCollapsedSections(prev => ({
-      ...prev,
-      [section]: !prev[section]
-    }))
+    setCollapsedSection(section, !collapsedSections[section])
   }
 
   const handleChange = (key: keyof ComponentStyleConfig, value: any) => {
@@ -477,7 +470,13 @@ export function StyleConfigPanel({ config, onChange, type, FULL_DEFAULT_STYLE_CO
           <Input
             placeholder={t('styleConfigPanel.placeholders.enterTitle')}
             value={localConfig.title || ""}
-            onChange={(e) => handleChange("title", e.target.value)}
+            onChange={(e) => {
+              const value = e.target.value
+              if (value.length <= 15) {
+                handleChange("title", value)
+              }
+            }}
+            maxLength={15}
           />
         </FormBlock>
         <FormBlock label={t('styleConfigPanel.labels.textFormat')}>
@@ -549,7 +548,13 @@ export function StyleConfigPanel({ config, onChange, type, FULL_DEFAULT_STYLE_CO
                     <Input
                       placeholder={t('styleConfigPanel.placeholders.enterSubtitle')}
                       value={localConfig.subtitle || ""}
-                      onChange={(e) => handleChange("subtitle", e.target.value)}
+                      onChange={(e) => {
+                        const value = e.target.value
+                        if (value.length <= 24) {
+                          handleChange("subtitle", e.target.value)
+                        }
+                      }}
+                      maxLength={24}
                     />
                   </FormBlock>
                   <FormBlock label={t('styleConfigPanel.labels.textFormat')}>
@@ -585,7 +590,13 @@ export function StyleConfigPanel({ config, onChange, type, FULL_DEFAULT_STYLE_CO
                   <Input
                     placeholder={t('styleConfigPanel.placeholders.enterXAxisTitle')}
                     value={localConfig.xAxisTitle || ""}
-                    onChange={(e) => handleChange("xAxisTitle", e.target.value)}
+                    onChange={(e) => {
+                      const value = e.target.value
+                      if (value.length <= 24) {
+                        handleChange("xAxisTitle", e.target.value)
+                      }
+                    }}
+                    maxLength={15}
                   />
                 </FormBlock>
 
@@ -613,7 +624,13 @@ export function StyleConfigPanel({ config, onChange, type, FULL_DEFAULT_STYLE_CO
                     <Input
                       placeholder={t('styleConfigPanel.placeholders.enterYAxisTitle')}
                       value={localConfig.yAxisTitle || ""}
-                      onChange={(e) => handleChange("yAxisTitle", e.target.value)}
+                      onChange={(e) => {
+                        const value = e.target.value
+                        if (value.length <= 24) {
+                          handleChange("yAxisTitle", e.target.value)
+                        }
+                      }}
+                      maxLength={15}
                     />
                   </FormBlock>
 

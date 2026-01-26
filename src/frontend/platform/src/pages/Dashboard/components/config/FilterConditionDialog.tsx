@@ -128,7 +128,7 @@ function EnumMultiSelect({
         field: code,
         page: pageNum,
         pageSize,
-        keywords: searchText
+        keyword: searchText
       })
       const result = response.enums || []
 

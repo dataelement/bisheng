@@ -508,7 +508,13 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
     }
 }))
 
-
+export interface CollapseSections {
+    color: boolean;
+    title: boolean;
+    axis: boolean;
+    legend: boolean;
+    chartOptions: boolean;
+}
 // Shadow Component Editor Store
 interface ComponentEditorState {
     // The "Shadow" state: stores a copy of the component currently being edited
@@ -517,6 +523,21 @@ interface ComponentEditorState {
 
     // Internal helper to push changes to the main store
     _internalSync: () => void;
+    collapsedSections: {
+        color: boolean;
+        title: boolean;
+        axis: boolean;
+        legend: boolean;
+        chartOptions: boolean;
+    };
+
+    componentCollapseStates: Record<string, {
+        color: boolean;
+        title: boolean;
+        axis: boolean;
+        legend: boolean;
+        chartOptions: boolean;
+    }>;
 
     // Public methods
     updateEditingComponent: (data: Partial<DashboardComponent>) => void;
@@ -537,10 +558,15 @@ export const useComponentEditorStore = create<ComponentEditorState>((set, get) =
     editingComponent: null,
     hasChange: false,
 
-    /**
-     * Private-style helper to synchronize the shadow state 
-     * back to the primary Dashboard store.
-     */
+    collapsedSections: {
+        color: false,
+        title: true,
+        axis: true,
+        legend: true,
+        chartOptions: false
+    },
+    componentCollapseStates: {},
+
     _internalSync: () => {
         const { hasChange, editingComponent } = get();
         if (hasChange && editingComponent) {
@@ -559,6 +585,63 @@ export const useComponentEditorStore = create<ComponentEditorState>((set, get) =
         }
     },
 
+    setCollapsedSection: (section, collapsed) => {
+        const { editingComponent } = get();
+
+        set(state => ({
+            collapsedSections: {
+                ...state.collapsedSections,
+                [section]: collapsed
+            }
+        }));
+
+        if (editingComponent) {
+            get().saveComponentCollapseState(editingComponent.id);
+        }
+    },
+
+    saveComponentCollapseState: (componentId: string) => {
+        const { collapsedSections } = get();
+
+        set(state => ({
+            componentCollapseStates: {
+                ...state.componentCollapseStates,
+                [componentId]: { ...collapsedSections }
+            }
+        }));
+    },
+
+    loadComponentCollapseState: (componentId: string) => {
+        const { componentCollapseStates } = get();
+        const savedState = componentCollapseStates[componentId];
+
+        if (savedState) {
+            set({ collapsedSections: { ...savedState } });
+        } else {
+            set({
+                collapsedSections: {
+                    color: false,
+                    title: true,
+                    axis: true,
+                    legend: true,
+                    chartOptions: false
+                }
+            });
+        }
+    },
+
+    resetCollapsedSections: () => {
+        set({
+            collapsedSections: {
+                color: false,
+                title: true,
+                axis: true,
+                legend: true,
+                chartOptions: false
+            }
+        });
+    },
+
     copyFromDashboard: (componentId: string) => {
         const { editingComponent, _internalSync } = get();
         const dashboardStore = useEditorDashboardStore.getState();
@@ -566,6 +649,7 @@ export const useComponentEditorStore = create<ComponentEditorState>((set, get) =
         // 1. If there is an existing draft, save it first
         if (editingComponent) {
             _internalSync();
+            get().saveComponentCollapseState(editingComponent.id);
         }
 
         // 2. Find the new component to edit
@@ -576,7 +660,13 @@ export const useComponentEditorStore = create<ComponentEditorState>((set, get) =
         if (nextComponent) {
             // 3. Create a deep copy for the shadow state
             const deepCopy = JSON.parse(JSON.stringify(nextComponent)) as DashboardComponent;
-            set({ editingComponent: deepCopy, hasChange: false });
+
+            get().loadComponentCollapseState(componentId);
+
+            set({
+                editingComponent: deepCopy,
+                hasChange: false
+            });
         }
     },
 
@@ -587,12 +677,22 @@ export const useComponentEditorStore = create<ComponentEditorState>((set, get) =
         // Save pending changes before closing
         if (!force && editingComponent) {
             _internalSync();
+            get().saveComponentCollapseState(editingComponent.id);
         }
 
-        set({ editingComponent: null, hasChange: true });
+        set({
+            editingComponent: null,
+            hasChange: false,
+            collapsedSections: {
+                color: false,
+                title: true,
+                axis: true,
+                legend: true,
+                chartOptions: false
+            }
+        });
     },
 }));
-
 
 const debugLog = (msg: string) => {
     console.log('【savechange】 :>> ', msg);
