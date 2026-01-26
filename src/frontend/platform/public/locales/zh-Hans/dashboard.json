@@ -19,7 +19,7 @@
             "yearMonthDay": "年月日",
             "yearMonthDayHour": "年月日时"
         },
-        "setDefault": "设置为默认值",
+        "setDefault": "设置默认值",
         "datePicker": {
             "placeholder": "选择时间",
             "single": "时间",

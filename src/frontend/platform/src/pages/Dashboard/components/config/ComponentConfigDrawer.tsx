@@ -13,7 +13,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/bs-ui/radio"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
 import { useComponentEditorStore, useEditorDashboardStore } from "@/store/dashboardStore"
 import { useTranslation } from "react-i18next"
-import { ChartType, ComponentStyleConfig, QueryConfig } from "../../types/dataConfig"
+import { ChartType, ComponentStyleConfig, QueryConfig, TimeRangeMode } from "../../types/dataConfig"
 import { AdvancedDatePicker } from "../AdvancedDatePicker"
 import ComponentPicker, { ChartGroupItems } from "../editor/ComponentPicker"
 import ChartSelector from "./ChartSelector"
@@ -700,6 +700,7 @@ export function ComponentConfigDrawer() {
           onSave={(chartLinkConfig) => {
             console.log('保存查询配置:', chartLinkConfig)
 
+            const { dateRange } = chartLinkConfig
             // 构建 QueryConfig
             const queryConfig: QueryConfig = {
               linkedComponentIds: chartLinkConfig.chartIds || [],
@@ -710,10 +711,15 @@ export function ComponentConfigDrawer() {
                   chartLinkConfig.timeGranularity === "年月日时" ? "year_month_day_hour" : "year_month_day",
                 hasDefaultValue: chartLinkConfig.isDefault,
                 defaultValue: chartLinkConfig.isDefault ? {
-                  type: chartLinkConfig.dateRange.shortcutKey ? "recent_days" : "custom",
                   shortcutKey: chartLinkConfig.dateRange.shortcutKey ? parseInt(chartLinkConfig.dateRange.shortcutKey.replace('last_', '')) : undefined,
-                  startDate: new Date(chartLinkConfig.dateRange.start).getTime(),
-                  endDate: new Date(chartLinkConfig.dateRange.end).getTime()
+                  // startDate: new Date(chartLinkConfig.dateRange.start).getTime(),
+                  // endDate: new Date(chartLinkConfig.dateRange.end).getTime(),
+
+                  type: chartLinkConfig.dateRange.shortcutKey ? "recent_days" : "custom",
+                  mode: dateRange.isDynamic ? TimeRangeMode.Dynamic : TimeRangeMode.Fixed,
+                  recentDays: dateRange.shortcutKey ? parseInt(dateRange.shortcutKey.replace('last_', '')) : undefined,
+                  startDate: dateRange.start,
+                  endDate: dateRange.end
                 } : {
                   type: 'all' as const
                 }

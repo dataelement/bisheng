@@ -60,7 +60,7 @@ interface EditorState {
     // Refresh charts linked to a query component
     refreshChartsByQuery: (queryComponent: DashboardComponent, filter: DatePickerValue) => void;
     // Refresh all charts
-    refreshAllCharts: () => void;
+    // refreshAllCharts: () => void;
     // Initialize auto-refresh on load
     initializeAutoRefresh: () => void;
     // Reset state
@@ -346,39 +346,39 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
     },
 
     // Refresh all chart components (excluding query components)
-    refreshAllCharts: () => {
-        const { currentDashboard, chartRefreshTriggers } = get()
-        if (!currentDashboard) return
+    // refreshAllCharts: () => {
+    //     const { currentDashboard, chartRefreshTriggers } = get()
+    //     if (!currentDashboard) return
 
-        const updatedTriggers = { ...chartRefreshTriggers }
-        currentDashboard.components.forEach(component => {
-            // Refresh all non-query components
-            if (component.type !== 'query') {
-                // Find all query components associated with this chart 
-                const linkedQueryComponents = currentDashboard.components.filter(qc => {
-                    if (qc.type === 'query') {
-                        const queryConfig = qc.data_config as QueryConfig
-                        return queryConfig.linkedComponentIds?.includes(component.id)
-                    }
-                    return false
-                })
+    //     const updatedTriggers = { ...chartRefreshTriggers }
+    //     currentDashboard.components.forEach(component => {
+    //         // Refresh all non-query components
+    //         if (component.type !== 'query') {
+    //             // Find all query components associated with this chart 
+    //             const linkedQueryComponents = currentDashboard.components.filter(qc => {
+    //                 if (qc.type === 'query') {
+    //                     const queryConfig = qc.data_config as QueryConfig
+    //                     return queryConfig.linkedComponentIds?.includes(component.id)
+    //                 }
+    //                 return false
+    //             })
 
-                // Extract query parameters
-                const queryParams = linkedQueryComponents.map(qc => ({
-                    queryComponentId: qc.id,
-                    queryConditions: (qc.data_config as QueryConfig).queryConditions
-                }))
+    //             // Extract query parameters
+    //             const queryParams = linkedQueryComponents.map(qc => ({
+    //                 queryComponentId: qc.id,
+    //                 queryConditions: (qc.data_config as QueryConfig).queryConditions
+    //             }))
 
-                const currentInfo = updatedTriggers[component.id] || { trigger: 0, queryParams: [] }
-                updatedTriggers[component.id] = {
-                    trigger: currentInfo.trigger + 1,
-                    queryParams
-                }
-            }
-        })
+    //             const currentInfo = updatedTriggers[component.id] || { trigger: 0, queryParams: [] }
+    //             updatedTriggers[component.id] = {
+    //                 trigger: currentInfo.trigger + 1,
+    //                 queryParams
+    //             }
+    //         }
+    //     })
 
-        set({ chartRefreshTriggers: updatedTriggers })
-    },
+    //     set({ chartRefreshTriggers: updatedTriggers })
+    // },
 
     // Initialize auto-refresh based on query component configuration
     initializeAutoRefresh: () => {
@@ -408,6 +408,13 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
                         chartToQueriesMap[chartId].push(queryParam)
                     })
                 }
+            }
+        })
+
+        // other components
+        currentDashboard.components.forEach(component => {
+            if (component.type !== 'query' && !chartToQueriesMap[component.id]) {
+                chartToQueriesMap[component.id] = []
             }
         })
 
@@ -541,7 +548,8 @@ interface ComponentEditorState {
 
     // Public methods
     updateEditingComponent: (data: Partial<DashboardComponent>) => void;
-
+    saveComponentCollapseState: (componentId: string) => void;
+    loadComponentCollapseState: (componentId: string) => void;
     /**
      * Entry Point: Triggered when clicking a chart.
      * Checks if a previous draft exists, saves it if necessary, 

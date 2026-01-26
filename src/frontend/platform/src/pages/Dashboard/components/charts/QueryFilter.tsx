@@ -4,7 +4,7 @@ import { Button } from "@/components/bs-ui/button"
 import { useEditorDashboardStore } from "@/store/dashboardStore"
 import { cn } from "@/utils"
 import { GripHorizontalIcon, Search } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { DashboardComponent, QueryConfig, TimeRangeMode, TimeRangeType } from "../../types/dataConfig"
 import { AdvancedDatePicker, DatePickerValue } from "../AdvancedDatePicker"
 import { useTranslation } from "react-i18next"
@@ -13,9 +13,10 @@ interface QueryFilterProps {
     component: DashboardComponent  // Query the ID of the component, which is used to trigger the refresh of the associated chart
     isPreviewMode?: boolean
     isDark?: boolean
+    hasChanged?: boolean
 }
 
-export function QueryFilter({ isDark, component, isPreviewMode = false }: QueryFilterProps) {
+export function QueryFilter({ hasChanged, isDark, component, isPreviewMode = false }: QueryFilterProps) {
     const { t } = useTranslation("dashboard")
 
     const { refreshChartsByQuery, setQueryComponentParams } = useEditorDashboardStore()
@@ -38,10 +39,15 @@ export function QueryFilter({ isDark, component, isPreviewMode = false }: QueryF
     useEffect(() => {
         console.log('filter :>> ', filter);
     }, [filter])
+
+    const initRef = useRef(true)
     useEffect(() => {
         // set default filter
         const { type, mode, recentDays, startDate, endDate } = queryConditions.defaultValue
-        if (filter) return // not need reset
+        // Update only on the first time or when the configuration changes
+        if (!(initRef.current || hasChanged)) return
+        initRef.current = false
+
         if (queryConditions.defaultValue) {
             if (type === TimeRangeType.ALL) {
                 setQueryComponentParams(component.id, undefined)

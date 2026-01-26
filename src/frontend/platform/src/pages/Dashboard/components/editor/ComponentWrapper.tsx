@@ -36,7 +36,7 @@ export function ComponentWrapper({
     const inputRef = useRef<HTMLInputElement>(null)
     const { toast } = useToast()
     const [title, setTitle] = useState('')
-    const { copyFromDashboard, editingComponent, updateEditingComponent } = useComponentEditorStore();
+    const { hasChange, copyFromDashboard, editingComponent, updateEditingComponent } = useComponentEditorStore();
     const isSelected = editingComponent?.id === component.id
     const componentData = isSelected ? editingComponent : component
 
@@ -286,7 +286,12 @@ export function ComponentWrapper({
                     }}
                 >
                     {componentData.type === 'query' ? (
-                        <QueryFilter isDark={isDark} component={componentData} isPreviewMode={isPreviewMode} />
+                        <QueryFilter
+                            isDark={isDark}
+                            component={componentData}
+                            isPreviewMode={isPreviewMode}
+                            hasChanged={hasChange}
+                        />
                     ) : (
                         <ChartContainer isDark={isDark} component={componentData} isPreviewMode={isPreviewMode} />
                     )}

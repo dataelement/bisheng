@@ -34,7 +34,8 @@ export function ChartContainer({ isPreviewMode, isDark, component }: ChartContai
       component,
       queryParams
     }),
-    enabled: !!component.id && component.data_config.isConfigured
+    // use refreshTrigger
+    enabled: false // !!component.id && component.data_config.isConfigured
   });
 
   // Refetch when refresh trigger changes

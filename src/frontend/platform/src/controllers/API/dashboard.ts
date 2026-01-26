@@ -202,14 +202,20 @@ export async function queryChartData(params: {
         component_data: useId ? undefined : component,
         component_id: useId ? component.id : undefined,
         time_filters: queryParams
-            .filter(p => p.queryComponentParams) // all
-            .map(({ queryComponentParams: p }) => ({
-                type: p.shortcutKey ? TimeRangeType.RECENT_DAYS : TimeRangeType.CUSTOM,
-                mode: p.isDynamic ? TimeRangeMode.Dynamic : TimeRangeMode.Fixed,
-                recentDays: p.shortcutKey ? Number(p.shortcutKey.replace('last_', '')) : undefined,
-                startDate: p.startTime,
-                endDate: p.endTime,
-            }))
+            .filter(p => p.queryComponentParams || (p.queryConditions && p.queryConditions.hasDefaultValue)) // all
+            .map(({ queryComponentParams: p, queryConditions: q }) => {
+                if (p) {
+                    return {
+                        type: p.shortcutKey ? TimeRangeType.RECENT_DAYS : TimeRangeType.CUSTOM,
+                        mode: p.isDynamic ? TimeRangeMode.Dynamic : TimeRangeMode.Fixed,
+                        recentDays: p.shortcutKey ? Number(p.shortcutKey.replace('last_', '')) : undefined,
+                        startDate: p.startTime,
+                        endDate: p.endTime,
+                    }
+                } else if (q) {
+                    return q.defaultValue
+                }
+            })
     });
 
     if (!resData?.value?.length) return null

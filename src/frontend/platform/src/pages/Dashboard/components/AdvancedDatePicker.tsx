@@ -98,9 +98,30 @@ export function AdvancedDatePicker({
   const [selectedShortcut, setSelectedShortcut] = useState<string | undefined>(undefined);
   const [isDynamic, setIsDynamic] = useState(false);
 
-  // Hour State (Managed independently for easier UI binding)
+  // Hour State
   const [startHour, setStartHour] = useState(0);
   const [endHour, setEndHour] = useState(0);
+
+  // Shortcuts configuration
+  const shortcuts = [
+    { label: t('shortcut.last_7'), days: 7, key: "last_7" },
+    { label: t('shortcut.last_30'), days: 30, key: "last_30" },
+    { label: t('shortcut.last_90'), days: 90, key: "last_90" },
+    { label: t('shortcut.last_180'), days: 180, key: "last_180" },
+  ];
+
+  // Helper function for automatically applying dynamic shortcuts
+  const applyDynamicShortcut = (shortcutKey: string) => {
+    const shortcut = shortcuts.find(s => s.key === shortcutKey);
+    if (!shortcut) return;
+
+    const end = new Date();
+    const start = subDays(end, shortcut.days);
+    setDateRange({ from: start, to: end });
+    setStartHour(0);
+    setEndHour(23);
+    setSelectedShortcut(shortcutKey);
+  };
 
   // Sync internal state with external value when popover opens or value changes
   useEffect(() => {
@@ -121,7 +142,14 @@ export function AdvancedDatePicker({
       setSelectedShortcut(undefined);
       setIsDynamic(false);
     }
-  }, [value, open]);
+  }, [value]);
+
+  // When the pop-up window opens, if it is in dynamic mode, automatically refresh the time range 
+  useEffect(() => {
+    if (open && value?.isDynamic && value?.shortcutKey) {
+      applyDynamicShortcut(value.shortcutKey);
+    }
+  }, [open]);
 
   // --- Logic Handlers ---
 
@@ -145,7 +173,7 @@ export function AdvancedDatePicker({
     let finalStart = new Date(dateRange.from);
     let finalEnd = dateRange.to ? new Date(dateRange.to) : new Date(dateRange.from);
 
-    // 1. Process StartTime based on granularity
+    // Process StartTime based on granularity
     if (granularity === "month") {
       finalStart = startOfMonth(finalStart);
     } else if (granularity === "day") {
@@ -156,7 +184,7 @@ export function AdvancedDatePicker({
       finalStart.setSeconds(0);
     }
 
-    // 2. Process EndTime based on granularity
+    // Process EndTime based on granularity
     if (granularity === "month") {
       finalEnd = endOfMonth(finalEnd);
       finalEnd = endOfDay(finalEnd);
@@ -186,13 +214,15 @@ export function AdvancedDatePicker({
   // --- Display Formatting ---
   const getDisplayValue = () => {
     if (!dateRange?.from) return "";
-    // if (selectedShortcut) return shortcuts.find((s) => s.key === selectedShortcut)?.label;
-    if (selectedShortcut) {
+
+    // Shortcut key text is only displayed in dynamic mode
+    if (selectedShortcut && isDynamic) {
       return t(`shortcut.${selectedShortcut}`);
     }
 
     const start = new Date(dateRange.from);
-    const end = new Date(dateRange.to);
+    // Fix: Handle undefined dateRange.to to prevent Invalid time value error
+    const end = dateRange.to ? new Date(dateRange.to) : new Date(dateRange.from);
 
     // Formatting templates
     let fmt = "yyyy/MM/dd";
@@ -211,17 +241,9 @@ export function AdvancedDatePicker({
     return `${sStr} - ${eStr}`;
   };
 
-  // --- Shortcut Configurations ---
-  const shortcuts = [
-    { label: t('shortcut.last_7'), days: 7, key: "last_7" },
-    { label: t('shortcut.last_30'), days: 30, key: "last_30" },
-    { label: t('shortcut.last_90'), days: 90, key: "last_90" },
-    { label: t('shortcut.last_180'), days: 180, key: "last_180" },
-  ];
-
   const handleClear = () => {
     setDateRange(undefined);
-    onChange(undefined)
+    onChange(undefined);
   }
 
   return (
@@ -268,13 +290,14 @@ export function AdvancedDatePicker({
                       }
                     }
                     setSelectedShortcut(undefined);
+                    setIsDynamic(false);
                   }}
                 />
               </div>
             ) : (
               <Calendar
                 mode={mode === "range" ? "range" : "single"}
-                defaultMonth={dateRange?.from}
+                defaultMonth={dateRange?.from || new Date()}
                 selected={mode === "range" ? dateRange : dateRange?.from}
                 onSelect={(val: any) => {
                   if (mode === "single") {
@@ -283,6 +306,7 @@ export function AdvancedDatePicker({
                     setDateRange(val);
                   }
                   setSelectedShortcut(undefined);
+                  setIsDynamic(false);
                 }}
                 numberOfMonths={mode === "range" ? 2 : 1}
               />
@@ -353,12 +377,11 @@ export function AdvancedDatePicker({
                   </div>
                 )}
               </div>
-
             </div>
           )}
 
           {/* Footer Action */}
-          <div className="flex justify-end gap-2  px-3 mb-3">
+          <div className="flex justify-end gap-2 px-3 mb-3">
             <Button className="h-6" variant="ghost" size="sm" onClick={handleClear}>{t('clear')}</Button>
             <Button className="h-6" size="sm" onClick={handleConfirm}>{t('confirm')}</Button>
           </div>
