@@ -182,7 +182,7 @@
     "desc": "ナレッジベース説明",
     "descPlaceholder": "説明を入力してください",
     "searchFileName": "ファイル名を検索",
-    "uploadFile": "ファイルをアップロード",
+    "uploadFile": "アップロード",
     "segmentStrategy": "セグメントルール",
     "textComparison": "原文比較",
     "dataProcessing": "データ処理",

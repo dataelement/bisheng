@@ -202,15 +202,23 @@ export async function queryChartData(params: {
         component_data: useId ? undefined : component,
         component_id: useId ? component.id : undefined,
         time_filters: queryParams
-            .filter(p => p.queryComponentParams) // all
-            .map(({ queryComponentParams: p }) => ({
-                type: p.shortcutKey ? TimeRangeType.RECENT_DAYS : TimeRangeType.CUSTOM,
-                mode: p.isDynamic ? TimeRangeMode.Dynamic : TimeRangeMode.Fixed,
-                recentDays: p.shortcutKey ? Number(p.shortcutKey.replace('last_', '')) : undefined,
-                startDate: p.startTime,
-                endDate: p.endTime,
-            }))
+            .filter(p => p.queryComponentParams || (p.queryConditions && p.queryConditions.hasDefaultValue)) // all
+            .map(({ queryComponentParams: p, queryConditions: q }) => {
+                if (p) {
+                    return {
+                        type: p.shortcutKey ? TimeRangeType.RECENT_DAYS : TimeRangeType.CUSTOM,
+                        mode: p.isDynamic ? TimeRangeMode.Dynamic : TimeRangeMode.Fixed,
+                        recentDays: p.shortcutKey ? Number(p.shortcutKey.replace('last_', '')) : undefined,
+                        startDate: p.startTime,
+                        endDate: p.endTime,
+                    }
+                } else if (q) {
+                    return q.defaultValue
+                }
+            })
     });
+
+    if (!resData?.value?.length) return null
 
     const isStacked = !!component.data_config.stackDimension?.fieldId;
     const { dimensions, series } = isStacked
@@ -221,7 +229,7 @@ export async function queryChartData(params: {
 
     const chartType = params.component.type
 
-    // 根据图表类型返回对应的 mock 数据
+    // 根据图表类型返回对应的 数据
     switch (chartType) {
         case ChartType.Bar:
         case ChartType.StackedBar:
@@ -263,18 +271,20 @@ export async function queryChartData(params: {
 }
 
 // 获取字段枚举列表
-export async function getFieldEnums({ dataset_code, field, page, pageSize = 20 }: {
+export async function getFieldEnums({ dataset_code, field, page, pageSize = 20, keyword = "" }: {
     dataset_code: string
     field: string
     page: number
     pageSize?: number
+    keyword?: string
 }): Promise<any> {
     return await axios.get(`/api/v1/telemetry/dashboard/dataset/field/enums`, {
         params: {
             index_name: dataset_code,
             field,
             page,
-            size: pageSize
+            size: pageSize,
+            keyword
         }
     });
 }

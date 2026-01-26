@@ -302,7 +302,7 @@ export default function FilesUpload() {
           <Button
             variant="outline"
             size="icon"
-            className="bg-[#fff] size-8"
+            className="bg-main size-8"
             onClick={() => navigate(-1)}
           >
             <ChevronLeft />
@@ -383,7 +383,7 @@ export default function FilesUpload() {
                 />
 
                 {/* Step 3 bottom buttons */}
-                <div className="fixed bottom-2 right-12 flex gap-4 bg-white p-2 rounded-lg shadow-sm z-10">
+                <div className="fixed bottom-2 right-12 flex gap-4 bg-background p-2 rounded-lg shadow-sm z-10">
                   <Button variant="outline" onClick={handleBack}>
                     {t('previousStep')}
                   </Button>

@@ -3,7 +3,7 @@
 
 import { Button } from "@/components/bs-ui/button"
 import { ListIndentDecrease, ListIndentIncrease } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { useEditorDashboardStore } from "@/store/dashboardStore"
 import { useTranslation } from "react-i18next"
 
@@ -52,16 +52,18 @@ export function DashboardConfigPanel({ collapsed = false, onCollapse }: Dashboar
     </div>
   )
 
-  const CollapseLabel = ({ label, onClick, icon }: any) => (
-    <div className="h-full flex flex-col items-center justify-center cursor-pointer hover:bg-accent/50 transition-colors" onClick={onClick}>
-      <div className="writing-mode-vertical text-sm font-medium py-4">{label}</div>
-      <div className="mt-2">{icon}</div>
+  const CollapseLabel = useCallback(({ label, onClick, icon }: any) => (
+    <div className="h-full flex flex-col items-center cursor-pointer hover:bg-accent/50 transition-colors" onClick={onClick}>
+      <div className="m-[20px]">{icon}</div>
+      <div className="w-full h-[2px] bg-gray-100 mb-4"></div>
+      <div className="writing-mode-vertical text-sm font-medium tracking-[6px]">{label}</div>
+
     </div>
-  )
+  ), [])
 
   return (
     <div className="h-full flex bg-background border-l border-border">
-      <div className={`border-r flex flex-col h-full transition-all duration-300 ${collapsed ? "w-12" : "w-[460px]"} shrink-0`}>
+      <div className={`border-r flex flex-col h-full transition-all duration-300 ${collapsed ? "w-12" : "w-[440px]"} shrink-0`}>
         {collapsed ? (
           <CollapseLabel
             label={t("configPanel.title")}

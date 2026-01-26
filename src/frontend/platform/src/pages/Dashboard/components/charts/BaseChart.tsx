@@ -205,7 +205,9 @@ const getCartesianChartOption = (
 
   // Tooltip
   const tooltipFormatter = (params: any[]) => {
-    let res = params[0].name.replaceAll('\n', '<br/>') + '<br/>';
+    const originName = params[0]?.name || '';
+    const shortName = originName.replace(/(.{50})/g, '$1<br/>');
+    let res = shortName.replaceAll('\n', '<br/>') + '<br/>';
     params.forEach((item) => {
       res += item.value === undefined ? '' : `${item.marker} ${item.seriesName}: <b>${unitConversion(item.value, dataConfig).join('')}</b><br/>`;
     });
@@ -213,58 +215,95 @@ const getCartesianChartOption = (
   };
 
   //  Axis
-  const axisLabelStyle = { ...getTextStyle({ fontSize: styleConfig.xAxisFontSize, color: styleConfig.xAxisColor }) };
+  const xAxisTitleStyle = getTextStyle({
+    fontSize: styleConfig.xAxisFontSize,
+    color: styleConfig.xAxisColor,
+    bold: styleConfig.xAxisBold
+  });
+  const yAxisTitleStyle = getTextStyle({
+    fontSize: styleConfig.yAxisFontSize,
+    color: styleConfig.yAxisColor,
+    bold: styleConfig.yAxisBold
+  });
 
   // (Category Axis)
   const categoryAxis = {
     type: 'category',
     data: dimensions,
-    show: styleConfig.showAxis ?? true,
     axisLabel: {
+      show: styleConfig.showAxis ?? true,
       rotate: 0,
       interval: 'auto',
       formatter: function (value) {
         if (!value) return '';
         const lines = value.split('\n');
-
-        const processedLines = lines.map(line => {
-          if (line.length > 10) {
-            return line.slice(0, 10) + '...';
-          }
-          return line;
-        });
-
-        return processedLines.join('\n');
+        return lines.map(line => line.length > 10 ? line.slice(0, 10) + '...' : line).join('\n');
       },
       hideOverlap: true,
+      color: '#666'
       // interval: 0,
       // hideOverlap: true,
       // overflow: 'break'
       // ...axisLabelStyle,
     },
-    name: styleConfig.xAxisTitle || ''
+    name: styleConfig.xAxisTitle || '',
+    nameLocation: styleConfig.xAxisAlign === 'right' ? 'end' : styleConfig.xAxisAlign === 'left' ? 'start' : 'center',
+    nameTextStyle: xAxisTitleStyle
   };
 
   // (Value Axis)
   const valueAxis = {
     type: 'value',
-    show: styleConfig.showAxis ?? true,
     axisLabel: {
+      show: styleConfig.showAxis ?? true,
       formatter: (val: any) => unitConversion(val, dataConfig).join(''),
-      ...axisLabelStyle,
+      color: '#666'
     },
     splitLine: { show: styleConfig.showGrid ?? true },
-    name: styleConfig.yAxisTitle || ''
+    name: styleConfig.yAxisTitle || '',
+    nameLocation: styleConfig.yAxisAlign === 'right' ? 'end' : styleConfig.yAxisAlign === 'left' ? 'start' : 'center',
+    nameRotate: isHorizontal ? 0 : 90,
+    nameTextStyle: yAxisTitleStyle
   };
 
+  const lastValueIndexes = dimensions.map((_, dimIdx) => {
+    let lastIdx = -1;
+    for (let sIdx = series.length - 1; sIdx >= 0; sIdx--) {
+      const val = series[sIdx].data[dimIdx];
+      // 只有当值存在且大于 0 时，才认为是这一列的“顶端”
+      if (val !== null && val !== undefined && val > 0) {
+        lastIdx = sIdx;
+        break;
+      }
+    }
+    return lastIdx;
+  });
   // Series
-  const cartesianSeries = series.map((s) => {
+  const cartesianSeries = series.map((s, index) => {
+    const processedData = s.data.map((val, dimIdx) => {
+      const isTopItem = lastValueIndexes[dimIdx] === index;
+
+      // 如果是顶端项，则单独给该 data item 设置样式
+      if (!isLineOrArea && isStacked && isTopItem) {
+        return {
+          value: val,
+          itemStyle: {
+            borderRadius: isHorizontal ? [0, 4, 4, 0] : [4, 4, 0, 0]
+          }
+        };
+      }
+      return val;
+    });
+
     const item: any = {
       name: s.name,
-      data: s.data,
+      data: processedData,
       type: isLineOrArea ? 'line' : 'bar',
+      symbol: 'none',
       itemStyle: {
-        borderRadius: !isLineOrArea ? (isHorizontal ? [0, 2, 2, 0] : [2, 2, 0, 0]) : 0
+        borderRadius: (!isLineOrArea && !isStacked)
+          ? (isHorizontal ? [0, 4, 4, 0] : [4, 4, 0, 0])
+          : 0
       }
     };
 
@@ -273,23 +312,35 @@ const getCartesianChartOption = (
     }
     if (isStacked) item.stack = 'total';
     if (isArea) item.areaStyle = {};
-    if (isLineOrArea) item.smooth = true;
+    // if (isLineOrArea) item.smooth = true;
 
     return item;
   });
+
+  let grid = {
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    // containLabel: true,
+  }
+  if (styleConfig.showLegend) {
+    const titleBottom = (styleConfig.xAxisTitle ? 18 : 0) + ((dataConfig.dimensions.length - 1) * 10);
+    const bottom = (styleConfig.legendPosition === 'bottom' ? 44 : 0) + titleBottom;
+    grid = {
+      left: styleConfig.legendPosition === 'left' ? 160 : 0,
+      right: styleConfig.legendPosition === 'right' ? 100 : 0,
+      top: styleConfig.legendPosition === 'top' ? 40 : 0,
+      bottom,
+    }
+  }
 
   return {
     backgroundColor: styleConfig.bgColor,
     // title: buildTitleOption(styleConfig),
     legend: buildLegendOption(styleConfig, series.map(s => s.name)),
     tooltip: buildTooltipOption('axis', tooltipFormatter),
-    grid: {
-      left: styleConfig.legendPosition === 'left' ? 100 : '3%',
-      right: styleConfig.legendPosition === 'right' ? 100 : '3%',
-      top: styleConfig.legendPosition === 'top' ? 60 : 28,
-      bottom: styleConfig.legendPosition === 'bottom' ? 40 : 0,
-      containLabel: true
-    },
+    grid,
     xAxis: isHorizontal ? valueAxis : categoryAxis,
     yAxis: isHorizontal ? categoryAxis : valueAxis,
     series: cartesianSeries,
@@ -314,12 +365,22 @@ const buildLegendOption = (styleConfig: ComponentStyleConfig, seriesNames?: stri
   if (styleConfig.showLegend === false) return undefined;
 
   const pos = styleConfig.legendPosition || 'top';
+  const align = styleConfig.legendAlign || 'auto';
+  const isVertical = pos === 'left' || pos === 'right';
   // computed
-  const orient = pos === 'left' || pos === 'right' ? 'vertical' : 'horizontal';
-  const top = pos === 'top' ? 0 : pos === 'bottom' ? 'auto' : 'center';
-  const bottom = pos === 'bottom' ? 10 : 'auto';
-  const left = pos === 'left' ? 10 : pos === 'center' ? 'center' : 'auto';
-  const right = pos === 'right' ? 10 : 'auto';
+  const orient = isVertical ? 'vertical' : 'horizontal';
+  const top = !isVertical
+    ? (pos === 'top' ? 0 : 'auto')
+    : (align === 'left' ? 0 : (align === 'right' ? 'auto' : 'center'));
+  const bottom = !isVertical
+    ? (pos === 'bottom' ? 0 : 'auto')
+    : (align === 'right' ? 0 : 'auto');
+  const left = isVertical
+    ? (pos === 'left' ? 0 : 'auto')
+    : (align === 'left' ? 0 : (align === 'right' ? 'auto' : 'center'));
+  const right = isVertical
+    ? (pos === 'right' ? 0 : 'auto')
+    : (align === 'right' ? 0 : 'auto');
 
   return {
     data: seriesNames, // Pie chart doesn't strictly need this, but Cartesian does
@@ -348,6 +409,9 @@ const buildTooltipOption = (type: 'axis' | 'item', formatter: (params: any) => s
     trigger: type,
     axisPointer: type === 'axis' ? { type: 'shadow' } : undefined,
     appendToBody: true,
+    confine: true,
+    enterable: true,
+    extraCssText: 'max-height: 500px; overflow-y: auto;',
     formatter,
   };
 };

@@ -36,7 +36,7 @@ export function ComponentWrapper({
     const inputRef = useRef<HTMLInputElement>(null)
     const { toast } = useToast()
     const [title, setTitle] = useState('')
-    const { copyFromDashboard, editingComponent, updateEditingComponent } = useComponentEditorStore();
+    const { hasChange, copyFromDashboard, editingComponent, updateEditingComponent } = useComponentEditorStore();
     const isSelected = editingComponent?.id === component.id
     const componentData = isSelected ? editingComponent : component
 
@@ -100,8 +100,8 @@ export function ComponentWrapper({
 
     const createTitleStyle = (config) => {
         const defaultConfig = {
-            titleFontSize: 14,
-            titleColor: "#111",
+            titleFontSize: 16,
+            titleColor: "#000000",
             titleAlign: "left",
             titleBold: false,
             titleItalic: false,
@@ -244,7 +244,7 @@ export function ComponentWrapper({
 
             <div className="w-full h-full p-2">
                 {/* Component title with rename ability - hidden for query type */}
-                {!['query', 'metric'].includes(component.type) && (
+                {!['query', 'metric'].includes(componentData.type) && (
                     <div className="group mb-2 relative">
                         {isEditing ? (
                             <Input
@@ -279,9 +279,19 @@ export function ComponentWrapper({
                 )}
 
                 {/* Component content */}
-                <div className={['query', 'metric'].includes(component.type) ? 'h-full' : 'h-[calc(100%-2.5rem)] no-drag cursor-default'}>
-                    {component.type === 'query' ? (
-                        <QueryFilter isDark={isDark} component={componentData} isPreviewMode={isPreviewMode} />
+                <div
+                    className={['query', 'metric'].includes(componentData.type) ? '' : ` no-drag cursor-default`}
+                    style={{
+                        height: ['query', 'metric'].includes(componentData.type) ? '100%' : `calc(100% - ${(componentData.style_config?.titleFontSize || 0) + 10}px)`
+                    }}
+                >
+                    {componentData.type === 'query' ? (
+                        <QueryFilter
+                            isDark={isDark}
+                            component={componentData}
+                            isPreviewMode={isPreviewMode}
+                            hasChanged={hasChange}
+                        />
                     ) : (
                         <ChartContainer isDark={isDark} component={componentData} isPreviewMode={isPreviewMode} />
                     )}

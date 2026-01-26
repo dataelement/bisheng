@@ -7,7 +7,8 @@ import { ComponentStyleConfig, DataConfig } from '../../types/dataConfig'
 import { cn } from '@/utils'
 
 interface MetricCardProps {
-  data: MetricDataResponse
+  data: MetricDataResponse,
+  title?: string
   dataConfig?: DataConfig
   styleConfig: ComponentStyleConfig
   isPreviewMode?: boolean
@@ -73,9 +74,8 @@ export const unitConversion = (value, dataConfig) => {
   return [result, finalUnit];
 }
 
-export function MetricCard({ data, isPreviewMode, dataConfig, styleConfig }: MetricCardProps) {
+export function MetricCard({ title: indicatorName, data, isPreviewMode, dataConfig, styleConfig }: MetricCardProps) {
 
-  const indicatorName = styleConfig.title
   const subTitle = styleConfig.subtitle
 
   // format

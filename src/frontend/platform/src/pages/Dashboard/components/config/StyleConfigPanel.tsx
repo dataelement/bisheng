@@ -84,7 +84,7 @@ function TextFormat({
         value={String(fontSize)}
         onValueChange={(v) => setFontSize(Number(v))}
       >
-        <SelectTrigger className="w-[50px] h-7 px-2 text-xs border-0 bg-white">
+        <SelectTrigger className="w-[60px] h-7 px-2 text-xs border-0 bg-white">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -100,7 +100,7 @@ function TextFormat({
       {setColor && (
         <Select
         >
-          <SelectTrigger className="w-[50px] h-7 px-2 text-xs border-0 bg-white -m-1">
+          <SelectTrigger className="w-[60px] h-7 px-2 text-xs border-0 bg-white">
             <div className="size-4 border-[#EBECF0]">
               <div
                 className="h-full w-full rounded shadow-sm border"
@@ -140,7 +140,7 @@ function TextFormat({
         value={align}
         onValueChange={(v) => setAlign(v as "left" | "center" | "right")}
       >
-        <SelectTrigger className="w-10 h-7 px-1 border-0 shadow-none bg-white">
+        <SelectTrigger className="w-12 h-7 px-1 border-0 shadow-none bg-white">
           <SelectValue asChild>{alignIcon}</SelectValue>
         </SelectTrigger>
 
@@ -160,12 +160,12 @@ function TextFormat({
       {/* 样式 */}
       <div className="flex w-[88px] m-1 gap-1">
         <IconBtn active={bold} onClick={() => setBold(!bold)}>
-          <Bold className="w-3 h-3" />
+          <Bold className="w-3.5 h-3.5" />
         </IconBtn>
         <IconBtn active={italic} onClick={() => setItalic(!italic)}>
-          <Italic className="w-3 h-3" />
+          <Italic className="w-3.5 h-3.5" />
         </IconBtn>
-        <IconBtn active={underline} onClick={() => setUnderline(!underline)}>
+        {/* <IconBtn active={underline} onClick={() => setUnderline(!underline)}>
           <Underline className="w-3 h-3" />
         </IconBtn>
         <IconBtn
@@ -173,7 +173,7 @@ function TextFormat({
           onClick={() => setStrikethrough(!strikethrough)}
         >
           <Strikethrough className="w-3 h-3" />
-        </IconBtn>
+        </IconBtn> */}
       </div>
     </div>
   )
@@ -270,15 +270,11 @@ export function StyleConfigPanel({ config, onChange, type, FULL_DEFAULT_STYLE_CO
 
   const { t } = useTranslation("dashboard")
 
-  const [collapsedSections, setCollapsedSections] = useState({
-    color: false,
-    title: true,
-    axis: true,
-    legend: true,
-    chartOptions: false
-  })
 
   const editingComponent = useComponentEditorStore(state => state.editingComponent)
+
+  const collapsedSections = useComponentEditorStore(state => state.collapsedSections)
+  const setCollapsedSection = useComponentEditorStore(state => state.setCollapsedSection)
 
   const updateEditingComponent = useComponentEditorStore(state => state.updateEditingComponent)
   const firstDimension = editingComponent?.data_config?.dimensions?.[0]
@@ -306,12 +302,12 @@ export function StyleConfigPanel({ config, onChange, type, FULL_DEFAULT_STYLE_CO
     //   baseConfig.title = editingComponent?.data_config?.metrics?.[0]?.fieldName
     // }
     // 如果轴标题为空，设置默认值
-    if (!baseConfig.xAxisTitle && firstDimension?.fieldName) {
-      baseConfig.xAxisTitle = firstDimension.fieldName
+    if (baseConfig.xAxisTitle === undefined && firstDimension?.fieldName) {
+      baseConfig.xAxisTitle = firstDimension.fieldName;
     }
 
-    if (!baseConfig.yAxisTitle && firstMetric?.fieldName) {
-      baseConfig.yAxisTitle = firstMetric.fieldName
+    if (baseConfig.yAxisTitle === undefined && firstMetric?.fieldName) {
+      baseConfig.yAxisTitle = firstMetric.fieldName;
     }
 
     return baseConfig
@@ -327,9 +323,8 @@ export function StyleConfigPanel({ config, onChange, type, FULL_DEFAULT_STYLE_CO
         style_config: {
           ...FULL_DEFAULT_STYLE_CONFIG,
           ...styleConfig,
-          title:
-            editingComponent.data_config?.metrics?.[0]?.fieldName ?? "",
         },
+        title: editingComponent.data_config?.metrics?.[0]?.fieldName ?? "",
       })
     } else {
       updateEditingComponent({
@@ -348,10 +343,7 @@ export function StyleConfigPanel({ config, onChange, type, FULL_DEFAULT_STYLE_CO
 
 
   const toggleSection = (section: keyof typeof collapsedSections) => {
-    setCollapsedSections(prev => ({
-      ...prev,
-      [section]: !prev[section]
-    }))
+    setCollapsedSection(section, !collapsedSections[section])
   }
 
   const handleChange = (key: keyof ComponentStyleConfig, value: any) => {
@@ -478,14 +470,20 @@ export function StyleConfigPanel({ config, onChange, type, FULL_DEFAULT_STYLE_CO
           <Input
             placeholder={t('styleConfigPanel.placeholders.enterTitle')}
             value={localConfig.title || ""}
-            onChange={(e) => handleChange("title", e.target.value)}
+            onChange={(e) => {
+              const value = e.target.value
+              if (value.length <= 15) {
+                handleChange("title", value)
+              }
+            }}
+            maxLength={15}
           />
         </FormBlock>
         <FormBlock label={t('styleConfigPanel.labels.textFormat')}>
           <TextFormat
             fontSize={localConfig.titleFontSize}
             setFontSize={(v) => handleChange("titleFontSize", v)}
-            bold={localConfig.titleBold}
+            bold={localConfig.titleBold || false}
             setBold={(v) => handleChange("titleBold", v)}
             italic={localConfig.titleItalic}
             setItalic={(v) => handleChange("titleItalic", v)}
@@ -550,7 +548,13 @@ export function StyleConfigPanel({ config, onChange, type, FULL_DEFAULT_STYLE_CO
                     <Input
                       placeholder={t('styleConfigPanel.placeholders.enterSubtitle')}
                       value={localConfig.subtitle || ""}
-                      onChange={(e) => handleChange("subtitle", e.target.value)}
+                      onChange={(e) => {
+                        const value = e.target.value
+                        if (value.length <= 24) {
+                          handleChange("subtitle", e.target.value)
+                        }
+                      }}
+                      maxLength={24}
                     />
                   </FormBlock>
                   <FormBlock label={t('styleConfigPanel.labels.textFormat')}>
@@ -586,7 +590,13 @@ export function StyleConfigPanel({ config, onChange, type, FULL_DEFAULT_STYLE_CO
                   <Input
                     placeholder={t('styleConfigPanel.placeholders.enterXAxisTitle')}
                     value={localConfig.xAxisTitle || ""}
-                    onChange={(e) => handleChange("xAxisTitle", e.target.value)}
+                    onChange={(e) => {
+                      const value = e.target.value
+                      if (value.length <= 24) {
+                        handleChange("xAxisTitle", e.target.value)
+                      }
+                    }}
+                    maxLength={15}
                   />
                 </FormBlock>
 
@@ -614,7 +624,13 @@ export function StyleConfigPanel({ config, onChange, type, FULL_DEFAULT_STYLE_CO
                     <Input
                       placeholder={t('styleConfigPanel.placeholders.enterYAxisTitle')}
                       value={localConfig.yAxisTitle || ""}
-                      onChange={(e) => handleChange("yAxisTitle", e.target.value)}
+                      onChange={(e) => {
+                        const value = e.target.value
+                        if (value.length <= 24) {
+                          handleChange("yAxisTitle", e.target.value)
+                        }
+                      }}
+                      maxLength={15}
                     />
                   </FormBlock>
 
@@ -684,7 +700,6 @@ export function StyleConfigPanel({ config, onChange, type, FULL_DEFAULT_STYLE_CO
                 />
               </FormBlock>
             </CollapsibleBlock>
-            {console.log(editingComponent, editingComponent?.type, 454545454)}
             {/* 图表选项 */}
             <CollapsibleBlock
               title={t('styleConfigPanel.sections.chartOptions')}

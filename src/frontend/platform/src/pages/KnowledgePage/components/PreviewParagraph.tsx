@@ -20,7 +20,7 @@ export const MarkdownView = ({ noHead = false, data }) => {
     // 新增：使用knowledge命名空间的国际化
     const { t } = useTranslation('knowledge');
 
-    return <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md hover:border-primary transition-shadow w-full">
+    return <div className="p-4 bg-main rounded-lg shadow-sm border border-gray-200 hover:shadow-md hover:border-primary transition-shadow w-full">
         {!noHead && <p className="text-sm text-gray-500 flex gap-2 mb-1">
             <span>{t('chunk')}{data.chunkIndex + 1}</span>
             <span>-</span>

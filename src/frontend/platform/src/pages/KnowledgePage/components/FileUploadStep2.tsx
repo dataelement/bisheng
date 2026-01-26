@@ -295,7 +295,7 @@ const FileUploadStep2 = forwardRef(({
                 ) : null}
             </div >
 
-            <div className="fixed bottom-2 right-12 flex gap-4 bg-white p-2 rounded-lg shadow-sm z-10">
+            <div className="fixed bottom-2 right-12 flex gap-4 bg-background p-2 rounded-lg shadow-sm z-10">
                 <Button
                     className="h-8"
                     variant="outline"

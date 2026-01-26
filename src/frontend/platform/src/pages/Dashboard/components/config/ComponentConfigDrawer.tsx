@@ -13,7 +13,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/bs-ui/radio"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
 import { useComponentEditorStore, useEditorDashboardStore } from "@/store/dashboardStore"
 import { useTranslation } from "react-i18next"
-import { ChartType, ComponentStyleConfig, QueryConfig } from "../../types/dataConfig"
+import { ChartType, ComponentStyleConfig, QueryConfig, TimeRangeMode } from "../../types/dataConfig"
 import { AdvancedDatePicker } from "../AdvancedDatePicker"
 import ComponentPicker, { ChartGroupItems } from "../editor/ComponentPicker"
 import ChartSelector from "./ChartSelector"
@@ -26,7 +26,7 @@ import { useChartState } from "./useChartState"
 import { generateUUID } from "@/components/bs-ui/utils"
 const FULL_DEFAULT_STYLE_CONFIG: ComponentStyleConfig = {
   themeColor: "professional-blue",
-  bgColor: "#ffffff",
+  bgColor: "",
 
   title: "",
   titleFontSize: 14,
@@ -84,7 +84,7 @@ const FULL_DEFAULT_STYLE_CONFIG: ComponentStyleConfig = {
 
   showLegend: true,
   showAxis: true,
-  showDataLabel: true,
+  showDataLabel: false,
   showGrid: true,
 }
 
@@ -386,12 +386,20 @@ export function ComponentConfigDrawer() {
       setIsMetricCard(true)
     }
   }, [chartType])
+  editingComponent?.dataset_code
   // 数据集改变
   const handleDatasetChange = useCallback((datasetCode: string) => {
     if (editingComponent) {
       updateEditingComponent({ dataset_code: datasetCode })
+      // 只有当数据集真正改变时才重置
+      if (editingComponent.dataset_code !== datasetCode) {
+        setFilterGroup({
+          logic: "and",
+          conditions: []
+        })
+      }
     }
-  }, [editingComponent, updateEditingComponent])
+  }, [editingComponent, updateEditingComponent, setFilterGroup])
 
   // 拖拽开始
   const handleDragStart = useCallback((e: React.DragEvent, data: any) => {
@@ -455,6 +463,18 @@ export function ComponentConfigDrawer() {
   }, [filterGroup, handleAddFilter])
 
   const handleSaveFilter = useCallback((newFilterGroup: any) => {
+    if (editingComponent) {
+      // 获取当前的数据配置
+      const currentDataConfig = editingComponent.data_config || {}
+
+      updateEditingComponent({
+        data_config: {
+          ...currentDataConfig,
+          filters: newFilterGroup.conditions,
+          filtersLogic: newFilterGroup.logic
+        }
+      })
+    }
     setFilterGroup(newFilterGroup)
     setFilterDialogOpen(false)
   }, [])
@@ -541,13 +561,12 @@ export function ComponentConfigDrawer() {
     if (dataConfig?.metrics?.[0]?.fieldName && !isMetricCard) {
       finalStyleConfig.title = dataConfig.metrics[0].fieldName
     } else {
-      finalStyleConfig.title = title
+      finalStyleConfig.title = ''
     }
-
     updateEditingComponent({
       data_config: dataConfig,
       type: chartType,
-      title: finalStyleConfig.title,
+      title: finalStyleConfig.title || dataConfig.metrics[0].fieldName,
       style_config: finalStyleConfig,
       dataset_code: editingComponent.dataset_code
     })
@@ -681,6 +700,7 @@ export function ComponentConfigDrawer() {
           onSave={(chartLinkConfig) => {
             console.log('保存查询配置:', chartLinkConfig)
 
+            const { dateRange } = chartLinkConfig
             // 构建 QueryConfig
             const queryConfig: QueryConfig = {
               linkedComponentIds: chartLinkConfig.chartIds || [],
@@ -691,9 +711,15 @@ export function ComponentConfigDrawer() {
                   chartLinkConfig.timeGranularity === "年月日时" ? "year_month_day_hour" : "year_month_day",
                 hasDefaultValue: chartLinkConfig.isDefault,
                 defaultValue: chartLinkConfig.isDefault ? {
-                  type: 'custom' as const,
-                  startDate: new Date(chartLinkConfig.dateRange.start).getTime(),
-                  endDate: new Date(chartLinkConfig.dateRange.end).getTime()
+                  shortcutKey: chartLinkConfig.dateRange.shortcutKey ? parseInt(chartLinkConfig.dateRange.shortcutKey.replace('last_', '')) : undefined,
+                  // startDate: new Date(chartLinkConfig.dateRange.start).getTime(),
+                  // endDate: new Date(chartLinkConfig.dateRange.end).getTime(),
+
+                  type: chartLinkConfig.dateRange.shortcutKey ? "recent_days" : "custom",
+                  mode: dateRange.isDynamic ? TimeRangeMode.Dynamic : TimeRangeMode.Fixed,
+                  recentDays: dateRange.shortcutKey ? parseInt(dateRange.shortcutKey.replace('last_', '')) : undefined,
+                  startDate: dateRange.start,
+                  endDate: dateRange.end
                 } : {
                   type: 'all' as const
                 }
@@ -807,7 +833,14 @@ export function ComponentConfigDrawer() {
                                   const isCurrentChartStacked = currentChartHasStack;
 
                                   let updatedDataConfig = { ...dataConfig };
-
+                                  if (isMetricChart) {
+                                    updatedDataConfig = {
+                                      ...updatedDataConfig,
+                                      stackDimension: undefined,
+                                      dimensions: updatedDataConfig.dimensions || [],
+                                      metrics: updatedDataConfig.metrics[0] ? [updatedDataConfig.metrics[0]] : []
+                                    }
+                                  }
                                   // 处理堆叠维度
                                   if (isCurrentChartStacked && !isNewChartStacked) {
                                     // 从堆叠图切换到非堆叠图：移除堆叠维度配置
@@ -821,26 +854,43 @@ export function ComponentConfigDrawer() {
                                     // 从非堆叠图切换到堆叠图：清空堆叠维度
                                     updatedDataConfig = {
                                       ...updatedDataConfig,
-                                      stackDimension: undefined, // 清空堆叠维度
+                                      stackDimension: undefined,
                                       dimensions: updatedDataConfig.dimensions || [],
                                       metrics: updatedDataConfig.metrics || []
                                     };
                                   }
+                                  if (data.type === 'metric') {
+                                    const firstMetric = valueDimensions[0] ? { ...valueDimensions[0] } : null;
 
-                                  // 更新组件配置
-                                  updateEditingComponent({
-                                    type: data.type,
-                                    data_config: updatedDataConfig,
-                                    title: newTitle,
-                                    style_config: {
-                                      ...styleConfig,
-                                      title: newTitle // 同时更新styleConfig中的标题
-                                    },
-                                    dataset_code: editingComponent.dataset_code
-                                  });
+                                    // 更新 chartState
+                                    chartState.setValueDimensions(firstMetric ? [firstMetric] : []);
+                                    chartState.setCategoryDimensions([]);
+                                    chartState.setStackDimensions([]);
+                                    updateEditingComponent({
+                                      type: data.type,
+                                      data_config: updatedDataConfig,
+                                      title: newTitle,
+                                      style_config: {
+                                        ...styleConfig
+                                      },
+                                      dataset_code: editingComponent.dataset_code
+                                    });
+                                  } else {
+                                    updateEditingComponent({
+                                      type: data.type,
+                                      data_config: updatedDataConfig,
+                                      title: newTitle,
+                                      style_config: {
+                                        ...styleConfig,
+                                        title: newTitle
+                                      },
+                                      dataset_code: editingComponent.dataset_code
+                                    });
+                                  }
 
                                   // 刷新图表
                                   refreshChart(editingComponent.id);
+
                                 }
                               }} maxHeight={400}>
                                 <div className="relative w-full group">
@@ -1037,65 +1087,7 @@ export function ComponentConfigDrawer() {
                       </FormBlock>
 
 
-                      {/* 结果显示 */}
-                      {(editingComponent.type !== 'metric' && isMetricCard) &&
-                        <div>
-                          <RadioGroup
-                            value={limitType}
-                            onValueChange={(value: "all" | "limit") => setLimitType(value)}
-                            className="flex justify-between gap-4"
-                          >
-                            <div className=" text-sm font-medium mt-1">
-                              {t("componentConfigDrawer.resultsDisplay")}
-                            </div>
-                            <div className="flex">
-                              <div className="flex items-center space-x-2 mr-1">
-                                <RadioGroupItem value="all" id="limit-all" />
-                                <Label htmlFor="limit-all" className="text-sm cursor-pointer whitespace-nowrap">
-                                  {t("componentConfigDrawer.allResults")}
-                                </Label>
-                              </div>
-                              <div className="flex items-center space-x-2">
-                                <RadioGroupItem value="limit" id="limit-limit" />
-                                <div className="flex items-center gap-2">
-                                  <Input
-                                    className="w-16 h-7 text-sm appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                                    type="number"
-                                    value={limitValue}
-                                    disabled={limitType !== "limit"}
-                                    onChange={(e) => {
-                                      const value = e.target.value;
-                                      if (value === '' || /^\d+$/.test(value)) {
-                                        const num = parseInt(value);
-                                        if (value === '' || (num >= 1 && num <= 1000)) {
-                                          setLimitValue(value);
-                                        }
-                                      }
-                                    }}
-                                    onBlur={(e) => {
-                                      const value = e.target.value;
-                                      const num = parseInt(value);
-                                      if (value === '' || isNaN(num)) {
-                                        setLimitValue('1');
-                                      } else if (num < 1) {
-                                        setLimitValue('1');
-                                      } else if (num > 1000) {
-                                        setLimitValue('1000');
-                                      } else {
-                                        setLimitValue(num.toString());
-                                      }
-                                    }}
-                                    min={1}
-                                    max={1000}
-                                    placeholder="1000"
-                                  />
-                                </div>
-                              </div>
-                            </div>
 
-                          </RadioGroup>
-                        </div>
-                      }
 
                       {/* <Button id="config_save" className="w-full h-10 mt-4" onClick={handleUpdateChart}>
                         {t("componentConfigDrawer.updateChartData")}
@@ -1121,9 +1113,68 @@ export function ComponentConfigDrawer() {
                 </div>
                 {/* 底部固定更新按钮（不随滚动） */}
                 {configTab !== "style" && <div className="px-4 py-3 border-t bg-background">
+                  {/* 结果显示 */}
+                  {(editingComponent.type !== 'metric' && isMetricCard) &&
+                    <div>
+                      <RadioGroup
+                        value={limitType}
+                        onValueChange={(value: "all" | "limit") => setLimitType(value)}
+                        className="flex justify-between gap-4"
+                      >
+                        <div className=" text-sm font-medium mt-1">
+                          {t("componentConfigDrawer.resultsDisplay")}
+                        </div>
+                        <div className="flex">
+                          <div className="flex items-center space-x-2 mr-1">
+                            <RadioGroupItem value="all" id="limit-all" />
+                            <Label htmlFor="limit-all" className="text-sm cursor-pointer whitespace-nowrap">
+                              {t("componentConfigDrawer.allResults")}
+                            </Label>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="limit" id="limit-limit" />
+                            <div className="flex items-center gap-2">
+                              <Input
+                                className="w-16 h-7 text-sm appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                type="number"
+                                value={limitValue}
+                                disabled={limitType !== "limit"}
+                                onChange={(e) => {
+                                  const value = e.target.value;
+                                  if (value === '' || /^\d+$/.test(value)) {
+                                    const num = parseInt(value);
+                                    if (value === '' || (num >= 1 && num <= 1000)) {
+                                      setLimitValue(value);
+                                    }
+                                  }
+                                }}
+                                onBlur={(e) => {
+                                  const value = e.target.value;
+                                  const num = parseInt(value);
+                                  if (value === '' || isNaN(num)) {
+                                    setLimitValue('1');
+                                  } else if (num < 1) {
+                                    setLimitValue('1');
+                                  } else if (num > 1000) {
+                                    setLimitValue('1000');
+                                  } else {
+                                    setLimitValue(num.toString());
+                                  }
+                                }}
+                                min={1}
+                                max={1000}
+                                placeholder="1000"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                      </RadioGroup>
+                    </div>
+                  }
                   <Button
                     id="config_save"
-                    className="w-full h-10"
+                    className="w-full h-10 mt-[12px]"
                     onClick={handleUpdateChart}
                   >
                     {t("componentConfigDrawer.updateChartData")}
@@ -1213,6 +1264,7 @@ export function ComponentConfigDrawer() {
         onChange={handleSaveFilter}
         fields={datasetFields}
         dataset_code={editingComponent?.dataset_code}
+        filtersLogic={editingComponent?.data_config.filtersLogic}
         dimensions={[...categoryDimensions, ...stackDimensions, ...valueDimensions]}
       />
     </div>

@@ -334,7 +334,7 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
 
         if (data.type === 'close' && data.category === 'processing') {
             insetSeparator(t('chat.chatEndMessage'))
-            setInputLock((prev) => (prev.reason ? prev : { locked: false, reason: '' }))
+            setInputLock((prev) => (prev.reason ? prev : { locked: true, reason: '' }))
             // 重启会话按钮,接收close确认后端处理结束后重启会话
             if (restartCallBackRef.current[data.chat_id]) {
                 restartCallBackRef.current[data.chat_id]()
