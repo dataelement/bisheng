@@ -84,7 +84,7 @@ function TextFormat({
         value={String(fontSize)}
         onValueChange={(v) => setFontSize(Number(v))}
       >
-        <SelectTrigger className="w-[50px] h-7 px-2 text-xs border-0 bg-white">
+        <SelectTrigger className="w-[60px] h-7 px-2 text-xs border-0 bg-white">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -100,7 +100,7 @@ function TextFormat({
       {setColor && (
         <Select
         >
-          <SelectTrigger className="w-[50px] h-7 px-2 text-xs border-0 bg-white -m-1">
+          <SelectTrigger className="w-[60px] h-7 px-2 text-xs border-0 bg-white">
             <div className="size-4 border-[#EBECF0]">
               <div
                 className="h-full w-full rounded shadow-sm border"
@@ -140,7 +140,7 @@ function TextFormat({
         value={align}
         onValueChange={(v) => setAlign(v as "left" | "center" | "right")}
       >
-        <SelectTrigger className="w-10 h-7 px-1 border-0 shadow-none bg-white">
+        <SelectTrigger className="w-12 h-7 px-1 border-0 shadow-none bg-white">
           <SelectValue asChild>{alignIcon}</SelectValue>
         </SelectTrigger>
 
@@ -160,12 +160,12 @@ function TextFormat({
       {/* 样式 */}
       <div className="flex w-[88px] m-1 gap-1">
         <IconBtn active={bold} onClick={() => setBold(!bold)}>
-          <Bold className="w-3 h-3" />
+          <Bold className="w-3.5 h-3.5" />
         </IconBtn>
         <IconBtn active={italic} onClick={() => setItalic(!italic)}>
-          <Italic className="w-3 h-3" />
+          <Italic className="w-3.5 h-3.5" />
         </IconBtn>
-        <IconBtn active={underline} onClick={() => setUnderline(!underline)}>
+        {/* <IconBtn active={underline} onClick={() => setUnderline(!underline)}>
           <Underline className="w-3 h-3" />
         </IconBtn>
         <IconBtn
@@ -173,7 +173,7 @@ function TextFormat({
           onClick={() => setStrikethrough(!strikethrough)}
         >
           <Strikethrough className="w-3 h-3" />
-        </IconBtn>
+        </IconBtn> */}
       </div>
     </div>
   )
