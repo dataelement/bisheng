@@ -60,6 +60,22 @@ export function BaseChart({ isDark, data, chartType, dataConfig, styleConfig }: 
       })
   }, [])
 
+  const renderChart = () => {
+    if (!chartRef.current || !domRef.current) return;
+
+    const containerSize = [domRef.current.clientWidth || 0, domRef.current.clientHeight || 0];
+
+    const option = generateChartOption({
+      data,
+      chartType,
+      dataConfig,
+      styleConfig,
+      containerSize
+    });
+
+    chartRef.current.setOption(option);
+    chartRef.current.resize();
+  }
   // Initialize and update the chart.
   const [screenFull, setScreenFull] = useState(false)
   useEffect(() => {
@@ -83,8 +99,8 @@ export function BaseChart({ isDark, data, chartType, dataConfig, styleConfig }: 
       echartsLibRef.current.registerTheme(themeName, themeConfig);
       // init echarts
       chartRef.current = echartsLibRef.current.init(domRef.current, themeName)
-      const option = generateChartOption({ data, chartType, dataConfig, styleConfig })
-      chartRef.current.setOption(option, true)
+
+      renderChart();
     } catch (err) {
       console.error('Failed to initialize chart:', err)
     }
@@ -99,19 +115,17 @@ export function BaseChart({ isDark, data, chartType, dataConfig, styleConfig }: 
 
   // resize
   useEffect(() => {
-    if (!chartRef.current) return
-
-    const resizeObserver = new ResizeObserver(() => {
-      chartRef.current?.resize()
-    })
-
-    if (domRef.current) {
-      resizeObserver.observe(domRef.current)
-    }
+    if (!chartRef.current || !domRef.current) return;
 
     const handleResize = () => {
-      chartRef.current?.resize()
-    }
+      renderChart();
+    };
+
+    const resizeObserver = new ResizeObserver(() => {
+      handleResize()
+    })
+
+    resizeObserver.observe(domRef.current)
     window.addEventListener('resize', handleResize)
 
     return () => {
@@ -155,6 +169,7 @@ export function generateChartOption(props: {
   chartType: ChartType;
   dataConfig?: ComponentConfig;
   styleConfig: ComponentStyleConfig;
+  containerSize?: number[];
 }): any {
   const { chartType } = props;
 
@@ -163,7 +178,7 @@ export function generateChartOption(props: {
     return getPieChartOption(props.data, chartType, props.styleConfig);
   }
 
-  return getCartesianChartOption(props.data, chartType, props.styleConfig, props.dataConfig);
+  return getCartesianChartOption(props.data, chartType, props.styleConfig, props.dataConfig, props.containerSize);
 }
 
 
@@ -211,13 +226,19 @@ const getCartesianChartOption = (
   data: ChartDataResponse,
   chartType: ChartType,
   styleConfig: ComponentStyleConfig,
-  dataConfig?: ComponentConfig
+  dataConfig?: ComponentConfig,
+  containerSize: number[] = []
 ) => {
   const { dimensions, series } = data;
   const isHorizontal = chartType.includes('horizontal');
   const isStacked = chartType.includes('stacked');
   const isLineOrArea = chartType.includes('line') || chartType.includes('area');
   const isArea = chartType.includes('area')
+
+  // aixs title tyle
+  const [containerWidth = 500, containerHeight = 500] = containerSize
+  const axisWidth = containerWidth - styleConfig.xAxisTitle.length * styleConfig.xAxisFontSize - 50;
+  const axisHeight = containerHeight - styleConfig.yAxisTitle.length * styleConfig.yAxisFontSize - 50;
 
   // Tooltip
   const tooltipFormatter = (params: any[]) => {
@@ -263,8 +284,11 @@ const getCartesianChartOption = (
       // ...axisLabelStyle,
     },
     name: styleConfig.xAxisTitle || '',
-    nameLocation: styleConfig.xAxisAlign === 'right' ? 'end' : styleConfig.xAxisAlign === 'left' ? 'start' : 'center',
-    nameTextStyle: xAxisTitleStyle,
+    nameLocation: 'center',
+    nameTextStyle: {
+      ...xAxisTitleStyle,
+      padding: [0, 0, 0, styleConfig.xAxisAlign === 'right' ? axisWidth : styleConfig.xAxisAlign === 'left' ? -axisWidth : 0]
+    },
     inverse: isHorizontal
   };
 
@@ -278,9 +302,12 @@ const getCartesianChartOption = (
     },
     splitLine: { show: styleConfig.showGrid ?? true },
     name: styleConfig.yAxisTitle || '',
-    nameLocation: styleConfig.yAxisAlign === 'right' ? 'end' : styleConfig.yAxisAlign === 'left' ? 'start' : 'center',
+    nameLocation: 'center',
     nameRotate: isHorizontal ? 0 : 90,
-    nameTextStyle: yAxisTitleStyle,
+    nameTextStyle: {
+      ...yAxisTitleStyle,
+      padding: [0, 0, 0, styleConfig.yAxisAlign === 'right' ? axisHeight : styleConfig.yAxisAlign === 'left' ? -axisHeight : 0]
+    },
     boundaryGap: [0, '20%'],
   };
 
