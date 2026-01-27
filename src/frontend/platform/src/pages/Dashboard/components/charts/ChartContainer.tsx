@@ -101,6 +101,7 @@ export function ChartContainer({ isPreviewMode, isDark, component }: ChartContai
       title={component.title}
       data={data as MetricDataResponse}
       dataConfig={component.data_config}
+      isPreviewMode={isPreviewMode}
       styleConfig={component.style_config} />;
   }
 

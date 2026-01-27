@@ -156,8 +156,9 @@ export enum ChartType {
   Area = 'area',
   /** 堆叠面积图 */
   StackedArea = 'stacked-area',
-  /** 堆叠折线图 */
-  StackedLine = 'stacked-line',
+  /** 组合折线图 */
+  StackedLine = 'multiple-line',
+  StackedLineOld = 'stacked-line',
   /** 饼状图 */
   Pie = 'pie',
   /** 环状图 */

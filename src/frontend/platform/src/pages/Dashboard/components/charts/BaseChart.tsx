@@ -237,8 +237,8 @@ const getCartesianChartOption = (
 
   // aixs title tyle
   const [containerWidth = 500, containerHeight = 500] = containerSize
-  const axisWidth = containerWidth - styleConfig.xAxisTitle.length * styleConfig.xAxisFontSize - 50;
-  const axisHeight = containerHeight - styleConfig.yAxisTitle.length * styleConfig.yAxisFontSize - 50;
+  const axisWidth = containerWidth - styleConfig.xAxisTitle.length * styleConfig.xAxisFontSize - 60;
+  const axisHeight = containerHeight - styleConfig.yAxisTitle.length * styleConfig.yAxisFontSize - 60;
 
   // Tooltip
   const tooltipFormatter = (params: any[]) => {
@@ -255,12 +255,14 @@ const getCartesianChartOption = (
   const xAxisTitleStyle = getTextStyle({
     fontSize: styleConfig.xAxisFontSize,
     color: styleConfig.xAxisColor,
-    bold: styleConfig.xAxisBold
+    bold: styleConfig.xAxisBold,
+    italic: styleConfig.xAxisItalic
   });
   const yAxisTitleStyle = getTextStyle({
     fontSize: styleConfig.yAxisFontSize,
     color: styleConfig.yAxisColor,
-    bold: styleConfig.yAxisBold
+    bold: styleConfig.yAxisBold,
+    italic: styleConfig.yAxisItalic
   });
 
   // (Category Axis)

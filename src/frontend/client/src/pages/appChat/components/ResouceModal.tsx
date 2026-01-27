@@ -19,15 +19,16 @@ const Anwser = ({ id, msg, onInit, onAdd, fullScreen = false }) => {
         const loadData = () => {
             splitWordApi(msg, id).then((res) => {
                 const data = res.data
+                if (res.status_code === 14001) {
+                    // 自动重试
+                    return setTimeout(() => {
+                        loadData()
+                    }, 1800);
+                }
                 // 匹配
                 const reg = new RegExp(`(${data.join('|')})`, 'g')
                 setHtml(msg.replace(reg, '<span>$1</span>'))
                 onInit(data)
-            }).catch(e => {
-                // 自动重试
-                e === 14001 && setTimeout(() => {
-                    loadData()
-                }, 1800);
             })
         }
         msg && loadData()
@@ -236,7 +237,9 @@ export const ResouceContent = ({ data, setOpen, fullScreen = false }) => {
     const [loading, setLoading] = useState(true)
     const handleAnwserInit = (words) => {
         setKeywords(words)
-        setLoading(false)
+        if (words.length) {
+            setLoading(false)
+        }
     }
 
 
