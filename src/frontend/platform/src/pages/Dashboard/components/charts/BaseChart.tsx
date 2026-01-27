@@ -279,7 +279,8 @@ const getCartesianChartOption = (
     name: styleConfig.yAxisTitle || '',
     nameLocation: styleConfig.yAxisAlign === 'right' ? 'end' : styleConfig.yAxisAlign === 'left' ? 'start' : 'center',
     nameRotate: isHorizontal ? 0 : 90,
-    nameTextStyle: yAxisTitleStyle
+    nameTextStyle: yAxisTitleStyle,
+    boundaryGap: [0, '20%']
   };
 
   const lastValueIndexes = dimensions.map((_, dimIdx) => {
@@ -333,7 +334,7 @@ const getCartesianChartOption = (
       };
     }
     if (isStacked) item.stack = 'total';
-    if (isArea) item.areaStyle = {};
+    if (isArea) item.areaStyle = {opacity: 0.1};
     // if (isLineOrArea) item.smooth = true;
 
     return item;
