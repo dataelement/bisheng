@@ -632,7 +632,7 @@ export function useChartState(initialComponent: DashboardComponent) {
       } else {
         numberFormat = metric.numberFormat || {
           type: 'number' as const,
-          decimalPlaces: 2,
+          decimalPlaces: 0,
           unit: undefined,
           suffix: undefined,
           thousandSeparator: true
