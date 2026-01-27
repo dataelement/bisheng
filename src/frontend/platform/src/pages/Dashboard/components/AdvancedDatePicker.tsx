@@ -252,15 +252,16 @@ export function AdvancedDatePicker({
         <Button
           variant={"outline"}
           className={cn(
-            "w-92 flex-1 justify-start text-left font-normal dark:text-gray-200",
-            !value && "text-muted-foreground"
+            "w-92 flex-1 justify-start text-left font-normal",
+            value ? "text-prompt-description" : "text-muted-foreground",
+            isDark && "dark:text-gray-200"
           )}
         >
           <CalendarIcon className="mr-2 h-4 w-4" />
           {getDisplayValue() || placeholder}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className={cn("w-auto p-0", isDark && 'dark bg-gray-950 border-gray-600')} align="start">
+      <PopoverContent className={cn("w-auto p-0", isDark ? 'dark bg-gray-950 border-gray-600' : "theme-force-light")} align="start">
         <div className="no-drag flex flex-col">
 
           {/* Calendar Area */}

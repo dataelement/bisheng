@@ -2,10 +2,10 @@
 
 import { ChartType, ComponentConfig, ComponentStyleConfig } from '@/pages/Dashboard/types/dataConfig'
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { colorSchemes, convertToEChartsTheme } from '../../colorSchemes'
 import { ChartDataResponse } from '../../types/chartData'
 import { unitConversion } from './MetricCard'
-import { useTranslation } from 'react-i18next'
 
 // Dynamic loading of ECharts.
 const loadECharts = async () => {
@@ -264,7 +264,8 @@ const getCartesianChartOption = (
     },
     name: styleConfig.xAxisTitle || '',
     nameLocation: styleConfig.xAxisAlign === 'right' ? 'end' : styleConfig.xAxisAlign === 'left' ? 'start' : 'center',
-    nameTextStyle: xAxisTitleStyle
+    nameTextStyle: xAxisTitleStyle,
+    inverse: isHorizontal
   };
 
   // (Value Axis)
@@ -280,7 +281,7 @@ const getCartesianChartOption = (
     nameLocation: styleConfig.yAxisAlign === 'right' ? 'end' : styleConfig.yAxisAlign === 'left' ? 'start' : 'center',
     nameRotate: isHorizontal ? 0 : 90,
     nameTextStyle: yAxisTitleStyle,
-    boundaryGap: [0, '20%']
+    boundaryGap: [0, '20%'],
   };
 
   const lastValueIndexes = dimensions.map((_, dimIdx) => {
@@ -331,10 +332,14 @@ const getCartesianChartOption = (
         position: 'top',
         fontSize: 10,
         color: "#666",
+        formatter: (params: any) => unitConversion(params.value, dataConfig).join('')
       };
+      item.labelLayout = {
+        hideOverlap: true
+      }
     }
     if (isStacked) item.stack = 'total';
-    if (isArea) item.areaStyle = {opacity: 0.1};
+    if (isArea) item.areaStyle = { opacity: 0.1 };
     // if (isLineOrArea) item.smooth = true;
 
     return item;
