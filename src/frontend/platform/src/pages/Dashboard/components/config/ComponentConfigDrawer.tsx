@@ -29,8 +29,8 @@ const FULL_DEFAULT_STYLE_CONFIG: ComponentStyleConfig = {
   bgColor: "",
 
   title: "",
-  titleFontSize: 14,
-  titleBold: false,
+  titleFontSize: 16,
+  titleBold: true,
   titleItalic: false,
   titleUnderline: false,
   titleStrikethrough: false,
@@ -44,7 +44,7 @@ const FULL_DEFAULT_STYLE_CONFIG: ComponentStyleConfig = {
   xAxisUnderline: false,
   xAxisStrikethrough: false,
   xAxisAlign: "center",
-  xAxisColor: "#000000",
+  xAxisColor: "#666666",
 
   yAxisTitle: "",
   yAxisFontSize: 14,
@@ -53,16 +53,16 @@ const FULL_DEFAULT_STYLE_CONFIG: ComponentStyleConfig = {
   yAxisUnderline: false,
   yAxisStrikethrough: false,
   yAxisAlign: "center",
-  yAxisColor: "#000000",
+  yAxisColor: "#666666",
 
   legendPosition: "bottom",
-  legendFontSize: 14,
+  legendFontSize: 12,
   legendBold: false,
   legendItalic: false,
   legendUnderline: false,
   legendStrikethrough: false,
   legendAlign: "left",
-  legendColor: "#000000",
+  legendColor: "#999999",
 
   showSubtitle: false,
   subtitle: "",
@@ -256,6 +256,7 @@ export function ComponentConfigDrawer() {
           originalName: field.displayName || field.fieldName,
           fieldType: field.role,
           timeGranularity: field.timeGranularity,
+          isDivide: field.isDivide,
           sort: null
         }
         chartState.setCategoryDimensions(prev => [...prev, newDimension])
@@ -360,7 +361,8 @@ export function ComponentConfigDrawer() {
         fieldType: field.role,
         sort: null,
         aggregation: 'sum' as const,
-        isVirtual: currentIsVirtual
+        isVirtual: currentIsVirtual,
+        isDivide: field.isDivide,
       }
 
       chartState.setValueDimensions(prev => [...prev, newMetric])

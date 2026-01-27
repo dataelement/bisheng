@@ -91,6 +91,7 @@ export function DatasetSelector({ selectedDatasetCode, isMetricCard, onDatasetCh
             fieldId: data.fieldId,
             fieldCode: data.fieldCode,
             fieldType,
+            isDivide: data.isDivide,
             timeGranularity: data.timeGranularity,
         }
 
@@ -121,6 +122,7 @@ export function DatasetSelector({ selectedDatasetCode, isMetricCard, onDatasetCh
             displayName: m.name,
             fieldType: m.field_type,
             isVirtual: m.is_virtual,
+            isDivide: m.formula,
             role: "metric" as const
         }))
 
@@ -278,7 +280,8 @@ export function DatasetSelector({ selectedDatasetCode, isMetricCard, onDatasetCh
                                         displayName: t(metric.field),
                                         fieldType: "number",
                                         role: "metric" as const,
-                                        isVirtual: metric.is_virtual
+                                        isVirtual: metric.is_virtual,
+                                        isDivide: metric.formula,
                                     }
                                     return (
                                         <div

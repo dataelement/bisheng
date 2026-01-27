@@ -131,6 +131,7 @@ export function useChartState(initialComponent: DashboardComponent) {
               fieldType: 'metric',
               isVirtual: metric.isVirtual || false,
               aggregation: metric.aggregation || 'sum',
+              isDivide: metric.formula,
               numberFormat: metric.numberFormat || {
                 type: 'number',
                 decimalPlaces: 2,
@@ -499,7 +500,8 @@ export function useChartState(initialComponent: DashboardComponent) {
         sort: null,
         sortPriority: 0,
         timeGranularity: data.timeGranularity,
-        fieldType
+        fieldType,
+        isDivide: data.isDivide,
       }
 
       if (section === 'category') {
@@ -601,23 +603,57 @@ export function useChartState(initialComponent: DashboardComponent) {
       timeGranularity: stackDimensions[0].timeGranularity || null
     } : undefined
 
-    const metrics = valueDimensions.map(metric => ({
-      fieldId: metric.fieldId,
-      fieldName: metric.originalName,
-      fieldCode: metric.name,
-      displayName: metric.displayName,
-      sort: metric.sort,
-      isVirtual: metric.isVirtual,
-      aggregation: metric.aggregation || 'sum',
-      numberFormat: metric.numberFormat || {
-        type: 'number' as const,
-        decimalPlaces: 2,
-        unit: undefined,
-        suffix: undefined,
-        thousandSeparator: true
+    const metrics = valueDimensions.map(metric => {
+      let numberFormat;
+      if (metric.isDivide === "divide") {
+        console.log('检测到除法指标:', metric.displayName);
+        if (metric.numberFormat) {
+          if (metric.numberFormat.type === 'percent') {
+            numberFormat = metric.numberFormat;
+            console.log('已使用百分比格式:', numberFormat);
+          } else {
+            numberFormat = {
+              type: 'percent' as const,
+              decimalPlaces: metric.numberFormat.decimalPlaces || 2,
+              unit: undefined,
+              suffix: metric.numberFormat.suffix || '',
+              thousandSeparator: false
+            };
+          }
+        } else {
+          numberFormat = {
+            type: 'percent' as const,
+            decimalPlaces: 2,
+            unit: undefined,
+            suffix: '',
+            thousandSeparator: false
+          };
+        }
+      } else {
+        numberFormat = metric.numberFormat || {
+          type: 'number' as const,
+          decimalPlaces: 2,
+          unit: undefined,
+          suffix: undefined,
+          thousandSeparator: true
+        };
       }
-    }))
 
+      console.log('最终 numberFormat:', numberFormat);
+
+      return {
+        fieldId: metric.fieldId,
+        fieldName: metric.originalName,
+        fieldCode: metric.name,
+        displayName: metric.displayName,
+        sort: metric.sort,
+        isVirtual: metric.isVirtual,
+        aggregation: metric.aggregation || 'sum',
+        isDivide: metric.isDivide,
+        formula: metric.isDivide === "divide" ? "divide" : undefined,
+        numberFormat: numberFormat
+      }
+    })
     // 4. 构建字段顺序 - 按照 sortPriorityOrder 排序
     const allFields = [
       ...categoryDimensions.map(d => ({

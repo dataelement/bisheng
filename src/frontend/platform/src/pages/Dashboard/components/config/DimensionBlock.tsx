@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Button } from "@/components/bs-ui/button"
 import { Settings, X, Check } from "lucide-react"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog"
@@ -36,6 +36,7 @@ interface DimensionItem {
   isVirtual?: boolean // 补充定义
   fieldId?: string
   timeGranularity?: string
+  isDivide?: string
 }
 
 interface DimensionBlockProps {
@@ -91,7 +92,42 @@ export function DimensionBlock({
   const [formatDialogOpen, setFormatDialogOpen] = useState(false)
   const [localFormat, setLocalFormat] = useState<MetricFormat | null>(null)
   const [hoveredIcon, setHoveredIcon] = useState<string | null>(null)
+  // 监听editingMetric变化，设置默认格式
+  useEffect(() => {
+    if (editingMetric) {
+      console.log('Editing metric:', editingMetric);
 
+      const currentFormat = editingMetric.numberFormat;
+
+      if (currentFormat) {
+        console.log('使用现有的 numberFormat:', currentFormat);
+        setLocalFormat({
+          type: currentFormat.type,
+          decimalPlaces: currentFormat.decimalPlaces || 2,
+          unit: currentFormat.unit || '',
+          suffix: currentFormat.suffix || '',
+          thousandSeparator: currentFormat.thousandSeparator || false
+        });
+      } else {
+        const defaultFormat: MetricFormat = editingMetric.isDivide === "divide"
+          ? {
+            type: 'percent',
+            decimalPlaces: 2,
+            thousandSeparator: false,
+            unit: undefined,
+            suffix: ''
+          }
+          : {
+            type: 'number',
+            decimalPlaces: 2,
+            thousandSeparator: false,
+            unit: '',
+            suffix: ''
+          };
+        setLocalFormat(defaultFormat);
+      }
+    }
+  }, [editingMetric]);
   const getFieldTypeStyle = (dimension: DimensionItem) => {
     const isSelected = selectedDimensionId === dimension.id
     const bgColor = isSelected
@@ -301,15 +337,6 @@ export function DimensionBlock({
                           <DropdownMenuItem
                             onClick={() => {
                               setEditingMetric(dimension)
-                              setLocalFormat(
-                                dimension.numberFormat || {
-                                  type: 'number',
-                                  decimalPlaces: 2,
-                                  unit: '',
-                                  suffix: '',
-                                  thousandSeparator: false
-                                }
-                              )
                               setFormatDialogOpen(true)
                             }}
                           >
