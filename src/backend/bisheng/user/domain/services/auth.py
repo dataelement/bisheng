@@ -220,9 +220,9 @@ class LoginUser(BaseModel):
                 return True
         return False
 
-    def get_user_groups(self, user_id: int) -> List[Dict]:
+    async def get_user_groups(self, user_id: int) -> List[Dict]:
         """ Query a list of roles for a user """
-        user_groups = UserGroupDao.get_user_group(user_id)
+        user_groups = await UserGroupDao.aget_user_group(user_id)
         user_group_ids: List[int] = [one_group.group_id for one_group in user_groups]
         res = []
         for i in range(len(user_group_ids) - 1, -1, -1):
@@ -231,7 +231,7 @@ class LoginUser(BaseModel):
                 del user_group_ids[i]
         # Query database for role information without caching
         if user_group_ids:
-            group_list = GroupDao.get_group_by_ids(user_group_ids)
+            group_list = await GroupDao.aget_group_by_ids(user_group_ids)
             for group_info in group_list:
                 self.group_cache[group_info.id] = {'id': group_info.id, 'name': group_info.group_name}
                 res.append(self.group_cache.get(group_info.id))

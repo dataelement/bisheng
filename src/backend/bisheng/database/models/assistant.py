@@ -3,7 +3,7 @@ from enum import Enum
 from typing import List, Optional, Tuple
 
 from sqlalchemy import JSON, Column, DateTime, Text, and_, func, or_, text
-from sqlmodel import Field, select
+from sqlmodel import Field, select, col
 
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.models.base import SQLModelSerializable
@@ -20,14 +20,16 @@ class AssistantStatus(Enum):
 
 
 class AssistantBase(SQLModelSerializable):
-    id: Optional[str] = Field(default_factory=generate_uuid, nullable=False, primary_key=True, description='Uniqueness quantificationID')
+    id: Optional[str] = Field(default_factory=generate_uuid, nullable=False, primary_key=True,
+                              description='Uniqueness quantificationID')
     name: str = Field(default='', description='The assistant name.')
     logo: str = Field(default='', description='logoimage URL')
     desc: str = Field(default='', sa_column=Column(Text), description='Assistant description')
     system_prompt: str = Field(default='', sa_column=Column(Text), description='System Prompt')
     prompt: str = Field(default='', sa_column=Column(Text), description='User Visible Descriptor')
     guide_word: Optional[str] = Field(default='', sa_column=Column(Text), description='Ice Breaker ')
-    guide_question: Optional[List] = Field(default_factory=list, sa_column=Column(JSON), description='Facilitation Questions')
+    guide_question: Optional[List] = Field(default_factory=list, sa_column=Column(JSON),
+                                           description='Facilitation Questions')
     model_name: str = Field(default='', description='Corresponds to the only model in the model managementID')
     temperature: float = Field(default=0.5, description='Model Temperature')
     max_token: int = Field(default=32000, description='MaxtokenQuantity')
@@ -101,9 +103,20 @@ class AssistantDao(AssistantBase):
 
     @classmethod
     def get_assistants_by_ids(cls, assistant_ids: List[str]) -> List[Assistant]:
+        if not assistant_ids:
+            return []
         with get_sync_db_session() as session:
             statement = select(Assistant).where(Assistant.id.in_(assistant_ids))
             return session.exec(statement).all()
+
+    @classmethod
+    async def aget_assistants_by_ids(cls, assistant_ids: List[str]) -> List[Assistant]:
+        if not assistant_ids:
+            return []
+        statement = select(Assistant).where(col(Assistant.id).in_(assistant_ids))
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return result.all()
 
     @classmethod
     def get_assistant_by_name_user_id(cls, name: str, user_id: int) -> Assistant:

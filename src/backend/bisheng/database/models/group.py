@@ -5,7 +5,7 @@ from sqlalchemy import Column, DateTime, delete, text, update
 from sqlmodel import Field, select
 
 from bisheng.common.models.base import SQLModelSerializable
-from bisheng.core.database import get_sync_db_session
+from bisheng.core.database import get_sync_db_session, get_async_db_session
 
 # Default User GroupID
 DefaultGroup = 2
@@ -71,6 +71,15 @@ class GroupDao(GroupBase):
         with get_sync_db_session() as session:
             statement = select(Group).where(Group.id.in_(ids)).order_by(Group.update_time.desc())
             return session.exec(statement).all()
+
+    @classmethod
+    async def aget_group_by_ids(cls, ids: List[int]) -> list[Group]:
+        if not ids:
+            raise ValueError('ids is empty')
+        async with get_async_db_session() as session:
+            statement = select(Group).where(Group.id.in_(ids)).order_by(Group.update_time.desc())
+            result = await session.exec(statement)
+            return result.all()
 
     @classmethod
     def delete_group(cls, group_id: int):

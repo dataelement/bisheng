@@ -1,3 +1,4 @@
+import asyncio
 import json
 from typing import List, Optional, Union
 from uuid import UUID, uuid4
@@ -224,12 +225,12 @@ def copy(conversationId: str = Body(..., description='Sessionsid', embed=True), 
 
 
 @router.delete('/chat/{chat_id}', status_code=200)
-def del_chat_id(*,
-                request: Request,
-                chat_id: str,
-                login_user: UserPayload = Depends(UserPayload.get_login_user)):
+async def del_chat_id(*,
+                      request: Request,
+                      chat_id: str,
+                      login_user: UserPayload = Depends(UserPayload.get_login_user)):
     # Get a message
-    session_chat = MessageSessionDao.get_one(chat_id)
+    session_chat = await MessageSessionDao.async_get_one(chat_id)
 
     if not session_chat or session_chat.is_delete:
         return resp_200()
@@ -237,29 +238,31 @@ def del_chat_id(*,
         # Processing Temporary Data
         col_name = f'tmp_{session_chat.flow_id}_{chat_id}'
         logger.info('tmp_delete_milvus col={}', col_name)
-        delete_vector(col_name, None)
-        delete_es(col_name)
+        await asyncio.to_thread(delete_vector, collection_name=col_name, partition_key=None)
+        await asyncio.to_thread(delete_es, col_name)
     if session_chat.flow_type == FlowType.ASSISTANT.value:
-        assistant_info = AssistantDao.get_one_assistant(session_chat.flow_id)
+        assistant_info = await AssistantDao.aget_one_assistant(session_chat.flow_id)
         if assistant_info:
-            AuditLogService.delete_chat_assistant(login_user, get_request_ip(request), assistant_info)
+            await AuditLogService.delete_chat_assistant(login_user, get_request_ip(request), assistant_info)
+    elif session_chat.flow_type == FlowType.WORKSTATION.value:
+        await AuditLogService.delete_chat_message(login_user, get_request_ip(request), session_chat)
     else:
         # Determine whether it is an assistant or a skill, Write Audit Log
-        flow_info = FlowDao.get_flow_by_id(session_chat.flow_id)
+        flow_info = await FlowDao.aget_flow_by_id(session_chat.flow_id)
         if flow_info and flow_info.flow_type == FlowType.FLOW.value:
-            AuditLogService.delete_chat_flow(login_user, get_request_ip(request), flow_info)
+            await AuditLogService.delete_chat_flow(login_user, get_request_ip(request), flow_info)
         elif flow_info:
-            AuditLogService.delete_chat_workflow(login_user, get_request_ip(request), flow_info)
+            await AuditLogService.delete_chat_workflow(login_user, get_request_ip(request), flow_info)
 
     # Set the delete state of the session
-    MessageSessionDao.delete_session(chat_id)
+    await MessageSessionDao.delete_session(chat_id)
 
     # RecordTelemetryJournal
-    telemetry_service.log_event_sync(user_id=login_user.user_id,
-                                     event_type=BaseTelemetryTypeEnum.DELETE_MESSAGE_SESSION,
-                                     trace_id=trace_id_var.get(),
-                                     event_data=DeleteMessageSessionEventData(session_id=chat_id)
-                                     )
+    await telemetry_service.log_event(user_id=login_user.user_id,
+                                      event_type=BaseTelemetryTypeEnum.DELETE_MESSAGE_SESSION,
+                                      trace_id=trace_id_var.get(),
+                                      event_data=DeleteMessageSessionEventData(session_id=chat_id)
+                                      )
 
     return resp_200()
 

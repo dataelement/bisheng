@@ -7,6 +7,7 @@ from typing import Optional, Union, List, Type, Tuple
 from urllib.parse import unquote
 from uuid import uuid4
 
+import aiofiles
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, Request, UploadFile
 from fastapi.responses import StreamingResponse
 from langchain_core.documents import Document
@@ -15,6 +16,7 @@ from loguru import logger
 from sse_starlette import EventSourceResponse
 
 from bisheng.api.services import knowledge_imp
+from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.workflow import WorkFlowService
 from bisheng.api.services.workstation import (WorkstationConversation,
@@ -46,6 +48,7 @@ from bisheng.share_link.api.dependencies import header_share_token_parser
 from bisheng.share_link.domain.models.share_link import ShareLink
 from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
 from bisheng.tool.domain.services.executor import ToolExecutor
+from bisheng.utils import get_request_ip
 
 router = APIRouter(prefix='/workstation', tags=['WorkStation'])
 
@@ -268,7 +271,8 @@ async def get_chat_history(conversationId: str,
         return resp_200([])
 
 
-async def genTitle(human: str, assistant: str, llm: BishengLLM, conversationId: str):
+async def genTitle(human: str, assistant: str, llm: BishengLLM, conversationId: str, login_user: UserPayload,
+                   request: Request):
     """
     Generate Title
     """
@@ -282,7 +286,9 @@ async def genTitle(human: str, assistant: str, llm: BishengLLM, conversationId: 
     session = await MessageSessionDao.async_get_one(conversationId)
     if session:
         session.flow_name = title[:200]
-        await MessageSessionDao.async_insert_one(session)
+        session = await MessageSessionDao.async_insert_one(session)
+        # Audit log
+        await AuditLogService.create_chat_message(user=login_user, ip_address=get_request_ip(request), message=session)
 
 
 async def webSearch(query: str, user_id: int):
@@ -423,6 +429,7 @@ async def _log_telemetry_events(user_id: str, conversation_id: str, start_time: 
 
 @router.post('/chat/completions')
 async def chat_completions(
+        request: Request,
         data: APIChatCompletion,
         login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
@@ -498,39 +505,57 @@ async def chat_completions(
                                                           question=data.text).prompt
                 logger.debug(f'Knowledge prompt: {prompt}')
 
+
             elif data.files:
+
                 logger.info(f'Using file content for prompt.')
 
-                download_files: List[Tuple[str, str]] = [await async_file_download(file.get('filepath')) for file in
-                                                         data.files]
+                download_tasks = [async_file_download(file.get('filepath')) for file in data.files]
 
-                visual_files = []
+                downloaded_files = await asyncio.gather(*download_tasks)
 
-                # 常规解析的文件列表
-                conventional_files = []
+                visual_tasks = []
 
-                if model_info.visual:
-                    for (filepath, filename) in download_files:
-                        file_ext = filename.split('.')[-1].lower()
-                        if file_ext in visual_model_file_types:
-                            visual_files.append((filepath, filename))
-                        else:
-                            conventional_files.append((filepath, filename))
-                else:
-                    conventional_files = download_files
+                doc_tasks = []
 
-                if visual_files:
-                    for (filepath, filename) in visual_files:
-                        with open(filepath, 'rb') as f:
-                            image_data = f.read()
-                            image_base64 = f"data:image/{filename.split('.')[-1].lower()};base64," + base64.b64encode(
-                                image_data).decode('utf-8')
-                            image_bases64.append(image_base64)
+                # image to base64
+                async def _read_image_sync(filepath: str, filename: str) -> str:
+                    async with aiofiles.open(filepath, mode='rb') as f:
+                        image_data = await f.read()
+                        ext = filename.split('.')[-1].lower()
 
-                file_contents = [await getFileContent(filepath_local=filepath,
-                                                      file_name=filename,
-                                                      invoke_user_id=login_user.user_id)
-                                 for (filepath, filename) in conventional_files]
+                        mime_type = 'jpeg' if ext == 'jpg' else ext
+
+                        return f"data:image/{mime_type};base64," + base64.b64encode(image_data).decode('utf-8')
+
+                for filepath, filename in downloaded_files:
+
+                    file_ext = filename.split('.')[-1].lower()
+
+                    # Determine task type based on file extension and model capabilities
+                    if model_info.visual and file_ext in visual_model_file_types:
+                        # Image processing task
+                        visual_tasks.append(_read_image_sync(filepath=filepath, filename=filename))
+
+                    else:
+                        # Document processing task
+                        doc_tasks.append(
+                            getFileContent(filepath_local=filepath,
+                                           file_name=filename,
+                                           invoke_user_id=login_user.user_id)
+                        )
+
+                # Execute all tasks concurrently
+                results = await asyncio.gather(
+                    asyncio.gather(*visual_tasks),
+                    asyncio.gather(*doc_tasks)
+                )
+
+                # results[0] is image base64 list
+                # results[1] is document content list
+                image_bases64.extend(results[0])
+                file_contents = results[1]
+
                 file_context = '\n'.join(file_contents)[:max_token]
                 prompt = wsConfig.fileUpload.prompt.format(file_content=file_context, question=data.text)
 
@@ -597,7 +622,7 @@ async def chat_completions(
 
         if is_new_conv:
             asyncio.create_task(
-                genTitle(data.text, final_content_for_db, bishengllm, conversationId))
+                genTitle(data.text, final_content_for_db, bishengllm, conversationId, login_user, request))
 
     try:
         return StreamingResponse(event_stream(), media_type='text/event-stream')

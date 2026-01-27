@@ -350,11 +350,12 @@ class ChatMessageDao(MessageBase):
             session.commit()
 
     @classmethod
-    def get_all_message_by_chat_ids(cls, chat_ids: List[str]) -> List[ChatMessage]:
+    async def get_all_message_by_chat_ids(cls, chat_ids: List[str]) -> List[ChatMessage]:
         statement = select(ChatMessage).where(ChatMessage.chat_id.in_(chat_ids)).order_by(
             ChatMessage.create_time.asc())
-        with get_sync_db_session() as session:
-            return session.exec(statement).all()
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return result.all()
 
     @classmethod
     async def afilter_message_by_chat_id(cls, chat_id: str, flow_id: str, message_id: int = None, page_size: int = 20) \
