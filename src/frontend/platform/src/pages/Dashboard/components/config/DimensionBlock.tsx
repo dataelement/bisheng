@@ -101,9 +101,10 @@ export function DimensionBlock({
 
       if (currentFormat) {
         console.log('使用现有的 numberFormat:', currentFormat);
+        const defaultDecimal = currentFormat.type === 'number' ? 0 : 2;
         setLocalFormat({
           type: currentFormat.type,
-          decimalPlaces: currentFormat.decimalPlaces || 2,
+          decimalPlaces: currentFormat.decimalPlaces ?? defaultDecimal,
           unit: currentFormat.unit || '',
           suffix: currentFormat.suffix || '',
           thousandSeparator: currentFormat.thousandSeparator || false
@@ -119,7 +120,7 @@ export function DimensionBlock({
           }
           : {
             type: 'number',
-            decimalPlaces: 2,
+            decimalPlaces: 0,
             thousandSeparator: false,
             unit: '',
             suffix: ''
@@ -425,11 +426,15 @@ export function DimensionBlock({
                       newUnit = localFormat.unit || '';
                     }
 
+                    // 切换类型时，数值一律 0，小数位其他类型一律 2，互不影响
+                    const newDecimalPlaces = newType === 'number' ? 0 : 2;
+
                     setLocalFormat({
                       ...localFormat,
                       type: newType,
                       unit: newUnit,
-                      thousandSeparator: newThousandSeparator
+                      thousandSeparator: newThousandSeparator,
+                      decimalPlaces: newDecimalPlaces
                     })
                   }}
                   className="flex gap-6"
@@ -482,7 +487,8 @@ export function DimensionBlock({
                   onBlur={(e) => {
                     const val = e.target.value;
                     if (val === '' || isNaN(Number(val))) {
-                      setLocalFormat({ ...localFormat, decimalPlaces: 2 })
+                      const defaultDecimal = localFormat.type === 'number' ? 0 : 2;
+                      setLocalFormat({ ...localFormat, decimalPlaces: defaultDecimal })
                     }
                   }}
                   className="w-full"
