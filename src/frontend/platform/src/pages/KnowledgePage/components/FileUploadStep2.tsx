@@ -57,7 +57,7 @@ const enum DisplayModeType {
 
 const FileUploadStep2 = forwardRef(({
     step, resultFiles, isSubmitting, onNext, onPrev, isAdjustMode, kId,
-    persistState, 
+    persistState,
     onPersistStateChange
 }: IProps, ref) => {
     const [previewLoading, setPreviewLoading] = useState(false);
@@ -72,12 +72,12 @@ const FileUploadStep2 = forwardRef(({
     const splitRule = resultFiles[0]?.split_rule;
     const isEtl4lm = resultFiles[0]?.isEtl4lm === 'etl4lm';
     const displayStep = isAdjustMode ? step + 1 : step;
-    const initialStrategies = useMemo(()=>{
-  return [
-        { id: '1', regex: '\\n\\n', position: 'after', rule: t('predefinedRules.singleNewlineRule.desc') },
-        { id: '2', regex: '\\n', position: 'after', rule: t('predefinedRules.doubleNewlineRule.desc') }
-    ]
-},[t]);
+    const initialStrategies = useMemo(() => {
+        return [
+            { id: '1', regex: '\\n\\n', position: 'after', rule: t('predefinedRules.singleNewlineRule.desc') },
+            { id: '2', regex: '\\n', position: 'after', rule: t('predefinedRules.doubleNewlineRule.desc') }
+        ]
+    }, [t]);
     const displayMode: DisplayModeType | null = useMemo(() => {
         if (!resultFiles || resultFiles.length === 0) return null;
         const hasTableFiles = resultFiles.some(file => file.fileType === 'table');
@@ -166,7 +166,7 @@ const FileUploadStep2 = forwardRef(({
 
         const nextStep = step + 1;
         if (step === 2 || displayStep === 2) {
-            const config = { applyEachCell, cellGeneralConfig, rules,resultFiles };
+            const config = { applyEachCell, cellGeneralConfig, rules, resultFiles };
             setApplyRule(config);
             setSelectedChunkIndex(-1);
             return onNext(nextStep, config);
@@ -232,8 +232,8 @@ const FileUploadStep2 = forwardRef(({
                             <div className="">
                                 {displayMode === DisplayModeType.Mixed ? (
                                     <TabsList className="">
-                                        <TabsTrigger id="knowledge_file_tab" value="file" className="roundedrounded-xl">{t('defStrategy')}</TabsTrigger>
-                                        <TabsTrigger id="knowledge_table_tab" value="table">{t('cusStrategy')}</TabsTrigger>
+                                        <TabsTrigger id="knowledge_file_tab" value="file" className="roundedrounded-xl">{t('defaultStrategy')}</TabsTrigger>
+                                        <TabsTrigger id="knowledge_table_tab" value="table">{t('customStrategy')}</TabsTrigger>
                                     </TabsList>
                                 ) : <div className="h-1"></div>}
                             </div>
