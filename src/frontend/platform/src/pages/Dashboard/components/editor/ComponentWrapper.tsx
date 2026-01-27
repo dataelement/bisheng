@@ -17,6 +17,7 @@ interface ComponentWrapperProps {
     component: DashboardComponent
     isPreviewMode: boolean
     dashboards: Dashboard[]
+    /** When it is true, the dark selector can take effect, resolving the conflict between the system and canvas themes  */
     isDark: boolean
     onDuplicate: (component: DashboardComponent) => void
     onCopyTo: (component: DashboardComponent, targetDashboardId: string) => void
@@ -83,7 +84,7 @@ export function ComponentWrapper({
 
         if (trimmedTitle !== component.title) {
             setTitle(trimmedTitle)
-            onRename(component.id, trimmedTitle)
+            // onRename(component.id, trimmedTitle)
             updateEditingComponent({ title: trimmedTitle })
         }
     }
@@ -130,9 +131,10 @@ export function ComponentWrapper({
 
     return (
         <div
+            id={component.id}
             className={cn(`relative w-full h-full rounded-md overflow-visible transition-all border ${!isPreviewMode && isSelected ? 'component-select border border-primary' : ''
                 }`,
-                !componentData.style_config.bgColor && 'dark:bg-gray-900',
+                !componentData.style_config.bgColor && isDark && 'dark:bg-gray-900',
                 !componentData.style_config.bgColor && 'bg-background',
                 !isPreviewMode && 'hover:border-primary hover:shadow-md'
             )}
@@ -258,8 +260,8 @@ export function ComponentWrapper({
                             />
                         ) : (
                             <h3
-                                className={cn("text-sm font-medium truncate",
-                                    "dark:text-gray-400"
+                                className={cn("text-sm font-medium truncate text-foreground",
+                                    isDark && "dark:text-gray-400"
                                 )}
                                 style={{ textAlign: componentData.style_config?.titleAlign }}
                                 onDoubleClick={() => setIsEditing(true)}>

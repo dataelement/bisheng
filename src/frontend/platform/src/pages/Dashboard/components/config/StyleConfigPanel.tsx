@@ -88,7 +88,7 @@ function TextFormat({
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          {[10, 12, 14, 16, 18, 20, 24].map((v) => (
+          {[10, 12, 14, 16, 18, 20, 24, 28].map((v) => (
             <SelectItem key={v} value={String(v)} className="text-xs">
               {v}
             </SelectItem>

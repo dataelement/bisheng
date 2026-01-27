@@ -2,10 +2,10 @@
 
 import { ChartType, ComponentConfig, ComponentStyleConfig } from '@/pages/Dashboard/types/dataConfig'
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { colorSchemes, convertToEChartsTheme } from '../../colorSchemes'
 import { ChartDataResponse } from '../../types/chartData'
 import { unitConversion } from './MetricCard'
-import { useTranslation } from 'react-i18next'
 
 // Dynamic loading of ECharts.
 const loadECharts = async () => {
@@ -60,7 +60,24 @@ export function BaseChart({ isDark, data, chartType, dataConfig, styleConfig }: 
       })
   }, [])
 
+  const renderChart = () => {
+    if (!chartRef.current || !domRef.current) return;
+
+    const containerSize = [domRef.current.clientWidth || 0, domRef.current.clientHeight || 0];
+
+    const option = generateChartOption({
+      data,
+      chartType,
+      dataConfig,
+      styleConfig,
+      containerSize
+    });
+
+    chartRef.current.setOption(option);
+    chartRef.current.resize();
+  }
   // Initialize and update the chart.
+  const [screenFull, setScreenFull] = useState(false)
   useEffect(() => {
     if (!echartsLibRef.current || !domRef.current || isLoading) return
 
@@ -82,8 +99,8 @@ export function BaseChart({ isDark, data, chartType, dataConfig, styleConfig }: 
       echartsLibRef.current.registerTheme(themeName, themeConfig);
       // init echarts
       chartRef.current = echartsLibRef.current.init(domRef.current, themeName)
-      const option = generateChartOption({ data, chartType, dataConfig, styleConfig })
-      chartRef.current.setOption(option, true)
+
+      renderChart();
     } catch (err) {
       console.error('Failed to initialize chart:', err)
     }
@@ -94,23 +111,21 @@ export function BaseChart({ isDark, data, chartType, dataConfig, styleConfig }: 
         chartRef.current = null
       }
     }
-  }, [echartsLibRef.current, data, chartType, dataConfig, styleConfig, isLoading, isDark])
+  }, [screenFull, echartsLibRef.current, data, chartType, dataConfig, styleConfig, isLoading, isDark])
 
   // resize
   useEffect(() => {
-    if (!chartRef.current) return
-
-    const resizeObserver = new ResizeObserver(() => {
-      chartRef.current?.resize()
-    })
-
-    if (domRef.current) {
-      resizeObserver.observe(domRef.current)
-    }
+    if (!chartRef.current || !domRef.current) return;
 
     const handleResize = () => {
-      chartRef.current?.resize()
-    }
+      renderChart();
+    };
+
+    const resizeObserver = new ResizeObserver(() => {
+      handleResize()
+    })
+
+    resizeObserver.observe(domRef.current)
     window.addEventListener('resize', handleResize)
 
     return () => {
@@ -118,6 +133,21 @@ export function BaseChart({ isDark, data, chartType, dataConfig, styleConfig }: 
       window.removeEventListener('resize', handleResize)
     }
   }, [chartRef.current])
+
+  // screen full
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setScreenFull(!screenFull)
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+    };
+  }, []);
 
   if (isLoading) {
     return (
@@ -139,6 +169,7 @@ export function generateChartOption(props: {
   chartType: ChartType;
   dataConfig?: ComponentConfig;
   styleConfig: ComponentStyleConfig;
+  containerSize?: number[];
 }): any {
   const { chartType } = props;
 
@@ -147,7 +178,7 @@ export function generateChartOption(props: {
     return getPieChartOption(props.data, chartType, props.styleConfig);
   }
 
-  return getCartesianChartOption(props.data, chartType, props.styleConfig, props.dataConfig);
+  return getCartesianChartOption(props.data, chartType, props.styleConfig, props.dataConfig, props.containerSize);
 }
 
 
@@ -195,13 +226,19 @@ const getCartesianChartOption = (
   data: ChartDataResponse,
   chartType: ChartType,
   styleConfig: ComponentStyleConfig,
-  dataConfig?: ComponentConfig
+  dataConfig?: ComponentConfig,
+  containerSize: number[] = []
 ) => {
   const { dimensions, series } = data;
   const isHorizontal = chartType.includes('horizontal');
   const isStacked = chartType.includes('stacked');
   const isLineOrArea = chartType.includes('line') || chartType.includes('area');
-  const isArea = chartType.includes('area') || chartType === 'stacked-line'; // Depending on logic
+  const isArea = chartType.includes('area')
+
+  // aixs title tyle
+  const [containerWidth = 500, containerHeight = 500] = containerSize
+  const axisWidth = containerWidth - styleConfig.xAxisTitle.length * styleConfig.xAxisFontSize - 50;
+  const axisHeight = containerHeight - styleConfig.yAxisTitle.length * styleConfig.yAxisFontSize - 50;
 
   // Tooltip
   const tooltipFormatter = (params: any[]) => {
@@ -247,8 +284,12 @@ const getCartesianChartOption = (
       // ...axisLabelStyle,
     },
     name: styleConfig.xAxisTitle || '',
-    nameLocation: styleConfig.xAxisAlign === 'right' ? 'end' : styleConfig.xAxisAlign === 'left' ? 'start' : 'center',
-    nameTextStyle: xAxisTitleStyle
+    nameLocation: 'center',
+    nameTextStyle: {
+      ...xAxisTitleStyle,
+      padding: [0, 0, 0, styleConfig.xAxisAlign === 'right' ? axisWidth : styleConfig.xAxisAlign === 'left' ? -axisWidth : 0]
+    },
+    inverse: isHorizontal
   };
 
   // (Value Axis)
@@ -261,9 +302,13 @@ const getCartesianChartOption = (
     },
     splitLine: { show: styleConfig.showGrid ?? true },
     name: styleConfig.yAxisTitle || '',
-    nameLocation: styleConfig.yAxisAlign === 'right' ? 'end' : styleConfig.yAxisAlign === 'left' ? 'start' : 'center',
+    nameLocation: 'center',
     nameRotate: isHorizontal ? 0 : 90,
-    nameTextStyle: yAxisTitleStyle
+    nameTextStyle: {
+      ...yAxisTitleStyle,
+      padding: [0, 0, 0, styleConfig.yAxisAlign === 'right' ? axisHeight : styleConfig.yAxisAlign === 'left' ? -axisHeight : 0]
+    },
+    boundaryGap: [0, '20%'],
   };
 
   const lastValueIndexes = dimensions.map((_, dimIdx) => {
@@ -299,7 +344,8 @@ const getCartesianChartOption = (
       name: s.name,
       data: processedData,
       type: isLineOrArea ? 'line' : 'bar',
-      symbol: 'none',
+      symbol: 'circle',
+      symbolSize: 0,
       itemStyle: {
         borderRadius: (!isLineOrArea && !isStacked)
           ? (isHorizontal ? [0, 4, 4, 0] : [4, 4, 0, 0])
@@ -308,10 +354,19 @@ const getCartesianChartOption = (
     };
 
     if (styleConfig.showDataLabel) {
-      item.label = { show: true, position: isLineOrArea ? 'top' : 'inside' };
+      item.label = {
+        show: true,
+        position: 'top',
+        fontSize: 10,
+        color: "#666",
+        formatter: (params: any) => unitConversion(params.value, dataConfig).join('')
+      };
+      item.labelLayout = {
+        hideOverlap: true
+      }
     }
     if (isStacked) item.stack = 'total';
-    if (isArea) item.areaStyle = {};
+    if (isArea) item.areaStyle = { opacity: 0.1 };
     // if (isLineOrArea) item.smooth = true;
 
     return item;
@@ -407,11 +462,12 @@ const buildLegendOption = (styleConfig: ComponentStyleConfig, seriesNames?: stri
 const buildTooltipOption = (type: 'axis' | 'item', formatter: (params: any) => string) => {
   return {
     trigger: type,
-    axisPointer: type === 'axis' ? { type: 'shadow' } : undefined,
-    appendToBody: true,
     confine: true,
+    axisPointer: type === 'axis' ? { type: 'shadow' } : undefined,
     enterable: true,
     extraCssText: 'max-height: 500px; overflow-y: auto;',
-    formatter,
+    appendToBody: !document.fullscreenElement,
+    // renderMode: 'html',
+    formatter
   };
 };

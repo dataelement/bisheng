@@ -163,17 +163,38 @@ export function MetricCard({ title: indicatorName, data, isPreviewMode, dataConf
     align: styleConfig.metricAlign
   })
 
+  const subtitleLineHeight = styleConfig.subtitleFontSize ? styleConfig.subtitleFontSize * 1.5 : 21 // 默认14px * 1.5
+  const maxSubtitleHeight = subtitleLineHeight * 4
+
   return (
-    <div className="group h-full flex flex-col justify-between select-none">
-      {/* subtitle */}
+    <div className="group h-full flex flex-col select-none py-1 px-2">
+      {/* title - single line */}
+      <div style={titleStyle} className='truncate mb-1'>{indicatorName}</div>
+
+      {/* subtitle - max 4 lines with ellipsis */}
       {styleConfig.showSubtitle && subTitle ? (
-        <div style={subtitleStyle}>{subTitle}</div>
-      ) : <div></div>}
-      <div className='flex justify-between items-end'>
-        {/* title */}
-        <div style={titleStyle} className='w-1/2 truncate'>{indicatorName}</div>
-        {/* value */}
-        <div style={metricStyle} className='w-1/2 leading-[1.2em] truncate pr-1'>
+        <div
+          style={{
+            ...subtitleStyle,
+            display: '-webkit-box',
+            WebkitLineClamp: 4,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            wordBreak: 'break-all',
+            lineHeight: `${subtitleLineHeight}px`,
+            maxHeight: `${maxSubtitleHeight}px`,
+            flex: 1,
+            minHeight: 0
+          }}
+        >
+          {subTitle}
+        </div>
+      ) : <div className="flex-1"></div>}
+
+      {/* value - stays at bottom */}
+      <div className='mt-auto pt-2'>
+        <div style={metricStyle} className='leading-[1.2em] truncate'>
           {formatValue}
           {displayUnit && <span className="text-xl ml-2 text-muted-foreground">{displayUnit}</span>}
         </div>
@@ -188,16 +209,6 @@ export function MetricCard({ title: indicatorName, data, isPreviewMode, dataConf
         )}
         size={16}
       />}
-      {/* 趋势信息 */}
-      {/* {trend && (
-        <div className="flex items-center gap-1 text-sm">
-          {getTrendIcon()}
-          <span className={getTrendColor()}>
-            {trend.value > 0 ? '+' : ''}{trend.value}%
-          </span>
-          <span className="text-muted-foreground ml-1">{trend.label}</span>
-        </div>
-      )} */}
     </div>
   )
 }

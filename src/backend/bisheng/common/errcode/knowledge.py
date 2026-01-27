@@ -99,6 +99,11 @@ class KnowledgeNotQAError(BaseErrorCode):
     Msg: str = 'Is notQAThe knowledge base upon'
 
 
+class KnowledgeRecommendQuestionError(BaseErrorCode):
+    Code: int = 10961
+    Msg: str = 'The model returned an incorrect format: {message}'
+
+
 # Knowledge base does not exist
 class KnowledgeNotExistError(BaseErrorCode):
     Code: int = 10970

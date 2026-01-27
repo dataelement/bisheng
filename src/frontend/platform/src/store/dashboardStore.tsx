@@ -260,22 +260,22 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
         if (!currentDashboard) return
 
         // Find all query components associated with this chart 
-        const linkedQueryComponents = currentDashboard.components.filter(component => {
-            if (component.type === 'query') {
-                const queryConfig = component.data_config as QueryConfig
-                return queryConfig.linkedComponentIds?.includes(chartId)
-            }
-            return false
-        })
+        // const linkedQueryComponents = currentDashboard.components.filter(component => {
+        //     if (component.type === 'query') {
+        //         const queryConfig = component.data_config as QueryConfig
+        //         return queryConfig.linkedComponentIds?.includes(chartId)
+        //     }
+        //     return false
+        // })
 
         // Extract query parameters
-        const queryParams = linkedQueryComponents.map(queryComponent => {
-            const queryConfig = queryComponent.data_config as QueryConfig
-            return {
-                queryComponentId: queryComponent.id,
-                queryConditions: queryConfig.queryConditions
-            }
-        })
+        // const queryParams = linkedQueryComponents.map(queryComponent => {
+        //     const queryConfig = queryComponent.data_config as QueryConfig
+        //     return {
+        //         queryComponentId: queryComponent.id,
+        //         queryConditions: queryConfig.queryConditions
+        //     }
+        // })
 
         const currentInfo = chartRefreshTriggers[chartId] || { trigger: 0, queryParams: [] }
         set({
@@ -283,7 +283,7 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
                 ...chartRefreshTriggers,
                 [chartId]: {
                     trigger: currentInfo.trigger + 1,
-                    queryParams
+                    queryParams: []
                 }
             }
         })

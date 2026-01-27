@@ -113,7 +113,9 @@ export function EditorCanvas({ isLoading, isPreviewMode }: EditorCanvasProps) {
             const isInsideContainer = containerRef.current?.contains(target);
             const isDragHandle = target.closest('.drag-handle');
             if (isInsideContainer && !isDragHandle) {
-                clearComponentEditorStore();
+                setTimeout(() => {
+                    clearComponentEditorStore();
+                }, 0);
             }
         };
 
@@ -214,7 +216,7 @@ export function EditorCanvas({ isLoading, isPreviewMode }: EditorCanvasProps) {
 
     // loading
     if (isLoading || !currentDashboard) {
-        return <div className="w-full h-full flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
+        return <div className="w-full h-full flex justify-center items-center z-10">
             <LoadingIcon />
         </div>
     }
@@ -232,10 +234,7 @@ export function EditorCanvas({ isLoading, isPreviewMode }: EditorCanvasProps) {
             <div className="flex h-full">
                 <div
                     id="edit-charts-panne"
-                    className={cn("flex-1 overflow-auto no-scrollbar", theme)}
-                    style={{
-                        backgroundColor: theme === 'dark' ? '#1a1a1a' : '#f5f5f5',
-                    }}
+                    className={cn("flex-1 relative overflow-auto no-scrollbar", theme === 'dark' ? 'bg-[#1a1a1a] dark' : 'bg-[#f5f5f5] theme-force-light')}
                 >
                     <div
                         ref={containerRef}

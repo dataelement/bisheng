@@ -40,7 +40,7 @@ from bisheng.common.constants.vectorstore_metadata import KNOWLEDGE_RAG_METADATA
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.knowledge import KnowledgeSimilarError, KnowledgeFileDeleteError, KnowledgeFileEmptyError, \
     KnowledgeFileChunkMaxError, KnowledgeLLMError, KnowledgeFileDamagedError, KnowledgeFileNotSupportedError, \
-    KnowledgeEtl4lmTimeoutError, KnowledgeFileFailedError, KnowledgeExcelChunkMaxError
+    KnowledgeEtl4lmTimeoutError, KnowledgeFileFailedError, KnowledgeExcelChunkMaxError, KnowledgeRecommendQuestionError
 from bisheng.common.schemas.telemetry.event_data_schema import FileParseEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
@@ -1567,7 +1567,7 @@ def recommend_question(invoke_user_id: int, question: str, answer: str, number: 
         return []
     except Exception as exc:
         logger.error("recommend_question json.loads error:{}", gen_question)
-        raise ValueError(gen_question) from exc
+        raise KnowledgeRecommendQuestionError(exception=exc, message=gen_question)
 
 
 def extract_code_blocks(markdown_code_block: str):

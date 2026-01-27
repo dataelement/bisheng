@@ -216,7 +216,7 @@ export function EditorHeader({
                         {title}
                     </h1>
                 )}
-                <Badge variant="outline" className="break-keep font-normal bg-gray-100">{getSaveStatus()}</Badge>
+                <Badge variant="outline" className="break-keep font-normal bg-gray-100 dark:bg-black">{getSaveStatus()}</Badge>
             </div>
 
             {/* Middle section */}

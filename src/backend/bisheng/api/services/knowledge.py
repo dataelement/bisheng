@@ -1158,6 +1158,7 @@ class KnowledgeService(KnowledgeUtils):
                     "filter": {"match": {"metadata.chunk_index": chunk_index}},
                 }
             },
+            conflicts="proceed",
         )
         logger.info(f"act=delete_es_over {res}")
 

@@ -121,7 +121,7 @@ export default function RuleTable({
   }, [rules.fileList])
 
   return (
-    <div className="flex-1 flex flex-col relative max-w-[760px] mx-auto">
+    <div className="flex-1 flex flex-col relative min-w-[740px] max-w-[760px] mx-auto">
       <div
         className="flex flex-col gap-4"
         style={{ gridTemplateColumns: '114px 1fr' }}
