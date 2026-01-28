@@ -8,9 +8,9 @@ logger = logging.getLogger(__name__)
 
 
 class PromptManager(BaseContextManager[PromptLoader]):
-    """提示词管理器
+    """Prompt Manager
 
-    负责提示词的加载、缓存和管理
+    Responsible for loading, caching, and managing prompts
     """
 
     name = 'prompts'
@@ -19,30 +19,30 @@ class PromptManager(BaseContextManager[PromptLoader]):
         super().__init__(**kwargs)
 
     async def _async_initialize(self) -> PromptLoader:
-        """异步初始化提示词加载器"""
+        """Asynchronous initialization prompt word loader"""
         logger.info("Initializing PromptLoader...")
         prompt_loader = PromptLoader()
         logger.info("PromptLoader initialized.")
         return prompt_loader
 
     def _sync_initialize(self) -> PromptLoader:
-        """同步初始化提示词加载器"""
+        """Synchronous Initialization Prompt Loader"""
         logger.info("Initializing PromptLoader...")
         prompt_loader = PromptLoader()
         logger.info("PromptLoader initialized.")
         return prompt_loader
 
     async def _async_cleanup(self) -> None:
-        """清理数据库资源"""
+        """Clean up database resources"""
         pass
 
     def _sync_cleanup(self) -> None:
-        """同步清理数据库资源"""
+        """Synchronously clean up database resources"""
         pass
 
 
 async def get_prompt_manager() -> PromptLoader:
-    """获取提示词管理器实例（异步方式）"""
+    """Get a prompt word manager instance (asynchronous)"""
     from bisheng.core.context.manager import app_context
     try:
         return await app_context.async_get_instance(PromptManager.name)
@@ -58,7 +58,7 @@ async def get_prompt_manager() -> PromptLoader:
 
 
 def get_prompt_manager_sync() -> PromptLoader:
-    """获取提示词管理器实例（同步方式）"""
+    """Get a prompt word manager instance (sync method)"""
     from bisheng.core.context.manager import app_context
     try:
         return app_context.sync_get_instance(PromptManager.name)

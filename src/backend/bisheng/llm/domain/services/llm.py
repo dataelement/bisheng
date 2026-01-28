@@ -33,7 +33,7 @@ class LLMService:
 
     @classmethod
     async def get_all_llm(cls) -> List[LLMServerInfo]:
-        """ 获取所有的模型数据， 不包含key等敏感信息 """
+        """ Get all the model data, Exclusion:keyand other sensitive information """
         llm_servers = await LLMDao.aget_all_server()
         ret = []
         server_ids = []
@@ -54,7 +54,7 @@ class LLMService:
 
     @classmethod
     async def get_one_llm(cls, server_id: int) -> LLMServerInfo:
-        """ 获取一个服务提供方的详细信息 包含了key等敏感的配置信息 """
+        """ Get a service provider's details Containskeyand other sensitive configuration information """
         llm = await LLMDao.aget_server_by_id(server_id)
         if not llm:
             raise NotFoundError.http_exception()
@@ -66,7 +66,7 @@ class LLMService:
     @classmethod
     async def add_llm_server(cls, request: Request, login_user: UserPayload,
                              server: LLMServerCreateReq) -> LLMServerInfo:
-        """ 添加一个服务提供方 """
+        """ Add a service provider """
         exist_server = await LLMDao.aget_server_by_name(server.name)
         if exist_server:
             raise ServerExistError.http_exception()
@@ -88,7 +88,7 @@ class LLMService:
         success_msg = ''
         failed_models = []
         failed_msg = ''
-        # 尝试实例化对应的模型，有报错的话删除
+        # Try to instantiate the corresponding model, delete it if there is an error
         common_params = {
             'app_id': ApplicationTypeEnum.MODEL_TEST.value,
             'app_name': ApplicationTypeEnum.MODEL_TEST.value,
@@ -110,33 +110,33 @@ class LLMService:
                 success_models.append(one)
             except Exception as e:
                 logger.exception("init_model_error")
-                # 模型初始化失败的话，不添加到模型列表里
-                failed_msg += f'<{one.model_name}>添加失败，失败原因：{str(e)}\n'
+                # If model initialization fails, do not add to the model list
+                failed_msg += f'<{one.model_name}>Add failed, Reason for failure:{str(e)}\n'
                 failed_models.append(one)
 
-        # 说明模型全部添加失败了
+        # Description Failed to add all models
         if len(success_models) == 0 and failed_msg:
             await LLMDao.adelete_server_by_id(ret.id)
             raise ServerAddAllError.http_exception(failed_msg)
         elif len(success_models) > 0 and failed_msg:
-            # 部分模型添加成功了, 删除失败的模型信息
+            # Some models added successfully, Delete failed model information
             ret.models = success_models
             await LLMDao.adelete_model_by_ids(model_ids=[one.id for one in failed_models])
             await cls.add_llm_server_hook(request, login_user, ret)
-            raise ServerAddError.http_exception(f"<{success_msg.rstrip(',')}>添加成功，{failed_msg}")
+            raise ServerAddError.http_exception(f"<{success_msg.rstrip(',')}>Added{failed_msg}")
 
         await cls.add_llm_server_hook(request, login_user, ret)
         return ret
 
     @classmethod
     async def delete_llm_server(cls, request: Request, login_user: UserPayload, server_id: int) -> bool:
-        """ 删除一个服务提供方 """
+        """ Delete a service provider """
         await LLMDao.adelete_server_by_id(server_id)
         return True
 
     @classmethod
     async def add_llm_server_hook(cls, request: Request, login_user: UserPayload, server: LLMServerInfo) -> bool:
-        """ 添加一个服务提供方 后续动作 """
+        """ Add a service provider Next Actions """
 
         handle_types = []
         for one in server.models:
@@ -146,7 +146,7 @@ class LLMService:
                 continue
             handle_types.append(one.model_type)
             model_info = await LLMDao.aget_model_by_type(LLMModelType(one.model_type))
-            # 判断是否是首个llm或者embedding模型
+            # Determine if this is the firstllmorembeddingModels
             if model_info.id == one.id:
                 await cls.set_default_model(model_info)
         return True
@@ -184,10 +184,10 @@ class LLMService:
 
     @classmethod
     async def set_default_model(cls, model: LLMModel | LLMModelInfo):
-        """ 设置默认的模型配置 """
-        # 设置默认的llm模型配置
+        """ Set default model configuration """
+        # Set defaultllmmodel config
         if model.model_type == LLMModelType.LLM.value:
-            # 设置知识库的默认模型配置
+            # Set default model configuration for knowledge base
             knowledge_llm = await cls.aget_knowledge_llm()
             knowledge_change = False
             if not knowledge_llm.extract_title_model_id:
@@ -202,13 +202,13 @@ class LLMService:
             if knowledge_change:
                 await cls.update_knowledge_llm(knowledge_llm)
 
-            # 设置评测的默认模型配置
+            # Set default model configuration for reviews
             evaluation_llm = await cls.get_evaluation_llm()
             if not evaluation_llm.model_id:
                 evaluation_llm.model_id = model.id
                 await cls.update_evaluation_llm(evaluation_llm)
 
-            # 设置助手的默认模型配置
+            # Setting the default model configuration for the assistant
             assistant_llm = await cls.get_assistant_llm()
             assistant_change = False
             if not assistant_llm.auto_llm:
@@ -242,7 +242,7 @@ class LLMService:
     @classmethod
     async def update_llm_server(cls, request: Request, login_user: UserPayload,
                                 server: LLMServerCreateReq) -> LLMServerInfo:
-        """ 更新服务提供方信息 """
+        """ Update Service Provider Information """
         exist_server = await LLMDao.aget_server_by_id(server.id)
         if not exist_server:
             raise NotFoundError.http_exception()
@@ -252,16 +252,16 @@ class LLMService:
             one.id: one for one in old_models
         }
         if exist_server.name != server.name:
-            # 改名的话判断下是否已经存在
+            # If you change your name, determine if it already exists
             name_server = await LLMDao.aget_server_by_name(server.name)
             if name_server and name_server.id != server.id:
-                raise ServerExistError.http_exception(f'<{server.name}>已存在')
+                raise ServerExistError.http_exception(f'<{server.name}>already exists')
 
         model_dict = {}
         for one in server.models:
             if one.model_name not in model_dict:
                 model_dict[one.model_name] = LLMModel(**one.model_dump())
-                # 说明是新增模型
+                # Explanation is to add a model
                 if not one.id:
                     model_dict[one.model_name].user_id = login_user.user_id
                     model_dict[one.model_name].server_id = exist_server.id
@@ -279,11 +279,11 @@ class LLMService:
         db_server = await LLMDao.update_server_with_models(exist_server, list(model_dict.values()))
         new_server_info = await cls.get_one_llm(db_server.id)
 
-        # 判断是否需要重新判断模型状态
+        # Determine if the model status needs to be re-determined
         for one in new_server_info.models:
             if one.id not in old_model_dict:
                 await cls.set_default_model(one)
-            # 新增的模型，或者模型名字或者类型发生了变化
+            # The new model, or the model name or type has changed
             if (one.id not in old_model_dict or old_model_dict[one.id].model_name != one.model_name
                     or old_model_dict[one.id].model_type != one.model_type):
                 await cls.test_model_status(one, login_user)
@@ -291,7 +291,7 @@ class LLMService:
 
     @classmethod
     async def update_model_online(cls, model_id: int, online: bool) -> LLMModelInfo:
-        """ 更新模型是否上线 """
+        """ Update whether the model is online """
         exist_model = await LLMDao.aget_model_by_id(model_id)
         if not exist_model:
             raise NotFoundError.http_exception()
@@ -301,7 +301,7 @@ class LLMService:
 
     @classmethod
     def get_knowledge_llm(cls) -> KnowledgeLLMConfig:
-        """ 获取知识库相关的默认模型配置 """
+        """ Get the default model configuration for the knowledge base """
         ret = {}
         config = ConfigDao.get_config(ConfigKeyEnum.KNOWLEDGE_LLM)
         if config:
@@ -310,7 +310,7 @@ class LLMService:
 
     @classmethod
     async def aget_knowledge_llm(cls) -> KnowledgeLLMConfig:
-        """ 获取知识库相关的默认模型配置 """
+        """ Get the default model configuration for the knowledge base """
         ret = {}
         config = await ConfigDao.aget_config(ConfigKeyEnum.KNOWLEDGE_LLM)
         if config:
@@ -319,9 +319,9 @@ class LLMService:
 
     @classmethod
     def get_knowledge_source_llm(cls, invoke_user_id: int) -> Optional[BaseChatModel]:
-        """ 获取知识库溯源的默认模型配置 """
+        """ Get the default model configuration for Knowledge Base Traceability """
         knowledge_llm = cls.get_knowledge_llm()
-        # 没有配置模型，则用jieba
+        # If no model is configured, usejieba
         if not knowledge_llm.source_model_id:
             return None
         return cls.get_bisheng_llm_sync(model_id=knowledge_llm.source_model_id,
@@ -332,9 +332,9 @@ class LLMService:
 
     @classmethod
     async def get_knowledge_source_llm_async(cls, invoke_user_id: int) -> Optional[BaseChatModel]:
-        """ 获取知识库溯源的默认模型配置 """
+        """ Get the default model configuration for Knowledge Base Traceability """
         knowledge_llm = await cls.aget_knowledge_llm()
-        # 没有配置模型，则用jieba
+        # If no model is configured, usejieba
         if not knowledge_llm.source_model_id:
             return None
         return await cls.get_bisheng_llm(model_id=knowledge_llm.source_model_id,
@@ -345,9 +345,9 @@ class LLMService:
 
     @classmethod
     def get_knowledge_similar_llm(cls, invoke_user_id: int) -> Optional[BaseChatModel]:
-        """ 获取知识库相似问的默认模型配置 """
+        """ Get the default model configuration for knowledge base similar questions """
         knowledge_llm = cls.get_knowledge_llm()
-        # 没有配置模型，则用jieba
+        # If no model is configured, usejieba
         if not knowledge_llm.qa_similar_model_id:
             return None
         return cls.get_bisheng_llm_sync(model_id=knowledge_llm.qa_similar_model_id,
@@ -358,7 +358,7 @@ class LLMService:
 
     @classmethod
     def get_knowledge_default_embedding(cls, invoke_user_id: int) -> Optional[Embeddings]:
-        """ 获取知识库默认的embedding模型 """
+        """ Get Knowledge Base DefaultsembeddingModels """
         knowledge_llm = cls.get_knowledge_llm()
         if not knowledge_llm.embedding_model_id:
             return None
@@ -378,13 +378,13 @@ class LLMService:
     @classmethod
     async def update_knowledge_llm(cls, data: KnowledgeLLMConfig) \
             -> KnowledgeLLMConfig:
-        """ 更新知识库相关的默认模型配置 """
+        """ Update default model configuration for knowledge base """
         await cls._base_update_llm_config(data=data.model_dump(), key=ConfigKeyEnum.KNOWLEDGE_LLM)
         return data
 
     @classmethod
     async def get_assistant_llm(cls) -> AssistantLLMConfig:
-        """ 获取助手相关的默认模型配置 """
+        """ Get the default model configuration related to the assistant """
         ret = {}
         config = ConfigDao.get_config(ConfigKeyEnum.ASSISTANT_LLM)
         if config:
@@ -393,7 +393,7 @@ class LLMService:
 
     @classmethod
     def sync_get_assistant_llm(cls) -> AssistantLLMConfig:
-        """ 获取助手相关的默认模型配置 """
+        """ Get the default model configuration related to the assistant """
         ret = {}
         config = ConfigDao.get_config(ConfigKeyEnum.ASSISTANT_LLM)
         if config:
@@ -403,13 +403,13 @@ class LLMService:
     @classmethod
     async def update_assistant_llm(cls, data: AssistantLLMConfig) \
             -> AssistantLLMConfig:
-        """ 更新助手相关的默认模型配置 """
+        """ Update default model configurations related to the assistant """
         await cls._base_update_llm_config(data=data.model_dump(), key=ConfigKeyEnum.ASSISTANT_LLM)
         return data
 
     @classmethod
     async def get_evaluation_llm(cls) -> EvaluationLLMConfig:
-        """ 获取评测功能的默认模型配置 """
+        """ Get the default model configuration for the evaluation feature """
         ret = {}
         config = await ConfigDao.aget_config(ConfigKeyEnum.EVALUATION_LLM)
         if config:
@@ -418,7 +418,7 @@ class LLMService:
 
     @classmethod
     def sync_get_evaluation_llm(cls) -> EvaluationLLMConfig:
-        """ 获取评测功能的默认模型配置 """
+        """ Get the default model configuration for the evaluation feature """
         ret = {}
         config = ConfigDao.get_config(ConfigKeyEnum.EVALUATION_LLM)
         if config:
@@ -429,7 +429,7 @@ class LLMService:
     async def get_evaluation_llm_object(cls, invoke_user_id: int) -> BaseChatModel:
         evaluation_llm = await cls.get_evaluation_llm()
         if not evaluation_llm.model_id:
-            raise Exception('未配置评测模型')
+            raise Exception('Evaluation model is not configured')
         return await cls.get_bisheng_llm(model_id=evaluation_llm.model_id,
                                          app_id=ApplicationTypeEnum.EVALUATION.value,
                                          app_name=ApplicationTypeEnum.EVALUATION.value,
@@ -438,12 +438,12 @@ class LLMService:
 
     @classmethod
     async def get_bisheng_llm(cls, **kwargs) -> BaseChatModel:
-        """ 初始化毕昇llm对话模型 """
+        """ Initialize LiftedllmConversation Model """
         return await BishengLLM.get_bisheng_llm(**kwargs)
 
     @classmethod
     def get_bisheng_llm_sync(cls, **kwargs) -> BaseChatModel:
-        """ 初始化毕昇llm对话模型 """
+        """ Initialize LiftedllmConversation Model """
         return BishengLLM(**kwargs)
 
     @classmethod
@@ -464,17 +464,17 @@ class LLMService:
 
     @classmethod
     async def get_bisheng_embedding(cls, **kwargs) -> Embeddings:
-        """ 初始化毕昇embedding模型 """
+        """ Initialize LiftedembeddingModels """
         return await BishengEmbedding.get_bisheng_embedding(**kwargs)
 
     @classmethod
     def get_bisheng_embedding_sync(cls, **kwargs) -> Embeddings:
-        """ 初始化毕昇embedding模型 """
+        """ Initialize LiftedembeddingModels """
         return BishengEmbedding(**kwargs)
 
     @classmethod
     async def get_bisheng_daily_embedding(cls, invoke_user_id: int, model_id: int) -> Embeddings:
-        """ 获取日常的embedding模型 """
+        """ Get dailyembeddingModels """
         return await cls.get_bisheng_embedding(model_id=model_id,
                                                app_id=ApplicationTypeEnum.DAILY_CHAT.value,
                                                app_name=ApplicationTypeEnum.DAILY_CHAT.value,
@@ -483,7 +483,7 @@ class LLMService:
 
     @classmethod
     async def get_bisheng_linsight_embedding(cls, invoke_user_id: int, model_id: int) -> Embeddings:
-        """ 获取灵思默认的embedding模型 """
+        """ Get Ideas DefaultembeddingModels """
         return await cls.get_bisheng_embedding(model_id=model_id,
                                                app_id=ApplicationTypeEnum.LINSIGHT.value,
                                                app_name=ApplicationTypeEnum.LINSIGHT.value,
@@ -492,7 +492,7 @@ class LLMService:
 
     @classmethod
     async def get_bisheng_knowledge_embedding(cls, invoke_user_id: int, model_id: int) -> Embeddings:
-        """ 获取知识库默认的embedding模型 """
+        """ Get Knowledge Base DefaultsembeddingModels """
         return await cls.get_bisheng_embedding(model_id=model_id,
                                                app_id=ApplicationTypeEnum.KNOWLEDGE_BASE.value,
                                                app_name=ApplicationTypeEnum.KNOWLEDGE_BASE.value,
@@ -501,7 +501,7 @@ class LLMService:
 
     @classmethod
     def get_bisheng_knowledge_embedding_sync(cls, invoke_user_id: int, model_id: int) -> Embeddings:
-        """ 获取知识库默认的embedding模型 """
+        """ Get Knowledge Base DefaultsembeddingModels """
         return cls.get_bisheng_embedding_sync(model_id=model_id,
                                               app_id=ApplicationTypeEnum.KNOWLEDGE_BASE.value,
                                               app_name=ApplicationTypeEnum.KNOWLEDGE_BASE.value,
@@ -510,30 +510,30 @@ class LLMService:
 
     @classmethod
     async def get_bisheng_asr(cls, **kwargs) -> BishengASR:
-        """ 初始化毕昇asr模型 """
+        """ Initialize LiftedasrModels """
         return await BishengASR.get_bisheng_asr(**kwargs)
 
     @classmethod
     async def get_bisheng_tts(cls, **kwargs) -> BishengTTS:
-        """ 初始化毕昇tts模型 """
+        """ Initialize LiftedttsModels """
         return await BishengTTS.get_bisheng_tts(**kwargs)
 
     @classmethod
     async def update_evaluation_llm(cls, data: EvaluationLLMConfig) \
             -> EvaluationLLMConfig:
-        """ 更新评测功能的默认模型配置 """
+        """ Update default model configuration for review feature """
         await cls._base_update_llm_config(data=data.model_dump(), key=ConfigKeyEnum.EVALUATION_LLM)
         return data
 
     @classmethod
     async def update_workflow_llm(cls, data: EvaluationLLMConfig) -> EvaluationLLMConfig:
-        """ 更新workflow的默认模型配置 """
+        """ Update workflow Default Model Configuration for """
         await cls._base_update_llm_config(data=data.model_dump(), key=ConfigKeyEnum.WORKFLOW_LLM)
         return data
 
     @classmethod
     async def get_workflow_llm(cls) -> EvaluationLLMConfig:
-        """ 获取评测功能的默认模型配置 """
+        """ Get the default model configuration for the evaluation feature """
         ret = {}
         config = await ConfigDao.aget_config(ConfigKeyEnum.WORKFLOW_LLM)
         if config:
@@ -542,7 +542,7 @@ class LLMService:
 
     @classmethod
     async def get_assistant_llm_list(cls, request: Request, login_user: UserPayload) -> List[LLMServerInfo]:
-        """ 获取助手可选的模型列表 """
+        """ Get a list of optional models for the assistant """
         assistant_llm = await cls.get_assistant_llm()
         if not assistant_llm.llm_list:
             return []
@@ -578,13 +578,13 @@ class LLMService:
     async def update_workbench_llm(cls, invoke_user_id: int, config_obj: WorkbenchModelConfig,
                                    background_tasks: BackgroundTasks):
         """
-        更新灵思模型配置
+        Update Invisible Model Configuration
         :param invoke_user_id:
         :param config_obj:
         :param background_tasks:
         :return:
         """
-        # 延迟导入以避免循环导入
+        # Delay imports to avoid looping imports
         from bisheng.worker.knowledge.rebuild_knowledge_worker import rebuild_knowledge_celery
 
         config = await ConfigDao.aget_config(ConfigKeyEnum.LINSIGHT_LLM)
@@ -592,7 +592,7 @@ class LLMService:
             config = Config(key=ConfigKeyEnum.LINSIGHT_LLM.value, value='{}')
 
         if config_obj.embedding_model:
-            # 判断是否一致
+            # Determine consistency
             config_old_obj = WorkbenchModelConfig(**json.loads(config.value)) if config else WorkbenchModelConfig()
             if (config_obj.embedding_model.id and config_old_obj.embedding_model is None or
                     config_obj.embedding_model.id != config_old_obj.embedding_model.id):
@@ -604,26 +604,26 @@ class LLMService:
                 try:
                     await embeddings.aembed_query("test")
                 except Exception as e:
-                    raise Exception(f"Embedding模型初始化失败: {str(e)}")
-                from bisheng.api.services.linsight.sop_manage import SOPManageService
+                    raise Exception(f"EmbeddingModel initialization failed: {str(e)}")
+                from bisheng.linsight.domain.services.sop_manage import SOPManageService
 
                 background_tasks.add_task(SOPManageService.rebuild_sop_vector_store_task, embeddings)
 
-                # 更新个人知识库
-                # 1.更新所有type为2(私有知识库)的knowledge状态和模型
+                # Update Personal Knowledge Base
+                # 1.Upgrading alltypeare2(Private Repository)right of privacyknowledgeStatus and Model
                 private_knowledges = await KnowledgeDao.aget_all_knowledge(
                     knowledge_type=KnowledgeTypeEnum.PRIVATE
                 )
 
                 updated_count = 0
                 for knowledge in private_knowledges:
-                    # 更新状态为重建中，模型为新的model_id
+                    # Update status is rebuilding, model is newmodel_id
                     knowledge.state = KnowledgeState.REBUILDING.value
                     knowledge.model = config_obj.embedding_model.id
                     await KnowledgeDao.aupdate_one(knowledge)
                     updated_count += 1
 
-                    # 3. 为每个knowledge发起异步任务
+                    # 3. For eachknowledgeStart asynchronous task
                     rebuild_knowledge_celery.delay(knowledge.id, int(knowledge.model), invoke_user_id)
                     logger.info(
                         f"Started rebuild task for knowledge_id={knowledge.id} with model_id={knowledge.model}")
@@ -640,7 +640,7 @@ class LLMService:
     @classmethod
     async def get_workbench_llm(cls) -> WorkbenchModelConfig:
         """
-        获取工作台模型配置
+        Get Workbench Model Configuration
         :return:
         """
         ret = {}
@@ -651,7 +651,7 @@ class LLMService:
 
     @classmethod
     async def invoke_workbench_asr(cls, login_user: UserPayload, file: UploadFile) -> str:
-        """ 调用工作台的asr模型 将语音转为文字 """
+        """ Call the workbench'sasrModels Convert Voice to Text """
         if not file:
             raise ServerError.http_exception("no file upload")
         workbench_llm = await cls.get_workbench_llm()
@@ -670,8 +670,8 @@ class LLMService:
     @classmethod
     async def invoke_workbench_tts(cls, login_user: UserPayload, text: str) -> str:
         """
-        调用工作台的tts模型 将文字转为语音
-        :return: minio的路径
+        Call the workbench'sttsModels Convert text to speech
+        :return: minioPath to
         """
 
         workbench_llm = await cls.get_workbench_llm()

@@ -216,7 +216,7 @@ class LLMFrontendNode(FrontendNode):
         if name and 'azure' in name.lower():
             LLMFrontendNode.format_azure_field(field)
 
-        # 把组件的流式配置放出来，取消全局的流式控制
+        # Release the streaming configuration of the component and cancel the global streaming control
         if field.name == 'streaming':
             field.show = True
 

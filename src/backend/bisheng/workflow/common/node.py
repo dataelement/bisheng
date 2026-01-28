@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field, field_validator
 
 
 class NodeType(Enum):
-    """ 节点类型 """
+    """ Node type """
     START = "start"
     END = "end"
     INPUT = "input"
@@ -22,21 +22,21 @@ class NodeType(Enum):
     TOOL = "tool"
     KNOWLEDGE_RETRIEVER = "knowledge_retriever"
 
-    NOTE = 'note'  # 备注节点 知识用来显示注释，非实际执行节点
+    NOTE = 'note'  # Notes node Knowledge is used to display annotations, not actual execution nodes
 
 
 class NodeParams(BaseModel):
-    key: str = Field(default="", description="变量的key")
-    label: Optional[str] = Field("", description="变量描述文本")
-    value: Optional[Any] = Field(None, description="变量的值")
+    key: str = Field(default="", description="Variablekey")
+    label: Optional[str] = Field("", description="Variable description text")
+    value: Optional[Any] = Field(None, description="Value of the variable")
 
-    # 变量类型 -> 数据格式的详情参考 https://dataelem.feishu.cn/wiki/IfBvwwvfFiHjuQkjFJgcxzoGnxb
-    type: Optional[str] = Field("", description="变量类型")
-    help: Optional[str] = Field("", description="变量帮助文本")
-    tab: Optional[str] = Field("", description="变量所属的tab，为空则都展示")
-    placeholder: Optional[str] = Field("", description="变量的占位提示文本")
-    required: Optional[bool] = Field(False, description="是否必填")
-    options: Optional[Any] = Field(None, description="变量的选项")
+    # Variable type -> Detailed reference for data format https://dataelem.feishu.cn/wiki/IfBvwwvfFiHjuQkjFJgcxzoGnxb
+    type: Optional[str] = Field("", description="Variable type")
+    help: Optional[str] = Field("", description="Variable Help Text")
+    tab: Optional[str] = Field("", description="Variable belongs totab, empty to show all")
+    placeholder: Optional[str] = Field("", description="Variable placeholder text")
+    required: Optional[bool] = Field(False, description="Required?")
+    options: Optional[Any] = Field(None, description="Variable options")
 
 
 class NodeGroupParams(BaseModel):

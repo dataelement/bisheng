@@ -21,73 +21,73 @@ from bisheng.workflow.nodes.base import BaseNode
 
 
 class ResourceType(Enum):
-    """资源类型枚举"""
+    """Resource Type Enumeration"""
     IMAGE = "image"
     TABLE = "table"
     TEXT = "text"
 
 
 class ImageSource(Enum):
-    """图片来源类型"""
+    """Image Source Type"""
 
-    LOCAL_FILE = "local_file"  # 本地文件路径
-    HTTP_URL = "http_url"  # HTTP/HTTPS链接
-    MINIO_PATH = "minio_path"  # MinIO路径
-    MARKDOWN_REF = "markdown_ref"  # Markdown引用格式
+    LOCAL_FILE = "local_file"  # Local file path
+    HTTP_URL = "http_url"  # HTTP/HTTPSLinks
+    MINIO_PATH = "minio_path"  # MinIOPath
+    MARKDOWN_REF = "markdown_ref"  # MarkdownQuote Post Format
 
 
 class TableSource(Enum):
-    """表格来源类型"""
+    """Table Source Type"""
 
-    MARKDOWN_TABLE = "markdown_table"  # |---|---|格式
-    CSV_CONTENT = "csv_content"  # [file content begin]...[end]格式
-    EXCEL_CONTENT = "excel_content"  # Excel文件内容
+    MARKDOWN_TABLE = "markdown_table"  # |---|---|Format
+    CSV_CONTENT = "csv_content"  # [file content begin]...[end]Format
+    EXCEL_CONTENT = "excel_content"  # ExcelFile contents
 
 
 @dataclass
 class ResourceData:
-    """资源数据类"""
+    """Resource Data Classes"""
 
     resource_id: int
     resource_type: ResourceType
     placeholder: str
-    position: int  # 在原文中的位置
-    original_content: str  # 原始匹配内容
-    pattern_name: str  # 匹配的模式名称
+    position: int  # Position in original text
+    original_content: str  # Original Match
+    pattern_name: str  # Matching Pattern Name
 
-    # 图片特有字段
+    # Image Specific Fields
     image_source: Optional[ImageSource] = None
     original_path: Optional[str] = None
     local_path: Optional[str] = None
     alt_text: Optional[str] = None
 
-    # 表格特有字段
+    # Table-specific fields
     table_source: Optional[TableSource] = None
     table_data: Optional[List[List[str]]] = None
     alignments: Optional[List[str]] = None
     file_name: Optional[str] = None
 
-    # 处理状态
+    # Process status
     download_success: bool = False
     error_message: Optional[str] = None
 
 
 class ResourcePlaceholderManager:
-    """统一的资源占位符管理器"""
+    """Unified Resource Placeholder Manager"""
 
     def __init__(self):
         self.counter = 0
         self.resources: List[ResourceData] = []
-        self.placeholder_map: Dict[str, ResourceData] = {}  # placeholder -> resource映射
+        self.placeholder_map: Dict[str, ResourceData] = {}  # placeholder -> resourceMapping
 
     def create_placeholder(
             self, resource_type: ResourceType, position: int, original_content: str, pattern_name: str
     ) -> str:
-        """创建新的占位符"""
+        """Create new placeholder"""
         resource_id = self.counter
         self.counter += 1
 
-        placeholder = f"__RESOURCE_{resource_id:04d}__"  # 使用4位数字，便于排序
+        placeholder = f"__RESOURCE_{resource_id:04d}__"  # Use4Digit numbers for easy sorting
 
         resource = ResourceData(
             resource_id=resource_id,
@@ -104,45 +104,45 @@ class ResourcePlaceholderManager:
         return placeholder
 
     def get_resource_by_placeholder(self, placeholder: str) -> Optional[ResourceData]:
-        """根据占位符获取资源"""
+        """Get resources based on placeholders"""
         return self.placeholder_map.get(placeholder)
 
     def get_resources_by_type(self, resource_type: ResourceType) -> List[ResourceData]:
-        """获取指定类型的所有资源"""
+        """Get all resources of the specified type"""
         return [r for r in self.resources if r.resource_type == resource_type]
 
     def get_sorted_resources(self) -> List[ResourceData]:
-        """按位置排序获取所有资源"""
+        """Get all resources sorted by location"""
         return sorted(self.resources, key=lambda x: x.position)
 
 
 @dataclass
 class MatchPattern:
-    """匹配模式定义"""
+    """Match Pattern Definition"""
 
     name: str
     resource_type: ResourceType
     pattern: str
     flags: int
-    priority: int  # 优先级，数字越小优先级越高
+    priority: int  # Priority, the smaller the number, the higher the priority
     handler_method: str
 
 
 class OverlapResolver:
-    """重叠资源解决器"""
+    """Overlay Resource Resolver"""
 
     @staticmethod
     def resolve_overlapping_resources(resources: List[ResourceData]) -> List[ResourceData]:
-        """解决重叠资源问题"""
+        """Resolve overlapping resource issues"""
         if not resources:
             return []
 
-        # 按开始位置排序
+        # Sort by starting position
         sorted_resources = sorted(resources, key=lambda x: x.position)
         resolved_resources = []
 
         for current in sorted_resources:
-            # 检查是否与已解决的资源重叠
+            # Check for overlap with resolved resources
             overlapping_existing = None
             for existing in resolved_resources:
                 if OverlapResolver._is_overlapping(current, existing):
@@ -150,13 +150,13 @@ class OverlapResolver:
                     break
 
             if overlapping_existing:
-                # 处理重叠：优先保留更精确的匹配
+                # Handle overlaps: Prefer to keep more precise matches
                 if OverlapResolver._should_replace(current, overlapping_existing):
                     resolved_resources.remove(overlapping_existing)
                     resolved_resources.append(current)
-                    logger.info(f"替换重叠资源: {overlapping_existing.placeholder} -> {current.placeholder}")
+                    logger.info(f"Replace overlapping resources: {overlapping_existing.placeholder} -> {current.placeholder}")
                 else:
-                    logger.info(f"跳过重叠资源: {current.placeholder}")
+                    logger.info(f"Skip overlapping resources: {current.placeholder}")
             else:
                 resolved_resources.append(current)
 
@@ -164,28 +164,28 @@ class OverlapResolver:
 
     @staticmethod
     def _is_overlapping(res1: ResourceData, res2: ResourceData) -> bool:
-        """判断两个资源是否重叠"""
-        # 计算结束位置
+        """Determine if the two resources overlap"""
+        # Calculate end position
         end1 = res1.position + len(res1.original_content)
         end2 = res2.position + len(res2.original_content)
 
-        # 检查是否有重叠区域
+        # Check for overlapping areas
         return not (end1 <= res2.position or end2 <= res1.position)
 
     @staticmethod
     def _should_replace(new_res: ResourceData, existing_res: ResourceData) -> bool:
-        """判断是否应该用新资源替换现有资源"""
-        # 优先级规则：
-        # 1. 更具体的匹配优先（如 Markdown 图片 > 普通 URL）
-        # 2. 匹配长度更精确的优先
-        # 3. 同类型资源，先匹配的优先
+        """Determine if existing resources should be replaced with new resources"""
+        # Priority Rules:
+        # 1. More specific matching priorities (e.g. Markdown Images > General URL）
+        # 2. Match length more precisely first
+        # 3. Same type of resource, match first priority
 
         priority_map = {
-            "markdown_table": 1,  # 表格优先级最高，包含其他资源
-            "markdown_image": 2,  # 图片次之
+            "markdown_table": 1,  # The form has the highest priority and includes additional resources
+            "markdown_image": 2,  # Images next
             "minio_image": 3,
             "http_image": 4,
-            "minio_excel_csv": 5,  # Excel/CSV文件
+            "minio_excel_csv": 5,  # Excel/CSVDoc.
             "http_excel_csv": 6,
             "local_excel_csv": 7,
             "local_image": 8,
@@ -198,11 +198,11 @@ class OverlapResolver:
 
 
 class PatternMatcher:
-    """模式匹配器，负责识别内容中的各种资源"""
+    """Pattern matchers, which are responsible for identifying various resources in the content"""
 
     def __init__(self):
         self.patterns = [
-            # 优先级1: Markdown图片 (最明确的格式)
+            # Priority1: MarkdownImages (The clearest format)
             MatchPattern(
                 name="markdown_image",
                 resource_type=ResourceType.IMAGE,
@@ -211,7 +211,7 @@ class PatternMatcher:
                 priority=1,
                 handler_method="_handle_markdown_image",
             ),
-            # 优先级2: 独立的Markdown表格（支持行首空格缩进）
+            # Priority2: IndependentMarkdownTable (supports indentation at the beginning of a row)
             MatchPattern(
                 name="markdown_table",
                 resource_type=ResourceType.TABLE,
@@ -220,7 +220,7 @@ class PatternMatcher:
                 priority=2,
                 handler_method="_handle_markdown_table",
             ),
-            # 优先级3: MinIO图片路径
+            # Priority3: MinIOImage Path
             MatchPattern(
                 name="minio_image",
                 resource_type=ResourceType.IMAGE,
@@ -229,7 +229,7 @@ class PatternMatcher:
                 priority=3,
                 handler_method="_handle_minio_image",
             ),
-            # 优先级4: HTTP图片链接
+            # Priority4: HTTPHero Image Link
             MatchPattern(
                 name="http_image",
                 resource_type=ResourceType.IMAGE,
@@ -238,7 +238,7 @@ class PatternMatcher:
                 priority=4,
                 handler_method="_handle_http_image",
             ),
-            # 优先级5: Excel/CSV文件 (MinIO路径和HTTP链接)
+            # Priority5: Excel/CSVDoc. (MinIOPath andHTTPLinks)
             MatchPattern(
                 name="minio_excel_csv",
                 resource_type=ResourceType.TABLE,
@@ -247,7 +247,7 @@ class PatternMatcher:
                 priority=5,
                 handler_method="_handle_minio_excel_csv",
             ),
-            # 优先级6: HTTP Excel/CSV文件链接
+            # Priority6: HTTP Excel/CSVLink to Files
             MatchPattern(
                 name="http_excel_csv",
                 resource_type=ResourceType.TABLE,
@@ -256,7 +256,7 @@ class PatternMatcher:
                 priority=6,
                 handler_method="_handle_http_excel_csv",
             ),
-            # 优先级7: 本地Excel/CSV文件路径
+            # Priority7: Perangkat iniExcel/CSVFilePath
             MatchPattern(
                 name="local_excel_csv",
                 resource_type=ResourceType.TABLE,
@@ -265,7 +265,7 @@ class PatternMatcher:
                 priority=7,
                 handler_method="_handle_local_excel_csv",
             ),
-            # 优先级8: 本地图片路径 (最宽泛，最后匹配)
+            # Priority8: Local Image Path (Broadest, last match)
             MatchPattern(
                 name="local_image",
                 resource_type=ResourceType.IMAGE,
@@ -277,7 +277,7 @@ class PatternMatcher:
         ]
 
     def find_all_matches(self, content: str) -> List[Dict[str, Any]]:
-        """找到内容中的所有匹配项"""
+        """Find all matches in content"""
         all_matches = []
 
         for pattern in self.patterns:
@@ -294,58 +294,58 @@ class PatternMatcher:
                 }
                 all_matches.append(match_info)
 
-        # 只按位置排序，不去重（重叠处理交给后续步骤）
+        # Sort by location only, no deduplication (overlap goes to next steps)
         return sorted(all_matches, key=lambda x: x["start"])
 
 
 class ContentParser:
-    """内容解析器，负责解析变量内容并生成占位符"""
+    """Content parser, responsible for parsing variable content and generating placeholders"""
 
     def __init__(self, minio_client):
         self.placeholder_manager = ResourcePlaceholderManager()
         self.pattern_matcher = PatternMatcher()
         self.minio_client = minio_client
         self.logger = logger
-        self._table_image_resources = []  # 临时存储表格内的图片资源
+        self._table_image_resources = []  # Temporary storage of image resources within the table
 
     def parse_variable_content(self, var_name: str, content: str) -> tuple[str, List[ResourceData]]:
         """
-        解析单个变量的内容
+        Parsing the contents of a single variable
 
         Args:
-            var_name: 变量名
-            content: 变量内容
+            var_name: Variables
+            content: Variable Content
 
         Returns:
-            (处理后的内容, 资源列表)
+            (Post-Processing Content, Resource list)
         """
         if not isinstance(content, str):
             content = str(content)
 
-        self.logger.info(f"开始解析变量 '{var_name}', 内容长度: {len(content)}")
+        self.logger.info(f"Start parsing variables '{var_name}', CL: {len(content)}")
 
-        # 添加详细的内容预览日志
+        # Add Detailed Content Preview Log
         if content:
             content_preview = content.replace('\n', '\\n').replace('\r', '\\r').replace('\t', '\\t')
             if len(content_preview) > 300:
-                self.logger.info(f"变量 '{var_name}' 内容预览（前300字符）: {content_preview[:300]}...")
+                self.logger.info(f"Variables '{var_name}' Content Preview (Before300characters. : {content_preview[:300]}...")
             else:
-                self.logger.info(f"变量 '{var_name}' 完整内容: {content_preview}")
+                self.logger.info(f"Variables '{var_name}' Box Full Text: {content_preview}")
         else:
-            self.logger.info(f"变量 '{var_name}' 内容为空")
+            self.logger.info(f"Variables '{var_name}' Konten kosong")
 
-        # 1. 找到所有匹配项
+        # 1. Find all matches
         matches = self.pattern_matcher.find_all_matches(content)
 
-        self.logger.info(f"变量 '{var_name}' 中找到 {len(matches)} 个资源匹配项")
+        self.logger.info(f"Variables '{var_name}' found in {len(matches)} resource matches")
         for i, match in enumerate(matches):
-            self.logger.debug(f"匹配项 {i + 1}: {match['pattern_name']} at {match['start']}-{match['end']}")
+            self.logger.debug(f"Matched items {i + 1}: {match['pattern_name']} at {match['start']}-{match['end']}")
 
-        # 2. 创建资源对象
+        # 2. Create Resource Object
         resources = []
         for match in matches:
             try:
-                # 创建占位符
+                # Create Placeholder
                 placeholder = self.placeholder_manager.create_placeholder(
                     resource_type=match["resource_type"],
                     position=match["start"],
@@ -353,45 +353,45 @@ class ContentParser:
                     pattern_name=match["pattern_name"],
                 )
 
-                # 获取资源对象并填充详细信息
+                # Get resource objects and populate details
                 resource = self.placeholder_manager.get_resource_by_placeholder(placeholder)
 
-                # 调用对应的处理方法
+                # Call the corresponding processing method
                 handler = getattr(self, match["handler_method"])
                 handler(resource, match)
 
                 resources.append(resource)
 
-                self.logger.info(f"成功处理资源: {match['pattern_name']} -> {placeholder}")
+                self.logger.info(f"Successfully processed resources: {match['pattern_name']} -> {placeholder}")
 
             except Exception as e:
-                self.logger.error(f"处理资源失败: {match['pattern_name']}, 错误: {str(e)}")
-                # 继续处理其他资源，不中断整个流程
+                self.logger.error(f"Failed to process resource: {match['pattern_name']}, Error-free: {str(e)}")
+                # Continue with other resources without disrupting the process
 
-        # 3. 解决重叠问题
+        # 3. Resolve Overlap Issues
         resolved_resources = OverlapResolver.resolve_overlapping_resources(resources)
 
-        # 4. 收集表格内的图片资源
+        # 4. Collect image resources within the form
         table_image_resources = []
         for resource in resolved_resources:
             if resource.resource_type == ResourceType.TABLE and hasattr(self, '_table_image_resources'):
                 table_image_resources.extend(self._table_image_resources)
-                self._table_image_resources = []  # 清空临时列表
+                self._table_image_resources = []  # Empty Temporary List
 
-        # 5. 替换内容
+        # 5. REPLACE CONTENT
         processed_content = self._replace_content_with_placeholders(content, resolved_resources)
 
-        # 6. 合并所有资源（主要资源 + 表格内图片资源）
+        # 6. Merge All Resources (Primary Resource + In-Table Picture Resources)
         all_resources = resolved_resources + table_image_resources
 
         self.logger.info(
-            f"变量 '{var_name}' 解析完成，生成 {len(all_resources)} 个资源（主要 {len(resolved_resources)} 个，表格内图片 {len(table_image_resources)} 个）")
+            f"Variables '{var_name}' Parsing complete, generating {len(all_resources)} resources (primary {len(resolved_resources)} , images in table {len(table_image_resources)} words)")
 
         return processed_content, all_resources
 
     def _replace_content_with_placeholders(self, content: str, resources: List[ResourceData]) -> str:
-        """正确的内容替换逻辑"""
-        # 按位置从后往前替换（避免位置偏移）
+        """Correct Content Substitution Logic"""
+        # Replace from back to front by position (avoid position offset)
         sorted_resources = sorted(resources, key=lambda x: x.position, reverse=True)
 
         processed_content = content
@@ -399,111 +399,111 @@ class ContentParser:
             start_pos = resource.position
             end_pos = start_pos + len(resource.original_content)
 
-            # 验证内容匹配
+            # Verify Content Match
             actual_content = processed_content[start_pos:end_pos]
             if actual_content != resource.original_content:
-                self.logger.warning(f"内容不匹配，跳过替换: 期望 '{resource.original_content}', 实际 '{actual_content}'")
+                self.logger.warning(f"Content mismatch, skipping replacement: Expectations '{resource.original_content}', actual '{actual_content}'")
                 continue
 
-            # 执行替换
+            # Execute Replacement
             processed_content = processed_content[:start_pos] + resource.placeholder + processed_content[end_pos:]
 
-            self.logger.debug(f"替换成功: '{resource.original_content}' -> '{resource.placeholder}'")
+            self.logger.debug(f"Replaced successfully: '{resource.original_content}' -> '{resource.placeholder}'")
 
         return processed_content
 
-    # 各种资源处理方法
+    # Various resource handling methods
     def _handle_markdown_image(self, resource: ResourceData, match: Dict):
-        """处理Markdown格式图片"""
+        """<g id="Bold">Medical Treatment:</g>MarkdownFormat image"""
         alt_text, img_path = match["groups"]
 
         resource.image_source = ImageSource.MARKDOWN_REF
         resource.original_path = img_path
-        resource.alt_text = alt_text or "图片"
+        resource.alt_text = alt_text or "Images"
 
-        self.logger.debug(f"Markdown图片: alt='{alt_text}', path='{img_path}'")
+        self.logger.debug(f"MarkdownImages: alt='{alt_text}', path='{img_path}'")
 
     def _handle_markdown_table(self, resource: ResourceData, match: Dict):
-        """处理独立的Markdown表格"""
+        """Handling independentMarkdownTable Filter"""
         table_content = match["full_match"]
 
         resource.table_source = TableSource.MARKDOWN_TABLE
-        resource.file_name = "table_data.csv"  # 默认文件名
+        resource.file_name = "table_data.csv"  # Default filename
 
-        # 解析表格数据
+        # Parsing table data
         resource.table_data, resource.alignments = self._parse_table_data(table_content)
 
-        self.logger.debug(f"Markdown表格: rows={len(resource.table_data) if resource.table_data else 0}")
+        self.logger.debug(f"MarkdownTable Filter: rows={len(resource.table_data) if resource.table_data else 0}")
 
     def _handle_minio_image(self, resource: ResourceData, match: Dict):
-        """处理MinIO图片路径"""
+        """<g id="Bold">Medical Treatment:</g>MinIOImage Path"""
         img_path = match["full_match"]
 
-        # 统一走智能本地下载pipeline：本地->MinIO->原路径
+        # Unified smart local downloadpipelineLocal: ->MinIO->Original Path
         resource.image_source = ImageSource.LOCAL_FILE
         resource.original_path = img_path
-        resource.alt_text = "图片"
+        resource.alt_text = "Images"
 
-        self.logger.debug(f"MinIO图片: path='{img_path}'")
+        self.logger.debug(f"MinIOImages: path='{img_path}'")
 
     def _handle_http_image(self, resource: ResourceData, match: Dict):
-        """处理HTTP图片链接"""
+        """<g id="Bold">Medical Treatment:</g>HTTPHero Image Link"""
         img_url = match["full_match"]
 
         resource.image_source = ImageSource.HTTP_URL
         resource.original_path = img_url
-        resource.alt_text = "图片"
+        resource.alt_text = "Images"
 
-        self.logger.debug(f"HTTP图片: url='{img_url}'")
+        self.logger.debug(f"HTTPImages: url='{img_url}'")
 
     def _handle_local_image(self, resource: ResourceData, match: Dict):
-        """处理本地图片路径"""
+        """Working with local image paths"""
         img_path = match["full_match"]
 
-        # 清理路径中的多余字符，如 [''] 等
+        # Clean extra characters in the path, such as [''] etc.
         img_path = img_path.strip("[]'\"")
 
         resource.image_source = ImageSource.LOCAL_FILE
         resource.original_path = img_path
-        resource.alt_text = "图片"
+        resource.alt_text = "Images"
 
-        self.logger.debug(f"本地图片: path='{img_path}'")
+        self.logger.debug(f"Location Image: path='{img_path}'")
 
     def _handle_minio_excel_csv(self, resource: ResourceData, match: Dict):
-        """处理MinIO Excel/CSV文件"""
+        """<g id="Bold">Medical Treatment:</g>MinIO Excel/CSVDoc."""
         file_path = match["full_match"]
 
         resource.table_source = self._determine_table_source_by_extension(file_path)
         resource.original_path = file_path
         resource.file_name = os.path.basename(file_path)
 
-        self.logger.debug(f"MinIO Excel/CSV文件: path='{file_path}', type='{resource.table_source.value}'")
+        self.logger.debug(f"MinIO Excel/CSVDoc.: path='{file_path}', type='{resource.table_source.value}'")
 
     def _handle_http_excel_csv(self, resource: ResourceData, match: Dict):
-        """处理HTTP Excel/CSV文件"""
+        """<g id="Bold">Medical Treatment:</g>HTTP Excel/CSVDoc."""
         file_url = match["full_match"]
 
         resource.table_source = self._determine_table_source_by_extension(file_url)
         resource.original_path = file_url
         resource.file_name = os.path.basename(urlparse(file_url).path) or "spreadsheet_file"
 
-        self.logger.debug(f"HTTP Excel/CSV文件: url='{file_url}', type='{resource.table_source.value}'")
+        self.logger.debug(f"HTTP Excel/CSVDoc.: url='{file_url}', type='{resource.table_source.value}'")
 
     def _handle_local_excel_csv(self, resource: ResourceData, match: Dict):
-        """处理本地Excel/CSV文件"""
+        """Handling LocalExcel/CSVDoc."""
         file_path = match["full_match"]
 
-        # 清理路径中的多余字符
+        # Clean extra characters in the path
         file_path = file_path.strip("[]'\"")
 
         resource.table_source = self._determine_table_source_by_extension(file_path)
         resource.original_path = file_path
         resource.file_name = os.path.basename(file_path)
 
-        self.logger.debug(f"本地Excel/CSV文件: path='{file_path}', type='{resource.table_source.value}'")
+        self.logger.debug(f"Perangkat iniExcel/CSVDoc.: path='{file_path}', type='{resource.table_source.value}'")
 
     def _determine_table_source_by_extension(self, file_path: str) -> TableSource:
-        """根据文件扩展名确定表格源类型"""
+        """Determine table source type based on file extension"""
         file_path_lower = file_path.lower()
 
         if file_path_lower.endswith('.csv'):
@@ -511,48 +511,48 @@ class ContentParser:
         elif file_path_lower.endswith(('.xlsx', '.xls')):
             return TableSource.EXCEL_CONTENT
         else:
-            # 默认为CSV
+            # Defaulted toCSV
             return TableSource.CSV_CONTENT
 
     def _parse_table_data(self, table_content: str) -> tuple[List[List[str]], List[str]]:
-        """解析表格数据，同时处理表格内的图片"""
+        """Parse the table data while working with the images in the table"""
         try:
-            # 先解析表格结构
+            # Analyze the table structure first
             table_data, alignments = self._parse_markdown_table_from_content(table_content)
 
-            # 处理表格内的图片链接
+            # Working with image links in forms
             self._process_images_in_table(table_data)
 
             return table_data, alignments
         except Exception as e:
-            self.logger.error(f"解析表格数据失败: {str(e)}")
-            return [["解析失败", str(e)]], ["left"]
+            self.logger.error(f"Failed to parse table data: {str(e)}")
+            return [["Parse Failure", str(e)]], ["left"]
 
     def _parse_markdown_table_from_content(self, content: str) -> Tuple[list, list]:
         """
-        从文件内容中解析Markdown表格
+        Parsing from file contentsMarkdownTable Filter
 
         Args:
-            content: 文件内容
+            content: File contents
 
         Returns:
-            tuple: (表格数据, 对齐信息列表)
+            tuple: (Form Data, Alignment Info List)
         """
         try:
-            # 查找所有Markdown表格（支持行首缩进）
+            # Find allMarkdownTable (row indentation supported)
             table_pattern = r"(\s*\|[^\r\n]*\|[^\r\n]*(?:\r?\n\s*\|[^\r\n]*\|[^\r\n]*)+)"
             tables = re.findall(table_pattern, content, re.MULTILINE)
 
             if not tables:
-                self.logger.warning("内容中没有找到Markdown表格")
-                return [["内容解析失败", "未找到表格数据"]], ["left"]
+                self.logger.warning("Not found in contentMarkdownTable Filter")
+                return [["Content parsing failed", "Table data not found"]], ["left"]
 
-            # 合并所有表格（如果有多个表格，合并为一个大表格）
+            # Combine all tables (if there are multiple tables, combine into one large table)
             all_rows = []
             alignments = []
 
             for i, table_content in enumerate(tables):
-                # 保留所有行，包括空行 - 完全保留原始表格结构
+                # Keep all rows, including empty rows - Fully preserving the original table structure
                 lines = [line.strip() for line in table_content.strip().split("\n")]
 
                 if len(lines) < 2:
@@ -563,80 +563,80 @@ class ContentParser:
                 separator_found = False
 
                 for line in lines:
-                    # 跳过完全空的行，但保留只有竖线的空表格行
+                    # Skip completely empty rows, but leave empty table rows with only vertical lines
                     if not line:
                         continue
 
-                    # 检查是否是分隔符行
+                    # Check if it is a delimiter line
                     if self._is_separator_line(line):
                         table_alignments = self._parse_alignments(line)
                         separator_found = True
                         continue
 
-                    # 解析数据行 - 保留所有表格行，包括空行
+                    # Parse Data Rows - Keep all table rows, including empty rows
                     cells = self._parse_table_row(line)
-                    # 移除 if cells 条件，保留空表格行
+                    # Remove if cells Condition, leave empty table rows
                     cleaned_cells = []
                     for cell in cells:
                         cleaned_cell = self._clean_cell_content(cell)
                         cleaned_cells.append(cleaned_cell)
                     table_rows.append(cleaned_cells)
 
-                # 如果没有找到分隔符，使用默认对齐
+                # Use default alignment if no separator found
                 if not separator_found and table_rows:
                     table_alignments = ["left"] * len(table_rows[0])
 
-                # 将表格添加到总列表
+                # Add table to total list
                 if table_rows:
                     if i == 0:
                         alignments = table_alignments
                     all_rows.extend(table_rows)
 
-            # 确保所有行的列数一致
+            # Make sure all rows have the same number of columns
             if all_rows:
                 max_cols = max(len(row) for row in all_rows)
                 for row in all_rows:
                     while len(row) < max_cols:
                         row.append("")
 
-                # 确保对齐信息数量匹配列数
+                # Make sure the number of aligned messages matches the number of columns
                 while len(alignments) < max_cols:
                     alignments.append("left")
                 alignments = alignments[:max_cols]
 
-            self.logger.info(f"成功解析内容中的表格，大小: {len(all_rows)}行 x {len(alignments)}列")
+            self.logger.info(f"Successfully parsed table in content, size: {len(all_rows)}Parade x {len(alignments)}column")
             return all_rows, alignments
 
         except Exception as e:
-            self.logger.error(f"解析内容中的表格失败: {str(e)}")
-            return [["表格解析失败", str(e)]], ["left"]
+            self.logger.error(f"Failed to parse table in content: {str(e)}")
+            return [["Table parsing failed", str(e)]], ["left"]
 
     def _is_separator_line(self, line: str) -> bool:
-        """检查是否是Markdown表格的分隔符行"""
+        """Check if yesMarkdownTable Separator Row"""
         content = line.strip().strip("|").strip()
         if not content:
             return False
 
         cells = [cell.strip() for cell in content.split("|")]
 
-        # 必须至少有一个单元格包含分隔符字符（-或:）
+        # At least one cell must contain a delimiter character (-OR:）
         has_separator_chars = False
         for cell in cells:
             if not cell:
                 continue
-            # 检查是否包含分隔符字符
+            # Check for delimiter characters
             if '-' in cell or ':' in cell:
                 has_separator_chars = True
-            # 移除分隔符字符后检查是否还有其他内容
+            # Check for anything else after removing the separator character
             clean_cell = cell.replace("-", "").replace(":", "").strip()
             if clean_cell:
                 return False
 
-        # 只有包含分隔符字符的行才能被认为是分隔符行
+        # Only lines containing delimiter characters can be considered delimiter lines
         return has_separator_chars
 
     def _parse_alignments(self, separator_line: str) -> list:
-        """从分隔符行解析列对齐方式"""
+        """Parse column alignment from delimiter rows"""
         alignments = []
         content = separator_line.strip().strip("|").strip()
         cells = [cell.strip() for cell in content.split("|")]
@@ -656,7 +656,7 @@ class ContentParser:
         return alignments
 
     def _parse_table_row(self, line: str) -> list:
-        """解析表格行"""
+        """Parse Table Rows"""
         content = line.strip()
         if content.startswith("|"):
             content = content[1:]
@@ -680,13 +680,13 @@ class ContentParser:
             else:
                 current_cell += char
 
-        # 总是添加最后一个单元格，确保空表格行也能正确解析
+        # Always add the last cell to ensure empty table rows are also parsed correctly
         cells.append(current_cell.strip())
 
         return cells
 
     def _clean_cell_content(self, cell: str) -> str:
-        """清理单元格内容"""
+        """Clean cell contents"""
         if not cell:
             return ""
 
@@ -703,7 +703,7 @@ class ContentParser:
         return cleaned
 
     def _process_images_in_table(self, table_data: List[List[str]]):
-        """处理表格内的图片链接，创建图片资源"""
+        """Process image links within the table to create image assets"""
         if not table_data:
             return
 
@@ -712,26 +712,26 @@ class ContentParser:
                 if not cell:
                     continue
 
-                # 在单元格内容中查找并处理图片链接
+                # Find and process picture links in cell contents
                 updated_cell = self._process_cell_images(cell)
                 table_data[row_idx][col_idx] = updated_cell
 
     def _process_cell_images(self, cell_content: str) -> str:
-        """处理单元格内的图片，使用现有的模式匹配逻辑"""
+        """Process images inside cells, using existing pattern matching logic"""
         if not cell_content:
             return cell_content
 
-        # 复用现有的模式匹配逻辑查找所有图片
+        # Reuse existing pattern matching logic to find all images
         matches = self.pattern_matcher.find_all_matches(cell_content)
 
-        # 只处理图片类型的匹配
+        # Handle image type matches only
         image_matches = [m for m in matches if m["resource_type"] == ResourceType.IMAGE]
 
         updated_content = cell_content
 
-        # 从后往前处理，避免位置偏移
+        # Process from back to front to avoid position offset
         for match in reversed(image_matches):
-            # 创建图片资源
+            # Create image resource
             placeholder = self.placeholder_manager.create_placeholder(
                 resource_type=match["resource_type"],
                 position=match["start"],
@@ -739,17 +739,17 @@ class ContentParser:
                 pattern_name=match["pattern_name"],
             )
 
-            # 获取资源对象并调用对应的处理方法
+            # Get the resource object and call the corresponding processing method
             resource = self.placeholder_manager.get_resource_by_placeholder(placeholder)
             handler = getattr(self, match["handler_method"])
             handler(resource, match)
 
-            # 将表格内的图片资源添加到临时列表（避免被重叠解决器跳过）
+            # Add image resources within the table to a temporary list (to avoid being skipped by the overlap resolver)
             self._table_image_resources.append(resource)
 
-            self.logger.info(f"表格内图片: {match['pattern_name']} {match['full_match']} -> {placeholder}")
+            self.logger.info(f"In-Table Images: {match['pattern_name']} {match['full_match']} -> {placeholder}")
 
-            # 替换为占位符
+            # Replace with a placeholder
             start_pos = match["start"]
             end_pos = match["end"]
             updated_content = updated_content[:start_pos] + placeholder + updated_content[end_pos:]
@@ -758,28 +758,28 @@ class ContentParser:
 
 
 class ResourceDownloadManager:
-    """资源下载管理器"""
+    """Resource Download Manager"""
 
     def __init__(self, minio_client):
         self.minio_client = minio_client
-        self.temp_files: List[str] = []  # 管理所有临时文件
+        self.temp_files: List[str] = []  # Manage all temporary files
         self.logger = logger
 
     def download_all_resources(self, resources: List[ResourceData]) -> Dict[str, Any]:
         """
-        下载所有需要下载的资源
+        Download all resources that need to be downloaded
 
         Returns:
-            下载统计信息
+            Download stats
         """
         stats = {"total": len(resources), "images_success": 0, "images_failed": 0, "tables_processed": 0, "errors": []}
 
         image_resources = [r for r in resources if r.resource_type == ResourceType.IMAGE]
         table_resources = [r for r in resources if r.resource_type == ResourceType.TABLE]
 
-        self.logger.info(f"开始下载资源: 图片 {len(image_resources)} 个, 表格 {len(table_resources)} 个")
+        self.logger.info(f"Start downloading resources: Images {len(image_resources)} Pcs, Table Filter {len(table_resources)} Pcs")
 
-        # 下载图片资源
+        # Download image resources
         for resource in image_resources:
             try:
                 self._download_image_resource(resource)
@@ -789,117 +789,117 @@ class ResourceDownloadManager:
                     stats["images_failed"] += 1
             except Exception as e:
                 stats["images_failed"] += 1
-                stats["errors"].append(f"图片下载失败 {resource.original_path}: {str(e)}")
-                self.logger.error(f"图片下载异常: {str(e)}")
+                stats["errors"].append(f"This image failed to load {resource.original_path}: {str(e)}")
+                self.logger.error(f"Abnormal image download: {str(e)}")
 
-        # 处理表格资源
+        # Processing Table Resources
         for resource in table_resources:
             try:
                 if resource.table_source == TableSource.MARKDOWN_TABLE:
-                    # Markdown表格已在解析阶段处理，只需验证
+                    # MarkdownThe form has been processed in the parsing phase, just verify
                     self._validate_table_resource(resource)
                 elif resource.table_source in [TableSource.CSV_CONTENT, TableSource.EXCEL_CONTENT]:
-                    # Excel/CSV文件需要下载和解析
+                    # Excel/CSVFile needs to be downloaded and parsed
                     self._download_and_parse_table_file(resource)
                     self._validate_table_resource(resource)
                 stats["tables_processed"] += 1
             except Exception as e:
-                stats["errors"].append(f"表格处理失败 {resource.file_name}: {str(e)}")
-                self.logger.error(f"表格处理异常: {str(e)}")
+                stats["errors"].append(f"Form processing failed {resource.file_name}: {str(e)}")
+                self.logger.error(f"Form Processing Exception: {str(e)}")
 
         self.logger.info(
-            f"资源下载完成: 成功 {stats['images_success']}, 失败 {stats['images_failed']}, 表格 {stats['tables_processed']}"
+            f"Resource download complete: Berhasil {stats['images_success']}, Kalah {stats['images_failed']}, Table Filter {stats['tables_processed']}"
         )
 
         return stats
 
     def _download_image_resource(self, resource: ResourceData):
-        """下载单个图片资源"""
+        """Download individual image assets"""
         if resource.image_source == ImageSource.LOCAL_FILE:
             self._handle_smart_local_download(resource)
         elif resource.image_source == ImageSource.HTTP_URL:
             self._handle_http_download(resource)
         elif resource.image_source == ImageSource.MARKDOWN_REF:
-            # Markdown引用需要根据路径类型进一步判断
+            # MarkdownReferences need to be further judged based on the path type
             self._handle_markdown_reference(resource)
 
     def _handle_smart_local_download(self, resource: ResourceData):
         """
-        智能处理本地路径文件
-        1. 优先从本地下载
-        2. 如果本地没有，解析第一个目录为bucket从MinIO下载
-        3. 如果都没有，返回原路径
+        Handle local path files intelligently
+        1. Prioritize local downloads
+        2. If not locally, resolve the first directory tobucketFROMMinIOMengunduh
+        3. If none, return to the original path
         """
         file_path = resource.original_path
 
-        # 步靄1: 优先尝试本地文件
+        # Buyi1: Try local files first
         if os.path.exists(file_path):
             resource.local_path = file_path
             resource.download_success = True
-            self.logger.info(f"本地图片文件存在: {file_path}")
+            self.logger.info(f"Local image file exists: {file_path}")
             return
 
-        # 步靄2: 尝试从MinIO下载（解析bucket和object名）
-        self.logger.info(f"本地文件不存在，尝试从MinIO下载: {file_path}")
+        # Buyi2: Try fromMinIODownload (parsingbucketAndobjectLast name
+        self.logger.info(f"Local file does not exist, try fromMinIOMengunduh: {file_path}")
 
-        # 解析路径获取bucket和object_name
+        # Resolve Path AcquisitionbucketAndobject_name
         bucket_name, object_name = self._parse_path_for_minio(file_path)
 
         if bucket_name and object_name:
-            # 尝试MinIO下载
+            # attemptMinIOMengunduh
             success = self._try_minio_download(resource, bucket_name, object_name)
             if success:
                 return
 
-        # 步靄3: 都没有下载成功，返回原路径
+        # Buyi3: Neither download was successful, returning to the original path
         resource.local_path = file_path
-        resource.download_success = True  # 返回原路径也算成功
-        self.logger.warning(f"图片下载失败，使用原路径: {file_path}")
+        resource.download_success = True  # Return to original path is also considered successful
+        self.logger.warning(f"Image download failed, use original path: {file_path}")
 
     def _parse_path_for_minio(self, file_path: str) -> tuple[str, str]:
         """
-        解析文件路径为MinIO的bucket和object_name
-        支持特殊路径的正确映射
+        Resolve file path asMinIOright of privacybucketAndobject_name
+        Supports correct mapping of special paths
 
-        规则:
+        rule’:
         - "/bisheng/xxx" -> bucket="bisheng", object_name="xxx"  
         - "/tmp-dir/xxx" -> bucket="tmp-dir", object_name="xxx"
-        - "/tmp/xxx" -> 优先尝试 bucket="bisheng", object_name="tmp/xxx"，然后尝试 bucket="tmp-dir", object_name="xxx"
+        - "/tmp/xxx" -> Try first bucket="bisheng", object_name="tmp/xxx", then try bucket="tmp-dir", object_name="xxx"
         - "images/photo.jpg" -> bucket="images", object_name="photo.jpg"
         """
         if not file_path:
             return None, None
 
-        # 特殊路径处理
+        # Special Path Processing
         if file_path.startswith("/bisheng/"):
             # /bisheng/object/name -> bucket="bisheng", object_name="object/name"
-            object_name = file_path[9:]  # 移除 '/bisheng/'
+            object_name = file_path[9:]  # Remove '/bisheng/'
             return "bisheng", object_name if object_name else None
 
         elif file_path.startswith("/tmp-dir/"):
             # /tmp-dir/object/name -> bucket="tmp-dir", object_name="object/name"  
-            object_name = file_path[9:]  # 移除 '/tmp-dir/'
+            object_name = file_path[9:]  # Remove '/tmp-dir/'
             return "tmp-dir", object_name if object_name else None
 
         elif file_path.startswith("/tmp/"):
-            # /tmp/xxx -> 返回多个可能的bucket选项，调用方需要都尝试
-            # 这里先返回主bucket映射，调用方应该实现多bucket尝试逻辑
-            object_name = file_path[5:]  # 移除 '/tmp/'
+            # /tmp/xxx -> Returns multiple possiblebucketoption, the caller needs to try
+            # Here first return to the Lordbucketmapping, the caller should implement morebucketTry Logic
+            object_name = file_path[5:]  # Remove '/tmp/'
             return "tmp-dir", object_name if object_name else None
 
-        # 通用路径解析（保持原有逻辑）
+        # Generic path resolution (keep the original logic)
         clean_path = file_path.lstrip("/")
         if not clean_path or "/" not in clean_path:
-            # 如果没有目录分隔，不能解析
+            # Cannot parse without directory delimitation
             return None, None
 
-        # 分离第一个目录和剩余路径
+        # Detach first directory and remaining paths
         parts = clean_path.split("/", 1)
         if len(parts) == 2:
             bucket_name = parts[0]
             object_name = parts[1]
 
-            # 验证bucket名是否合法（简单检查）
+            # VerifybucketFirst name is legal (simple check)
             if bucket_name and object_name and bucket_name.replace("_", "").replace("-", "").isalnum():
                 return bucket_name, object_name
 
@@ -907,44 +907,44 @@ class ResourceDownloadManager:
 
     def _try_minio_download(self, resource: ResourceData, bucket_name: str, object_name: str) -> bool:
         """
-        尝试从MinIO下载文件
+        Try fromMinIODownload file
 
         Returns:
-            bool: 是否下载成功
+            bool: Was the download successful?
         """
         try:
-            # 检查文件是否存在
+            # Checks to see if file exists.
             if not self.minio_client.object_exists_sync(bucket_name, object_name):
-                self.logger.debug(f"MinIO文件不存在: {bucket_name}/{object_name}")
+                self.logger.debug(f"MinIOFile don\'t exists: {bucket_name}/{object_name}")
                 return False
 
-            # 下载文件内容
+            # Download File Contents
             file_content = self.minio_client.get_object_sync(bucket_name, object_name)
 
-            # 生成临时文件名
+            # Generate temporary filename
             file_ext = os.path.splitext(object_name)[1] or ".dat"
             filename = f"{uuid4().hex}{file_ext}"
             temp_dir = tempfile.gettempdir()
             temp_file = os.path.join(temp_dir, filename)
 
-            # 保存到临时文件
+            # Save to Temporary File
             with open(temp_file, "wb") as f:
                 f.write(file_content)
 
-            # 更新资源信息
+            # Update resource information
             resource.local_path = temp_file
             resource.download_success = True
             self.temp_files.append(temp_file)
 
-            self.logger.info(f"MinIO下载成功: {bucket_name}/{object_name} -> {temp_file}")
+            self.logger.info(f"MinIODownloaded Successfully: {bucket_name}/{object_name} -> {temp_file}")
             return True
 
         except Exception as e:
-            self.logger.debug(f"从MinIO下载失败 {bucket_name}/{object_name}: {str(e)}")
+            self.logger.debug(f"FROMMinIODownload failed {bucket_name}/{object_name}: {str(e)}")
             return False
 
     def _handle_http_download(self, resource: ResourceData):
-        """处理HTTP下载"""
+        """<g id="Bold">Medical Treatment:</g>HTTPMengunduh"""
         try:
             local_path, success = self._download_file_from_url(resource.original_path)
             resource.local_path = local_path
@@ -952,83 +952,83 @@ class ResourceDownloadManager:
 
             if success:
                 self.temp_files.append(local_path)
-                self.logger.info(f"HTTP图片下载成功: {resource.original_path} -> {local_path}")
+                self.logger.info(f"HTTPImage downloaded successfully: {resource.original_path} -> {local_path}")
             else:
-                self.logger.warning(f"HTTP图片下载失败，使用原路径: {resource.original_path}")
+                self.logger.warning(f"HTTPImage download failed, use original path: {resource.original_path}")
 
         except Exception as e:
             resource.local_path = resource.original_path
-            resource.download_success = True  # 返回原路径也算成功
-            self.logger.warning(f"HTTP图片下载失败，使用原路径: {resource.original_path} (错误: {str(e)})")
+            resource.download_success = True  # Return to original path is also considered successful
+            self.logger.warning(f"HTTPImage download failed, use original path: {resource.original_path} (Error-free: {str(e)})")
 
     def _handle_markdown_reference(self, resource: ResourceData):
-        """处理Markdown引用（需要判断具体类型）"""
+        """<g id="Bold">Medical Treatment:</g>MarkdownQuotes (specific type needs to be determined)"""
         img_path = resource.original_path
 
         if self._is_valid_url(img_path):
             resource.image_source = ImageSource.HTTP_URL
             self._handle_http_download(resource)
         else:
-            # 所有非HTTP URL的路径都走智能本地下载pipeline
+            # All non-HTTP URLAll paths to smart local downloadspipeline
             resource.image_source = ImageSource.LOCAL_FILE
             self._handle_smart_local_download(resource)
 
     def _download_and_parse_table_file(self, resource: ResourceData):
-        """下载并解析Excel/CSV文件"""
+        """Download and parseExcel/CSVDoc."""
         file_path = resource.original_path
 
-        # 1. 先尝试下载文件
+        # 1. Try downloading the file first
         local_file_path = self._download_table_file(file_path)
 
         if not local_file_path:
-            raise Exception(f"无法下载表格文件: {file_path}")
+            raise Exception(f"Unable to download form file: {file_path}")
 
-        # 2. 根据文件类型解析
+        # 2. Parse based on file type
         try:
             if resource.table_source == TableSource.CSV_CONTENT:
                 resource.table_data, resource.alignments = self._parse_csv_file(local_file_path)
             elif resource.table_source == TableSource.EXCEL_CONTENT:
                 resource.table_data, resource.alignments = self._parse_excel_file(local_file_path)
 
-            # 设置下载路径
+            # Set download path
             resource.local_path = local_file_path
             resource.download_success = True
-            self.logger.info(f"表格文件解析成功: {file_path} -> {len(resource.table_data)}行")
+            self.logger.info(f"Table file parsed successfully: {file_path} -> {len(resource.table_data)}Parade")
 
         except Exception as e:
-            self.logger.error(f"表格文件解析失败: {file_path}, 错误: {str(e)}")
-            # 创建错误表格
-            resource.table_data = [["文件解析失败", str(e)]]
+            self.logger.error(f"Table file parsing failed: {file_path}, Error-free: {str(e)}")
+            # Create error table
+            resource.table_data = [["File parsing failed", str(e)]]
             resource.alignments = ["left", "left"]
-            resource.local_path = local_file_path if local_file_path else file_path  # 确保有路径
+            resource.local_path = local_file_path if local_file_path else file_path  # Make sure there's a path
             resource.download_success = False
 
     def _download_table_file(self, file_path: str) -> Optional[str]:
-        """下载表格文件到本地临时文件"""
-        # 1. 优先尝试本地文件
+        """Download form files to local temporary files"""
+        # 1. Try local files first
         if os.path.exists(file_path):
-            self.logger.info(f"本地表格文件存在: {file_path}")
+            self.logger.info(f"Local table file exists: {file_path}")
             return file_path
 
-        # 2. 尝试HTTP下载
+        # 2. attemptHTTPMengunduh
         if self._is_valid_url(file_path):
             try:
                 temp_file, success = self._download_file_from_url(file_path)
                 if success and temp_file:
                     self.temp_files.append(temp_file)
-                    self.logger.info(f"HTTP表格文件下载成功: {file_path} -> {temp_file}")
+                    self.logger.info(f"HTTPForm file downloaded successfully: {file_path} -> {temp_file}")
                     return temp_file
             except Exception as e:
-                self.logger.warning(f"HTTP表格文件下载失败: {file_path}, 错误: {str(e)}")
+                self.logger.warning(f"HTTPForm file download failed: {file_path}, Error-free: {str(e)}")
 
-        # 3. 尝试从MinIO下载
+        # 3. Try fromMinIOMengunduh
         bucket_name, object_name = self._parse_path_for_minio(file_path)
         if bucket_name and object_name:
             try:
                 if self.minio_client.object_exists_sync(bucket_name, object_name):
                     file_content = self.minio_client.get_object_sync(bucket_name, object_name)
 
-                    # 生成临时文件
+                    # Generate Temporary Files
                     file_ext = os.path.splitext(object_name)[1] or ".dat"
                     filename = f"{uuid4().hex}{file_ext}"
                     temp_dir = tempfile.gettempdir()
@@ -1038,64 +1038,64 @@ class ResourceDownloadManager:
                         f.write(file_content)
 
                     self.temp_files.append(temp_file)
-                    self.logger.info(f"MinIO表格文件下载成功: {bucket_name}/{object_name} -> {temp_file}")
+                    self.logger.info(f"MinIOForm file downloaded successfully: {bucket_name}/{object_name} -> {temp_file}")
                     return temp_file
             except Exception as e:
-                self.logger.warning(f"MinIO表格文件下载失败: {file_path}, 错误: {str(e)}")
+                self.logger.warning(f"MinIOForm file download failed: {file_path}, Error-free: {str(e)}")
 
-        # 4. 都没有下载成功
-        self.logger.warning(f"表格文件下载失败: {file_path}")
+        # 4. None of the downloads were successful
+        self.logger.warning(f"Form file download failed: {file_path}")
         return None
 
     def _parse_csv_file(self, file_path: str) -> Tuple[List[List[str]], List[str]]:
-        """解析CSV文件"""
+        """analyzingCSVDoc."""
         try:
-            # 自动检测编码
+            # Auto-Detect Encoding
             with open(file_path, 'rb') as f:
                 raw_data = f.read()
                 encoding_info = detect(raw_data)
                 encoding = encoding_info['encoding'] or 'utf-8'
 
-            # 使用pandas读取CSV，更好地处理各种格式
+            # Usepandasread outCSVto better handle various formats
             df = pd.read_csv(file_path, encoding=encoding)
 
-            # 转换为表格数据格式
+            # Convert to Tabular Data Format
             table_data = []
 
-            # 添加表头
+            # Add header
             headers = [str(col) for col in df.columns]
             table_data.append(headers)
 
-            # 添加数据行
+            # Add Data Row
             for _, row in df.iterrows():
                 row_data = [str(cell) if pd.notna(cell) else "" for cell in row]
                 table_data.append(row_data)
 
-            # 生成对齐信息（默认左对齐）
+            # Generate alignment information (default left alignment)
             alignments = ["left"] * len(headers)
 
-            self.logger.info(f"CSV文件解析成功: {len(table_data)}行 x {len(headers)}列")
+            self.logger.info(f"CSVFile parsed successfully: {len(table_data)}Parade x {len(headers)}column")
             return table_data, alignments
 
         except Exception as e:
-            self.logger.error(f"CSV文件解析失败: {file_path}, 错误: {str(e)}")
+            self.logger.error(f"CSVFile parsing failed: {file_path}, Error-free: {str(e)}")
             raise
 
     def _parse_excel_file(self, file_path: str) -> Tuple[List[List[str]], List[str]]:
-        """解析Excel文件"""
+        """analyzingExcelDoc."""
         try:
-            # 使用openpyxl读取Excel文件
-            workbook = load_workbook(file_path, data_only=True)  # data_only=True获取计算后的值
+            # Useopenpyxlread outExcelDoc.
+            workbook = load_workbook(file_path, data_only=True)  # data_only=TrueGet Calculated Value
 
-            # 使用第一个工作表
+            # Using the first worksheet
             worksheet = workbook.active
 
             table_data = []
             max_col = 0
 
-            # 读取所有行
+            # Read all rows
             for row in worksheet.iter_rows(values_only=True):
-                # 跳过完全空白的行
+                # Skip completely blank rows
                 if all(cell is None or str(cell).strip() == "" for cell in row):
                     continue
 
@@ -1103,47 +1103,47 @@ class ResourceDownloadManager:
                 table_data.append(row_data)
                 max_col = max(max_col, len(row_data))
 
-            # 确保所有行的列数一致
+            # Make sure all rows have the same number of columns
             for row in table_data:
                 while len(row) < max_col:
                     row.append("")
 
-            # 生成对齐信息（默认左对齐）
+            # Generate alignment information (default left alignment)
             alignments = ["left"] * max_col
 
-            self.logger.info(f"Excel文件解析成功: {len(table_data)}行 x {max_col}列")
+            self.logger.info(f"ExcelFile parsed successfully: {len(table_data)}Parade x {max_col}column")
 
             return table_data, alignments
 
         except Exception as e:
-            self.logger.error(f"Excel文件解析失败: {file_path}, 错误: {str(e)}")
+            self.logger.error(f"ExcelFile parsing failed: {file_path}, Error-free: {str(e)}")
             raise
 
     def _validate_table_resource(self, resource: ResourceData):
-        """验证表格资源"""
-        # 允许空表格存在，不再抛出"表格数据为空"错误
+        """Validate form resources"""
+        # Allow empty forms to exist, no more throwing"Table data is empty"Error-free
         if not resource.table_data:
-            resource.table_data = []  # 确保table_data是空列表而不是None
+            resource.table_data = []  # Ensuringtable_datais an empty list and notNone
 
-        # 验证表格数据一致性
+        # Verify table data consistency
         if len(resource.table_data) > 0:
             col_count = len(resource.table_data[0])
             for i, row in enumerate(resource.table_data):
                 if len(row) != col_count:
-                    self.logger.warning(f"表格第 {i + 1} 行列数不一致，将补齐空值")
+                    self.logger.warning(f"Form pg. {i + 1} The number of rows and columns is inconsistent, the null value will be filled")
                     while len(row) < col_count:
                         row.append("")
 
-        # 验证对齐信息
+        # Verify alignment information
         if resource.alignments and resource.table_data:
             expected_cols = len(resource.table_data[0]) if resource.table_data else 0
             while len(resource.alignments) < expected_cols:
                 resource.alignments.append("left")
 
     def _download_file_from_url(self, url: str) -> Tuple[str, bool]:
-        """从 URL 下载文件"""
+        """FROM URL Download file"""
         try:
-            # 设置请求头，模拟浏览器访问
+            # Set request headers to simulate browser access
             headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
                               "(KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
@@ -1152,8 +1152,8 @@ class ResourceDownloadManager:
             response = requests.get(url, headers=headers, timeout=30, verify=False)
             response.raise_for_status()
 
-            # 获取文件名
-            # 根据Content-Type推断扩展名
+            # Get filename
+            # accordingContent-TypeInferred extension
             content_type = response.headers.get("Content-Type", "").lower()
             if "image/png" in content_type:
                 filename = f"{uuid4().hex}.png"
@@ -1165,7 +1165,7 @@ class ResourceDownloadManager:
                 file_ext = url.split('.')[-1].lower()[-5:]
                 filename = f"{uuid4().hex}.{file_ext}"
 
-            # 创建临时文件
+            # Creating temp file
             temp_dir = tempfile.gettempdir()
             temp_file = os.path.join(temp_dir, filename)
 
@@ -1175,81 +1175,81 @@ class ResourceDownloadManager:
             return temp_file, True
 
         except Exception as e:
-            self.logger.error(f"下载文件失败: {url}, 错误: {str(e)}")
+            self.logger.error(f"Download failed: {url}, Error-free: {str(e)}")
             return "", False
 
     def _download_file_from_minio(self, minio_path: str) -> Tuple[str, bool]:
-        """从MinIO下载文件"""
+        """FROMMinIODownload file"""
         try:
-            # 解析MinIO路径
+            # analyzingMinIOPath
             bucket_name = None
             object_name = None
 
             if minio_path.startswith("minio://"):
-                # 格式: minio://bucket/object/name
+                # Format: minio://bucket/object/name
                 parts = minio_path[8:].split("/", 1)
                 if len(parts) == 2:
                     bucket_name, object_name = parts
                 else:
                     object_name = parts[0]
-                    bucket_name = self.minio_client.bucket  # 默认bucket
+                    bucket_name = self.minio_client.bucket  # Defaultbucket
             elif minio_path.startswith("/bisheng/"):
-                # 格式: /bisheng/object/name
+                # Format: /bisheng/object/name
                 bucket_name = self.minio_client.bucket
-                object_name = minio_path[9:]  # 移除 '/bisheng/'
+                object_name = minio_path[9:]  # Remove '/bisheng/'
             elif minio_path.startswith("/tmp-dir/"):
-                # 格式: /tmp-dir/object/name
+                # Format: /tmp-dir/object/name
                 bucket_name = self.minio_client.tmp_bucket
-                object_name = minio_path[9:]  # 移除 '/tmp-dir/'
+                object_name = minio_path[9:]  # Remove '/tmp-dir/'
             elif minio_path.startswith("/tmp/"):
-                # 格式: /tmp/object/name -> 智能bucket选择
-                object_name = minio_path[5:]  # 移除 '/tmp/'
+                # Format: /tmp/object/name -> SmartbucketPilih
+                object_name = minio_path[5:]  # Remove '/tmp/'
 
-                # 先尝试主bucket
+                # Try the Lord firstbucket
                 bucket_name = self.minio_client.bucket
                 if self.minio_client.object_exists_sync(bucket_name, object_name):
-                    self.logger.debug(f"在主bucket找到文件: {bucket_name}/{object_name}")
+                    self.logger.debug(f"Schedule an immediate check of all services on this hostbucketFile Found: {bucket_name}/{object_name}")
                 else:
-                    # 主bucket没有，尝试tmp_bucket
+                    # MasterbucketNo, trytmp_bucket
                     bucket_name = self.minio_client.tmp_bucket
                     if self.minio_client.object_exists_sync(bucket_name, object_name):
-                        self.logger.debug(f"在tmp_bucket找到文件: {bucket_name}/{object_name}")
+                        self.logger.debug(f"Insidetmp_bucketFile Found: {bucket_name}/{object_name}")
                     else:
-                        self.logger.warning(f"两个bucket都没找到文件: {object_name}")
+                        self.logger.warning(f"TwobucketNo documents found: {object_name}")
             else:
-                # 尝试作为完整URL处理
+                # Try as fullURL<g id="Bold">Medical Treatment:</g>
                 if self._is_valid_url(minio_path):
                     return self._download_file_from_url(minio_path)
                 else:
-                    self.logger.error(f"无法解析MinIO路径: {minio_path}")
+                    self.logger.error(f"Unable to AnalyzeMinIOPath: {minio_path}")
                     return "", False
 
-            # 检查文件是否存在
+            # Checks to see if file exists.
             if not self.minio_client.object_exists_sync(bucket_name, object_name):
-                self.logger.error(f"MinIO文件不存在: {bucket_name}/{object_name}")
+                self.logger.error(f"MinIOFile don\'t exists: {bucket_name}/{object_name}")
                 return "", False
 
-            # 下载文件内容
+            # Download File Contents
             file_content = self.minio_client.get_object_sync(bucket_name, object_name)
 
-            # 生成临时文件名
+            # Generate temporary filename
             file_ext = os.path.splitext(object_name)[1] or ".dat"
             filename = f"{uuid4().hex}{file_ext}"
             temp_dir = tempfile.gettempdir()
             temp_file = os.path.join(temp_dir, filename)
 
-            # 保存到临时文件
+            # Save to Temporary File
             with open(temp_file, "wb") as f:
                 f.write(file_content)
 
             return temp_file, True
 
         except Exception as e:
-            self.logger.error(f"从MinIO下载文件失败: {minio_path}, 错误: {str(e)}")
+            self.logger.error(f"FROMMinIODownload failed: {minio_path}, Error-free: {str(e)}")
             return "", False
 
     def _is_valid_url(self, url: str) -> bool:
-        """检查是否为有效的URL"""
+        """Check if it is validURL"""
         try:
             result = urlparse(url)
             return all([result.scheme, result.netloc])
@@ -1257,26 +1257,26 @@ class ResourceDownloadManager:
             return False
 
     def _is_minio_path(self, path: str) -> bool:
-        """检查是否为明确的MinIO专用路径"""
-        # 只有明确的MinIO专用路径才直接走MinIO下载
-        # 其他路径（包括/tmp/）都走智能本地下载pipeline
+        """Check if it is clearMinIODedicated Path"""
+        # Only explicitMinIODedicated paths go straightMinIOMengunduh
+        # Other pathways (incl./tmp/) all go smart local downloadspipeline
         return path.startswith(("minio://", "/bisheng/", "/tmp-dir/"))
 
     def cleanup(self):
-        """清理临时文件"""
+        """Clean Up Temp Files"""
         for temp_file in self.temp_files:
             try:
                 if os.path.exists(temp_file):
                     os.remove(temp_file)
-                    self.logger.debug(f"清理临时文件: {temp_file}")
+                    self.logger.debug(f"Clean Up Temp Files: {temp_file}")
             except Exception as e:
-                self.logger.warning(f"清理临时文件失败 {temp_file}: {str(e)}")
+                self.logger.warning(f"Failed to clean temporary files {temp_file}: {str(e)}")
 
         self.temp_files.clear()
 
 
 class SmartDocumentRenderer:
-    """智能文档渲染器"""
+    """Smart Document Renderer"""
 
     def __init__(self, template_content: bytes):
         self.template_content = template_content
@@ -1284,40 +1284,40 @@ class SmartDocumentRenderer:
 
     def render(self, variables: Dict[str, str], resources: List[ResourceData]) -> bytes:
         """
-        渲染最终文档
+        Render Final Document
 
         Args:
-            variables: 处理后的变量字典（包含占位符）
-            resources: 所有资源列表
+            variables: Processed variable dictionary (with placeholders)
+            resources: All Resources List
 
         Returns:
-            渲染后的文档字节流
+            Rendered document byte stream
         """
-        self.logger.info(f"开始渲染文档，变量 {len(variables)} 个，资源 {len(resources)} 个")
+        self.logger.info(f"Start rendering documents, variables {len(variables)} , resources {len(resources)} Pcs")
 
-        # 1. 初始化DocxTemplateRender
+        # 1. InisialisasiDocxTemplateRender
         docx_renderer = DocxTemplateRender(file_content=io.BytesIO(self.template_content))
 
-        # 2. 第一步：变量替换（包含占位符）
+        # 2. Step 1: Variable replacement (including placeholders)
         template_def = [[f"{{{{{key}}}}}", value] for key, value in variables.items()]
 
-        # 3. 构建资源映射（按类型分组）
+        # 3. Build resource maps (grouped by type)
         resource_map = self._build_resource_map(resources)
 
-        # 4. 调用DocxTemplateRender进行渲染
+        # 4. RecallDocxTemplateRenderPerform Rendering
         output_doc = docx_renderer.render(template_def, resource_map)
 
-        # 5. 转换为字节流
+        # 5. Convert to byte stream
         output_content = io.BytesIO()
         output_doc.save(output_content)
         output_content.seek(0)
 
-        self.logger.info("文档渲染完成")
+        self.logger.info("Document rendering complete")
 
         return output_content.read()
 
     def _build_resource_map(self, resources: List[ResourceData]) -> Dict[str, List[Dict]]:
-        """构建资源映射，适配DocxTemplateRender的格式"""
+        """Build resource mappings, adaptingDocxTemplateRenderformat; """
         resource_map = {"images": [], "excel_files": [], "csv_files": [], "markdown_tables": []}
 
         for resource in resources:
@@ -1334,46 +1334,46 @@ class SmartDocumentRenderer:
 
             elif resource.resource_type == ResourceType.TABLE:
                 if resource.table_source == TableSource.MARKDOWN_TABLE:
-                    # Markdown表格放在csv_files中处理
+                    # MarkdownTable incsv_filesMedium Processing
                     table_info = {
                         "placeholder": resource.placeholder,
                         "table_data": resource.table_data,
                         "alignments": resource.alignments,
                         "file_name": resource.file_name,
-                        "type": "markdown_table",  # 修复：使用正确的类型标识符
+                        "type": "markdown_table",  # Fix: Use correct type identifier
                     }
                     resource_map["csv_files"].append(table_info)
 
                 elif resource.table_source == TableSource.CSV_CONTENT:
-                    # CSV文件
+                    # CSVDoc.
                     table_info = {
                         "placeholder": resource.placeholder,
                         "table_data": resource.table_data,
                         "alignments": resource.alignments,
                         "file_name": resource.file_name,
-                        "type": "csv",  # 修复：使用正确的类型标识符
-                        # 添加兼容性字段
-                        "local_path": getattr(resource, 'local_path', resource.original_path),  # 使用下载的本地路径或原始路径
+                        "type": "csv",  # Fix: Use correct type identifier
+                        # Add compatibility field
+                        "local_path": getattr(resource, 'local_path', resource.original_path),  # Use downloaded local path or original path
                     }
                     resource_map["csv_files"].append(table_info)
 
                 elif resource.table_source == TableSource.EXCEL_CONTENT:
-                    # Excel文件
+                    # ExcelDoc.
                     table_info = {
                         "placeholder": resource.placeholder,
                         "table_data": resource.table_data,
                         "alignments": resource.alignments,
                         "file_name": resource.file_name,
-                        "type": "excel",  # 修复：使用正确的类型标识符
-                        # 添加docx_temp.py期望的字段
-                        "local_path": getattr(resource, 'local_path', resource.original_path),  # 使用下载的本地路径或原始路径
+                        "type": "excel",  # Fix: Use correct type identifier
+                        # Tambahdocx_temp.pyExpected Fields
+                        "local_path": getattr(resource, 'local_path', resource.original_path),  # Use downloaded local path or original path
                     }
 
                     resource_map["excel_files"].append(table_info)
 
-        # 记录资源统计
+        # Record Resource Statistics
         self.logger.info(
-            f"资源映射构建完成: 图片 {len(resource_map['images'])}, "
+            f"Resource mapping build complete: Images {len(resource_map['images'])}, "
             f"CSV {len(resource_map['csv_files'])}, Excel {len(resource_map['excel_files'])}"
         )
 
@@ -1392,157 +1392,157 @@ class ReportNode(BaseNode):
         self._minio_client = get_minio_storage_sync()
 
     def _run(self, unique_id: str):
-        """主执行流程"""
+        """Master Execution Process"""
         download_manager = None
 
         try:
-            # 1. 下载模板文件
-            logger.info("=== 步遄1: 下载报告模板 ===")
+            # 1. Download sample
+            logger.info("=== Walking Tongs1: Download report template ===")
             template_content = self._download_template()
 
-            # 2. 解析模板变量
-            logger.info("=== 步遄2: 解析模板变量 ===")
+            # 2. Resolve Template Variables
+            logger.info("=== Walking Tongs2: Resolve Template Variables ===")
             template_variables = self._extract_template_variables(template_content)
 
-            # 3. 获取工作流变量
-            logger.info("=== 步遄3: 获取工作流变量 ===")
+            # 3. Get workflow variables
+            logger.info("=== Walking Tongs3: Get workflow variables ===")
             workflow_variables = self._get_filtered_workflow_variables(template_variables)
 
-            # 4. 解析所有变量内容
-            logger.info("=== 步遄4: 解析变量内容 ===")
+            # 4. Parsing all variable content
+            logger.info("=== Walking Tongs4: Parse variable contents ===")
             content_parser = ContentParser(self._minio_client)
             processed_variables = {}
             all_resources = []
 
             for var_name, var_value in workflow_variables.items():
-                # 添加详细的变量值日志
-                logger.info(f"[变量解析] 变量名: '{var_name}'")
-                logger.info(f"[变量解析] 变量类型: {type(var_value).__name__}")
-                logger.info(f"[变量解析] 变量值长度: {len(str(var_value)) if var_value is not None else 0}")
+                # Add Detailed Variable Value Log
+                logger.info(f"[Variable parsing] Variables: '{var_name}'")
+                logger.info(f"[Variable parsing] Variable type: {type(var_value).__name__}")
+                logger.info(f"[Variable parsing] Variable Value Length: {len(str(var_value)) if var_value is not None else 0}")
 
-                # 打印变量值内容（截取前500字符避免日志过长）
+                # Print variable value contents (before interception500Character Avoidance Log Too Long)
                 if var_value is not None:
                     var_value_str = str(var_value)
                     if len(var_value_str) > 500:
-                        logger.info(f"[变量解析] 变量值内容（前500字符）: {var_value_str[:500]}...")
+                        logger.info(f"[Variable parsing] Variable Value Content (ex.500characters. : {var_value_str[:500]}...")
                     else:
-                        logger.info(f"[变量解析] 变量值内容: {var_value_str}")
+                        logger.info(f"[Variable parsing] Variable Value Content: {var_value_str}")
                 else:
-                    logger.info(f"[变量解析] 变量值内容: None")
+                    logger.info(f"[Variable parsing] Variable Value Content: None")
 
                 processed_content, resources = content_parser.parse_variable_content(var_name, var_value)
                 processed_variables[var_name] = processed_content
                 all_resources.extend(resources)
 
-                # 添加解析结果日志
-                logger.info(f"[变量解析] 解析后内容长度: {len(processed_content) if processed_content else 0}")
-                logger.info(f"[变量解析] 识别资源数量: {len(resources)}")
+                # Add Parsing Result Log
+                logger.info(f"[Variable parsing] Post-Parse Content Length: {len(processed_content) if processed_content else 0}")
+                logger.info(f"[Variable parsing] Identify the number of resources: {len(resources)}")
                 if resources:
                     for i, resource in enumerate(resources):
                         logger.info(
-                            f"[变量解析] 资源{i + 1}: {resource.resource_type.value}, 占位符: {resource.placeholder}")
-                logger.info(f"[变量解析] --- 变量 '{var_name}' 解析完成 ---")
+                            f"[Variable parsing] reasourse{i + 1}: {resource.resource_type.value}, Placeholder Icon: {resource.placeholder}")
+                logger.info(f"[Variable parsing] --- Variables '{var_name}' Parsing complete ---")
 
-            # 5. 下载所有资源
-            logger.info("=== 步遄5: 下载资源文件 ===")
+            # 5. Download all resources
+            logger.info("=== Walking Tongs5: Download Resource File ===")
             download_manager = ResourceDownloadManager(self._minio_client)
             download_stats = download_manager.download_all_resources(all_resources)
 
             self._log_download_stats(download_stats)
 
-            # 6. 渲染文档
-            logger.info("=== 步遄6: 渲染Word文档 ===")
+            # 6. Render Document
+            logger.info("=== Walking Tongs6: renderedWordDocumentation ===")
             renderer = SmartDocumentRenderer(template_content)
             final_document = renderer.render(processed_variables, all_resources)
 
-            # 7. 保存并分享
-            logger.info("=== 步遄7: 保存并分享文档 ===")
+            # 7. SAVE AND SHARE
+            logger.info("=== Walking Tongs7: Save and share documents ===")
             share_url = self._save_and_share_document(final_document)
 
-            # 8. 发送输出消息
+            # 8. Send Output Message
             self._send_output_message(unique_id, share_url)
 
-            logger.info("=== 报告生成完成 ===")
+            logger.info("=== Report Generation Complete ===")
 
         except Exception as e:
-            logger.error(f"报告生成失败: {str(e)}")
+            logger.error(f"Report generation failed: {str(e)}")
             self._send_error_message(unique_id, str(e))
             raise
 
         finally:
-            # 临时禁用清理，避免图片文件被删除影响Word文档显示
+            # Temporarily disable cleanup to avoid image file deletionWordDocument display
             # if download_manager:
             #     download_manager.cleanup()
             pass
 
     def _download_template(self) -> bytes:
-        """下载模板文件"""
+        """Download sample"""
         if not self._minio_client.object_exists_sync(self._minio_client.bucket, self._object_name):
-            raise Exception(f"模板文件不存在: {self._object_name}")
+            raise Exception(f"Template file does not exists!: {self._object_name}")
 
         template_content = self._minio_client.get_object_sync(self._minio_client.bucket, self._object_name)
-        logger.info(f"模板下载成功，大小: {len(template_content)} 字节")
+        logger.info(f"Template downloaded successfully, size: {len(template_content)} byte")
 
         return template_content
 
     def _get_filtered_workflow_variables(self, template_variables: set) -> Dict[str, Any]:
-        """获取过滤后的工作流变量"""
+        """Get filtered workflow variables"""
         all_variables = self.graph_state.get_all_variables()
 
-        # 添加详细的变量信息日志
-        logger.info(f"[工作流变量] 总数: {len(all_variables)}")
-        logger.info(f"[工作流变量] 所有变量名: {list(all_variables.keys())}")
+        # Add Detailed Variable Information Log
+        logger.info(f"[Process Variables] Total: {len(all_variables)}")
+        logger.info(f"[Process Variables] All Variable Names: {list(all_variables.keys())}")
 
-        # 显示每个变量的基本信息
+        # Show basic information for each variable
         for var_name, var_value in all_variables.items():
             var_type = type(var_value).__name__
             var_length = len(str(var_value)) if var_value is not None else 0
-            logger.info(f"[工作流变量] '{var_name}': {var_type}, 长度={var_length}")
+            logger.info(f"[Process Variables] '{var_name}': {var_type}, Longitudinal={var_length}")
 
-        # 只保留模板中实际使用的变量
+        # Keep only the variables actually used in the template
         filtered_variables = {k: v for k, v in all_variables.items() if k in template_variables}
 
-        logger.info(f"[工作流变量] 模板需要的变量: {list(template_variables)}")
-        logger.info(f"[工作流变量] 过滤后变量数: {len(filtered_variables)}")
-        logger.info(f"[工作流变量] 过滤后变量名: {list(filtered_variables.keys())}")
+        logger.info(f"[Process Variables] Variables required by the template: {list(template_variables)}")
+        logger.info(f"[Process Variables] Number of filtered variables: {len(filtered_variables)}")
+        logger.info(f"[Process Variables] Filtered Variable Names: {list(filtered_variables.keys())}")
 
-        # 记录被过滤掉的变量（调试用）
+        # Record filtered variables (for debugging)
         excluded_vars = set(all_variables.keys()) - set(filtered_variables.keys())
         if excluded_vars:
-            logger.info(f"[工作流变量] 被过滤的变量: {list(excluded_vars)}")
+            logger.info(f"[Process Variables] Filtered Variables: {list(excluded_vars)}")
 
         return filtered_variables
 
     def _log_download_stats(self, stats: Dict[str, Any]):
-        """记录下载统计信息"""
-        logger.info("资源下载统计:")
-        logger.info(f"  - 图片成功: {stats['images_success']}")
-        logger.info(f"  - 图片失败: {stats['images_failed']}")
-        logger.info(f"  - 表格处理: {stats['tables_processed']}")
+        """Record download statistics"""
+        logger.info("Resource Download Stats:")
+        logger.info(f"  - Image Success: {stats['images_success']}")
+        logger.info(f"  - Image failed: {stats['images_failed']}")
+        logger.info(f"  - Form Processing: {stats['tables_processed']}")
 
         if stats.get("errors"):
-            logger.warning("下载错误详情:")
+            logger.warning("Download error details:")
             for error in stats["errors"]:
                 logger.warning(f"  - {error}")
 
     def _save_and_share_document(self, document_content: bytes) -> str:
-        """保存文档并获取分享链接"""
-        # 生成唯一的文件路径
+        """Save the document and get a share link"""
+        # Generate unique file path
         tmp_object_name = f"workflow/report/{uuid4().hex}/{self._file_name}"
 
-        # 上传到MinIO
+        # Uploaded toMinIO
         self._minio_client.put_object_tmp_sync(tmp_object_name, document_content)
 
-        # 获取分享链接
+        # Get share link
         share_url = self._minio_client.get_share_link_sync(tmp_object_name, self._minio_client.tmp_bucket)
 
-        logger.info(f"文档保存成功: {tmp_object_name}")
-        logger.info(f"分享链接: {share_url}")
+        logger.info(f"Document saved successfully: {tmp_object_name}")
+        logger.info(f"Share Links: {share_url}")
 
         return share_url
 
     def _send_output_message(self, unique_id: str, share_url: str):
-        """发送输出消息"""
+        """Send Output Message"""
         self.callback_manager.on_output_msg(
             OutputMsgData(
                 unique_id=unique_id,
@@ -1555,70 +1555,70 @@ class ReportNode(BaseNode):
         )
 
     def _send_error_message(self, unique_id: str, error_msg: str):
-        """发送错误消息"""
+        """Send error message"""
         self.callback_manager.on_output_msg(
             OutputMsgData(
                 unique_id=unique_id,
                 node_id=self.id,
                 name=self.name,
-                msg=f"报告生成失败: {error_msg}",
+                msg=f"Report generation failed: {error_msg}",
                 files=[],
                 output_key="",
             )
         )
 
-    # 保留必要的辅助方法
+    # Preserve necessary auxiliary methods
     def _get_unique_placeholder_id(self) -> int:
-        """保留的旧方法，用于兼容性"""
-        return 0  # 新系统中不再使用
+        """Old method retained for compatibility"""
+        return 0  # No longer used in the new system
 
     def _extract_template_variables(self, file_content: bytes) -> set:
         """
-        从Word模板文件中提取所有的变量占位符
+        FROMWordExtract all variable placeholders in the template file
 
         Args:
-            file_content: Word文件的二进制内容
+            file_content: WordThe binary content of the file
 
         Returns:
-            set: 模板中引用的变量名集合
+            set: Collection of variable names referenced in the template
         """
         import zipfile
         import re
 
         try:
-            # Word文档是一个zip文件，解析其中的XML内容
+            # WordThe document is azipfiles, parsing theXMLContents
             template_variables = set()
 
             with zipfile.ZipFile(io.BytesIO(file_content), "r") as docx_zip:
-                # 解析主文档部分
+                # Parse Main Document Section
                 if "word/document.xml" in docx_zip.namelist():
                     doc_xml = docx_zip.read("word/document.xml").decode("utf-8")
 
-                    # 使用正则表达式查找所有 {{变量名}} 格式的占位符
+                    # Find all using regular expressions {{Variables}} Formatted Placeholder
                     pattern = r"\{\{([^}]+)\}\}"
                     matches = re.findall(pattern, doc_xml)
 
-                    # 处理Word可能将变量拆分到多个XML标签的情况
-                    # 先移除所有XML标签，再进行匹配
+                    # <g id="Bold">Medical Treatment:</g>WordPossible splitting of variables into multipleXMLLabel Situation
+                    # Remove all firstXMLTags, then match
                     clean_xml = re.sub(r"<[^>]+>", "", doc_xml)
                     clean_matches = re.findall(pattern, clean_xml)
 
-                    # 合并两种匹配结果
+                    # Merge two matches
                     all_matches = list(set(matches + clean_matches))
 
-                    # 添加详细调试日志
-                    logger.warning(f"原始XML匹配结果: {matches}")
-                    logger.warning(f"清理XML后匹配结果: {clean_matches}")
-                    logger.warning(f"合并后的匹配结果: {all_matches}")
+                    # Add Detailed Debug Log
+                    logger.warning(f"OriginalXMLNo Matching Results: {matches}")
+                    logger.warning(f"CleanedXMLPost-Match Results: {clean_matches}")
+                    logger.warning(f"Merged Match Result: {all_matches}")
 
                     for match in all_matches:
-                        # 清理变量名（去除空格等）
+                        # Clean up variable names (remove spaces, etc.)
                         var_name = match.strip()
                         if var_name:
                             template_variables.add(var_name)
-                            logger.debug(f"发现模板变量: {var_name}")
+                            logger.debug(f"Template variables found: {var_name}")
 
-                # 也检查页眉页脚等部分
+                # Also check the header footer and other sections
                 for xml_part in ["word/header1.xml", "word/footer1.xml"]:
                     if xml_part in docx_zip.namelist():
                         xml_content = docx_zip.read(xml_part).decode("utf-8")
@@ -1627,14 +1627,14 @@ class ReportNode(BaseNode):
                             var_name = match.strip()
                             if var_name:
                                 template_variables.add(var_name)
-                                logger.debug(f"发现模板变量(页眉/页脚): {var_name}")
+                                logger.debug(f"Template variables found(Header/Pre Footer): {var_name}")
 
-            logger.info(f"[模板解析] 提取到 {len(template_variables)} 个变量: {list(template_variables)}")
+            logger.info(f"[Template resolution] Extract to {len(template_variables)} variables: {list(template_variables)}")
             for i, var_name in enumerate(sorted(template_variables), 1):
-                logger.info(f"[模板解析] 变量{i}: '{var_name}'")
+                logger.info(f"[Template resolution] Variables{i}: '{var_name}'")
             return template_variables
 
         except Exception as e:
-            logger.error(f"解析模板变量失败: {e}")
-            # 如果解析失败，返回空集合，这样就不会过滤任何变量
+            logger.error(f"Failed to parse template variable: {e}")
+            # If parsing fails, return an empty collection so that no variables are filtered
             return set()

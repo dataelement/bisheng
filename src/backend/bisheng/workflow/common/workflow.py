@@ -2,9 +2,9 @@ from enum import Enum
 
 
 class WorkflowStatus(Enum):
-    WAITING = 'WAITING'  # 等待异步任务调度
+    WAITING = 'WAITING'  # Waiting for asynchronous task scheduling
     RUNNING = 'RUNNING'
     SUCCESS = 'SUCCESS'
     FAILED = 'FAILED'
-    INPUT = 'INPUT'  # 待输入状态
-    INPUT_OVER = 'INPUT_OVER'  # 已输入状态
+    INPUT = 'INPUT'  # Status to be entered
+    INPUT_OVER = 'INPUT_OVER'  # Entered status

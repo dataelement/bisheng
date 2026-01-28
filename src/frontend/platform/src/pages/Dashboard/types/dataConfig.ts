@@ -1,0 +1,281 @@
+import { generateUUID } from "@/components/bs-ui/utils"
+
+// React-Grid-Layout 布局项
+export interface LayoutItem {
+  i: string // 组件ID
+  x: number // 横向位置 (0-11)
+  y: number // 纵向位置
+  w: number // 宽度 (1-12)
+  h: number // 高度
+  minW?: number // 最小宽度
+  minH?: number // 最小高度
+  maxW?: number // 最大宽度
+  maxH?: number // 最大高度
+  static?: boolean // 是否静态（不可拖拽）
+}
+
+// 看板布局配置
+export interface LayoutConfig {
+  layouts: LayoutItem[] // 布局数组
+}
+
+// 主题配置
+export interface ThemeConfig {
+  backgroundColor: string
+  textColor: string
+  borderColor: string
+  chartColors: string[] // echarts 配色
+}
+
+// 看板样式配置
+export interface StyleConfig {
+  theme: 'light' | 'dark'// 当前主题
+}
+
+// 组件样式配置
+export interface ComponentStyleConfig {
+  themeColor: string
+  bgColor: string
+
+  // 主标题
+  title: string
+  titleFontSize: number
+  titleBold: boolean
+  titleItalic: boolean
+  titleUnderline: boolean
+  titleStrikethrough: boolean
+  titleAlign: "left" | "center" | "right"
+  titleColor?: string
+
+  // X 轴
+  xAxisTitle: string
+  xAxisFontSize: number
+  xAxisBold: boolean
+  xAxisItalic: boolean
+  xAxisUnderline: boolean
+  xAxisStrikethrough: boolean
+  xAxisAlign: "left" | "center" | "right"
+  xAxisColor?: string 
+
+  // Y 轴
+  yAxisTitle: string
+  yAxisFontSize: number
+  yAxisBold: boolean
+  yAxisItalic: boolean
+  yAxisUnderline: boolean
+  yAxisAlign: "left" | "center" | "right"
+  yAxisStrikethrough: boolean
+  yAxisColor?: string 
+
+  // 图例
+  legendPosition: "top" | "bottom" | "left" | "right"
+  legendFontSize: number
+  legendBold: boolean
+  legendItalic: boolean
+  legendUnderline: boolean
+  legendStrikethrough: boolean
+  legendAlign: "left" | "center" | "right"
+  legendColor?: string 
+
+  // 副标题
+  showSubtitle: boolean
+  subtitle: string
+  subtitleFontSize: number
+  subtitleBold: boolean
+  subtitleItalic: boolean
+  subtitleUnderline: boolean
+  subtitleStrikethrough: boolean
+  subtitleAlign: "left" | "center" | "right"
+  subtitleColor?: string 
+
+  // 指标卡
+  metricFontSize: number
+  metricBold: boolean
+  metricItalic: boolean
+  metricUnderline: boolean
+  metricStrikethrough: boolean
+  metricAlign: "left" | "center" | "right"
+  metricColor?: string 
+
+  // 图表选项
+  showLegend: boolean
+  showAxis: boolean
+  showDataLabel: boolean
+  showGrid: boolean
+}
+
+export interface Dashboard {
+  id: string
+  title: string
+  description: string
+  status: 'draft' | 'published',
+  dashboard_type: 'custom',
+  layout_config: LayoutConfig,
+  style_config: StyleConfig,
+  create_time: string
+  update_time: string
+  is_default: boolean
+  user_name: string
+  write: boolean
+  components: DashboardComponent[]
+}
+
+export interface DashboardComponent {
+  id: string //
+  dashboard_id: string
+  title: string
+  type: ChartType
+  dataset_code: string
+  data_config: ComponentConfig // 图表/指标组件使用 DataConfig，查询组件使用 QueryConfig
+  style_config: ComponentStyleConfig
+  create_time: string
+  update_time: string
+}
+
+/**
+ * Dashboard 组件数据配置类型定义
+ */
+// 图表类型
+
+export enum ChartType {
+  /** 基础柱状图 */
+  Bar = 'bar',
+  /** 堆叠柱状图 */
+  StackedBar = 'stacked-bar',
+  /** 分组柱状图 */
+  GroupedBar = 'grouped-bar',
+  /** 基础条形图 */
+  HorizontalBar = 'horizontal-bar',
+  /** 堆叠条形图 */
+  StackedHorizontalBar = 'stacked-horizontal-bar',
+  /** 分组条形图 */
+  GroupedHorizontalBar = 'grouped-horizontal-bar',
+  /** 基础折线图 */
+  Line = 'line',
+  /** 面积图 */
+  Area = 'area',
+  /** 堆叠面积图 */
+  StackedArea = 'stacked-area',
+  /** 组合折线图 */
+  StackedLine = 'multiple-line',
+  StackedLineOld = 'stacked-line',
+  /** 饼状图 */
+  Pie = 'pie',
+  /** 环状图 */
+  Donut = 'donut',
+  /** 指标卡 */
+  Metric = 'metric',
+  /** 查询组件 */
+  Query = 'query'
+}
+
+// 维度配置
+export interface DimensionField {
+  fieldId: string               // 字段ID（来自数据集）
+  fieldName: string             // 字段名称
+  fieldCode: string             // 字段编码
+  displayName?: string          // 展示名称（不填则使用 fieldName）
+  sort: null | 'asc' | 'desc' // 排序方式
+  timeGranularity: string | null // 时间子维度（仅时间字段有效）
+}
+
+//  指标配置 
+export interface MetricField {
+  fieldId: string               // 字段ID（来自数据集）
+  fieldName: string             // 字段名称
+  fieldCode: string             // 字段编码
+  displayName?: string          // 展示名称
+  aggregation?: string // 汇总方式（虚拟指标无此属性）
+  isVirtual: boolean            // 是否为虚拟指标
+  sort: null | 'asc' | 'desc' // 排序方式
+  numberFormat: {               // 数值格式
+    type: 'number' | 'percent' | 'duration' | 'storage'    // 数值 百分比 时长 存储大小      
+    decimalPlaces: number         // 小数位数
+    unit?: string                 // 数量单位（如 K、M、B）
+    suffix?: string               // 单位后缀（如 元、个、次）
+    thousandSeparator: boolean    // 是否显示千分位符
+  }
+}
+
+export interface FilterCondition {
+  id: string                           // 筛选条件唯一ID
+  fieldId: string                      // 字段ID
+  fieldName: string                    // 字段名称
+  filterType: string                   // 筛选类型
+  operator?: string                    // 操作符
+  value?: string | number | string[]   // 值
+}
+
+// 时间筛选 
+export const enum TimeRangeType {
+  ALL = 'all', // 全部时间
+  RECENT_DAYS = 'recent_days', // 最近n天
+  CUSTOM = 'custom' // 自定义时间范围
+}
+
+export const enum TimeRangeMode {
+  Fixed = 'fixed',     // 固定时间范围
+  Dynamic = 'dynamic' // 动态时间范围（相对当前时间）
+}
+
+export interface TimeFilter {
+  type: TimeRangeType           // 时间范围类型
+  mode?: TimeRangeMode          // 时间范围模式（type 为 recent_days 时有效）
+  recentDays?: number           // 最近n天（如 7, 30, 70, 90）
+  startDate?: number            // 自定义开始日期
+  endDate?: number              // 自定义结束日期
+}
+
+// 数据配置（图表组件和指标组件使用）
+export interface DataConfig {
+  dimensions: DimensionField[]  // 维度字段列表（对应 echarts xAxis）
+  stackDimension?: DimensionField // 堆叠维度字段（某些图表类型才有，如堆叠柱状图）
+  metrics: MetricField[]        // 指标字段列表（对应 echarts yAxis）
+  fieldOrder: {
+    fieldId: string               // 字段ID
+    fieldType: 'dimension' | 'stack_dimension' | 'metric'   // 字段类型 维度字段|堆叠维度字段|指标字段
+  }[]   // 所有字段的排序顺序（数组顺序即为排序）
+  filters: FilterCondition[]      // 条件筛选列表
+  timeFilter?: TimeFilter         // 时间筛选（可选）
+  resultLimit: {                  // 结果展示配置
+    limitType: 'all' | 'limited'  // 限制类型
+    limit?: number                // 具体条数（limitType 为 limited 时有效）
+  },
+  isConfigured: boolean // 配置完成
+}
+
+// 查询组件配置
+export interface QueryConfig {
+  linkedComponentIds: string[]    // 关联的图表组件ID列表（查询时会更新这些组件）
+  queryConditions: {
+    id: string                      // 条件唯一ID
+    displayType: 'range' | 'single'        // 展示类型：时间范围 或 单个时间
+    timeGranularity: 'year_month' | 'year_month_day' | 'year_month_day_hour'// 时间粒度
+    hasDefaultValue: boolean        // 是否设置默认值
+    defaultValue?: TimeFilter // 默认值配置
+  }// 查询条件列表
+}
+
+// 组件配置联合类型
+export type ComponentConfig = DataConfig | QueryConfig
+export const createDefaultDataConfig = (type: ChartType): ComponentConfig => (
+  type === 'query'
+    ? {
+      linkedComponentIds: [], queryConditions: {
+        id: generateUUID(4),
+        displayType: 'range',
+        timeGranularity: 'year_month_day',
+        hasDefaultValue: false,
+        defaultValue: {
+          type: TimeRangeType.ALL
+        }
+      }
+    }
+    : {
+      dimensions: [],
+      metrics: [],
+      fieldOrder: [],
+      filters: [],
+      resultLimit: { limitType: 'all' },
+      isConfigured: false
+    })

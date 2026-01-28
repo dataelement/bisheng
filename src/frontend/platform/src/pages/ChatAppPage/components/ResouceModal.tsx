@@ -13,6 +13,7 @@ import FileViewPanne from "./FileViewPanne";
 // 顶部答案区
 const Anwser = ({ id, msg, onInit, onAdd, fullScreen = false }) => {
     const [html, setHtml] = useState('')
+    const { t } = useTranslation()
     const pRef = useRef(null)
 
     // init
@@ -26,7 +27,7 @@ const Anwser = ({ id, msg, onInit, onAdd, fullScreen = false }) => {
                 onInit(res)
             }).catch(e => {
                 // 自动重试
-                e === '后台处理中，稍后再试' && setTimeout(() => {
+                e === t('errors.14001') && setTimeout(() => {
                     loadData()
                 }, 1800);
             })
@@ -214,9 +215,9 @@ export const ResouceContent = ({ data, setOpen, fullScreen = false }) => {
     const [loading, setLoading] = useState(true)
     const handleAnwserInit = (words) => {
         setKeywords(words)
-        setLoading(false)
-        // if (words.length) {
-        // }
+        if (words.length) {
+            setLoading(false)
+        }
     }
 
 

@@ -71,6 +71,7 @@ export default function FilesUpload() {
     setResultFiles(files);
 
     const _repeatFiles = files.filter(e => e.repeat);
+
     if (_repeatFiles.length) {
       setRepeatFiles(_repeatFiles.map(file => ({
         ...file,
@@ -241,7 +242,7 @@ export default function FilesUpload() {
     const { uniqueObjs, removedPaths } = dedupeWithRemovedPaths(objs)
     const newResultFiles = resultFiles.filter(file => !removedPaths[file.file_path])
     const newUniqueObjs = uniqueObjs.map(item => {
-      const file = newResultFiles.find(f => item.id === f.fileId)
+      const file = newResultFiles.find(f => item.id === f.fileId || item.file_name === f.fileName)
       return {
         ...item,
         file_path: file?.file_path,
@@ -301,7 +302,7 @@ export default function FilesUpload() {
           <Button
             variant="outline"
             size="icon"
-            className="bg-[#fff] size-8"
+            className="bg-main size-8"
             onClick={() => navigate(-1)}
           >
             <ChevronLeft />
@@ -382,7 +383,7 @@ export default function FilesUpload() {
                 />
 
                 {/* Step 3 bottom buttons */}
-                <div className="fixed bottom-2 right-12 flex gap-4 bg-white p-2 rounded-lg shadow-sm z-10">
+                <div className="fixed bottom-2 right-12 flex gap-4 bg-background p-2 rounded-lg shadow-sm z-10">
                   <Button variant="outline" onClick={handleBack}>
                     {t('previousStep')}
                   </Button>
@@ -397,7 +398,7 @@ export default function FilesUpload() {
 
             {/* Step 4: Data processing */}
             {currentStep === 4 && (
-              <FileUploadStep4 data={resultFiles} hasRepeat={repeatFiles.length > 0}/>
+              <FileUploadStep4 data={resultFiles} hasRepeat={repeatFiles.length > 0} />
             )}
           </div>
         </div>

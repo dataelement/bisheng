@@ -6,7 +6,6 @@ from bisheng.api.v1.endpoints import router as endpoints_router
 from bisheng.api.v1.evaluation import router as evaluation_router
 from bisheng.api.v1.flows import router as flows_router
 from bisheng.api.v1.invite_code import router as invite_code_router
-from bisheng.api.v1.linsight import router as linsight_router
 from bisheng.api.v1.mark_task import router as mark_router
 from bisheng.api.v1.report import router as report_router
 from bisheng.api.v1.skillcenter import router as skillcenter_router
@@ -37,7 +36,6 @@ __all__ = [
     'workflow_router',
     'mark_router',
     'workstation_router',
-    "linsight_router",
     "tool_router",
     "invite_code_router",
 ]

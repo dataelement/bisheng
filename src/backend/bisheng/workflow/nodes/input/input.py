@@ -22,15 +22,15 @@ class InputNode(BaseNode):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # 节点当前版本
+        # Node Current Version
         self._current_v = 2
-        # 记录是对话还是表单
+        # Whether the record is a conversation or a form
         self._tab = self.node_data.tab['value']
 
-        # 记录这个变量是什么类型的
+        # Record what type of variable this is
         self._node_params_map = {}
         new_node_params = {}
-        # 对话框里输入文件的最大长度，超过这个长度会被截断
+        # The maximum length of the input file in the dialog box, more than this length will be truncated
         self._dialog_files_length = int(self.node_params.get('dialog_files_content_size', 15000))
         # save image file path
         self._dialog_images_files = []
@@ -51,7 +51,7 @@ class InputNode(BaseNode):
         self._es_client = None
 
     def is_dialog_input(self):
-        """ 是否是对话形式的输入 """
+        """ Whether the input is in the form of a conversation """
         if self.node_data.v < self._current_v:
             raise IgnoreException(f'{self.name} -- workflow node is update')
 
@@ -76,7 +76,7 @@ class InputNode(BaseNode):
 
     def _run(self, unique_id: str):
         if self.is_dialog_input():
-            # 对话框形式的输入
+            # Input in the form of a dialog
             dislog_files_content, self._dialog_images_files = self.parse_dialog_files()
             res = {
                 'user_input': self.node_params['user_input'],
@@ -89,7 +89,7 @@ class InputNode(BaseNode):
 
         ret = {}
         human_input = ""
-        # 表单形式的需要去处理对应的文件上传
+        # The corresponding file upload needs to be processed in the form
         for key, value in self.node_params.items():
             ret[key] = value
             key_info = self._node_params_map[key]
@@ -116,7 +116,7 @@ class InputNode(BaseNode):
         return [ret]
 
     def parse_dialog_files(self) -> (str, list[str]):
-        """ 获取对话框里上传的文件内容 """
+        """ Get the file content uploaded in the dialog box """
         file_length = 0
         dialog_files_content = ""
         image_files_path = []
@@ -166,25 +166,25 @@ class InputNode(BaseNode):
                                                      file_rule.filter_page_header_footer, file_rule.excel_rule)
         except Exception as e:
             logger.exception('parse input node file error')
-            if str(e).find('类型不支持') == -1:
+            if str(e).find('Type not supported') == -1:
                 raise e
 
         return file_name, original_file_path, texts, metadatas
 
     def parse_upload_file(self, key: str, key_info: dict, value: str) -> dict | None:
         """
-         将文件上传到milvus后
-         记录文件的metadata数据、文件全文、文件本地路径
+         Upload files tomilvusLate Stageろ
+         DocumentedmetadataData, full-text files, local file paths
         """
-        # 1、获取默认的embedding模型
+        # 1Get the defaultembeddingModels
         if self._embedding is None:
             embedding = LLMService.get_knowledge_default_embedding(self.user_id)
             if not embedding:
-                raise Exception('没有配置默认的embedding模型')
+                raise Exception('No default configuredembeddingModels')
             self._embedding = embedding
 
         if self._vector_client is None:
-            # 2、初始化milvus和es实例
+            # 2InisialisasimilvusAndesInstances
             milvus_collection_name = self.get_milvus_collection_name(getattr(self._embedding, 'model_id'))
             self._vector_client = KnowledgeRag.init_milvus_vectorstore(milvus_collection_name, self._embedding,
                                                                        metadata_schemas=InputFileMetadata)
@@ -202,7 +202,7 @@ class InputNode(BaseNode):
                 key_info['image_file']: None
             }
 
-        # 解析文件
+        # Parsing the file.
         all_metadata = []
         all_file_content = ''
         original_file_path = []
@@ -227,7 +227,7 @@ class InputNode(BaseNode):
                 continue
 
             new_metadata = []
-            # 同一个变量对应的文件，放在一个file_id里
+            # A file corresponding to the same variable, placed in afile_idmile
             for one in metadatas:
                 metadata = one.model_dump()
                 metadata.update({
@@ -235,22 +235,22 @@ class InputNode(BaseNode):
                     'document_name': file_name,
                     'knowledge_id': self.workflow_id,
                     'upload_time': int(time.time()),
-                    'bbox': '',  # 临时文件不能溯源，因为没有持久化存储源文件
+                    'bbox': '',  # Temporary files cannot be traced because the source files are not persisted
                 })
                 new_metadata.append(metadata)
 
-            # 上传到milvus和es
-            logger.debug(f'workflow_add_vectordb file={key} file_name={file_name}')
-            # 存入milvus
+            # Uploaded tomilvusAndes
+            logger.debug(f'workflow_add_vectordb file={key} file_name={file_name} file_id={file_id}')
+            # Depositmilvus
             self._vector_client.add_texts(texts=texts, metadatas=new_metadata)
 
-            logger.debug(f'workflow_add_es file={key} file_name={file_name}')
-            # 存入es
+            logger.debug(f'workflow_add_es file={key} file_name={file_name} file_id={file_id}')
+            # Deposites
             self._es_client.add_texts(texts=texts, metadatas=new_metadata)
 
             logger.debug(f'workflow_record_file_metadata file={key} file_name={file_name}')
             all_metadata.append(new_metadata[0])
-        # 记录文件metadata，其他节点根据metadata数据去检索对应的文件
+        # Documentationmetadata, other nodes according tometadataData to retrieve corresponding files
         return {
             key_info['key']: all_metadata,
             key_info['file_content']: all_file_content,

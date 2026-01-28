@@ -13,13 +13,13 @@ router = APIRouter(prefix='/flows', tags=['OpenAPI', 'FlowV2'])
 @router.get('/{flow_id}', status_code=200)
 async def get_flow(request: Request, flow_id: UUID):
     """
-    公开的获取技能信息的接口
+    Exposed interfaces for obtaining skill information
     """
     flow_id = flow_id.hex
     logger.info(f'public_get_flow  ip: {request.client.host} flow_id:{flow_id}')
-    # 判断下配置是否打开
+    # Determine if the configuration under is turned on
     if not settings.get_from_db("default_operator").get("enable_guest_access"):
-        raise HTTPException(status_code=403, detail="无权限访问")
+        raise HTTPException(status_code=403, detail="No permission to access")
     default_user = get_default_operator()
 
     return await FlowService.get_one_flow(default_user, flow_id)
@@ -27,14 +27,14 @@ async def get_flow(request: Request, flow_id: UUID):
 
 @router.get('', status_code=200)
 def get_flow_list(request: Request,
-                  name: str = Query(default=None, description='根据name查找数据库，包含描述的模糊搜索'),
-                  tag_id: int = Query(default=None, description='标签ID'),
-                  page_size: int = Query(default=10, description='每页数量'),
-                  page_num: int = Query(default=1, description='页数'),
+                  name: str = Query(default=None, description='accordingnameFind databases with fuzzy searches for descriptions'),
+                  tag_id: int = Query(default=None, description='labelID'),
+                  page_size: int = Query(default=10, description='Items per page'),
+                  page_num: int = Query(default=1, description='Page'),
                   status: int = None,
                   user_id: int = None):
     """
-    公开的获取技能信息的接口
+    Exposed interfaces for obtaining skill information
     """
     logger.info(f'public_get_flow_list  ip: {request.client.host} user_id={user_id}')
     login_user = get_default_operator()
@@ -43,4 +43,4 @@ def get_flow_list(request: Request,
         return FlowService.get_all_flows(login_user, name, status, tag_id, page_num, page_size)
     except Exception as e:
         logger.error(e)
-        raise HTTPException(status_code=500, detail='获取技能列表失败')
+        raise HTTPException(status_code=500, detail='Failed to get skills list')

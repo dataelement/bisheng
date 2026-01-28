@@ -16,9 +16,9 @@ from ..utils import wrapper_bisheng_model_limit_check
 
 def _get_user_kwargs(model_config: dict) -> dict:
     user_kwargs = model_config.get('user_kwargs', {})
-    if isinstance(user_kwargs, str):
+    if isinstance(user_kwargs, str) and user_kwargs:
         return json.loads(user_kwargs)
-    return user_kwargs
+    return user_kwargs if user_kwargs else {}
 
 
 def _get_ollama_params(params: dict, server_config: dict, model_config: dict) -> dict:
@@ -67,13 +67,13 @@ def _get_qwen_params(params: dict, server_config: dict, model_config: dict) -> d
 
 
 _node_type: Dict = {
-    # 开源推理框架
+    # Open source inference framework
     LLMServerType.OLLAMA.value: {"client": OllamaEmbeddings, "params_handler": _get_ollama_params},
     LLMServerType.XINFERENCE.value: {"client": OpenAIEmbeddings, "params_handler": _get_openai_params},
     LLMServerType.LLAMACPP.value: {"client": OpenAIEmbeddings, "params_handler": _get_openai_params},
     LLMServerType.VLLM.value: {"client": OpenAIEmbeddings, "params_handler": _get_openai_params},
 
-    # 官方API服务
+    # OfficalAPISERVICES
     LLMServerType.OPENAI.value: {"client": OpenAIEmbeddings, "params_handler": _get_openai_params},
     LLMServerType.AZURE_OPENAI.value: {"client": AzureOpenAIEmbeddings, "params_handler": _get_azure_openai_params},
     LLMServerType.QWEN.value: {"client": DashScopeEmbeddings, "params_handler": _get_qwen_params},
@@ -89,10 +89,10 @@ _node_type: Dict = {
 class BishengEmbedding(BishengBase, Embeddings):
     """ Use the embedding model that has been launched in model management """
 
-    embedding_ctx_length: int = Field(default=8192, description='embedding模型上下文长度')
-    max_retries: int = Field(default=6, description='embedding模型调用失败重试次数')
-    request_timeout: int = Field(default=200, description='embedding模型调用超时时间')
-    model_kwargs: dict = Field(default={}, description='embedding模型调用参数')
+    embedding_ctx_length: int = Field(default=8192, description='embeddingModel Context Length')
+    max_retries: int = Field(default=6, description='embeddingNumber of failed model call retries')
+    request_timeout: int = Field(default=200, description='embeddingModel Call Timeout')
+    model_kwargs: dict = Field(default={}, description='embeddingModel Call Parameters')
 
     embeddings: Optional[Embeddings] = Field(default=None)
 
@@ -104,7 +104,7 @@ class BishengEmbedding(BishengBase, Embeddings):
         super().__init__(**kwargs)
         self.model_id = kwargs.get('model_id')
         if not self.model_id:
-            raise Exception('没有找到embedding模型配置')
+            raise Exception('No bulkpost found in Trashembeddingmodel config')
         if "model_info" in kwargs and "server_info" in kwargs:
             self._init_client(model_info=kwargs.pop('model_info'), server_info=kwargs.pop('server_info'), **kwargs)
         else:
@@ -114,13 +114,13 @@ class BishengEmbedding(BishengBase, Embeddings):
     def _init_client(self, model_info, server_info, **kwargs):
         ignore_online = kwargs.get('ignore_online', False)
         if not model_info:
-            raise Exception('embedding模型配置已被删除，请重新配置模型')
+            raise Exception('embeddingModel configuration has been deleted, please reconfigure the model')
         if not server_info:
-            raise Exception('服务提供方配置已被删除，请重新配置embedding模型')
+            raise Exception('Service provider configuration has been deleted, please reconfigureembeddingModels')
         if model_info.model_type != LLMModelType.EMBEDDING.value:
-            raise Exception(f'只支持Embedding类型的模型，不支持{model_info.model_type}类型的模型')
+            raise Exception(f'Support onlyEmbeddingModel of type, not supported{model_info.model_type}Type of model')
         if not ignore_online and not model_info.online:
-            raise Exception(f'{server_info.name}下的{model_info.model_name}模型已下线，请联系管理员上线对应的模型')
+            raise Exception(f'{server_info.name}under{model_info.model_name}The model is offline, please contact the administrator to launch the corresponding model')
         logger.debug(
             f'init_bisheng_embedding: server_id: {server_info.id}, model_id: {model_info.id}')
         self.model_info: LLMModel = model_info
@@ -133,13 +133,13 @@ class BishengEmbedding(BishengBase, Embeddings):
             self.embeddings = class_object(**params)
         except Exception as e:
             logger.exception('init_bisheng_embedding error')
-            raise Exception(f'初始化bisheng embedding组件失败，请检查配置或联系管理员。错误信息：{e}')
+            raise Exception(f'Inisialisasibisheng embeddingComponent failed, please check the configuration or contact the administrator.Error message:{e}')
 
     @staticmethod
     def _get_embedding_class(server_type: str) -> type[Embeddings]:
         node_type = _node_type.get(server_type)
         if not node_type:
-            raise Exception(f'{server_type}类型的服务提供方暂不支持embedding')
+            raise Exception(f'{server_type}Type of service provider is not supportedembedding')
         class_object = node_type.get('client')
         return class_object
 
@@ -162,7 +162,7 @@ class BishengEmbedding(BishengBase, Embeddings):
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
         """embedding"""
         ret = self.embeddings.embed_documents(texts)
-        # 盘单向量是否归一化了
+        # Whether the disc single vector is normalized
         if ret:
             vector = ret[0]
             if np.linalg.norm(vector) != 1:

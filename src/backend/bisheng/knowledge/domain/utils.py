@@ -3,7 +3,7 @@ from datetime import datetime
 from bisheng.knowledge.domain.models.knowledge import MetadataFieldType
 
 
-# 将时间字符串转换为时间戳
+# Convert Time String to Timestamp
 def time_str_to_timestamp(time_str):
     try:
         return int(time_str)
@@ -47,13 +47,13 @@ def time_str_to_timestamp(time_str):
         pass
 
     try:
-        dt = datetime.strptime(time_str, "%Y年%m月%d日 %H:%M:%S")
+        dt = datetime.strptime(time_str, "%Yyear%mMonth%dHarian %H:%M:%S")
         return int(dt.timestamp())
     except:
         raise ValueError("Unsupported time format")
 
 
-# metadata 数据格式转换
+# metadata Data Format Conversion
 def metadata_value_type_convert(value, target_type: MetadataFieldType):
     try:
         if target_type == MetadataFieldType.NUMBER:

@@ -731,7 +731,8 @@
   "com_tools_knowledge_base": "Knowledge Base",
   "kbLimitReached": "Knowledge base limit reached (maximum 50)",
   "com_tools_knowledge_base_search": "Knowledge Base Search",
-  "com_tools_knowledge_rebuilding": "Personal knowledge base embedding model has been changed, rebuilding knowledge base, please try again later",
+  "com_tools_knowledge_rebuilding": "Personal kowledge base embedding model has been changed, rebuilding knowledge base, please try again later",
+  "com_tools_knowledge_upload_remark": "Detection of duplicate files, duplicate files are automatically skipped",
   "com_tools_no_more": "No more data",
   "com_tools_no_results": "No results found",
   "com_ui_edit": "Edit",
@@ -1208,6 +1209,7 @@
     "15023": "Server URLs must start with http or https: {{url}}",
     "15024": "MCP config parse error: {{exception}}",
     "16000": "Dataset name already exists",
-    "11111": "The application has been deleted"
+    "11111": "The application has been deleted",
+    "90001": "You do not have permission to access the admin backend. Please contact the administrator to request access if needed."
   }
 }

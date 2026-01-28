@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getMetaFile, readFileByLibDatabase } from '@/controllers/API';
 import { LoadingIcon } from "@/components/bs-icons/loading";
+import Tip from "@/components/bs-ui/tooltip/tip";
 
 interface FileSelectorProps {
     knowledgeId: string | number;
@@ -111,7 +112,7 @@ export default function FileSelector({
                 onWriteableChange(res.writeable);
             }
             const filesData = res?.data || [];
-            
+
             const formattedFiles: FileOption[] = filesData.map((el: FileData) => ({
                 label: el?.file_name || t('file.unnamedFile'),
                 value: String(el?.id || ''),
@@ -310,7 +311,9 @@ export default function FileSelector({
                                     type={getFileType(selectedFile.label)}
                                     className="size-[30px] min-w-[30px]"
                                 />
-                                <div className="truncate flex-1">{selectedFile.label}</div>
+                                <Tip content={selectedFile.label}>
+                                    <div className="truncate flex-1">{selectedFile.label}</div>
+                                </Tip>
                             </>
                         ) : (
                             <span className="text-gray-500">{t('file.selectFile')}</span>
@@ -379,20 +382,22 @@ export default function FileSelector({
                                         }}
                                         className="cursor-pointer hover:bg-gray-50 px-3 py-2 focus:bg-gray-50 outline-none"
                                     >
-                                        <div className="flex items-center gap-3 w-full h-full">
-                                            <FileIcon
-                                                type={getFileType(file.label)}
-                                                className="size-[30px] min-w-[30px] text-current"
-                                            />
-                                            <span className="flex-1 min-w-0 truncate text-sm">
-                                                {truncateString(file.label, 50)}
-                                            </span>
-                                            {String(file.value) === String(selectedFileId) && (
-                                                <div className="w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
-                                                    <div className="w-2 h-2 bg-white rounded-full"></div>
-                                                </div>
-                                            )}
-                                        </div>
+                                        <Tip content={file.label} side="top" styleClasses="z-[999]">
+                                            <div className="flex items-center gap-3 w-full h-full">
+                                                <FileIcon
+                                                    type={getFileType(file.label)}
+                                                    className="size-[30px] min-w-[30px] text-current"
+                                                />
+                                                <span className="flex-1 min-w-0 truncate text-sm">
+                                                    {truncateString(file.label, 50)}
+                                                </span>
+                                                {String(file.value) === String(selectedFileId) && (
+                                                    <div className="w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
+                                                        <div className="w-2 h-2 bg-white rounded-full"></div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </Tip>
                                     </DropdownMenuItem>
                                 ))}
 

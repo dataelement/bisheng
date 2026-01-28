@@ -103,7 +103,7 @@ def pre_handle(partitions, file_name, knowledge_id):
 
 
 def merge_partitions(file_name, partitions, knowledge_id=None):
-    # 预处理pdf，提取图片
+    # Pre-processingpdf, Extracting Images
     pre_handle_results = pre_handle(
         partitions=partitions, file_name=file_name, knowledge_id=knowledge_id
     )

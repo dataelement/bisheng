@@ -15,12 +15,13 @@ class ResourceTypeEnum(Enum):
     ASSISTANT = 3
     GPTS_TOOL = 4
     WORK_FLOW = 5
+    DASHBOARD = 6  # KANBAN
 
 
 class GroupResourceBase(SQLModelSerializable):
     group_id: str = Field(index=True)
     third_id: str = Field(index=False)
-    type: int = Field(index=False, description='资源类别 1:知识库 2:技能 3:助手 4:工具 5:工作流')
+    type: int = Field(index=False, description='Resource Categories 1:The knowledge base upon 2:Skill 3:assistant 4:Tools 5:The Workflow')
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
@@ -63,6 +64,13 @@ class GroupResourceDao(GroupResourceBase):
             return group_resources
 
     @classmethod
+    async def ainsert_group_batch(cls, group_resources: List[GroupResource]) -> List[GroupResource]:
+        async with get_async_db_session() as session:
+            session.add_all(group_resources)
+            await session.commit()
+            return group_resources
+
+    @classmethod
     def get_group_resource(cls,
                            group_id: int,
                            resource_type: ResourceTypeEnum,
@@ -77,6 +85,16 @@ class GroupResourceDao(GroupResourceBase):
             if page_num and page_size:
                 statement = statement.offset(page_size * (page_num - 1)).limit(page_size)
             return session.exec(statement).all()
+
+    @classmethod
+    async def aget_group_resources(cls, group_id: int, resource_type: ResourceTypeEnum) -> List[GroupResource]:
+        statement = select(GroupResource).where(
+            GroupResource.group_id == group_id,
+            GroupResource.type == resource_type.value
+        )
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return result.all()
 
     @classmethod
     def get_groups_resource(cls,
@@ -98,7 +116,7 @@ class GroupResourceDao(GroupResourceBase):
     @classmethod
     def get_resource_group(cls, resource_type: ResourceTypeEnum, third_id: str) -> list[GroupResource]:
         """
-        获取资源所属的分组
+        Get the group to which the resource belongs
         """
         with get_sync_db_session() as session:
             statement = select(GroupResource).where(GroupResource.third_id == third_id,
@@ -108,7 +126,7 @@ class GroupResourceDao(GroupResourceBase):
     @classmethod
     async def aget_resource_group(cls, resource_type: ResourceTypeEnum, third_id: str) -> list[GroupResource]:
         """
-        获取资源所属的分组
+        Get the group to which the resource belongs
         """
         async with get_async_db_session() as session:
             statement = select(GroupResource).where(GroupResource.third_id == third_id,
@@ -119,7 +137,7 @@ class GroupResourceDao(GroupResourceBase):
     @classmethod
     def get_resources_group(cls, resource_type: ResourceTypeEnum | None, third_ids: List[str]) -> list[GroupResource]:
         """
-        获取批量资源所属的分组
+        Get the grouping to which the bulk resource belongs
         """
         statement = select(GroupResource).where(GroupResource.third_id.in_(third_ids))
         if resource_type:
@@ -146,7 +164,7 @@ class GroupResourceDao(GroupResourceBase):
     @classmethod
     def get_group_all_resource(cls, group_id: int) -> List[GroupResource]:
         """
-        获取分组下的所有资源
+        Get all resources under a group
         """
         with get_sync_db_session() as session:
             return session.exec(

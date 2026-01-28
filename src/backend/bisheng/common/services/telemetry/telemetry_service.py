@@ -17,7 +17,7 @@ from bisheng.user.domain.repositories.implementations.user_repository_impl impor
 logger = logging.getLogger(__name__)
 
 INDEX_MAPPING = {
-    "mappings": {  # 定义索引的 Mapping
+    "mappings": {  # Defining the indexed Mapping
         "properties": {
             "event_id": {"type": "keyword"},
             "event_type": {"type": "keyword"},
@@ -63,9 +63,9 @@ class BaseTelemetryService(object):
         self._es_client: Optional[AsyncElasticsearch] = None
         self._es_client_sync: Optional[Elasticsearch] = None
 
-        # 线程池，用于同步方法
+        # Thread pool for synchronizing methods
         self.thread_pool = ThreadPoolExecutor(max_workers=10)
-        # 创建一个信号量，限制并发数量
+        # Create a semaphore to limit the number of concurrency
         self._semaphore = Semaphore(10)
 
     async def _ensure_index(self):
@@ -80,10 +80,10 @@ class BaseTelemetryService(object):
         try:
             exists = await self._es_client.indices.exists(index=self._index_name)
             if not exists:
-                # 传入 body 应用 Mapping
+                # Incoming body Applications Mapping
                 await self._es_client.indices.create(index=self._index_name, body=INDEX_MAPPING)
         except es_exceptions.RequestError as e:
-            # 并发创建时忽略 "resource_already_exists_exception"
+            # Ignore on concurrency creation "resource_already_exists_exception"
             if "resource_already_exists_exception" not in str(e):
                 logger.error(f"Failed to create ES index: {e}")
                 raise e
@@ -102,7 +102,7 @@ class BaseTelemetryService(object):
         try:
             exists = self._es_client_sync.indices.exists(index=self._index_name)
             if not exists:
-                # 传入 body
+                # Incoming body
                 self._es_client_sync.indices.create(index=self._index_name, body=INDEX_MAPPING)
         except es_exceptions.RequestError as e:
             if "resource_already_exists_exception" not in str(e):
@@ -190,26 +190,26 @@ class BaseTelemetryService(object):
     async def _record_event_task(self, user_id: int, event_type: BaseTelemetryTypeEnum, trace_id: str,
                                  event_data: T_EventData = None):
 
-        # 获取信号量
+        # Get semaphore
         async with self._semaphore:
             try:
                 logger.debug(f"Recording telemetry event for user_id {user_id}, event_type {event_type}")
-                # 获取用户信息 (带异常捕获)
+                # get user info (With Exception Capture)
                 user_context = await self._init_user_context(user_id)
                 if not user_context:
-                    # 即使查不到用户，建议也记录日志，但 user_context 为空或默认值
+                    # Even if the user is not found, it is recommended to keep a log, but user_context Empty or default
                     logger.warning(f"User context missing for user_id {user_id}, logging anonymously")
-                    # 可以根据需求决定是否 return，或者构建一个空的 Context
+                    # It is possible to decide according to your needs whether or not returnor build an empty Context
 
-                # 构建 Event
+                # Build. Event
                 event_info = BaseTelemetryEvent(
                     event_type=event_type,
-                    user_context=user_context,  # 允许为 None 或需调整 Schema 允许 Optional
+                    user_context=user_context,  # Allow for None May need to be adjusted Schema Allow Optional
                     trace_id=trace_id,
                     event_data=event_data
                 )
 
-                # 发送 (Fire and Forget)
+                # Send (Fire and Forget)
                 await self._es_client.index(index=self.index_name, document=event_info.model_dump())
 
             except Exception as e:
@@ -217,17 +217,17 @@ class BaseTelemetryService(object):
 
     async def log_event(self, user_id: int, event_type: BaseTelemetryTypeEnum, trace_id: str,
                         event_data: T_EventData = None):
-        """异步记录事件到 Elasticsearch (Safe Version)"""
+        """Log events asynchronously to Elasticsearch (Safe Version)"""
         try:
-            # 确保 ES 连接
+            # Ensuring ES CONNECT
             if not self._es_client:
                 self._es_client = await get_statistics_es_connection()
 
-            # 确保索引存在 (Lazy Init)
+            # Make sure the index exists (Lazy Init)
             if not self._index_initialized:
                 await self._ensure_index()
 
-            # 异步记录事件
+            # Log events asynchronously
             asyncio.create_task(
                 self._record_event_task(
                     user_id=user_id,
@@ -238,7 +238,7 @@ class BaseTelemetryService(object):
             )
 
         except Exception as e:
-            # 吞掉异常，不要让日志系统搞崩主业务
+            # Swallow exceptions, do not let the log system crash the main business
             logger.error(f"Failed to log telemetry event: {e}", exc_info=True)
 
     # record event task thread sync
@@ -260,7 +260,7 @@ class BaseTelemetryService(object):
 
     def log_event_sync(self, user_id: int, event_type: BaseTelemetryTypeEnum, trace_id: str,
                        event_data: T_EventData = None):
-        """同步记录事件到 Elasticsearch (Safe Version)"""
+        """Synchronize logging events to Elasticsearch (Safe Version)"""
         try:
             if not self._es_client_sync:
                 self._es_client_sync = get_statistics_es_connection_sync()
@@ -268,7 +268,7 @@ class BaseTelemetryService(object):
             if not self._index_initialized:
                 self._ensure_index_sync()
 
-            # 使用线程池执行同步任务
+            # Perform synchronization tasks using thread pools
             self.thread_pool.submit(
                 self._record_event_task_sync,
                 user_id,

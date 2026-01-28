@@ -27,45 +27,45 @@ def orjson_dumps(v, *, default=None, sort_keys=False, indent_2=True):
 
 def generate_short_high_entropy_string(length=32):
     """
-    生成指定长度的高熵短字符串（默认32字符）
+    Generate a short string of high entropy of the specified length (default32characters. 
 
-    参数:
-        length: 目标长度
+    Parameters:
+        length: Target Length
     """
-    # 根据目标长度计算需要的原始字节数（Base64每字符对应6比特）
-    byte_length = (length * 6 + 7) // 8  # 向上取整
+    # Calculate the required number of raw bytes based on the target length (Base64Corresponds to each character6bit
+    byte_length = (length * 6 + 7) // 8  # Round Up
 
-    # 生成加密级随机密钥
-    key = os.urandom(16)  # 128位密钥
+    # Generate Encryption-Level Random Keys
+    key = os.urandom(16)  # 128Bit Key
 
-    # 生成基础随机数据（UUID的128位足够作为源）
+    # Generate basic random data (UUIDright of privacy128bits are sufficient as a source)
     base_random = uuid.uuid4().bytes
 
-    # HMAC加密混合增强随机性
+    # HMACCrypto Hybrid Enhanced Randomness
     h = hmac.new(key, base_random, hashlib.sha256)
     hmac_bytes = h.digest()
 
-    # 截取所需长度的字节
+    # Truncate bytes of desired length
     combined = hmac_bytes[:byte_length]
 
-    # 转换为URL安全Base64并截断到目标长度（去除填充符）
+    # Convert ToURLSAFETYBase64and truncate to target length (without padding)
     short_str = base64.urlsafe_b64encode(combined).decode().rstrip('=')[:length]
 
     return short_str
 
 
-# --- 定义装饰器 ---
+# --- Define decorator ---
 def transfer_trace_id(func):
     """
-    装饰器：自动将当前上下文（包含 trace_id）复制到被装饰函数的执行环境中。
-    适用于 Thread 或 Executor。
+    Decorator: Automatically convert the current context (including trace_id) into the execution environment of the decorated function.
+    Available for Thread OR Executor。
     """
 
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
-        # 1. 这里的代码还在父线程执行，捕获上下文
+        # 1. The code here is still executing in the parent thread, capturing the context
         ctx = contextvars.copy_context()
-        # 2. 使用 ctx.run 在捕获的上下文中运行原函数
+        # 2. Use ctx.run Run the original function in the captured context
         return ctx.run(func, *args, **kwargs)
 
     return wrapper

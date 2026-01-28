@@ -1,88 +1,88 @@
 from .base import BaseErrorCode
 
 
-# 技能服务相关的返回错误码，功能模块代码：105
+# Skill service related return error code, function module code:105
 class NotFoundVersionError(BaseErrorCode):
     Code: int = 10500
-    Msg: str = '未找到技能版本信息'
+    Msg: str = 'Skill version information not found'
 
 
 class CurVersionDelError(BaseErrorCode):
     Code: int = 10501
-    Msg: str = '当前正在使用版本无法删除'
+    Msg: str = 'Version currently in use cannot be deleted'
 
 
 class VersionNameExistsError(BaseErrorCode):
     Code: int = 10502
-    Msg: str = '版本名已存在'
+    Msg: str = 'Version name already exists'
 
 
 class FlowNameExistsError(BaseErrorCode):
     Code: int = 10503
-    Msg: str = '技能名重复'
+    Msg: str = 'Duplicate skill name'
 
 
 class NotFoundFlowError(BaseErrorCode):
     Code: int = 10520
-    Msg: str = '技能不存在'
+    Msg: str = 'Skill does not exist.'
 
 
 class FlowOnlineEditError(BaseErrorCode):
     Code: int = 10521
-    Msg: str = '技能已上线，不可编辑'
+    Msg: str = 'Skills are live and cannot be edited'
 
 
 class WorkFlowOnlineEditError(BaseErrorCode):
     Code: int = 10525
-    Msg: str = '工作流已上线，不可编辑'
+    Msg: str = 'Workflow is live and not editable'
 
 
 class WorkFlowInitError(BaseErrorCode):
     Code: int = 10526
-    Msg: str = '工作流初始化失败'
+    Msg: str = 'Workflow initialization failed'
 
 
 class WorkFlowWaitUserTimeoutError(BaseErrorCode):
     Code: int = 10527
-    Msg: str = '工作流等待用户输入超时'
+    Msg: str = 'Workflow timed out waiting for user input'
 
 
 class WorkFlowNodeRunMaxTimesError(BaseErrorCode):
     Code: int = 10528
-    Msg: str = '节点执行超过最大次数'
+    Msg: str = 'Node exceeds maximum number of executions'
 
 
 class WorkflowNameExistsError(BaseErrorCode):
     Code: int = 10529
-    Msg: str = '工作流名称重复'
+    Msg: str = 'Duplicate workflow name'
 
 
 class FlowTemplateNameError(BaseErrorCode):
     Code: int = 10530
-    Msg: str = '模板名称已存在'
+    Msg: str = 'Template Name Already Exists'
 
 
 class WorkFlowNodeUpdateError(BaseErrorCode):
     Code: int = 10531
-    Msg: str = '<节点名称>功能已升级，需删除后重新拖入。'
+    Msg: str = '<Node name>The feature has been upgraded and needs to be deleted and dragged back in.'
 
 
 class WorkFlowVersionUpdateError(BaseErrorCode):
     Code: int = 10532
-    Msg: str = '工作流版本已升级，请联系创建者重新编排'
+    Msg: str = 'The workflow version has been upgraded, please contact the creator to reschedule'
 
 
 class WorkFlowTaskBusyError(BaseErrorCode):
     Code: int = 10540
-    Msg: str = '服务器线程数已满，请稍候再试'
+    Msg: str = 'Server thread count is full, please try again later'
 
 
-# 工作流任务其它错误
+# Workflow Task Other Errors
 class WorkFlowTaskOtherError(BaseErrorCode):
     Code: int = 10541
-    Msg: str = '工作流任务执行失败'
+    Msg: str = 'Workflow task execution failed'
 
 
 class AppWriteAuthError(BaseErrorCode):
     Code: int = 10599
-    Msg: str = '没有应用写权限'
+    Msg: str = 'No Apply Write Permission'

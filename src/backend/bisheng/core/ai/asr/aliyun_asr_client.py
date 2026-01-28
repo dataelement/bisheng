@@ -7,11 +7,11 @@ from ..base import BaseASRClient
 
 
 class AliyunASRClient(BaseASRClient):
-    """阿里云ASR客户端"""
+    """Alibaba CloudASRClient"""
 
     def __init__(self, api_key: str, model: str, **kwargs):
         """
-        初始化阿里云ASR客户端
+        Initialize Alibaba CloudASRClient
         """
 
         self.api_key = api_key
@@ -23,7 +23,7 @@ class AliyunASRClient(BaseASRClient):
             **kwargs
         )
 
-    # 耗时操作，异步执行
+    # Time-consuming operation, asynchronous execution
     def sync_func(self, temp_file, language=None, model=None):
         result: RecognitionResult = self.recognition.call(temp_file, api_key=self.api_key, language=language,
                                                           model=model)

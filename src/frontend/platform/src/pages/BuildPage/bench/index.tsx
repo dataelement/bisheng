@@ -151,7 +151,6 @@ export default function index({ formData: parentFormData, setFormData: parentSet
     // Redirect non-admin users
     const { user } = useContext(userContext);
     const navigate = useNavigate()
-    const [open, setOpen] = useState(false);
     useEffect(() => {
         if (user.user_id && user.role !== 'admin') {
             navigate('/build/apps')

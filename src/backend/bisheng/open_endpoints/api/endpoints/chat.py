@@ -21,7 +21,7 @@ from bisheng.processing.process import process_tweaks
 
 router = APIRouter(prefix='/chat', tags=['OpenAPI', 'Chat'])
 chat_manager = ChatManager()
-expire = 600  # reids 60s 过期
+expire = 600  # reids 60s Overdue
 
 
 @router.websocket('/ws/{flow_id}')
@@ -36,11 +36,11 @@ async def union_websocket(flow_id: str,
             db_flow = session.get(Flow, flow_id)
         if not db_flow:
             await websocket.accept()
-            message = '该技能已被删除'
+            message = 'This skill has been deleted'
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=message)
         if db_flow.status != 2:
             await websocket.accept()
-            message = '当前技能未上线，无法直接对话'
+            message = 'The current skill is not online and cannot be spoken to directly'
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=message)
         graph_data = db_flow.data
 

@@ -9,24 +9,24 @@ from bisheng.core.database import get_sync_db_session, get_async_db_session
 
 
 class SensitiveStatus(Enum):
-    PASS = 1  # 通过
-    VIOLATIONS = 2  # 违规
+    PASS = 1  # Setuju
+    VIOLATIONS = 2  # violates regulation
 
 
 class MessageSessionBase(SQLModelSerializable):
-    """ 会话表 """
-    chat_id: str = Field(default=None, primary_key=True, description='会话唯一ID')
-    flow_id: str = Field(index=True, description='应用唯一ID')
-    flow_type: int = Field(description='应用类型。技能、助手、工作流')
-    flow_name: str = Field(index=True, description='应用名称')
-    flow_description: Optional[str] = Field(default=None, description='应用描述')
-    flow_logo: Optional[str] = Field(default=None, description='应用logo')
-    user_id: int = Field(index=True, description='创建会话的用户ID')
-    is_delete: Optional[bool] = Field(default=False, description='对应的技能或者会话本身是否被删除')
-    like: Optional[int] = Field(default=0, description='点赞的消息数量')
-    dislike: Optional[int] = Field(default=0, description='点踩的消息数量')
-    copied: Optional[int] = Field(default=0, description='已复制的消息数量')
-    sensitive_status: int = Field(default=SensitiveStatus.PASS.value, description='审查状态')
+    """ Conversation table """
+    chat_id: str = Field(default=None, primary_key=True, description='Session UniqueID')
+    flow_id: str = Field(index=True, description='Apply UniqueID')
+    flow_type: int = Field(description='App type. Skills, assistants, workflows')
+    flow_name: str = Field(index=True, description='Application name')
+    flow_description: Optional[str] = Field(default=None, description='App Description')
+    flow_logo: Optional[str] = Field(default=None, description='Applicationslogo')
+    user_id: int = Field(index=True, description='User who created the sessionID')
+    is_delete: Optional[bool] = Field(default=False, description='Whether the corresponding skill or the session itself was deleted')
+    like: Optional[int] = Field(default=0, description='Number of liked messages')
+    dislike: Optional[int] = Field(default=0, description='Number of messages clicked')
+    copied: Optional[int] = Field(default=0, description='Number of messages copied')
+    sensitive_status: int = Field(default=SensitiveStatus.PASS.value, description='Review Status')
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(

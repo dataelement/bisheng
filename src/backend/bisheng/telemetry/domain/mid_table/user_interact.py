@@ -13,11 +13,11 @@ class UserInteractRecord(BaseRecord):
 class UserInteract(BaseMidTable):
     _index_name = 'mid_user_interact_dtl'
     _mappings = {
-        "message_id": {"type": "integer"},
-        "event_id": {"type": "keyword"},
-        "interact_type": {"type": "keyword"},
-        "app_id": {"type": "keyword"},
-        "app_name": {"type": "keyword"},
+        "message_id": {"type": "keyword", "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}}},
+        "event_id": {"type": "keyword", "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}}},
+        "interact_type": {"type": "keyword", "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}}},
+        "app_id": {"type": "keyword", "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}}},
+        "app_name": {"type": "keyword", "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}}},
     }
 
     def get_records_by_time_range_sync(self, start_time: int, end_time: int, page: int = 1, page_size: int = 1000):
@@ -25,7 +25,7 @@ class UserInteract(BaseMidTable):
             "bool": {
                 "filter": [
                     {"term": {"event_type": {"value": BaseTelemetryTypeEnum.MESSAGE_FEEDBACK.value}}},
-                    {"range": {"timestamp": {"gte": start_time, "lt": end_time}}}
+                    {"range": {"timestamp": {"gte": start_time * 1000, "lt": end_time * 1000}}}
                 ]
             }
         }

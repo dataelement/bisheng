@@ -20,12 +20,12 @@ class AppChatList(BaseModel):
     like_count: Optional[int] = None
     dislike_count: Optional[int] = None
     copied_count: Optional[int] = None
-    sensitive_status: Optional[int] = None  # 敏感词审查状态
-    user_groups: Optional[List[Any]] = None  # 用户所属的分组
+    sensitive_status: Optional[int] = None  # Sensitive word review status
+    user_groups: Optional[List[Any]] = None  # Groups to which the user belongs
     mark_user: Optional[str] = None
     mark_status: Optional[int] = None
     mark_id: Optional[int] = None
-    messages: Optional[List[dict]] = None  # 会话的所有消息列表数据
+    messages: Optional[List[dict]] = None  # All message list data for the session
 
     @field_validator('user_name', mode='before')
     @classmethod
@@ -49,7 +49,7 @@ class UseKnowledgeBaseParam(BaseModel):
     @classmethod
     def convert_organization_knowledge_ids(cls, v: Any):
         if len(v) > 20:
-            raise ValueError('最多只能使用20个组织知识库')
+            raise ValueError('Can only be used up to20organization knowledge base')
 
         return v
 

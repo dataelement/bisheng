@@ -7,6 +7,7 @@ export default function Tip({
     children,
     styleClasses,
     delayDuration = 200,
+    align = "center"
 }: {
     content: string;
     side: "top" | "right" | "bottom" | "left" | "top-right";
@@ -14,6 +15,7 @@ export default function Tip({
     children: React.ReactNode;
     styleClasses?: string;
     delayDuration?: number
+    align?: "center" | "start" | "end"
 }): JSX.Element {
     return content ? <Tooltip delayDuration={delayDuration}>
         <TooltipTrigger asChild={asChild}>{children}</TooltipTrigger>
@@ -21,6 +23,7 @@ export default function Tip({
             <TooltipContent
                 className={`${styleClasses} text-sm shadow-md`}
                 side={side}
+                align={align}
                 avoidCollisions={false}
                 sticky="always"
             >

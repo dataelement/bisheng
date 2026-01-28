@@ -48,7 +48,7 @@ class AssistantService(BaseService, AssistantUtils):
                       page: int = 1,
                       limit: int = 20) -> (List[AssistantSimpleInfo], int):
         """
-        获取助手列表
+        Get list of assistants
         """
         assistant_ids = []
         if tag_id:
@@ -61,7 +61,7 @@ class AssistantService(BaseService, AssistantUtils):
         if user.is_admin():
             res, total = AssistantDao.get_all_assistants(name, page, limit, assistant_ids, status)
         else:
-            # 权限管理可见的助手信息
+            # Permission management visible assistant information
             assistant_ids_extra = []
             user_role = UserRoleDao.get_user_roles(user.user_id)
             if user_role:
@@ -73,7 +73,7 @@ class AssistantService(BaseService, AssistantUtils):
                                                      assistant_ids)
 
         assistant_ids = [one.id for one in res]
-        # 查询助手所属的分组
+        # Query groups to which the assistant belongs
         assistant_groups = GroupResourceDao.get_resources_group(ResourceTypeEnum.ASSISTANT, assistant_ids)
         assistant_group_dict = {}
         for one in assistant_groups:
@@ -81,7 +81,7 @@ class AssistantService(BaseService, AssistantUtils):
                 assistant_group_dict[one.third_id] = []
             assistant_group_dict[one.third_id].append(one.group_id)
 
-        # 获取助手关联的tag
+        # Get assistant-associatedtag
         flow_tags = TagDao.get_tags_by_resource(ResourceTypeEnum.ASSISTANT, assistant_ids)
 
         for one in res:
@@ -97,7 +97,7 @@ class AssistantService(BaseService, AssistantUtils):
     @classmethod
     def return_simple_assistant_info(cls, one: Assistant) -> AssistantSimpleInfo:
         """
-        将数据库的 助手model简化 处理后成返回前端的格式
+        Put the database's assistantmodelSimplified After processing, it returns to the front-end format
         """
         simple_dict = one.model_dump(include={
             'id', 'name', 'desc', 'logo', 'status', 'user_id', 'create_time', 'update_time'
@@ -111,7 +111,7 @@ class AssistantService(BaseService, AssistantUtils):
         assistant = await AssistantDao.aget_one_assistant(assistant_id)
         if not assistant or assistant.is_delete:
             raise AssistantNotExistsError()
-        # 检查是否有权限获取信息
+        # Check if you have permission to access the information
         if not await login_user.async_access_check(assistant.user_id, assistant.id, AccessType.ASSISTANT_READ):
 
             if (share_link is None
@@ -146,18 +146,18 @@ class AssistantService(BaseService, AssistantUtils):
         assistant = await AssistantDao.aget_one_assistant(assistant_id)
         return assistant
 
-    # 创建助手
+    # Create Assistant
     @classmethod
     async def create_assistant(cls, request: Request, login_user: UserPayload, assistant: Assistant) \
             -> AssistantInfo:
 
-        # 检查下是否有重名
+        # Check if there are any duplicate names under
         if cls.judge_name_repeat(assistant.name, assistant.user_id):
             raise AssistantNameRepeatError()
 
         logger.info(f"assistant original prompt id: {assistant.id}, desc: {assistant.prompt}")
 
-        # 自动补充默认的模型配置
+        # Automatically replenish default model configurations
         assistant_llm = await LLMService.get_assistant_llm()
         if assistant_llm.llm_list:
             for one in assistant_llm.llm_list:
@@ -165,11 +165,11 @@ class AssistantService(BaseService, AssistantUtils):
                     assistant.model_name = str(one.model_id)
                     break
 
-        # 自动生成描述
+        # Autogenerate Descriptions
         assistant, _, _ = await cls.get_auto_info(assistant, login_user)
         assistant = AssistantDao.create_assistant(assistant)
 
-        # 记录Telemetry日志
+        # RecordTelemetryJournal
         await telemetry_service.log_event(user_id=login_user.user_id,
                                           event_type=BaseTelemetryTypeEnum.NEW_APPLICATION,
                                           trace_id=trace_id_var.get(),
@@ -188,12 +188,12 @@ class AssistantService(BaseService, AssistantUtils):
     @classmethod
     def create_assistant_hook(cls, request: Request, assistant: Assistant, user_payload: UserPayload) -> bool:
         """
-        创建助手成功后的hook，执行一些其他业务逻辑
+        After successful creation of the assistanthook, perform some other business logic
         """
-        # 查询下用户所在的用户组
+        # Query the user group the user belongs to under
         user_group = UserGroupDao.get_user_group(user_payload.user_id)
         if user_group:
-            # 批量将助手资源插入到关联表里
+            # Batch Insert Assistant Resources into Correlation Table
             batch_resource = []
             for one in user_group:
                 batch_resource.append(GroupResource(
@@ -202,21 +202,21 @@ class AssistantService(BaseService, AssistantUtils):
                     type=ResourceTypeEnum.ASSISTANT.value))
             GroupResourceDao.insert_group_batch(batch_resource)
 
-        # 写入审计日志
+        # Write Audit Log
         AuditLogService.create_build_assistant(user_payload, get_request_ip(request), assistant.id)
 
-        # 写入logo缓存
+        # WritelogoCeacle
         cls.get_logo_share_link(assistant.logo)
         return True
 
-    # 删除助手
+    # Delete Assistant
     @classmethod
     def delete_assistant(cls, request: Request, login_user: UserPayload, assistant_id: str) -> bool:
         assistant = AssistantDao.get_one_assistant(assistant_id)
         if not assistant:
             raise AssistantNotExistsError()
 
-        # 判断授权
+        # Judgment Authorization
         if not login_user.access_check(assistant.user_id, assistant.id, AccessType.ASSISTANT_WRITE):
             raise UnAuthorizedError()
 
@@ -229,30 +229,30 @@ class AssistantService(BaseService, AssistantUtils):
 
     @classmethod
     def delete_assistant_hook(cls, request: Request, login_user: UserPayload, assistant: Assistant) -> bool:
-        """ 清理关联的助手资源 """
+        """ Clean up associated assistant resources """
         logger.info(f"delete_assistant_hook id: {assistant.id}, user: {login_user.user_id}")
-        # 写入审计日志
+        # Write Audit Log
         AuditLogService.delete_build_assistant(login_user, get_request_ip(request), assistant.id)
 
-        # 清理和用户组的关联
+        # Clean up associations with user groups
         GroupResourceDao.delete_group_resource_by_third_id(assistant.id, ResourceTypeEnum.ASSISTANT)
 
-        # 更新会话信息
+        # Update session information
         MessageSessionDao.update_session_info_by_flow(assistant.name, assistant.desc, assistant.logo,
                                                       assistant.id, FlowType.ASSISTANT.value)
         return True
 
     @classmethod
     async def auto_update_stream(cls, assistant_id: str, prompt: str, login_user: UserPayload):
-        """ 重新生成助手的提示词和工具选择, 只调用模型能力不修改数据库数据 """
+        """ Regenerate Assistant Prompts and Tool Selection, Only call the model capability without modifying the database data """
         assistant = AssistantDao.get_one_assistant(assistant_id)
         assistant.prompt = prompt
 
-        # 初始化llm
+        # Inisialisasillm
         auto_agent = AssistantAgent(assistant, '', login_user.user_id)
         await auto_agent.init_auto_update_llm()
 
-        # 流式生成提示词
+        # Streaming Generation Prompts
         final_prompt = ''
         async for one_prompt in auto_agent.optimize_assistant_prompt():
             if one_prompt.content in ('```', 'markdown'):
@@ -262,14 +262,14 @@ class AssistantService(BaseService, AssistantUtils):
         assistant.prompt = final_prompt
         yield str(StreamData(event='message', data={'type': 'end', 'message': ""}))
 
-        # 生成开场白和开场问题
+        # Generate opening remarks and opening questions
         guide_info = auto_agent.generate_guide(assistant.prompt)
         yield str(StreamData(event='message', data={'type': 'guide_word', 'message': guide_info['opening_lines']}))
         yield str(StreamData(event='message', data={'type': 'end', 'message': ""}))
         yield str(StreamData(event='message', data={'type': 'guide_question', 'message': guide_info['questions']}))
         yield str(StreamData(event='message', data={'type': 'end', 'message': ""}))
 
-        # 自动选择工具和技能
+        # Automatic selection of tools and skills
         tool_info = cls.get_auto_tool_info(assistant, auto_agent)
         tool_info = [one.model_dump() for one in tool_info]
         yield str(StreamData(event='message', data={'type': 'tool_list', 'message': tool_info}))
@@ -282,16 +282,16 @@ class AssistantService(BaseService, AssistantUtils):
     @classmethod
     async def update_assistant(cls, request: Request, login_user: UserPayload, req: AssistantUpdateReq) \
             -> AssistantInfo:
-        """ 更新助手信息 """
+        """ Update Assistant Information """
         assistant = AssistantDao.get_one_assistant(req.id)
         if not assistant:
             raise AssistantNotExistsError()
 
         cls.check_update_permission(assistant, login_user)
 
-        # 更新助手数据
+        # Update Assistant Data
         if req.name and req.name != assistant.name:
-            # 检查下是否有重名
+            # Check if there are any duplicate names under
             if cls.judge_name_repeat(req.name, assistant.user_id):
                 raise AssistantNameRepeatError()
             assistant.name = req.name
@@ -308,13 +308,13 @@ class AssistantService(BaseService, AssistantUtils):
         telemetry_service.log_event_sync(user_id=login_user.user_id, event_type=BaseTelemetryTypeEnum.EDIT_APPLICATION,
                                          trace_id=trace_id_var.get())
 
-        # 更新助手关联信息
+        # Update assistant association information
         if req.tool_list is not None:
             AssistantLinkDao.update_assistant_tool(assistant.id, tool_list=req.tool_list)
         if req.flow_list is not None:
             AssistantLinkDao.update_assistant_flow(assistant.id, flow_list=req.flow_list)
         if req.knowledge_list is not None:
-            # 使用配置的flow 进行技能补充
+            # Using Configuredflow Perform skill replenishment
             AssistantLinkDao.update_assistant_knowledge(assistant.id,
                                                         knowledge_list=req.knowledge_list,
                                                         flow_id='')
@@ -328,31 +328,31 @@ class AssistantService(BaseService, AssistantUtils):
 
     @classmethod
     def update_assistant_hook(cls, request: Request, login_user: UserPayload, assistant: Assistant) -> bool:
-        """ 更新助手的钩子 """
+        """ Update Assistant's Hook """
         logger.info(f"delete_assistant_hook id: {assistant.id}, user: {login_user.user_id}")
 
-        # 写入审计日志
+        # Write Audit Log
         AuditLogService.update_build_assistant(login_user, get_request_ip(request), assistant.id)
 
-        # 写入缓存
+        # Write cache
         cls.get_logo_share_link(assistant.logo)
         return True
 
     @classmethod
     async def update_status(cls, request: Request, login_user: UserPayload, assistant_id: str,
                             status: int) -> bool:
-        """ 更新助手的状态 """
+        """ Update Assistant Status """
         assistant = AssistantDao.get_one_assistant(assistant_id)
         if not assistant:
             raise AssistantNotExistsError()
-        # 判断权限
+        # Determine permissions
         if not login_user.access_check(assistant.user_id, assistant.id, AccessType.ASSISTANT_WRITE):
             raise UnAuthorizedError()
-        # 状态相等不做改动
+        # Equal status without modification
         if assistant.status == status:
             return True
 
-        # 尝试初始化agent，初始化成功则上线、否则不上线
+        # Try to initializeagent, go online if initialization is successful, otherwise not go online
         if status == AssistantStatus.ONLINE.value:
             tmp_agent = AssistantAgent(assistant, '', login_user.user_id)
             try:
@@ -369,7 +369,7 @@ class AssistantService(BaseService, AssistantUtils):
 
     @classmethod
     def update_prompt(cls, assistant_id: str, prompt: str, user_payload: UserPayload) -> bool:
-        """ 更新助手的提示词 """
+        """ Update assistant prompts """
         assistant = AssistantDao.get_one_assistant(assistant_id)
         if not assistant:
             raise AssistantNotExistsError()
@@ -386,7 +386,7 @@ class AssistantService(BaseService, AssistantUtils):
     @classmethod
     def update_flow_list(cls, assistant_id: str, flow_list: List[str],
                          user_payload: UserPayload) -> bool:
-        """  更新助手的技能列表 """
+        """  Update Assistant Skills List """
         assistant = AssistantDao.get_one_assistant(assistant_id)
         if not assistant:
             raise AssistantNotExistsError()
@@ -399,7 +399,7 @@ class AssistantService(BaseService, AssistantUtils):
     @classmethod
     def update_tool_list(cls, assistant_id: str, tool_list: List[int],
                          user_payload: UserPayload) -> bool:
-        """  更新助手的工具列表 """
+        """  Update Assistant Tool List """
         assistant = AssistantDao.get_one_assistant(assistant_id)
         if not assistant:
             raise AssistantNotExistsError()
@@ -411,11 +411,11 @@ class AssistantService(BaseService, AssistantUtils):
 
     @classmethod
     def check_update_permission(cls, assistant: Assistant, user_payload: UserPayload) -> Any:
-        # 判断权限
+        # Determine permissions
         if not user_payload.access_check(assistant.user_id, assistant.id, AccessType.ASSISTANT_WRITE):
             raise UnAuthorizedError()
 
-        # 已上线不允许改动
+        # Changes are not allowed when online
         if assistant.status == AssistantStatus.ONLINE.value:
             raise AssistantNotEditError()
         return None
@@ -445,7 +445,7 @@ class AssistantService(BaseService, AssistantUtils):
 
     @classmethod
     def judge_name_repeat(cls, name: str, user_id: int) -> bool:
-        """ 判断助手名字是否重复 """
+        """ Determine if the assistant name is a duplicate """
         assistant = AssistantDao.get_assistant_by_name_user_id(name, user_id)
         if assistant:
             return True
@@ -454,21 +454,21 @@ class AssistantService(BaseService, AssistantUtils):
     @classmethod
     async def get_auto_info(cls, assistant: Assistant, login_user: UserPayload) -> (Assistant, List[int], List[int]):
         """
-        自动生成助手的prompt，自动选择工具和技能
-        return：助手信息，工具ID列表，技能ID列表
+        Auto Generate Assistant'sprompt, Automatically select tools and skills
+        return: Assistant Information, ToolsIDList, SkillsIDVertical
         """
-        # 初始化agent
+        # Inisialisasiagent
         auto_agent = AssistantAgent(assistant, '', login_user.user_id)
         await auto_agent.init_auto_update_llm()
 
-        # 自动生成描述
+        # Autogenerate Descriptions
         assistant.desc = auto_agent.generate_description(assistant.prompt)
 
         return assistant, [], []
 
     @classmethod
     def get_auto_tool_info(cls, assistant: Assistant, auto_agent: AssistantAgent) -> List[GptsTools]:
-        # 分页自动选择工具
+        # Pagination Auto-Select Tool
         res = []
         page = 1
         page_num = 50
@@ -496,7 +496,7 @@ class AssistantService(BaseService, AssistantUtils):
 
     @classmethod
     def get_auto_flow_info(cls, assistant: Assistant, auto_agent: AssistantAgent) -> List[Flow]:
-        # 自动选择技能, 挑选前50个技能用来做自动选择
+        # Automatically select skills, Before picking50skills to make automatic selections
         all_flow = FlowDao.get_user_access_online_flows(assistant.user_id, 1, 50)
         flow_dict = {}
         flow_list = []

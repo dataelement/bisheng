@@ -34,7 +34,7 @@ class OpenApiSchema:
         security_schemes = self.contents.get('components', {}).get('securitySchemes', {})
         api_key_auth = security_schemes.get('ApiKeyAuth', {})
 
-        # 获取认证类型
+        # Get certification type
         auth_type = api_key_auth.get('type')
         if auth_type == 'apiKey':
             self.auth_type = 'custom'
@@ -43,10 +43,10 @@ class OpenApiSchema:
         else:
             self.auth_type = 'basic'
 
-        # 设置认证方法
+        # Set authentication method
         self.auth_method = 1 if auth_type in ('apiKey', 'http') else 0
 
-        # 获取 API 位置和参数名
+        # Dapatkan API Location and parameter name
         self.api_location = api_key_auth.get('in')
         self.parameter_name = api_key_auth.get('name')
         return self.default_server
@@ -108,7 +108,7 @@ class OpenApiSchema:
                                   api_key: str = None):
         if isinstance(extra, str):
             extra = json.loads(extra)
-        # 拼接请求头
+        # Stitching request header
         headers = {}
         if auth_method == AuthMethod.API_KEY.value:
             if auth_type == AuthType.CUSTOM.value:
@@ -121,7 +121,7 @@ class OpenApiSchema:
             elif auth_type == AuthType.BEARER.value:
                 headers = {'Authorization': f'Bearer {api_key}'}
 
-        # 返回初始化 openapi所需的入参
+        # Back to initialization openapiRequired input parameters
         params = {
             'params': extra,
             'headers': headers,

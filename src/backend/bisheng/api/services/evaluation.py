@@ -50,16 +50,16 @@ class EvaluationService:
                        page: int = 1,
                        limit: int = 20) -> UnifiedResponseModel[List[Evaluation]]:
         """
-        获取测评任务列表
+        Get a list of assessment tasks
         """
         data = []
         res_evaluations, total = EvaluationDao.get_my_evaluations(user.user_id, page, limit)
 
-        # 技能ID列表
+        # SkillIDVertical
         flow_ids = []
-        # 助手ID列表
+        # assistantIDVertical
         assistant_ids = []
-        # 版本ID列表
+        # VersionIDVertical
         flow_version_ids = []
 
         for one in res_evaluations:
@@ -100,7 +100,7 @@ class EvaluationService:
                 evaluation_item['result_score'] = json.loads(one.result_score) if isinstance(one.result_score,
                                                                                              str) else one.result_score
 
-            # 处理任务进度
+            # Processing Task Progress
             if one.status != EvaluationTaskStatus.running.value:
                 evaluation_item['progress'] = f'100%'
             elif redis_client.exists(EvaluationService.get_redis_key(one.id)):
@@ -108,7 +108,7 @@ class EvaluationService:
             else:
                 evaluation_item['progress'] = f'0%'
 
-            # 确保错误描述信息能够返回给前端
+            # Make sure the error description is returned to the front-end
             evaluation_item['description'] = one.description or ''
             evaluation_item['user_name'] = cls.get_user_name(one.user_id)
             data.append(evaluation_item)
@@ -198,7 +198,7 @@ class EvaluationService:
             if not version_info:
                 return {"input": ""}
 
-            # L1 用户，采用build流程
+            # L1 Users, usingbuildProcess
             try:
                 async for message in build_flow(graph_data=version_info.data,
                                                 artifacts=artifacts,
@@ -239,17 +239,17 @@ class EvaluationService:
 
 
 def execute_workflow_get_answer(workflow_info: FlowVersion, evaluation: Evaluation, question: str) -> str:
-    # 初始化工作流
+    # Initialize workflow
     unique_id = generate_uuid()
     workflow_id = evaluation.unique_id
     chat_id = ""
-    user_id = str(evaluation.user_id)
+    user_id = evaluation.user_id
     workflow = RedisCallback(unique_id, workflow_id, chat_id, user_id)
     workflow.set_workflow_data(workflow_info.data)
     workflow.set_workflow_status(WorkflowStatus.WAITING.value)
     execute_workflow.delay(unique_id, workflow_id, chat_id, user_id)
 
-    # 监听工作流的执行结果
+    # Listen for execution results of workflows
     input_event = None
     for event in workflow.sync_get_response_until_break():
         input_event = event
@@ -258,11 +258,11 @@ def execute_workflow_get_answer(workflow_info: FlowVersion, evaluation: Evaluati
     if status_info["status"] == WorkflowStatus.FAILED.value:
         raise Exception(status_info.get("reason", "workflow run failed"))
     elif status_info['status'] == WorkflowStatus.SUCCESS.value:
-        raise Exception("目前仅支持“一问一答”类型的工作流")
+        raise Exception("Only Q&A type workflows are currently supported")
     elif status_info['status'] == WorkflowStatus.INPUT.value:
         if not input_event or input_event.message.get('input_schema', {}).get("tab") == "form_input":
-            raise Exception("目前仅支持“一问一答”类型的工作流")
-        # 默认只输入对话框输入的工作流
+            raise Exception("Only Q&A type workflows are currently supported")
+        # Only workflows entered in dialog boxes are entered by default
         workflow.set_user_input({input_event.message.get('node_id'): {"user_input": question}})
         workflow.set_workflow_status(WorkflowStatus.INPUT_OVER.value)
         continue_workflow.delay(unique_id, workflow_id, chat_id, user_id)
@@ -274,9 +274,9 @@ def execute_workflow_get_answer(workflow_info: FlowVersion, evaluation: Evaluati
             raise Exception(status_info.get("reason", "workflow run failed"))
         elif status_info['status'] in [WorkflowStatus.SUCCESS.value, WorkflowStatus.INPUT.value]:
             workflow.set_workflow_stop()
-            # 获取第一个输出事件的内容作为回答，如果没有则报错
+            # Get the content of the first output event as an answer, if not, report an error
             if not events:
-                raise Exception("目前仅支持“一问一答”类型的工作流")
+                raise Exception("Only Q&A type workflows are currently supported")
             answer = None
             for event in events:
                 if event.category in [WorkflowEventType.OutputMsg.value, WorkflowEventType.OutputWithInput.value,
@@ -287,7 +287,7 @@ def execute_workflow_get_answer(workflow_info: FlowVersion, evaluation: Evaluati
                     answer = event.message.get('msg', "")
                     break
             if answer is None:
-                raise Exception("目前仅支持“一问一答”类型的工作流")
+                raise Exception("Only Q&A type workflows are currently supported")
             return answer
         else:
             workflow.set_workflow_stop()
@@ -368,7 +368,7 @@ async def add_evaluation_task(evaluation_id: int):
 
         question = result.get('question', [])
         columns = [
-            # 字段:标题:类型(1:文本 2:数字 3:百分比)
+            # Data field:Title:Type(1:Text 2:Numbers 3:%)
             ("question", "question", 1),
             ("ground_truths", "ground_truth", 1),
             ("answer", "answer", 1),
@@ -416,6 +416,6 @@ async def add_evaluation_task(evaluation_id: int):
     except Exception as e:
         logger.exception(f'evaluation task failed id={evaluation_id} {str(e)}')
         evaluation.status = EvaluationTaskStatus.failed.value
-        evaluation.description = str(e)[-500:]  # 限制错误描述长度，避免过长
+        evaluation.description = str(e)[-500:]  # Limit the length of the error description to avoid being too long
         EvaluationDao.update_evaluation(evaluation=evaluation)
         redis_client.delete(redis_key)

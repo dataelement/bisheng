@@ -17,7 +17,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import Tip from "@/components/bs-ui/tooltip/tip";
 import { truncateString } from "@/util/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@radix-ui/react-dropdown-menu";
-import { ClipboardPenLine, Filter, RotateCw, Trash2 } from "lucide-react";
+import { CircleAlertIcon, ClipboardPenLine, Filter, RotateCw, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { SearchInput } from "../../../components/bs-ui/input";
@@ -38,6 +38,8 @@ const STATUS_CONFIG: Record<number, { labelKey: string; colorClass: string; bgCl
     2: { labelKey: "completed", colorClass: "text-green-500", bgClass: "bg-green-500" },
     3: { labelKey: "parseFailed", colorClass: "text-red-500", bgClass: "bg-red-500" },
     4: { labelKey: "parsing", colorClass: "text-[#4D9BF0]", bgClass: "bg-[#4D9BF0]" },
+    5: { labelKey: "queuing", colorClass: "text-yellow-500", bgClass: "bg-yellow-500" },
+    6: { labelKey: "timeout", colorClass: "text-red-500", bgClass: "bg-red-500" },
 };
 
 export const StatusIndicator: React.FC<StatusIndicatorProps> = ({ status, remark }) => {
@@ -53,38 +55,47 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({ status, remark
             }
         }
         return remark
-    }, [remark])
+    }, [remark, t])
 
     // 如果状态不在定义中，返回 null 或默认 UI
     if (!config) return null;
 
-    // 2. 抽取公共的基础 UI (圆点 + 文字)
-    const BadgeContent = (
-        <div className="flex items-center gap-2 cursor-default">
-            <span className={`size-[6px] rounded-full ${config.bgClass}`}></span>
-            <span className={`font-[500] text-[14px] leading-[100%] text-center ${config.colorClass}`}>
-                {t(config.labelKey, { ns: 'knowledge' })}
-            </span>
-        </div>
-    );
+    const renderTooltip = () => {
+        let tooltipContent = "";
 
-    // 3. 特殊逻辑：只有失败状态 (3) 且有 remark 时才显示 Tooltip
-    if (status === 3 && remark) {
+        if (status === 3 && remark) {
+            tooltipContent = reason; // 解析失败的报错原因
+        } else if (status === 6) {
+            tooltipContent = t('timeoutTip', { ns: 'knowledge' })
+        }
+
+        if (!tooltipContent) return null;
+
         return (
             <TooltipProvider delayDuration={100}>
                 <Tooltip>
                     <TooltipTrigger asChild>
-                        {BadgeContent}
+                        <CircleAlertIcon size={16} className="cursor-pointer" />
                     </TooltipTrigger>
                     <TooltipContent side="top" className="whitespace-pre-line">
                         <div className="max-w-96 text-left break-all whitespace-normal">
-                            {reason}
+                            {tooltipContent}
                         </div>
                     </TooltipContent>
                 </Tooltip>
             </TooltipProvider>
         );
-    }
+    };
+
+    const BadgeContent = (
+        <div className="flex items-center gap-2 cursor-default">
+            <span className={`size-[6px] rounded-full ${config?.bgClass}`}></span>
+            <span className={`font-[500] text-[14px] leading-[100%] text-center flex gap-0.5 items-center ${config?.colorClass}`}>
+                {t(config?.labelKey, { ns: 'knowledge' })}
+                {(status === 3 || status === 6) && renderTooltip()}
+            </span>
+        </div>
+    );
 
     // 其他状态直接渲染内容
     return BadgeContent;
@@ -95,7 +106,6 @@ export default function Files({ onPreview }) {
     const { id } = useParams()
 
     const { isEditable, setEditable } = useKnowledgeStore();
-    const [dialogOpen, setDialogOpen] = useState(false)
     const { page, pageSize, data: datalist, total, loading, setPage, search, reload, filterData } = useTable({ cancelLoadingWhenReload: true }, (param) =>
         readFileByLibDatabase({ ...param, id, name: param.keyword }).then(res => {
             setEditable(res.writeable)
@@ -335,7 +345,7 @@ export default function Files({ onPreview }) {
                 <div className="absolute top-[-62px] left-0 right-0 flex justify-center items-center p-2 border-b z-10">
                     <div className="flex items-center">
                         <div className="flex gap-2">
-                            <Tip content={!isEditable && 'No operation permission'} side='bottom'>
+                            <Tip content={!isEditable && t('noOperationPermission')} side='bottom'>
                                 <Button
                                     variant="outline"
                                     onClick={handleBatchDelete}
@@ -347,7 +357,7 @@ export default function Files({ onPreview }) {
                                 </Button>
                             </Tip>
                             {hasSelectedFailedFiles && (
-                                <Tip content={!isEditable && 'No operation permission'} side='bottom'>
+                                <Tip content={!isEditable && t('noOperationPermission')} side='bottom'>
                                     <Button
                                         variant="outline"
                                         onClick={handleBatchRetry}
@@ -535,13 +545,15 @@ export default function Files({ onPreview }) {
                                     />
                                 </TableCell>
                                 <TableCell className="min-w-[250px]">
-                                    <div className="flex items-center gap-2">
-                                        <FileIcon
-                                            type={el.file_name.split('.').pop().toLowerCase() || 'txt'}
-                                            className="size-[30px] min-w-[30px]"
-                                        />
-                                        {truncateString(el.file_name, 35)}
-                                    </div>
+                                    <Tip content={el.file_name} align="start" >
+                                        <div className="flex items-center gap-2">
+                                            <FileIcon
+                                                type={el.file_name.split('.').pop().toLowerCase() || 'txt'}
+                                                className="size-[30px] min-w-[30px]"
+                                            />
+                                            {truncateString(el.file_name, 35)}
+                                        </div>
+                                    </Tip>
                                 </TableCell>
                                 <TableCell>
                                     {el.strategy[0] ? (
@@ -563,7 +575,7 @@ export default function Files({ onPreview }) {
                                 <TableCell className="text-right">
                                     <div className="flex items-center justify-end gap-1">
                                         {el.status === 3 && (
-                                            <Tip content={!isEditable && 'No operation permission'} side='top'>
+                                            <Tip content={!isEditable && t('noOperationPermission')} side='top'>
                                                 <Button
                                                     variant="ghost"
                                                     size="icon"
@@ -580,7 +592,7 @@ export default function Files({ onPreview }) {
                                             </Tip>
                                         )}
                                         <Tip
-                                            content={!isEditable && 'No operation permission'}
+                                            content={!isEditable && t('noOperationPermission')}
                                             side='top'
                                             styleClasses="-translate-x-6"
                                         >

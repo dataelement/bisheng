@@ -7,7 +7,7 @@ import AutoPagination from '@/components/bs-ui/pagination/autoPagination';
 import { toast } from "@/components/bs-ui/toast/use-toast";
 import Tip from "@/components/bs-ui/tooltip/tip";
 import ShadTooltip from "@/components/ShadTooltipComponent";
-import { addMetadata, delChunkApi, getFileBboxApi, getFilePathApi, getKnowledgeChunkApi, getKnowledgeDetailApi, getMetaFile, saveUserMetadataApi, updateChunkApi } from '@/controllers/API';
+import { addMetadata, delChunkApi, getFileBboxApi, getFilePathApi, getKnowledgeChunkApi, getKnowledgeDetailApi, getMetaFile, readFileByLibDatabase, saveUserMetadataApi, updateChunkApi } from '@/controllers/API';
 import { captureAndAlertRequestErrorHoc } from '@/controllers/request';
 import { useTable } from '@/util/hook';
 import { ArrowLeft, ClipboardPenLine, FileText } from 'lucide-react';
@@ -101,7 +101,50 @@ export default function Paragraphs({ fileId, onBack }) {
         file_ids: selectedFileId ? [selectedFileId] : [],
         unInitData: true
     }), [selectedFileId]);
+    // 在 Paragraphs 组件中添加
+    const fetchAllFiles = useCallback(async () => {
+        try {
+            const res = await readFileByLibDatabase({
+                id: id,
+                page: 1,
+                pageSize: 1000, // 获取足够多的文件
+                name: '',
+                status: 2
+            });
 
+            const filesData = res?.data || [];
+            setRawFiles(filesData);
+            console.log('Fetched all files:', filesData.length);
+
+            // 如果有传入的 fileId，确保 currentFile 被设置
+            if (fileId && filesData.length > 0 && !currentFile) {
+                const foundFile = filesData.find(f => String(f.id) === String(fileId));
+                if (foundFile) {
+                    setCurrentFile({
+                        label: foundFile.file_name || '',
+                        value: fileId,
+                        id: foundFile.id || '',
+                        name: foundFile.file_name || '',
+                        size: foundFile.size || 0,
+                        type: foundFile.file_name?.split('.').pop() || '',
+                        filePath: '',
+                        suffix: foundFile.file_name?.split('.').pop() || '',
+                        fileType: foundFile.parse_type || 'unknown',
+                        fullData: foundFile || {},
+                    });
+                }
+            }
+        } catch (error) {
+            console.error('Failed to fetch all files:', error);
+        }
+    }, [id, fileId, currentFile]);
+
+    // 在组件初始化时调用
+    useEffect(() => {
+        if (id) {
+            fetchAllFiles();
+        }
+    }, [id, fetchAllFiles]);
     const {
         page,
         pageSize,
@@ -199,6 +242,7 @@ export default function Paragraphs({ fileId, onBack }) {
 
             // Get current selected file information
             const currentFile = rawFiles.find(f => String(f.id) === String(fileId));
+
             let finalUrl = '';
             let finalPreviewUrl = '';
 
@@ -207,35 +251,16 @@ export default function Paragraphs({ fileId, onBack }) {
             const hasOriginalUrl = typeof res.original_url === 'string' && res.original_url.trim() !== '';
 
             if (currentFile) {
-
-                // Determine if it's UNS or LOCAL type
-                const isUnsOrLocal = currentFile.parse_type === "uns" || currentFile.parse_type === "local";
-
-                if (isUnsOrLocal) {
-                    // UNS or LOCAL type: select URL based on whether bbox is valid
-                    const isBboxesValid = hasChunkBboxes;
-                    const isBboxesEmpty = !hasChunkBboxes;
-                    if (!isBboxesEmpty && hasPreviewUrl) {
-                        // Has valid bbox and preview_url → use preview_url
-                        finalUrl = res.preview_url.trim();
-                        finalPreviewUrl = res.preview_url.trim();
-                    } else {
-                        // No valid bbox (empty array/string) or no preview_url → force use original_url
-                        finalUrl = hasOriginalUrl ? res.original_url.trim() : '';
-                        finalPreviewUrl = finalUrl;
-                    }
+                if (hasPreviewUrl) {
+                    // Has preview_url → prioritize use
+                    finalUrl = res.preview_url.trim();
+                    finalPreviewUrl = res.preview_url.trim();
                 } else {
-                    // Other types: prioritize preview_url, fallback to original_url
-                    if (hasPreviewUrl) {
-                        // Has preview_url → prioritize use
-                        finalUrl = res.preview_url.trim();
-                        finalPreviewUrl = res.preview_url.trim();
-                    } else {
-                        // No preview_url → use original_url or alternative URL
-                        finalUrl = hasOriginalUrl ? res.original_url.trim() : '';
-                        finalPreviewUrl = finalUrl;
-                    }
+                    // No preview_url → use original_url or alternative URL
+                    finalUrl = hasOriginalUrl ? res.original_url.trim() : '';
+                    finalPreviewUrl = finalUrl;
                 }
+                // }
             } else {
                 // If current file not found, use default strategy
                 finalUrl = hasPreviewUrl ? res.preview_url.trim() : (hasOriginalUrl ? res.original_url.trim() : '');
@@ -271,9 +296,10 @@ export default function Paragraphs({ fileId, onBack }) {
 
     useEffect(() => {
         // Check if current path is adjust page and doesn't have valid state data
-        if (location.pathname.startsWith('/filelib/adjust/') && !window.history.state?.isAdjustMode) {
+        const pathName = location.pathname.replace(__APP_ENV__.BASE_URL, '')
+        if (pathName.startsWith('/filelib/adjust/') && !window.history.state?.isAdjustMode) {
             // Extract ID (e.g., extract 2066 from /filelib/adjust/2066)
-            const adjustId = location.pathname.split('/')[3];
+            const adjustId = pathName.split('/')[3];
             if (adjustId) {
                 // Redirect to corresponding filelib page
                 navigate(`/filelib/${adjustId}`, { replace: true });
@@ -574,22 +600,29 @@ export default function Paragraphs({ fileId, onBack }) {
             .replace(/\t/g, '\\t');
     }, [t]);
 
-    const handleDeleteChunk = useCallback((data) => {
-        const updatedChunks = chunks.filter(chunk => chunk.chunkIndex !== data);
-        setChunks(updatedChunks);
+    const handleDeleteChunk = useCallback(async (data) => {
+        try {
+            const updatedChunks = chunks.filter(chunk => chunk.chunkIndex !== data);
+            setChunks(updatedChunks);
 
-        if (selectedChunkIndex === data) {
-            setSelectedBbox([]);
+            if (selectedChunkIndex === data) {
+                setSelectedBbox([]);
+            }
+
+            await captureAndAlertRequestErrorHoc(delChunkApi({
+                knowledge_id: Number(id),
+                file_id: selectedFileId || currentFile?.id || '',
+                chunk_index: data || 0
+            }));
+
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+            await reload();
+
+        } catch (error) {
+            console.error('Failed to delete chunk:', error);
+            await reload();
         }
-
-        captureAndAlertRequestErrorHoc(delChunkApi({
-            knowledge_id: Number(id),
-            file_id: selectedFileId || currentFile?.id || '',
-            chunk_index: data || 0
-        }));
-
-        reload();
-
     }, [
         id,
         reload,
@@ -597,7 +630,8 @@ export default function Paragraphs({ fileId, onBack }) {
         selectedFileId,
         currentFile?.id,
         selectedChunkIndex,
-        setSelectedBbox
+        setSelectedBbox,
+        t
     ]);
 
     const formatFileSize = useCallback((bytes) => {

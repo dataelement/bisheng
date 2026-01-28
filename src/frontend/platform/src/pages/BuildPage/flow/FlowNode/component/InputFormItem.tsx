@@ -718,7 +718,7 @@ export default function InputFormItem({ data, nodeId, onChange, onValidate, onVa
             {error && <p className="text-red-500 text-sm">{t("atLeastOneFormItem")}</p>}
 
             <Dialog open={isOpen} onOpenChange={setIsOpen}>
-                <DialogContent>
+                <DialogContent className="max-h-screen overflow-auto">
                     <DialogHeader>
                         <DialogTitle>
                             {editKey ? t("editFormItem") : t("addFormItem")}

@@ -220,7 +220,7 @@ class MilvusWithPermissionCheck(MilvusLangchain):
     def _load(self) -> None:
         """Load the collection if available."""
         from pymilvus import Collection
-        # 加载所有的collection
+        # Load allcollection
         for i, col in enumerate(self.col):
             if isinstance(col, Collection) and self._get_index(col_index=i) is not None:
                 col.load()
@@ -444,7 +444,7 @@ class MilvusWithPermissionCheck(MilvusLangchain):
             logger.debug(f'MilvusWithPermissionCheck Search {one_col.name} query: {query} results: {res[0]}')
         ret.sort(key=lambda x: x[1])
         logger.debug(f'MilvusWithPermissionCheck Search all results: {len(ret)}')
-        # milvus是分数越小越好，所以直接取前几位就行
+        # milvusYes, the smaller the score, the better, so just take the first few digits directly
         ret = ret[:finally_k]
         logger.debug(f'MilvusWithPermissionCheck Search finally results: {len(ret)}')
         return ret

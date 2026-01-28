@@ -1,7 +1,7 @@
-"""应用上下文管理器
+"""App Context Manager
 
-集成了懒加载、缓存机制的全局上下文管理器
-提供便捷的依赖注入和生命周期管理功能
+Global context manager with integrated lazy loading and caching
+Provides easy dependency injection and lifecycle management
 """
 import asyncio
 from contextlib import asynccontextmanager, contextmanager
@@ -21,10 +21,10 @@ T = TypeVar('T')
 
 
 class ApplicationContextManager:
-    """应用上下文管理器
+    """App Context Manager
 
-    负责管理整个应用的基础设施服务生命周期，提供统一的访问接口
-    支持依赖注入、批量操作和健康检查功能
+    Responsible for managing the entire application infrastructure service lifecycle and providing a unified access interface
+    Supports dependency injection, bulk operations, and health checks
     """
 
     def __init__(self):
@@ -35,13 +35,13 @@ class ApplicationContextManager:
         self._dependencies: Dict[str, List[str]] = {}
 
     async def initialize(self, config: Settings) -> None:
-        """初始化应用上下文
+        """Initialize app context
 
         Args:
-            config: 可选的配置字典，用于传递给各个上下文管理器
+            config: Optional configuration dictionary for passing to individual context managers
 
         Raises:
-            ContextError: 初始化失败时抛出
+            ContextError: Thrown on initialization failure
         """
         async with self._initialization_lock:
             if self._initialized:
@@ -49,10 +49,10 @@ class ApplicationContextManager:
                 return
 
             try:
-                # 注册默认的上下文管理器
+                # Register default context manager
                 self._register_default_contexts(config or {})
 
-                # 按依赖顺序初始化所有上下文
+                # Initialize all contexts in dependency order
                 await self._initialize_contexts_in_order()
 
                 self._initialized = True
@@ -60,12 +60,12 @@ class ApplicationContextManager:
 
             except Exception as e:
                 logger.exception(f"Failed to initialize application context: {e}")
-                # 清理已初始化的资源
+                # Clean Up Initialized Resources
                 await self.async_close()
                 raise ContextError(f"Application context initialization failed: {e}") from e
 
     def _register_default_contexts(self, config: Settings) -> None:
-        """注册默认的上下文管理器"""
+        """Register default context manager"""
         try:
 
             from bisheng.core.database.manager import DatabaseManager
@@ -98,8 +98,8 @@ class ApplicationContextManager:
             raise
 
     async def _initialize_contexts_in_order(self) -> None:
-        """按依赖顺序初始化上下文"""
-        # 如果没有定义初始化顺序，则按注册顺序初始化
+        """Initialize context in dependency order"""
+        # If no initialization order is defined, initialize in registration order
         if not self._initialization_order:
             self._initialization_order = list(self._registry.get_all_contexts().keys())
 
@@ -110,20 +110,20 @@ class ApplicationContextManager:
                 await self._initialize_context_with_dependencies(context_name, initialized)
 
     async def _initialize_context_with_dependencies(self, context_name: str, initialized: set) -> None:
-        """递归初始化上下文及其依赖"""
+        """Recursive initialization context and its dependencies"""
         if context_name in initialized:
             return
 
-        # 先初始化依赖
+        # Initialize dependencies first
         dependencies = self._dependencies.get(context_name, [])
         for dep_name in dependencies:
             if dep_name not in initialized:
                 await self._initialize_context_with_dependencies(dep_name, initialized)
 
-        # 然后初始化当前上下文
+        # Then initialize the current context
         try:
             context = self._registry.get_context(context_name)
-            await context.async_get_instance()  # 这会触发初始化
+            await context.async_get_instance()  # This will trigger initialization
             initialized.add(context_name)
             logger.debug(f"Initialized context: '{context_name}'")
         except Exception as e:
@@ -131,17 +131,17 @@ class ApplicationContextManager:
             raise
 
     async def async_get_instance(self, name: str) -> T:
-        """异步获取指定名称的上下文实例"""
+        """Gets the context instance of the specified name asynchronously"""
         context = self.get_context(name)
         return await context.async_get_instance()
 
     def sync_get_instance(self, name: str) -> T:
-        """同步获取指定名称的上下文实例"""
+        """Synchronously get a contextual instance of the specified name"""
         context = self.get_context(name)
         return context.sync_get_instance()
 
     def get_context(self, name: str) -> BaseContextManager:
-        """获取指定名称的上下文实例"""
+        """Gets the context instance of the specified name"""
         return self._registry.get_context(name)
 
     def register_context(
@@ -150,25 +150,25 @@ class ApplicationContextManager:
             dependencies: Optional[List[str]] = None,
             initialize_order: Optional[int] = None
     ) -> None:
-        """注册新的上下文管理器
+        """Register a new context manager
 
         Args:
-            context: 要注册的上下文管理器
-            dependencies: 该上下文依赖的其他上下文名称列表
-            initialize_order: 初始化顺序（数字越小越早初始化）
+            context: Context manager to register
+            dependencies: A list of other context names that the context depends on
+            initialize_order: Initialization order (smaller numbers initialize earlier)
 
         Raises:
-            ValueError: 如果上下文名称已存在
+            ValueError: If the context name already exists
         """
         self._registry.register(context)
 
-        # 记录依赖关系
+        # Record dependencies
         if dependencies:
             self._dependencies[context.name] = dependencies
 
-        # 更新初始化顺序
+        # Update initialization order
         if initialize_order is not None:
-            # 插入到指定位置
+            # Insert to Specified Location
             if context.name in self._initialization_order:
                 self._initialization_order.remove(context.name)
 
@@ -188,24 +188,24 @@ class ApplicationContextManager:
         logger.debug(f"Registered context '{context.name}' with dependencies: {dependencies or []}")
 
     def unregister_context(self, name: str) -> None:
-        """注销上下文管理器"""
+        """Log out of the context manager"""
         self._registry.unregister(name)
 
     async def health_check(self, include_details: bool = False) -> Union[Dict[str, bool], Dict[str, Dict[str, Any]]]:
-        """执行健康检查
+        """Perform a health check
 
         Args:
-            include_details: 是否包含详细的健康检查信息
+            include_details: Does it contain detailed health check information?
 
         Returns:
-            Union[Dict[str, bool], Dict[str, Dict[str, Any]]]: 健康检查结果
+            Union[Dict[str, bool], Dict[str, Dict[str, Any]]]: Health Check Results
         """
         results = await self._registry.health_check()
 
         if not include_details:
             return results
 
-        # 包含详细信息
+        # Include details
         detailed_results = {}
         for name, is_healthy in results.items():
             try:
@@ -225,18 +225,18 @@ class ApplicationContextManager:
         return detailed_results
 
     async def async_close(self) -> None:
-        """关闭应用上下文
+        """Close app context
 
-        按与初始化相反的顺序关闭所有上下文
+        Close all contexts in reverse order from initialization
         """
         if not self._initialized:
             return
 
         try:
-            # 按相反顺序关闭上下文以确保依赖关系正确处理
+            # Close context in reverse order to ensure dependencies are handled correctly
             await self._close_contexts_in_reverse_order()
 
-            # 清理状态
+            # Cleanup status
             self._initialized = False
             self._initialization_order.clear()
             self._dependencies.clear()
@@ -247,7 +247,7 @@ class ApplicationContextManager:
             raise
 
     async def _close_contexts_in_reverse_order(self) -> None:
-        """按相反顺序关闭所有上下文"""
+        """Close all contexts in reverse order"""
         close_order = list(reversed(self._initialization_order))
 
         for context_name in close_order:
@@ -259,26 +259,26 @@ class ApplicationContextManager:
             except Exception as e:
                 logger.error(f"Error closing context '{context_name}': {e}")
 
-        # 确保所有上下文都被关闭
+        # Ensure all contexts are closed
         await self._registry.async_close_all()
 
     def is_initialized(self) -> bool:
-        """检查是否已初始化"""
+        """Check if initialized"""
         return self._initialized
 
     def get_registry(self) -> ContextRegistry:
-        """获取上下文注册表
+        """Get Context Registry
 
         Returns:
-            ContextRegistry: 上下文注册表实例
+            ContextRegistry: Context Registry Instance
         """
         return self._registry
 
     def get_context_info(self) -> Dict[str, Any]:
-        """获取应用上下文的详细信息
+        """Get app context details
 
         Returns:
-            Dict[str, Any]: 包含应用上下文详细信息的字典
+            Dict[str, Any]: Dictionary with app context details
         """
         return {
             'initialized': self._initialized,
@@ -290,14 +290,14 @@ class ApplicationContextManager:
 
     @contextmanager
     def sync_context(self, *context_names: str):
-        """同步上下文管理器，用于批量获取多个上下文
+        """Synchronize context manager for batch fetching multiple contexts
 
         Args:
-            *context_names: 要获取的上下文名称列表
+            *context_names: List of context names to get
 
         Example:
             with app_context.sync_context('database', 'cache') as (db, cache):
-                # 使用 db 和 cache
+                # Use db And cache
                 pass
         """
         instances = []
@@ -311,19 +311,19 @@ class ApplicationContextManager:
             else:
                 yield tuple(instances)
         finally:
-            # 注意：这里不自动关闭，因为可能被其他地方使用
+            # Note: This does not close automatically as it may be used elsewhere
             pass
 
     @asynccontextmanager
     async def async_context(self, *context_names: str):
-        """异步上下文管理器，用于批量获取多个上下文
+        """Asynchronous context manager for batch fetching multiple contexts
 
         Args:
-            *context_names: 要获取的上下文名称列表
+            *context_names: List of context names to get
 
         Example:
             async with app_context.async_context('database', 'cache') as (db, cache):
-                # 使用 db 和 cache
+                # Use db And cache
                 pass
         """
         instances = []
@@ -337,43 +337,43 @@ class ApplicationContextManager:
             else:
                 yield tuple(instances)
         finally:
-            # 注意：这里不自动关闭，因为可能被其他地方使用
+            # Note: This does not close automatically as it may be used elsewhere
             pass
 
     async def reset_context(self, context_name: str) -> None:
-        """重置指定的上下文
+        """Reset Specified Context
 
         Args:
-            context_name: 要重置的上下文名称
+            context_name: Context name to reset
 
         Raises:
-            KeyError: 如果上下文不存在
+            KeyError: If the context does not exist
         """
         context = self._registry.get_context(context_name)
         await context.async_reset()
         logger.info(f"Context '{context_name}' reset successfully")
 
     async def restart_context(self, context_name: str) -> None:
-        """重启指定的上下文（重置后立即初始化）
+        """Restart the specified context (initialize immediately after reset)
 
         Args:
-            context_name: 要重启的上下文名称
+            context_name: Context name to restart
 
         Raises:
-            KeyError: 如果上下文不存在
+            KeyError: If the context does not exist
         """
         await self.reset_context(context_name)
-        await self.async_get_instance(context_name)  # 触发重新初始化
+        await self.async_get_instance(context_name)  # Trigger reinitialization
         logger.info(f"Context '{context_name}' restarted successfully")
 
     def list_contexts(self, state_filter: Optional[ContextState] = None) -> List[str]:
-        """列出所有上下文名称
+        """List all context names
 
         Args:
-            state_filter: 可选的状态过滤器，只返回指定状态的上下文
+            state_filter: Optional status filter that returns only the context of the specified status
 
         Returns:
-            List[str]: 上下文名称列表
+            List[str]: Context Name List
         """
         if state_filter is None:
             return list(self._registry.get_all_contexts().keys())
@@ -384,13 +384,13 @@ class ApplicationContextManager:
         ]
 
 
-# 全局应用上下文实例
+# Global App Context Instance
 app_context = ApplicationContextManager()
 
 
 async def initialize_app_context(config: Settings) -> None:
     """
-    初始化全局应用上下文
+    Initialize global app context
     :param config:
     :return:
     """
@@ -399,54 +399,54 @@ async def initialize_app_context(config: Settings) -> None:
 
 
 def get_context(name: str) -> BaseContextManager:
-    """获取上下文的便捷方法
+    """Convenient way to get context
 
     Args:
-        name: 上下文名称
+        name: Context Name
 
     Returns:
-        BaseContextManager: 对应的上下文管理器
+        BaseContextManager: Corresponding context manager
 
     Raises:
-        KeyError: 如果上下文不存在
+        KeyError: If the context does not exist
     """
     return app_context.get_context(name)
 
 
 async def async_get_instance(name: str) -> Any:
-    """异步获取上下文实例的便捷方法
+    """Convenient way to get contextual instances asynchronously
 
     Args:
-        name: 上下文名称
+        name: Context Name
 
     Returns:
-        Any: 上下文实例
+        Any: Contextual instances
 
     Raises:
-        KeyError: 如果上下文不存在
-        ContextError: 如果初始化失败
+        KeyError: If the context does not exist
+        ContextError: If initialization fails
     """
     return await app_context.async_get_instance(name)
 
 
 def sync_get_instance(name: str) -> Any:
-    """同步获取上下文实例的便捷方法
+    """Convenient way to get contextual instances synchronously
 
     Args:
-        name: 上下文名称
+        name: Context Name
 
     Returns:
-        Any: 上下文实例
+        Any: Contextual instances
 
     Raises:
-        KeyError: 如果上下文不存在
-        ContextError: 如果初始化失败
+        KeyError: If the context does not exist
+        ContextError: If initialization fails
     """
     return app_context.sync_get_instance(name)
 
 
 async def close_app_context() -> None:
-    """关闭全局应用上下文的便捷方法"""
+    """Convenient way to turn off global app context"""
     await app_context.async_close()
 
 
@@ -455,27 +455,27 @@ def register_context(
         dependencies: Optional[List[str]] = None,
         initialize_order: Optional[int] = None
 ) -> None:
-    """注册上下文的便捷方法
+    """Convenient way to register a context
 
     Args:
-        context: 要注册的上下文管理器
-        dependencies: 该上下文依赖的其他上下文名称列表
-        initialize_order: 初始化顺序（数字越小越早初始化）
+        context: Context manager to register
+        dependencies: A list of other context names that the context depends on
+        initialize_order: Initialization order (smaller numbers initialize earlier)
 
     Example:
-        # 注册一个依赖数据库的缓存上下文
+        # Register a cache context that depends on the database
         register_context(cache_manager, dependencies=['database'], initialize_order=10)
     """
     app_context.register_context(context, dependencies, initialize_order)
 
 
 async def health_check(include_details: bool = False) -> Union[Dict[str, bool], Dict[str, Dict[str, Any]]]:
-    """执行健康检查的便捷方法
+    """Convenient way to perform a health check
 
     Args:
-        include_details: 是否包含详细的健康检查信息
+        include_details: Does it contain detailed health check information?
 
     Returns:
-        Union[Dict[str, bool], Dict[str, Dict[str, Any]]]: 健康检查结果
+        Union[Dict[str, bool], Dict[str, Dict[str, Any]]]: Health Check Results
     """
     return await app_context.health_check(include_details)

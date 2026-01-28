@@ -39,18 +39,18 @@ DIRECT_TYPES = [
     'knowledge_one', 'bisheng_model', 'bisheng_embedding'
 ]
 
-# 新增用来记录node_id 和 对象之间关系的key
+# Added to recordnode_id And of the relationship between objectskey
 NODE_ID_DICT = 'node_id_dict'
 
-# 用来记录 preset questions, dict: key 为作用对象的id
+# Used to record preset questions, dict: key is the object of the actionid
 PRESET_QUESTION = 'preset_question'
 
 # redis key
 CAPTCHA_PREFIX = 'cap_'
 RSA_KEY = 'rsa_'
-# 存储用户的密码错误次数，key为username
+# Stores the number of times a user's password is incorrect.keyareusername
 USER_PASSWORD_ERROR = 'user_password_error:{}'
-# 存储当前用户登录的cookie, key为用户id
+# Store current user logged incookie, keyIs Userid
 USER_CURRENT_SESSION = 'user_current_session:{}'
 
 LOADERS_INFO: List[Dict[str, Any]] = [

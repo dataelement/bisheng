@@ -13,7 +13,7 @@ class ConditionNode(BaseNode):
         self._next_node_id = None
         self._condition_cases = [ConditionCases(**one) for one in self.node_params['condition']]
 
-        # 存储计算过的变量和值
+        # Store calculated variables and values
         self._variable_key_value = {}
 
     def _run(self, unique_id: str):
@@ -27,7 +27,7 @@ class ConditionNode(BaseNode):
                 logger.info(f'Condition node {self.id} pass condition {next_node_ids}')
                 break
 
-        # 保底逻辑，使用默认的路由
+        # Guaranteed logic, using default routing
         if next_node_ids is None:
             self._next_node_id = self.get_next_node_id('right_handle')
         else:

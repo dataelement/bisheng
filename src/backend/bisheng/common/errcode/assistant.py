@@ -1,57 +1,57 @@
 from .base import BaseErrorCode
 
 
-# 组件模块 返回错误码，业务代码104
+# Component Modules Return error code, business code104
 class AssistantNotExistsError(BaseErrorCode):
     Code: int = 10400
-    Msg: str = '助手不存在'
+    Msg: str = 'Assistant does not exist'
 
 
 class AssistantInitError(BaseErrorCode):
     Code: int = 10401
-    Msg: str = '助手上线失败: {exception}'
+    Msg: str = 'Assistant onboarding failed: {exception}'
 
 
 class AssistantNameRepeatError(BaseErrorCode):
     Code: int = 10402
-    Msg: str = '助手名称重复'
+    Msg: str = 'Duplicate assistant name'
 
 
 class AssistantNotEditError(BaseErrorCode):
     Code: int = 10403
-    Msg: str = '助手已上线，不可编辑'
+    Msg: str = 'Assistant is live and not editable'
 
 
-# 该助手已被删除
+# The assistant has been deleted
 class AssistantDeletedError(BaseErrorCode):
     Code: int = 10420
-    Msg: str = '该助手已被删除'
+    Msg: str = 'The assistant has been deleted'
 
 
-# 当前助手未上线，无法直接对话
+# The assistant is currently not online and cannot talk directly
 class AssistantNotOnlineError(BaseErrorCode):
     Code: int = 10421
-    Msg: str = '当前助手未上线，无法直接对话'
+    Msg: str = 'The assistant is currently not online and cannot talk directly'
 
 
-# 助手推理模型列表为空
+# Assistant reasoning model list is empty
 class AssistantModelEmptyError(BaseErrorCode):
     Code: int = 10422
-    Msg: str = '助手推理模型列表为空'
+    Msg: str = 'Assistant reasoning model list is empty'
 
 
-# 未配置助手推理模型
+# No assistant inference model configured
 class AssistantModelNotConfigError(BaseErrorCode):
     Code: int = 10423
-    Msg: str = '未配置助手推理模型'
+    Msg: str = 'No assistant inference model configured'
 
 
 class AssistantAutoLLMError(BaseErrorCode):
     Code: int = 10424
-    Msg: str = '未配置助手画像自动优化模型'
+    Msg: str = 'Assistant portrait auto-optimization model is not configured'
 
 
-# 其它错误
+# Other errors
 class AssistantOtherError(BaseErrorCode):
     Code: int = 10499
-    Msg: str = '助手服务异常'
+    Msg: str = 'Assistant Service Exception'

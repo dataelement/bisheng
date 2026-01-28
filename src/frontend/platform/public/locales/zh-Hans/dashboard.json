@@ -1,0 +1,467 @@
+{
+    "chartSelector": {
+        "title": "关联图表配置",
+        "componentName": "组件：{{componentName}}",
+        "selectCharts": "选择关联图表",
+        "selectAll": "全选",
+        "unSelectAll":"取消全选",
+        "unnamedChart": "未命名图表",
+        "noDataset": "未设置数据集",
+        "config": "查询条件配置",
+        "displayType": "展示类型",
+        "displayTypes": {
+            "timeRange": "时间范围",
+            "time": "时间"
+        },
+        "timeGranularity": "时间粒度",
+        "granularities": {
+            "yearMonth": "年月",
+            "yearMonthDay": "年月日",
+            "yearMonthDayHour": "年月日时"
+        },
+        "setDefault": "设置默认值",
+        "datePicker": {
+            "placeholder": "选择时间",
+            "single": "时间",
+            "range": "时间范围"
+        },
+        "buttons": {
+            "cancel": "取消",
+            "save": "保存"
+        },
+        "messages": {
+            "saveSuccess": "关联图表配置已保存",
+            "noCharts": "没有可关联的图表",
+            "collapse": "关联图表配置"
+        }
+    },
+    "componentConfigDrawer": {
+        "basicConfig": "基础配置",
+        "customStyle": "自定义样式",
+        "basicConfigTab": "基础配置",
+        "styleConfigTab": "自定义样式",
+        "chartType": "图表类型",
+        "selectChartType": "选择图表类型",
+        "categoryAxis": "类别轴 / 维度",
+        "stackItem": "堆叠项 / 维度",
+        "subCategory": "子类别项 / 维度",
+        "valueAxis": "值轴 / 指标",
+        "sortPriority": "排序优先级",
+        "sortHint": "添加维度或指标后可调整排序优先级",
+        "filter": "筛选",
+        "addFilterCondition": "添加筛选条件",
+        "filterConditionsAdded": "已添加筛选条件",
+        "filterLogicHint": " ({{logic}})",
+        "timeRange": "时间范围",
+        "selectTimeRange": "选择时间范围",
+        "resultsDisplay": "显示数据",
+        "allResults": "全部",
+        "limitResults": "条",
+        "updateChartData": "更新图表数据",
+        "dataSelection": "数据选择",
+        "validation": {
+            "validationFailed": "校验失败",
+            "chartTypeRequired": "请选择图表类型",
+            "categoryRequired": "请至少添加一个类别维度",
+            "metricRequired": "请至少添加一个指标",
+            "datasetRequired": "请选择数据集",
+            "stackRequired": "请为堆叠图表添加堆叠维度",
+            "invalidCategoryFields": "类别维度包含无效字段，请重新选择",
+            "invalidMetricFields": "指标包含无效字段，请重新选择"
+        },
+        "dialog": {
+            "chartUpdated": "图表已更新",
+            "editDisplayName": "编辑显示名称",
+            "displayRequired": "名称不能为空",
+            "originalName": "原始名称",
+            "displayName": "显示名称",
+            "displayNameRequired": "显示名称 *",
+            "enterDisplayName": "请输入显示名称",
+            "displayMaxLength": "显示名称长度不能超过 15 个字符",
+            "cancel": "取消",
+            "confirm": "确认"
+        },
+        "toast": {
+            "fieldAlreadyExists": "该字段已添加",
+            "dimensionLimitReached": "当前维度数量已达到上限",
+            "metricReached": "不支持拖拽维度至指标",
+            "metricLimitReached": "当前指标数量已达到上限",
+            "virtualMetricConflict": "无法同时添加虚拟指标和非虚拟指标",
+            "multipleVirtualMetric": "无法同时添加多个虚拟指标"
+        },
+        "sections": {
+            "category": "类别轴",
+            "stack": "堆叠项",
+            "value": "指标区域"
+        }
+    },
+    "configPanel": {
+        "title": "看板配置",
+        "dashboardStyle": "仪表盘风格",
+        "lightTheme": "浅色主题",
+        "darkTheme": "深色主题"
+    },
+    "datasetSelector": {
+        "dataset": "数据集",
+        "selectDataset": "选择数据集",
+        "searchDataset": "搜索数据集...",
+        "loading": "加载中...",
+        "noDatasetsFound": "未找到数据集",
+        "dimensions": "维度",
+        "metrics": "指标",
+        "virtualMetric": "*",
+        "selectDatasetPrompt": "请先选择一个数据集",
+        "fieldTypes": {
+            "date": "日期",
+            "integer": "整数",
+            "keyword": "文本"
+        },
+        "timeGranularity": {
+            "year": "年",
+            "quarter": "季度",
+            "month": "月",
+            "week": "周",
+            "day": "日",
+            "hour": "时"
+        }
+    },
+    "dimensionBlock": {
+        "menu": {
+            "sort": "排序",
+            "aggregation": "汇总方式",
+            "format": "数值格式"
+        },
+        "aggregation": {
+            "sum": "求和",
+            "avg": "平均",
+            "count": "计数",
+            "max": "最大值",
+            "min": "最小值",
+            "distinctCount": "去重计数"
+        },
+        "sort": {
+            "none": "无",
+            "asc": "升序",
+            "desc": "降序"
+        },
+        "button": {
+            "deleteField": "删除字段"
+        },
+        "prompt": {
+            "dragDimensionHere": "拖拽维度字段至此",
+            "dragMetricHere": "拖拽指标字段至此"
+        },
+        "dialog": {
+            "formatTitle": "数值格式",
+            "formatType": "格式类型",
+            "decimalPlaces": "小数位数",
+            "unit": "数量单位",
+            "suffix": "单位后缀",
+            "thousandSeparator": "千分符",
+            "example": "示例",
+            "none": "无",
+            "selectUnit": "请选择",
+            "enterSuffix": "请输入内容",
+            "formatTypes": {
+                "number": "数值",
+                "percent": "百分比",
+                "duration": "时长",
+                "storage": "存储大小"
+            }
+        }
+    },
+    "filterConditionDialog": {
+        "title": "筛选条件配置",
+        "keywords": {
+            "time": "时间",
+            "date": "日期"
+        },
+        "placeholders": {
+            "selectField": "选择字段",
+            "filterType": "筛选类型",
+            "operator": "操作符",
+            "enterNumber": "请输入数值",
+            "enterValue": "请输入值",
+            "selectEnumValue": "请选择枚举值"
+        },
+        "filterTypes": {
+            "conditional": "条件筛选",
+            "noFields": "暂无字段",
+            "enum": "枚举筛选"
+        },
+        "operators": {
+            "equals": "等于",
+            "notEquals": "不等于",
+            "contains": "包含",
+            "notContains": "不包含",
+            "greaterThan": "大于",
+            "greaterThanOrEqual": "大于等于",
+            "lessThan": "小于",
+            "lessThanOrEqual": "小于等于",
+            "isEmpty": "为空",
+            "isNotEmpty": "不为空"
+        },
+        "buttons": {
+            "addCondition": "添加条件",
+            "cancel": "取消",
+            "save": "保存"
+        },
+        "errors": {
+            "selectField": "请选择字段",
+            "selectOperator": "请选择操作符",
+            "selectEnumValue": "请选择枚举值",
+            "enterFilterValue": "请填写筛选值",
+            "atLeastOneCondition": "请至少配置一个有效的筛选条件"
+        },
+        "toast": {
+            "fetchEnumFailed": "获取枚举值失败，请稍后重试",
+            "saveSuccess": "保存成功"
+        },
+        "enumSelect": {
+            "placeholder": "请选择",
+            "searchPlaceholder": "搜索...",
+            "loading": "加载中...",
+            "selectAll": "全选",
+            "loadingMore": "加载更多...",
+            "noMatch": "未找到匹配的选项",
+            "noData": "暂无数据"
+        }
+    },
+    "styleConfigPanel": {
+        "sections": {
+            "color": "颜色",
+            "title": "标题",
+            "axisTitle": "轴标题",
+            "legend": "图例",
+            "metricValue": "指标数值",
+            "subtitle": "指标副标题",
+            "chartOptions": "图表选项"
+        },
+        "labels": {
+            "themeColor": "主题颜色",
+            "bgColor": "背景颜色",
+            "titleContent": "标题内容",
+            "textFormat": "文本格式",
+            "textContent": "文本内容",
+            "xAxisTitleContent": "X 轴标题内容",
+            "xAxisTextFormat": "X 轴文本格式",
+            "yAxisTitleContent": "Y 轴标题内容",
+            "yAxisTextFormat": "Y 轴文本格式",
+            "legendPosition": "图例位置",
+            "legendTextFormat": "文本格式"
+        },
+        "placeholders": {
+            "enterTitle": "请输入标题",
+            "enterSubtitle": "请输入副标题",
+            "enterXAxisTitle": "请输入X轴标题",
+            "enterYAxisTitle": "请输入Y轴标题"
+        },
+        "positions": {
+            "top": "顶部",
+            "bottom": "底部",
+            "left": "左侧",
+            "right": "右侧"
+        },
+        "buttons": {
+            "show": "显示该项"
+        },
+        "options": {
+            "legend": "图例",
+            "axis": "坐标轴",
+            "dataLabel": "数据标签",
+            "gridLine": "网格线"
+        }
+    },
+    "useChartState": {
+        "sections": {
+            "category": "维度",
+            "stack": "维度",
+            "value": "指标"
+        },
+        "fieldTypes": {
+            "dimension": "维度",
+            "metric": "指标"
+        },
+        "warn": {
+            "invalidFieldType": "不支持拖拽{{fieldType}}至{{section}}",
+            "maxStackDimension": "当前维度数量已达到上限",
+            "metricLimitReached": "当前指标数量已达到上限",
+            "maxCategoryDimensions": "类别维度最多只能有 2 个",
+            "fieldExists": "该字段已添加"
+        }
+    },
+    "renameSuccess": "已重命名",
+    "renameError": "重命名失败",
+    "shareNotPublished": "该看板尚未发布",
+    "shareCopySuccess": "分享链接已复制",
+    "shareCopyError": "复制失败",
+    "publishSuccess": "已发布",
+    "unpublishSuccess": "已取消发布",
+    "operationFailed": "操作失败",
+    "selectTime": "选择时间",
+    "startHour": "开始小时",
+    "endHour": "结束小时",
+    "dynamicUpdate": "动态更新",
+    "cancel": "取消",
+    "clear": "清空",
+    "confirm": "确定",
+    "yearUnit": "年",
+    "monthUnit": "月",
+    "shortcut": {
+        "last_7": "最近7天",
+        "last_30": "最近30天",
+        "last_90": "最近90天",
+        "last_180": "最近180天"
+    },
+    "selectComponentToStart": "请选择一个组件，开始搭建你的数据看板",
+    "saveSuccess": "保存成功",
+    "saveFailed": "保存失败",
+    "saving": "保存中...",
+    "unsaved": "未保存",
+    "saved": "已保存",
+    "addChart": "添加图表",
+    "addQueryComponent": "添加查询组件",
+    "fullScreen": "全屏",
+    "saveAndPublish": "保存并发布",
+    "save": "保存",
+    "prompt": "提示词",
+    "unsavedChangesWarning": "您有未保存的更改，确定要离开吗？",
+    "saveAndLeave": "离开并保存",
+    "leaveWithoutSaving": "不保存",
+    "copyToTargetSuccess": "已复制到目标看板",
+    "copyFailed": "复制失败",
+    "confirmDeleteComponent": "确认删除组件 \"{{name}}\"?",
+    "delete": "删除",
+    "nameRequired": "名称不能为空",
+    "charLimit200": "字数范围 1-200 字",
+    "charLimit200b": "名称不能超过 200 字",
+    "rename": "重命名",
+    "duplicate": "复制",
+    "copyTo": "复制到",
+    "noOtherDashboards": "暂无其他看板",
+    "createFailed": "创建失败，请重试",
+    "maxLimitReached": "最多允许创建 {{count}} 个看板",
+    "untitledDashboard": "未命名看板",
+    "dashboardCopyName": "{{title}}-副本",
+    "confirmDeleteDashboard": "确认删除{{title}}？删除后不可恢复。",
+    "dashboardList": "看板列表",
+    "addDashboard": "添加看板",
+    "expandList": "展开列表",
+    "collapseList": "收起列表",
+    "noMatchingDashboards": "未找到匹配的看板",
+    "noDashboards": "暂无看板",
+    "default": "默认",
+    "setAsDefault": "设为默认",
+    "alreadyDefault": "已设为默认",
+    "share": "分享",
+    "selectADashboard": "暂无可见看板",
+    "createdBy": "创建人",
+    "createTime": "创建时间",
+    "lastUpdateTime": "最近更新时间",
+    "publish": "发布",
+    "unpublish": "取消发布",
+    "editDashboard": "编辑看板",
+    "editAfterUnpublish": "取消发布后方可编辑",
+    "updatingCharts": "图表更新中",
+    "noDataInChart": "当前图表无数据",
+    "selectDate": "选择日期",
+    "query": "查询",
+    "dashboardOffline": "该看板已下线",
+    "chart": {
+        "barChart": "柱状图",
+        "basicBarChart": "基础柱状图",
+        "stackedBarChart": "堆叠柱状图",
+        "groupedBarChart": "分组柱状图",
+        "horizontalBarChart": "条形图",
+        "basicHorizontalBarChart": "基础条形图",
+        "stackedHorizontalBarChart": "堆叠条形图",
+        "groupedHorizontalBarChart": "分组条形图",
+        "lineChart": "折线图",
+        "basicLineChart": "基础折线图",
+        "stackedLineChart": "堆叠折线图",
+        "multipleLineChart": "组合折线图",
+        "areaChart": "基础面积图",
+        "stackedAreaChart": "堆叠面积图",
+        "pieChart": "饼图",
+        "donutChart": "环形图",
+        "others": "其他",
+        "metricCard": "指标卡"
+    },
+
+    "mid_user_increment": "用户规模统计",
+    "timestamp": {
+        "year": "时间(年)",
+        "month": "时间(月)",
+        "week": "时间(周)",
+        "day": "时间(日)",
+        "hour": "时间(小时)"
+    },
+    "user_group_infos": {
+        "user_group_id": "用户组ID",
+        "user_group_name": "用户组名称"
+    },
+    "total_user_count": "总用户数",
+    "new_user_count": "新增用户数",
+    "mid_active_user": "活跃用户规模统计",
+    "active_user_count": "活跃用户数",
+    "mid_app_increment": "应用规模统计",
+    "user_id": "用户ID",
+    "user_name": "用户名称",
+    "app_type": "应用类型",
+    "total_app_count": "总应用数",
+    "new_app_count": "新增应用数",
+    "mid_sessions_increment": "应用使用情况统计",
+    "app_id": "应用ID",
+    "app_name": "应用名称",
+    "source": "来源类型（平台/API）",
+    "session_count": "会话次数",
+    "platform_user_count": "使用人数",
+    "api_call_count": "API调用次数",
+    "mid_session_run_dtl": "应用并发与耗时",
+    "duration_seconds": "会话运行时长",
+    "max_concurrent_sessions": "最大同时在线会话数",
+    "mid_tool_call_dtl": "工具调用分析",
+    "tool_name": "工具名称",
+    "tool_id": "工具ID",
+    "tool_type": "工具类型",
+    "tool_call_count": "工具调用次数",
+    "tool_call_success_count": "工具调用成功次数",
+    "tool_call_success_rate": "工具调用成功率",
+    "mid_knowledge_increment": "知识库规模统计",
+    "total_document_knowledge_base_count": "总文档知识库数",
+    "total_qa_knowledge_base_count": "总QA知识库数",
+    "new_document_knowledge_base_count": "新增文档知识库数",
+    "new_qa_knowledge_base_count": "新增QA知识库数",
+    "mid_knowledge_file_increment": "知识库文件统计",
+    "total_file_count": "总文件数",
+    "total_qa_count": "总QA对数",
+    "file_size": "文件大小",
+    "mid_doc_parse_dtl": "文件解析效能",
+    "parse_type": "解析类型",
+    "status": "文件最终状态",
+    "doc_parse_count": "文档上传次数",
+    "doc_parse_success_count": "文档入库成功次数",
+    "doc_parse_success_rate": "文档入库成功率",
+    "etl_parse_count": "ETL处理次数",
+    "etl_parse_success_count": "ETL处理成功次数",
+    "etl_parse_success_rate": "ETL处理成功率",
+    "mid_model_call_dtl": "模型成本与性能",
+    "user_role_infos": {
+        "role_id": "角色ID",
+        "role_name": "角色名称"
+    },
+    "model_id": "模型ID",
+    "model_type": "模型类型",
+    "model_name": "模型名称",
+    "model_server_id": "服务方ID",
+    "model_server_name": "服务方名称",
+    "total_token": "Token消耗量",
+    "model_call_count": "模型调用次数",
+    "model_call_success_rate": "模型调用成功率",
+    "max_concurrent_llm_sessions": "最大LLM并发数",
+    "avg_first_token_cost_time": "平均首Token响应延迟",
+    "mid_user_interact_dtl": "用户反馈统计",
+    "like_count": "点赞次数",
+    "dislike_count": "点踩次数",
+    "copy_count": "复制次数"
+}

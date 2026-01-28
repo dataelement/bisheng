@@ -9,6 +9,7 @@ import { format } from "date-fns";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
 import { DatePicker } from "@/components/bs-ui/calendar/datePicker";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
+import Tip from '@/components/bs-ui/tooltip/tip';
 
 // Types
 interface MetadataItem {
@@ -168,14 +169,11 @@ export const MetadataRow = React.memo(({
                         {item.type === 'Time' && (
                             <DatePicker
                                 disabled={!isKnowledgeAdmin}
-                                value={item.value ? new Date(item.value) : undefined}
-                                placeholder={t('metadatainfor.selectTime')}
-                                showTime={true}
-                                onChange={(selectedDate: Date | undefined) => {
-                                    const formattedValue = selectedDate
-                                        ? format(selectedDate, 'yyyy-MM-dd HH:mm:ss')
-                                        : '';
-                                    onValueChange(item.id, formattedValue);
+                                value={item.value ? Number(item.value) : undefined}
+                                showTime
+                                onChange={(date: Date | undefined) => {
+                                    const ts = date ? Math.floor(date.getTime() / 1000) : ''
+                                    onValueChange(item.id, String(ts))
                                 }}
                             />
                         )}
@@ -314,9 +312,16 @@ export const MainMetadataDialog = React.memo(({
                                 item.value && (
                                     <div key={index} className="grid grid-cols-4 gap-4 items-center">
                                         <span className="text-sm text-muted-foreground col-span-1">{item.label}</span>
-                                        <span className={`col-span-3 text-sm ${item.isFileName ? 'truncate max-w-full' : ''}`}>
-                                            {item.value || t('metacommon.none')}
-                                        </span>
+                                        {
+                                            item.isFileName ? <Tip content={item.value} align="start">
+                                                <span className={`col-span-3 text-sm truncate max-w-full`}>
+                                                    {item.value || t('metacommon.none')}
+                                                </span>
+                                            </Tip> :
+                                                <span className={`col-span-3 text-sm`}>
+                                                    {item.value || t('metacommon.none')}
+                                                </span>
+                                        }
                                     </div>
                                 )
                             ))}

@@ -89,6 +89,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
         })
     }
 
+    
     useLayoutEffect(() => {
         // 链接ar参数存cookie（免登录接口）
         const cookie = location.search.match(/(?<=token=)[^&]+/g)?.[0]
@@ -97,6 +98,13 @@ export function UserProvider({ children }: { children: ReactNode }) {
             localStorage.setItem('isLogin', '1')
             location.href = location.origin + location.pathname;
             return
+        }
+        // record workspace auth
+        const search = location.search;
+        const params = new URLSearchParams(search);
+        const error = params.get('error');
+        if (error) {
+            window.url_error = error;
         }
 
         // 异地登录强制退出
@@ -114,8 +122,51 @@ export function UserProvider({ children }: { children: ReactNode }) {
         // 获取用户信息
         getUserInfo().then(res => {
             setUser(res.user_id ? res : null)
-            localStorage.setItem('UUR_INFO', res.user_id ? String(res.user_id) : '')
-            if (res.user_id) loadComponents()
+            const { user_id, web_menu = [] } = res;
+
+            localStorage.setItem('UUR_INFO', user_id ? String(user_id) : '');
+            if (user_id) loadComponents();
+            // 是否有访问后台权限
+            if (/^(\/\w+)?\/chat/.test(location.pathname)) return // 排除免登陆
+
+            if (res.role !== 'admin' && !web_menu.includes('backend')) {
+                location.href = `${location.origin}/workspace/c/new?error=90001`;
+                return;
+            }
+
+            const BASE_URL = __APP_ENV__.BASE_URL
+            const pathName = location.pathname.replace(BASE_URL, '');
+
+            // Jump to the route based on permissions 
+            if (pathName === '/admin') {
+                const MENU_ROUTE_MAP = [
+                    { key: 'board', path: '/dashboard' },
+                    { key: 'build', path: '/build/apps' },
+                    { key: 'knowledge', path: '/filelib' },
+                    { key: 'model', path: '/model/management' },
+                    { key: 'evaluation', path: '/evaluation' },
+                    { key: 'label', path: '/label' }, // 兜底选项放在最后
+                ];
+                const target = MENU_ROUTE_MAP.find(item => web_menu.includes(item.key));
+                if (target) {
+                    history.pushState(null, '', BASE_URL + target.path);
+                } else {
+                    history.pushState(null, '', BASE_URL + '/label');
+                }
+            } else {
+                // 403
+                const MENU_KEY_MAP = {
+                    '/dashboard': 'board',
+                    '/build/apps': 'build',
+                    '/filelib': 'knowledge',
+                    '/model/management': 'model',
+                    '/evaluation': 'evaluation',
+                }
+                const menuName = MENU_KEY_MAP[pathName]
+                if (menuName && res.role !== 'admin' && !web_menu.includes(menuName)) {
+                    history.pushState(null, '', BASE_URL + '/403');
+                }
+            }
         }).catch(e => {
             setUser(null)
         })

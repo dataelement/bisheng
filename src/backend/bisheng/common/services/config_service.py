@@ -18,7 +18,7 @@ def read_from_conf(file_path: str) -> str:
     if '/' not in file_path:
         # Get project main path
         current_path = os.path.dirname(os.path.abspath(__file__))
-        # 向前两级目录查找
+        # Look up the previous two levels of the catalog
         current_path = os.path.dirname(os.path.dirname(current_path))
 
         file_path = os.path.join(current_path, file_path)
@@ -30,7 +30,7 @@ def read_from_conf(file_path: str) -> str:
 
 
 def parse_key(keys: list[str], setting_str: str = None, include_key: bool = False) -> str:
-    # 通过key，返回yaml配置里value所有的字符串，包含注释
+    # Setujukey  Back  yamlConfigure invalueAll strings, including comments
     if not setting_str:
         setting_str = read_from_conf(config_file)
     setting_lines = setting_str.split('\n')
@@ -56,7 +56,7 @@ def parse_key(keys: list[str], setting_str: str = None, include_key: bool = Fals
 
 
 class ConfigService(Settings):
-    """配置服务类，继承自Settings以提供配置访问功能"""
+    """Configure service classes, inherited fromSettingsto provide configuration access"""
 
     def __init__(self, **data):
 
@@ -64,20 +64,20 @@ class ConfigService(Settings):
 
     @staticmethod
     def env_var_constructor(loader, node):
-        value = loader.construct_scalar(node)  # PyYAML loader的固定方法，用于根据当前节点构造一个变量值
-        var_name = value.strip('${} ')  # 去除变量值（例如${PATH}）前后的特殊字符及空格
-        env_val = os.getenv(var_name)  # 尝试在环境变量中获取变量名（如USER）对应的值，获取不到则为空
+        value = loader.construct_scalar(node)  # PyYAML loaderFixed method for constructing a variable value from the current node
+        var_name = value.strip('${} ')  # Subtract variable values (e.g.${PATH}) Special characters and spaces before and after
+        env_val = os.getenv(var_name)  # Try to get the variable name in the environment variable (e.g.USER) corresponding to the value, if it is not obtained, it is empty
         if env_val is None:
             raise ValueError(f'Environment variable {var_name} not found')
         return env_val
 
     @classmethod
     def load_settings_from_yaml(cls, file_path: str) -> 'ConfigService':
-        # 注册自定义的YAML构造器以处理环境变量
+        # Sign up for customYAMLConstructor to handle environment variables
         yaml.SafeLoader.add_constructor('!env', cls.env_var_constructor)
         # Get current path
         current_path = os.path.dirname(os.path.abspath(__file__))
-        # 向前两级目录查找
+        # Look up the previous two levels of the catalog
         current_path = os.path.dirname(os.path.dirname(current_path))
         # Check if a string is a valid path or a file name
         if '/' not in file_path:
@@ -96,9 +96,9 @@ class ConfigService(Settings):
         return ConfigService(**settings_dict)
 
     async def init_config(self):
-        # 初始化config
+        # Inisialisasiconfig
 
-        # 首先通过yaml 获取配置文件所有的key
+        # First Passedyaml Get all of the profileskey
         config_content = read_from_conf('initdb_config.yaml')
         if not config_content:
             return
@@ -109,10 +109,10 @@ class ConfigService(Settings):
 
             db_keys = {conf.key: conf.value for conf in config}
             all_config_key = 'initdb_config'
-            # 数据库内没有默认配置，将默认配置写入到数据库
+            # There is no default configuration in the database, write the default configuration to the database
             if db_keys.get(all_config_key, None) is None:
-                # 将配置文件写入到数据库
-                # 兼容旧配置，需要将旧配置和新的配置文件进行merge, 没有old config直接将新的config添加到数据库
+                # Write profile to database
+                # Compatible with old configurations, old configurations and new profiles need to bemerge, Noold configDirectly combine the newconfigAdd to Database
                 new_config_content = self.merge_old_config(config_content, config, db_keys)
                 try:
                     db_config = Config(key=all_config_key, value=new_config_content)
@@ -124,14 +124,14 @@ class ConfigService(Settings):
 
     @staticmethod
     def merge_old_config(new_config: str, old_db_config: List[Config], old_db_keys: Dict[str, str]):
-        # 没有旧的配置，直接将新的配置写入到数据库
+        # No old configuration, write the new configuration directly to the database
         if old_db_config.__len__() == 0:
             return new_config
         new_content = ''
-        # 先将新的配置
+        # Start with the new configuration
         config_yaml = yaml.safe_load(new_config)
         for one in config_yaml.keys():
-            if old_db_keys.get(one, None) is None:  # 是新的配置，直接用文件内的内容
+            if old_db_keys.get(one, None) is None:  # is a new configuration, directly using the contents of the file
                 new_content += f'{parse_key([one], new_config, include_key=True)[0]}\n\n'
             else:
                 new_content += f'{one}:\n{old_db_keys[one]}\n\n'
@@ -173,41 +173,41 @@ class ConfigService(Settings):
                     raise Exception('initdb_config not found, please check your system config')
 
     def get_knowledge(self) -> KnowledgeConf:
-        # 由于分布式的要求，可变更的配置存储于mysql，因此读取配置每次从mysql中读取
+        # Due to distributed requirements, configurations that can be changed are stored inmysqlso each time the configuration is read from themysqlRead in
         all_config = self.get_all_config()
         ret = all_config.get('knowledges', {})
         return KnowledgeConf(**ret)
 
     async def async_get_knowledge(self) -> KnowledgeConf:
-        # 由于分布式的要求，可变更的配置存储于mysql，因此读取配置每次从mysql中读取
+        # Due to distributed requirements, configurations that can be changed are stored inmysqlso each time the configuration is read from themysqlRead in
         all_config = await self.aget_all_config()
         ret = all_config.get('knowledges', {})
         return KnowledgeConf(**ret)
 
     def get_default_llm(self):
-        # 由于分布式的要求，可变更的配置存储于mysql，因此读取配置每次从mysql中读取
+        # Due to distributed requirements, configurations that can be changed are stored inmysqlso each time the configuration is read from themysqlRead in
         all_config = self.get_all_config()
         return all_config.get('default_llm', {})
 
     async def get_password_conf(self) -> PasswordConf:
-        # 获取密码相关的配置项
+        # Get password-related configuration items
         all_config = await self.aget_all_config()
         return PasswordConf(**all_config.get('password_conf', {}))
 
     def get_system_login_method(self) -> SystemLoginMethod:
-        # 获取密码相关的配置项
+        # Get password-related configuration items
         all_config = self.get_all_config()
         tmp = SystemLoginMethod(**all_config.get('system_login_method', {}))
         tmp.bisheng_pro = os.getenv('BISHENG_PRO') == 'true'
         return tmp
 
     def get_workflow_conf(self) -> WorkflowConf:
-        # 获取密码相关的配置项
+        # Get password-related configuration items
         all_config = self.get_all_config()
         return WorkflowConf(**all_config.get('workflow', {}))
 
     def get_linsight_conf(self) -> LinsightConf:
-        # 获取灵思相关的配置项
+        # Get Ideas-related configuration items
         all_config = self.get_all_config()
         conf = LinsightConf(debug=self.linsight_conf.debug)
         linsight_conf = all_config.get('linsight', {})
@@ -216,12 +216,12 @@ class ConfigService(Settings):
         return conf
 
     def get_from_db(self, key: str):
-        # 先获取所有的key
+        # Get all of them firstkey
         all_config = self.get_all_config()
         return all_config.get(key, {})
 
     async def aget_from_db(self, key: str):
-        # 先获取所有的key
+        # Get all of them firstkey
         all_config = await self.aget_all_config()
         return all_config.get(key, {})
 

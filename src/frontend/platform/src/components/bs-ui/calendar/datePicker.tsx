@@ -311,6 +311,8 @@ export function DatePicker({
   })
   const [open, setOpen] = useState(false)
 
+  const isInternalChangeRef = useRef(false)
+
   const dateStr = useMemo(() => {
     if (!date) return ''
     const mergedDate = new Date(date)
@@ -323,9 +325,14 @@ export function DatePicker({
   }, [date, time, showTime, dateFormat])
 
   useEffect(() => {
+    if (isInternalChangeRef.current) {
+      isInternalChangeRef.current = false
+      return
+    }
+
     const parsed = parseDate(value)
-    console.log('Parsed date:', parsed)
     setDate(parsed)
+
     if (showTime && parsed) {
       setTime({
         hour: parsed.getHours(),
@@ -334,6 +341,7 @@ export function DatePicker({
       })
     }
   }, [value, showTime])
+
 
   const handleTimeChange = useCallback((newTime: { hour: number; minute: number; second: number }) => {
     setTime(newTime)
@@ -352,6 +360,7 @@ export function DatePicker({
     } else {
       mergedDate.setHours(0, 0, 0, 0)
     }
+    isInternalChangeRef.current = true
     onChange?.(mergedDate)
   }
 

@@ -26,7 +26,7 @@ def list(request: Request,
          page_num: int = 1,
          login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
-    非admin 只能查看自己已标注和未标注的
+    Nonadmin Can only see their own marked and unlabeled
     """
     groups = UserGroupDao.get_user_admin_group(login_user.user_id)
     if login_user.is_admin():
@@ -79,7 +79,7 @@ async def get_status(task_id: int, chat_id: str,
 @router.post('/create_task')
 async def create(task_create: MarkTaskCreate, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
-    应用和用户是多对多对关系，依赖一条主任务记录
+    Apps and users are in a many-to-many relationship, relying on one director record
     """
 
     task = MarkTask(create_id=login_user.user_id,
@@ -99,10 +99,10 @@ async def create(task_create: MarkTaskCreate, login_user: UserPayload = Depends(
 @router.get('/get_user')
 async def get_user(task_id: int):
     """
-    查询此应用下 所有的用户
+    Query under this app All Users
     """
 
-    # 根据type 查询不同的会话
+    # accordingtype Query different sessions
     task = MarkTaskDao.get_task_byid(task_id)
     user_list = []
 
@@ -117,13 +117,13 @@ async def get_user(task_id: int):
 async def mark(data: MarkData,
                login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
-    标记任务为当前用户，并且其他人不能进行覆盖
+    Flag task as current user and cannot be overwritten by others
     flow_type flow assistant
     """
 
     # record = MarkRecordDao.get_record(data.task_id,data.session_id)
     # if record:
-    #     return resp_500(data="已经标注过了")
+    #     return resp_500(data="Already flagged")
 
     session_info = MessageSessionDao.get_one(data.session_id)
     if session_info:
@@ -137,13 +137,13 @@ async def mark(data: MarkData,
         db_r.status = data.status
         MarkRecordDao.update_record(db_r)
     else:
-        # 未标注不记录数据
+        # Not marked No data recorded
         if data.status == MarkTaskStatus.DEFAULT.value:
             return resp_200(data="ok")
         record_info = MarkRecord(create_user=login_user.user_name, create_id=login_user.user_id,
                                  session_id=data.session_id, task_id=data.task_id, status=data.status,
                                  flow_type=data.flow_type)
-        # 创建一条 用户标注记录
+        # Create an article User callout record
         MarkRecordDao.create_record(record_info)
 
     task = MarkTaskDao.get_task_byid(task_id=data.task_id)
@@ -183,7 +183,7 @@ async def pre_or_next(chat_id: str, action: str, task_id: int,
     """
 
     if action not in ["prev", "next"]:
-        return resp_500(data="action参数错误")
+        return resp_500(data="actionParameter salah")
 
     result = {"task_id": task_id}
 
@@ -251,7 +251,7 @@ async def pre_or_next(chat_id: str, action: str, task_id: int,
 @router.delete('/del')
 def del_task(request: Request, task_id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
-    非admin 只能查看自己已标注和未标注的
+    Nonadmin Can only see their own marked and unlabeled
     """
 
     MarkTaskDao.delete_task(task_id)

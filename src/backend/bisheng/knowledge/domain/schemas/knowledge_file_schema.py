@@ -6,13 +6,13 @@ from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileRead, Kn
 
 
 class KnowledgeFileInfoRes(KnowledgeFileRead):
-    """知识库文件信息响应体"""
-    creat_user: Optional[str] = Field(default=None, description='创建用户名称')
-    update_user: Optional[str] = Field(default=None, description='更新用户名称')
+    """Knowledge Base File Information Response Body"""
+    creat_user: Optional[str] = Field(default=None, description='Create user name')
+    update_user: Optional[str] = Field(default=None, description='Update user name')
 
     @classmethod
     def from_orm_extra(cls, model: KnowledgeFile, extra: Dict[str, Any]) -> "KnowledgeFileInfoRes":
-        """从ORM模型和额外信息创建响应体实例"""
+        """FROMORMModel and Additional Information Create Response Body Instance"""
         knowledge_file_info = cls.model_validate(model)
 
         knowledge_file_info.creat_user = extra.get('creat_user')

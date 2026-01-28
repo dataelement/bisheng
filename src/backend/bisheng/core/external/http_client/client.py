@@ -169,7 +169,7 @@ class AsyncHttpClient(object):
             **kwargs
     ) -> AsyncGenerator[bytes, None]:
         """
-        流式请求
+        Streaming requests
         """
         client = await self.get_aiohttp_client()
 

@@ -14,14 +14,14 @@ from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 async def get_knowledge_repository(
         session: AsyncSession = Depends(get_db_session),
 ) -> KnowledgeRepository:
-    """获取KnowledgeRepository实例的依赖项"""
+    """Dapatkan KnowledgeRepositoryInstance Dependencies"""
     return KnowledgeRepositoryImpl(session)
 
 
 async def get_knowledge_file_repository(
         session: AsyncSession = Depends(get_db_session),
 ) -> 'KnowledgeFileRepository':
-    """获取KnowledgeFileRepository实例的依赖项"""
+    """Dapatkan KnowledgeFileRepositoryInstance Dependencies"""
 
     return KnowledgeFileRepositoryImpl(session)
 
@@ -30,7 +30,7 @@ async def get_knowledge_service(
         knowledge_repository: KnowledgeRepository = Depends(get_knowledge_repository),
         knowledge_file_repository: KnowledgeFileRepository = Depends(get_knowledge_file_repository),
 ) -> 'KnowledgeService':
-    """获取KnowledgeService实例的依赖项"""
+    """Dapatkan KnowledgeServiceInstance Dependencies"""
     return KnowledgeService(knowledge_repository=knowledge_repository,
                             knowledge_file_repository=knowledge_file_repository)
 
@@ -39,7 +39,7 @@ async def get_knowledge_file_service(
         knowledge_repository: KnowledgeRepository = Depends(get_knowledge_repository),
         knowledge_file_repository: KnowledgeFileRepository = Depends(get_knowledge_file_repository),
 ) -> 'KnowledgeFileService':
-    """获取KnowledgeFileService实例的依赖项"""
+    """Dapatkan KnowledgeFileServiceInstance Dependencies"""
     return KnowledgeFileService(
         knowledge_repository=knowledge_repository,
         knowledge_file_repository=knowledge_file_repository,

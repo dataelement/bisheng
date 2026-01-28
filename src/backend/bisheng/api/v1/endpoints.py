@@ -63,7 +63,7 @@ if bisheng_settings.debug:
 
 @router.get('/all')
 def get_all():
-    """获取所有参数"""
+    """Get all parameters"""
     all_types = get_all_types_dict()
     return resp_200(all_types)
 
@@ -71,7 +71,7 @@ def get_all():
 @router.get('/env')
 def get_env():
     from bisheng import __version__
-    """获取环境变量参数"""
+    """Get environment variable parameters"""
     uns_support = ['doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'txt', 'md', 'html', 'pdf', 'csv']
 
     etl_for_lm_url = bisheng_settings.get_knowledge().etl4lm.url
@@ -110,10 +110,10 @@ def save_config(data: dict, admin_user: UserPayload = Depends(UserPayload.get_ad
     if not data.get('data', '').strip():
         raise SystemConfigEmptyError()
     try:
-        # 校验是否符合yaml格式
+        # Check for complianceyamlFormat
         config = yaml.safe_load(data.get('data'))
 
-        # 判断 linsight_invitation_code 是不是boolean
+        # Judging linsight_invitation_code Right?boolean
         if isinstance(config, dict) and 'linsight_invitation_code' in config.keys():
             if config['linsight_invitation_code'] is not None and bool(config['linsight_invitation_code']) not in [True,
                                                                                                                    False]:
@@ -131,7 +131,7 @@ def save_config(data: dict, admin_user: UserPayload = Depends(UserPayload.get_ad
 
 @router.get('/web/config')
 async def get_web_config():
-    """ 获取一些前端所需要的配置项，内容由前端决定 """
+    """ Get some configuration items required by the front-end, the content is determined by the front-end """
     web_conf = ConfigDao.get_config(ConfigKeyEnum.WEB_CONFIG)
     if not web_conf:
         return resp_200(data='')
@@ -142,7 +142,7 @@ async def get_web_config():
 async def update_web_config(request: Request,
                             admin_user: UserPayload = Depends(UserPayload.get_admin_user),
                             value: str = Body(embed=True)):
-    """ 更新一些前端所需要的配置项，内容由前端决定 """
+    """ Update some configuration items required by the front-end, the content is determined by the front-end """
     logger.info(
         f'update_web_config user_name={admin_user.user_name}, ip={get_request_ip(request)}')
     web_conf = ConfigDao.get_config(ConfigKeyEnum.WEB_CONFIG)
@@ -244,7 +244,7 @@ async def process_flow(
 
         if isinstance(task_result, str):
             task_result = {'answer': task_result}
-        # 判断溯源
+        # Judgment traceability
         source_documents = task_result.pop('source_documents', '')
         answer = list(task_result.values())[0]
         extra = {}
@@ -278,7 +278,7 @@ async def process_flow(
                         user_id=login_user.user_id,
                     ))
 
-                # 记录Telemetry日志
+                # RecordTelemetryJournal
                 await telemetry_service.log_event(user_id=login_user.user_id,
                                                   event_type=BaseTelemetryTypeEnum.NEW_MESSAGE_SESSION,
                                                   trace_id=trace_id_var.get(),
@@ -363,8 +363,8 @@ async def _upload_file(file: UploadFile, object_name_prefix: str, file_supports:
         file_path = str(file_path)
 
     return UploadFileResponse(
-        file_path=file_path,  # minio可访问的链接
-        relative_path=object_name,  # minio中的object_name
+        file_path=file_path,  # minioAccessible links
+        relative_path=object_name,  # miniohitting the nail on the headobject_name
     )
 
 

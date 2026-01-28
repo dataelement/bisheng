@@ -15,7 +15,7 @@ from bisheng.common.exceptions.auth import JWTDecodeError
 from bisheng.common.services.config_service import settings
 from bisheng.database.constants import AdminRole
 from bisheng.database.models.group import GroupDao
-from bisheng.database.models.role_access import AccessType, RoleAccessDao
+from bisheng.database.models.role_access import AccessType, RoleAccessDao, WebMenuResource
 from bisheng.database.models.user_group import UserGroupDao
 from ..models.user import User
 from ..models.user_role import UserRoleDao
@@ -95,8 +95,8 @@ class AuthJwt:
 class LoginUser(BaseModel):
     user_id: int
     user_name: str = Field(default="")
-    user_role: List[int] = Field(default_factory=list, description="用户角色ID列表")
-    group_cache: Dict[int, Any] = Field(default_factory=dict, description="用户组缓存")
+    user_role: List[int] = Field(default_factory=list, description="Users GroupsIDVertical")
+    group_cache: Dict[int, Any] = Field(default_factory=dict, description="User Group Cache")
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -124,8 +124,8 @@ class LoginUser(BaseModel):
     @staticmethod
     def wrapper_access_check(func):
         """
-        权限检查的装饰器
-        如果是admin用户则不执行后续具体的检查逻辑
+        Decorator for permissions check
+        ifadminThe user does not perform subsequent specific check logic
         """
 
         @functools.wraps(func)
@@ -139,8 +139,8 @@ class LoginUser(BaseModel):
     @staticmethod
     def async_wrapper_access_check(func):
         """
-        异步权限检查的装饰器
-        如果是admin用户则不执行后续具体的检查逻辑
+        Decorator for asynchronous permission checking
+        ifadminThe user does not perform subsequent specific check logic
         """
 
         @functools.wraps(func)
@@ -154,12 +154,12 @@ class LoginUser(BaseModel):
     @wrapper_access_check
     def access_check(self, owner_user_id: int, target_id: str, access_type: AccessType) -> bool:
         """
-            检查用户是否有某个资源的权限
+            Check if the user has permission to a resource
         """
-        # 判断是否属于本人资源
+        # Determine if it belongs to my resource
         if self.user_id == owner_user_id:
             return True
-        # 判断授权
+        # Judgment Authorization
         if RoleAccessDao.judge_role_access(self.user_role, target_id, access_type):
             return True
         return False
@@ -174,9 +174,9 @@ class LoginUser(BaseModel):
     @wrapper_access_check
     def copiable_check(self, owner_user_id: int) -> bool:
         """
-            检查用户是否有某个资源复制权限
+            Check if the user has permission to copy a resource
         """
-        # 判断是否属于本人资源
+        # Determine if it belongs to my resource
         if self.user_id == owner_user_id:
             return True
         return False
@@ -184,9 +184,9 @@ class LoginUser(BaseModel):
     @wrapper_access_check
     def check_group_admin(self, group_id: int) -> bool:
         """
-            检查用户是否是某个组的管理员
+            Check if the user is an administrator of a group
         """
-        # 判断是否是用户组的管理员
+        # Determine if you are an administrator of a user group
         user_group = UserGroupDao.get_user_admin_group(self.user_id)
         if not user_group:
             return False
@@ -198,9 +198,9 @@ class LoginUser(BaseModel):
     @async_wrapper_access_check
     async def async_check_group_admin(self, group_id: int) -> bool:
         """
-            异步检查用户是否是某个组的管理员
+            Asynchronously check if the user is an administrator of a group
         """
-        # 判断是否是用户组的管理员
+        # Determine if you are an administrator of a user group
         user_group = await UserGroupDao.aget_user_admin_group(self.user_id, group_id)
         if not user_group:
             return False
@@ -212,7 +212,7 @@ class LoginUser(BaseModel):
     @wrapper_access_check
     def check_groups_admin(self, group_ids: List[int]) -> bool:
         """
-        检查用户是否是用户组列表中的管理员，有一个就是true
+        Check if the user is an administrator in the user group list, one of which istrue
         """
         user_groups = UserGroupDao.get_user_admin_group(self.user_id)
         for one in user_groups:
@@ -221,7 +221,7 @@ class LoginUser(BaseModel):
         return False
 
     def get_user_groups(self, user_id: int) -> List[Dict]:
-        """ 查询用户的角色列表 """
+        """ Query a list of roles for a user """
         user_groups = UserGroupDao.get_user_group(user_id)
         user_group_ids: List[int] = [one_group.group_id for one_group in user_groups]
         res = []
@@ -229,7 +229,7 @@ class LoginUser(BaseModel):
             if self.group_cache.get(user_group_ids[i]):
                 res.append(self.group_cache.get(user_group_ids[i]))
                 del user_group_ids[i]
-        # 将没有缓存的角色信息查询数据库
+        # Query database for role information without caching
         if user_group_ids:
             group_list = GroupDao.get_group_by_ids(user_group_ids)
             for group_info in group_list:
@@ -237,20 +237,26 @@ class LoginUser(BaseModel):
                 res.append(self.group_cache.get(group_info.id))
         return res
 
+    async def get_user_group_ids(self, user_id: int = None):
+        if user_id is None:
+            user_id = self.user_id
+        user_groups = await UserGroupDao.aget_user_group(user_id)
+        return [one_group.group_id for one_group in user_groups]
+
     def get_user_access_resource_ids(self, access_types: List[AccessType]) -> List[str]:
-        """ 查询用户有对应权限的资源ID列表 """
+        """ Query resources for which the user has the corresponding permissionsIDVertical """
         role_access = RoleAccessDao.get_role_access_batch(self.user_role, access_types)
         return list(set([one.third_id for one in role_access]))
 
     async def aget_user_access_resource_ids(self, access_types: List[AccessType]) -> List[str]:
-        """ 异步查询用户有对应权限的资源ID列表 """
+        """ Resources with corresponding permissions for asynchronous query usersIDVertical """
         role_access = await RoleAccessDao.aget_role_access_batch(self.user_role, access_types)
         return list(set([one.third_id for one in role_access]))
 
     # some methods related to AuthJwt
     @classmethod
     def create_access_token(cls, user: User, auth_jwt: AuthJwt) -> str:
-        """ 创建用户的访问token """
+        """ Create access for userstoken """
         payload = {
             'user_id': user.user_id,
             'user_name': user.user_name
@@ -323,8 +329,9 @@ class LoginUser(BaseModel):
                 role = 'group_admin'
             else:
                 role = role_ids
-        # 获取用户的菜单栏权限列表
-        web_menu = await RoleAccessDao.aget_role_access(role_ids, AccessType.WEB_MENU)
-        web_menu = list(set([one.third_id for one in web_menu]))
-
+            # Get a list of a user's menu bar permissions
+            web_menu = await RoleAccessDao.aget_role_access(role_ids, AccessType.WEB_MENU)
+            web_menu = list(set([one.third_id for one in web_menu]))
+        else:
+            web_menu = [one.value for one in WebMenuResource]
         return role, web_menu

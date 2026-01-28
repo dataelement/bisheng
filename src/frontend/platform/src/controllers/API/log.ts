@@ -29,33 +29,36 @@ export async function getLogsApi({ page, pageSize, userIds, groupId = '', start,
 // 系统模块
 export async function getModulesApi(): Promise<{ data: any[] }> {
     return {
-        data: [{ name: 'log.chat', value: 'chat' }, { name: 'log.build', value: 'build' }, { name: 'log.knowledge', value: 'knowledge' }, { name: 'log.system', value: 'system' }]
+        data: [{ name: 'log.systemIdEnum.chat', value: 'chat' }, { name: 'log.systemIdEnum.build', value: 'build' }, { name: 'log.systemIdEnum.knowledge', value: 'knowledge' }, { name: 'log.systemIdEnum.system', value: 'system' },{ name: 'log.systemIdEnum.dashboard', value: 'dashboard' }]
     }
 }
 
 const actions = [
-    { name: 'log.createChat', value: 'create_chat' },
-    { name: 'log.deleteChat', value: 'delete_chat' },
-    { name: 'log.createBuild', value: 'create_build' },
-    { name: 'log.updateBuild', value: 'update_build' },
-    { name: 'log.deleteBuild', value: 'delete_build' },
-    { name: 'log.createKnowledge', value: 'create_knowledge' },
-    { name: 'log.deleteKnowledge', value: 'delete_knowledge' },
-    { name: 'log.uploadFile', value: 'upload_file' },
-    { name: 'log.deleteFile', value: 'delete_file' },
-    { name: 'log.updateUser', value: 'update_user' },
-    { name: 'log.forbidUser', value: 'forbid_user' },
-    { name: 'log.recoverUser', value: 'recover_user' },
-    { name: 'log.createUserGroup', value: 'create_user_group' },
-    { name: 'log.deleteUserGroup', value: 'delete_user_group' },
-    { name: 'log.updateUserGroup', value: 'update_user_group' },
-    { name: 'log.createRole', value: 'create_role' },
-    { name: 'log.deleteRole', value: 'delete_role' },
-    { name: 'log.updateRole', value: 'update_role' },
-    { name: 'log.userLogin', value: 'user_login' },
-    { name: 'log.add_tool', value: 'add_tool' },
-    { name: 'log.update_tool', value: 'update_tool' },
-    { name: 'log.delete_tool', value: 'delete_tool' }
+    { name: 'log.eventTypeEnum.createChat', value: 'create_chat' },
+    { name: 'log.eventTypeEnum.deleteChat', value: 'delete_chat' },
+    { name: 'log.eventTypeEnum.createBuild', value: 'create_build' },
+    { name: 'log.eventTypeEnum.updateBuild', value: 'update_build' },
+    { name: 'log.eventTypeEnum.deleteBuild', value: 'delete_build' },
+    { name: 'log.eventTypeEnum.createKnowledge', value: 'create_knowledge' },
+    { name: 'log.eventTypeEnum.deleteKnowledge', value: 'delete_knowledge' },
+    { name: 'log.eventTypeEnum.uploadFile', value: 'upload_file' },
+    { name: 'log.eventTypeEnum.deleteFile', value: 'delete_file' },
+    { name: 'log.eventTypeEnum.updateUser', value: 'update_user' },
+    { name: 'log.eventTypeEnum.forbidUser', value: 'forbid_user' },
+    { name: 'log.eventTypeEnum.recoverUser', value: 'recover_user' },
+    { name: 'log.eventTypeEnum.createUserGroup', value: 'create_user_group' },
+    { name: 'log.eventTypeEnum.deleteUserGroup', value: 'delete_user_group' },
+    { name: 'log.eventTypeEnum.updateUserGroup', value: 'update_user_group' },
+    { name: 'log.eventTypeEnum.createRole', value: 'create_role' },
+    { name: 'log.eventTypeEnum.deleteRole', value: 'delete_role' },
+    { name: 'log.eventTypeEnum.updateRole', value: 'update_role' },
+    { name: 'log.eventTypeEnum.userLogin', value: 'user_login' },
+    { name: 'log.eventTypeEnum.add_tool', value: 'add_tool' },
+    { name: 'log.eventTypeEnum.update_tool', value: 'update_tool' },
+    { name: 'log.eventTypeEnum.delete_tool', value: 'delete_tool' },
+    { name: 'log.eventTypeEnum.create_dashboard', value: 'create_dashboard' },
+    { name: 'log.eventTypeEnum.update_dashboard', value: 'update_dashboard' },
+    { name: 'log.eventTypeEnum.delete_dashboard', value: 'delete_dashboard' }
 ];
 
 // 全部操作行为
@@ -70,6 +73,7 @@ export async function getActionsByModuleApi(moduleId) {
         case 'build': return actions.filter(a => a.value.includes('build'))
         case 'knowledge': return actions.filter(a => a.value.includes('knowledge') || a.value.includes('file'))
         case 'system': return actions.filter(a => a.value.includes('user') || a.value.includes('role'))
+        case 'dashboard': return actions.filter(a => a.value.includes('dashboard'))
     }
 }
 

@@ -1,0 +1,290 @@
+// Mock API functions for dashboard operations
+
+import { generateUUID } from "@/components/bs-ui/utils";
+import { ChartType, Dashboard, DashboardComponent, LayoutItem, TimeRangeMode, TimeRangeType } from "@/pages/Dashboard/types/dataConfig";
+import axios from "../request";
+
+// Simulate API delay
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+export async function getDashboards(): Promise<Dashboard[]> {
+    // has administrative privileges or can view published dashboards
+    return await axios.get(`/api/v1/telemetry/dashboard`).then(res =>
+        res.data.filter(dashboard => (dashboard.write || dashboard.status === 'published')));
+}
+
+export async function getDashboard(id: string, fromShare: boolean = false): Promise<Dashboard> {
+    const query = fromShare ? `?from_share=true` : ''
+    return await axios.get(`/api/v1/telemetry/dashboard/${id}${query}`);
+}
+
+export async function createDashboard(title: string): Promise<Dashboard> {
+    return await axios.post(`/api/v1/telemetry/dashboard`, {
+        title,
+        description: "",
+        layout_config: { layouts: [] },
+        style_config: { theme: 'light' }
+    })
+}
+
+export async function updateDashboardTitle(id: string, title: string): Promise<Dashboard> {
+    return await axios.post(`/api/v1/telemetry/dashboard/${id}/title`, {
+        title
+    })
+}
+
+export async function setDefaultDashboard(id: string): Promise<Dashboard> {
+    return await axios.post(`/api/v1/telemetry/dashboard/${id}/default`, {
+        dashboard_id: id
+    })
+}
+
+export async function copyDashboard({ id, title }: { id: string, title: string }): Promise<Dashboard> {
+    return await axios.post(`/api/v1/telemetry/dashboard/${id}/copy`, {
+        new_title: title
+    })
+}
+
+export async function updateDashboard(id: string, data: Partial<Dashboard>): Promise<Dashboard> {
+    const payload = cloneDeep(data);
+    // delete time
+    delete payload.create_time;
+    delete payload.update_time;
+    payload.components.forEach(component => {
+        delete component.create_time;
+        delete component.update_time;
+    })
+    return await axios.put(`/api/v1/telemetry/dashboard/${id}`, payload)
+}
+
+export async function deleteDashboard(id: string): Promise<void> {
+    return await axios.delete(`/api/v1/telemetry/dashboard/${id}`)
+}
+
+
+export async function getShareLink(id: string): Promise<string> {
+    await delay(300)
+    return `${window.location.origin}/share/${id}`
+}
+
+export async function publishDashboard(id: string, status: any): Promise<Dashboard> {
+    return await axios.post(`/api/v1/telemetry/dashboard/${id}/status`, {
+        status
+    })
+}
+
+export async function copyComponentTo(component: DashboardComponent, targetId: string, layout: LayoutItem): Promise<any> {
+    const targetDashboard = await getDashboard(targetId)
+    console.log('targetDashboard :>> ', targetDashboard, layout);
+    const copyComponentId = generateUUID(6)
+    targetDashboard.components.push({
+        ...component,
+        id: copyComponentId
+    })
+
+    // // Calculate position at bottom left of target dashboard
+    const maxY = targetDashboard.layout_config.layouts.length > 0
+        ? Math.max(...targetDashboard.layout_config.layouts.map(l => l.y + l.h))
+        : 0
+    const newLayoutItem: LayoutItem = {
+        ...layout,
+        i: copyComponentId,
+        x: 0,
+        y: maxY
+    }
+
+    targetDashboard.layout_config.layouts.push(newLayoutItem)
+    return await updateDashboard(targetId, targetDashboard)
+}
+
+// Dataset related types and APIs
+// 时间粒度
+export interface TimeGranularity {
+    name: string
+    aggregation: Record<string, any>
+}
+
+// 维度配置
+export interface DimensionConfig {
+    name: string
+    type: 'integer' | 'keyword' | 'date'
+    field: string
+    time_granularity?: TimeGranularity[]
+    aggregation?: Record<string, any>
+    aggregation_name: string
+    bucket_path: string
+}
+
+// 指标配置
+export interface MetricConfig {
+    name: string
+    filter?: Record<string, any>
+    aggregation: Record<string, any>
+    aggregation_name: string
+    bucket_path?: string
+}
+
+// Schema 配置
+export interface SchemaConfig {
+    metrics: MetricConfig[]
+    dimensions: DimensionConfig[]
+}
+
+// 数据集
+export interface DashboardDataset {
+    id: number
+    dataset_name: string
+    dataset_code: string
+    es_index_name: string
+    description: string
+    is_commercial_only: boolean
+    schema_config: SchemaConfig
+}
+
+// 获取数据集列表
+export async function getDatasets(): Promise<DashboardDataset[]> {
+    return await axios.get(`/api/v1/telemetry/dashboard/dataset/list`);
+}
+
+// 查询图表数据
+import {
+    QueryDataResponse
+} from '@/pages/Dashboard/types/chartData';
+import { cloneDeep } from "lodash-es";
+
+function transformStackedData(resData: any) {
+    const { value, dimensions: rawDimensions } = resData;
+    const groups: string[] = [];
+    const seriesKeys: string[] = [];
+    const dataMap: Record<string, Record<string, number>> = {};
+
+    rawDimensions.forEach((dim: string[], index: number) => {
+        const seriesName = dim[dim.length - 1];
+        const groupName = dim.slice(0, -1).join('\n');
+        const val = value[index][0];
+
+        if (!groups.includes(groupName)) groups.push(groupName);
+        if (!seriesKeys.includes(seriesName)) seriesKeys.push(seriesName);
+
+        if (!dataMap[groupName]) dataMap[groupName] = {};
+        dataMap[groupName][seriesName] = val;
+    });
+
+    const series = seriesKeys.map(name => ({
+        name,
+        data: groups.map(group => dataMap[group][name] ?? null)
+    }));
+
+    return { dimensions: groups, series };
+}
+
+function transformNormalData(resData: any, component: DashboardComponent) {
+    const dimensions = resData.dimensions.map((name: string[]) => name.join('\n'));
+    const metrics = component.data_config.metrics || [];
+    const series = metrics.map((m, idx) => ({
+        name: m.displayName.length > 24 ? m.displayName.slice(0, 24) + '...' : m.displayName,
+        data: resData.value.map((val: any[]) => val[idx])
+    }));
+
+    return { dimensions, series };
+}
+
+export async function queryChartData(params: {
+    useId: boolean,
+    component: DashboardComponent,
+    dashboardId: string
+    queryParams?: any
+}): Promise<QueryDataResponse> {
+    const { component, useId, dashboardId, queryParams } = params;
+
+    const resData = await axios.post(`/api/v1/telemetry/dashboard/component/query`, {
+        dashboard_id: dashboardId,
+        component_data: useId ? undefined : component,
+        component_id: useId ? component.id : undefined,
+        time_filters: queryParams
+            .filter(p => p.queryComponentParams || (p.queryConditions && p.queryConditions.hasDefaultValue)) // all
+            .map(({ queryComponentParams: p, queryConditions: q }) => {
+                if (p) {
+                    return {
+                        type: p.shortcutKey ? TimeRangeType.RECENT_DAYS : TimeRangeType.CUSTOM,
+                        mode: p.isDynamic ? TimeRangeMode.Dynamic : TimeRangeMode.Fixed,
+                        recentDays: p.shortcutKey ? Number(p.shortcutKey.replace('last_', '')) : undefined,
+                        startDate: p.startTime,
+                        endDate: p.endTime,
+                    }
+                } else if (q) {
+                    return q.defaultValue
+                }
+            })
+    });
+
+    if (!resData?.value?.length) return null
+
+    const isStacked = !!component.data_config.stackDimension?.fieldId;
+    const { dimensions, series } = isStacked
+        ? transformStackedData(resData)
+        : transformNormalData(resData, component);
+
+    // console.log('query params :>> ', dimensions, series);
+
+    const chartType = params.component.type
+
+    // 根据图表类型返回对应的 数据
+    switch (chartType) {
+        case ChartType.Bar:
+        case ChartType.StackedBar:
+        case ChartType.GroupedBar:
+        case ChartType.HorizontalBar:
+        case ChartType.StackedHorizontalBar:
+        case ChartType.GroupedHorizontalBar:
+        case ChartType.Line:
+        case ChartType.Area:
+        case ChartType.StackedLine:
+        case ChartType.StackedArea:
+            return {
+                dimensions,// xAxis.data
+                series // legend && series(chart line) 
+            }
+        case ChartType.Pie:
+        case ChartType.Donut:
+            return {
+                dimensions: [],
+                series: [
+                    {
+                        name: '',
+                        data: dimensions.map((name, index) => ({
+                            name: name,
+                            value: resData.value[index][0]
+                        }))
+                    }
+                ]
+            }
+        case ChartType.Metric:
+            return {
+                value: resData.value[0]?.[0] ?? 0,
+                title: series[0]?.name || '',
+                unit: '',
+                trend: { value: 0, direction: 'up', label: '' },
+                format: { decimalPlaces: 2, thousandSeparator: true }
+            };
+    }
+}
+
+// 获取字段枚举列表
+export async function getFieldEnums({ dataset_code, field, page, pageSize = 20, keyword = "" }: {
+    dataset_code: string
+    field: string
+    page: number
+    pageSize?: number
+    keyword?: string
+}): Promise<any> {
+    return await axios.get(`/api/v1/telemetry/dashboard/dataset/field/enums`, {
+        params: {
+            index_name: dataset_code,
+            field,
+            page,
+            size: pageSize,
+            keyword
+        }
+    });
+}

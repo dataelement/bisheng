@@ -69,7 +69,7 @@ class ConditionCases(BaseModel):
     variable_key_value: Dict = Field(default={}, description='variable key value')
 
     def evaluate_conditions(self, node_instance: BaseNode) -> bool:
-        # 正常来讲只有else没有conditions
+        # Normally onlyelseNoconditions
         if not self.conditions:
             return True
 

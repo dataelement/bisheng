@@ -16,10 +16,10 @@ from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
 router = APIRouter(prefix='/qa', tags=['QA'])
 
 
-# 溯源模块的一些接口
+# Some interfaces of the traceability module
 @router.get('/keyword')
 async def get_answer_keyword(message_id: int):
-    # 获取命中的key
+    # Get Hitskey
     conter = 3
     while True:
         with get_sync_db_session() as session:
@@ -30,7 +30,7 @@ async def get_answer_keyword(message_id: int):
             keywords = chunks.keywords
             return resp_200(json.loads(keywords))
         else:
-            # 延迟循环
+            # Delay Loop
             if conter <= 0:
                 break
             await asyncio.sleep(1)
@@ -41,15 +41,15 @@ async def get_answer_keyword(message_id: int):
 @router.post('/chunk', status_code=200)
 def get_original_file(message_id: Annotated[int, Body(embed=True)],
                       keys: Annotated[str, Body(embed=True)]):
-    # 获取命中的key
+    # Get Hitskey
     with get_sync_db_session() as session:
         chunks = session.exec(
             select(RecallChunk).where(RecallChunk.message_id == message_id)).all()
 
     if not chunks:
-        return resp_200(message='没有找到chunks')
+        return resp_200(message='No bulkpost found in Trashchunks')
 
-    # chunk 的所有file
+    # chunk care of all offile
     file_ids = {chunk.file_id for chunk in chunks}
     db_knowledge_files = KnowledgeFileDao.get_file_by_ids(list(file_ids))
     id2file = {file.id: file for file in db_knowledge_files}
@@ -63,7 +63,7 @@ def get_original_file(message_id: Annotated[int, Body(embed=True)],
         file_access = json.loads(chunk.meta_data).get('right', True)
         chunk_res['right'] = file_access
         if file_access and file:
-            # 预览文件url
+            # Preview filesurl
             original_url, preview_url = KnowledgeService.get_file_share_url(file.id)
             chunk_res['source_url'] = preview_url
             chunk_res['original_url'] = original_url
@@ -100,15 +100,15 @@ def find_lcsubstr(s1, s2):
 
 def match_score(chunk, keywords):
     """
-    去重后的keywords，被chunk覆盖的比例多少
+    After deduplicationkeywordsBlanketchunkWhat percentage is covered?
     """
     hit_num = 0
-    # # 精确匹配
+    # # Exact match
     # for keyword in keywords:
     #     if keyword in chunk:
     #         hit_num += 1
 
-    # 模糊匹配，关键词2/3以上被包含
+    # fuzzy matching, keywords2/3The above is included
     for keyword in keywords:
         res = find_lcsubstr(keyword, chunk)
         if res[1] >= 2 / 3 * len(keyword):
@@ -118,10 +118,10 @@ def match_score(chunk, keywords):
 
 def sort_and_filter_all_chunks(keywords, all_chunks, thr=0.0):
     """
-    1. answer提取关键词，并进行去重处理
-    2. 计算关键词被chunk的覆盖比例（=matched_key_num / all_key_num），依次计算每一个chunk
-    3. 按照覆盖比例从高到低，对chunk进行排序
-    4. 过滤掉覆盖比例小于阈值Thr的chunk，同时至少保留一个chunk（防止阈值过高，把所有的chunk都过滤掉了）
+    1. answerExtract and deduplicate keywords
+    2. Calculated keywords arechunkPercentage of coverage (=matched_key_num / all_key_num), calculate each in turnchunk
+    3. From high to low in terms of coverage ratio, yeschunkSort
+    4. Filter coverage ratio is less than thresholdThrright of privacychunkwhile retaining at least onechunk(To prevent the threshold from being too high, put all thechunkhave been filtered out)
     """
     keywords = set(keywords)
 

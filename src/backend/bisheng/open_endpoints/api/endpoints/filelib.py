@@ -4,6 +4,7 @@ from typing import Dict, List, Optional
 
 from fastapi import (APIRouter, BackgroundTasks, Body, File, Form, HTTPException, Query, Request,
                      UploadFile)
+from loguru import logger
 from starlette.responses import FileResponse
 
 from bisheng.api.services import knowledge_imp
@@ -13,20 +14,18 @@ from bisheng.api.services.knowledge_imp import (decide_vectorstores, delete_es, 
 from bisheng.api.v1.schemas import (ChunkInput, KnowledgeFileOne, KnowledgeFileProcess,
                                     resp_200, resp_500, ExcelRule)
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
-from bisheng.common.services import telemetry_service
-from bisheng.core.logger import trace_id_var
-from bisheng.open_endpoints.domain.schemas.filelib import APIAddQAParam, APIAppendQAParam, QueryQAParam
-from bisheng.open_endpoints.domain.utils import get_default_operator
-from bisheng.core.cache.utils import file_download, save_download_file
 from bisheng.common.errcode.http_error import ServerError
+from bisheng.common.services import telemetry_service
+from bisheng.common.services.config_service import settings
+from bisheng.core.cache.utils import file_download, save_download_file
+from bisheng.core.logger import trace_id_var
+from bisheng.database.models.message import ChatMessageDao
+from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.knowledge.domain.models.knowledge import (KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum,
                                                        KnowledgeUpdate)
 from bisheng.knowledge.domain.models.knowledge_file import (QAKnoweldgeDao, QAKnowledgeUpsert)
-from bisheng.database.models.message import ChatMessageDao
-from bisheng.interface.embeddings.custom import FakeEmbedding
-from bisheng.common.services.config_service import settings
-from loguru import logger
-
+from bisheng.open_endpoints.domain.schemas.filelib import APIAddQAParam, APIAppendQAParam, QueryQAParam
+from bisheng.open_endpoints.domain.utils import get_default_operator
 from bisheng.utils.util import sync_func_to_async
 
 # build router
@@ -35,7 +34,7 @@ router = APIRouter(prefix='/filelib', tags=['OpenAPI', 'Knowledge'])
 
 @router.post('/', status_code=201)
 def create(request: Request, knowledge: KnowledgeCreate):
-    """创建知识库."""
+    """Create Knowledge Base."""
     login_user = get_default_operator()
     db_knowledge = KnowledgeService.create_knowledge(request, login_user, knowledge)
     return resp_200(db_knowledge)
@@ -43,7 +42,7 @@ def create(request: Request, knowledge: KnowledgeCreate):
 
 @router.put('/', status_code=201)
 def update_knowledge(*, request: Request, knowledge: KnowledgeUpdate):
-    """ 更新知识库."""
+    """ Update Knowledge Base."""
     login_user = get_default_operator()
     db_knowledge = KnowledgeService.update_knowledge(request, login_user, knowledge)
     return resp_200(db_knowledge)
@@ -57,7 +56,7 @@ async def get_knowledge(*,
                         name: str = None,
                         page_size: Optional[int] = 10,
                         page_num: Optional[int] = 1):
-    """ 读取所有知识库信息. """
+    """ Read all knowledge base information. """
     knowledge_type = KnowledgeTypeEnum(knowledge_type)
     login_user = get_default_operator()
     res, total = await KnowledgeService.get_knowledge(request, login_user, knowledge_type, name,
@@ -67,16 +66,16 @@ async def get_knowledge(*,
 
 @router.delete('/{knowledge_id}', status_code=200)
 def delete_knowledge_api(*, request: Request, knowledge_id: int):
-    """ 删除知识库信息. """
+    """ Delete Knowledge Base Information. """
     login_user = get_default_operator()
     KnowledgeService.delete_knowledge(request, login_user, knowledge_id)
     return resp_200(message='knowledge deleted successfully')
 
 
-# 清空知识库的所有文件内容
+# Empty all Knowledge Base file contents
 @router.delete('/clear/{knowledge_id}', status_code=200)
 def clear_knowledge_files(*, request: Request, knowledge_id: int):
-    """ 清空知识库的内容. """
+    """ Empty Knowledge Base Contents. """
     login_user = get_default_operator()
     KnowledgeService.delete_knowledge(request, login_user, knowledge_id, only_clear=True)
     return resp_200(message='knowledge clear successfully')
@@ -87,27 +86,27 @@ async def upload_file(
         request: Request,
         knowledge_id: int,
         separator: Optional[List[str]] = Form(default=None,
-                                              description='切分文本规则, 不传则为默认'),
+                                              description='Split text rule, If not passed on, it is the default'),
         separator_rule: Optional[List[str]] = Form(
-            default=None, description='切分规则前还是后进行切分；before/after'),
-        chunk_size: Optional[int] = Form(default=None, description='切分文本长度，不传则为默认'),
+            default=None, description='Segmentation before or after the segmentation rule;before/after'),
+        chunk_size: Optional[int] = Form(default=None, description='Split text length, default if not passed'),
         chunk_overlap: Optional[int] = Form(default=None,
-                                            description='切分文本重叠长度，不传则为默认'),
-        callback_url: Optional[str] = Form(default=None, description='回调地址'),
-        file_url: Optional[str] = Form(default=None, description='文件地址'),
-        file: Optional[UploadFile] = File(default=None, description='上传文件'),
+                                            description='Split text overlap length, default if not passed'),
+        callback_url: Optional[str] = Form(default=None, description='Return URL'),
+        file_url: Optional[str] = Form(default=None, description='File URL'),
+        file: Optional[UploadFile] = File(default=None, description='Upload file'),
         background_tasks: BackgroundTasks = None,
-        retain_images: Optional[int] = Form(default=1, description='保留文档图片'),
-        force_ocr: Optional[int] = Form(default=0, description='启用OCR'),
-        enable_formula: Optional[int] = Form(default=1, description='latex公式识别'),
-        filter_page_header_footer: Optional[int] = Form(default=0, description='过滤页眉页脚'),
+        retain_images: Optional[int] = Form(default=1, description='Keep document image'),
+        force_ocr: Optional[int] = Form(default=0, description='EnableOCR'),
+        enable_formula: Optional[int] = Form(default=1, description='latexFormula Recognition'),
+        filter_page_header_footer: Optional[int] = Form(default=0, description='Filter Header Footer'),
         excel_rule: Optional[ExcelRule] = Form(default={}, description="excel rule"),
 ):
     if file:
         file_name = file.filename
         if not file_name:
             return resp_500(message='file name must be not empty')
-        # 缓存本地
+        # Cache Local
         file_byte = await file.read()
         file_path = save_download_file(file_byte, 'bisheng', file_name)
     else:
@@ -135,7 +134,7 @@ async def upload_file(
 
 @router.delete('/file/{file_id}', status_code=200)
 def delete_knowledge_file(request: Request, file_id: int):
-    """ 删除知识库中的文件 """
+    """ Delete files in the Knowledge Base """
     login_user = get_default_operator()
     KnowledgeService.delete_knowledge_file(request, login_user, [file_id])
     return resp_200()
@@ -143,7 +142,7 @@ def delete_knowledge_file(request: Request, file_id: int):
 
 @router.post('/delete_file', status_code=200)
 def delete_file_batch_api(request: Request, file_ids: List[int]):
-    """ 批量删除知识文件信息 """
+    """ Bulk delete knowledge file information """
     login_user = get_default_operator()
     KnowledgeService.delete_knowledge_file(request, login_user, file_ids)
     return resp_200()
@@ -153,13 +152,13 @@ def delete_file_batch_api(request: Request, file_ids: List[int]):
 def get_filelist(request: Request,
                  knowledge_id: int,
                  keyword: str = None,
-                 status: Optional[int] = None,
+                 status: List[int] = Query(default=None),
                  page_size: int = 10,
                  page_num: int = 1):
-    """ 获取知识库文件信息. """
+    """ Get knowledge base file information. """
     login_user = get_default_operator()
     data, total, flag = KnowledgeService.get_knowledge_files(request, login_user, knowledge_id,
-                                                             keyword, [status], page_num, page_size)
+                                                             keyword, status, page_num, page_size)
     return resp_200(data={'data': data, 'total': total, 'writeable': flag})
 
 
@@ -172,7 +171,7 @@ async def post_chunks(request: Request,
                       chunk_size: Optional[int] = Form(default=None),
                       chunk_overlap: Optional[int] = Form(default=None),
                       file: UploadFile = File(...)):
-    """ 上传文件到知识库内，同步接口 """
+    """ Upload files to the knowledge base and sync the interface """
     file_name = file.filename
     if not file_name:
         return resp_500(message='file name must be not empty')
@@ -195,9 +194,9 @@ async def post_chunks(request: Request,
 
 @router.post('/chunks_string')
 async def post_string_chunks(request: Request, document: ChunkInput):
-    """ 获取知识库文件信息. """
+    """ Get knowledge base file information. """
 
-    # 字符串存入到文件中
+    # String saved to file
     content = '\n\n'.join([doc.page_content for doc in document.documents])
     content_bytes = bytes(content, encoding='utf-8')
     file_name = document.documents[0].metadata.get('source')
@@ -224,18 +223,18 @@ async def post_string_chunks(request: Request, document: ChunkInput):
 
 @router.post('/chunk_clear', status_code=200)
 async def clear_tmp_chunks_data(body: Dict):
-    # 通过接口删除milvus、es 数据
+    # Delete via Interfacemilvus、es DATA
     flow_id = body.get('flow_id')
     chat_id = body.get('chat_id')
 
     if flow_id and not chat_id:
-        # 清理技能下的临时文件
+        # Clean temporary files under the skill
         flow_id = flow_id.replace('-', '')
         collection_name = f'tmp_{flow_id}_1'
         delete_es(collection_name)
         delete_vector(collection_name, None)
     if chat_id:
-        #  查询自动生成的
+        #  Query auto-generated
         message = ChatMessageDao.get_latest_message_by_chatid(chat_id)
         if message:
             collection_name = f'tmp_{message.flow_id}_{chat_id}'
@@ -259,7 +258,7 @@ def dump_vector_knowledge(collection_name: str, expr: str = None, store: str = '
         res_list = vector_store.col.query('file_id>1', output_fields=fields)
         return resp_200(res_list)
     else:
-        return resp_500('参数错误')
+        return resp_500('Parameter salah')
 
 
 @router.get('/download_statistic')
@@ -306,7 +305,7 @@ def append_qa(*,
     knowledge = KnowledgeDao.query_by_id(knowledge_id)
     qa_db = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(data.id)
     if not qa_db:
-        return HTTPException(404, detail='qa 对没有找到')
+        return HTTPException(404, detail='qa Right, nothing found.')
 
     t = qa_db.dict()
     t['answers'] = json.loads(t['answers'])
@@ -318,11 +317,11 @@ def append_qa(*,
 
 @router.delete('/qa/{qa_id}', status_code=200)
 def delete_qa_data(*, qa_id: int, question: Optional[str] = None):
-    """ 删除qa 问题对信息 """
+    """ Deleteqa Question to Information """
     qa = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(qa_id)
     login_user = get_default_operator()
     if not qa:
-        raise HTTPException(status_code=404, detail='qa 不存在')
+        raise HTTPException(status_code=404, detail='qa Does not exist')
 
     if question:
         qa.questions = [q for q in qa.questions if q != question]
@@ -350,11 +349,11 @@ def update_qa(
         original_question: Optional[str] = Body(default=None, embed=True),
         answer: Optional[List[str]] = Body(default=None, embed=True),
 ):
-    """ 删除qa 问题对信息 """
+    """ Deleteqa Question to Information """
     qa = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(id)
 
     if not qa:
-        raise HTTPException(status_code=404, detail='qa 不存在')
+        raise HTTPException(status_code=404, detail='qa Does not exist')
 
     if original_question:
         qa.questions = [q if q != question else question for q in qa.questions]
@@ -376,15 +375,15 @@ def update_qa(
 
 @router.get('/detail_qa', status_code=200)
 def detail_qa(*, id: int):
-    """ 获取问题对信息 """
+    """ Get questions on information """
     qa = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(id)
     return resp_200(qa)
 
 
 @router.post('/query_qa', status_code=200)
 def query_qa(QueryQAParam: QueryQAParam):
-    """ 删除qa 问题对信息 """
-    sources = [1, 2]  # 3 是api倒入的
+    """ Deleteqa Question to Information """
+    sources = [1, 2]  # 3 Yes apiInverted
     qa_list = QAKnoweldgeDao.query_by_condition_v1(source=sources,
                                                    create_start=QueryQAParam.timeRange[0],
                                                    create_end=QueryQAParam.timeRange[1])

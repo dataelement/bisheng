@@ -7,11 +7,11 @@ from ..base import BaseTTSClient
 
 
 class AliyunTTSClient(BaseTTSClient):
-    """阿里云TTS客户端"""
+    """Alibaba CloudTTSClient"""
 
     def __init__(self, api_key: str, **kwargs):
         """
-        初始化阿里云TTS客户端
+        Initialize Alibaba CloudTTSClient
         """
         self.model = kwargs.get("model", "cosyvoice-v2")
         self.voice = kwargs.get("voice", "longxiaochun_v2")
@@ -31,7 +31,7 @@ class AliyunTTSClient(BaseTTSClient):
             format: str = "mp3"
     ) -> bytes:
         """
-        将文本转换为音频
+        Convert text to audio
         :param text:
         :param voice:
         :param language:

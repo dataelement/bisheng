@@ -30,17 +30,17 @@ interface BuiltInMetadata {
 
 const BUILT_IN_METADATA: BuiltInMetadata[] = [
     { name: "document_id", type: "Number" },
-    { name: "document_name", type: "String"},
-    { name: "upload_time", type: "Time"},
-    { name: "update_time", type: "Time"},
-    { name: "uploader", type: "String"},
-    { name: "updater", type: "String"},
-    { name: "abstract", type: "String"},
-    { name: "chunk_index", type: "Number"},
-    { name: "bbox", type: "String"},
-    { name: "page", type: "Number"},
-    { name: "knowledge_id", type: "Number"},
-    { name: "user_metadata", type: "String"},
+    { name: "document_name", type: "String" },
+    { name: "upload_time", type: "Time" },
+    { name: "update_time", type: "Time" },
+    { name: "uploader", type: "String" },
+    { name: "updater", type: "String" },
+    { name: "abstract", type: "String" },
+    { name: "chunk_index", type: "Number" },
+    { name: "bbox", type: "String" },
+    { name: "page", type: "Number" },
+    { name: "knowledge_id", type: "Number" },
+    { name: "user_metadata", type: "String" },
 ]
 
 const TYPE_ICONS = {
@@ -402,10 +402,10 @@ export function MetadataManagementDialog({
                     <DialogHeader>
                         <DialogTitle className={isSmallScreen ? "text-base" : ""}>{t('metaData')}</DialogTitle>
                     </DialogHeader>
-                    <div className="space-y-6">
+                    <div className="meta-dialog space-y-6">
                         <button
                             onClick={handleCreateClick} disabled={!hasManagePermission}
-                            className={cname("w-full flex items-center justify-center gap-2 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors", isSmallScreen ? "py-2" : "py-3")}
+                            className={cname("w-full flex items-center justify-center gap-2 rounded-lg bg-muted hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed transition-colors", isSmallScreen ? "py-2" : "py-3")}
                         >
                             <Plus size={isSmallScreen ? 16 : 20} />
                             <span>{t('createMetadata')}</span>
@@ -415,7 +415,7 @@ export function MetadataManagementDialog({
                             {sortedMetadata.map((metadata) => (
                                 <div
                                     key={metadata.id}
-                                    className={cname("flex items-center justify-between bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors", isSmallScreen ? "p-2 gap-2" : "p-3 gap-3")}
+                                    className={cname("flex items-center justify-between rounded-lg bg-muted hover:bg-accent transition-colors", isSmallScreen ? "p-2 gap-2" : "p-3 gap-3")}
                                 >
                                     <div className="flex items-center gap-2 flex-1">
                                         <span className={isSmallScreen ? "text-base" : "text-lg"}>{TYPE_ICONS[metadata.type]}</span>
@@ -481,10 +481,10 @@ export function MetadataManagementDialog({
                                 </div>
                             </div>
                             <div className="space-y-2">
-                                { BUILT_IN_METADATA.slice(0, 6).map((metadata) => (
+                                {BUILT_IN_METADATA.slice(0, 6).map((metadata) => (
                                     <div
                                         key={metadata.name}
-                                        className={cname("flex items-center bg-gray-50 rounded-lg", isSmallScreen ? "p-2 gap-2" : "p-3 gap-3")}
+                                        className={cname("flex items-center bg-muted rounded-lg", isSmallScreen ? "p-2 gap-2" : "p-3 gap-3")}
                                     >
                                         <span className={isSmallScreen ? "text-base" : "text-lg"}>{TYPE_ICONS[metadata.type]}</span>
                                         <span className={cname("text-gray-500", isSmallScreen ? "text-xs" : "text-sm")}>{metadata.type}</span>

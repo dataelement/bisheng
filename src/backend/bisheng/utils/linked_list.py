@@ -3,45 +3,45 @@ from __future__ import print_function
 
 
 class DoubleNode(object):
-    """节点"""
+    """node_amb"""
 
     def __init__(self, data):
-        # 标识数据域
+        # Identity Data Domain
         self.data = data
-        # 标识前一个链接域
+        # Identify the previous linked domain
         self.prev = None
-        # 标识后一个链接域
+        # Identify the next linked domain
         self.next = None
 
 
 class DoubleLinkList(object):
-    """双链表"""
+    """Double linked watch"""
 
     def head(self):
         return self.__head
 
     def __init__(self, node=None):
-        # 私有属性头结点
+        # Private Attribute Header Node
         self.__head = node
 
-    # is_empty() 链表是否为空
+    # is_empty() Is the linked list empty
     def is_empty(self):
         return self.__head is None
 
-    # length() 链表长度
+    # length() Link List Length
     def length(self):
-        count = 0  # 数目
-        # 当前节点
+        count = 0  # Number
+        # Current Node
         current = self.__head
         while current is not None:
             count += 1
-            # 当前节点往后移
+            # Move the current node backward
             current = current.next
         return count
 
-    # travel() 遍历整个链表
+    # travel() Traverse the entire linked list
     def travel(self):
-        # 访问的当前节点
+        # Current node accessed
         current = self.__head
         print('[ ', end='')
         while current is not None:
@@ -49,103 +49,103 @@ class DoubleLinkList(object):
             current = current.next
         print(']')
 
-    # add(item) 链表头部添加元素
+    # add(item) Adding elements to the head of a linked list
     def add(self, item):
         node = DoubleNode(item)
-        # 新节点的下一个节点为旧链表的头结点
+        # The next node of the new node is the head node of the old linked list
         node.next = self.__head
-        # 新链表的头结点为新节点
+        # The header node of the new linked list is the new node
         self.__head = node
-        # 下一个节点的上一个节点指向新增的节点
+        # The previous node of the next node points to the newly added node
         node.next.prev = node
 
-    # append(item) 链表尾部添加元素
+    # append(item) Add an element at the end of the linked list
     def append(self, item):
         node = DoubleNode(item)
         if self.is_empty():
-            # 为空节点时
+            # When empty node
             self.__head = node
         else:
-            # 让指针指向最后节点
+            # Let the pointer point to the last node
             current = self.__head
             while current.next is not None:
                 current = current.next
-            # 最后节点的下一个为新添加的node
+            # The next of the last node is the newly addednode
             current.next = node
-            # 新添加的结点上一个节点为当前节点
+            # Newly added node The previous node is the current node
             node.prev = current
 
-    # search(item) 查找节点是否存在
+    # search(item) Find out if the node exists
     def search(self, item):
-        # 当前节点
+        # Current Node
         current = self.__head
         while current is not None:
             if current.data == item:
-                # 找到了
+                # Found it.
                 return True
             else:
                 current = current.next
         return False
 
     def find(self, item):
-        # 当前节点
+        # Current Node
         current = self.__head
         while current is not None:
             if current.data == item:
-                # 找到了
+                # Found it.
                 return current
             else:
                 current = current.next
         return None
 
-    # insert(index, item) 指定位置（从0开始）添加元素
+    # insert(index, item) Specify location (from0Start) Add Element
     def insert(self, index, item):
         if index <= 0:
-            # 在前方插入
+            # Insert Before
             self.add(item)
         elif index > (self.length() - 1):
-            # 在最后添加
+            # Add at the end
             self.append(item)
         else:
-            # 创建新节点
+            # Create a new section
             node = DoubleNode(item)
             current = self.__head
-            # 遍历次数
+            # Number of traversals
             count = 0
-            # 查找到插入节点的上一个节点
+            # Find the previous node of the inserted node
             while count < index:
                 count += 1
                 current = current.next
-            # 新节点的下一个节点指向当前节点
+            # The next node of the new node points to the current node
             node.next = current
-            # 新节点的上一个节点指向当前节点的上一个节点
+            # The previous node of the new node points to the previous node of the current node
             node.prev = current.prev
-            # 当前节点的上一个节点的下一个节点指向新节点
+            # The next node of the previous node of the current node points to the new node
             current.prev.next = node
-            # 当前节点的上一个节点指向新节点
+            # The previous node of the current node points to the new node
             current.prev = node
 
-    # remove(item) 删除节点
+    # remove(item) Delete node
     def remove(self, item):
         current = self.__head
         while current is not None:
             if current.data == item:
-                # 找到要删除的节点元素
+                # Locate the node element you want to delete
                 if current == self.__head:
-                    # 头结点
+                    # Head Node
                     self.__head = current.next
                     if current.next:
-                        # 如果不是只剩下一个节点
+                        # If there is not only one node left,
                         current.next.prev = None
                 else:
-                    # 当前节点的上一个节点的下一个节点指向当前节点的下一个节点
+                    # The next node of the previous node of the current node points to the next node of the current node
                     current.prev.next = current.next
                     if current.next:
-                        # 如果不是删除最后一个元素，当前节点的下一个节点的上一个节点指向当前节点的上一个节点
+                        # If the last element is not deleted, the previous node of the next node of the current node points to the previous node of the current node
                         current.next.prev = current.prev
-                return  # 返回当前节点
+                return  # Return to current node
             else:
-                # 没找到，往后移
+                # Nothing found, move backward
                 current = current.next
 
 
@@ -159,7 +159,7 @@ if __name__ == '__main__':
 
 
 
-    print('--------判断是否为空-------')
+    print('--------Determine if it is empty-------')
     print(double_link_list.is_empty())
     node = double_link_list.find('0:hello')
     t = {}
@@ -168,39 +168,39 @@ if __name__ == '__main__':
 
     print("{}",node.next.data)
 
-    print('-----------长度------------')
+    print('-----------Longitudinal------------')
     print(double_link_list.length())
 
     double_link_list.append(2)
     double_link_list.append(3)
     double_link_list.append(5)
 
-    print('-----------遍历------------')
+    print('-----------Step Through------------')
     double_link_list.travel()
 
     double_link_list.add(1)
-    print('-----------遍历------------')
+    print('-----------Step Through------------')
     double_link_list.travel()
     double_link_list.add(0)
-    print('-----------遍历------------')
+    print('-----------Step Through------------')
     double_link_list.travel()
     double_link_list.insert(4, 4)
-    print('-----------遍历------------')
+    print('-----------Step Through------------')
     double_link_list.travel()
     double_link_list.insert(-1, -1)
 
-    print('-----------遍历------------')
+    print('-----------Step Through------------')
     double_link_list.travel()
 
-    print('-----------查找------------')
+    print('-----------Cari------------')
     print(double_link_list.search(4))
 
-    print('-----------删除------------')
+    print('-----------Delete------------')
     double_link_list.remove(5)
     double_link_list.remove(-1)
 
-    print('-----------遍历------------')
+    print('-----------Step Through------------')
     double_link_list.travel()
 
-    print('-----------长度------------')
+    print('-----------Longitudinal------------')
     print(double_link_list.length())

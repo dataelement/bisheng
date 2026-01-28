@@ -1,6 +1,6 @@
-"""数据库基础设施模块
+"""Database Infrastructure Module
 
-提供数据库连接管理、会话管理、事务管理和上下文管理功能
+Provides database connection management, session management, transaction management, and context management capabilities
 """
 
 from .connection import DatabaseConnectionManager  # noqa: F401

@@ -14,11 +14,11 @@ class OutputNode(BaseNode):
 
         # minio
         self._minio_client = get_minio_storage_sync()
-        # 交互类型
+        # Interaction Type
         self._output_type = self.node_params['output_result']['type']
         self._output_result = self.node_params['output_result']['value']
 
-        # 用户处理的结果
+        # Result of user processing
         self._handled_output_result = self._output_result
 
         # user input msg
@@ -29,23 +29,23 @@ class OutputNode(BaseNode):
         self._output_msg = _original_output_msg['msg']
         self._output_files = _original_output_msg['files']
 
-        # 替换变量后消息内容
+        # Message Content After Variable Replacement
         self._parsed_output_msg = ''
         self._parsed_files = []
 
         self._source_documents = []
 
-        # 非选择型交互，则下个节点就是连线的target。选择型交互，需要根据用户输入来判断
+        # Non-selective interaction, then the next node is wiredtarget. Selective interactions, which need to be judged based on user input
         self._next_node_id = [one.target for one in self.target_edges]
 
     def handle_input(self, user_input: dict) -> Any:
-        # 需要存入state，
+        # Needs to be depositedstate，
         self.graph_state.save_context(content=json.dumps(user_input, ensure_ascii=False), msg_sender='human')
         self._handled_output_result = user_input['output_result']
         self.graph_state.set_variable(self.id, 'output_result', user_input['output_result'])
 
     def get_input_schema(self) -> Any:
-        # 说明不需要交互
+        # Explain that no interaction is required
         if self._output_type not in ['input', 'choose']:
             return None
         group_params = self.node_data.dict(include={'group_params'})
@@ -55,7 +55,7 @@ class OutputNode(BaseNode):
         return self._output_type == 'choose'
 
     def route_node(self, state: dict) -> str | list[str]:
-        # 选择型交互需要根据用户的输入，来判断下个节点
+        # Selective interaction requires judging the next node based on the user's input
         if self._output_type == 'choose':
             return self.get_next_node_id(self._handled_output_result)
         return self._next_node_id
@@ -87,7 +87,7 @@ class OutputNode(BaseNode):
         return [ret]
 
     def parse_output_msg(self):
-        """ 填充msg中的变量，获取文件的share地址 """
+        """ Paddingmsgvariable in, get the file'sshare<g id="Bold">Address:</g> """
         self._parsed_output_msg = self.parse_template_msg(self._output_msg)
 
         if self._parsed_files:
@@ -97,7 +97,7 @@ class OutputNode(BaseNode):
             self._parsed_files.append(one)
 
     def send_output_msg(self, unique_id: str):
-        """ 发送output节点的消息 """
+        """ SendoutputNode's Message """
         msg_params = {
             'name': self.name,
             'unique_id': unique_id,
@@ -107,7 +107,7 @@ class OutputNode(BaseNode):
             'output_key': '',
             'source_documents': self._source_documents
         }
-        # 需要交互则有group_params
+        # where interaction is required, there isgroup_params
         if self._output_type == 'input':
             msg_params['key'] = 'output_result'
             msg_params['input_msg'] = self.parse_template_msg(self._output_result)
@@ -128,7 +128,7 @@ class OutputNode(BaseNode):
             var_map = {}
             for one in variables:
                 node_id = one.split('.')[0]
-                # 引用qa知识库节点时，展示溯源情况
+                # CiteqaDemonstrate traceability when using the Knowledge Base node
                 if node_id.startswith('qa_retriever'):
                     self._source_documents = self.graph_state.get_variable(node_id, '$retrieved_result$')
                 var_map[one] = self.get_other_node_variable(one)

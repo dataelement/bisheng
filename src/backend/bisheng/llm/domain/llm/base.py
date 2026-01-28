@@ -10,7 +10,7 @@ from ..models import LLMModel, LLMServer, LLMDao
 class BishengBase(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True, validate_by_name=True, validate_by_alias=True)
 
-    model_id: int = Field(description="后端服务保存的model唯一ID")
+    model_id: int = Field(description="Saved by backend servicemodelUniqueness quantificationID")
     model_name: str = Field(default='', description='model name in mysql')
 
     # field for telemetry logging
@@ -19,9 +19,9 @@ class BishengBase(BaseModel):
     app_name: str = Field(..., description='application name')
     user_id: int = Field(..., description='invoke user id')
 
-    # bisheng强相关的业务参数
-    model_info: Optional[LLMModel] = Field(default=None, description="模型配置信息")
-    server_info: Optional[LLMServer] = Field(default=None, description="服务提供方信息")
+    # bishengStrongly related business parameters
+    model_info: Optional[LLMModel] = Field(default=None, description="Model Configuration Information")
+    server_info: Optional[LLMServer] = Field(default=None, description="Service Provider Information")
 
     @classmethod
     async def get_class_instance(cls, **kwargs: Dict) -> Self:
@@ -59,13 +59,13 @@ class BishengBase(BaseModel):
         return model_info, server_info
 
     async def update_model_status(self, status: int, remark: str = ''):
-        """更新模型状态"""
+        """Update model status"""
         if self.model_info.status != status:
             self.model_info.status = status
-            await LLMDao.aupdate_model_status(self.model_id, status, remark[-500:])  # 限制备注长度为500字符
+            await LLMDao.aupdate_model_status(self.model_id, status, remark[-500:])  # Limit note length to500characters. 
 
     def sync_update_model_status(self, status: int, remark: str = ''):
-        """更新模型状态"""
+        """Update model status"""
         if self.model_info.status != status:
             self.model_info.status = status
             LLMDao.update_model_status(self.model_id, status, remark[-500:])

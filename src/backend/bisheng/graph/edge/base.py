@@ -41,7 +41,7 @@ class Edge:
             self._source_handle = edge.get('sourceHandle', '')
             self._target_handle = edge.get('targetHandle', '')
             # 'BaseLoader;BaseOutputParser|documents|PromptTemplate-zmTlD'
-            # target_param is documents 兼容处理嵌套group
+            # target_param is documents Compatible processing nestinggroup
             self.target_param = self._target_handle.split('|')[1].split(f'_{self.target_id}')[0]
         # 'BaseLoader;BaseOutputParser|documents|PromptTemplate-zmTlD'
         # target_param is documents

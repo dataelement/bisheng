@@ -187,7 +187,7 @@ def update_target_handle(
     Returns:
         dict: The updated edge.
     """
-    # 兼容逻辑
+    # Compatibility Logic
     for node in g_nodes:
         if node['id'] in new_edge['targetHandle']:
             new_edge['target'] = node['id']
@@ -289,7 +289,7 @@ def find_next_node(graph_data: Dict, node_id: str) -> List[Dict]:
 
 def cut_graph_bynode(graph_data: Dict, node_id: str) -> List[Dict]:
     """
-    通过node_id 找到和node相关的所有依赖节点。
+    Setujunode_id Find andnodeAll dependent nodes involved.
     """
     nodes = graph_data.get('nodes', [])
     edges = graph_data.get('edges', [])

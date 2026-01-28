@@ -6,27 +6,27 @@ class StatusEnum(str, Enum):
     FAILED = 'failed'
 
 
-# 广义应用类型枚举
+# Generalized application type enumeration
 class ApplicationTypeEnum(str, Enum):
-    """应用类型枚举"""
+    """App Type Enumeration"""
 
-    # 工作流应用
+    # Workflow Apps
     WORKFLOW = "workflow"
-    # 技能应用
+    # Skill application
     SKILL = "skill"
-    # 助手应用
+    # Assistant App
     ASSISTANT = "assistant"
-    # 灵思应用
+    # Inspiration App
     LINSIGHT = "linsight"
-    # 日常对话应用
+    # Daily Conversation App
     DAILY_CHAT = "daily_chat"
-    # 知识库应用
+    # Knowledge Base Application
     KNOWLEDGE_BASE = "knowledge_base"
-    # RAG溯源
+    # RAGBack
     RAG_TRACEABILITY = "rag_traceability"
-    # 评测应用
+    # Review Apps
     EVALUATION = "evaluation"
-    # 模型连通性测试
+    # Model Connectivity Testing
     MODEL_TEST = "model_test"
     # ASR
     ASR = "asr"
@@ -37,52 +37,52 @@ class ApplicationTypeEnum(str, Enum):
 
 
 class BaseTelemetryTypeEnum(str, Enum):
-    """基础的遥测事件类型枚举"""
+    """Basic Telemetry Event Type Enumeration"""
 
-    # 用户登录事件
+    # User Login Events
     USER_LOGIN = "user_login"
 
-    # 工具调用事件
+    # Tool Call Event
     TOOL_INVOKE = "tool_invoke"
 
-    # 新增会话事件
+    # Add Session Event
     NEW_MESSAGE_SESSION = "new_message_session"
 
-    # 文件解析事件
+    # File Parsing Event
     FILE_PARSE = "file_parse"
 
-    # 删除会话事件
+    # Delete Session Event
     DELETE_MESSAGE_SESSION = "delete_message_session"
 
-    # 新建应用事件
+    # New App Event
     NEW_APPLICATION = "new_application"
 
-    # 编辑应用事件
+    # Edit App Event
     EDIT_APPLICATION = "edit_application"
 
-    # 删除应用事件
+    # Delete app event
     DELETE_APPLICATION = "delete_application"
 
-    # 新增知识库事件
+    # Add Knowledge Base Event
     NEW_KNOWLEDGE_BASE = "new_knowledge_base"
 
-    # 删除知识库事件
+    # Delete Knowledge Base Event
     DELETE_KNOWLEDGE_BASE = "delete_knowledge_base"
 
-    # 知识库文件上传事件
+    # Knowledge Base File Upload Event
     NEW_KNOWLEDGE_FILE = "new_knowledge_file"
 
-    # 知识库文件删除事件
+    # Knowledge Base File Delete Event
     DELETE_KNOWLEDGE_FILE = "delete_knowledge_file"
 
-    # 会话消息反馈事件
+    # Session Message Feedback Event
     MESSAGE_FEEDBACK = "message_feedback"
 
-    # 模型调用事件
+    # Model Call Event
     MODEL_INVOKE = "model_invoke"
 
-    # 在线会话数
+    # Number of online sessions
     APPLICATION_ALIVE = "application_alive"
 
-    # 会话运行时长
+    # Session Run Time
     APPLICATION_PROCESS = "application_process"

@@ -343,10 +343,10 @@ class VectorStoreFrontendNode(FrontendNode):
             field.show = True
             field.advanced = False
             field.value = ''
-            field.field_type = 'knowledge_one'  # 知识库单选类型，前端渲染单选列表
+            field.field_type = 'knowledge_one'  # Knowledge base radio type, front-end rendering radio list
             if name == 'MilvusWithPermissionCheck':
                 field.is_list = True
-                field.field_type = 'knowledge_list'  # 知识库多选类型，前端渲染多选列表
+                field.field_type = 'knowledge_list'  # Knowledge base multi-select type, front-end rendering multi-select list
                 field.required = True
         elif field.name == 'index_name':
             field.show = True
@@ -355,7 +355,7 @@ class VectorStoreFrontendNode(FrontendNode):
             field.field_type = 'knowledge_one'
             if name == 'ElasticsearchWithPermissionCheck':
                 field.is_list = True
-                field.field_type = 'knowledge_list'  # 知识库多选类型，前端渲染多选列表
+                field.field_type = 'knowledge_list'  # Knowledge base multi-select type, front-end rendering multi-select list
                 field.required = True
 
         elif field.name in basic_fields:

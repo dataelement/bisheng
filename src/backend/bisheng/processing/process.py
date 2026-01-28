@@ -117,7 +117,7 @@ def process_inputs(inputs: Optional[dict], artifacts: Dict[str, Any], input_key:
             continue
         elif key not in inputs or not inputs[key]:
             inputs[key] = value
-    # 针对api设置default input，防止技能变更后，输入变化
+    # For 7mmx7mmx10mm of blood clot,apiPengaturandefault inputto prevent the entry of changes after skill changes
     if input_key not in inputs and 'default_input' in inputs:
         inputs[input_key] = inputs.pop('default_input')
     elif 'default_input' in inputs:

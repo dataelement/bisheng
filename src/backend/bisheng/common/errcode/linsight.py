@@ -3,120 +3,120 @@ from bisheng.common.errcode.base import BaseErrorCode
 
 class SopFileError(BaseErrorCode):
     Code: int = 11010
-    Msg: str = 'SOP文件格式不符合要求'
+    Msg: str = 'SOPFile format does not meet requirements'
 
 
 class SopShowcaseError(BaseErrorCode):
     Code: int = 11011
-    Msg: str = 'SOP设置精选案例失败'
+    Msg: str = 'SOPFailed to set featured case'
 
 
 class FileUploadError(BaseErrorCode):
-    __doc__ = 'Linsight上传文件失败'
+    __doc__ = 'LinsightFailed to upload documents'
     Code: int = 11020
-    Msg: str = '文件上传失败'
+    Msg: str = 'Upload Failed'
 
 
-# 您的灵思使用次数已用完，请使用新的邀请码激活灵思功能
+# Your Idea has run out of uses, please use the new invite code to activate the Idea feature
 class LinsightUseUpError(BaseErrorCode):
     Code: int = 11030
-    Msg: str = '您的灵思使用次数已用完，请使用新的邀请码激活灵思功能'
+    Msg: str = 'Your Idea has run out of uses, please use the new invite code to activate the Idea feature'
 
 
-# 提交灵思用户问题失败
+# Failed to submit Idea User Issue
 class LinsightQuestionError(BaseErrorCode):
     Code: int = 11040
-    Msg: str = '提交灵思用户问题失败'
+    Msg: str = 'Failed to submit Idea User Issue'
 
 
-# 请联系管理员检查工作台向量检索模型状态
+# Please contact the administrator to check the status of the workbench vector retrieval model
 class LinsightVectorModelError(BaseErrorCode):
     Code: int = 11050
-    Msg: str = '请联系管理员检查工作台向量检索模型状态'
+    Msg: str = 'Please contact the administrator to check the status of the workbench vector retrieval model'
 
 
-# 指导手册检索失败，向量检索与关键词检索均不可用
+# Instruction manual retrieval failed, vector retrieval and keyword retrieval are not available
 class LinsightDocSearchError(BaseErrorCode):
     Code: int = 11060
-    Msg: str = '指导手册检索失败，向量检索与关键词检索均不可用'
+    Msg: str = 'Instruction manual retrieval failed, vector retrieval and keyword retrieval are not available'
 
 
-# 指导手册检索失败
+# Guidebook retrieval failed
 class LinsightDocNotFoundError(BaseErrorCode):
     Code: int = 11070
-    Msg: str = '指导手册检索失败'
+    Msg: str = 'Guidebook retrieval failed'
 
 
-# 初始化灵思工作台工具失败
+# Failed to initialize the Inspiration Workbench tool
 class LinsightToolInitError(BaseErrorCode):
     Code: int = 11080
-    Msg: str = '初始化灵思工作台工具失败'
+    Msg: str = 'Failed to initialize the Inspiration Workbench tool'
 
 
-# 灵思Bisheng LLM相关错误
+# InspirationBisheng LLMRelated Errors
 class LinsightBishengLLMError(BaseErrorCode):
     Code: int = 11090
-    Msg: str = '灵思Bisheng LLM相关错误'
+    Msg: str = 'InspirationBisheng LLMRelated Errors'
 
 
-# 生成SOP内容失败
+# BuatSOPContent failed
 class LinsightGenerateSopError(BaseErrorCode):
     Code: int = 11100
-    Msg: str = '生成SOP内容失败'
+    Msg: str = 'BuatSOPContent failed'
 
 
-# 修改SOP内容失败
+# ChangeSOPContent failed
 class LinsightModifySopError(BaseErrorCode):
     Code: int = 11110
-    Msg: str = '修改SOP内容失败'
+    Msg: str = 'ChangeSOPContent failed'
 
 
-# 灵思会话版本已完成或正在执行，无法再次执行
+# The Inspiration session version has been completed or is being executed and cannot be executed again
 class LinsightSessionVersionRunningError(BaseErrorCode):
     Code: int = 11120
-    Msg: str = '灵思会话版本已完成或正在执行，无法再次执行'
+    Msg: str = 'The Inspiration session version has been completed or is being executed and cannot be executed again'
 
 
-# 开始执行灵思任务失败
+# Failed to start the Ideas task
 class LinsightStartTaskError(BaseErrorCode):
     Code: int = 11130
-    Msg: str = '开始执行灵思任务失败'
+    Msg: str = 'Failed to start the Ideas task'
 
 
-# 获取灵思队列排队状态失败
+# Failed to get Ideas queue queue status
 class LinsightQueueStatusError(BaseErrorCode):
     Code: int = 11140
-    Msg: str = '获取灵思队列排队状态失败'
+    Msg: str = 'Failed to get Ideas queue queue status'
 
 
-# 添加指导手册失败，向量存储添加数据失败
+# Failed to add instruction manual, failed to add data for vector store
 class LinsightAddSopError(BaseErrorCode):
     Code: int = 11150
-    Msg: str = '添加指导手册失败，向量存储添加数据失败'
+    Msg: str = 'Failed to add instruction manual, failed to add data for vector store'
 
 
-# 更新指导手册失败，向量存储更新数据失败
+# Failed to update the instruction manual, vector store update data failed
 class LinsightUpdateSopError(BaseErrorCode):
     Code: int = 11160
-    Msg: str = '更新指导手册失败，向量存储更新数据失败'
+    Msg: str = 'Failed to update the instruction manual, vector store update data failed'
 
 
-# 删除指导手册失败，向量存储删除数据失败
+# Failed to delete instruction manual, failed to delete data in vector store
 class LinsightDeleteSopError(BaseErrorCode):
     Code: int = 11170
-    Msg: str = '删除指导手册失败，向量存储删除数据失败'
+    Msg: str = 'Failed to delete instruction manual, failed to delete data in vector store'
 
 
 class SopContentOverLimitError(BaseErrorCode):
     Code: int = 11171
-    Msg: str = '{sop_name}内容超长'
+    Msg: str = '{sop_name}The content is too long'
 
 
 class InviteCodeInvalidError(BaseErrorCode):
     Code: int = 11180
-    Msg: str = '您输入的邀请码无效'
+    Msg: str = 'The invite code you entered is invalid'
 
 
 class InviteCodeBindError(BaseErrorCode):
     Code: int = 11190
-    Msg: str = '已绑定其他邀请码'
+    Msg: str = 'Additional invite codes bound'

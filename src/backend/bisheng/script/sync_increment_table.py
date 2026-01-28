@@ -3,6 +3,7 @@ from datetime import datetime
 from bisheng.api.services.workflow import WorkFlowService
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.user.domain.services.user import UserService
+from bisheng.worker import sync_mid_user_interact_dtl
 from bisheng.worker.telemetry.mid_table import sync_mid_user_increment, sync_mid_knowledge_increment, \
     sync_mid_app_increment
 
@@ -46,7 +47,14 @@ def sync_app_increment_table_all():
     sync_mid_app_increment(start_date, end_date)
 
 
+def sync_user_interact_dtl_all():
+    first_date = datetime(2025, 12, 1).isoformat()
+    end_date = datetime.now().isoformat()
+    sync_mid_user_interact_dtl(first_date, end_date)
+
+
 if __name__ == '__main__':
     sync_user_increment_table_all()
     sync_knowledge_increment_table_all()
     sync_app_increment_table_all()
+    sync_user_interact_dtl_all()

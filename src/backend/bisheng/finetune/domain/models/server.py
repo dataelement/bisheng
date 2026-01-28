@@ -10,7 +10,7 @@ from bisheng.core.database import get_async_db_session
 
 class ServerBase(SQLModelSerializable):
     endpoint: str = Field(index=False)
-    sft_endpoint: str = Field(default='', index=False, description='Finetune服务地址')
+    sft_endpoint: str = Field(default='', index=False, description='FinetuneService Address')
     server: str = Field(index=True)
     remark: Optional[str] = Field(default=None, index=False)
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
@@ -23,7 +23,7 @@ class Server(ServerBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
 
 
-# 封装业务操作
+# Package business operations
 class ServerDao(ServerBase):
     @classmethod
     async def find_server(cls, server_id: int) -> Server | None:

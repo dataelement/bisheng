@@ -34,6 +34,7 @@ export default function Parameter({
     onOutPutChange,
     onStatusChange,
     onVarEvent,
+    onAddSysPrompt,
     selectedKnowledgeIds
 }: {
     nodeId: string;
@@ -42,6 +43,7 @@ export default function Parameter({
     onOutPutChange: (key: string, value: any) => void;
     onStatusChange: (key: string, obj: any) => void;
     onVarEvent: (key: string, obj: any) => void;
+    onAddSysPrompt: (type: 'knowledge' | 'sql') => void;
     onFouceUpdate: () => void;
 }) {
 
@@ -57,6 +59,12 @@ export default function Parameter({
     const bindVarValidate = (validate: any) => {
         onVarEvent(item.key, { param: item, validate });
     };
+
+    const addSysPrompt = (type: 'knowledge' | 'sql') => {
+        if (node.type === 'agent') {
+            onAddSysPrompt(type);
+        }
+    }
 
     const i18nPrefix = `node.${node.type}.${item.key}.`
 
@@ -148,7 +156,10 @@ export default function Parameter({
             return <KnowledgeSelectItem
                 nodeId={nodeId}
                 data={item}
-                onChange={handleOnNewValue}
+                onChange={(val) => {
+                    handleOnNewValue(val)
+                    addSysPrompt('knowledge')
+                }}
                 onValidate={bindValidate}
                 onVarEvent={bindVarValidate}
                 i18nPrefix={i18nPrefix}
@@ -194,7 +205,10 @@ export default function Parameter({
             return <ReportItem nodeId={nodeId} data={item} onChange={handleOnNewValue} onValidate={bindValidate} i18nPrefix={i18nPrefix}
             />;
         case 'sql_config':
-            return <SqlConfigItem nodeId={nodeId} data={item} onChange={handleOnNewValue} onValidate={bindValidate} i18nPrefix={i18nPrefix}
+            return <SqlConfigItem nodeId={nodeId} data={item} onChange={(val) => {
+                handleOnNewValue(val)
+                val.open && addSysPrompt('sql')
+            }} onValidate={bindValidate} i18nPrefix={i18nPrefix}
             />;
         case 'select_fileaccept':
             return <FileTypeSelect

@@ -10,12 +10,12 @@ from bisheng.user.domain.repositories.interfaces.user_repository import UserRepo
 
 
 class UserRepositoryImpl(BaseRepositoryImpl[User, int], UserRepository):
-    """共享链接仓库实现"""
+    """Shared link repository implementation"""
 
     def __init__(self, session: Union[AsyncSession, Session]):
         super().__init__(session, User)
 
-    # 根据user_id获取用户信息 user、user_groups、roles
+    # accordinguser_idget user info user、user_groups、roles
     async def get_user_with_groups_and_roles_by_user_id(self, user_id: int) -> User | None:
         statement = (
             select(User).where(User.user_id == user_id).options(

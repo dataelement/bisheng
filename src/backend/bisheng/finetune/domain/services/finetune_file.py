@@ -14,7 +14,7 @@ from ..models.preset_train import PresetTrain, PresetTrainDao
 
 
 class FinetuneFileService(BaseModel):
-    """ 训练任务 文件管理 """
+    """ Training Tasks File management """
 
     @classmethod
     async def upload_file(cls, files: List[UploadFile], is_preset: bool,
@@ -22,10 +22,10 @@ class FinetuneFileService(BaseModel):
         if len(files) == 0:
             raise TrainFileNotExistError()
 
-        # 将训练文件上传到minio
+        # Upload training files tominio
         file_root = cls.get_upload_file_root(is_preset)
         file_list = await cls.upload_file_to_minio(files, file_root, user)
-        # 将预置数据存入数据库
+        # Store preset data in database
         if is_preset:
             logger.info(f'save preset file : {file_list}')
             file_list = await PresetTrainDao.insert_batch(file_list)
@@ -34,14 +34,14 @@ class FinetuneFileService(BaseModel):
     @classmethod
     async def upload_preset_file(cls, name: str, preset_type: int, file_path: str,
                                  user: UserPayload) -> PresetTrain:
-        # 将训练文件上传到minio
+        # Upload training files tominio
         file_root = cls.get_upload_file_root(False)
         file_id = generate_uuid()
         file_ext = os.path.basename(file_path).split('.')[-1]
         object_name = f'{file_root}/{file_id}.{file_ext}'
         minio_client = await get_minio_storage()
         await minio_client.put_object(bucket_name=minio_client.bucket, object_name=object_name, file=file_path)
-        # 将预置数据存入数据库
+        # Store preset data in database
         file_info = PresetTrain(id=file_id,
                                 name=name,
                                 url=object_name,

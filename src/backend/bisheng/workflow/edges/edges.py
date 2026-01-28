@@ -61,7 +61,7 @@ class EdgeManage:
         """ get all branch nodes from start node to end node """
         branches = []
         def get_node_branch(node_id, branch: List, node_map: dict):
-            # 已经遍历过的节点不再遍历，说明成环了
+            # The nodes that have been traversed are no longer traversed, indicating that they are looped
             if node_id in node_map or node_id == end_node_id:
                 branch.append(node_id)
                 branches.append(branch)
@@ -83,14 +83,14 @@ class EdgeManage:
 
     def get_next_nodes(self, node_id: str, exclude: Optional[List[str]] = None) -> List[str] | None:
         """ get all next nodes by node id"""
-        # 获取直接的下游节点
+        # Get direct downstream nodes
         output_nodes = self.get_target_node(node_id)
         if not output_nodes:
             return []
         if not exclude:
             exclude = [node_id]
 
-        # 排除指定的节点
+        # Exclude specified nodes
         for one in exclude:
             if one in output_nodes:
                 output_nodes.remove(one)

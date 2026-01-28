@@ -7,7 +7,7 @@ class IgnoreException(Exception):
         return self.message
 
 
-# 业务异常抛出错误信息用
+# For business exception throwing error message
 class MessageException(Exception):
     def __init__(self, message):
         self.message = message

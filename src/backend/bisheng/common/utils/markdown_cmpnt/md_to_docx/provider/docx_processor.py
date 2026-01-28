@@ -24,10 +24,10 @@ from bisheng.common.utils.markdown_cmpnt.md_to_docx.utils.style_enum import MDX_
 class DocxProcessor:
     def __init__(self, style_conf: dict, debug_state: bool = False, show_image_desc: bool = True):
         """
-        初始化DocxProcessor
-        :param style_conf: 样式配置字典
-        :param debug_state: 是否开启调试模式
-        :param show_image_desc: 是否显示图片的描述，即 `![desc](src/img)` 中 desc的内容
+        InisialisasiDocxProcessor
+        :param style_conf: Style Configuration Dictionary
+        :param debug_state: Whether to turn on debug mode
+        :param show_image_desc: Whether to display the description of the picture, i.e. `![desc](src/img)` II descThe contents of the
         """
         self.document = Document()
         self.debug_state = debug_state
@@ -36,7 +36,7 @@ class DocxProcessor:
             StyleManager(self.document, style_conf).init_styles()
 
     def debug(self, *args):
-        """调试输出"""
+        """Debug Output"""
         if self.debug_state:
             print(*args)
 
@@ -44,28 +44,28 @@ class DocxProcessor:
     def add_heading(self, content: str, tag: str):
         level: int = int(tag.__getitem__(1))
         p = self.document.add_paragraph(content, style="Heading%d" % level)
-        # 强制设置标题不分页
+        # Force title not pagination
         p.paragraph_format.page_break_before = False
         p.paragraph_format.keep_with_next = True
         return p
 
     def add_run(self, p: Paragraph, content: str, char_style: str = "plain"):
-        # fixme 行内的样式超过一个的句子会被忽略，如：
-        # <u>**又加粗又*斜体*又下划线**</u>
+        # fixme Sentences with more than one style in a row are ignored, such as:
+        # <u>**Bold and*Italic*Underline again**</u>
         self.debug("[%s]:" % char_style, content)
         run = p.add_run(content)
 
-        # 标准化标签名 - 将 HTML5 标签映射到标准样式
+        # Standardized label name - will be HTML5 Label mapping to standard styles
         style_map = {
-            'b': 'strong',      # <b> -> 粗体
-            'i': 'em',          # <i> -> 斜体
-            'del': 'strike',    # <del> -> 删除线
-            'mark': 'highlight' # <mark> -> 高亮
+            'b': 'strong',      # <b> -> Bold
+            'i': 'em',          # <i> -> Italic
+            'del': 'strike',    # <del> -> Strikethrough
+            'mark': 'highlight' # <mark> -> Gao Liang
         }
         char_style = style_map.get(char_style, char_style)
 
-        # 不应当使用形如 run.bold = (char_style=="strong") 的方式
-        # 因为没有显式加粗，不意味着整体段落不加粗。
+        # Should not be used in the form of run.bold = (char_style=="strong") to be
+        # Because there is no explicit bolding, it does not mean that the whole paragraph is not bold.
         if char_style == "strong":
             run.bold = True
         if char_style == "em":
@@ -84,44 +84,44 @@ class DocxProcessor:
         #     run.font.name = "Consolas"
 
     def add_code_block(self, pre_tag):
-        # TODO 代码块样式
-        # TODO 设置代码块（表格）中的中文字体，似乎只能通过指定 已设置好中文字体的样式 来达到目的
+        # TODO Code-Block Styles
+        # TODO Set the Chinese font in the code block (table), it seems that it can only be specified by Chinese fonts are styled to get there.
         code_table = self.document.add_table(0, 1, style=MDX_STYLE.TABLE)
         row_cells = code_table.add_row().cells
 
-        # 安全检查：确保代码块有内容
+        # Security check: Make sure the code block has content
         if pre_tag.contents and len(pre_tag.contents) > 0 and pre_tag.contents[0].string:
             code_text = pre_tag.contents[0].string.rstrip('\n')
             run = row_cells[0].paragraphs[0].add_run(code_text)
             run.font.name = "Consolas"
         else:
-            # 如果代码块为空，添加空白占位
+            # If the code block is empty, add a blank placeholder
             run = row_cells[0].paragraphs[0].add_run("")
             run.font.name = "Consolas"
 
     def add_picture(self, img_tag, parent_paragraph: Paragraph = None):
         """
-        添加图片到文档
-        :param img_tag: 图片标签
-        :param parent_paragraph: 父段落。如果提供,图片将内嵌在该段落中;否则创建新的独立段落
+        Adding Images to Documents
+        :param img_tag: Images Tab
+        :param parent_paragraph: Parent paragraph. If provided,Images will be embedded in the paragraph;Otherwise create a new standalone paragraph
         """
-        # 如果没有提供父段落,创建新的独立段落(居中显示)
+        # If no parent paragraph is provided,Create a new standalone paragraph(Appear from center)
         if parent_paragraph is None:
             p: Paragraph = self.document.add_paragraph()
             p.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
             p.paragraph_format.first_line_indent = 0
         else:
-            # 使用提供的父段落(内嵌模式)
+            # Use provided parent paragraph(Embedded Mode)
             p = parent_paragraph
 
         run: Run = p.add_run()
 
         img_src: str
-        scale: float = 100  # 优先级最高，单位 %
+        scale: float = 100  # Highest priority, unit %
         width_px: int = 100
         height_px: int = 100
 
-        # 设置宽度
+        # Set width
         if img_tag.get("style"):
             style_content: str = img_tag["style"]
             img_attr: list = style_content.strip().split(";")
@@ -129,7 +129,7 @@ class DocxProcessor:
             attr: str
             for attr in img_attr:
                 if attr.find("width") != -1:
-                    # TODO 处理 style 中的宽度和高度属性
+                    # TODO <g id="Bold">Medical Treatment:</g> style Medium Width and Height Properties
                     width_px = int(re.findall(r"\d+", attr)[0])
                 if attr.find("height") != -1:
                     height_px = int(re.findall(r"\d+", attr)[0])
@@ -138,7 +138,7 @@ class DocxProcessor:
 
         if img_tag["src"] != "":
             img_src = img_tag["src"]
-            # 网络图片
+            # webauthn
             if img_src.startswith("http://") or img_src.startswith("https://"):
                 print("[IMAGE] fetching:", img_src)
                 try:
@@ -154,7 +154,7 @@ class DocxProcessor:
                 except Exception as e:
                     print(f"[RESOURCE ERROR] {type(e).__name__}: {e} - {img_src}")
             else:
-                # 本地图片
+                # Location Image
                 try:
                     run.add_picture(img_src, width=Inches(5.7 * scale / 100))
                 except FileNotFoundError:
@@ -162,7 +162,7 @@ class DocxProcessor:
                 except Exception as e:
                     print(f"[RESOURCE ERROR] Failed to load image: {type(e).__name__}: {e} - {img_src}")
         else:
-            # 网络图片
+            # webauthn
             img_src = img_tag["title"]
             print("[IMAGE] fetching:", img_src)
             try:
@@ -178,10 +178,10 @@ class DocxProcessor:
             except Exception as e:
                 print(f"[RESOURCE ERROR] {type(e).__name__}: {e} - {img_src}")
 
-        # 如果选择展示图片描述，那么描述会在图片下方显示
-        # 注意：只有在独立段落模式下才添加描述(避免打断段落流)
+        # If you choose to display an image description, the description will appear below the image
+        # Note: Add descriptions only in standalone paragraph mode(Avoid interrupting paragraph flow)
         if parent_paragraph is None and self.show_image_desc and img_tag.get("alt"):
-            # TODO 图片描述的显示样式
+            # TODO Display style for image description
             desc: Paragraph = self.document.add_paragraph(img_tag["alt"], style=MDX_STYLE.CAPTION)
             desc.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
             desc.style.font.color.rgb = RGBColor(11, 11, 11)
@@ -189,7 +189,7 @@ class DocxProcessor:
             desc.paragraph_format.first_line_indent = 0
 
     def add_table(self, table_root):
-        # 统计列数 - 优先从 thead 获取，否则从 tbody 第一行获取
+        # Number of statistical columns - Preferred From thead Fetch, otherwise from tbody Get on the first line
         col_count: int = 0
         has_thead = False
 
@@ -199,7 +199,7 @@ class DocxProcessor:
                 if col.name in ['th', 'td']:
                     col_count += 1
         elif table_root.tbody:
-            # 从 tbody 第一行统计列数
+            # FROM tbody Number of columns in the first row
             first_row = table_root.tbody.find('tr')
             if first_row:
                 for col in first_row.contents:
@@ -207,12 +207,12 @@ class DocxProcessor:
                         col_count += 1
 
         if col_count == 0:
-            # 容错：如果没有找到列数，默认为1
+            # Fault tolerance: if the number of columns is not found, the default is1
             col_count = 1
 
-        table = self.document.add_table(0, col_count, style=MDX_STYLE.TABLE)  # TODO 表格样式
+        table = self.document.add_table(0, col_count, style=MDX_STYLE.TABLE)  # TODO Table Style
 
-        # 表格头行（如果存在）
+        # Table header row (if present)
         if has_thead:
             head_row_cells = table.add_row().cells
             i = 0
@@ -222,7 +222,7 @@ class DocxProcessor:
                     head_row_cells[i].paragraphs[0].add_run(cell_text).bold = True
                     i += 1
 
-        # 数据行
+        # Data Line
         if table_root.tbody:
             for tr in table_root.tbody:
                 if tr.name != 'tr':
@@ -238,45 +238,45 @@ class DocxProcessor:
     def add_number_list(self, number_list):
         # print(number_list.contents, "\n")
         for item in number_list.children:
-            if item.name != 'li':  # 跳过非 li 标签
+            if item.name != 'li':  # Skip non- li label
                 continue
 
-            # 获取直接文本内容(不包括子标签)
+            # Get direct text content(Exclude subtags)
             direct_text = ''.join([str(s) for s in item.find_all(text=True, recursive=False)]).strip()
 
-            # 检查是否有段落标签
+            # Check if there are paragraph tags
             has_paragraph_tag = item.find('p') is not None
 
-            # 如果有直接文本,添加段落
+            # If there is direct text,Add your paragraph
             if direct_text:
                 self.add_paragraph(item, p_style=MDX_STYLE.LIST_NUMBER) \
-                    .style.paragraph_format.space_after = Pt(1)  # TODO 数字列表样式
-            # 如果没有直接文本但有 <p> 标签,处理 <p> 标签
+                    .style.paragraph_format.space_after = Pt(1)  # TODO Number List Style
+            # If there is no direct text but there is <p> label,<g id="Bold">Medical Treatment:</g> <p> label
             elif has_paragraph_tag:
                 para_count = 0
                 for child in item.children:
                     if hasattr(child, 'name') and child.name == 'p':
                         if para_count == 0:
-                            # 第一个 <p> 使用列表样式
+                            # first <p> Use list style
                             self.add_paragraph(child, p_style=MDX_STYLE.LIST_NUMBER) \
                                 .style.paragraph_format.space_after = Pt(1)
                         else:
-                            # 后续 <p> 使用续行样式
+                            # Additional <p> Use continuation style
                             self.add_paragraph(child, p_style=MDX_STYLE.LIST_CONTINUE) \
                                 .style.paragraph_format.space_after = Pt(1)
                         para_count += 1
 
-            # 处理嵌套的有序列表
+            # Working with Nested Ordered Lists
             if hasattr(item, "ol") and item.ol is not None:
-                sub_num: int = 1  # 子序号
+                sub_num: int = 1  # Sub-Serial Number
                 for item2 in item.ol.children:
                     if item2.name != 'li':
                         continue
                     self.add_paragraph(item2, prefix="(%d). " % sub_num, p_style=MDX_STYLE.LIST_CONTINUE) \
-                        .style.paragraph_format.first_line_indent = 0  # TODO 数字列表样式
+                        .style.paragraph_format.first_line_indent = 0  # TODO Number List Style
                     sub_num += 1
 
-            # 处理嵌套的无序列表
+            # Working with Nested Unordered Lists
             if hasattr(item, "ul") and item.ul is not None:
                 for item2 in item.ul.children:
                     if item2.name != 'li':
@@ -285,41 +285,41 @@ class DocxProcessor:
                         .style.paragraph_format.space_after = Pt(1)
 
     def add_bullet_list(self, bullet_list):
-        # 有可能是 list
+        # It may be. list
         text = str(bullet_list.contents[1].string).strip()
         if text.startswith("[ ]") or text.startswith("[x]"):
             self.add_todo_list(bullet_list)
             return
         for item in bullet_list.children:
-            if item.name != 'li':  # 跳过非 li 标签
+            if item.name != 'li':  # Skip non- li label
                 continue
 
-            # 获取直接文本内容(不包括子标签)
+            # Get direct text content(Exclude subtags)
             direct_text = ''.join([str(s) for s in item.find_all(text=True, recursive=False)]).strip()
 
-            # 检查是否有段落标签
+            # Check if there are paragraph tags
             has_paragraph_tag = item.find('p') is not None
 
-            # 如果有直接文本,添加段落
+            # If there is direct text,Add your paragraph
             if direct_text:
                 self.add_paragraph(item, p_style=MDX_STYLE.LIST_BULLET) \
                     .style.paragraph_format.space_after = Pt(1)
-            # 如果没有直接文本但有 <p> 标签,处理 <p> 标签
+            # If there is no direct text but there is <p> label,<g id="Bold">Medical Treatment:</g> <p> label
             elif has_paragraph_tag:
                 para_count = 0
                 for child in item.children:
                     if hasattr(child, 'name') and child.name == 'p':
                         if para_count == 0:
-                            # 第一个 <p> 使用列表样式
+                            # first <p> Use list style
                             self.add_paragraph(child, p_style=MDX_STYLE.LIST_BULLET) \
                                 .style.paragraph_format.space_after = Pt(1)
                         else:
-                            # 后续 <p> 使用续行样式
+                            # Additional <p> Use continuation style
                             self.add_paragraph(child, p_style=MDX_STYLE.LIST_CONTINUE) \
                                 .style.paragraph_format.space_after = Pt(1)
                         para_count += 1
 
-            # 处理 ul 子列表
+            # <g id="Bold">Medical Treatment:</g> ul Above listings
             if hasattr(item, "ul") and item.ul is not None:
                 for item2 in item.ul.children:
                     if item2.string == "\n" or (not item2.string):
@@ -327,9 +327,9 @@ class DocxProcessor:
                     self.add_paragraph(item2, prefix="•  ", p_style=MDX_STYLE.LIST_CONTINUE) \
                         .style.paragraph_format.space_after = Pt(1)
 
-            # 处理 ol 子列表
+            # <g id="Bold">Medical Treatment:</g> ol Above listings
             if hasattr(item, "ol") and item.ol is not None:
-                # 读取 start 属性,如果不存在则默认为1
+                # read out start Property,If not present, defaults to1
                 sub_num = int(item.ol.get('start', 1))
                 for item2 in item.ol.children:
                     if item2.name != 'li':
@@ -338,7 +338,7 @@ class DocxProcessor:
                         .style.paragraph_format.space_after = Pt(1)
                     sub_num += 1
 
-    # 伪TODO list
+    # falseTODO list
     def add_todo_list(self, todo_list):
         # list_para.style.font.name = "Consolas"
         for item in todo_list.children:
@@ -353,7 +353,7 @@ class DocxProcessor:
                 list_para.add_run("[   ]").font.name = "Consolas"
                 list_para.add_run(text.replace("[ ]", " ", 1))
 
-    # 分割线
+    # Split Lines
     def add_split_line(self):
         p = self.document.add_paragraph()
         p.paragraph_format.space_before = Pt(6)
@@ -362,7 +362,7 @@ class DocxProcessor:
             r'<w:pBdr {}><w:bottom w:val="single" w:sz="6" w:space="1" w:color="auto"/></w:pBdr>'.format(nsdecls('w')))
         p._p.get_or_add_pPr().append(border_elm)
 
-    # 超链接
+    # Hyperlinks
     def add_link(self, p: Paragraph, text: str, href: str):
         self.debug("[link]:", text, "[href]:", href)
         add_hyperlink(p, href, text)
@@ -371,58 +371,58 @@ class DocxProcessor:
     def add_paragraph(self, children, p_style: str = None, prefix: str = ""):
         """
         children: list|str
-        一个段落内的元素（包括图片）。根据有无样式来划分，组成一个列表。
-        有样式文字如加粗、斜体、图片、等。
-        如`I am plain _while_ he is **bold**`将转为：
+        An element (including an image) within a paragraph. Divided according to whether there is a style, forming a list.
+        There are style text such as bold, italics, images, etc.
+        As`I am plain _while_ he is **bold**`will be converted to:
         ["I am plain", "while", "he is", "bold"]
         """
         p = self.document.add_paragraph(prefix, style=p_style)
         if type(children) == str:
             p.add_run(children)
             return p
-        for elem in children.contents:  # 遍历一个段落内的所有元素
+        for elem in children.contents:  # Traverse all elements in a paragraph
             if elem.name == "a":
                 self.add_link(p, elem.string, elem["href"])
             elif elem.name == "img":
-                self.add_picture(elem, parent_paragraph=p)  # 传递当前段落
-            elif elem.name is not None:  # 有字符样式的子串
+                self.add_picture(elem, parent_paragraph=p)  # Pass the current paragraph
+            elif elem.name is not None:  # Substring with character style
                 self.add_run(p, elem.string, elem.name)
-            elif not elem.string == "\n":  # 无字符样式的子串
+            elif not elem.string == "\n":  # Substring without character style
                 self.add_run(p, elem)
         return p
 
     # from docx.enum.style import WD_STYLE
     def add_blockquote(self, children):
-        # TODO 将引用块放在1x1的表格中，优化引用块的显示效果
-        #  设置左侧缩进，上下行距
+        # TODO Place Blockquote on1x1In the table, optimize the display effect of the reference block
+        #  Set left indent, up and down spacing
         table: Table = self.document.add_table(0, 1)
         row_cells = table.add_row().cells
 
-        # 支持多个段落
+        # Supports multiple paragraphs
         para_count = 0
         for child in children.contents:
-            # 跳过换行符
+            # Skip line breaks
             if isinstance(child, str) and child.strip() == "":
                 continue
 
-            # 处理段落标签
+            # Working with paragraph tags
             if hasattr(child, 'name') and child.name == 'p':
                 if para_count > 0:
-                    # 添加新段落
+                    # Add a new passage
                     row_cells[0].add_paragraph()
                 p = row_cells[0].paragraphs[para_count]
 
-                for elem in child.contents:  # 遍历一个段落内的所有元素
+                for elem in child.contents:  # Traverse all elements in a paragraph
                     if elem.name == "a":
                         self.add_link(p, elem.string, elem["href"])
                     elif elem.name == "img":
-                        self.add_picture(elem, parent_paragraph=p)  # 传递当前段落
-                    elif elem.name is not None:  # 有字符样式的子串
+                        self.add_picture(elem, parent_paragraph=p)  # Pass the current paragraph
+                    elif elem.name is not None:  # Substring with character style
                         self.add_run(p, elem.string, elem.name)
-                    elif elem.string and elem.string != "\n":  # 无字符样式的子串
+                    elif elem.string and elem.string != "\n":  # Substring without character style
                         self.add_run(p, elem.string)
                 para_count += 1
-            # 处理直接文本节点
+            # Working with Direct Text Nodes
             elif isinstance(child, str) and child.strip():
                 if para_count == 0:
                     p = row_cells[0].paragraphs[0]
@@ -436,37 +436,37 @@ class DocxProcessor:
         table.rows[0].cells[0]._tc.get_or_add_tcPr().append(shading_elm_1)
 
     def html2docx(self, html_str: str):
-        # 打开HTML
+        # OpenHTML
 
         soup = BeautifulSoup(html_str, 'html.parser')
 
-        # 安全地查找 body 标签
+        # Find it securely body label
         body_tag = soup.find('body')
         if body_tag is None:
-            # 如果没有 body,使用整个 soup
+            # If no evidence of   microbial body,Use entire soup
             body_tag = soup
 
-        # 标题
+        # Title
         title_text = ""
-        # 逐个解析标签，并写到word中
+        # parse the labels one by one and writewordII
         for root in body_tag.children:
-            # 跳过纯文本节点和换行
+            # Skip plain text nodes and line breaks
             if isinstance(root, str):
                 if root.strip():
-                    # 处理直接文本节点
+                    # Working with Direct Text Nodes
                     self.document.add_paragraph(root.strip(), style=MDX_STYLE.PLAIN_TEXT)
                 continue
 
             # debug("<%s>" % root.name)
-            if root.name == "p":  # 普通段落
+            if root.name == "p":  # Normal paragraph
                 self.add_paragraph(root, p_style=MDX_STYLE.PLAIN_TEXT)
-            elif root.name == "blockquote":  # 引用块
+            elif root.name == "blockquote":  # Blockquote
                 self.add_blockquote(root)
-            elif root.name == "ol":  # 数字列表
+            elif root.name == "ol":  # Numbered
                 self.add_number_list(root)
-            elif root.name == "ul":  # 无序列表 或 List
+            elif root.name == "ul":  # Unordered List OR List
                 self.add_bullet_list(root)
-            elif root.name == "table":  # 表格
+            elif root.name == "table":  # Table Filter
                 self.add_table(root)
             elif root.name == "hr":
                 self.add_split_line()

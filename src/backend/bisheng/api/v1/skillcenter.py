@@ -25,17 +25,17 @@ def create_template(*, template: TemplateCreate):
         with get_sync_db_session() as session:
             db_flow = session.get(Flow, template.flow_id)
         db_template.data = db_flow.data
-    # 校验name
+    # Correctionname
     with get_sync_db_session() as session:
         name_repeat = session.exec(
             select(Template).where(Template.name == db_template.name)).first()
     if name_repeat:
         raise FlowTemplateNameError.http_exception()
-    # 增加 order_num  x,x+65535
+    # Boost order_num  x,x+65535
     with get_sync_db_session() as session:
         max_order = session.exec(select(Template).order_by(
             Template.order_num.desc()).limit(1)).first()
-    # 如果没有数据，就从 65535 开始
+    # If no data is available, proceed from 65535 Getting Started
     db_template.order_num = max_order.order_num + ORDER_GAP if max_order else ORDER_GAP
     with get_sync_db_session() as session:
         session.add(db_template)

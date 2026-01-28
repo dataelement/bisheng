@@ -1,0 +1,490 @@
+{
+  "chartSelector": {
+    "title": "関連グラフ設定",
+    "componentName": "コンポーネント: {{componentName}}",
+
+    "selectCharts": "関連グラフを選択",
+    "selectAll": "すべて選択",
+    "unSelectAll": "すべて選択解除",
+    "unnamedChart": "無名グラフ",
+    "noDataset": "データセット未設定",
+
+    "config": "クエリ条件設定",
+    "displayType": "表示タイプ",
+    "displayTypes": {
+      "timeRange": "時間範囲",
+      "time": "時間"
+    },
+    "dashboard": {
+
+    },
+    "timeGranularity": "時間粒度",
+    "granularities": {
+      "yearMonth": "年月",
+      "yearMonthDay": "年月日",
+      "yearMonthDayHour": "年月日時"
+    },
+    "setDefault": "デフォルト値として設定",
+    "datePicker": {
+      "placeholder": "時間を選択",
+      "single": "時間",
+      "range": "時間範囲"
+    },
+
+    "buttons": {
+      "cancel": "キャンセル",
+      "save": "保存"
+    },
+
+    "messages": {
+      "saveSuccess": "関連グラフ設定を保存しました",
+      "noCharts": "関連可能なグラフがありません",
+      "collapse": "関連グラフ設定"
+    }
+  },
+  "componentConfigDrawer": {
+    "basicConfig": "基本設定",
+    "customStyle": "カスタムスタイル",
+    "basicConfigTab": "基本設定",
+    "styleConfigTab": "カスタムスタイル",
+    "validation": {
+      "validationFailed": "検証に失敗しました",
+      "chartTypeRequired": "グラフタイプを選択してください",
+      "categoryRequired": "少なくとも1つのカテゴリーディメンションを追加してください",
+      "metricRequired": "少なくとも1つのメトリックを追加してください",
+      "datasetRequired": "データセットを選択してください",
+      "stackRequired": "積み上げグラフにはスタックディメンションが必要です",
+      "invalidCategoryFields": "カテゴリーディメンションに無効なフィールドがあります",
+      "invalidMetricFields": "メトリックに無効なフィールドがあります"
+    },
+    "chartType": "グラフタイプ",
+    "selectChartType": "グラフタイプを選択",
+
+    "categoryAxis": "カテゴリ軸 / ディメンション",
+    "stackItem": "積み上げ項目 / ディメンション",
+    "subCategory": "サブカテゴリ / ディメンション",
+    "valueAxis": "値軸 / メトリック",
+
+    "sortPriority": "ソート優先順位",
+    "sortHint": "ディメンションまたはメトリックを追加してソート優先順位を調整",
+
+    "filter": "フィルター",
+    "addFilterCondition": "フィルター条件を追加",
+    "filterConditionsAdded": "フィルター条件を追加済み",
+    "filterLogicHint": " ({{logic}})",
+
+    "timeRange": "時間範囲",
+    "selectTimeRange": "時間範囲を選択",
+
+    "resultsDisplay": "結果表示",
+    "allResults": "すべて",
+    "limitResults": "件",
+
+    "updateChartData": "グラフデータを更新",
+
+    "dataSelection": "データ選択",
+
+    "dialog": {
+      "editDisplayName": "表示名を編集",
+      "originalName": "元の名前",
+      "displayRequired": "名前を入力してください",
+      "displayName": "表示名",
+      "displayNameRequired": "表示名 *",
+      "enterDisplayName": "表示名を入力してください",
+      "displayMaxLength": "表示名は15文字以内で入力してください",
+      "cancel": "キャンセル",
+      "confirm": "確認",
+      "chartUpdated": "グラフが更新されました"
+    },
+
+    "toast": {
+      "fieldAlreadyExists": "フィールドは既に{{section}}に存在します",
+      "dimensionLimitReached": "ディメンションの上限に達しました",
+      "metricReached": "メトリックの上限に達しました",
+      "metricLimitReached": "現在のメトリクス数は上限に達しました",
+      "virtualMetricConflict": "仮想指標と通常の指標を同時に追加することはできません",
+      "multipleVirtualMetric": "複数の仮想指標を同時に追加することはできません"
+    },
+
+    "sections": {
+      "category": "カテゴリ軸",
+      "stack": "積み上げ項目",
+      "value": "メトリックエリア"
+    }
+  },
+
+  "configPanel": {
+    "title": "ダッシュボード設定",
+    "dashboardStyle": "ダッシュボードスタイル",
+    "lightTheme": "ライトテーマ",
+    "darkTheme": "ダークテーマ"
+  },
+  "datasetSelector": {
+    "dataset": "データセット",
+    "selectDataset": "データセットを選択",
+    "searchDataset": "データセットを検索...",
+    "loading": "読み込み中...",
+    "noDatasetsFound": "データセットが見つかりません",
+    "dimensions": "ディメンション",
+    "metrics": "メトリック",
+    "virtualMetric": "*",
+    "selectDatasetPrompt": "まずデータセットを選択してください",
+
+    "fieldTypes": {
+      "date": "日付",
+      "integer": "整数",
+      "keyword": "テキスト"
+    },
+
+    "timeGranularity": {
+      "year": "年",
+      "quarter": "四半期",
+      "month": "月",
+      "week": "週",
+      "day": "日",
+      "hour": "時"
+    }
+  },
+  "dimensionBlock": {
+    "menu": {
+      "sort": "ソート",
+      "aggregation": "集計方法",
+      "format": "数値フォーマット"
+    },
+    "aggregation": {
+      "sum": "合計",
+      "avg": "平均",
+      "count": "カウント",
+      "max": "最大値",
+      "min": "最小値",
+      "distinctCount": "ユニークカウント"
+    },
+    "sort": {
+      "none": "なし",
+      "asc": "昇順",
+      "desc": "降順"
+    },
+    "button": {
+      "deleteField": "フィールドを削除"
+    },
+    "prompt": {
+      "dragDimensionHere": "ディメンションフィールドをここにドラッグ",
+      "dragMetricHere": "メトリックフィールドをここにドラッグ"
+    },
+    "dialog": {
+      "formatTitle": "数値フォーマット",
+      "chartUpdated": "グラフが更新されました",
+      "formatType": "フォーマットタイプ",
+      "decimalPlaces": "小数位数",
+      "unit": "単位",
+      "suffix": "単位サフィックス",
+      "thousandSeparator": "桁区切り記号",
+      "example": "例",
+      "none": "なし",
+      "selectUnit": "単位を選択",
+      "enterSuffix": "サフィックスを入力",
+      "formatTypes": {
+        "number": "数値",
+        "percent": "パーセント",
+        "duration": "期間",
+        "storage": "ストレージサイズ"
+      }
+    }
+  },
+  "filterConditionDialog": {
+    "title": "フィルター条件設定",
+    "keywords": {
+      "time": "時間",
+      "date": "日付"
+    },
+    "placeholders": {
+      "selectField": "フィールドを選択",
+      "filterType": "フィルタータイプ",
+      "operator": "演算子",
+      "enterNumber": "数値を入力してください",
+      "enterValue": "値を入力してください",
+      "selectEnumValue": "列挙値を選択してください"
+    },
+    "filterTypes": {
+      "conditional": "条件フィルター",
+      "noFields": "フィールドがありません",
+      "enum": "列挙フィルター"
+    },
+    "operators": {
+      "equals": "等しい",
+      "notEquals": "等しくない",
+      "contains": "含む",
+      "notContains": "含まない",
+      "greaterThan": "より大きい",
+      "greaterThanOrEqual": "以上",
+      "lessThan": "より小さい",
+      "lessThanOrEqual": "以下",
+      "isEmpty": "空である",
+      "isNotEmpty": "空でない"
+    },
+    "buttons": {
+      "addCondition": "条件を追加",
+      "cancel": "キャンセル",
+      "save": "保存"
+    },
+    "errors": {
+      "selectField": "フィールドを選択してください",
+      "selectOperator": "演算子を選択してください",
+      "selectEnumValue": "列挙値を選択してください",
+      "enterFilterValue": "フィルター値を入力してください",
+      "atLeastOneCondition": "有効なフィルター条件を少なくとも1つ設定してください"
+    },
+    "toast": {
+      "fetchEnumFailed": "列挙値の取得に失敗しました。後で再試行してください",
+      "virtualMetricConflict": "仮想メトリックと通常のメトリックを同時に追加することはできません",
+      "multipleVirtualMetric": "複数の仮想メトリックを同時に追加することはできません",
+      "saveSuccess": "保存に成功しました"
+
+    },
+    "enumSelect": {
+      "placeholder": "選択してください",
+      "searchPlaceholder": "検索...",
+      "loading": "読み込み中...",
+      "selectAll": "すべて選択",
+      "loadingMore": "さらに読み込み...",
+      "noMatch": "一致するオプションが見つかりません",
+      "noData": "データがありません"
+    }
+  },
+  "styleConfigPanel": {
+    "sections": {
+      "color": "色",
+      "title": "タイトル",
+      "axisTitle": "軸タイトル",
+      "legend": "凡例",
+      "metricValue": "指標値",
+      "subtitle": "サブタイトル",
+      "chartOptions": "チャートオプション"
+    },
+    "labels": {
+      "themeColor": "テーマカラー",
+      "bgColor": "背景色",
+      "titleContent": "タイトル内容",
+      "textFormat": "テキストフォーマット",
+      "textContent": "テキスト内容",
+      "xAxisTitleContent": "X軸タイトル内容",
+      "xAxisTextFormat": "X軸テキストフォーマット",
+      "yAxisTitleContent": "Y軸タイトル内容",
+      "yAxisTextFormat": "Y軸テキストフォーマット",
+      "legendPosition": "凡例の位置",
+      "legendTextFormat": "凡例テキストフォーマット"
+    },
+    "placeholders": {
+      "enterTitle": "タイトルを入力してください",
+      "enterSubtitle": "サブタイトルを入力してください",
+      "enterXAxisTitle": "X軸タイトルを入力してください",
+      "enterYAxisTitle": "Y軸タイトルを入力してください"
+    },
+    "positions": {
+      "top": "上部",
+      "bottom": "下部",
+      "left": "左側",
+      "right": "右側"
+    },
+    "buttons": {
+      "show": "表示"
+    },
+    "options": {
+      "legend": "凡例",
+      "axis": "軸",
+      "dataLabel": "データラベル",
+      "gridLine": "グリッド線"
+    }
+  },
+  "useChartState": {
+    "sections": {
+      "category": "カテゴリーディメンション",
+      "stack": "スタックディメンション",
+      "value": "メトリックディメンション"
+    },
+    "fieldTypes": {
+      "dimension": "ディメンション",
+      "metric": "メトリック"
+    },
+    "warn": {
+      "invalidFieldType": "フィールドタイプ {{fieldType}} を {{section}} エリアにドラッグすることはできません",
+      "maxStackDimension": "スタックディメンションは1つだけ許可されます。既存のスタックディメンションを先に削除してください",
+      "metricLimitReached": "現在のメトリクス数は上限に達しました",
+      "maxCategoryDimensions": "カテゴリーディメンションは最大2つまで許可されます",
+      "fieldExists": "このフィールドは既に追加されています"
+    }
+  },
+  "renameSuccess": "名前を変更しました",
+  "renameError": "名前の変更に失敗しました",
+  "shareNotPublished": "このダッシュボードはまだ公開されていません",
+  "shareCopySuccess": "共有リンクをコピーしました",
+  "shareCopyError": "コピーに失敗しました",
+  "publishSuccess": "公開されました",
+  "unpublishSuccess": "公開を取り消しました",
+  "operationFailed": "操作に失敗しました",
+  "selectTime": "時間を選択",
+  "startHour": "開始時間",
+  "endHour": "終了時間",
+  "dynamicUpdate": "動的更新",
+  "cancel": "キャンセル",
+  "clear": "クリア",
+  "confirm": "確定",
+  "yearUnit": "年",
+  "monthUnit": "月",
+  "shortcut": {
+    "last_7": "過去7日間",
+    "last_30": "過去30日間",
+    "last_90": "過去90日間",
+    "last_180": "過去180日間"
+  },
+  "selectComponentToStart": "コンポーネントを選択して、データダッシュボードの作成を開始してください",
+  "saveSuccess": "保存に成功しました",
+  "saveFailed": "保存に失敗しました",
+  "saving": "保存中...",
+  "unsaved": "未保存",
+  "saved": "保存済み",
+  "addChart": "チャートを追加",
+  "addQueryComponent": "クエリコンポーネントを追加",
+  "fullScreen": "全画面表示",
+  "saveAndPublish": "保存して公開",
+  "save": "保存",
+  "prompt": "ヒント",
+  "unsavedChangesWarning": "保存されていない変更があります。退出してもよろしいですか？",
+  "saveAndLeave": "退出して保存",
+  "leaveWithoutSaving": "保存せず",
+  "copyToTargetSuccess": "対象のダッシュボードにコピーしました",
+  "copyFailed": "コピーに失敗しました",
+  "confirmDeleteComponent": "コンポーネント「{{name}}」を削除してもよろしいですか？",
+  "delete": "削除",
+  "nameRequired": "名前は空欄にできません",
+  "charLimit200": "文字数は1〜200文字の範囲で入力してください",
+  "charLimit200b": "名前は200文字以内にしてください",
+  "rename": "名前を変更",
+  "duplicate": "複製",
+  "copyTo": "先にコピー",
+  "noOtherDashboards": "他のダッシュボードはありません",
+  "createFailed": "作成に失敗しました。もう一度お試しください",
+  "maxLimitReached": "最大 {{count}} 個のダッシュボードまで作成可能です",
+  "untitledDashboard": "無題のダッシュボード",
+  "dashboardCopyName": "{{title}}-コピー",
+  "confirmDeleteDashboard": "{{title}}を削除しますか？削除後は元に戻せません。",
+  "dashboardList": "看板一覧",
+  "addDashboard": "看板を追加",
+  "expandList": "リストを展開",
+  "collapseList": "リストを折りたたむ",
+  "noMatchingDashboards": "該当する看板が見つかりません",
+  "noDashboards": "ダッシュボードはありません",
+  "default": "デフォルト",
+  "setAsDefault": "デフォルトに設定",
+  "alreadyDefault": "デフォルト設定済み",
+  "share": "共有",
+  "selectADashboard": "看板を選択してください",
+  "createdBy": "作成者",
+  "createTime": "作成日時",
+  "lastUpdateTime": "最終更新日時",
+  "publish": "公開",
+  "unpublish": "公開中止",
+  "editDashboard": "看板を編集",
+  "editAfterUnpublish": "編集するには公開を中止してください",
+  "updatingCharts": "チャートを更新中",
+  "noDataInChart": "チャートデータなし",
+  "selectDate": "日付を選択",
+  "query": "照会",
+  "dashboardOffline": "このダッシュボードは現在オフラインです",
+  "chart": {
+    "barChart": "棒グラフ",
+    "basicBarChart": "基本棒グラフ",
+    "stackedBarChart": "積立棒グラフ",
+    "groupedBarChart": "集合棒グラフ",
+    "horizontalBarChart": "横棒グラフ",
+    "basicHorizontalBarChart": "基本横棒グラフ",
+    "stackedHorizontalBarChart": "積立横棒グラフ",
+    "groupedHorizontalBarChart": "集合横棒グラフ",
+    "lineChart": "折れ線グラフ",
+    "basicLineChart": "基本折れ線グラフ",
+    "stackedLineChart": "積立折れ線グラフ",
+    "multipleLineChart": "組み合わせグラフ",
+    "areaChart": "面グラフ",
+    "stackedAreaChart": "積立面グラフ",
+    "pieChart": "円グラフ",
+    "donutChart": "ドーナツグラフ",
+    "others": "その他",
+    "metricCard": "指標カード"
+  },
+  "mid_user_increment": "ユーザースケール統計",
+  "timestamp": {
+    "year": "時間(年)",
+    "month": "時間(月)",
+    "week": "時間(週)",
+    "day": "時間(日)",
+    "hour": "時間(時)"
+  },
+  "user_group_infos": {
+    "user_group_id": "ユーザーグループID",
+    "user_group_name": "ユーザーグループ名"
+  },
+  "total_user_count": "総ユーザー数",
+  "new_user_count": "新規ユーザー数",
+  "mid_active_user": "アクティブユーザー規模統計",
+  "active_user_count": "アクティブユーザー数",
+  "mid_app_increment": "アプリケーション規模統計",
+  "user_id": "ユーザーID",
+  "user_name": "ユーザー名",
+  "app_type": "アプリケーションタイプ",
+  "total_app_count": "総アプリケーション数",
+  "new_app_count": "新規アプリケーション数",
+  "mid_sessions_increment": "アプリケーション使用状況統計",
+  "app_id": "アプリケーションID",
+  "app_name": "アプリケーション名",
+  "source": "ソースタイプ（プラットフォーム/API）",
+  "session_count": "セッション回数",
+  "platform_user_count": "利用人数",
+  "api_call_count": "APIコール回数",
+  "mid_session_run_dtl": "アプリケーションの並行処理と時間消費",
+  "duration_seconds": "セッション実行時間",
+  "max_concurrent_sessions": "最大同時オンラインセッション数",
+  "mid_tool_call_dtl": "ツール呼び出し分析",
+  "tool_name": "ツール名",
+  "tool_id": "ツールID",
+  "tool_type": "ツールタイプ",
+  "tool_call_count": "ツールコール回数",
+  "tool_call_success_count": "ツールコール成功回数",
+  "tool_call_success_rate": "ツールコール成功率",
+  "mid_knowledge_increment": "知識ベースの規模統計",
+  "total_document_knowledge_base_count": "総ドキュメントナレッジベース数",
+  "total_qa_knowledge_base_count": "総Q&Aナレッジベース数",
+  "new_document_knowledge_base_count": "新規ドキュメントナレッジベース数",
+  "new_qa_knowledge_base_count": "新規Q&Aナレッジベース数",
+  "mid_knowledge_file_increment": "ナレッジベースファイルの統計",
+  "total_file_count": "総ファイル数",
+  "total_qa_count": "総Q&Aペア数",
+  "file_size": "ファイルサイズ",
+  "mid_doc_parse_dtl": "ファイル解析性能",
+  "parse_type": "解析タイプ",
+  "status": "ファイル最終ステータス",
+  "doc_parse_count": "ドキュメントアップロード回数",
+  "doc_parse_success_count": "ドキュメント入庫成功回数",
+  "doc_parse_success_rate": "ドキュメント入庫成功率",
+  "etl_parse_count": "ETL処理回数",
+  "etl_parse_success_count": "ETL処理成功回数",
+  "etl_parse_success_rate": "ETL処理成功率",
+  "mid_model_call_dtl": "モデルのコストと性能",
+  "user_role_infos": {
+    "role_id": "ロールID",
+    "role_name": "ロール名"
+  },
+  "model_id": "モデルID",
+  "model_type": "モデルタイプ",
+  "model_name": "モデル名",
+  "model_server_id": "サービス提供元ID",
+  "model_server_name": "サービス提供元名",
+  "total_token": "Token消費量",
+  "model_call_count": "モデルコール回数",
+  "model_call_success_rate": "モデルコール成功率",
+  "max_concurrent_llm_sessions": "最大LLM同時実行数",
+  "avg_first_token_cost_time": "平均初回Token応答遅延",
+  "mid_user_interact_dtl": "ユーザーフィードバック統計",
+  "like_count": "いいね回数",
+  "dislike_count": "ネガティブ評価回数",
+  "copy_count": "コピー回数"
+}

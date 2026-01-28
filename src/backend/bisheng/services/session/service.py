@@ -23,7 +23,7 @@ class SessionService(Service):
 
         # If not cached, build the graph and cache it
         # graph, artifacts = await build_sorted_vertices(data_graph)
-        # 用自定义的初始化方法，完成api和聊天的对齐
+        # Complete with custom initialization methodsapiAlignment with Chat
         artifacts = {}
         graph = await build_flow_no_yield(graph_data=data_graph, **kwargs)
 

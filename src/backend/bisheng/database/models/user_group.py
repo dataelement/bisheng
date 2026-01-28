@@ -23,7 +23,7 @@ class UserGroupBase(SQLModelSerializable):
         primary_key=True,
         ondelete="CASCADE"
     )
-    is_group_admin: bool = Field(default=False, index=False, description='是否是组管理员')  # 管理员不属于此用户组
+    is_group_admin: bool = Field(default=False, index=False, description='Is Group Admin')  # Admin does not belong to this user group
     remark: Optional[str] = Field(default=None, index=False)
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
@@ -55,16 +55,26 @@ class UserGroupDao(UserGroupBase):
     @classmethod
     def get_user_group(cls, user_id: int) -> List[UserGroup]:
         """
-        获取用户所在的用户组
+        Get the user group the user is in
         """
         with get_sync_db_session() as session:
             statement = select(UserGroup).where(UserGroup.user_id == user_id).where(UserGroup.is_group_admin == 0)
             return session.exec(statement).all()
 
     @classmethod
+    async def aget_user_group(cls, user_id: int) -> List[UserGroup]:
+        """
+        Get the user group the user is in asynchronously
+        """
+        statement = select(UserGroup).where(UserGroup.user_id == user_id).where(UserGroup.is_group_admin == 0)
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return result.all()
+
+    @classmethod
     def get_user_admin_group(cls, user_id: int) -> List[UserGroup]:
         """
-        获取用户是管理员的用户组
+        Get user groups where the user is an administrator
         """
         with get_sync_db_session() as session:
             statement = select(UserGroup).where(UserGroup.user_id == user_id).where(UserGroup.is_group_admin == 1)
@@ -73,7 +83,7 @@ class UserGroupDao(UserGroupBase):
     @classmethod
     async def aget_user_admin_group(cls, user_id: int, group_id: int = None) -> List[UserGroup]:
         """
-        获取用户是管理员的用户组, 如果传了group_id则只获取该组的管理员信息
+        Get user groups where the user is an administrator, If it passes,group_idOnly the group's admin information will be retrieved
         """
         statement = select(UserGroup).where(UserGroup.user_id == user_id).where(UserGroup.is_group_admin == 1)
         if group_id:
@@ -94,7 +104,7 @@ class UserGroupDao(UserGroupBase):
     @classmethod
     def insert_user_group_admin(cls, user_id: int, group_id: int) -> UserGroup:
         """
-        将用户设置为组管理员
+        Set user as group administrator
         """
         with get_sync_db_session() as session:
             user_group = UserGroup(user_id=user_id, group_id=group_id, is_group_admin=True)
@@ -115,10 +125,10 @@ class UserGroupDao(UserGroupBase):
     @classmethod
     def delete_user_groups(cls, user_id: int, group_ids: List[int]):
         """
-        将用户从某些组中移除
+        Remove users from certain groups
         """
         with get_sync_db_session() as session:
-            # 先把旧的用户组全部清空
+            # Empty all old user groups first
             statement = delete(UserGroup).where(
                 UserGroup.user_id == user_id).where(
                 UserGroup.is_group_admin == 0).where(
@@ -130,7 +140,7 @@ class UserGroupDao(UserGroupBase):
     @classmethod
     def add_user_groups(cls, user_id: int, group_ids: List[int]):
         """
-        将用户添加到某些组
+        Add users to some groups
         """
         with get_sync_db_session() as session:
             for group_id in group_ids:
@@ -144,7 +154,7 @@ class UserGroupDao(UserGroupBase):
                        page_size: str = None,
                        page_num: str = None) -> List[UserGroup]:
         """
-        获取分组下的所有用户，不包含管理员
+        Get all users in a group, excluding admins
         """
         with get_sync_db_session() as session:
             statement = select(UserGroup).where(UserGroup.group_id == group_id).where(UserGroup.is_group_admin == 0)
@@ -159,7 +169,7 @@ class UserGroupDao(UserGroupBase):
                         page: int = 0,
                         limit: int = 0) -> List[UserGroup]:
         """
-        批量获取分组下的用户
+        Batch Get Users Under Grouping
         """
         with get_sync_db_session() as session:
             statement = select(UserGroup).where(UserGroup.group_id.in_(group_ids)).where(
@@ -192,7 +202,7 @@ class UserGroupDao(UserGroupBase):
     @classmethod
     async def add_default_user_group(cls, user_id: int) -> None:
         """
-        给默认用户组内添加用户
+        Add users to the default user group
         """
         async with get_async_db_session() as session:
             user_group = UserGroup(user_id=user_id, group_id=DefaultGroup, is_group_admin=False)
@@ -202,7 +212,7 @@ class UserGroupDao(UserGroupBase):
     @classmethod
     def delete_group_admins(cls, group_id: int, admin_ids: List[int]) -> None:
         """
-        批量删除用户组的admin
+        Bulk delete user groupsadmin
         """
         with get_sync_db_session() as session:
             statement = delete(UserGroup).where(
@@ -215,7 +225,7 @@ class UserGroupDao(UserGroupBase):
     @classmethod
     def delete_group_all_admin(cls, group_id: int) -> None:
         """
-        删除用户组下所有的管理员
+        Remove all administrators under the user group
         """
         with get_sync_db_session() as session:
             statement = delete(UserGroup).where(

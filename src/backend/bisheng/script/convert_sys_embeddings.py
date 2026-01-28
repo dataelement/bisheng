@@ -5,11 +5,11 @@ from bisheng.llm.domain.models import LLMServer, LLMDao, LLMModel
 
 
 def parse_openai_embedding_conf(name, model_name, embedding_conf):
-    # 说明是azure的api服务
+    # Explanation isazureright of privacyapiSERVICES
     if embedding_conf.get('openai_api_type') in ('azure', 'azure_ad', 'azuread'):
         server = LLMServer(
             name=f"AzureOpenAI",
-            description='系统升级自动添加',
+            description='System upgrade automatically added',
             type=LLMServerType.AZURE_OPENAI.value,
             config={
                 "azure_endpoint": embedding_conf.pop("azure_endpoint", ''),
@@ -28,7 +28,7 @@ def parse_openai_embedding_conf(name, model_name, embedding_conf):
     else:
         server = LLMServer(
             name=f"OpenAI",
-            description='系统升级自动添加',
+            description='System upgrade automatically added',
             type=LLMServerType.OPENAI.value,
             config={
                 "openai_api_key": embedding_conf.pop("openai_api_key", ''),
@@ -50,7 +50,7 @@ def parse_openai_embedding_conf(name, model_name, embedding_conf):
 def parse_rt_embedding_conf(name, model_name, embedding_conf):
     server = LLMServer(
         name=f"RT",
-        description='系统升级自动添加',
+        description='System upgrade automatically added',
         type=LLMServerType.BISHENG_RT.value,
         config={
             "host_base_url": embedding_conf.get("host_base_url", ''),
@@ -67,19 +67,19 @@ def parse_rt_embedding_conf(name, model_name, embedding_conf):
     return server, model
 
 
-# 将系统配置里的embedding配置项，转为模型管理里的服务提供方, 升级034执行此脚本
+# In the system configuration,embeddingconfiguration item, to the service provider in the model management, level-up034Execute this script
 def convert_sys_embeddings_to_mysql():
     knowledge_conf = settings.get_knowledge()
     embeddings = knowledge_conf.get('embeddings', {})
     if not embeddings:
         print('no found embeddings')
         return
-    # 查询是否有已存在的知识库
+    # Query if there is an existing knowledge base
     all_knowledge = KnowledgeDao.get_all_knowledge()
     if not all_knowledge:
         return
 
-    # 先将系统配置全部入库
+    # Warehousing all system configurations first
     need_add_server = {}
     need_add_server_index = {}
     for name, embedding_conf in embeddings.items():
@@ -88,13 +88,13 @@ def convert_sys_embeddings_to_mysql():
             model_name = 'text-embedding-ada-002'
 
         if not model_name:
-            print("未找到model名字，不插入到模型管理内")
+            print("not foundmodelFirst name, not inserted into model management")
             continue
-        # 说明是openai的官方服务
+        # Explanation isopenaiOfficial Services of
         if name == 'text-embedding-ada-002' or embedding_conf.get('component') == 'openai':
             server, model = parse_openai_embedding_conf(name, model_name, embedding_conf)
         else:
-            # 说明是rt部署的embedding模型
+            # Explanation isrtDeployedembeddingModels
             server, model = parse_rt_embedding_conf(name, model_name, embedding_conf)
         if server.type not in need_add_server_index:
             need_add_server_index[server.type] = 0
@@ -107,11 +107,11 @@ def convert_sys_embeddings_to_mysql():
             if one.name == name:
                 need_add_server[name] = one
 
-    # 重新设置知识库的模型配置
+    # Reset Model Configuration for Knowledge Base
     update_knowledge = []
     for one in all_knowledge:
         if one.model in need_add_server:
-            print(f"修改知识库【{one.name}】 的模型配置")
+            print(f"Modify Knowledge Base【{one.name}】 Model Configuration for")
             one.model = need_add_server[one.model].id
             update_knowledge.append(one)
 
@@ -119,10 +119,10 @@ def convert_sys_embeddings_to_mysql():
         KnowledgeDao.update_knowledge_list(update_knowledge)
 
     if not need_add_server_index.get(LLMServerType.BISHENG_RT.value):
-        # 添加一个默认的RT服务提供方
+        # Add a defaultRTservice provider
         server = LLMServer(
             name=f"RT_OLD",
-            description='系统升级自动添加，后续不建议使用',
+            description='The system upgrade is automatically added, and it is not recommended to use it in the future',
             type=LLMServerType.BISHENG_RT.value,
             config={
                 "host_base_url": 'http://xxxx:8000',

@@ -33,7 +33,7 @@ class FlowType(Enum):
     ASSISTANT = 5
     WORKFLOW = 10
     WORKSTATION = 15
-    LINSIGHT = 20  # 灵思模式
+    LINSIGHT = 20  # Inspiration Mode
 
 
 class AppEnum(Enum):
@@ -113,7 +113,7 @@ class FlowDao(FlowBase):
         from bisheng.database.models.flow_version import FlowVersion
         with get_sync_db_session() as session:
             session.add(flow_info)
-            # 创建一个默认的版本
+            # Create a default version
             flow_version = FlowVersion(name='v0',
                                        is_current=1,
                                        data=flow_info.data,
@@ -136,7 +136,7 @@ class FlowDao(FlowBase):
             else:
                 app_type = ApplicationTypeEnum.DAILY_CHAT
 
-            # 记录Telemetry日志
+            # RecordTelemetryJournal
             telemetry_service.log_event_sync(user_id=flow_info.user_id,
                                              event_type=BaseTelemetryTypeEnum.NEW_APPLICATION,
                                              trace_id=trace_id_var.get(),
@@ -153,7 +153,7 @@ class FlowDao(FlowBase):
         from bisheng.database.models.flow_version import FlowVersion
         with get_sync_db_session() as session:
             session.delete(flow_info)
-            # 删除对应的版本信息
+            # Delete the corresponding version information
             update_statement = update(FlowVersion).where(
                 FlowVersion.flow_id == flow_info.id).values(is_delete=1)
             session.exec(update_statement)
@@ -240,7 +240,7 @@ class FlowDao(FlowBase):
                   limit: int = 0,
                   flow_type: Optional[int] = None) -> List[Flow]:
         with get_sync_db_session() as session:
-            # data 数据量太大，对mysql 有影响
+            # data The amount of data is too large, yesmysql Influential
             statement = select(Flow.id, Flow.user_id, Flow.name, Flow.status, Flow.create_time,
                                Flow.logo, Flow.update_time, Flow.description, Flow.guide_word,
                                Flow.flow_type)
@@ -340,7 +340,7 @@ class FlowDao(FlowBase):
                             page: int = 0, limit: int = 0, flow_type: int = FlowType.FLOW.value) \
             -> (List[Flow], int):
         """
-        通过技能ID过滤技能列表，只返回简略信息，不包含data
+        Via SkillsIDFilter the list of skills by returning only brief information and not includingdata
         """
         statement = select(Flow.id, Flow.user_id, Flow.name, Flow.status, Flow.create_time,
                            Flow.update_time, Flow.description, Flow.guide_word)
@@ -388,7 +388,7 @@ class FlowDao(FlowBase):
                      id_list_not_in: list = None,
                      page: int = 0,
                      limit: int = 0) -> (List[Dict], int):
-        """ 获取所有的应用 包含技能、助手、工作流 """
+        """ Get all apps Contains skills, assistants, workflows """
         sub_query = select(
             Flow.id, Flow.name, Flow.description, Flow.flow_type, Flow.logo, Flow.user_id,
             Flow.status, Flow.create_time, Flow.update_time).union_all(

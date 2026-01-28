@@ -1,0 +1,168 @@
+.theme-force-light {
+    --background-login: #fff;
+    --text-color: rgba(17, 17, 17, 0.3);
+    --background-main: rgba(244, 245, 248, 1);
+    --background-main-content: rgba(255, 255, 255, 1);
+    --background-tip: white;
+    --background-tip-darkhover: #0055e3;
+    --background-prompt: hsla(0, 0%, 100%, 1);
+    --background-new: hsla(240, 14%, 99%, 1);
+    --nav-hover: white;
+    --header-icon: white;
+    --text-answer: #111;
+    --text-prompt: hsla(0, 0%, 18%, 1);
+    --search-input: hsla(220, 100%, 99%, 1);
+    --background: 0 0% 100%;
+    /* hsl(0 0% 100%) */
+    --foreground: 222.2 47.4% 11.2%;
+    /* hsl(222 47% 11%) */
+    --muted: 210 40% 98%;
+    /* hsl(210 40% 98%) */
+    --muted-foreground: 215.4 16.3% 46.9%;
+    /* hsl(215 16% 46%) */
+    --popover: 0 0% 100%;
+    /* hsl(0 0% 100%) */
+    --popover-foreground: 222.2 47.4% 11.2%;
+    /* hsl(222 47% 11%) */
+    --card: 0 0% 100%;
+    /* hsl(0 0% 100%) */
+    --card-foreground: 222.2 47.4% 11.2%;
+    --white: white;
+    /* hsl(222 47% 11%) */
+    --border: 214.3 21.8% 91.4%;
+    /* hsl(214 32% 91%) */
+    --input: 223 48% 44%;
+    /* hsl(214 32% 91%) */
+    --primary: 220 98% 45%;
+    /* hsl(222 27% 18%) */
+    --primary-foreground: 210 40% 98%;
+    /* hsl(210 40% 98%) */
+    --secondary: 210 40% 96.1%;
+    /* hsl(210 40% 96%) */
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    /* hsl(222 47% 11%) */
+    --accent: 210 30% 96.1%;
+    /* hsl(210 30% 96%) */
+    --accent-foreground: 222.2 47.4% 11.2%;
+    /* hsl(222 47% 11%) */
+    --destructive: 0 100% 50%;
+    /* hsl(0 100% 50%) */
+    --destructive-foreground: 210 40% 98%;
+    --black-button: 0 0% 7%;
+    /* hsl(215 20% 65%) */
+    --ring: 223, 48%, 44%, 0.35;
+    --radius: .58rem;
+    --round-btn-shadow: #00000063;
+    --error-background: #fef2f2;
+    --error-foreground: #991b1b;
+    --success-background: #f0fdf4;
+    --success-foreground: #14532d;
+    --info-background: #f0f4fd;
+    --info-foreground: #141653;
+    --high-indigo: #4338ca;
+    --medium-indigo: #6366f1;
+    --chat-bot-icon: #afe6ef;
+    --chat-user-icon: #aface9;
+    /* Colors that are shared in dark and light mode */
+    --blur-shared: #151923de;
+    --build-trigger: #dc735b;
+    --chat-trigger: #5c8be1;
+    --chat-trigger-disabled: #b4c3da;
+    --status-red: #ef4444;
+    --status-yellow: #eab308;
+    --status-green: #4ade80;
+    --status-blue: #2563eb;
+    --connection: #555;
+}
+
+.react-grid-item>.react-resizable-handle {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 1px solid hsl(var(--primary));
+    background: #fff;
+}
+
+.react-grid-item>.react-resizable-handle.react-resizable-handle-sw {
+    bottom: -3px;
+    left: -3px;
+}
+
+.react-grid-item>.react-resizable-handle.react-resizable-handle-nw {
+    top: -3px;
+    left: -3px;
+}
+
+.react-grid-item>.react-resizable-handle.react-resizable-handle-se {
+    bottom: -3px;
+    right: -3px;
+}
+
+.react-grid-item>.react-resizable-handle.react-resizable-handle-ne {
+    top: -3px;
+    right: -3px;
+}
+
+.react-grid-item>.react-resizable-handle.react-resizable-handle-n {
+    left: 10px;
+    width: calc(100% - 20px);
+    border-radius: 0;
+    transform: rotate(0);
+    margin: 0;
+    top: -3px;
+    opacity: 0;
+}
+
+.react-grid-item>.react-resizable-handle.react-resizable-handle-s {
+    left: 10px;
+    width: calc(100% - 20px);
+    border-radius: 0;
+    transform: rotate(0);
+    margin: 0;
+    bottom: -3px;
+    opacity: 0;
+}
+
+.react-grid-item>.react-resizable-handle.react-resizable-handle-w {
+    left: -3px;
+    top: 10px;
+    transform: rotate(0);
+    height: calc(100% - 20px);
+    border-radius: 0;
+    margin: 0;
+    opacity: 0;
+}
+
+.react-grid-item>.react-resizable-handle.react-resizable-handle-e {
+    right: -3px;
+    top: 10px;
+    transform: rotate(0);
+    height: calc(100% - 20px);
+    border-radius: 0;
+    margin: 0;
+    opacity: 0;
+}
+
+.react-grid-item .component-select~.react-resizable-handle.react-resizable-handle-sw,
+.react-grid-item .component-select~.react-resizable-handle.react-resizable-handle-nw,
+.react-grid-item .component-select~.react-resizable-handle.react-resizable-handle-se,
+.react-grid-item .component-select~.react-resizable-handle.react-resizable-handle-ne {
+    opacity: 1;
+}
+
+.react-grid-item>.react-resizable-handle::after {
+    content: normal;
+}
+
+
+.react-grid-item.react-grid-placeholder {
+    background: #2D4FE6;
+    opacity: 0.05;
+    border-radius: 6px;
+    /* border: 1px dashed hsl(var(--primary)); */
+}
+
+.writing-mode-vertical {
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+}

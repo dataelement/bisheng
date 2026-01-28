@@ -47,18 +47,17 @@ export default function PreviewFile({
 
   const targetFile = matchedRawFile || file;
   let fileParseType = '';
-  if(step === 2){
+  if (step === 2) {
     fileParseType = resultFiles[0].isEtl4lm
-  }else if(step === 3 && etl){
+  } else if (step === 3 && etl) {
     fileParseType = etl
   } else {
     fileParseType = targetFile.fileType;
   }
-  
-  const fileName = targetFile.name || file.fileName || file.name;
   const suffix = useMemo(() => {
-    return fileName?.split('.').pop()?.toLowerCase() || '';
-  }, [fileName]);
+    if (!urlState.url) return '';
+    return urlState.url?.split('?')[0].split('/').pop().split('.')[1].toLowerCase() || '';
+  }, [urlState.url]);
 
   const isUnsType = useMemo(() => {
     return fileParseType === 'uns' ||
@@ -219,18 +218,13 @@ export default function PreviewFile({
   // 9. 渲染逻辑（统一与ParagraphEdit的fileView逻辑）
   const render = () => {
     const { url, load } = urlState;
-    const previewFileUrl = targetFile.url;
 
-    // 强制uns类型的Excel文件使用pdf预览
-    const renderType = (fileParseType === 'etl4lm' || fileParseType === 'un_etl4lm') && ['ppt', 'pptx'].includes(suffix)
-      ? 'pdf'
-      : suffix;
     // 加载状态处理
     if (!load && !url) return <div className="flex justify-center items-center h-full text-gray-400">预览失败</div>;
     if (!url) return <div className="flex justify-center items-center h-full text-gray-400"><LoadingIcon /></div>;
 
     // 新版文件预览
-    switch (renderType) {
+    switch (suffix) {
       case 'ppt':
       case 'pptx': return <div className="flex justify-center items-center h-full text-gray-400">
         <div className="text-center">
@@ -270,7 +264,7 @@ export default function PreviewFile({
       case 'xlsx':
       case 'xls':
       case 'csv':
-        return(
+        return (
           <div>
             <ExcelPreview filePath={previewUrl || url} />
           </div>
@@ -337,7 +331,7 @@ export default function PreviewFile({
         <span className="text-primary cursor-pointer" onClick={handleOvergap}>{t('overwriteSegment')}</span>
       </div>
     </div>
-    <div className={`relative ${['csv', 'xlsx','xls'].includes(file.suffix)? '':"overflow-y-auto"}  ${edit ? 'h-[calc(100vh-206px)]' : 'h-[calc(100vh-284px)]'}`}>
+    <div className={`relative ${['csv', 'xlsx', 'xls'].includes(file.suffix) ? '' : "overflow-y-auto"}  ${edit ? 'h-[calc(100vh-206px)]' : 'h-[calc(100vh-284px)]'}`}>
       {render(file.suffix)}
     </div>
   </div>

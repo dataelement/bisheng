@@ -4,9 +4,9 @@ from bisheng.user.domain.models.user import User, UserQuery
 
 
 class UserRepository(BaseRepository[User, int], ABC):
-    """用户仓库接口类"""
+    """User Repository Interface Class"""
 
-    # 根据user_id获取用户信息 user、user_groups、roles
+    # accordinguser_idget user info user、user_groups、roles
     async def get_user_with_groups_and_roles_by_user_id(self, user_id: int) -> UserQuery:
         pass
 

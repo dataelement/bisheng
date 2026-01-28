@@ -114,7 +114,7 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
       ? sameSopLabel
         ? "请输入与此案例相似的目标"
         : bsConfig?.linsightConfig?.input_placeholder ||
-          localize("com_linsight_input_placeholder")
+        localize("com_linsight_input_placeholder")
       : bsConfig?.inputPlaceholder,
   });
 
@@ -173,7 +173,7 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
       isAssistantsEndpoint(conversation?.endpoint) &&
       (!(conversation?.assistant_id ?? "") ||
         !assistantMap?.[conversation?.endpoint ?? ""][
-          conversation?.assistant_id ?? ""
+        conversation?.assistant_id ?? ""
         ]),
     [conversation?.assistant_id, conversation?.endpoint, assistantMap]
   );
@@ -249,8 +249,8 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
         // 如果已经有保存的状态，恢复它
         console.log("恢复已保存的状态", savedState);
         setSelectedOrgKbs(savedState.selectedOrgKbs || []);
-        setEnableOrgKb(savedState.enableOrgKb || false);
-        setSearchType(savedState.searchType || "");
+        setEnableOrgKb(savedState.enableOrgKb ?? false);
+        setSearchType(savedState.searchType ?? "");
       } else {
         // 如果没有保存的状态，保存当前状态
         console.log("保存当前状态到新ID");
@@ -406,9 +406,8 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
       )}
     >
       <div
-        className={`relative flex h-full flex-1 items-stretch md:flex-col ${
-          !isLingsi && "overflow-hidden"
-        }`}
+        className={`relative flex h-full flex-1 items-stretch md:flex-col ${!isLingsi && "overflow-hidden"
+          }`}
       >
         {/* 切换模型 */}
         {/* {showPlusPopover && !isAssistantsEndpoint(endpoint) && (
@@ -434,7 +433,7 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
           className={cn(
             "transitional-all relative flex w-full flex-grow flex-col overflow-hidden rounded-3xl bg-surface-tertiary pb-8 z-10 text-text-primary duration-200 border border-transparent",
             isLingsi &&
-              "border-blue-400 bg-gradient-to-b from-[#F2F5FF] to-white"
+            "border-blue-400 bg-gradient-to-b from-[#F2F5FF] to-white"
           )}
         >
           {/* 临时对话 */}
@@ -481,11 +480,14 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
 
                       {setSelectedOrgKbs && (
                         <button
-                          onClick={() =>
+                          onClick={() => {
                             setSelectedOrgKbs((prev) =>
                               prev.filter((i) => i.id !== kb.id)
-                            )
-                          }
+                            );
+                            if (kb.id === "personal_knowledge_base") {
+                              setSearchType("");
+                            }
+                          }}
                           className="absolute right-1 top-1/2 -translate-y-1/2
                   opacity-0 group-hover:opacity-100
                   w-4 h-4 flex items-center justify-center
@@ -564,7 +566,7 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
               />
             )}
             {(isSubmitting || isSubmittingAdded) &&
-            (showStopButton || showStopAdded) ? (
+              (showStopButton || showStopAdded) ? (
               <StopButton
                 stop={handleStopGenerating}
                 setShowStopButton={setShowStopButton}

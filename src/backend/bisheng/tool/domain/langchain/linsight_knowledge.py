@@ -5,7 +5,7 @@ from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field
 
 from bisheng.api.services.knowledge_imp import decide_vectorstores
-from bisheng.database.models.linsight_session_version import LinsightSessionVersionDao
+from bisheng.linsight.domain.models.linsight_session_version import LinsightSessionVersionDao
 from bisheng.interface.importing.utils import import_vectorstore
 from bisheng.interface.initialize.loading import instantiate_vectorstore
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
@@ -44,7 +44,7 @@ class SearchKnowledgeBase(BaseTool):
                     **kwargs) -> str:
         limit = kwargs.get('limit', None) or 2
         if not query:
-            raise ValueError("query 参数不能为空")
+            raise ValueError("query Parameter shall not be empty")
 
         try:
             knowledge_id = int(knowledge_id)
@@ -77,7 +77,7 @@ class SearchKnowledgeBase(BaseTool):
                 file_info = one
                 break
         if not file_info:
-            raise Exception("文件不存在或已被删除")
+            raise Exception("File does not exist or has been deleted")
         class_obj = import_vectorstore('Milvus')
         embeddings = await LLMService.get_bisheng_linsight_embedding(session_info.user_id,
                                                                      file_info.get("embedding_model_id"))
@@ -92,14 +92,14 @@ class SearchKnowledgeBase(BaseTool):
     async def search_knowledge(self, query: str, knowledge_id: int, limit: int) -> str:
         knowledge_info = KnowledgeDao.query_by_id(knowledge_id)
         if not knowledge_info:
-            raise Exception("知识库不存在或已被删除")
+            raise Exception("Knowledgebase does not exist or has been deleted")
         if not knowledge_info.model:
-            # "知识库未配置embedding模型"
-            raise Exception("知识库未配置embedding模型")
+            # "Knowledge Base Not ConfiguredembeddingModels"
+            raise Exception("Knowledge Base Not ConfiguredembeddingModels")
         embed_info = LLMDao.get_model_by_id(int(knowledge_info.model))
         if not embed_info:
-            # "知识库配置的embedding模型不存在或已被删除"
-            raise Exception("知识库配置的embedding模型不存在或已被删除")
+            # "Configured by the Knowledge BaseembeddingModel does not exist or has been deleted"
+            raise Exception("Configured by the Knowledge BaseembeddingModel does not exist or has been deleted")
         embeddings = await LLMService.get_bisheng_knowledge_embedding(0, model_id=int(knowledge_info.model))
         milvus_client = decide_vectorstores(
             knowledge_info.collection_name, "Milvus", embeddings, knowledge_id=knowledge_id

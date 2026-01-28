@@ -30,7 +30,7 @@ async def get_result_and_steps(langchain_object, inputs: Union[dict, str], **kwa
         intermediate_steps = (output.get('intermediate_steps', [])
                               if isinstance(output, dict) else [])
         source_document = (output.get('source_documents', '') if isinstance(output, dict) else '')
-        # 针对返回为空的情况，进行默认文案说明
+        # Default copywriting for cases where the return is empty
         if isinstance(output, dict):
             result = output.get(langchain_object.output_keys[0])
         else:

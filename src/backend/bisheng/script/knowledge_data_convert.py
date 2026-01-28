@@ -50,9 +50,9 @@ def convert_new_metadata(old_metadata: Dict, file: KnowledgeFile, knowledge: Kno
 
 
 def convert_milvus_data(knowledge: Knowledge, all_file: List[KnowledgeFile], new_collection_name: str):
-    print(f"正在转换 ID:{knowledge.id} 的Milvus数据...")
+    print(f"converting ID:{knowledge.id} right of privacyMilvusDATA...")
     # convert_milvus_chunk
-    # 新的Milvus对象
+    # New.. MilvusObjects
 
     embedding = LLMService.get_bisheng_knowledge_embedding_sync(0, model_id=int(knowledge.model))
     new_milvus = KnowledgeRag.init_milvus_vectorstore(new_collection_name, embedding,
@@ -61,10 +61,10 @@ def convert_milvus_data(knowledge: Knowledge, all_file: List[KnowledgeFile], new
     for file in all_file:
         all_file_chunk = _get_milvus_chunks_data(knowledge, all_fields_expect_pk=True, file_id=file.id)
         if not all_file_chunk:
-            print(f"知识库 ID:{knowledge.id} 的文件：{file.id}没有Milvus数据，跳过转换。")
+            print(f"The knowledge base upon ID:{knowledge.id} from here{file.id}NoMilvusdata, skipping the conversion.")
             continue
         if all_file_chunk[0].get("document_id"):
-            print(f"知识库 ID:{knowledge.id} 的Milvus数据已经是新格式，跳过转换。")
+            print(f"The knowledge base upon ID:{knowledge.id} right of privacyMilvusData is already in the new format, skipping conversion.")
             return None
         new_texts = []
         new_metadata = []
@@ -75,23 +75,23 @@ def convert_milvus_data(knowledge: Knowledge, all_file: List[KnowledgeFile], new
             new_embedding.append(one["vector"])
         new_milvus.add_embeddings(texts=new_texts, embeddings=new_embedding, metadatas=new_metadata)
 
-    # 在这里添加转换逻辑
-    print(f"知识库 ID:{knowledge.id} 的Milvus数据转换完成。")
+    # Add conversion logic here
+    print(f"The knowledge base upon ID:{knowledge.id} right of privacyMilvusData conversion complete.")
     return new_milvus
 
 
 def convert_es_data(knowledge: Knowledge, all_file: List[KnowledgeFile], new_index_name: str):
-    print(f"正在转换 ID:{knowledge.id} 的Elasticsearch数据...")
+    print(f"converting ID:{knowledge.id} right of privacyElasticsearchDATA...")
     # convert_es_chunk
     es_vectorstore = KnowledgeRag.init_es_vectorstore_sync(new_index_name,
                                                            metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
     for file in all_file:
         all_file_chunk = _get_es_chunks_data(knowledge, source=True, file_id=file.id)
         if not all_file_chunk:
-            print(f"知识库 ID:{knowledge.id} 的文件：{file.id}没有es数据，跳过转换。")
+            print(f"The knowledge base upon ID:{knowledge.id} from here{file.id}Noesdata, skipping the conversion.")
             continue
         if all_file_chunk[0].get("document_id"):
-            print(f"知识库 ID:{knowledge.id} 的ES数据已经是新格式，跳过转换。")
+            print(f"The knowledge base upon ID:{knowledge.id} right of privacyESData is already in the new format, skipping conversion.")
             return None
         new_texts = []
         new_metadata = []
@@ -100,17 +100,17 @@ def convert_es_data(knowledge: Knowledge, all_file: List[KnowledgeFile], new_ind
             new_metadata.append(convert_new_metadata(one["_source"]["metadata"], file, knowledge))
         es_vectorstore.add_texts(texts=new_texts, metadatas=new_metadata)
 
-    print(f"知识库 ID:{knowledge.id} 的Elasticsearch数据转换完成。")
+    print(f"The knowledge base upon ID:{knowledge.id} right of privacyElasticsearchData conversion complete.")
     return es_vectorstore
 
 
 def convert_one_knowledge_data(knowledge: Knowledge):
-    print(f"开始转换 ID:{knowledge.id}  {knowledge.name} 的数据...")
+    print(f"Start Conversion ID:{knowledge.id}  {knowledge.name} Data...")
     if knowledge.collection_name.startswith("partition_"):
-        print(f"！！！跳过分区知识库 ID:{knowledge.id} 的数据转换。请先进行数据修复")
+        print(f"!!! Skip partition knowledge base ID:{knowledge.id} Data conversion. Please repair the data first")
         return
     if knowledge.type == KnowledgeTypeEnum.QA.value:
-        print(f"跳过QA知识库 ID:{knowledge.id} 的数据转换。!!!")
+        print(f"SkipQAThe knowledge base upon ID:{knowledge.id} Data conversion.!!!")
         return
 
     all_file = get_all_knowledge_files(knowledge.id)
@@ -123,7 +123,7 @@ def convert_one_knowledge_data(knowledge: Knowledge):
         old_fields = old_milvus_vector.col.schema.fields
         old_fields = {field.name: field for field in old_fields}
         if "document_id" in old_fields:
-            print(f"知识库 ID:{knowledge.id} 的数据已经是新格式，跳过转换。")
+            print(f"The knowledge base upon ID:{knowledge.id} The data is already in the new format, skipping the conversion.")
             return
         milvus_vector = convert_milvus_data(knowledge, all_file, new_collection_name)
         es_vector = convert_es_data(knowledge, all_file, new_index_name)
@@ -136,12 +136,12 @@ def convert_one_knowledge_data(knowledge: Knowledge):
             if es_vector.client.indices.exists(index=old_index_name):
                 es_vector.client.indices.delete(index=old_index_name)
         else:
-            print(f"知识库 ID:{knowledge.id} 的数据无需更新。")
+            print(f"The knowledge base upon ID:{knowledge.id} Data does not need to be updated.")
     except Exception as e:
-        print(f"知识库 ID:{knowledge.id} 数据转换失败，错误原因：{e}")
+        print(f"The knowledge base upon ID:{knowledge.id} Data conversion failed, error reason:{e}")
         traceback.print_exc()
-    # 在这里添加转换逻辑
-    print(f"知识库 ID:{knowledge.id} 的数据转换完成。")
+    # Add conversion logic here
+    print(f"The knowledge base upon ID:{knowledge.id} Data conversion complete.")
 
 
 def convert_all_knowledge_data():
@@ -156,9 +156,9 @@ def convert_all_knowledge_data():
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--mode', type=str, default="convert_all",
-                        help='模式。convert_all: 转换所有知识库的数据；convert_one: 转换某一个知识库的数据')
-    # 单个进程的最大并发数
-    parser.add_argument('--id', type=int, default=0, help='知识库ID，如果是操作单个知识库时，参数必填')
+                        help='modalities.convert_all: Convert data from all knowledge bases;convert_one: Convert data from a knowledge base')
+    # Maximum number of concurrency for a single process
+    parser.add_argument('--id', type=int, default=0, help='The knowledge base uponID, parameter is required if operating a single knowledge base')
     args = parser.parse_args()
 
     if args.mode == "convert_all":
@@ -166,8 +166,8 @@ if __name__ == '__main__':
     elif args.mode == "convert_one":
         tmp_knowledge = KnowledgeDao.query_by_id(args.id)
         if not tmp_knowledge:
-            print(f"知识库 ID:{args.id} 不存在，无法进行转换。")
+            print(f"The knowledge base upon ID:{args.id} It does not exist and cannot be converted.")
             exit(0)
         convert_one_knowledge_data(tmp_knowledge)
     else:
-        print("mode参数错误,只能是 convert_all 或 convert_one")
+        print("modeParameter salah,can only be convert_all OR convert_one")

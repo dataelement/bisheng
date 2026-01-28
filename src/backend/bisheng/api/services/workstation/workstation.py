@@ -1,10 +1,9 @@
 import asyncio
 import json
 from datetime import datetime
-from typing import Optional, Any, Coroutine
+from typing import Optional, Any
 
 from fastapi import BackgroundTasks, Request
-from langchain_core.documents import Document
 from langchain_core.messages import AIMessage, HumanMessage
 from loguru import logger
 from openai import BaseModel
@@ -17,13 +16,14 @@ from bisheng.api.v1.schemas import KnowledgeFileOne, KnowledgeFileProcess, Works
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.server import EmbeddingModelStatusError
 from bisheng.common.models.config import Config, ConfigDao, ConfigKeyEnum
+from bisheng.core.vectorstore.multi_retriever import MultiRetriever
 from bisheng.database.constants import MessageCategory
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
-from bisheng.core.vectorstore.ensemble_retriever import RRFMultiVectorRetriever, VectorRetrieverParams
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum
 from bisheng.llm.domain.services import LLMService
+from bisheng.tool.domain.langchain.knowledge import KnowledgeRetrieverTool
 from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
 from bisheng.user.domain.models.user import UserDao
 
@@ -33,7 +33,7 @@ class WorkStationService(BaseService):
     @classmethod
     def update_config(cls, request: Request, login_user: UserPayload, data: WorkstationConfig) \
             -> WorkstationConfig:
-        """ 更新workflow的默认模型配置 """
+        """ Update Workstation Default Configuration """
         config = ConfigDao.get_config(ConfigKeyEnum.WORKSTATION)
         if config:
             config.value = data.model_dump_json()
@@ -45,7 +45,7 @@ class WorkStationService(BaseService):
 
     @classmethod
     def sync_tool_info(cls, tools: list[dict]) -> list[dict]:
-        """ 同步工具信息 """
+        """ Synchronization Tool Information """
         if not tools:
             return []
         tool_type_ids = [t.get("id") for t in tools]
@@ -82,25 +82,25 @@ class WorkStationService(BaseService):
             if ret.sidebarIcon and ret.sidebarIcon.relative_path:
                 ret.sidebarIcon.image = cls.get_logo_share_link(ret.sidebarIcon.relative_path)
 
-            # 兼容旧的websearch配置
+            # Compatible with olderwebsearchConfigure
             if ret.webSearch and not ret.webSearch.params:
                 ret.webSearch.tool = 'bing'
                 ret.webSearch.params = {'api_key': ret.webSearch.bingKey, 'base_url': ret.webSearch.bingUrl}
             if ret.linsightConfig:
-                # 判断工具是否被删除, 同步工具最新的信息名称和描述等
+                # Determine if the tool was deleted, Synchronization tool latest information name and description, etc.
                 ret.linsightConfig.tools = cls.sync_tool_info(ret.linsightConfig.tools)
             return ret
         return None
 
     @classmethod
     def get_config(cls) -> WorkstationConfig | None:
-        """ 获取工作台的默认配置 """
+        """ Get the default configuration of the workbench """
         config = ConfigDao.get_config(ConfigKeyEnum.WORKSTATION)
         return cls.parse_config(config)
 
     @classmethod
     async def aget_config(cls) -> WorkstationConfig | None:
-        """ 异步获取工作台的默认配置 """
+        """ Get the default configuration of the workbench asynchronously """
         config = await ConfigDao.aget_config(ConfigKeyEnum.WORKSTATION)
         return cls.parse_config(config)
 
@@ -112,12 +112,12 @@ class WorkStationService(BaseService):
             file_path,
             background_tasks: BackgroundTasks,
     ):
-        # 查询是否有个人知识库
+        # Check if there is a personal knowledge base
         knowledge = KnowledgeDao.get_user_knowledge(login_user.user_id, None,
                                                     KnowledgeTypeEnum.PRIVATE)
         if not knowledge:
             model = LLMService.get_knowledge_llm()
-            knowledgeCreate = KnowledgeCreate(name='个人知识库',
+            knowledgeCreate = KnowledgeCreate(name='Personal Knowledge Base',
                                               type=KnowledgeTypeEnum.PRIVATE.value,
                                               user_id=login_user.user_id,
                                               model=model.embedding_model_id)
@@ -144,7 +144,7 @@ class WorkStationService(BaseService):
             page: int,
             size: int,
     ):
-        # 查询是否有个人知识库
+        # Check if there is a personal knowledge base
         knowledge = KnowledgeDao.get_user_knowledge(login_user.user_id, None,
                                                     KnowledgeTypeEnum.PRIVATE)
         if not knowledge:
@@ -162,27 +162,27 @@ class WorkStationService(BaseService):
                                 max_token: int,
                                 login_user: UserPayload) -> tuple[list[Any], None] | tuple[list[Any], Any]:
         """
-        从数据库中查询相关知识块
+        Query relevant knowledge blocks from the database
         
         Args:
-            max_token: 最大token限制
-            question: 用户查询问题
-            use_knowledge_param: 使用知识库的参数
-            login_user: 登录用户信息
+            max_token: MaxtokenLimit
+            question: User Query Questions
+            use_knowledge_param: Working with Knowledge Base Parameters
+            login_user: Logged in user information
             
         Returns:
-            List[str]: 格式化后的知识库内容列表，格式为：
-                "[file name]:文件名\n[file content begin]\n内容\n[file content end]\n"
+            List[str]: Formatted Knowledge Base Content List in the following format:
+                "[file name]:The file name\n[file content begin]\nContents\n[file content end]\n"
         """
         try:
             knowledge_ids = []
 
             if use_knowledge_param.organization_knowledge_ids:
-                # 如果有组织知识库，则调用知识库服务获取知识块
+                # Call the Knowledge Base service to get the Knowledge Block if there is an Organizational Knowledge Base
                 knowledge_ids.extend(use_knowledge_param.organization_knowledge_ids)
 
             if use_knowledge_param.personal_knowledge_enabled:
-                # 如果启用了个人知识库，则添加个人知识库ID
+                # If Personal Knowledge Base is enabled, add Personal Knowledge BaseID
                 personal_knowledge = await KnowledgeDao.aget_user_knowledge(login_user.user_id,
                                                                             knowledge_type=KnowledgeTypeEnum.PRIVATE)
                 if personal_knowledge:
@@ -191,44 +191,50 @@ class WorkStationService(BaseService):
             knowledge_vector_list = await KnowledgeRag.get_multi_knowledge_vectorstore(
                 invoke_user_id=login_user.user_id,
                 knowledge_ids=knowledge_ids,
-                user_name=login_user.user_name, include_private=True)
+                user_name=login_user.user_name)
 
-            vector_store_params = []
+            all_milvus, all_milvus_filter = [], []
+            all_es, all_es_filter = [], []
+            multi_milvus_retriever, multi_es_retriever = None, None
             for knowledge_id, vectorstore_info in knowledge_vector_list.items():
                 milvus_vectorstore = vectorstore_info.get("milvus")
                 es_vectorstore = vectorstore_info.get("es")
-                if milvus_vectorstore:
-                    vector_store_params.append(VectorRetrieverParams(
-                        vector_store=milvus_vectorstore,
-                        search_kwargs={"top_k": 100},
-                    ))
-                if es_vectorstore:
-                    vector_store_params.append(VectorRetrieverParams(
-                        vector_store=es_vectorstore,
-                        search_kwargs={"top_k": 100},
-                    ))
-
-            if not vector_store_params:
-                return [], None
-
-            rrf_multivector_retriever = RRFMultiVectorRetriever(
-                vector_store_params=vector_store_params,
-                top_k=100,
-                max_context_length=max_token,
+                all_milvus.append(milvus_vectorstore)
+                all_milvus_filter.append({"k": 100, "param": {"ef": 110}})
+                all_es.append(es_vectorstore)
+                all_es_filter.append({"k": 100})
+            if all_milvus:
+                multi_milvus_retriever = MultiRetriever(
+                    vectors=all_milvus,
+                    search_kwargs=all_milvus_filter,
+                    finally_k=100
+                )
+            if all_es:
+                multi_es_retriever = MultiRetriever(
+                    vectors=all_es,
+                    search_kwargs=all_es_filter,
+                    finally_k=100
+                )
+            knowledge_retriever_tool = KnowledgeRetrieverTool(
+                vector_retriever=multi_milvus_retriever,
+                elastic_retriever=multi_es_retriever,
+                max_content=max_token,
+                rrf_remove_zero_score=True,
+                sort_by_source_and_index=True
             )
-            # 使用 RAG 方法进行检索
-            finally_docs = await rrf_multivector_retriever.ainvoke(question)
 
-            # 将检索结果格式化为指定的模板格式
+            finally_docs = await knowledge_retriever_tool.ainvoke({"query": question})
+
+            # Format the retrieval results to the specified template format
             formatted_results = []
             if finally_docs:
                 for doc in finally_docs:
-                    # 获取文件名，优先从 metadata 中获取
+                    # Get the filename, preferably from metadata Get in
                     file_name = doc.metadata.get('source') or doc.metadata.get('document_name')
-                    # 获取文档内容
+                    # Get document content
                     content = doc.page_content.strip()
 
-                    # 按照模板格式组织内容
+                    # Organize content in template format
                     formatted_content = f"[file name]:{file_name}\n[file content begin]\n{content}\n[file content end]\n"
                     formatted_results.append(formatted_content)
 

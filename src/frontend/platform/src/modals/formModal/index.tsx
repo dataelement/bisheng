@@ -41,8 +41,7 @@ export default function FormModal({
   setOpen: Function;
   flow: FlowType;
 }) {
-  console.log(flow,454);
-  
+
   const { tabsState, setTabsState } = useContext(TabsContext);
   const [chatValue, setChatValue] = useState(() => {
     try {

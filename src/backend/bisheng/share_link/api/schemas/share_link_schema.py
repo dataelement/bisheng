@@ -6,9 +6,9 @@ from bisheng.share_link.domain.models.share_link import ResourceTypeEnum, ShareM
 
 
 class GenerateShareLinkRequest(BaseModel):
-    """生成共享链接请求模型"""
-    resource_type: ResourceTypeEnum = Field(..., description="资源类型")
-    resource_id: str = Field(..., description="资源ID")
-    share_mode: ShareMode = Field(default=ShareMode.READ_ONLY, description="共享模式")
-    expire_time: int = Field(default=0, description="过期时间，单位秒，0表示永不过期")
-    meta_data: Optional[Dict] = Field(None, description="元数据，存储额外信息")
+    """Generate shared link request model"""
+    resource_type: ResourceTypeEnum = Field(..., description="Resource Type")
+    resource_id: str = Field(..., description="reasourseID")
+    share_mode: ShareMode = Field(default=ShareMode.READ_ONLY, description="sharing mode")
+    expire_time: int = Field(default=0, description="Expiration time, in seconds,0Indicates never expires")
+    meta_data: Optional[Dict] = Field(None, description="Metadata to store additional information")

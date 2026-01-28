@@ -13,44 +13,44 @@ logger = logging.getLogger(__name__)
 
 class PromptTypeEnum(str, Enum):
     """
-    Prompt类型枚举
+    PromptType Enumeration
     """
     PROMPT = "prompt"
     CHATPROMPT = "chat_prompt"
 
 
 class ChatPromptSchema(BaseModel):
-    system: str = Field(default='', description='系统Prompt内容')
-    user: str = Field(default='', description='用户Prompt内容')
+    system: str = Field(default='', description='SystemPromptContents')
+    user: str = Field(default='', description='UsersPromptContents')
 
 
-# 标准Prompt Schema
+# StandardPrompt Schema
 class PromptSchema(BaseModel):
     """
-    标准Prompt Schema
+    StandardPrompt Schema
     """
-    description: str = Field(default='', description='Prompt描述')
-    type: PromptTypeEnum = Field(default=PromptTypeEnum.PROMPT, description='Prompt类型')
-    prompt: Union[str, ChatPromptSchema] = Field(..., description='Prompt内容')
+    description: str = Field(default='', description='PromptDescription')
+    type: PromptTypeEnum = Field(default=PromptTypeEnum.PROMPT, description='PromptType')
+    prompt: Union[str, ChatPromptSchema] = Field(..., description='PromptContents')
 
 
-# 内置Prompt加载器
+# embeddedPromptLoader..
 class PromptLoader(object):
     def __init__(self):
         """
-        初始化Prompt加载器
+        InisialisasiPromptLoader..
         """
         self.prompt_yaml_dir = os.path.join(os.path.dirname(__file__), 'yaml')
         self.prompts_storage = {}
         self._load_all()
 
-    # 解析prompts
+    # analyzingprompts
     @staticmethod
     def _parse_prompt(prompts_data: dict) -> Dict[str, PromptSchema]:
         """
-        解析Prompt数据
-        :param prompts_data: Prompt数据
-        :return: 解析后的Prompt对象
+        analyzingPromptDATA
+        :param prompts_data: PromptDATA
+        :return: After parsingPromptObjects
         """
         parsed_prompts = {}
         for prompt_name, prompt_data in prompts_data.items():
@@ -79,13 +79,13 @@ class PromptLoader(object):
                         logger.error(f"Error parsing YAML file {file_path}: {e}")
                         continue
 
-    # 获取指定的Prompt
+    # Get the specifiedPrompt
     def get_prompt(self, namespace: str, prompt_name: str) -> PromptSchema:
         """
-        获取指定的Prompt
-        :param namespace: 命名空间
-        :param prompt_name: Prompt名称
-        :return: Prompt对象
+        Get the specifiedPrompt
+        :param namespace: namespace
+        :param prompt_name: PromptPart Name
+        :return: PromptObjects
         """
         if namespace in self.prompts_storage:
             return copy.deepcopy(self.prompts_storage[namespace].get(prompt_name, None))
@@ -94,11 +94,11 @@ class PromptLoader(object):
 
     def render_prompt(self, namespace: str, prompt_name: str, **kwargs) -> PromptSchema:
         """
-        渲染指定的Prompt
-        :param namespace: 命名空间
-        :param prompt_name: Prompt名称
-        :param kwargs: 渲染参数
-        :return: 渲染后的Prompt字符串
+        Render specifiedPrompt
+        :param namespace: namespace
+        :param prompt_name: PromptPart Name
+        :param kwargs: Rendering parameters
+        :return: RenderedPromptString
         """
         prompt_obj = self.get_prompt(namespace, prompt_name)
         if prompt_obj.type == PromptTypeEnum.PROMPT:

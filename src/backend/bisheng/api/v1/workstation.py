@@ -10,16 +10,14 @@ from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, Request, Up
 from fastapi.responses import StreamingResponse
 from langchain_core.documents import Document
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_core.runnables import RunnableConfig
 from loguru import logger
 from sse_starlette import EventSourceResponse
 
 from bisheng.api.services import knowledge_imp
 from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.workflow import WorkFlowService
-from bisheng.api.services.workstation import (SSECallbackClient, WorkstationConversation,
+from bisheng.api.services.workstation import (WorkstationConversation,
                                               WorkstationMessage, WorkStationService)
-from bisheng.api.v1.callback import AsyncStreamingLLMCallbackHandler
 from bisheng.api.v1.schema.chat_schema import APIChatCompletion, SSEResponse, delta
 from bisheng.api.v1.schemas import FrequentlyUsedChat
 from bisheng.api.v1.schemas import WorkstationConfig, resp_200, ExcelRule, UnifiedResponseModel
@@ -56,10 +54,10 @@ promptSearch = '用户的问题是：%s \
 如果问题涉及到实时信息、最新事件或特定数据库查询等超出你知识截止日期（2024年7月）的内容，就需要进行联网搜索来获取最新信息。'
 
 
-# 自定义 JSON 序列化器
+# Customizable JSON Serializer
 def custom_json_serializer(obj):
     if isinstance(obj, datetime):
-        return obj.isoformat()  # 转换为 ISO 8601 格式字符串
+        return obj.isoformat()  # Convert To ISO 8601 Format String
     raise TypeError(f'Type {type(obj)} not serializable')
 
 
@@ -114,13 +112,13 @@ async def final_message(conversation: MessageSession, title: str, requestMessage
             source=SourceType.FILE.value if source_document else SourceType.NOT_SUPPORT.value
         ))
     if source_document:
-        # 异步处理溯源信息存储
+        # Asynchronous processing traceability information storage
         asyncio.create_task(process_source_document(source_document=source_document,
                                                     chat_id=conversation.chat_id,
                                                     message_id=responseMessage.id,
                                                     answer=text))
 
-    # 更新会话的最后消息时间
+    # Last message time to update session
     msg = json.dumps(
         {
             'final': True,
@@ -133,11 +131,11 @@ async def final_message(conversation: MessageSession, title: str, requestMessage
     return f'event: message\ndata: {msg}\n\n'
 
 
-@router.get('/config', summary='获取工作台配置', response_model=UnifiedResponseModel)
+@router.get('/config', summary='Get workbench configuration', response_model=UnifiedResponseModel)
 def get_config(
         request: Request,
         login_user: UserPayload = Depends(UserPayload.get_login_user)):
-    """ 获取评价相关的模型配置 """
+    """ Get model configurations related to reviews """
     ret = WorkStationService.get_config()
 
     etl_for_lm_url = bisheng_settings.get_knowledge().etl4lm.url
@@ -152,13 +150,13 @@ def get_config(
     return resp_200(data=ret)
 
 
-@router.post('/config', summary='更新工作台配置', response_model=UnifiedResponseModel)
+@router.post('/config', summary='Update workbench configuration', response_model=UnifiedResponseModel)
 def update_config(
         request: Request,
         login_user: UserPayload = Depends(UserPayload.get_admin_user),
-        data: WorkstationConfig = Body(..., description='默认模型配置'),
+        data: WorkstationConfig = Body(..., description='Default Model Configuration'),
 ):
-    """ 更新评价相关的模型配置 """
+    """ Update model configurations related to reviews """
     ret = WorkStationService.update_config(request, login_user, data)
     return resp_200(data=ret)
 
@@ -182,7 +180,7 @@ def queryKnoledgeList(request: Request,
                       page: int,
                       size: int,
                       login_user: UserPayload = Depends(UserPayload.get_login_user)):
-    # 查询是否有个人知识库
+    # Check if there is a personal knowledge base
     res, total = WorkStationService.queryKnowledgeList(request, login_user, page, size)
     return resp_200(data={'list': res, 'total': total})
 
@@ -199,17 +197,17 @@ def deleteKnowledge(request: Request,
 async def upload_file(
         request: Request,
         file: UploadFile = File(...),
-        file_id: str = Body(..., description='文件ID'),
+        file_id: str = Body(..., description='Doc.ID'),
         login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     """
-    上传文件
+    Upload file
     """
-    # 读取文件内容
-    # 保存文件
+    # Read file contents
+    # Save file
     file_path = await save_uploaded_file(file, 'bisheng', unquote(file.filename))
 
-    # 返回文件路径
+    # Return to file path
     return resp_200(
         data={
             'filepath': file_path,
@@ -230,19 +228,19 @@ async def upload_file(
 async def gen_title(conversationId: str = Body(..., description='', embed=True),
                     login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
-    生成标题
+    Generate Title
     """
-    # 获取会话消息
+    # Get session messages
     redis_key = f'workstation_title_{conversationId}'
     redis_client = await get_redis_client()
 
     title = await redis_client.aget(redis_key)
     if not title:
         await asyncio.sleep(5)
-        # 如果标题已经存在，则直接返回
+        # If the title already exists, go straight back to
         title = await redis_client.aget(redis_key)
     if title:
-        # 如果标题已经存在，则直接返回
+        # If the title already exists, go straight back to
         await redis_client.adelete(redis_key)
         return resp_200({'title': title})
     else:
@@ -258,7 +256,7 @@ async def get_chat_history(conversationId: str,
     if messages:
 
         if login_user.user_id != messages[0].user_id:
-            # 校验分享链接权限
+            # Verify sharing link permissions
             if not share_link or share_link.resource_id != conversationId:
                 return UnAuthorizedError.return_resp()
 
@@ -269,7 +267,7 @@ async def get_chat_history(conversationId: str,
 
 async def genTitle(human: str, assistant: str, llm: BishengLLM, conversationId: str):
     """
-    生成标题
+    Generate Title
     """
     convo = f'||>User:\n"{human}"\n ||>Response:\n"{assistant}"'
     prompt = f'Please generate {titleInstruction} \n{convo} \n||>Title:'
@@ -286,7 +284,7 @@ async def genTitle(human: str, assistant: str, llm: BishengLLM, conversationId: 
 
 async def webSearch(query: str, user_id: int):
     """
-    联网搜索
+    Internet search
     """
     web_search_info = GptsToolsDao.get_tool_by_tool_key("web_search")
     if not web_search_info:
@@ -308,7 +306,7 @@ async def webSearch(query: str, user_id: int):
 
 def getFileContent(filepath: str, invoke_user_id: int):
     """
-    获取文件内容
+    Get file contents
     """
     filepath_local, file_name = file_download(filepath)
     raw_texts, _, _, _ = knowledge_imp.read_chunk_text(
@@ -319,7 +317,8 @@ def getFileContent(filepath: str, invoke_user_id: int):
         ['after', 'after'],
         1000,
         0,
-        excel_rule=ExcelRule()
+        excel_rule=ExcelRule(),
+        no_summary=True
     )
     return knowledge_imp.KnowledgeUtils.chunk2promt(''.join(raw_texts), {'source': file_name})
 
@@ -578,11 +577,11 @@ def frequently_used_chat(login_user: UserPayload = Depends(UserPayload.get_login
 
 @router.post('/app/frequently_used')
 def frequently_used_chat(login_user: UserPayload = Depends(UserPayload.get_login_user),
-                         data: FrequentlyUsedChat = Body(..., description='添加常用应用')
+                         data: FrequentlyUsedChat = Body(..., description='Add your favorite apps')
                          ):
     is_new = WorkFlowService.add_frequently_used_flows(login_user, data.user_link_type, data.type_detail)
     if is_new:
-        return resp_200(message='添加成功')
+        return resp_200(message='Added')
     else:
         return AgentAlreadyExistsError.return_resp()
 
@@ -593,7 +592,7 @@ def frequently_used_chat(login_user: UserPayload = Depends(UserPayload.get_login
                          type_detail: Optional[str] = None
                          ):
     WorkFlowService.delete_frequently_used_flows(login_user, user_link_type, type_detail)
-    return resp_200(message='删除成功')
+    return resp_200(message='Delete successful')
 
 
 @router.get('/app/uncategorized')

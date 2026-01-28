@@ -6,7 +6,7 @@ from ..base import BaseASRClient
 
 
 class AzureOpenAIASRClient(BaseASRClient):
-    """微软Azure OpenAI ASR客户端"""
+    """MicrosoftAzure OpenAI ASRClient"""
 
     def __init__(self, api_key: str, **kwargs):
         self.model = kwargs.pop("model", "whisper-1")
@@ -20,7 +20,7 @@ class AzureOpenAIASRClient(BaseASRClient):
             **kwargs
     ) -> str:
         """
-        使用Azure OpenAI Whisper API进行语音识别
+        UseAzure OpenAI Whisper APISpeech Recognition
         :param audio:
         :param language:
         :param model:
