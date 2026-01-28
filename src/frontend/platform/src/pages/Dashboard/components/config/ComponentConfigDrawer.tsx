@@ -562,6 +562,8 @@ export function ComponentConfigDrawer() {
 
     if (dataConfig?.metrics?.[0]?.fieldName && !isMetricCard) {
       finalStyleConfig.title = dataConfig.metrics[0].fieldName
+    } else if (chartType !== ChartType.Metric) {
+      finalStyleConfig.title = editingComponent.title
     } else {
       finalStyleConfig.title = ''
     }
@@ -677,7 +679,7 @@ export function ComponentConfigDrawer() {
   const CollapsibleBlock = useCallback(({ title: blockTitle, required, collapsed, onCollapse, children }: any) => (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <label className="text-sm font-medium flex items-center gap-1 text-black">
+        <label className="text-sm font-medium flex items-center gap-1 text-foreground">
           {required && <span className="text-red-500">*</span>}
           {blockTitle}
         </label>
@@ -896,7 +898,7 @@ export function ComponentConfigDrawer() {
                                 }
                               }} maxHeight={400}>
                                 <div className="relative w-full group">
-                                  <div className="flex h-[28px] w-full items-center justify-between rounded-md border border-gray-300 bg-white px-3 py-2 text-sm transition-colors hover:border-gray-400 cursor-pointer">
+                                  <div className="flex h-[28px] w-full items-center justify-between rounded-md border hover:border-muted-foreground/40 px-3 py-2 text-sm transition-colors cursor-pointer">
                                     {/* 文本区域 */}
                                     <div className="flex items-center gap-2 flex-1 min-w-0">
                                       <img
@@ -904,7 +906,7 @@ export function ComponentConfigDrawer() {
                                         className="w-4 h-4 shrink-0"
                                         alt={chartType}
                                       />
-                                      <span className="truncate text-gray-700">
+                                      <span className="truncate text-foreground">
                                         {t(
                                           `chart.${ChartGroupItems
                                             .flatMap(item => item.data)

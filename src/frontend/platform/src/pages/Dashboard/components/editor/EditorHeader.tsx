@@ -166,6 +166,7 @@ export function EditorHeader({
         configSave?.click()
 
         setTimeout(async () => {
+            // currentDashboard.components.map(el => el.style_config.titleColor = '')
             await saveMutation.mutate({
                 id: currentDashboard?.id,
                 dashboard: currentDashboard,

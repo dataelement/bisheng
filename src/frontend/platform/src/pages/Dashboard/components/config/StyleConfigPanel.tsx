@@ -84,7 +84,7 @@ function TextFormat({
         value={String(fontSize)}
         onValueChange={(v) => setFontSize(Number(v))}
       >
-        <SelectTrigger className="w-[60px] h-7 px-2 text-xs border-0 bg-white">
+        <SelectTrigger className="w-[60px] h-7 px-2 text-xs border-0 bg-background">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -100,7 +100,7 @@ function TextFormat({
       {setColor && (
         <Select
         >
-          <SelectTrigger className="w-[60px] h-7 px-2 text-xs border-0 bg-white">
+          <SelectTrigger className="w-[60px] h-7 px-2 text-xs border-0 bg-background">
             <div className="size-4 border-[#EBECF0]">
               <div
                 className="h-full w-full rounded shadow-sm border"
@@ -140,7 +140,7 @@ function TextFormat({
         value={align}
         onValueChange={(v) => setAlign(v as "left" | "center" | "right")}
       >
-        <SelectTrigger className="w-12 h-7 px-1 border-0 shadow-none bg-white">
+        <SelectTrigger className="w-12 h-7 px-1 border-0 shadow-none bg-background">
           <SelectValue asChild>{alignIcon}</SelectValue>
         </SelectTrigger>
 
@@ -226,7 +226,7 @@ function CollapsibleBlock({
   return (
     <div className="space-y-3">
       <div
-        className="flex items-center justify-between bg-gray-50 rounded-md h-[28px] w-[228px] cursor-pointer"
+        className="flex items-center justify-between bg-gray-50 dark:bg-gray-400 rounded-md h-[28px] w-[228px] cursor-pointer"
         onClick={onCollapse}
       >
         <div className="flex items-center">
