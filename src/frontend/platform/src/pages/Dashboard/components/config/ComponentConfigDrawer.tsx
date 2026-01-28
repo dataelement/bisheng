@@ -562,6 +562,8 @@ export function ComponentConfigDrawer() {
 
     if (dataConfig?.metrics?.[0]?.fieldName && !isMetricCard) {
       finalStyleConfig.title = dataConfig.metrics[0].fieldName
+    } else if (chartType !== ChartType.Metric) {
+      finalStyleConfig.title = editingComponent.title
     } else {
       finalStyleConfig.title = ''
     }
