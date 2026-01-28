@@ -283,11 +283,12 @@ def parse_knowledge_file_celery(file_id: int, preview_cache_key: str = None, cal
     except Exception as e:
         logger.error("parse_knowledge_file_celery error: {}", str(e))
     finally:
-        logger.debug(f"delete_knowledge_file_celery start file_id={file_id}")
         db_file = KnowledgeFileDao.get_file_by_ids([file_id])
         if not db_file:
-            # If it does not exist, it may have been deleted during the parsing process, and the data of the vector database needs to be deleted.
-            delete_vector_files([db_file.id], knowledge)
+            logger.debug(f"delete_knowledge_file_celery file_id={file_id}")
+            # If it does not exist, it may have been deleted during the parsing process,
+            # and the data of the vector database needs to be deleted.
+            delete_vector_files([db_file[0].id], knowledge)
 
 
 def _parse_knowledge_file(file_id: int, preview_cache_key: str = None, callback_url: str = None):
@@ -349,6 +350,12 @@ def retry_knowledge_file_celery(file_id: int, preview_cache_key: str = None, cal
         _parse_knowledge_file(file_id, preview_cache_key, callback_url)
     except Exception as e:
         logger.error("retry_knowledge_file_celery error: {}", str(e))
+    finally:
+        db_file = KnowledgeFileDao.get_file_by_ids([file_id])
+        if not db_file:
+            logger.debug(f"delete_knowledge_file_celery file_id={file_id}")
+            # If it does not exist, it may have been deleted during the parsing process, and the data of the vector database needs to be deleted.
+            delete_vector_files([db_file[0].id], knowledge)
 
 
 @bisheng_celery.task()
