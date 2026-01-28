@@ -4,7 +4,7 @@ import { Input } from "@/components/bs-ui/input"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
 import { useComponentEditorStore } from "@/store/dashboardStore"
 import { Copy, Edit3, GripHorizontalIcon, MoreHorizontal, MoreVerticalIcon, Trash2 } from "lucide-react"
-import { useEffect, useRef, useState } from "react"
+import { memo, useEffect, useRef, useState } from "react"
 import { ChartType, Dashboard, DashboardComponent } from "../../types/dataConfig"
 import { ChartContainer } from "../charts/ChartContainer"
 import { QueryFilter } from "../charts/QueryFilter"
@@ -22,14 +22,13 @@ interface ComponentWrapperProps {
     onDuplicate: (component: DashboardComponent) => void
     onCopyTo: (component: DashboardComponent, targetDashboardId: string) => void
     onDelete: (componentId: string) => void
-    onRename: (componentId: string, newTitle: string) => void
 }
 
 // 组件包装器，用于处理选中状态
-export function ComponentWrapper({
+export const ComponentWrapper = memo(({
     dashboards, component, isPreviewMode, isDark,
-    onDuplicate, onCopyTo, onDelete, onRename
-}: ComponentWrapperProps) {
+    onDuplicate, onCopyTo, onDelete
+}: ComponentWrapperProps) => {
     const { t } = useTranslation("dashboard")
 
     const [isHovered, setIsHovered] = useState(false)
@@ -301,4 +300,6 @@ export function ComponentWrapper({
             </div>
         </div>
     )
-}
+});
+
+

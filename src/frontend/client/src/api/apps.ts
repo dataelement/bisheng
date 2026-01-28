@@ -160,9 +160,6 @@ export async function getChatHistoryApi({ flowId, chatId, flowType, id, shareTok
 // 溯源-分词
 export async function splitWordApi(word: string, messageId: string): Promise<string[]> {
     return await request.get(`/api/v1/qa/keyword?message_id=${messageId}`)
-    // .then(res => {
-    //     return {data: null, status_code: 14001, message: "请求参数错误"}
-    // })
 }
 
 // 溯源-获取 chunks
