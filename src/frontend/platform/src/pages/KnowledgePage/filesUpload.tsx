@@ -242,7 +242,7 @@ export default function FilesUpload() {
     const { uniqueObjs, removedPaths } = dedupeWithRemovedPaths(objs)
     const newResultFiles = resultFiles.filter(file => !removedPaths[file.file_path])
     const newUniqueObjs = uniqueObjs.map(item => {
-      const file = newResultFiles.find(f => item.id === f.fileId)
+      const file = newResultFiles.find(f => item.id === f.fileId || item.file_name === f.fileName)
       return {
         ...item,
         file_path: file?.file_path,
