@@ -300,10 +300,10 @@ export default function ChartSelector({
     )
   }
 
+
   return (
     <div className="border-r flex flex-col h-full w-[440px] shrink-0 bg-background relative">
-      {/* 标题区域 */}
-      <div className="px-4 py-3 border-b flex items-center justify-between bg-muted/20">
+      <div className="px-4 py-3 border-b flex items-center justify-between bg-muted/20 shrink-0">
         <div>
           <h3 className="text-base font-semibold">
             {t("chartSelector.title")}
@@ -315,8 +315,7 @@ export default function ChartSelector({
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {/* 图表列表 */}
-        <div className="max-h-64 overflow-y-auto space-y-2">
+        <div className="space-y-2">
           <div>{t("chartSelector.selectCharts")}</div>
 
           {/* 全选 */}
@@ -331,129 +330,128 @@ export default function ChartSelector({
           </div>
 
           {/* 单个图表 */}
-          {charts.length > 0 ? (
-            charts.map(chart => (
-              <div key={chart.id} className="flex items-center gap-2">
-                <Checkbox
-                  checked={selectedCharts.includes(chart.id)}
-                  onCheckedChange={() => toggleChart(chart.id)}
-                />
-                <span className="text-sm flex">
-                  <img
-                    src={`${__APP_ENV__.BASE_URL}/assets/dashboard/${chart.type}.png`}
-                    className="w-4 h-4 shrink-0 mt-0.5 mr-1"
-                    alt={chart.type}
+          <div className="max-h-40 overflow-y-auto space-y-2">
+            {charts.length > 0 ? (
+              charts.map(chart => (
+                <div key={chart.id} className="flex items-center gap-2">
+                  <Checkbox
+                    checked={selectedCharts.includes(chart.id)}
+                    onCheckedChange={() => toggleChart(chart.id)}
                   />
-                  {chart.name}
-                  {
-                    chart.dataset && (
-                      <span className="text-muted-foreground text-xs ml-4 mt-0.5">
-                        {getDatasetName(chart.dataset)}
-                      </span>
-                    )
-                  }
-                </span>
+                  <span className="text-sm flex">
+                    <img
+                      src={`${__APP_ENV__.BASE_URL}/assets/dashboard/${chart.type}.png`}
+                      className="w-4 h-4 shrink-0 mt-0.5 mr-1"
+                      alt={chart.type}
+                    />
+                    {chart.name}
+                    {
+                      chart.dataset && (
+                        <span className="text-muted-foreground text-xs ml-4 mt-0.5">
+                          {getDatasetName(chart.dataset)}
+                        </span>
+                      )
+                    }
+                  </span>
+                </div>
+              ))
+            ) : (
+              <div className="text-sm text-muted-foreground pl-4">
+                {t("chartSelector.messages.noCharts")}
               </div>
-            ))
-          ) : (
-            <div className="text-sm text-muted-foreground pl-4">
-              {t("chartSelector.messages.noCharts")}
+            )}
+          </div>
+
+          <div className="h-px bg-muted"></div>
+
+          <div className="space-y-3">
+            <div className="text-md font-medium">
+              {t("chartSelector.config")}
             </div>
-          )}
+
+            <div className="space-y-1">
+              <label className="text-sm">
+                {t("chartSelector.displayType")}
+              </label>
+              <Select value={displayType} onValueChange={setDisplayType}>
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={t("chartSelector.displayTypes.timeRange")}>
+                    {t("chartSelector.displayTypes.timeRange")}
+                  </SelectItem>
+                  <SelectItem value={t("chartSelector.displayTypes.time")}>
+                    {t("chartSelector.displayTypes.time")}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* 时间粒度 */}
+            <div className="space-y-1">
+              <label className="text-sm">
+                {t("chartSelector.timeGranularity")}
+              </label>
+              <Select value={timeGranularity} onValueChange={setTimeGranularity}>
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={t("chartSelector.granularities.yearMonth")}>
+                    {t("chartSelector.granularities.yearMonth")}
+                  </SelectItem>
+                  <SelectItem value={t("chartSelector.granularities.yearMonthDay")}>
+                    {t("chartSelector.granularities.yearMonthDay")}
+                  </SelectItem>
+                  <SelectItem value={t("chartSelector.granularities.yearMonthDayHour")}>
+                    {t("chartSelector.granularities.yearMonthDayHour")}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* 默认值 */}
+            <div className="flex items-center gap-2">
+              <Checkbox
+                checked={isDefault}
+                onCheckedChange={() => setIsDefault(prev => !prev)}
+              />
+              <span className="text-sm">
+                {t("chartSelector.setDefault")}
+              </span>
+            </div>
+
+            {isDefault && (
+              <div className="space-y-1 flex flex-1 w-full">
+                <AdvancedDatePicker
+                  granularity={getGranularity()}
+                  mode={getMode()}
+                  value={timeFilter}
+                  onChange={(val) => setTimeFilter(val)}
+                  placeholder={t("chartSelector.datePicker.placeholder")}
+                />
+              </div>
+            )}
+          </div>
         </div>
-
-        <div className="h-px bg-muted"></div>
-
-        {/* 配置区 */}
-        <div className="space-y-3">
-          <div className="text-md font-medium">
-            {t("chartSelector.config")}
-          </div>
-
-          {/* 展示类型 */}
-          <div className="space-y-1">
-            <label className="text-sm">
-              {t("chartSelector.displayType")}
-            </label>
-            <Select value={displayType} onValueChange={setDisplayType}>
-              <SelectTrigger className="h-9">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={t("chartSelector.displayTypes.timeRange")}>
-                  {t("chartSelector.displayTypes.timeRange")}
-                </SelectItem>
-                <SelectItem value={t("chartSelector.displayTypes.time")}>
-                  {t("chartSelector.displayTypes.time")}
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* 时间粒度 */}
-          <div className="space-y-1">
-            <label className="text-sm">
-              {t("chartSelector.timeGranularity")}
-            </label>
-            <Select value={timeGranularity} onValueChange={setTimeGranularity}>
-              <SelectTrigger className="h-9">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={t("chartSelector.granularities.yearMonth")}>
-                  {t("chartSelector.granularities.yearMonth")}
-                </SelectItem>
-                <SelectItem value={t("chartSelector.granularities.yearMonthDay")}>
-                  {t("chartSelector.granularities.yearMonthDay")}
-                </SelectItem>
-                <SelectItem value={t("chartSelector.granularities.yearMonthDayHour")}>
-                  {t("chartSelector.granularities.yearMonthDayHour")}
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* 默认值 */}
-          <div className="flex items-center gap-2">
-            <Checkbox
-              checked={isDefault}
-              onCheckedChange={() => setIsDefault(prev => !prev)}
-            />
-            <span className="text-sm">
-              {t("chartSelector.setDefault")}
-            </span>
-          </div>
-
-          {/* 时间范围 */}
-          {isDefault && <div className="space-y-1 flex flex-1 w-full">
-            <AdvancedDatePicker
-              granularity={getGranularity()}
-              mode={getMode()}
-              value={timeFilter}
-              onChange={(val) => setTimeFilter(val)}
-              placeholder={t("chartSelector.datePicker.placeholder")}
-            />
-          </div>}
-        </div>
-
-        {/* 底部按钮 */}
-        <div className="border-t bg-background p-4 absolute bottom-0 left-0 right-0">
-          <div className="flex justify-end gap-2">
-            <Button
-              variant="outline"
-              onClick={onCancel}
-              className="flex-1"
-            >
-              {t("chartSelector.buttons.cancel")}
-            </Button>
-            <Button
-              id="query_save"
-              onClick={handleSave}
-              className="flex-1"
-            >
-              {t("chartSelector.buttons.save")}
-            </Button>
-          </div>
+      </div>
+      <div className="border-t bg-background p-4 shrink-0">
+        <div className="flex justify-end gap-2">
+          <Button
+            variant="outline"
+            onClick={onCancel}
+            className="flex-1"
+          >
+            {t("chartSelector.buttons.cancel")}
+          </Button>
+          <Button
+            id="query_save"
+            onClick={handleSave}
+            className="flex-1"
+          >
+            {t("chartSelector.buttons.save")}
+          </Button>
         </div>
       </div>
     </div>
