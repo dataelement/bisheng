@@ -521,7 +521,7 @@ export const getDefaultMetricStyle = (title, subtitle) => ({
     "showSubtitle": true,
     title,
     "titleFontSize": 14,
-    "titleColor": "#0F172A",
+    "titleColor": "",
     "titleAlign": "left",
     "titleBold": false,
     "titleItalic": false,

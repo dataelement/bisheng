@@ -393,21 +393,21 @@ export function FilterConditionDialog({
   }, [dimensions, fields, t]);
   // 过滤掉时间字段
   const filteredFields = useMemo(() => {
-    console.log('原始字段数据:', fields)
+    // console.log('原始字段数据:', fields)
     if (!dataset_code || !dimensions || !fields) return []
 
     return fields.filter(field => {
       if (!field || !field.fieldCode || !field.displayName) {
-        console.log('发现无效字段:', field)
+        // console.log('发现无效字段:', field)
         return false
       }
       if (field.isVirtual === true) {
-        console.log('过滤虚拟指标:', field.displayName)
+        // console.log('过滤虚拟指标:', field.displayName)
         return false
       }
       const lowerCode = field.fieldCode.toLowerCase()
       const lowerName = field.displayName.toLowerCase()
-      console.log('检查字段:', field.displayName, 'lowerCode:', lowerCode, 'lowerName:', lowerName)
+      // console.log('检查字段:', field.displayName, 'lowerCode:', lowerCode, 'lowerName:', lowerName)
 
       // 检查是否包含时间相关关键词
       const isTimeField = lowerCode.includes('time') ||

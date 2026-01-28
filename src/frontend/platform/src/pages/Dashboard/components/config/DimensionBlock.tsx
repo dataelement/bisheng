@@ -130,18 +130,27 @@ export function DimensionBlock({
     }
   }, [editingMetric]);
   const getFieldTypeStyle = (dimension: DimensionItem) => {
-    const isSelected = selectedDimensionId === dimension.id
-    const bgColor = isSelected
-      ? dimension.fieldType === 'dimension'
-        ? 'bg-blue-100'
-        : 'bg-[#E7F8FA]'
-      : dimension.fieldType === 'dimension'
-        ? 'bg-blue-50'
-        : 'bg-[#E7F8FA]'
-    const borderColor = dimension.fieldType === 'dimension' ? 'border-blue-300' : 'border-[#88E1EB]'
-    const invalidStyle = invalidIds?.has(dimension.id) ? 'border-red-500 bg-red-50' : ''
-    return `${bgColor} border ${borderColor} ${invalidStyle} hover:bg-opacity-80 transition-colors`
-  }
+  const isSelected = selectedDimensionId === dimension.id
+  
+  //  (Blue)
+  const dimensionStyle = isSelected
+    ? 'bg-blue-100 border-blue-300 dark:bg-blue-900/40 dark:border-blue-700'
+    : 'bg-blue-50 border-blue-300 dark:bg-blue-900/20 dark:border-blue-800'
+
+  // (Cyan/Teal)
+  const measureStyle = isSelected
+    ? 'bg-[#E7F8FA] border-[#88E1EB] dark:bg-cyan-950/50 dark:border-cyan-700'
+    : 'bg-[#E7F8FA] border-[#88E1EB] dark:bg-cyan-950/30 dark:border-cyan-800'
+
+  // error
+  const invalidStyle = invalidIds?.has(dimension.id) 
+    ? 'border-red-500 bg-red-50 dark:border-red-700 dark:bg-red-900/30' 
+    : ''
+
+  const baseColor = dimension.fieldType === 'dimension' ? dimensionStyle : measureStyle
+
+  return `${baseColor} border ${invalidStyle} hover:bg-opacity-80 transition-colors`
+}
 
   // 选项配置
   const isVirtualMetric = (dimension: DimensionItem) => {

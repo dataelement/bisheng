@@ -101,7 +101,7 @@ export function LocationProvider({ children }: { children: ReactNode }) {
             // Only update the benchMenu property
             setAppConfig(prev => ({
               ...prev,
-              benchMenu: bench?.menuShow || false
+              benchMenu: bench?.menuShow ?? true
             }));
           })
           .catch(error => {
