@@ -202,7 +202,8 @@ const getPieChartOption = (
       name: s.name,
       left: styleConfig.legendPosition === 'left' && 100,
       right: styleConfig.legendPosition === 'right' && 100,
-      bottom: styleConfig.legendPosition === 'bottom' && 40,
+      bottom: styleConfig.legendPosition === 'bottom' && 20,
+      top: styleConfig.legendPosition === 'top' && 20,
       type: 'pie',
       radius: isDonut ? ['40%', '70%'] : '70%',
       avoidLabelOverlap: true,
@@ -210,6 +211,12 @@ const getPieChartOption = (
       label: {
         show: styleConfig.showDataLabel ?? true,
         formatter: '{b}: {d}%',
+        fontSize: 10,
+        color: "#666",
+        textBorderWidth: 0,
+        textBorderColor: 'none',
+        textShadowBlur: 0,
+        textShadowColor: 'none',
       },
       emphasis: {
         label: { show: true, fontSize: 16, fontWeight: 'bold' },
