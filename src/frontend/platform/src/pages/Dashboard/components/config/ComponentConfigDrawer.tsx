@@ -35,7 +35,7 @@ const FULL_DEFAULT_STYLE_CONFIG: ComponentStyleConfig = {
   titleUnderline: false,
   titleStrikethrough: false,
   titleAlign: "left",
-  titleColor: "#000000",
+  titleColor: "",
 
   xAxisTitle: "",
   xAxisFontSize: 14,

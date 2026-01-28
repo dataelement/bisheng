@@ -87,8 +87,6 @@ export function BaseChart({ isDark, data, chartType, dataConfig, styleConfig }: 
       chartRef.current = null
     }
 
-    console.log('render echarts :>> ');
-
     try {
       // theme
       const theme = styleConfig.themeColor || 'professional-blue'

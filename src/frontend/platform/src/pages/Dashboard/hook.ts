@@ -25,11 +25,15 @@ export const usePublishDashboard = () => {
                 published ? DashboardStatus.Draft : DashboardStatus.Published
             ),
         onSuccess: (_, variables) => {
-            queryClient.invalidateQueries({ queryKey: [DashboardQueryKey, variables.id] });
-            queryClient.setQueryData([DashboardsQueryKey], (old) => {
+            const newStatus = variables.published ? DashboardStatus.Draft : DashboardStatus.Published
+            queryClient.setQueryData([DashboardQueryKey, variables.id], (old: any) => {
+                old.status = newStatus // Reduce render
+                return old
+            })
+            queryClient.setQueryData([DashboardsQueryKey], (old: any) => {
                 return old.map(el => el.id === variables.id ? {
                     ...el,
-                    status: variables.published ? DashboardStatus.Draft : DashboardStatus.Published
+                    status: newStatus
                 } : el);
             });
             toast({

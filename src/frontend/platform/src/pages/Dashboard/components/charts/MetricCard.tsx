@@ -167,7 +167,7 @@ export function MetricCard({ title: indicatorName, data, isPreviewMode, dataConf
   const maxSubtitleHeight = subtitleLineHeight * 4
 
   return (
-    <div className="group h-full flex flex-col select-none py-1 px-2 pr-1">
+    <div className="group h-full flex flex-col select-none py-1 px-2 pr-1 text-foreground dark:text-gray-400">
       {/* title - single line */}
       <div style={titleStyle} className='truncate mb-1 pr-1'>{indicatorName}</div>
 

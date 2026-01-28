@@ -101,7 +101,7 @@ export const ComponentWrapper = memo(({
     const createTitleStyle = (config) => {
         const defaultConfig = {
             titleFontSize: 16,
-            titleColor: "#000000",
+            titleColor: "",
             titleAlign: "left",
             titleBold: false,
             titleItalic: false,
