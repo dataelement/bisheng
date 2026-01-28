@@ -37,12 +37,71 @@ INDEX_MAPPING = {
     }
 }
 
+import time
+
+
+def wait_for_task(
+        es,
+        task_id: str,
+        poll_interval: int = 10,
+        timeout: int = 3600,
+):
+    """
+    轮询 ES task 状态，直到完成或超时
+    """
+    start_time = time.time()
+
+    while True:
+
+        task_info = es.tasks.get(task_id=task_id)
+        completed = task_info.get("completed", False)
+
+        if completed:
+            response = task_info.get("response", {})
+            failures = response.get("failures", [])
+            total = response.get("total", 0)
+            created = response.get("created", 0)
+            updated = response.get("updated", 0)
+
+            print(
+                f"[REINDEX DONE] total={total}, created={created}, updated={updated}"
+            )
+
+            if failures:
+                raise RuntimeError(f"Reindex failures: {failures}")
+
+            return response
+
+        if time.time() - start_time > timeout:
+            raise TimeoutError(f"Reindex task timeout: {task_id}")
+
+        status = task_info.get("task", {}).get("status", {})
+        print(
+            f"[REINDEX RUNNING] "
+            f"total={status.get('total', 0)} "
+            f"created={status.get('created', 0)} "
+            f"updated={status.get('updated', 0)}"
+        )
+
+        time.sleep(poll_interval)
+
+
+def count_docs(es, index):
+    return es.count(index=index)["count"]
+
+
 if __name__ == '__main__':
     es_conn = get_statistics_es_connection_sync()
-
-    # 临时索引名称
-    temp_index_name = "base_telemetry_events_temp_reindex"
+    temp_index_name = "base_telemetry_events_v1"
     original_index_name = "base_telemetry_events"
+
+    # 1. 记录原始数据量
+    try:
+        source_count = count_docs(es_conn, original_index_name)
+        print(f"Original doc count: {source_count}")
+    except:
+        source_count = 0
+        print("Original index might not exist.")
 
     # 创建临时索引
     if not es_conn.indices.exists(index=temp_index_name):
@@ -59,32 +118,27 @@ if __name__ == '__main__':
         }
     }
 
-    es_conn.reindex(body=reindex_body, wait_for_completion=True, request_timeout=3600)
-    print(f"Reindexed data from {original_index_name} to {temp_index_name}")
+    resp = es_conn.options(request_timeout=3600).reindex(
+        body=reindex_body,
+        wait_for_completion=False
+    )
+
+    task_id = resp["task"]
+    print(f"Reindex started, task_id={task_id}")
+
+    wait_for_task(
+        es_conn,
+        task_id=task_id,
+        poll_interval=5,
+        timeout=3600
+    )
 
     # 删除原始索引
     es_conn.indices.delete(index=original_index_name)
 
-    print(f"Deleted original index: {original_index_name}")
+    # 将临时索引重命名为原始索引名
+    es_conn.indices.put_alias(index=temp_index_name, name=original_index_name)
 
-    # 创建新的原始索引
-    es_conn.indices.create(index=original_index_name, body=INDEX_MAPPING)
-    print(f"Created new index: {original_index_name}")
 
-    # 使用_reindex API将数据从临时索引迁移回原始索引
-    reindex_back_body = {
-        "source": {
-            "index": temp_index_name
-        },
-        "dest": {
-            "index": original_index_name
-        }
-    }
+    print(f"Reindexed data to {original_index_name} successfully.")
 
-    es_conn.reindex(body=reindex_back_body, wait_for_completion=True, request_timeout=3600)
-
-    # 删除临时索引
-    es_conn.indices.delete(index=temp_index_name)
-
-    print(f"Reindexed data back to {original_index_name} and deleted temporary index: {temp_index_name}")
-    print("Reindexing process completed successfully.")
