@@ -66,7 +66,7 @@ export function useChartState(initialComponent: DashboardComponent) {
 
       // 初始化维度数据
       if (dc) {
-        console.log('数据配置:', dc)
+        // console.log('数据配置:', dc)
 
         const newCategoryDimensions: any[] = []
         const newStackDimensions: any[] = []
@@ -168,7 +168,7 @@ export function useChartState(initialComponent: DashboardComponent) {
           fieldOrderIds = dc.fieldOrder
             .map(item => fieldIdToComponentId.get(item.fieldId))
             .filter(Boolean) as string[]
-          console.log('使用 data_config.fieldOrder 映射后的 componentIds:', fieldOrderIds)
+          // console.log('使用 data_config.fieldOrder 映射后的 componentIds:', fieldOrderIds)
         }
 
         // 如果没有 fieldOrder 或映射失败，使用默认顺序
@@ -179,11 +179,11 @@ export function useChartState(initialComponent: DashboardComponent) {
             ...newValueDimensions.map(d => d.id)
           ]
           fieldOrderIds = allComponentIds
-          console.log('使用默认字段顺序:', fieldOrderIds)
+          // console.log('使用默认字段顺序:', fieldOrderIds)
         }
 
         setSortPriorityOrder(fieldOrderIds)
-        console.log('设置 sortPriorityOrder:', fieldOrderIds)
+        // console.log('设置 sortPriorityOrder:', fieldOrderIds)
       }
     }
 
@@ -639,7 +639,7 @@ export function useChartState(initialComponent: DashboardComponent) {
         };
       }
 
-      console.log('最终 numberFormat:', numberFormat);
+      // console.log('最终 numberFormat:', numberFormat);
 
       return {
         fieldId: metric.fieldId,
@@ -708,14 +708,14 @@ export function useChartState(initialComponent: DashboardComponent) {
       }
     }) : []
 
-    console.log('生成数据配置:', {
-      dimensions,
-      stackDimension,
-      metrics,
-      fieldOrder,
-      filters,
-      hasStack: stackDimensions.length > 0
-    })
+    // console.log('生成数据配置:', {
+    //   dimensions,
+    //   stackDimension,
+    //   metrics,
+    //   fieldOrder,
+    //   filters,
+    //   hasStack: stackDimensions.length > 0
+    // })
 
     return {
       dimensions,
