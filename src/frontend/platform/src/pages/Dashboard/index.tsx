@@ -37,12 +37,16 @@ export default function DashboardPage() {
         queryFn: getDashboards,
     })
 
-    const updateMutation = useMutation({
+    const updateTitlteMutation = useMutation({
         mutationFn: ({ id, title }: { id: string; title: string }) => updateDashboardTitle(id, title),
         onSuccess: (a, { id, title }) => {
             // queryClient.invalidateQueries({ queryKey: [DashboardsQueryKey] })
-            queryClient.invalidateQueries({ queryKey: [DashboardQueryKey, id] })
-            queryClient.setQueryData([DashboardsQueryKey], (old) =>
+            // queryClient.invalidateQueries({ queryKey: [DashboardQueryKey, id] })
+            queryClient.setQueryData([DashboardQueryKey, id], (old: any) => {
+                old.title = title
+                return old
+            })
+            queryClient.setQueryData([DashboardsQueryKey], (old: any) =>
                 old.map(el => el.id === id ? { ...el, title } : el));
             toast({
                 description: t('renameSuccess'),
@@ -70,7 +74,7 @@ export default function DashboardPage() {
     })
 
     const handleRename = (id: string, newTitle: string) => {
-        updateMutation.mutate({ id, title: newTitle })
+        updateTitlteMutation.mutate({ id, title: newTitle })
     }
 
     const handleShare = async (id: string) => {
