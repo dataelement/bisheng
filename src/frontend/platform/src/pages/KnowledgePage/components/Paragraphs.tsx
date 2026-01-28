@@ -600,22 +600,29 @@ export default function Paragraphs({ fileId, onBack }) {
             .replace(/\t/g, '\\t');
     }, [t]);
 
-    const handleDeleteChunk = useCallback((data) => {
-        const updatedChunks = chunks.filter(chunk => chunk.chunkIndex !== data);
-        setChunks(updatedChunks);
+    const handleDeleteChunk = useCallback(async (data) => {
+        try {
+            const updatedChunks = chunks.filter(chunk => chunk.chunkIndex !== data);
+            setChunks(updatedChunks);
 
-        if (selectedChunkIndex === data) {
-            setSelectedBbox([]);
+            if (selectedChunkIndex === data) {
+                setSelectedBbox([]);
+            }
+
+            await captureAndAlertRequestErrorHoc(delChunkApi({
+                knowledge_id: Number(id),
+                file_id: selectedFileId || currentFile?.id || '',
+                chunk_index: data || 0
+            }));
+
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+            await reload();
+
+        } catch (error) {
+            console.error('Failed to delete chunk:', error);
+            await reload();
         }
-
-        captureAndAlertRequestErrorHoc(delChunkApi({
-            knowledge_id: Number(id),
-            file_id: selectedFileId || currentFile?.id || '',
-            chunk_index: data || 0
-        }));
-
-        reload();
-
     }, [
         id,
         reload,
@@ -623,7 +630,8 @@ export default function Paragraphs({ fileId, onBack }) {
         selectedFileId,
         currentFile?.id,
         selectedChunkIndex,
-        setSelectedBbox
+        setSelectedBbox,
+        t
     ]);
 
     const formatFileSize = useCallback((bytes) => {
