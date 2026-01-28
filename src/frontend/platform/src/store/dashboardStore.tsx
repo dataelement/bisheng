@@ -95,7 +95,19 @@ export const useEditorDashboardStore = create<EditorState>((set, get) => ({
     },
     setCurrentDashboardId: (id) => set({ currentDashboardId: id }),
     updateCurrentDashboard: (dashboard) => {
-        set({ currentDashboard: dashboard })
+        const { currentDashboard } = get()
+        if (!currentDashboard) {
+            set({ currentDashboard: dashboard })
+            return
+        }
+        const newDashboard = {
+            ...dashboard,
+            components: dashboard.components === currentDashboard.components
+                ? currentDashboard.components
+                : dashboard.components
+        }
+
+        set({ currentDashboard: newDashboard })
     },
     setLayouts: (newLayouts) => {
         const { layouts, saveSnapshot } = get()
@@ -590,6 +602,7 @@ export const useComponentEditorStore = create<ComponentEditorState>((set, get) =
                 editingComponent: { ...editingComponent, ...data },
                 hasChange: true
             });
+            useEditorDashboardStore.getState().setHasUnsavedChanges(true);
         }
     },
 

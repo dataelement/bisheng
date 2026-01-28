@@ -6,7 +6,7 @@ import { useToast } from "@/components/bs-ui/toast/use-toast"
 import { copyComponentTo, getDashboards } from "@/controllers/API/dashboard"
 import { useComponentEditorStore, useEditorDashboardStore } from "@/store/dashboardStore"
 import { cn } from "@/utils"
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import ReactGridLayout, { Layout, verticalCompactor } from "react-grid-layout"
 import "react-grid-layout/css/styles.css"
 import { useTranslation } from "react-i18next"
@@ -126,17 +126,17 @@ export function EditorCanvas({ isLoading, isPreviewMode }: EditorCanvasProps) {
     }, []);
 
     // Handle component duplicate
-    const handleDuplicate = (component: DashboardComponent) => {
+    const handleDuplicate = useCallback((component: DashboardComponent) => {
         duplicateComponentInStore(component)
-    }
+    }, [duplicateComponentInStore])
 
     // Handle copy to another dashboard
-    const handleCopyTo = (component: DashboardComponent, targetDashboardId: string) => {
+    const handleCopyTo = useCallback((component: DashboardComponent, targetDashboardId: string) => {
         copyToMutation.mutate({ component, targetId: targetDashboardId })
-    }
+    }, [copyToMutation.mutate])
 
     // Handle component delete
-    const handleDelete = (componentId: string) => {
+    const handleDelete = useCallback((componentId: string) => {
         const component = currentDashboard?.components.find(c => c.id === componentId)
         if (!component) return
 
@@ -149,7 +149,7 @@ export function EditorCanvas({ isLoading, isPreviewMode }: EditorCanvasProps) {
                 next()
             },
         })
-    }
+    }, [currentDashboard?.components, deleteComponentInStore])
 
     const handleRename = (id, title) => {
         setCurrentDashboard({
@@ -280,7 +280,6 @@ export function EditorCanvas({ isLoading, isPreviewMode }: EditorCanvasProps) {
                                                 onDuplicate={handleDuplicate}
                                                 onCopyTo={handleCopyTo}
                                                 onDelete={handleDelete}
-                                                onRename={handleRename}
                                             />
                                         </div>
                                     ))}

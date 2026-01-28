@@ -402,6 +402,7 @@
     "lineChart": "Line",
     "basicLineChart": "Basic Line",
     "stackedLineChart": "Stacked Line",
+    "multipleLineChart": "Multiple Line",
     "areaChart": "Area",
     "stackedAreaChart": "Stacked Area",
     "pieChart": "Pie",

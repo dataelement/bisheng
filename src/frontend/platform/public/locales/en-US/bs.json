@@ -1496,6 +1496,7 @@
     "10952": "Document parsing failed",
     "10953": "File parsing error: {{exception}}",
     "10960": "Not a QA knowledge base",
+    "10961": "Model returns incorrect format:{{message}}",
     "10970": "Knowledge base not found",
     "10971": "Knowledge base file not found",
     "10980": "{{field_name}} conflicts with built-in metadata fields",

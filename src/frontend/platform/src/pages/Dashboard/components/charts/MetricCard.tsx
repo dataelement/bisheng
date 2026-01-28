@@ -167,13 +167,14 @@ export function MetricCard({ title: indicatorName, data, isPreviewMode, dataConf
   const maxSubtitleHeight = subtitleLineHeight * 4
 
   return (
-    <div className="group h-full flex flex-col select-none py-1 px-2">
+    <div className="group h-full flex flex-col select-none py-1 px-2 pr-1">
       {/* title - single line */}
-      <div style={titleStyle} className='truncate mb-1'>{indicatorName}</div>
+      <div style={titleStyle} className='truncate mb-1 pr-1'>{indicatorName}</div>
 
       {/* subtitle - max 4 lines with ellipsis */}
-      {styleConfig.showSubtitle && subTitle ? (
+      {styleConfig.showSubtitle &&
         <div
+          className='pr-1'
           style={{
             ...subtitleStyle,
             display: '-webkit-box',
@@ -190,11 +191,11 @@ export function MetricCard({ title: indicatorName, data, isPreviewMode, dataConf
         >
           {subTitle}
         </div>
-      ) : <div className="flex-1"></div>}
+      }
 
       {/* value - stays at bottom */}
       <div className='mt-auto pt-2'>
-        <div style={metricStyle} className='leading-[1.2em] truncate'>
+        <div style={metricStyle} className='leading-[1.2em] truncate pr-1'>
           {formatValue}
           {displayUnit && <span className="text-xl ml-2 text-muted-foreground">{displayUnit}</span>}
         </div>

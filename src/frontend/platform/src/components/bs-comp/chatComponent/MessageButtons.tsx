@@ -13,8 +13,8 @@ const enum ThumbsState {
     ThumbsDown
 }
 
-export default function MessageButtons({debug, mark = false, id, onCopy, data, onUnlike, onMarkClick,version, text = '' }) {
-    
+export default function MessageButtons({ debug, mark = false, id, onCopy, data, onUnlike, onMarkClick, version, text = '' }) {
+
     const { t } = useTranslation()
     const [state, setState] = useState<ThumbsState>(data)
     const [copied, setCopied] = useState(false)
@@ -47,7 +47,7 @@ export default function MessageButtons({debug, mark = false, id, onCopy, data, o
             <FlagIcon width={12} height={12} className="cursor-pointer" />
             <span>{t('addQa')}</span>
         </Button>}
-        {linsightConfig?.tts_model?.id && (
+        {!mark && linsightConfig?.tts_model?.id && (
             <AudioPlayComponent
                 messageId={String(id)}
                 msg={text}
@@ -55,23 +55,23 @@ export default function MessageButtons({debug, mark = false, id, onCopy, data, o
         )}
 
         {!debug && (version === 'v2') &&
-        <>
-          <ThunmbIcon
-            type='copy'
-            className={`cursor-pointer ${copied && 'text-primary hover:text-primary'}`}
-            onClick={handleCopy}
-        />
-        <ThunmbIcon
-            type='like'
-            className={`cursor-pointer ${state === ThumbsState.ThumbsUp && 'text-primary hover:text-primary'}`}
-            onClick={() => handleClick(ThumbsState.ThumbsUp)}
-        />
-        <ThunmbIcon
-            type='unLike'
-            className={`cursor-pointer ${state === ThumbsState.ThumbsDown && 'text-primary hover:text-primary'}`}
-            onClick={() => handleClick(ThumbsState.ThumbsDown)}
-        /></>
+            <>
+                <ThunmbIcon
+                    type='copy'
+                    className={`cursor-pointer ${copied && 'text-primary hover:text-primary'}`}
+                    onClick={handleCopy}
+                />
+                <ThunmbIcon
+                    type='like'
+                    className={`cursor-pointer ${state === ThumbsState.ThumbsUp && 'text-primary hover:text-primary'}`}
+                    onClick={() => handleClick(ThumbsState.ThumbsUp)}
+                />
+                <ThunmbIcon
+                    type='unLike'
+                    className={`cursor-pointer ${state === ThumbsState.ThumbsDown && 'text-primary hover:text-primary'}`}
+                    onClick={() => handleClick(ThumbsState.ThumbsDown)}
+                /></>
         }
-      
+
     </div>
 };

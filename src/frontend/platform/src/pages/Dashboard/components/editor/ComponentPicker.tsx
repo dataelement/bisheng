@@ -25,7 +25,8 @@ export const ChartGroupItems = [
         label: 'lineChart',
         data: [
             { type: ChartType.Line, label: 'basicLineChart' },
-            { type: ChartType.StackedLine, label: 'stackedLineChart' },
+            // { type: ChartType.StackedLineOld, label: 'stackedLineChart' },
+            { type: ChartType.StackedLine, label: 'multipleLineChart' },
             { type: ChartType.Area, label: 'areaChart' },
             { type: ChartType.StackedArea, label: 'stackedAreaChart' }
         ]

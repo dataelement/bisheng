@@ -5,7 +5,7 @@
 
     "selectCharts": "関連グラフを選択",
     "selectAll": "すべて選択",
-    "unSelectAll":"すべて選択解除",
+    "unSelectAll": "すべて選択解除",
     "unnamedChart": "無名グラフ",
     "noDataset": "データセット未設定",
 
@@ -403,6 +403,7 @@
     "lineChart": "折れ線グラフ",
     "basicLineChart": "基本折れ線グラフ",
     "stackedLineChart": "積立折れ線グラフ",
+    "multipleLineChart": "組み合わせグラフ",
     "areaChart": "面グラフ",
     "stackedAreaChart": "積立面グラフ",
     "pieChart": "円グラフ",
