@@ -56,14 +56,15 @@ def parse_token_usage(result: Any) -> tuple[int, int, int, int]:
     input_token, output_token, cache_token, total_token = 0, 0, 0, 0
     if isinstance(result, ChatResult):
         for generation in result.generations:
-            token_usage = generation.generation_info.get('token_usage', {})
+            token_usage = generation.generation_info.get('token_usage', {}) or generation.message.response_metadata.get(
+                'token_usage', {})
             tmp1, tmp2, tmp3, tmp4 = get_token_from_usage(token_usage)
             input_token += tmp1
             output_token += tmp2
             cache_token += tmp3
             total_token += tmp4
     elif isinstance(result, ChatGenerationChunk):
-        token_usage = result.generation_info.get('token_usage', {})
+        token_usage = result.message.response_metadata.get('token_usage', {})
         input_token, output_token, cache_token, total_token = get_token_from_usage(token_usage)
     else:
         logger.warning(f'unknown result type: {type(result)}')
