@@ -35,7 +35,7 @@ from bisheng.llm.domain.services import LLMService
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_uuid
 from bisheng.worker.workflow.redis_callback import RedisCallback
-from bisheng.worker.workflow.tasks import execute_workflow, continue_workflow
+from bisheng.worker.workflow.tasks import execute_workflow, continue_workflow, workflow_stateful_worker
 from bisheng.workflow.common.workflow import WorkflowStatus
 
 expire = 600
@@ -247,7 +247,10 @@ def execute_workflow_get_answer(workflow_info: FlowVersion, evaluation: Evaluati
     workflow = RedisCallback(unique_id, workflow_id, chat_id, user_id)
     workflow.set_workflow_data(workflow_info.data)
     workflow.set_workflow_status(WorkflowStatus.WAITING.value)
-    execute_workflow.delay(unique_id, workflow_id, chat_id, user_id)
+    hash_key = generate_uuid()
+    worker_node = workflow_stateful_worker.find_task_node_sync(hash_key)
+
+    execute_workflow.apply_async([unique_id, workflow_id, chat_id, user_id], queue=worker_node)
 
     # Listen for execution results of workflows
     input_event = None
@@ -265,7 +268,8 @@ def execute_workflow_get_answer(workflow_info: FlowVersion, evaluation: Evaluati
         # Only workflows entered in dialog boxes are entered by default
         workflow.set_user_input({input_event.message.get('node_id'): {"user_input": question}})
         workflow.set_workflow_status(WorkflowStatus.INPUT_OVER.value)
-        continue_workflow.delay(unique_id, workflow_id, chat_id, user_id)
+        worker_node = workflow_stateful_worker.find_task_node_sync(hash_key)
+        continue_workflow.apply_async([unique_id, workflow_id, chat_id, user_id], queue=worker_node)
         events = []
         for event in workflow.sync_get_response_until_break():
             events.append(event)
