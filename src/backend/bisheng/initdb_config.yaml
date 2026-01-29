@@ -46,7 +46,7 @@ env:
   # websocket_url: 192.168.106.120:3003
   office_url: http://IP:8701 # onlyoffice 组件地址，需要浏览器能直接访问
   # 是否展示前端界面上的github和帮助链接
-  show_github_and_help: true
+  show_github_and_help: false
   # 是否开启注册
   enable_registration: true
   # 前端上传文件的最大限制，单位MB
@@ -58,15 +58,15 @@ workflow:
   # 等待用户输入的超时时间，单位分钟
   timeout: 5
 
-# 灵思模块相关配置
+# 星瞰DInsight Agent模块相关配置
 linsight:
   # 历史记录中工具消息的最大token，超过后需要总结下历史记录
   tool_buffer: 100000
   # 单个任务最大执行步骤数，防止死循环
   max_steps: 200
-  # 灵思任务执行过程中模型调用重试次数
+  # 星瞰DInsight Agent任务执行过程中模型调用重试次数
   retry_num: 3
-  # 灵思任务执行过程中模型调用重试间隔时间（秒）
+  # 星瞰DInsight Agent任务执行过程中模型调用重试间隔时间（秒）
   retry_sleep: 5
   # 生成SOP时，prompt里放的用户上传文件信息的数量
   max_file_num: 5
@@ -74,7 +74,7 @@ linsight:
   max_knowledge_num: 20
   # 拆分二级任务时读取文件内容的字符数，超过后会截断
   file_content_length: 5000
-  # 灵思模型默认温度
+  # 星瞰DInsight Agent模型默认温度
   default_temperature: 0
-  # 模型json格式失败重试时的温度
+  # 模型json格式解析失败重试时的温度
   retry_temperature: 1
