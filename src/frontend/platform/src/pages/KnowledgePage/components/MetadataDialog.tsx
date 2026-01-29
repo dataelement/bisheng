@@ -169,14 +169,11 @@ export const MetadataRow = React.memo(({
                         {item.type === 'Time' && (
                             <DatePicker
                                 disabled={!isKnowledgeAdmin}
-                                value={item.updated_at ? new Date(item.updated_at) : undefined}
-                                placeholder={t('metadatainfor.selectTime')}
-                                showTime={true}
-                                onChange={(selectedDate: Date | undefined) => {
-                                    const formattedValue = selectedDate
-                                        ? format(selectedDate, 'yyyy-MM-dd HH:mm:ss')
-                                        : '';
-                                    onValueChange(item.id, formattedValue);
+                                value={item.value ? Number(item.value) : undefined}
+                                showTime
+                                onChange={(date: Date | undefined) => {
+                                    const ts = date ? Math.floor(date.getTime() / 1000) : ''
+                                    onValueChange(item.id, String(ts))
                                 }}
                             />
                         )}

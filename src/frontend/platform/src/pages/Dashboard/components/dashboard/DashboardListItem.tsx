@@ -39,8 +39,8 @@ export function DashboardListItem({
     const { t } = useTranslation("dashboard")
 
     const [isEditing, setIsEditing] = useState(false)
-    const [title, setTitle] = useState('')
     const inputRef = useRef<HTMLInputElement>(null)
+    const [title, setTitle] = useState('')
     const { toast } = useToast()
     const { appConfig } = useContext(locationContext)
 
@@ -59,7 +59,7 @@ export function DashboardListItem({
         !dashboard.mange && setIsEditing(true)
     }
 
-    const handleBlur = () => {
+    const handleBlur = (e) => {
         setIsEditing(false)
         let trimmedTitle = title.trim()
 
@@ -106,6 +106,7 @@ export function DashboardListItem({
                         ref={inputRef}
                         value={title}
                         onChange={(e) => setTitle(e.target.value)}
+                        autoFocus={isEditing}
                         onBlur={handleBlur}
                         onKeyDown={handleKeyDown}
                         className="h-5 px-2 border-primary"
@@ -121,12 +122,16 @@ export function DashboardListItem({
 
             <DropdownMenu>
                 <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                    <Button variant="ghost" size="icon" className="h-5 w-0 group-hover:w-auto">
+                    <Button variant="ghost" size="icon" className={`h-5 w-0 ${isEditing ? "" : "group-hover:w-5"}`}>
                         <MoreHorizontal className="h-4 w-4" />
                     </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                    {dashboard.write && appConfig.isPro && <DropdownMenuItem onClick={() => setIsEditing(true)}>{t('rename')}</DropdownMenuItem>}
+                    {dashboard.write && appConfig.isPro && <DropdownMenuItem
+                        onClick={() => setTimeout(() => {
+                            setIsEditing(true)
+                        }, 300)} // hold close dropdownmenu
+                    >{t('rename')}</DropdownMenuItem>}
                     {appConfig.isPro && <DropdownMenuItem disabled={dashboard.is_default} onClick={() => onDefault(dashboard.id)}>{dashboard.is_default ? t('alreadyDefault') : t('setAsDefault')}</DropdownMenuItem>}
                     {dashboard.write && appConfig.isPro && <DropdownMenuItem onClick={() => onDuplicate(dashboard)}>{t('duplicate')}</DropdownMenuItem>}
                     <DropdownMenuItem onClick={() => onShare(dashboard.id)}>{t('share')}</DropdownMenuItem>
@@ -135,6 +140,6 @@ export function DashboardListItem({
                     </DropdownMenuItem>}
                 </DropdownMenuContent>
             </DropdownMenu>
-        </div>
+        </div >
     )
 }

@@ -123,7 +123,7 @@ export default function VarInput({
             textareaRef.current.innerHTML = parseToHTML(value || '')[0];
         }
         setFullVarInputValue(value)
-        placeholderInit();
+        textareaRef.current !== document.activeElement && placeholderInit();
     }, [value]);
 
     // firefox hack

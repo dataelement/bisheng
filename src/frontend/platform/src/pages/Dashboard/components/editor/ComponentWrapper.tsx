@@ -4,7 +4,7 @@ import { Input } from "@/components/bs-ui/input"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
 import { useComponentEditorStore } from "@/store/dashboardStore"
 import { Copy, Edit3, GripHorizontalIcon, MoreHorizontal, MoreVerticalIcon, Trash2 } from "lucide-react"
-import { useEffect, useRef, useState } from "react"
+import { memo, useEffect, useRef, useState } from "react"
 import { ChartType, Dashboard, DashboardComponent } from "../../types/dataConfig"
 import { ChartContainer } from "../charts/ChartContainer"
 import { QueryFilter } from "../charts/QueryFilter"
@@ -17,18 +17,18 @@ interface ComponentWrapperProps {
     component: DashboardComponent
     isPreviewMode: boolean
     dashboards: Dashboard[]
+    /** When it is true, the dark selector can take effect, resolving the conflict between the system and canvas themes  */
     isDark: boolean
     onDuplicate: (component: DashboardComponent) => void
     onCopyTo: (component: DashboardComponent, targetDashboardId: string) => void
     onDelete: (componentId: string) => void
-    onRename: (componentId: string, newTitle: string) => void
 }
 
 // 组件包装器，用于处理选中状态
-export function ComponentWrapper({
+export const ComponentWrapper = memo(({
     dashboards, component, isPreviewMode, isDark,
-    onDuplicate, onCopyTo, onDelete, onRename
-}: ComponentWrapperProps) {
+    onDuplicate, onCopyTo, onDelete
+}: ComponentWrapperProps) => {
     const { t } = useTranslation("dashboard")
 
     const [isHovered, setIsHovered] = useState(false)
@@ -36,7 +36,7 @@ export function ComponentWrapper({
     const inputRef = useRef<HTMLInputElement>(null)
     const { toast } = useToast()
     const [title, setTitle] = useState('')
-    const { copyFromDashboard, editingComponent, updateEditingComponent } = useComponentEditorStore();
+    const { hasChange, copyFromDashboard, editingComponent, updateEditingComponent } = useComponentEditorStore();
     const isSelected = editingComponent?.id === component.id
     const componentData = isSelected ? editingComponent : component
 
@@ -83,7 +83,7 @@ export function ComponentWrapper({
 
         if (trimmedTitle !== component.title) {
             setTitle(trimmedTitle)
-            onRename(component.id, trimmedTitle)
+            // onRename(component.id, trimmedTitle)
             updateEditingComponent({ title: trimmedTitle })
         }
     }
@@ -100,33 +100,40 @@ export function ComponentWrapper({
 
     const createTitleStyle = (config) => {
         const defaultConfig = {
-            titleFontSize: 14,
-            titleColor: "#111",
+            titleFontSize: 16,
+            titleColor: "",
             titleAlign: "left",
             titleBold: false,
             titleItalic: false,
             titleUnderline: false,
+            titleStrikethrough: false,
             ...config  // 用户配置覆盖默认值
         };
+
         return {
             fontSize: `${defaultConfig.titleFontSize}px`,
             color: defaultConfig.titleColor,
             textAlign: defaultConfig.titleAlign,
             fontWeight: defaultConfig.titleBold ? 'bold' : 'normal',
             fontStyle: defaultConfig.titleItalic ? 'italic' : 'normal',
-            textDecoration: defaultConfig.titleUnderline ? 'underline' : 'none',
+            textDecoration: [
+                defaultConfig.titleUnderline ? 'underline' : '',
+                defaultConfig.titleStrikethrough ? 'line-through' : ''
+            ].filter(Boolean).join(' ') || 'none',
             // 确保span能够应用text-align（如果需要）
             display: 'inline-block',
             maxWidth: '85%',
+            lineHeight: 1,
             // width: '100%'
         };
     };
 
     return (
         <div
+            id={component.id}
             className={cn(`relative w-full h-full rounded-md overflow-visible transition-all border ${!isPreviewMode && isSelected ? 'component-select border border-primary' : ''
                 }`,
-                !componentData.style_config.bgColor && 'dark:bg-gray-900',
+                !componentData.style_config.bgColor && isDark && 'dark:bg-gray-900',
                 !componentData.style_config.bgColor && 'bg-background',
                 !isPreviewMode && 'hover:border-primary hover:shadow-md'
             )}
@@ -238,7 +245,7 @@ export function ComponentWrapper({
 
             <div className="w-full h-full p-2">
                 {/* Component title with rename ability - hidden for query type */}
-                {!['query', 'metric'].includes(component.type) && (
+                {!['query', 'metric'].includes(componentData.type) && (
                     <div className="group mb-2 relative">
                         {isEditing ? (
                             <Input
@@ -251,9 +258,12 @@ export function ComponentWrapper({
                                 onClick={(e) => e.stopPropagation()}
                             />
                         ) : (
-                            <h3 className={cn("text-sm font-medium truncate",
-                                "dark:text-gray-400"
-                            )} onDoubleClick={() => setIsEditing(true)}>
+                            <h3
+                                className={cn("text-sm font-medium truncate text-foreground",
+                                    isDark && "dark:text-gray-400"
+                                )}
+                                style={{ textAlign: componentData.style_config?.titleAlign }}
+                                onDoubleClick={() => setIsEditing(true)}>
                                 <span className="no-drag cursor-pointer truncate" style={createTitleStyle(componentData.style_config)}>{title}</span>
                             </h3>
                         )}
@@ -270,9 +280,19 @@ export function ComponentWrapper({
                 )}
 
                 {/* Component content */}
-                <div className={['query', 'metric'].includes(component.type) ? 'h-full overflow-hidden' : 'h-[calc(100%-2.5rem)] overflow-hidden no-drag cursor-default'}>
-                    {component.type === 'query' ? (
-                        <QueryFilter isDark={isDark} component={componentData} isPreviewMode={isPreviewMode} />
+                <div
+                    className={['query', 'metric'].includes(componentData.type) ? '' : ` no-drag cursor-default`}
+                    style={{
+                        height: ['query', 'metric'].includes(componentData.type) ? '100%' : `calc(100% - ${(componentData.style_config?.titleFontSize || 0) + 10}px)`
+                    }}
+                >
+                    {componentData.type === 'query' ? (
+                        <QueryFilter
+                            isDark={isDark}
+                            component={componentData}
+                            isPreviewMode={isPreviewMode}
+                            hasChanged={hasChange}
+                        />
                     ) : (
                         <ChartContainer isDark={isDark} component={componentData} isPreviewMode={isPreviewMode} />
                     )}
@@ -280,4 +300,6 @@ export function ComponentWrapper({
             </div>
         </div>
     )
-}
+});
+
+

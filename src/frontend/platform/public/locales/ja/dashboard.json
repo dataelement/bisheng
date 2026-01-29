@@ -5,6 +5,7 @@
 
     "selectCharts": "関連グラフを選択",
     "selectAll": "すべて選択",
+    "unSelectAll": "すべて選択解除",
     "unnamedChart": "無名グラフ",
     "noDataset": "データセット未設定",
 
@@ -25,7 +26,7 @@
     },
     "setDefault": "デフォルト値として設定",
     "datePicker": {
-      "placeholder": "{{displayType}}を選択",
+      "placeholder": "時間を選択",
       "single": "時間",
       "range": "時間範囲"
     },
@@ -46,21 +47,22 @@
     "customStyle": "カスタムスタイル",
     "basicConfigTab": "基本設定",
     "styleConfigTab": "カスタムスタイル",
-  "validation": {
-    "validationFailed": "検証に失敗しました",
-    "chartTypeRequired": "グラフタイプを選択してください",
-    "categoryRequired": "少なくとも1つのカテゴリーディメンションを追加してください",
-    "metricRequired": "少なくとも1つのメトリックを追加してください",
-    "datasetRequired": "データセットを選択してください",
-    "stackRequired": "積み上げグラフにはスタックディメンションが必要です",
-    "invalidCategoryFields": "カテゴリーディメンションに無効なフィールドがあります",
-    "invalidMetricFields": "メトリックに無効なフィールドがあります"
-  },
+    "validation": {
+      "validationFailed": "検証に失敗しました",
+      "chartTypeRequired": "グラフタイプを選択してください",
+      "categoryRequired": "少なくとも1つのカテゴリーディメンションを追加してください",
+      "metricRequired": "少なくとも1つのメトリックを追加してください",
+      "datasetRequired": "データセットを選択してください",
+      "stackRequired": "積み上げグラフにはスタックディメンションが必要です",
+      "invalidCategoryFields": "カテゴリーディメンションに無効なフィールドがあります",
+      "invalidMetricFields": "メトリックに無効なフィールドがあります"
+    },
     "chartType": "グラフタイプ",
     "selectChartType": "グラフタイプを選択",
 
     "categoryAxis": "カテゴリ軸 / ディメンション",
     "stackItem": "積み上げ項目 / ディメンション",
+    "subCategory": "サブカテゴリ / ディメンション",
     "valueAxis": "値軸 / メトリック",
 
     "sortPriority": "ソート優先順位",
@@ -68,7 +70,7 @@
 
     "filter": "フィルター",
     "addFilterCondition": "フィルター条件を追加",
-    "filterConditionsAdded": "フィルター条件 {{count}} 個を追加",
+    "filterConditionsAdded": "フィルター条件を追加済み",
     "filterLogicHint": " ({{logic}})",
 
     "timeRange": "時間範囲",
@@ -85,19 +87,21 @@
     "dialog": {
       "editDisplayName": "表示名を編集",
       "originalName": "元の名前",
-       "displayRequired": "名前を入力してください",
+      "displayRequired": "名前を入力してください",
       "displayName": "表示名",
       "displayNameRequired": "表示名 *",
       "enterDisplayName": "表示名を入力してください",
+      "displayMaxLength": "表示名は15文字以内で入力してください",
       "cancel": "キャンセル",
-      "confirm": "確認"
+      "confirm": "確認",
+      "chartUpdated": "グラフが更新されました"
     },
 
     "toast": {
       "fieldAlreadyExists": "フィールドは既に{{section}}に存在します",
       "dimensionLimitReached": "ディメンションの上限に達しました",
       "metricReached": "メトリックの上限に達しました",
-      "metricLimitReached": "このグラフでは最大 {{count}} 個の指標まで選択できます",
+      "metricLimitReached": "現在のメトリクス数は上限に達しました",
       "virtualMetricConflict": "仮想指標と通常の指標を同時に追加することはできません",
       "multipleVirtualMetric": "複数の仮想指標を同時に追加することはできません"
     },
@@ -153,7 +157,7 @@
       "count": "カウント",
       "max": "最大値",
       "min": "最小値",
-      "aggregation":"ユニークカウント"
+      "distinctCount": "ユニークカウント"
     },
     "sort": {
       "none": "なし",
@@ -234,8 +238,8 @@
       "fetchEnumFailed": "列挙値の取得に失敗しました。後で再試行してください",
       "virtualMetricConflict": "仮想メトリックと通常のメトリックを同時に追加することはできません",
       "multipleVirtualMetric": "複数の仮想メトリックを同時に追加することはできません",
-      "saveSuccess":"保存に成功しました"
-      
+      "saveSuccess": "保存に成功しました"
+
     },
     "enumSelect": {
       "placeholder": "選択してください",
@@ -305,6 +309,7 @@
     "warn": {
       "invalidFieldType": "フィールドタイプ {{fieldType}} を {{section}} エリアにドラッグすることはできません",
       "maxStackDimension": "スタックディメンションは1つだけ許可されます。既存のスタックディメンションを先に削除してください",
+      "metricLimitReached": "現在のメトリクス数は上限に達しました",
       "maxCategoryDimensions": "カテゴリーディメンションは最大2つまで許可されます",
       "fieldExists": "このフィールドは既に追加されています"
     }
@@ -320,7 +325,7 @@
   "selectTime": "時間を選択",
   "startHour": "開始時間",
   "endHour": "終了時間",
-  "dynamicUpdate": "動的更新 (次回表示時に現在時刻から自動計算)",
+  "dynamicUpdate": "動的更新",
   "cancel": "キャンセル",
   "clear": "クリア",
   "confirm": "確定",
@@ -398,11 +403,88 @@
     "lineChart": "折れ線グラフ",
     "basicLineChart": "基本折れ線グラフ",
     "stackedLineChart": "積立折れ線グラフ",
+    "multipleLineChart": "組み合わせグラフ",
     "areaChart": "面グラフ",
     "stackedAreaChart": "積立面グラフ",
     "pieChart": "円グラフ",
     "donutChart": "ドーナツグラフ",
     "others": "その他",
     "metricCard": "指標カード"
-  }
+  },
+  "mid_user_increment": "ユーザースケール統計",
+  "timestamp": {
+    "year": "時間(年)",
+    "month": "時間(月)",
+    "week": "時間(週)",
+    "day": "時間(日)",
+    "hour": "時間(時)"
+  },
+  "user_group_infos": {
+    "user_group_id": "ユーザーグループID",
+    "user_group_name": "ユーザーグループ名"
+  },
+  "total_user_count": "総ユーザー数",
+  "new_user_count": "新規ユーザー数",
+  "mid_active_user": "アクティブユーザー規模統計",
+  "active_user_count": "アクティブユーザー数",
+  "mid_app_increment": "アプリケーション規模統計",
+  "user_id": "ユーザーID",
+  "user_name": "ユーザー名",
+  "app_type": "アプリケーションタイプ",
+  "total_app_count": "総アプリケーション数",
+  "new_app_count": "新規アプリケーション数",
+  "mid_sessions_increment": "アプリケーション使用状況統計",
+  "app_id": "アプリケーションID",
+  "app_name": "アプリケーション名",
+  "source": "ソースタイプ（プラットフォーム/API）",
+  "session_count": "セッション回数",
+  "platform_user_count": "利用人数",
+  "api_call_count": "APIコール回数",
+  "mid_session_run_dtl": "アプリケーションの並行処理と時間消費",
+  "duration_seconds": "セッション実行時間",
+  "max_concurrent_sessions": "最大同時オンラインセッション数",
+  "mid_tool_call_dtl": "ツール呼び出し分析",
+  "tool_name": "ツール名",
+  "tool_id": "ツールID",
+  "tool_type": "ツールタイプ",
+  "tool_call_count": "ツールコール回数",
+  "tool_call_success_count": "ツールコール成功回数",
+  "tool_call_success_rate": "ツールコール成功率",
+  "mid_knowledge_increment": "知識ベースの規模統計",
+  "total_document_knowledge_base_count": "総ドキュメントナレッジベース数",
+  "total_qa_knowledge_base_count": "総Q&Aナレッジベース数",
+  "new_document_knowledge_base_count": "新規ドキュメントナレッジベース数",
+  "new_qa_knowledge_base_count": "新規Q&Aナレッジベース数",
+  "mid_knowledge_file_increment": "ナレッジベースファイルの統計",
+  "total_file_count": "総ファイル数",
+  "total_qa_count": "総Q&Aペア数",
+  "file_size": "ファイルサイズ",
+  "mid_doc_parse_dtl": "ファイル解析性能",
+  "parse_type": "解析タイプ",
+  "status": "ファイル最終ステータス",
+  "doc_parse_count": "ドキュメントアップロード回数",
+  "doc_parse_success_count": "ドキュメント入庫成功回数",
+  "doc_parse_success_rate": "ドキュメント入庫成功率",
+  "etl_parse_count": "ETL処理回数",
+  "etl_parse_success_count": "ETL処理成功回数",
+  "etl_parse_success_rate": "ETL処理成功率",
+  "mid_model_call_dtl": "モデルのコストと性能",
+  "user_role_infos": {
+    "role_id": "ロールID",
+    "role_name": "ロール名"
+  },
+  "model_id": "モデルID",
+  "model_type": "モデルタイプ",
+  "model_name": "モデル名",
+  "model_server_id": "サービス提供元ID",
+  "model_server_name": "サービス提供元名",
+  "total_token": "Token消費量",
+  "model_call_count": "モデルコール回数",
+  "model_call_success_rate": "モデルコール成功率",
+  "max_concurrent_llm_sessions": "最大LLM同時実行数",
+  "avg_first_token_cost_time": "平均初回Token応答遅延",
+  "mid_user_interact_dtl": "ユーザーフィードバック統計",
+  "like_count": "いいね回数",
+  "dislike_count": "ネガティブ評価回数",
+  "copy_count": "コピー回数"
 }

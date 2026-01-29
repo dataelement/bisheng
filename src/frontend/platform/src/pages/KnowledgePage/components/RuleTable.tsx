@@ -121,7 +121,7 @@ export default function RuleTable({
   }, [rules.fileList])
 
   return (
-    <div className="flex-1 flex flex-col relative max-w-[760px] mx-auto">
+    <div className="flex-1 flex flex-col relative min-w-[600px] max-w-[760px] mx-auto">
       <div
         className="flex flex-col gap-4"
         style={{ gridTemplateColumns: '114px 1fr' }}
@@ -133,7 +133,7 @@ export default function RuleTable({
 
         {applyEachCell ? (
           <div>
-            <div className="relative after:absolute after:inset-0 after:bg-gray-100/50 after:z-10 after:pointer-events-none">
+            <div className="relative after:absolute after:inset-0 after:bg-accent/50 after:z-10 after:pointer-events-none">
               {/* 当 showPreview 为 true 时使用垂直布局，否则保持原有水平布局 */}
               <div className={showPreview ? "flex flex-col p-4 border rounded-lg text-sm" : "flex items-center justify-between p-4 border rounded-lg text-sm"}>
                 {/* 第一行：始终显示标题 */}
@@ -194,8 +194,8 @@ export default function RuleTable({
               </div>
             </div>
             {/* splice rule */}
-            <div className="space-y-4 mt-4 p-4 border rounded-lg bg-white shadow-sm">
-              <h3 className="text-md font-bold text-gray-800 text-left">
+            <div className="space-y-4 mt-4 p-4 border rounded-lg bg-main shadow-sm">
+              <h3 className="text-md font-bold text-foreground text-left">
                 {t('splitMethod')}
               </h3>
               <div className="relative mt-2 pr-2 overflow-y-auto max-h-[440px]">

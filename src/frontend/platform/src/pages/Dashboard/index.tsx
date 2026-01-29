@@ -22,7 +22,12 @@ import { DashboardQueryKey, DashboardsQueryKey } from "./hook"
 export default function DashboardPage() {
     const { t } = useTranslation("dashboard")
     const { appConfig } = useContext(locationContext)
-    const [selectedId, setSelectedId] = useEditorDashboardStore(state => [state.currentDashboardId, state.setCurrentDashboardId])
+
+    const {
+        currentDashboardId: selectedId,
+        setCurrentDashboardId: setSelectedId,
+        setCurrentDashboard,
+    } = useEditorDashboardStore()
     const { toast } = useToast()
     const queryClient = useQueryClient()
     const [isCollapsed, setIsCollapsed] = useState(false)
@@ -32,12 +37,16 @@ export default function DashboardPage() {
         queryFn: getDashboards,
     })
 
-    const updateMutation = useMutation({
+    const updateTitlteMutation = useMutation({
         mutationFn: ({ id, title }: { id: string; title: string }) => updateDashboardTitle(id, title),
         onSuccess: (a, { id, title }) => {
             // queryClient.invalidateQueries({ queryKey: [DashboardsQueryKey] })
-            queryClient.invalidateQueries({ queryKey: [DashboardQueryKey, id] })
-            queryClient.setQueryData([DashboardsQueryKey], (old) =>
+            // queryClient.invalidateQueries({ queryKey: [DashboardQueryKey, id] })
+            queryClient.setQueryData([DashboardQueryKey, id], (old: any) => {
+                old.title = title
+                return old
+            })
+            queryClient.setQueryData([DashboardsQueryKey], (old: any) =>
                 old.map(el => el.id === id ? { ...el, title } : el));
             toast({
                 description: t('renameSuccess'),
@@ -65,12 +74,12 @@ export default function DashboardPage() {
     })
 
     const handleRename = (id: string, newTitle: string) => {
-        updateMutation.mutate({ id, title: newTitle })
+        updateTitlteMutation.mutate({ id, title: newTitle })
     }
 
     const handleShare = async (id: string) => {
-        const _selectedDashboard = dashboards.find((d) => d.id === id)
-        if (_selectedDashboard?.status === "draft") {
+        // const _selectedDashboard = dashboards.find((d) => d.id === id)
+        if (selectedDashboard?.status === "draft") {
             toast({
                 description: t('shareNotPublished'),
                 variant: "error",
@@ -79,7 +88,7 @@ export default function DashboardPage() {
         }
 
         try {
-            const link = `${location.origin}${__APP_ENV__.BASE_URL}/dashboard/share/${btoa(_selectedDashboard.id)}`
+            const link = `${location.origin}${__APP_ENV__.BASE_URL}/dashboard/share/${btoa(selectedDashboard.id)}`
             await copyText(link)
             toast({
                 description: t('shareCopySuccess'),
@@ -107,6 +116,14 @@ export default function DashboardPage() {
     useEffect(() => {
         return () => setSelectedId("")
     }, [])
+
+    // dashboard reactquery to store
+    useEffect(() => {
+        if (selectedDashboard) {
+            setCurrentDashboard(selectedDashboard)
+            setSelectedId(selectedDashboard.id)
+        }
+    }, [selectedDashboard, setCurrentDashboard])
 
     // Auto-select first dashboard if none selected
     if (!selectedId && dashboards.length > 0) {

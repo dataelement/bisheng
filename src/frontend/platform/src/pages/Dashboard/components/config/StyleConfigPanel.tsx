@@ -74,7 +74,7 @@ function TextFormat({
     <div
       className="
       flex items-center
-      w-[244px] h-8
+      w-[230px] h-8
       border rounded-md
       overflow-hidden
     "
@@ -84,11 +84,11 @@ function TextFormat({
         value={String(fontSize)}
         onValueChange={(v) => setFontSize(Number(v))}
       >
-        <SelectTrigger className="w-[50px] h-7 px-2 text-xs border-0 ">
+        <SelectTrigger className="w-[60px] h-7 px-2 text-xs border-0 bg-background">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          {[10, 12, 14, 16, 18, 20, 24].map((v) => (
+          {[10, 12, 14, 16, 18, 20, 24, 28].map((v) => (
             <SelectItem key={v} value={String(v)} className="text-xs">
               {v}
             </SelectItem>
@@ -100,7 +100,7 @@ function TextFormat({
       {setColor && (
         <Select
         >
-          <SelectTrigger className="w-[50px] h-7 px-2 text-xs border-0 ">
+          <SelectTrigger className="w-[60px] h-7 px-2 text-xs border-0 bg-background">
             <div className="size-4 border-[#EBECF0]">
               <div
                 className="h-full w-full rounded shadow-sm border"
@@ -140,40 +140,40 @@ function TextFormat({
         value={align}
         onValueChange={(v) => setAlign(v as "left" | "center" | "right")}
       >
-        <SelectTrigger className="w-10 h-7 px-1 border-0 shadow-none">
+        <SelectTrigger className="w-12 h-7 px-1 border-0 shadow-none bg-background">
           <SelectValue asChild>{alignIcon}</SelectValue>
         </SelectTrigger>
 
         <SelectContent>
           <SelectItem value="left" className="flex justify-center">
-            <AlignLeft className="w-4 h-4" />
+            <AlignLeft className="w-3 h-3" />
           </SelectItem>
           <SelectItem value="center" className="flex justify-center">
-            <AlignCenter className="w-4 h-4" />
+            <AlignCenter className="w-3 h-3" />
           </SelectItem>
           <SelectItem value="right" className="flex justify-center">
-            <AlignRight className="w-4 h-4" />
+            <AlignRight className="w-3 h-3" />
           </SelectItem>
         </SelectContent>
       </Select>
 
       {/* 样式 */}
-      <div className="flex">
+      <div className="flex w-[88px] m-1 gap-1">
         <IconBtn active={bold} onClick={() => setBold(!bold)}>
           <Bold className="w-3.5 h-3.5" />
         </IconBtn>
         <IconBtn active={italic} onClick={() => setItalic(!italic)}>
           <Italic className="w-3.5 h-3.5" />
         </IconBtn>
-        <IconBtn active={underline} onClick={() => setUnderline(!underline)}>
-          <Underline className="w-3.5 h-3.5" />
+        {/* <IconBtn active={underline} onClick={() => setUnderline(!underline)}>
+          <Underline className="w-3 h-3" />
         </IconBtn>
         <IconBtn
           active={strikethrough}
           onClick={() => setStrikethrough(!strikethrough)}
         >
-          <Strikethrough className="w-3.5 h-3.5" />
-        </IconBtn>
+          <Strikethrough className="w-3 h-3" />
+        </IconBtn> */}
       </div>
     </div>
   )
@@ -195,76 +195,14 @@ function IconBtn({
       variant="ghost"
       size="sm"
       onClick={onClick}
-      className={`w-7 h-7 px-0 rounded-none ${active ? "bg-blue-100 text-blue-600" : ""}`}
+      className={`w-7 h-5 px-0 rounded-[3px] ${active ? "bg-blue-100 text-blue-600" : ""}`}
     >
       {children}
     </Button>
   )
 }
 
-const FULL_DEFAULT_STYLE_CONFIG: ComponentStyleConfig = {
-  themeColor: "#4ac5ff",
-  bgColor: "#ffffff",
 
-  title: "",
-  titleFontSize: 14,
-  titleBold: false,
-  titleItalic: false,
-  titleUnderline: false,
-  titleStrikethrough: false,
-  titleAlign: "left",
-  titleColor: "#000000",
-
-  xAxisTitle: "",
-  xAxisFontSize: 14,
-  xAxisBold: false,
-  xAxisItalic: false,
-  xAxisUnderline: false,
-  xAxisStrikethrough: false,
-  xAxisAlign: "center",
-  xAxisColor: "#000000",
-
-  yAxisTitle: "",
-  yAxisFontSize: 14,
-  yAxisBold: false,
-  yAxisItalic: false,
-  yAxisUnderline: false,
-  yAxisStrikethrough: false,
-  yAxisAlign: "center",
-  yAxisColor: "#000000",
-
-  legendPosition: "bottom",
-  legendFontSize: 14,
-  legendBold: false,
-  legendItalic: false,
-  legendUnderline: false,
-  legendStrikethrough: false,
-  legendAlign: "left",
-  legendColor: "#000000",
-
-  showSubtitle: false,
-  subtitle: "",
-  subtitleFontSize: 14,
-  subtitleStrikethrough: false,
-  subtitleBold: false,
-  subtitleItalic: false,
-  subtitleUnderline: false,
-  subtitleAlign: "center",
-  subtitleColor: "#000000",
-
-  metricFontSize: 14,
-  metricBold: false,
-  metricItalic: false,
-  metricUnderline: false,
-  metricStrikethrough: false,
-  metricAlign: "center",
-  metricColor: "#000000",
-
-  showLegend: true,
-  showAxis: true,
-  showDataLabel: true,
-  showGrid: true,
-}
 
 
 // 内联的折叠区块组件
@@ -288,7 +226,7 @@ function CollapsibleBlock({
   return (
     <div className="space-y-3">
       <div
-        className="flex items-center justify-between bg-gray-50 rounded-md h-[28px] w-[244px] cursor-pointer"
+        className="flex items-center justify-between bg-gray-50 dark:bg-gray-400 rounded-md h-[28px] w-[228px] cursor-pointer"
         onClick={onCollapse}
       >
         <div className="flex items-center">
@@ -305,7 +243,7 @@ function CollapsibleBlock({
         </div>
       </div>
       {(isOpen || !collapsed) && (
-        <div className="w-[244px]">
+        <div className="w-[228px]">
           {children}
         </div>
       )}
@@ -321,26 +259,22 @@ function FormBlock({ label, children }: {
   return (
     <div className="space-y-2">
       <label className="text-sm font-medium">{label}</label>
-      <div className="w-[244px]">
+      <div className="w-[228px]">
         {children}
       </div>
     </div>
   )
 }
 
-export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelProps) {
+export function StyleConfigPanel({ config, onChange, type, FULL_DEFAULT_STYLE_CONFIG }: StyleConfigPanelProps) {
 
   const { t } = useTranslation("dashboard")
 
-  const [collapsedSections, setCollapsedSections] = useState({
-    color: false,
-    title: true,
-    axis: true,
-    legend: true,
-    chartOptions: false
-  })
 
   const editingComponent = useComponentEditorStore(state => state.editingComponent)
+
+  const collapsedSections = useComponentEditorStore(state => state.collapsedSections)
+  const setCollapsedSection = useComponentEditorStore(state => state.setCollapsedSection)
 
   const updateEditingComponent = useComponentEditorStore(state => state.updateEditingComponent)
   const firstDimension = editingComponent?.data_config?.dimensions?.[0]
@@ -353,18 +287,27 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
       ...FULL_DEFAULT_STYLE_CONFIG,
       ...config,
       ...componentConfig,
-      themeColor: (componentConfig.themeColor || config.themeColor || colorSchemes[0]?.id || FULL_DEFAULT_STYLE_CONFIG.themeColor),
+      themeColor: (() => {
+        const id =
+          componentConfig.themeColor ??
+          config.themeColor
+
+        // 如果不存在 or 不合法 → 用第一个
+        return colorSchemes.some(s => s.id === id)
+          ? id
+          : colorSchemes[0].id
+      })(),
     }
-    if (baseConfig.title === "") {
-      baseConfig.title = editingComponent?.data_config?.metrics?.[0]?.fieldName
-    }
+    // if (baseConfig.title === "") {
+    //   baseConfig.title = editingComponent?.data_config?.metrics?.[0]?.fieldName
+    // }
     // 如果轴标题为空，设置默认值
-    if (!baseConfig.xAxisTitle && firstDimension?.fieldName) {
-      baseConfig.xAxisTitle = firstDimension.fieldName
+    if (baseConfig.xAxisTitle === undefined && firstDimension?.fieldName) {
+      baseConfig.xAxisTitle = firstDimension.fieldName;
     }
 
-    if (!baseConfig.yAxisTitle && firstMetric?.fieldName) {
-      baseConfig.yAxisTitle = firstMetric.fieldName
+    if (baseConfig.yAxisTitle === undefined && firstMetric?.fieldName) {
+      baseConfig.yAxisTitle = firstMetric.fieldName;
     }
 
     return baseConfig
@@ -372,24 +315,35 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
   const [initialized, setInitialized] = useState(false)
 
   useEffect(() => {
-    if (editingComponent && !editingComponent.style_config && !initialized) {
+    if (!editingComponent || initialized) return
 
+    const styleConfig = editingComponent.style_config ?? {}
+    if (styleConfig.title === undefined && editingComponent.type === "metric") {
       updateEditingComponent({
         style_config: {
           ...FULL_DEFAULT_STYLE_CONFIG,
-          ...config,
-          themeColor: config.themeColor || colorSchemes[0]?.id || FULL_DEFAULT_STYLE_CONFIG.themeColor,
-        }
+          ...styleConfig,
+        },
+        title: editingComponent.data_config?.metrics?.[0]?.fieldName ?? "",
       })
-      setInitialized(true)
+    } else {
+      updateEditingComponent({
+        style_config: {
+          ...FULL_DEFAULT_STYLE_CONFIG,
+          ...styleConfig,
+          title:
+            editingComponent.title ?? "",
+        },
+      })
     }
-  }, [editingComponent, config, updateEditingComponent, initialized])
+
+    setInitialized(true)
+  }, [editingComponent?.id])
+
+
 
   const toggleSection = (section: keyof typeof collapsedSections) => {
-    setCollapsedSections(prev => ({
-      ...prev,
-      [section]: !prev[section]
-    }))
+    setCollapsedSection(section, !collapsedSections[section])
   }
 
   const handleChange = (key: keyof ComponentStyleConfig, value: any) => {
@@ -429,7 +383,7 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
               <SelectTrigger className="w-full h-8">
                 <SelectValue>
                   <div className="flex gap-[1px]">
-                    {(colorSchemes.find(s => s.id === localConfig.themeColor)?.colors.light.slice(0, 5) || ["#000000"]).map((color, idx) => (
+                    {(colorSchemes.find(s => s.id === localConfig.themeColor)?.colors.light.slice(0, 5) || [colorSchemes[0].colors.light]).map((color, idx) => (
                       <div
                         key={idx}
                         className={`
@@ -512,18 +466,24 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
         onCollapse={() => toggleSection('title')}
         isOpen={type === 'metric'}
       >
-        <FormBlock label={t('styleConfigPanel.labels.titleContent')}>
+        <FormBlock label={type === 'metric' ? t('styleConfigPanel.labels.textContent') : t('styleConfigPanel.labels.titleContent')}>
           <Input
             placeholder={t('styleConfigPanel.placeholders.enterTitle')}
             value={localConfig.title || ""}
-            onChange={(e) => handleChange("title", e.target.value)}
+            onChange={(e) => {
+              const value = e.target.value
+              if (value.length <= 15) {
+                handleChange("title", value)
+              }
+            }}
+            maxLength={15}
           />
         </FormBlock>
         <FormBlock label={t('styleConfigPanel.labels.textFormat')}>
           <TextFormat
             fontSize={localConfig.titleFontSize}
             setFontSize={(v) => handleChange("titleFontSize", v)}
-            bold={localConfig.titleBold}
+            bold={localConfig.titleBold || false}
             setBold={(v) => handleChange("titleBold", v)}
             italic={localConfig.titleItalic}
             setItalic={(v) => handleChange("titleItalic", v)}
@@ -588,7 +548,13 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
                     <Input
                       placeholder={t('styleConfigPanel.placeholders.enterSubtitle')}
                       value={localConfig.subtitle || ""}
-                      onChange={(e) => handleChange("subtitle", e.target.value)}
+                      onChange={(e) => {
+                        const value = e.target.value
+                        if (value.length <= 24) {
+                          handleChange("subtitle", e.target.value)
+                        }
+                      }}
+                      maxLength={24}
                     />
                   </FormBlock>
                   <FormBlock label={t('styleConfigPanel.labels.textFormat')}>
@@ -624,7 +590,13 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
                   <Input
                     placeholder={t('styleConfigPanel.placeholders.enterXAxisTitle')}
                     value={localConfig.xAxisTitle || ""}
-                    onChange={(e) => handleChange("xAxisTitle", e.target.value)}
+                    onChange={(e) => {
+                      const value = e.target.value
+                      if (value.length <= 24) {
+                        handleChange("xAxisTitle", e.target.value)
+                      }
+                    }}
+                    maxLength={15}
                   />
                 </FormBlock>
 
@@ -652,7 +624,13 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
                     <Input
                       placeholder={t('styleConfigPanel.placeholders.enterYAxisTitle')}
                       value={localConfig.yAxisTitle || ""}
-                      onChange={(e) => handleChange("yAxisTitle", e.target.value)}
+                      onChange={(e) => {
+                        const value = e.target.value
+                        if (value.length <= 24) {
+                          handleChange("yAxisTitle", e.target.value)
+                        }
+                      }}
+                      maxLength={15}
                     />
                   </FormBlock>
 
@@ -722,7 +700,6 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
                 />
               </FormBlock>
             </CollapsibleBlock>
-            {console.log(editingComponent, editingComponent?.type, 454545454)}
             {/* 图表选项 */}
             <CollapsibleBlock
               title={t('styleConfigPanel.sections.chartOptions')}
@@ -738,13 +715,6 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
                   />
                   {t('styleConfigPanel.options.legend')}
                 </label>
-                {editingComponent.type !== "donut" && editingComponent.type !== "pie" && <label className="flex items-center gap-2 text-sm">
-                  <Checkbox
-                    checked={localConfig.showAxis}
-                    onCheckedChange={(v) => handleChange("showAxis", v)}
-                  />
-                  {t('styleConfigPanel.options.axis')}
-                </label>}
                 <label className="flex items-center gap-2 text-sm">
                   <Checkbox
                     checked={localConfig.showDataLabel}
@@ -752,6 +722,14 @@ export function StyleConfigPanel({ config, onChange, type }: StyleConfigPanelPro
                   />
                   {t('styleConfigPanel.options.dataLabel')}
                 </label>
+                {editingComponent.type !== "donut" && editingComponent.type !== "pie" && <label className="flex items-center gap-2 text-sm">
+                  <Checkbox
+                    checked={localConfig.showAxis}
+                    onCheckedChange={(v) => handleChange("showAxis", v)}
+                  />
+                  {t('styleConfigPanel.options.axis')}
+                </label>}
+
 
                 {editingComponent.type !== "donut" && editingComponent.type !== "pie" && <label className="flex items-center gap-2 text-sm">
                   <Checkbox

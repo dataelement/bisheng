@@ -12,7 +12,7 @@ import { useToast } from "@/components/bs-ui/toast/use-toast"
 import { updateDashboard } from "@/controllers/API/dashboard"
 import { useComponentEditorStore, useEditorDashboardStore } from "@/store/dashboardStore"
 import { ArrowLeft } from "lucide-react"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useMutation, useQueryClient } from "react-query"
 import { useNavigate } from "react-router-dom"
@@ -166,6 +166,7 @@ export function EditorHeader({
         configSave?.click()
 
         setTimeout(async () => {
+            // currentDashboard.components.map(el => el.style_config.titleColor = '')
             await saveMutation.mutate({
                 id: currentDashboard?.id,
                 dashboard: currentDashboard,
@@ -216,17 +217,19 @@ export function EditorHeader({
                         {title}
                     </h1>
                 )}
-                <Badge variant="outline" className="break-keep font-normal bg-gray-100">{getSaveStatus()}</Badge>
+                <Badge variant="outline" className="break-keep font-normal bg-gray-100 dark:bg-black">{getSaveStatus()}</Badge>
             </div>
 
             {/* Middle section */}
             <div className="flex items-center gap-4">
                 {/* Add Component */}
                 <ComponentPicker onSelect={addComponentToLayout}>
-                    <Button variant="outline" size="sm" className="gap-1.5">
-                        <GridAddIcon className="size-4" />
-                        {t('addChart')}
-                    </Button>
+                    {useMemo(() => (
+                        <Button variant="outline" size="sm" className="gap-1.5">
+                            <GridAddIcon className="size-4" />
+                            {t('addChart')}
+                        </Button>
+                    ), [t])}
                 </ComponentPicker>
                 <Button variant="outline" size="sm" className="gap-1.5" onClick={() => addComponentToLayout({
                     title: t('selectDate'),

@@ -5,32 +5,30 @@ import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
 import { copyComponentTo, getDashboards } from "@/controllers/API/dashboard"
 import { useComponentEditorStore, useEditorDashboardStore } from "@/store/dashboardStore"
-import { useEffect, useMemo, useRef, useState } from "react"
+import { cn } from "@/utils"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import ReactGridLayout, { Layout, verticalCompactor } from "react-grid-layout"
 import "react-grid-layout/css/styles.css"
+import { useTranslation } from "react-i18next"
 import { useMutation, useQuery, useQueryClient } from "react-query"
 import "react-resizable/css/styles.css"
 import { DashboardsQueryKey } from "../../hook"
-import { Dashboard, DashboardComponent } from "../../types/dataConfig"
+import { DashboardComponent } from "../../types/dataConfig"
 import { ComponentConfigDrawer } from "../config/ComponentConfigDrawer"
 import { ComponentWrapper } from "./ComponentWrapper"
 import Home from "./Home"
 import "./index.css"
-import { cn } from "@/utils"
-import { useTranslation } from "react-i18next"
 
 interface EditorCanvasProps {
     isPreviewMode?: boolean
     isLoading: boolean
-    dashboard: Dashboard | null
 }
 
-export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanvasProps) {
+export function EditorCanvas({ isLoading, isPreviewMode }: EditorCanvasProps) {
     const { width, containerRef, mounted } = useContainerWidth()
     const {
         currentDashboard,
         setCurrentDashboard,
-        setCurrentDashboardId,
         layouts,
         setLayouts,
         duplicateComponent: duplicateComponentInStore,
@@ -70,14 +68,6 @@ export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanv
             })
         },
     })
-
-    // 当dashboard变化时，更新store
-    useEffect(() => {
-        if (dashboard) {
-            setCurrentDashboard(dashboard)
-            setCurrentDashboardId(dashboard.id)
-        }
-    }, [dashboard, setCurrentDashboard])
 
     // When the page loads, it automatically refreshes according to the query component configuration 
     useEffect(() => {
@@ -123,7 +113,9 @@ export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanv
             const isInsideContainer = containerRef.current?.contains(target);
             const isDragHandle = target.closest('.drag-handle');
             if (isInsideContainer && !isDragHandle) {
-                clearComponentEditorStore();
+                setTimeout(() => {
+                    clearComponentEditorStore();
+                }, 0);
             }
         };
 
@@ -134,17 +126,17 @@ export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanv
     }, []);
 
     // Handle component duplicate
-    const handleDuplicate = (component: DashboardComponent) => {
+    const handleDuplicate = useCallback((component: DashboardComponent) => {
         duplicateComponentInStore(component)
-    }
+    }, [duplicateComponentInStore])
 
     // Handle copy to another dashboard
-    const handleCopyTo = (component: DashboardComponent, targetDashboardId: string) => {
+    const handleCopyTo = useCallback((component: DashboardComponent, targetDashboardId: string) => {
         copyToMutation.mutate({ component, targetId: targetDashboardId })
-    }
+    }, [copyToMutation.mutate])
 
     // Handle component delete
-    const handleDelete = (componentId: string) => {
+    const handleDelete = useCallback((componentId: string) => {
         const component = currentDashboard?.components.find(c => c.id === componentId)
         if (!component) return
 
@@ -157,7 +149,7 @@ export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanv
                 next()
             },
         })
-    }
+    }, [currentDashboard?.components, deleteComponentInStore])
 
     const handleRename = (id, title) => {
         setCurrentDashboard({
@@ -224,7 +216,7 @@ export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanv
 
     // loading
     if (isLoading || !currentDashboard) {
-        return <div className="w-full h-full flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
+        return <div className="w-full h-full flex justify-center items-center z-10">
             <LoadingIcon />
         </div>
     }
@@ -242,15 +234,12 @@ export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanv
             <div className="flex h-full">
                 <div
                     id="edit-charts-panne"
-                    className={cn("flex-1 overflow-auto no-scrollbar", theme)}
-                    style={{
-                        backgroundColor: theme === 'dark' ? '#1a1a1a' : '#f5f5f5',
-                    }}
+                    className={cn("flex-1 relative overflow-auto no-scrollbar", theme === 'dark' ? 'bg-[#1a1a1a] dark' : 'bg-[#f5f5f5] theme-force-light')}
                 >
                     <div
                         ref={containerRef}
-                        className="min-w-[1000px]">
-                        <div className="mx-auto relative" style={{
+                        className="min-w-[1000px] h-screen">
+                        <div className="mx-auto min-h-full" style={{
                             ...gridBackgroundStyle,
                         }}>
                             {mounted && (
@@ -291,7 +280,6 @@ export function EditorCanvas({ isLoading, isPreviewMode, dashboard }: EditorCanv
                                                 onDuplicate={handleDuplicate}
                                                 onCopyTo={handleCopyTo}
                                                 onDelete={handleDelete}
-                                                onRename={handleRename}
                                             />
                                         </div>
                                     ))}

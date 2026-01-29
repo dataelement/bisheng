@@ -56,12 +56,19 @@ def parse_token_usage(result: Any) -> tuple[int, int, int, int]:
     input_token, output_token, cache_token, total_token = 0, 0, 0, 0
     if isinstance(result, ChatResult):
         for generation in result.generations:
-            token_usage = generation.generation_info.get('token_usage', {})
+            token_usage = generation.generation_info.get('token_usage', {}) or generation.message.response_metadata.get(
+                'token_usage', {}) or generation.message.usage_metadata
             tmp1, tmp2, tmp3, tmp4 = get_token_from_usage(token_usage)
             input_token += tmp1
             output_token += tmp2
             cache_token += tmp3
             total_token += tmp4
+    elif isinstance(result, ChatGenerationChunk):
+        token_usage = result.message.response_metadata.get('token_usage', {}) or result.generation_info.get(
+            'token_usage', {}) or result.message.usage_metadata
+        input_token, output_token, cache_token, total_token = get_token_from_usage(token_usage)
+    else:
+        logger.warning(f'unknown result type: {type(result)}')
     return input_token, output_token, cache_token, total_token
 
 
@@ -72,7 +79,7 @@ class TelemetryCallback(BaseCallbackHandler):
 
     def __init__(self, start_time: float):
         self.start_time = start_time
-        self.first_token_time: Optional[int] = None
+        self.first_token_time: Optional[int] = 0
 
     def on_llm_new_token(
             self,
@@ -83,7 +90,7 @@ class TelemetryCallback(BaseCallbackHandler):
             parent_run_id: Optional[UUID] = None,
             **kwargs: Any,
     ) -> Any:
-        if self.first_token_time is None:
+        if not self.first_token_time:
             self.first_token_time = int((time.time() - self.start_time) * 1000)
 
 

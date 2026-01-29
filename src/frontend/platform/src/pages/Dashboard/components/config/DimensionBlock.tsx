@@ -1,8 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Button } from "@/components/bs-ui/button"
-import { Settings, X, ChevronRight, Check } from "lucide-react"
+import { Settings, X, Check } from "lucide-react"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog"
 import { Input } from "@/components/bs-ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select"
@@ -10,6 +10,17 @@ import { RadioGroup, RadioGroupItem } from "@/components/bs-ui/radio"
 import { Label } from "@/components/bs-ui/label"
 import { Checkbox } from "@/components/bs-ui/checkBox"
 import { useTranslation } from "react-i18next"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuPortal,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "@/components/bs-ui/dropdownMenu"
 
 interface DimensionItem {
   id: string
@@ -22,6 +33,10 @@ interface DimensionItem {
   format?: string
   numberFormat?: MetricFormat
   sortPriority?: number
+  isVirtual?: boolean // 补充定义
+  fieldId?: string
+  timeGranularity?: string
+  isDivide?: string
 }
 
 interface DimensionBlockProps {
@@ -39,6 +54,7 @@ interface DimensionBlockProps {
   onFormatChange?: (dimensionId: string, format: MetricFormat) => void
   invalidIds?: Set<string>
 }
+
 type MetricFormat = {
   type: 'number' | 'percent' | 'duration' | 'storage'
   decimalPlaces: number
@@ -46,6 +62,7 @@ type MetricFormat = {
   suffix?: string
   thousandSeparator: boolean
 }
+
 export function DimensionBlock({
   isDimension,
   dimensions = [],
@@ -66,42 +83,80 @@ export function DimensionBlock({
   const { t } = useTranslation("dashboard")
 
   const [hoveredDimension, setHoveredDimension] = useState<string | null>(null)
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null)
-  const [hoveredMenuItem, setHoveredMenuItem] = useState<{
-    dimensionId: string
-    menuType: 'sort' | 'aggregation' | 'format'
-  } | null>(null)
+
+  // const [openMenuId, setOpenMenuId] = useState<string | null>(null)
+  // const [hoveredMenuItem, setHoveredMenuItem] = useState<...>...
+
   const [selectedDimensionId, setSelectedDimensionId] = useState<string | null>(null)
   const [editingMetric, setEditingMetric] = useState<DimensionItem | null>(null)
   const [formatDialogOpen, setFormatDialogOpen] = useState(false)
   const [localFormat, setLocalFormat] = useState<MetricFormat | null>(null)
   const [hoveredIcon, setHoveredIcon] = useState<string | null>(null)
-  // 获取字段样式
+  // 监听editingMetric变化，设置默认格式
+  useEffect(() => {
+    if (editingMetric) {
+      console.log('Editing metric:', editingMetric);
+
+      const currentFormat = editingMetric.numberFormat;
+
+      if (currentFormat) {
+        console.log('使用现有的 numberFormat:', currentFormat);
+        const defaultDecimal = currentFormat.type === 'number' ? 0 : 2;
+        setLocalFormat({
+          type: currentFormat.type,
+          decimalPlaces: currentFormat.decimalPlaces ?? defaultDecimal,
+          unit: currentFormat.unit || '',
+          suffix: currentFormat.suffix || '',
+          thousandSeparator: currentFormat.thousandSeparator || false
+        });
+      } else {
+        const defaultFormat: MetricFormat = editingMetric.isDivide === "divide"
+          ? {
+            type: 'percent',
+            decimalPlaces: 2,
+            thousandSeparator: false,
+            unit: undefined,
+            suffix: ''
+          }
+          : {
+            type: 'number',
+            decimalPlaces: 0,
+            thousandSeparator: false,
+            unit: '',
+            suffix: ''
+          };
+        setLocalFormat(defaultFormat);
+      }
+    }
+  }, [editingMetric]);
   const getFieldTypeStyle = (dimension: DimensionItem) => {
-    const isSelected = selectedDimensionId === dimension.id
+  const isSelected = selectedDimensionId === dimension.id
+  
+  //  (Blue)
+  const dimensionStyle = isSelected
+    ? 'bg-blue-100 border-blue-300 dark:bg-blue-900/40 dark:border-blue-700'
+    : 'bg-blue-50 border-blue-300 dark:bg-blue-900/20 dark:border-blue-800'
 
-    const bgColor = isSelected
-      ? dimension.fieldType === 'dimension'
-        ? 'bg-blue-100'
-        : 'bg-[#E7F8FA]'
-      : dimension.fieldType === 'dimension'
-        ? 'bg-blue-50'
-        : 'bg-[#E7F8FA]'
+  // (Cyan/Teal)
+  const measureStyle = isSelected
+    ? 'bg-[#E7F8FA] border-[#88E1EB] dark:bg-cyan-950/50 dark:border-cyan-700'
+    : 'bg-[#E7F8FA] border-[#88E1EB] dark:bg-cyan-950/30 dark:border-cyan-800'
 
-    const borderColor = dimension.fieldType === 'dimension' ? 'border-blue-300' : 'border-[#88E1EB]'
+  // error
+  const invalidStyle = invalidIds?.has(dimension.id) 
+    ? 'border-red-500 bg-red-50 dark:border-red-700 dark:bg-red-900/30' 
+    : ''
 
-    const invalidStyle = invalidIds?.has(dimension.id) ? 'border-red-500 bg-red-50' : ''
+  const baseColor = dimension.fieldType === 'dimension' ? dimensionStyle : measureStyle
 
-    return `${bgColor} border ${borderColor} ${invalidStyle} hover:bg-opacity-80 transition-colors`
-  }
-
+  return `${baseColor} border ${invalidStyle} hover:bg-opacity-80 transition-colors`
+}
 
   // 选项配置
   const isVirtualMetric = (dimension: DimensionItem) => {
-    console.log(12312312312312312, dimension);
-
     return dimension.fieldType === 'metric' && dimension.isVirtual === true;
   };
+
   const aggregationOptions = [
     { label: t('dimensionBlock.aggregation.sum'), value: 'sum' },
     { label: t('dimensionBlock.aggregation.avg'), value: 'average' },
@@ -117,19 +172,6 @@ export function DimensionBlock({
     { label: t('dimensionBlock.sort.desc'), value: 'desc' }
   ]
 
-  // 设置按钮点击
-  const handleSettingsClick = (dimensionId: string, e: React.MouseEvent) => {
-    e.stopPropagation()
-    setOpenMenuId(openMenuId === dimensionId ? null : dimensionId)
-    setHoveredMenuItem(null)
-  }
-
-  // 菜单项悬停
-  const handleMenuItemHover = (dimensionId: string, menuType: 'sort' | 'aggregation' | 'format') => {
-    if (openMenuId === dimensionId) {
-      setHoveredMenuItem({ dimensionId, menuType })
-    }
-  }
   return (
     <div className="space-y-3"
       onDragOver={(e) => {
@@ -154,261 +196,191 @@ export function DimensionBlock({
           {dimensions.map((dimension) => (
             <div
               key={dimension.id}
-              className="relative group"
+              draggable={dimension.fieldType === 'dimension'}
+              onDragStart={(e) => {
+                if (dimension.fieldType !== 'dimension') return
+                e.stopPropagation()
+                e.dataTransfer.effectAllowed = 'move'
+                const dragData = {
+                  id: dimension.id,
+                  fieldId: dimension.fieldId,
+                  name: dimension.name,
+                  displayName: dimension.displayName || dimension.name,
+                  originalName: dimension.originalName || dimension.name,
+                  fieldType: dimension.fieldType,
+                  timeGranularity: dimension.timeGranularity || null,
+                  isExistingDimension: true,
+                  sourceSection: isStack === 'stack' ? 'stack' : 'category'
+                }
+                e.dataTransfer.setData('application/json', JSON.stringify(dragData))
+              }}
+              className={`relative group ${dimension.fieldType === 'dimension' ? 'cursor-move' : 'cursor-default'}`}
               onMouseEnter={() => setHoveredDimension(dimension.id)}
               onMouseLeave={() => setHoveredDimension(null)}
             >
               <div
                 className={`
-              flex items-center justify-between gap-2 p-1 rounded-md border h-[28px]
-              ${getFieldTypeStyle(dimension)}
-              ${selectedDimensionId === dimension.id ? (dimension.fieldType === 'dimension' ? 'bg-blue-100' : 'bg-[#E7F8FA]') : ''}
-              ${invalidIds?.has(dimension.id) ? 'border-red-500 bg-red-50' : ''}
-              hover:bg-opacity-80 transition-colors
-            `}
+                  flex items-center justify-between gap-2 p-1 rounded-md border h-[28px]
+                  ${getFieldTypeStyle(dimension)}
+                `}
                 onClick={() => setSelectedDimensionId(dimension.id)}
               >
 
                 {/* 字段名称 */}
                 <div className="min-w-0 flex-1">
-                  <span className="text-sm font-medium truncate">{dimension.displayName}</span>
+                  <span className="text-sm font-medium truncate">
+                    {dimension.displayName && dimension.displayName.length > 15
+                      ? `${dimension.displayName.substring(0, 15)}...`
+                      : dimension.displayName}
+                  </span>
                 </div>
 
-                {/* 操作按钮 */}
+                {/* 操作按钮区域 */}
                 <div className={`flex items-center gap-1 ${hoveredDimension === dimension.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 transition-opacity'}`}>
-                  {/* 设置按钮 */}
-                  <div className="relative">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6 p-0 hover:bg-transparent"
-                      onClick={(e) => handleSettingsClick(dimension.id, e)}
-                      onMouseEnter={() => setHoveredIcon(dimension.id)}
-                      onMouseLeave={() => setHoveredIcon(null)}
-                    >
-                      {hoveredIcon === dimension.id || openMenuId === dimension.id ? (
-                        <img src="/assets/dashboard/setting.svg" alt="设置" className="h-3 w-3 object-contain" />
-                      ) : (
-                        <Settings className="h-3 w-3" />
-                      )}
-                    </Button>
 
-                    {/* 菜单 */}
-                    {openMenuId === dimension.id && (
-                      <div
-                        className="absolute right-full top-0 mr-1 bg-white border rounded-md shadow-lg z-20 p-2 min-w-[120px]"
-                        onClick={(e) => e.stopPropagation()}
-
+                  <DropdownMenu modal={false}>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 p-0 hover:bg-transparent data-[state=open]:opacity-100"
+                        onMouseEnter={() => setHoveredIcon(dimension.id)}
+                        onMouseLeave={() => setHoveredIcon(null)}
+                        onClick={(e) => e.stopPropagation()} // 防止触发父级选中
                       >
-                        {/* 维度菜单 */}
-                        {dimension.fieldType === 'dimension' ? (
-                          <>
-                            {/* 排序 */}
-                            {isStack !== "stack" &&
-                              <>
-                                <div className="relative">
-                                  <div
-                                    className={`flex items-center justify-between px-2 py-1 text-xs rounded cursor-pointer ${hoveredMenuItem?.dimensionId === dimension.id && hoveredMenuItem?.menuType === 'sort' ? 'bg-gray-100' : 'hover:bg-gray-100'}`}
-                                    onMouseEnter={() => handleMenuItemHover(dimension.id, 'sort')}
-                                  >
-                                    <span>{t('dimensionBlock.menu.sort')}</span>
-                                    <ChevronRight className="h-3 w-3" />
-                                  </div>
+                        <img src="/assets/dashboard/setting.svg" alt="设置" className="h-3 w-3 object-contain" />
+                      </Button>
+                    </DropdownMenuTrigger>
 
-                                  {/* 排序子菜单 */}
-                                  {hoveredMenuItem?.dimensionId === dimension.id && hoveredMenuItem?.menuType === 'sort' && (
-                                    <div
-                                      className="absolute left-full top-0 ml-1 bg-white border rounded-md shadow-lg z-30 p-2 min-w-[90px]"
-                                      onMouseEnter={() => handleMenuItemHover(dimension.id, 'sort')}
-                                      onMouseLeave={() => setHoveredMenuItem(null)}
-                                    >
-                                      {sortOptions.map((option) => (
-                                        <button
-                                          key={option.value}
-                                          className={`flex items-center justify-between w-full px-2 py-1 text-xs rounded ${dimension.sort === option.value ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-100'}`}
-                                          onClick={() => {
-                                            onSortChange?.(dimension.id, option.value as null | 'asc' | 'desc')
-                                            setOpenMenuId(null)
-                                            setHoveredMenuItem(null)
-                                          }}
-                                        >
-                                          <span>{option.label}</span>
-                                          {dimension.sort === option.value && <Check className="h-3 w-3" />}
-                                        </button>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-
-                                <div className="h-px bg-gray-200 my-1"></div>
-                              </>
-                            }
-
-                            {/* 编辑显示名称 */}
-                            <button
-                              className="block w-full text-left px-2 py-1 text-xs hover:bg-gray-100 rounded"
-                              onMouseEnter={() => {
-                                setHoveredMenuItem(null);
-                              }}
-                              onClick={() => {
-                                onEditDisplayName(dimension.id, dimension.originalName, dimension.displayName)
-                                setOpenMenuId(null)
-                              }}
-                            >
-                              {t('componentConfigDrawer.dialog.editDisplayName')}
-                            </button>
-                          </>
-                        ) : (
-                          <>
-                            {/* 指标菜单 */}
-                            {/* 汇总方式 */}
-
-                            {!isVirtualMetric(dimension) && dimension.fieldType === 'metric' && <div className="relative">
-                              <div
-                                className={`flex items-center justify-between px-2 py-1 text-xs rounded cursor-pointer ${hoveredMenuItem?.dimensionId === dimension.id && hoveredMenuItem?.menuType === 'aggregation' ? 'bg-gray-100' : 'hover:bg-gray-100'}`}
-                                onMouseEnter={() => handleMenuItemHover(dimension.id, 'aggregation')}
-                              >
-                                <span>{t('dimensionBlock.menu.aggregation')}</span>
-                                <ChevronRight className="h-3 w-3" />
-                              </div>
-
-                              {/* 汇总方式子菜单 */}
-                              {hoveredMenuItem?.dimensionId === dimension.id && hoveredMenuItem?.menuType === 'aggregation' && (
-                                <div
-                                  className="absolute left-full top-0 ml-1 bg-white border rounded-md shadow-lg z-30 p-2 min-w-[90px]"
-                                  onMouseEnter={() => handleMenuItemHover(dimension.id, 'aggregation')}
-                                  onMouseLeave={() => setHoveredMenuItem(null)}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    e.preventDefault();
-                                  }}
-                                >
-                                  {aggregationOptions.map((option) => (
-                                    <button
-                                      key={option.value}
-                                      className={`flex items-center justify-between w-full px-2 py-1 text-xs rounded ${dimension.aggregation === option.value ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-100'}`}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        e.preventDefault();
-                                        onAggregationChange?.(dimension.id, option.value)
-                                        setOpenMenuId(null)
-                                        setHoveredMenuItem(null)
-                                      }}
-                                    >
-                                      <span>{option.label}</span>
-                                      {dimension.aggregation === option.value && <Check className="h-3 w-3" />}
-                                    </button>
-                                  ))}
-                                </div>
-                              )}
-                            </div>}
-
-                            {/* 排序  //指标卡不显示排序*/}
-
-
-                            {isMetricCard && <div className="relative mt-1">
-                              <div
-                                className={`flex items-center justify-between px-2 py-1 text-xs rounded cursor-pointer ${hoveredMenuItem?.dimensionId === dimension.id && hoveredMenuItem?.menuType === 'sort' ? 'bg-gray-100' : 'hover:bg-gray-100'}`}
-                                onMouseEnter={() => handleMenuItemHover(dimension.id, 'sort')}
-                              >
+                    <DropdownMenuContent
+                      className="w-40"
+                      align="start"
+                      side="left"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {/* --- 维度菜单 --- */}
+                      {dimension.fieldType === 'dimension' && (
+                        <>
+                          {/* 排序级联菜单 */}
+                          {isStack !== "stack" && (
+                            <DropdownMenuSub>
+                              <DropdownMenuSubTrigger>
                                 <span>{t('dimensionBlock.menu.sort')}</span>
-                                <ChevronRight className="h-3 w-3" />
-                              </div>
-
-                              {/* 排序子菜单 */}
-                              {hoveredMenuItem?.dimensionId === dimension.id && hoveredMenuItem?.menuType === 'sort' && (
-                                <div
-                                  className="absolute left-full top-0 ml-1 bg-white border rounded-md shadow-lg z-30 p-2 min-w-[90px]"
-                                  onMouseEnter={() => handleMenuItemHover(dimension.id, 'sort')}
-                                  onMouseLeave={() => setHoveredMenuItem(null)}
-                                >
+                              </DropdownMenuSubTrigger>
+                              <DropdownMenuPortal>
+                                <DropdownMenuSubContent>
                                   {sortOptions.map((option) => (
-                                    <button
-                                      key={option.value}
-                                      className={`flex items-center justify-between w-full px-2 py-1 text-xs rounded ${dimension.sort === option.value ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-100'}`}
-                                      onClick={() => {
-                                        onSortChange?.(dimension.id, option.value as 'none' | 'asc' | 'desc')
-                                        setOpenMenuId(null)
-                                        setHoveredMenuItem(null)
-                                      }}
+                                    <DropdownMenuItem
+                                      key={option.value || 'null'}
+                                      onClick={() => onSortChange?.(dimension.id, option.value as any)}
+                                      className="justify-between"
                                     >
-                                      <span>{option.label}</span>
-                                      {dimension.sort === option.value && <Check className="h-3 w-3" />}
-                                    </button>
+                                      {option.label}
+                                      {dimension.sort === option.value && <Check className="h-4 w-4" />}
+                                    </DropdownMenuItem>
                                   ))}
-                                </div>
-                              )}
-                            </div>}
+                                </DropdownMenuSubContent>
+                              </DropdownMenuPortal>
+                            </DropdownMenuSub>
+                          )}
 
-                            {/* 数值格式 */}
-                            <button
-                              className="flex items-center justify-between w-full px-2 py-1 text-xs rounded hover:bg-gray-100"
-                              onMouseEnter={() => {
-                                setHoveredMenuItem(null);
-                              }}
-                              onClick={() => {
-                                setEditingMetric(dimension)
-                                setLocalFormat(
-                                  dimension.numberFormat || {
-                                    type: 'number',
-                                    decimalPlaces: 0,
-                                    unit: '',
-                                    suffix: '',
-                                    thousandSeparator: false
-                                  }
-                                )
-                                setFormatDialogOpen(true)
-                                setOpenMenuId(null)
-                              }}
-                            >
-                              <span>{t('dimensionBlock.menu.format')}</span>
-                            </button>
+                          {isStack !== "stack" && <DropdownMenuSeparator />}
 
+                          <DropdownMenuItem
+                            onClick={() => onEditDisplayName(dimension.id, dimension.originalName, dimension.displayName)}
+                          >
+                            {t('componentConfigDrawer.dialog.editDisplayName')}
+                          </DropdownMenuItem>
+                        </>
+                      )}
 
-                            <div className="h-px bg-gray-200 my-1"></div>
+                      {/* --- 指标菜单 --- */}
+                      {dimension.fieldType === 'metric' && (
+                        <>
+                          {/* 聚合方式级联菜单 */}
+                          {!isVirtualMetric(dimension) && (
+                            <DropdownMenuSub>
+                              <DropdownMenuSubTrigger>
+                                <span>{t('dimensionBlock.menu.aggregation')}</span>
+                              </DropdownMenuSubTrigger>
+                              <DropdownMenuPortal>
+                                <DropdownMenuSubContent>
+                                  {aggregationOptions.map((option) => (
+                                    <DropdownMenuItem
+                                      key={option.value}
+                                      onClick={() => onAggregationChange?.(dimension.id, option.value)}
+                                      className="justify-between"
+                                    >
+                                      {option.label}
+                                      {dimension.aggregation === option.value && <Check className="h-4 w-4" />}
+                                    </DropdownMenuItem>
+                                  ))}
+                                </DropdownMenuSubContent>
+                              </DropdownMenuPortal>
+                            </DropdownMenuSub>
+                          )}
 
-                            {/* 编辑显示名称 */}
-                            <button
-                              className="block w-full text-left px-2 py-1 text-xs hover:bg-gray-100 rounded"
-                              onMouseEnter={() => {
-                                setHoveredMenuItem(null);
-                              }}
-                              onClick={() => {
-                                onEditDisplayName(dimension.id, dimension.originalName, dimension.displayName)
-                                setOpenMenuId(null)
-                              }}
-                            >
-                              {t('componentConfigDrawer.dialog.editDisplayName')}
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    )}
-                  </div>
+                          {/* 指标排序级联菜单 */}
+                          {isMetricCard && (
+                            <DropdownMenuSub>
+                              <DropdownMenuSubTrigger>
+                                <span>{t('dimensionBlock.menu.sort')}</span>
+                              </DropdownMenuSubTrigger>
+                              <DropdownMenuPortal>
+                                <DropdownMenuSubContent>
+                                  {sortOptions.map((option) => (
+                                    <DropdownMenuItem
+                                      key={option.value || 'null'}
+                                      onClick={() => onSortChange?.(dimension.id, option.value as any)}
+                                      className="justify-between"
+                                    >
+                                      {option.label}
+                                      {dimension.sort === option.value && <Check className="h-4 w-4" />}
+                                    </DropdownMenuItem>
+                                  ))}
+                                </DropdownMenuSubContent>
+                              </DropdownMenuPortal>
+                            </DropdownMenuSub>
+                          )}
+
+                          {/* 数值格式 */}
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setEditingMetric(dimension)
+                              setFormatDialogOpen(true)
+                            }}
+                          >
+                            {t('dimensionBlock.menu.format')}
+                          </DropdownMenuItem>
+
+                          <DropdownMenuSeparator />
+
+                          {/* 编辑显示名称 */}
+                          <DropdownMenuItem
+                            onClick={() => onEditDisplayName(dimension.id, dimension.originalName, dimension.displayName)}
+                          >
+                            {t('componentConfigDrawer.dialog.editDisplayName')}
+                          </DropdownMenuItem>
+                        </>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
 
                   {/* 删除按钮 */}
                   <Button
                     variant="ghost"
                     size="icon"
                     className="h-6 w-6 p-0 hover:bg-red-200"
-                    onClick={() => onDelete(dimension.id)}
+                    onClick={(e) => {
+                      e.stopPropagation(); // 防止拖拽或选中
+                      onDelete(dimension.id);
+                    }}
                     title={t('dimensionBlock.button.deleteField')}
                   >
                     <X className="h-3 w-3" />
                   </Button>
                 </div>
               </div>
-
-              {/* 点击外部关闭菜单 */}
-              {openMenuId === dimension.id && (
-                <div
-                  className="fixed inset-0 z-10"
-                  onClick={() => {
-                    setOpenMenuId(null)
-                    setHoveredMenuItem(null)
-                  }}
-                />
-              )}
             </div>
           ))}
         </div>
@@ -427,6 +399,7 @@ export function DimensionBlock({
           </div>
         </div>
       )}
+
       {editingMetric && localFormat && (
         <Dialog
           open={formatDialogOpen}
@@ -442,21 +415,37 @@ export function DimensionBlock({
             <DialogHeader>
               <DialogTitle>{t('dimensionBlock.dialog.formatTitle')}</DialogTitle>
             </DialogHeader>
-
             <div className="space-y-6 py-4">
-              {/* 格式类型 */}
               <div>
                 <div className="text-sm font-medium mb-2">{t('dimensionBlock.dialog.formatType')}</div>
                 <RadioGroup
                   value={localFormat.type}
-                  onValueChange={(value) =>
+                  onValueChange={(value) => {
+                    const newType = value as any;
+                    let newUnit = localFormat.unit;
+                    let newThousandSeparator = localFormat.thousandSeparator;
+                    if (newType === 'storage') {
+                      newUnit = 'B';
+                    } else if (newType === 'duration') {
+                      newUnit = 'ms';
+                    } else if (newType === 'percent') {
+                      newUnit = undefined;
+                      newThousandSeparator = false;
+                    } else {
+                      newUnit = localFormat.unit || '';
+                    }
+
+                    // 切换类型时，数值一律 0，小数位其他类型一律 2，互不影响
+                    const newDecimalPlaces = newType === 'number' ? 0 : 2;
+
                     setLocalFormat({
                       ...localFormat,
-                      type: value as any,
-                      unit: value === 'percent' ? undefined : localFormat.unit,
-                      thousandSeparator: value === 'percent' ? false : localFormat.thousandSeparator
+                      type: newType,
+                      unit: newUnit,
+                      thousandSeparator: newThousandSeparator,
+                      decimalPlaces: newDecimalPlaces
                     })
-                  }
+                  }}
                   className="flex gap-6"
                 >
                   {[
@@ -484,10 +473,31 @@ export function DimensionBlock({
                   max={5}
                   step={1}
                   value={localFormat.decimalPlaces}
-                  onChange={(e) => {
-                    const val = Number(e.target.value);
-                    if (val >= 0 && val <= 5) {
-                      setLocalFormat({ ...localFormat, decimalPlaces: val })
+                  onInput={(e) => {
+                    const input = e.target as HTMLInputElement;
+                    const val = input.value;
+
+                    if (val === '') {
+                      setLocalFormat({ ...localFormat, decimalPlaces: undefined })
+                    } else {
+                      const numVal = Number(val);
+                      // 限制在 0-5 范围内
+                      if (numVal > 5) {
+                        input.value = '5';
+                        setLocalFormat({ ...localFormat, decimalPlaces: 5 })
+                      } else if (numVal < 0) {
+                        input.value = '0';
+                        setLocalFormat({ ...localFormat, decimalPlaces: 0 })
+                      } else {
+                        setLocalFormat({ ...localFormat, decimalPlaces: numVal })
+                      }
+                    }
+                  }}
+                  onBlur={(e) => {
+                    const val = e.target.value;
+                    if (val === '' || isNaN(Number(val))) {
+                      const defaultDecimal = localFormat.type === 'number' ? 0 : 2;
+                      setLocalFormat({ ...localFormat, decimalPlaces: defaultDecimal })
                     }
                   }}
                   className="w-full"
@@ -515,6 +525,7 @@ export function DimensionBlock({
                           <SelectValue placeholder={t('dimensionBlock.dialog.selectUnit')} />
                         </SelectTrigger>
                         <SelectContent>
+                          {/* Select Items Logic */}
                           {localFormat.type === 'number' && (
                             <>
                               <SelectItem value="none">{t('dimensionBlock.dialog.none')}</SelectItem>
@@ -543,7 +554,6 @@ export function DimensionBlock({
                         </SelectContent>
                       </Select>
                     </div>
-
                     <div>
                       <div className="text-sm font-medium mb-2">{t('dimensionBlock.dialog.suffix')}</div>
                       <Input
@@ -599,38 +609,32 @@ export function DimensionBlock({
                       localFormat.type === 'storage' ? '2000000' : '20000'
                 }
               </div>
+
             </div>
 
             {/* Footer */}
             <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setFormatDialogOpen(false)
-                  setEditingMetric(null)
-                  setLocalFormat(null)
-                }}
-              >
+              <Button variant="outline" onClick={() => {
+                setFormatDialogOpen(false)
+                setEditingMetric(null)
+                setLocalFormat(null)
+              }}>
                 {t('chartSelector.buttons.cancel')}
               </Button>
-              <Button
-                onClick={() => {
-                  if (!editingMetric || !localFormat) return
-
-                  const formatToSave: MetricFormat = {
-                    type: localFormat.type,
-                    decimalPlaces: localFormat.decimalPlaces,
-                    thousandSeparator: localFormat.type === 'percent' ? false : localFormat.thousandSeparator,
-                    unit: localFormat.type === 'percent' ? undefined : (localFormat.unit === "" ? undefined : localFormat.unit),
-                    suffix: localFormat.suffix === "" ? undefined : localFormat.suffix
-                  }
-
-                  onFormatChange?.(editingMetric.id, formatToSave)
-                  setFormatDialogOpen(false)
-                  setEditingMetric(null)
-                  setLocalFormat(null)
-                }}
-              >
+              <Button onClick={() => {
+                if (!editingMetric || !localFormat) return
+                const formatToSave: MetricFormat = {
+                  type: localFormat.type,
+                  decimalPlaces: localFormat.decimalPlaces,
+                  thousandSeparator: localFormat.type === 'percent' ? false : localFormat.thousandSeparator,
+                  unit: localFormat.type === 'percent' ? undefined : (localFormat.unit === "" ? undefined : localFormat.unit),
+                  suffix: localFormat.suffix === "" ? undefined : localFormat.suffix
+                }
+                onFormatChange?.(editingMetric.id, formatToSave)
+                setFormatDialogOpen(false)
+                setEditingMetric(null)
+                setLocalFormat(null)
+              }}>
                 {t('chartSelector.buttons.save')}
               </Button>
             </DialogFooter>

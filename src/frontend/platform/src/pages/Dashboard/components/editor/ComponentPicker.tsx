@@ -1,6 +1,6 @@
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/bs-ui/popover';
 import { cn } from '@/utils';
-import React, { useState } from 'react';
+import React, { memo, useState } from 'react';
 import { ChartType } from '../../types/dataConfig';
 import { useTranslation } from 'react-i18next';
 
@@ -25,7 +25,8 @@ export const ChartGroupItems = [
         label: 'lineChart',
         data: [
             { type: ChartType.Line, label: 'basicLineChart' },
-            { type: ChartType.StackedLine, label: 'stackedLineChart' },
+            // { type: ChartType.StackedLineOld, label: 'stackedLineChart' },
+            { type: ChartType.StackedLine, label: 'multipleLineChart' },
             { type: ChartType.Area, label: 'areaChart' },
             { type: ChartType.StackedArea, label: 'stackedAreaChart' }
         ]
@@ -64,7 +65,7 @@ const ComponentPicker = ({ children, className, onSelect, maxHeight = 500 }: Com
     const [open, setOpen] = useState(false);
 
     const handleItemClick = (item) => {
-        onSelect({ ...item, title: t(`chart.${item.label}`) });
+        onSelect({ ...item, title: item.type === ChartType.Metric ? '' : t(`chart.${item.label}`) });
         setOpen(false);
     };
 
@@ -112,4 +113,4 @@ const ComponentPicker = ({ children, className, onSelect, maxHeight = 500 }: Com
     );
 };
 
-export default ComponentPicker;
+export default memo(ComponentPicker);

@@ -1,14 +1,17 @@
 "use client"
 
 import { MetricDataResponse } from '@/pages/Dashboard/types/chartData'
-import { ArrowDown, ArrowUp, Minus } from 'lucide-react'
+import { ArrowDown, ArrowUp, GripHorizontalIcon, Minus } from 'lucide-react'
 import { useMemo } from 'react'
 import { ComponentStyleConfig, DataConfig } from '../../types/dataConfig'
+import { cn } from '@/utils'
 
 interface MetricCardProps {
-  data: MetricDataResponse
+  data: MetricDataResponse,
+  title?: string
   dataConfig?: DataConfig
   styleConfig: ComponentStyleConfig
+  isPreviewMode?: boolean
 }
 
 export const unitConversion = (value, dataConfig) => {
@@ -65,14 +68,14 @@ export const unitConversion = (value, dataConfig) => {
   }
 
   // 处理后缀
-  const finalUnit = suffix || unitLabel;
+  const finalUnit = unitLabel + (suffix || '');
+  // const finalUnit = suffix || unitLabel;
 
   return [result, finalUnit];
 }
 
-export function MetricCard({ data, dataConfig, styleConfig }: MetricCardProps) {
+export function MetricCard({ title: indicatorName, data, isPreviewMode, dataConfig, styleConfig }: MetricCardProps) {
 
-  const indicatorName = styleConfig.title
   const subTitle = styleConfig.subtitle
 
   // format
@@ -113,6 +116,7 @@ export function MetricCard({ data, dataConfig, styleConfig }: MetricCardProps) {
     bold?: boolean
     italic?: boolean
     underline?: boolean
+    strikethrough?: boolean
     color?: string
     align?: 'left' | 'center' | 'right'
   }) => {
@@ -121,7 +125,10 @@ export function MetricCard({ data, dataConfig, styleConfig }: MetricCardProps) {
     if (config.bold) style.fontWeight = 'bold'
     if (config.italic) style.fontStyle = 'italic'
     if (config.color) style.color = config.color
-    if (config.underline) style.textDecoration = 'underline'
+    style.textDecoration = [
+      config.underline ? 'underline' : '',
+      config.strikethrough ? 'line-through' : ''
+    ].filter(Boolean).join(' ') || 'none'
     if (config.align) style.textAlign = config.align
     return style
   }
@@ -131,6 +138,7 @@ export function MetricCard({ data, dataConfig, styleConfig }: MetricCardProps) {
     bold: styleConfig.subtitleBold,
     italic: styleConfig.subtitleItalic,
     underline: styleConfig.subtitleUnderline,
+    strikethrough: styleConfig.subtitleStrikethrough,
     color: styleConfig.subtitleColor,
     align: styleConfig.subtitleAlign
   })
@@ -140,6 +148,7 @@ export function MetricCard({ data, dataConfig, styleConfig }: MetricCardProps) {
     bold: styleConfig.titleBold,
     italic: styleConfig.titleItalic,
     underline: styleConfig.titleUnderline,
+    strikethrough: styleConfig.titleStrikethrough,
     color: styleConfig.titleColor,
     align: styleConfig.titleAlign
   })
@@ -149,37 +158,58 @@ export function MetricCard({ data, dataConfig, styleConfig }: MetricCardProps) {
     bold: styleConfig.metricBold,
     italic: styleConfig.metricItalic,
     underline: styleConfig.metricUnderline,
+    strikethrough: styleConfig.metricStrikethrough,
     color: styleConfig.metricColor,
     align: styleConfig.metricAlign
   })
 
+  const subtitleLineHeight = styleConfig.subtitleFontSize ? styleConfig.subtitleFontSize * 1.5 : 21 // 默认14px * 1.5
+  const maxSubtitleHeight = subtitleLineHeight * 4
+
   return (
-    <div className="flex items-end justify-between h-full">
-      <div className='flex flex-col h-full justify-between'>
-        {/* subtitle */}
-        {styleConfig.showSubtitle && subTitle ? (
-          <div style={subtitleStyle}>{subTitle}</div>
-        ) : <div></div>}
-        {/* title */}
-        <div style={titleStyle}>{indicatorName}</div>
-      </div>
-      {/* value */}
-      <div style={metricStyle} className='leading-[1.2em]'>
-        {formatValue}
-        {displayUnit && <span className="text-xl ml-2 text-muted-foreground">{displayUnit}</span>}
-      </div>
+    <div className="group h-full flex flex-col select-none py-1 px-2 pr-1 text-foreground dark:text-gray-400">
+      {/* title - single line */}
+      <div style={titleStyle} className='truncate mb-1 pr-1'>{indicatorName}</div>
 
-
-      {/* 趋势信息 */}
-      {/* {trend && (
-        <div className="flex items-center gap-1 text-sm">
-          {getTrendIcon()}
-          <span className={getTrendColor()}>
-            {trend.value > 0 ? '+' : ''}{trend.value}%
-          </span>
-          <span className="text-muted-foreground ml-1">{trend.label}</span>
+      {/* subtitle - max 4 lines with ellipsis */}
+      {styleConfig.showSubtitle &&
+        <div
+          className='pr-1'
+          style={{
+            ...subtitleStyle,
+            display: '-webkit-box',
+            WebkitLineClamp: 4,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            wordBreak: 'break-all',
+            lineHeight: `${subtitleLineHeight}px`,
+            maxHeight: `${maxSubtitleHeight}px`,
+            flex: 1,
+            minHeight: 0
+          }}
+        >
+          {subTitle}
         </div>
-      )} */}
+      }
+
+      {/* value - stays at bottom */}
+      <div className='mt-auto pt-2'>
+        <div style={metricStyle} className='leading-[1.2em] truncate pr-1'>
+          {formatValue}
+          {displayUnit && <span className="text-xl ml-2 text-muted-foreground">{displayUnit}</span>}
+        </div>
+      </div>
+
+      {!isPreviewMode && <GripHorizontalIcon
+        className={cn(
+          "absolute top-1 left-1/2 -translate-x-1/2 text-gray-400 transition-opacity",
+          "opacity-0",
+          "group-hover:opacity-100",
+          "group-has-[.no-drag:hover]:opacity-0"
+        )}
+        size={16}
+      />}
     </div>
   )
 }

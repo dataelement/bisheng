@@ -14,7 +14,7 @@ from typing_extensions import Self
 
 from bisheng.common.errcode.server import NoLlmModelConfigError, LlmModelConfigDeletedError, LlmProviderDeletedError, \
     LlmModelTypeError, LlmModelOfflineError, InitLlmError
-from bisheng.core.ai import CustomChatOllamaWithReasoning, ChatOpenAI, ChatOpenAICompatible, \
+from bisheng.core.ai import ChatOllama, ChatOpenAI, ChatOpenAICompatible, \
     AzureChatOpenAI, ChatTongyi, ChatZhipuAI, MiniMaxChat, ChatAnthropic, MoonshotChat
 from bisheng.core.ai.llm.custom_chat_deepseek import CustomChatDeepSeek
 from bisheng.llm.domain.const import LLMModelType, LLMServerType
@@ -35,7 +35,6 @@ def _get_user_kwargs(model_config: dict) -> dict:
 def _get_ollama_params(params: dict, server_config: dict, model_config: dict) -> dict:
     params['base_url'] = server_config.get('base_url', '').rstrip('/')
     # some bugs
-    params['extract_reasoning'] = False
     params['stream'] = params.pop('streaming', True)
     if params.get('max_tokens'):
         params['num_ctx'] = params.pop('max_tokens', None)
@@ -155,7 +154,7 @@ def _get_spark_params(params: dict, server_config: dict, model_config: dict) -> 
 
 _llm_node_type: Dict = {
     # Open source inference framework
-    LLMServerType.OLLAMA.value: {'client': CustomChatOllamaWithReasoning, 'params_handler': _get_ollama_params},
+    LLMServerType.OLLAMA.value: {'client': ChatOllama, 'params_handler': _get_ollama_params},
     LLMServerType.XINFERENCE.value: {'client': ChatOpenAI, 'params_handler': _get_xinference_params},
     LLMServerType.LLAMACPP.value: {'client': ChatOpenAI, 'params_handler': _get_openai_params},
     LLMServerType.VLLM.value: {'client': ChatOpenAICompatible, 'params_handler': _get_openai_params},

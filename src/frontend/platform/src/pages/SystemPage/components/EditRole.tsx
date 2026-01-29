@@ -543,7 +543,7 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
           placeholder={t('system.roleName')}
           value={form.name}
           onChange={(e) => setForm(prev => ({ ...prev, name: e.target.value }))}
-          maxLength={60}
+          maxLength={50}
           showCount
         />
       </div>

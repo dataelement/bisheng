@@ -2,10 +2,10 @@
 
 import { ChartType, ComponentConfig, ComponentStyleConfig } from '@/pages/Dashboard/types/dataConfig'
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { colorSchemes, convertToEChartsTheme } from '../../colorSchemes'
 import { ChartDataResponse } from '../../types/chartData'
 import { unitConversion } from './MetricCard'
-import { useTranslation } from 'react-i18next'
 
 // Dynamic loading of ECharts.
 const loadECharts = async () => {
@@ -60,7 +60,24 @@ export function BaseChart({ isDark, data, chartType, dataConfig, styleConfig }: 
       })
   }, [])
 
+  const renderChart = () => {
+    if (!chartRef.current || !domRef.current) return;
+
+    const containerSize = [domRef.current.clientWidth || 0, domRef.current.clientHeight || 0];
+
+    const option = generateChartOption({
+      data,
+      chartType,
+      dataConfig,
+      styleConfig,
+      containerSize
+    });
+
+    chartRef.current.setOption(option);
+    chartRef.current.resize();
+  }
   // Initialize and update the chart.
+  const [screenFull, setScreenFull] = useState(false)
   useEffect(() => {
     if (!echartsLibRef.current || !domRef.current || isLoading) return
 
@@ -69,8 +86,6 @@ export function BaseChart({ isDark, data, chartType, dataConfig, styleConfig }: 
       chartRef.current.dispose()
       chartRef.current = null
     }
-
-    console.log('render echarts :>> ');
 
     try {
       // theme
@@ -82,8 +97,8 @@ export function BaseChart({ isDark, data, chartType, dataConfig, styleConfig }: 
       echartsLibRef.current.registerTheme(themeName, themeConfig);
       // init echarts
       chartRef.current = echartsLibRef.current.init(domRef.current, themeName)
-      const option = generateChartOption({ data, chartType, dataConfig, styleConfig })
-      chartRef.current.setOption(option, true)
+
+      renderChart();
     } catch (err) {
       console.error('Failed to initialize chart:', err)
     }
@@ -94,23 +109,21 @@ export function BaseChart({ isDark, data, chartType, dataConfig, styleConfig }: 
         chartRef.current = null
       }
     }
-  }, [echartsLibRef.current, data, chartType, dataConfig, styleConfig, isLoading, isDark])
+  }, [screenFull, echartsLibRef.current, data, chartType, dataConfig, styleConfig, isLoading, isDark])
 
   // resize
   useEffect(() => {
-    if (!chartRef.current) return
-
-    const resizeObserver = new ResizeObserver(() => {
-      chartRef.current?.resize()
-    })
-
-    if (domRef.current) {
-      resizeObserver.observe(domRef.current)
-    }
+    if (!chartRef.current || !domRef.current) return;
 
     const handleResize = () => {
-      chartRef.current?.resize()
-    }
+      renderChart();
+    };
+
+    const resizeObserver = new ResizeObserver(() => {
+      handleResize()
+    })
+
+    resizeObserver.observe(domRef.current)
     window.addEventListener('resize', handleResize)
 
     return () => {
@@ -118,6 +131,21 @@ export function BaseChart({ isDark, data, chartType, dataConfig, styleConfig }: 
       window.removeEventListener('resize', handleResize)
     }
   }, [chartRef.current])
+
+  // screen full
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setScreenFull(!screenFull)
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+    };
+  }, []);
 
   if (isLoading) {
     return (
@@ -139,6 +167,7 @@ export function generateChartOption(props: {
   chartType: ChartType;
   dataConfig?: ComponentConfig;
   styleConfig: ComponentStyleConfig;
+  containerSize?: number[];
 }): any {
   const { chartType } = props;
 
@@ -147,7 +176,7 @@ export function generateChartOption(props: {
     return getPieChartOption(props.data, chartType, props.styleConfig);
   }
 
-  return getCartesianChartOption(props.data, chartType, props.styleConfig, props.dataConfig);
+  return getCartesianChartOption(props.data, chartType, props.styleConfig, props.dataConfig, props.containerSize);
 }
 
 
@@ -173,7 +202,8 @@ const getPieChartOption = (
       name: s.name,
       left: styleConfig.legendPosition === 'left' && 100,
       right: styleConfig.legendPosition === 'right' && 100,
-      bottom: styleConfig.legendPosition === 'bottom' && 40,
+      bottom: styleConfig.legendPosition === 'bottom' && 20,
+      top: styleConfig.legendPosition === 'top' && 20,
       type: 'pie',
       radius: isDonut ? ['40%', '70%'] : '70%',
       avoidLabelOverlap: true,
@@ -181,6 +211,12 @@ const getPieChartOption = (
       label: {
         show: styleConfig.showDataLabel ?? true,
         formatter: '{b}: {d}%',
+        fontSize: 10,
+        color: "#666",
+        textBorderWidth: 0,
+        textBorderColor: 'none',
+        textShadowBlur: 0,
+        textShadowColor: 'none',
       },
       emphasis: {
         label: { show: true, fontSize: 16, fontWeight: 'bold' },
@@ -195,82 +231,178 @@ const getCartesianChartOption = (
   data: ChartDataResponse,
   chartType: ChartType,
   styleConfig: ComponentStyleConfig,
-  dataConfig?: ComponentConfig
+  dataConfig?: ComponentConfig,
+  containerSize: number[] = []
 ) => {
   const { dimensions, series } = data;
   const isHorizontal = chartType.includes('horizontal');
   const isStacked = chartType.includes('stacked');
-  const isLineOrArea = chartType.includes('line') || chartType === 'area';
-  const isArea = chartType === 'area' || chartType === 'stacked-line'; // Depending on logic
+  const isLineOrArea = chartType.includes('line') || chartType.includes('area');
+  const isArea = chartType.includes('area')
+
+  // aixs title tyle
+  const [containerWidth = 500, containerHeight = 500] = containerSize
+  const axisWidth = containerWidth - styleConfig.xAxisTitle.length * styleConfig.xAxisFontSize - 60;
+  const axisHeight = containerHeight - styleConfig.yAxisTitle.length * styleConfig.yAxisFontSize - 60;
 
   // Tooltip
   const tooltipFormatter = (params: any[]) => {
-    let res = params[0].name.replaceAll('\n', '<br/>') + '<br/>';
+    const originName = params[0]?.name || '';
+    const shortName = originName.replace(/(.{50})/g, '$1<br/>');
+    let res = shortName.replaceAll('\n', '<br/>') + '<br/>';
     params.forEach((item) => {
-      res += `${item.marker} ${item.seriesName}: <b>${unitConversion(item.value, dataConfig).join('')}</b><br/>`;
+      res += item.value === undefined ? '' : `${item.marker} ${item.seriesName}: <b>${unitConversion(item.value, dataConfig).join('')}</b><br/>`;
     });
     return res;
   };
 
   //  Axis
-  const axisLabelStyle = { ...getTextStyle({ fontSize: styleConfig.xAxisFontSize, color: styleConfig.xAxisColor }) };
+  const xAxisTitleStyle = getTextStyle({
+    fontSize: styleConfig.xAxisFontSize,
+    color: styleConfig.xAxisColor,
+    bold: styleConfig.xAxisBold,
+    italic: styleConfig.xAxisItalic
+  });
+  const yAxisTitleStyle = getTextStyle({
+    fontSize: styleConfig.yAxisFontSize,
+    color: styleConfig.yAxisColor,
+    bold: styleConfig.yAxisBold,
+    italic: styleConfig.yAxisItalic
+  });
 
   // (Category Axis)
   const categoryAxis = {
     type: 'category',
     data: dimensions,
-    show: styleConfig.showAxis ?? true,
     axisLabel: {
-      rotate: dimensions.length > 10 ? 45 : 0,
+      show: styleConfig.showAxis ?? true,
+      rotate: 0,
+      interval: 'auto',
+      formatter: function (value) {
+        if (!value) return '';
+        const lines = value.split('\n');
+        return lines.map(line => line.length > 10 ? line.slice(0, 10) + '...' : line).join('\n');
+      },
+      hideOverlap: true,
+      color: '#666'
+      // interval: 0,
+      // hideOverlap: true,
+      // overflow: 'break'
       // ...axisLabelStyle,
     },
-    name: styleConfig.xAxisTitle || ''
+    name: styleConfig.xAxisTitle || '',
+    nameLocation: 'center',
+    nameTextStyle: {
+      ...xAxisTitleStyle,
+      padding: [0, 0, 0, styleConfig.xAxisAlign === 'right' ? axisWidth : styleConfig.xAxisAlign === 'left' ? -axisWidth : 0]
+    },
+    inverse: isHorizontal
   };
 
   // (Value Axis)
   const valueAxis = {
     type: 'value',
-    show: styleConfig.showAxis ?? true,
     axisLabel: {
+      show: styleConfig.showAxis ?? true,
       formatter: (val: any) => unitConversion(val, dataConfig).join(''),
-      ...axisLabelStyle,
+      color: '#666'
     },
     splitLine: { show: styleConfig.showGrid ?? true },
-    name: styleConfig.yAxisTitle || ''
+    name: styleConfig.yAxisTitle || '',
+    nameLocation: 'center',
+    nameRotate: isHorizontal ? 0 : 90,
+    nameTextStyle: {
+      ...yAxisTitleStyle,
+      padding: [0, 0, 0, styleConfig.yAxisAlign === 'right' ? axisHeight : styleConfig.yAxisAlign === 'left' ? -axisHeight : 0]
+    },
+    boundaryGap: [0, '20%'],
   };
 
+  const lastValueIndexes = dimensions.map((_, dimIdx) => {
+    let lastIdx = -1;
+    for (let sIdx = series.length - 1; sIdx >= 0; sIdx--) {
+      const val = series[sIdx].data[dimIdx];
+      // 只有当值存在且大于 0 时，才认为是这一列的“顶端”
+      if (val !== null && val !== undefined && val > 0) {
+        lastIdx = sIdx;
+        break;
+      }
+    }
+    return lastIdx;
+  });
   // Series
-  const cartesianSeries = series.map((s) => {
+  const cartesianSeries = series.map((s, index) => {
+    const processedData = s.data.map((val, dimIdx) => {
+      const isTopItem = lastValueIndexes[dimIdx] === index;
+
+      // 如果是顶端项，则单独给该 data item 设置样式
+      if (!isLineOrArea && isStacked && isTopItem) {
+        return {
+          value: val,
+          itemStyle: {
+            borderRadius: isHorizontal ? [0, 4, 4, 0] : [4, 4, 0, 0]
+          }
+        };
+      }
+      return val;
+    });
+
     const item: any = {
       name: s.name,
-      data: s.data,
+      data: processedData,
       type: isLineOrArea ? 'line' : 'bar',
+      symbol: 'circle',
+      symbolSize: 0,
       itemStyle: {
-        borderRadius: !isLineOrArea ? (isHorizontal ? [0, 2, 2, 0] : [2, 2, 0, 0]) : 0
+        borderRadius: (!isLineOrArea && !isStacked)
+          ? (isHorizontal ? [0, 4, 4, 0] : [4, 4, 0, 0])
+          : 0
       }
     };
 
     if (styleConfig.showDataLabel) {
-      item.label = { show: true, position: isLineOrArea ? 'top' : 'inside' };
+      item.label = {
+        show: true,
+        position: 'top',
+        fontSize: 10,
+        color: "#666",
+        formatter: (params: any) => unitConversion(params.value, dataConfig).join('')
+      };
+      item.labelLayout = {
+        hideOverlap: true
+      }
     }
     if (isStacked) item.stack = 'total';
-    if (isArea) item.areaStyle = {};
-    if (isLineOrArea) item.smooth = true;
+    if (isArea) item.areaStyle = { opacity: 0.1 };
+    // if (isLineOrArea) item.smooth = true;
 
     return item;
   });
+
+  let grid = {
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    // containLabel: true,
+  }
+  if (styleConfig.showLegend) {
+    const titleBottom = (styleConfig.xAxisTitle ? 18 : 0) + ((dataConfig.dimensions.length - 1) * 10);
+    const bottom = (styleConfig.legendPosition === 'bottom' ? 44 : 0) + titleBottom;
+    grid = {
+      left: styleConfig.legendPosition === 'left' ? 160 : 0,
+      right: styleConfig.legendPosition === 'right' ? 100 : 0,
+      top: styleConfig.legendPosition === 'top' ? 40 : 0,
+      bottom,
+    }
+  }
 
   return {
     backgroundColor: styleConfig.bgColor,
     // title: buildTitleOption(styleConfig),
     legend: buildLegendOption(styleConfig, series.map(s => s.name)),
     tooltip: buildTooltipOption('axis', tooltipFormatter),
-    grid: {
-      left: styleConfig.legendPosition === 'left' ? 100 : '3%',
-      right: styleConfig.legendPosition === 'right' ? 100 : '3%',
-      bottom: '3%',
-      containLabel: true
-    },
+    grid,
     xAxis: isHorizontal ? valueAxis : categoryAxis,
     yAxis: isHorizontal ? categoryAxis : valueAxis,
     series: cartesianSeries,
@@ -288,26 +420,6 @@ const getTextStyle = (config: {
   return style;
 };
 
-
-/**
- * gen (Title)
- */
-const buildTitleOption = (styleConfig: ComponentStyleConfig) => {
-  // if (!styleConfig.title) return undefined;
-
-  const titleOption: any = {
-    text: styleConfig.title,
-    left: styleConfig.titleAlign || 'center',
-    textStyle: getTextStyle({
-      fontSize: styleConfig.titleFontSize,
-      bold: styleConfig.titleBold,
-      italic: styleConfig.titleItalic,
-      color: styleConfig.titleColor,
-    }),
-  };
-  return titleOption;
-};
-
 /**
  * gen (Legend)
  */
@@ -315,12 +427,22 @@ const buildLegendOption = (styleConfig: ComponentStyleConfig, seriesNames?: stri
   if (styleConfig.showLegend === false) return undefined;
 
   const pos = styleConfig.legendPosition || 'top';
+  const align = styleConfig.legendAlign || 'auto';
+  const isVertical = pos === 'left' || pos === 'right';
   // computed
-  const orient = pos === 'left' || pos === 'right' ? 'vertical' : 'horizontal';
-  const top = pos === 'top' ? 0 : pos === 'bottom' ? 'auto' : 'center';
-  const bottom = pos === 'bottom' ? 10 : 'auto';
-  const left = pos === 'left' ? 10 : pos === 'center' ? 'center' : 'auto';
-  const right = pos === 'right' ? 10 : 'auto';
+  const orient = isVertical ? 'vertical' : 'horizontal';
+  const top = !isVertical
+    ? (pos === 'top' ? 0 : 'auto')
+    : (align === 'left' ? 0 : (align === 'right' ? 'auto' : 'center'));
+  const bottom = !isVertical
+    ? (pos === 'bottom' ? 0 : 'auto')
+    : (align === 'right' ? 0 : 'auto');
+  const left = isVertical
+    ? (pos === 'left' ? 0 : 'auto')
+    : (align === 'left' ? 0 : (align === 'right' ? 'auto' : 'center'));
+  const right = isVertical
+    ? (pos === 'right' ? 0 : 'auto')
+    : (align === 'right' ? 0 : 'auto');
 
   return {
     data: seriesNames, // Pie chart doesn't strictly need this, but Cartesian does
@@ -347,7 +469,12 @@ const buildLegendOption = (styleConfig: ComponentStyleConfig, seriesNames?: stri
 const buildTooltipOption = (type: 'axis' | 'item', formatter: (params: any) => string) => {
   return {
     trigger: type,
+    confine: true,
     axisPointer: type === 'axis' ? { type: 'shadow' } : undefined,
-    formatter,
+    enterable: true,
+    extraCssText: 'max-height: 500px; overflow-y: auto;',
+    appendToBody: !document.fullscreenElement,
+    // renderMode: 'html',
+    formatter
   };
 };

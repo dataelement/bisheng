@@ -4,6 +4,7 @@
         "componentName": "组件：{{componentName}}",
         "selectCharts": "选择关联图表",
         "selectAll": "全选",
+        "unSelectAll":"取消全选",
         "unnamedChart": "未命名图表",
         "noDataset": "未设置数据集",
         "config": "查询条件配置",
@@ -18,7 +19,7 @@
             "yearMonthDay": "年月日",
             "yearMonthDayHour": "年月日时"
         },
-        "setDefault": "设置为默认值",
+        "setDefault": "设置默认值",
         "datePicker": {
             "placeholder": "选择时间",
             "single": "时间",
@@ -43,16 +44,17 @@
         "selectChartType": "选择图表类型",
         "categoryAxis": "类别轴 / 维度",
         "stackItem": "堆叠项 / 维度",
+        "subCategory": "子类别项 / 维度",
         "valueAxis": "值轴 / 指标",
         "sortPriority": "排序优先级",
         "sortHint": "添加维度或指标后可调整排序优先级",
         "filter": "筛选",
         "addFilterCondition": "添加筛选条件",
-        "filterConditionsAdded": "已添加 {{count}} 个筛选条件",
+        "filterConditionsAdded": "已添加筛选条件",
         "filterLogicHint": " ({{logic}})",
         "timeRange": "时间范围",
         "selectTimeRange": "选择时间范围",
-        "resultsDisplay": "结果显示",
+        "resultsDisplay": "显示数据",
         "allResults": "全部",
         "limitResults": "条",
         "updateChartData": "更新图表数据",
@@ -70,16 +72,17 @@
         "dialog": {
             "chartUpdated": "图表已更新",
             "editDisplayName": "编辑显示名称",
-            "displayRequired":"名称不能为空",
+            "displayRequired": "名称不能为空",
             "originalName": "原始名称",
             "displayName": "显示名称",
             "displayNameRequired": "显示名称 *",
             "enterDisplayName": "请输入显示名称",
+            "displayMaxLength": "显示名称长度不能超过 15 个字符",
             "cancel": "取消",
             "confirm": "确认"
         },
         "toast": {
-            "fieldAlreadyExists": "该字段已存在",
+            "fieldAlreadyExists": "该字段已添加",
             "dimensionLimitReached": "当前维度数量已达到上限",
             "metricReached": "不支持拖拽维度至指标",
             "metricLimitReached": "当前指标数量已达到上限",
@@ -134,7 +137,7 @@
             "count": "计数",
             "max": "最大值",
             "min": "最小值",
-            "distinctCount":"去重计数"
+            "distinctCount": "去重计数"
         },
         "sort": {
             "none": "无",
@@ -237,7 +240,7 @@
         "labels": {
             "themeColor": "主题颜色",
             "bgColor": "背景颜色",
-            "titleContent": "文本内容",
+            "titleContent": "标题内容",
             "textFormat": "文本格式",
             "textContent": "文本内容",
             "xAxisTitleContent": "X 轴标题内容",
@@ -245,7 +248,7 @@
             "yAxisTitleContent": "Y 轴标题内容",
             "yAxisTextFormat": "Y 轴文本格式",
             "legendPosition": "图例位置",
-            "legendTextFormat": "图例文本格式"
+            "legendTextFormat": "文本格式"
         },
         "placeholders": {
             "enterTitle": "请输入标题",
@@ -271,9 +274,9 @@
     },
     "useChartState": {
         "sections": {
-            "category": "类别维度",
-            "stack": "堆叠维度",
-            "value": "指标维度"
+            "category": "维度",
+            "stack": "维度",
+            "value": "指标"
         },
         "fieldTypes": {
             "dimension": "维度",
@@ -284,7 +287,7 @@
             "maxStackDimension": "当前维度数量已达到上限",
             "metricLimitReached": "当前指标数量已达到上限",
             "maxCategoryDimensions": "类别维度最多只能有 2 个",
-            "fieldExists":"该字段已添加"
+            "fieldExists": "该字段已添加"
         }
     },
     "renameSuccess": "已重命名",
@@ -298,7 +301,7 @@
     "selectTime": "选择时间",
     "startHour": "开始小时",
     "endHour": "结束小时",
-    "dynamicUpdate": "动态更新 (下次查看时自动根据当前时间推算)",
+    "dynamicUpdate": "动态更新",
     "cancel": "取消",
     "clear": "清空",
     "confirm": "确定",
@@ -376,11 +379,89 @@
         "lineChart": "折线图",
         "basicLineChart": "基础折线图",
         "stackedLineChart": "堆叠折线图",
+        "multipleLineChart": "组合折线图",
         "areaChart": "基础面积图",
         "stackedAreaChart": "堆叠面积图",
         "pieChart": "饼图",
         "donutChart": "环形图",
         "others": "其他",
         "metricCard": "指标卡"
-    }
+    },
+
+    "mid_user_increment": "用户规模统计",
+    "timestamp": {
+        "year": "时间(年)",
+        "month": "时间(月)",
+        "week": "时间(周)",
+        "day": "时间(日)",
+        "hour": "时间(小时)"
+    },
+    "user_group_infos": {
+        "user_group_id": "用户组ID",
+        "user_group_name": "用户组名称"
+    },
+    "total_user_count": "总用户数",
+    "new_user_count": "新增用户数",
+    "mid_active_user": "活跃用户规模统计",
+    "active_user_count": "活跃用户数",
+    "mid_app_increment": "应用规模统计",
+    "user_id": "用户ID",
+    "user_name": "用户名称",
+    "app_type": "应用类型",
+    "total_app_count": "总应用数",
+    "new_app_count": "新增应用数",
+    "mid_sessions_increment": "应用使用情况统计",
+    "app_id": "应用ID",
+    "app_name": "应用名称",
+    "source": "来源类型（平台/API）",
+    "session_count": "会话次数",
+    "platform_user_count": "使用人数",
+    "api_call_count": "API调用次数",
+    "mid_session_run_dtl": "应用并发与耗时",
+    "duration_seconds": "会话运行时长",
+    "max_concurrent_sessions": "最大同时在线会话数",
+    "mid_tool_call_dtl": "工具调用分析",
+    "tool_name": "工具名称",
+    "tool_id": "工具ID",
+    "tool_type": "工具类型",
+    "tool_call_count": "工具调用次数",
+    "tool_call_success_count": "工具调用成功次数",
+    "tool_call_success_rate": "工具调用成功率",
+    "mid_knowledge_increment": "知识库规模统计",
+    "total_document_knowledge_base_count": "总文档知识库数",
+    "total_qa_knowledge_base_count": "总QA知识库数",
+    "new_document_knowledge_base_count": "新增文档知识库数",
+    "new_qa_knowledge_base_count": "新增QA知识库数",
+    "mid_knowledge_file_increment": "知识库文件统计",
+    "total_file_count": "总文件数",
+    "total_qa_count": "总QA对数",
+    "file_size": "文件大小",
+    "mid_doc_parse_dtl": "文件解析效能",
+    "parse_type": "解析类型",
+    "status": "文件最终状态",
+    "doc_parse_count": "文档上传次数",
+    "doc_parse_success_count": "文档入库成功次数",
+    "doc_parse_success_rate": "文档入库成功率",
+    "etl_parse_count": "ETL处理次数",
+    "etl_parse_success_count": "ETL处理成功次数",
+    "etl_parse_success_rate": "ETL处理成功率",
+    "mid_model_call_dtl": "模型成本与性能",
+    "user_role_infos": {
+        "role_id": "角色ID",
+        "role_name": "角色名称"
+    },
+    "model_id": "模型ID",
+    "model_type": "模型类型",
+    "model_name": "模型名称",
+    "model_server_id": "服务方ID",
+    "model_server_name": "服务方名称",
+    "total_token": "Token消耗量",
+    "model_call_count": "模型调用次数",
+    "model_call_success_rate": "模型调用成功率",
+    "max_concurrent_llm_sessions": "最大LLM并发数",
+    "avg_first_token_cost_time": "平均首Token响应延迟",
+    "mid_user_interact_dtl": "用户反馈统计",
+    "like_count": "点赞次数",
+    "dislike_count": "点踩次数",
+    "copy_count": "复制次数"
 }

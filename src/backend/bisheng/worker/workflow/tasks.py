@@ -47,8 +47,8 @@ def _judge_workflow_status(redis_callback: RedisCallback, workflow: Workflow):
     _clear_workflow_obj(redis_callback.unique_id)
 
 
-def _execute_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: int):
-    redis_callback = RedisCallback(unique_id, workflow_id, chat_id, user_id)
+def _execute_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: int, source: str = "platform"):
+    redis_callback = RedisCallback(unique_id, workflow_id, chat_id, user_id, source=source)
     try:
         # update workflow status
         redis_callback.set_workflow_status(WorkflowStatus.RUNNING.value)
@@ -80,12 +80,12 @@ def _execute_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: i
 
 
 @bisheng_celery.task
-def execute_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: int):
+def execute_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: int, source: str = "platform"):
     """ Implementationworkflow """
     trace_id_var.set(unique_id)
     start_time = time.time()
     try:
-        _execute_workflow(unique_id, workflow_id, chat_id, user_id)
+        _execute_workflow(unique_id, workflow_id, chat_id, user_id, source)
     finally:
         end_time = time.time()
         workflow_info = WorkFlowService.get_one_workflow_simple_info_sync(workflow_id)
@@ -104,9 +104,9 @@ def execute_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: in
                                          ))
 
 
-def _continue_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: str):
+def _continue_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: int, source: str = "platform"):
     """ Resumeworkflow """
-    redis_callback = RedisCallback(unique_id, workflow_id, chat_id, user_id)
+    redis_callback = RedisCallback(unique_id, workflow_id, chat_id, user_id, source=source)
     try:
         workflow = _global_workflow.get(redis_callback.unique_id, None)
         if not workflow:
@@ -130,12 +130,12 @@ def _continue_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: 
 
 
 @bisheng_celery.task
-def continue_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: str):
+def continue_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: int, source: str = "platform"):
     """ Resumeworkflow """
     trace_id_var.set(unique_id)
     start_time = time.time()
     try:
-        _continue_workflow(unique_id, workflow_id, chat_id, user_id)
+        _continue_workflow(unique_id, workflow_id, chat_id, user_id, source)
     finally:
         end_time = time.time()
         workflow_info = WorkFlowService.get_one_workflow_simple_info_sync(workflow_id)

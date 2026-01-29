@@ -27,6 +27,8 @@ export interface ChartLinkConfig {
   dateRange: {
     start: string
     end: string
+    shortcutKey?: string
+    isDynamic?: boolean
   }
 }
 
@@ -38,7 +40,6 @@ interface ChartSelectorProps {
 /* ================== 组件 ================== */
 export default function ChartSelector({
   onSave,
-  onCancel
 }: ChartSelectorProps) {
   const { t } = useTranslation("dashboard")
   const [selectedCharts, setSelectedCharts] = useState<string[]>([])
@@ -87,16 +88,25 @@ export default function ChartSelector({
           setIsDefault(queryCond.hasDefaultValue)
         }
 
-        // 处理时间范围
-        if (queryCond.hasDefaultValue && queryCond.defaultValue?.type === 'custom') {
+        // 处理时间范围 - 修改这里
+        if (queryCond.hasDefaultValue) {
           try {
             const startTime = queryCond.defaultValue.startDate
             const endTime = queryCond.defaultValue.endDate
+            const mode = queryCond.defaultValue.mode || "fixed"
+
+            // 处理shortcutKey
+            let shortcutKey = ''
+            if (queryCond.defaultValue.type === 'recent_days') {
+              shortcutKey = `last_${queryCond.defaultValue.shortcutKey}`
+            }
 
             if (startTime && endTime) {
               setTimeFilter({
                 startTime: startTime,
-                endTime: endTime
+                endTime: endTime,
+                shortcutKey: shortcutKey,
+                isDynamic: mode === "dynamic"
               })
             } else {
               setTimeFilter(null)
@@ -117,7 +127,81 @@ export default function ChartSelector({
       setTimeFilter(null)
     }
   }, [editingComponent, t])
+  const onCancel = () => {
+    // 重置到编辑前的状态
+    const config = editingComponent?.data_config
 
+    if (config && 'linkedComponentIds' in config) {
+      setSelectedCharts(config.linkedComponentIds || [])
+
+      if (config.queryConditions) {
+        const queryCond = config.queryConditions
+
+        if (queryCond.displayType) {
+          const displayTypeValue = queryCond.displayType === "single"
+            ? t("chartSelector.displayTypes.time", "时间")
+            : t("chartSelector.displayTypes.timeRange", "时间范围")
+          setDisplayType(displayTypeValue)
+        }
+
+        // 映射时间粒度
+        if (queryCond.timeGranularity) {
+          let timeGranularityValue = t("chartSelector.granularities.yearMonthDay", "年月日")
+          if (queryCond.timeGranularity === "year_month") {
+            timeGranularityValue = t("chartSelector.granularities.yearMonth", "年月")
+          } else if (queryCond.timeGranularity === "year_month_day_hour") {
+            timeGranularityValue = t("chartSelector.granularities.yearMonthDayHour", "年月日时")
+          }
+          setTimeGranularity(timeGranularityValue)
+        }
+
+        // 设置默认值
+        if (queryCond.hasDefaultValue !== undefined) {
+          setIsDefault(queryCond.hasDefaultValue)
+        }
+
+        // 处理时间范围
+        if (queryCond.hasDefaultValue && queryCond.defaultValue?.type === 'custom') {
+          try {
+            const startTime = queryCond.defaultValue.startDate
+            const endTime = queryCond.defaultValue.endDate
+            const mode = queryCond.defaultValue.mode || "fixed"
+
+            // 处理shortcutKey
+            let shortcutKey = ''
+            if (queryCond.defaultValue.type === 'recent_days' && queryCond.defaultValue.recentDays) {
+              shortcutKey = `last_${queryCond.defaultValue.recentDays}`
+            }
+
+            if (startTime && endTime) {
+              setTimeFilter({
+                startTime: startTime,
+                endTime: endTime,
+                shortcutKey: shortcutKey,
+                isDynamic: mode === "dynamic"
+              })
+            } else {
+              setTimeFilter(null)
+            }
+          } catch (error) {
+            setTimeFilter(null)
+          }
+        } else {
+          setTimeFilter(null)
+        }
+      }
+    } else {
+      // 重置为默认值
+      setSelectedCharts([])
+      setDisplayType(t("chartSelector.displayTypes.timeRange"))
+      setTimeGranularity(t("chartSelector.granularities.yearMonthDay"))
+      setIsDefault(false)
+      setTimeFilter(null)
+    }
+
+    // 收起面板
+    setCollapsed(!collapsed)
+  }
   // 获取所有非查询类型的图表组件
   const charts = currentDashboard
     ? currentDashboard.components
@@ -169,7 +253,9 @@ export default function ChartSelector({
       isDefault,
       dateRange: {
         start: timeFilter?.startTime ?? "",
-        end: timeFilter?.endTime ?? ""
+        end: timeFilter?.endTime ?? "",
+        shortcutKey: timeFilter?.shortcutKey,
+        isDynamic: timeFilter?.isDynamic
       }
     }
 
@@ -214,10 +300,10 @@ export default function ChartSelector({
     )
   }
 
+
   return (
-    <div className="border-r flex flex-col h-full w-[420px] shrink-0 bg-background">
-      {/* 标题区域 */}
-      <div className="px-4 py-3 border-b flex items-center justify-between bg-muted/20">
+    <div className="border-r flex flex-col h-full w-[440px] shrink-0 bg-background relative">
+      <div className="px-4 py-3 border-b flex items-center justify-between bg-muted/20 shrink-0">
         <div>
           <h3 className="text-base font-semibold">
             {t("chartSelector.title")}
@@ -225,13 +311,11 @@ export default function ChartSelector({
         </div>
         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setCollapsed(true)}>
           <ListIndentIncrease className="h-4 w-4" />
-
         </Button>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {/* 图表列表 */}
-        <div className="max-h-64 overflow-y-auto space-y-2">
+        <div className="space-y-2">
           <div>{t("chartSelector.selectCharts")}</div>
 
           {/* 全选 */}
@@ -246,117 +330,126 @@ export default function ChartSelector({
           </div>
 
           {/* 单个图表 */}
-          {charts.length > 0 ? (
-            charts.map(chart => (
-              <div key={chart.id} className="flex items-center gap-2 pl-4">
-                <Checkbox
-                  checked={selectedCharts.includes(chart.id)}
-                  onCheckedChange={() => toggleChart(chart.id)}
-                />
-                <span className="text-sm flex">
-                  <img
-                    src={`${__APP_ENV__.BASE_URL}/assets/dashboard/${chart.type}.png`}
-                    className="w-4 h-4 shrink-0 mt-0.5 mr-1"
-                    alt={chart.type}
+          <div className="max-h-40 overflow-y-auto space-y-2">
+            {charts.length > 0 ? (
+              charts.map(chart => (
+                <div key={chart.id} className="flex items-center gap-2">
+                  <Checkbox
+                    checked={selectedCharts.includes(chart.id)}
+                    onCheckedChange={() => toggleChart(chart.id)}
                   />
-                  {chart.name}
-                  {
-                    chart.dataset && (
-                      <span className="text-muted-foreground text-xs ml-4 mt-0.5">
-                        {getDatasetName(chart.dataset)}
-                      </span>
-                    )
-                  }
-                </span>
+                  <span className="text-sm flex">
+                    <img
+                      src={`${__APP_ENV__.BASE_URL}/assets/dashboard/${chart.type}.png`}
+                      className="w-4 h-4 shrink-0 mt-0.5 mr-1"
+                      alt={chart.type}
+                    />
+                    {chart.name}
+                    {
+                      chart.dataset && (
+                        <span className="text-muted-foreground text-xs ml-4 mt-0.5">
+                          {getDatasetName(chart.dataset)}
+                        </span>
+                      )
+                    }
+                  </span>
+                </div>
+              ))
+            ) : (
+              <div className="text-sm text-muted-foreground pl-4">
+                {t("chartSelector.messages.noCharts")}
               </div>
-            ))
-          ) : (
-            <div className="text-sm text-muted-foreground pl-4">
-              {t("chartSelector.messages.noCharts")}
+            )}
+          </div>
+
+          <div className="h-px bg-muted"></div>
+
+          <div className="space-y-3">
+            <div className="text-md font-medium">
+              {t("chartSelector.config")}
             </div>
-          )}
-        </div>
 
-        <div className="h-px bg-muted"></div>
+            <div className="space-y-1">
+              <label className="text-sm">
+                {t("chartSelector.displayType")}
+              </label>
+              <Select value={displayType} onValueChange={setDisplayType}>
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={t("chartSelector.displayTypes.timeRange")}>
+                    {t("chartSelector.displayTypes.timeRange")}
+                  </SelectItem>
+                  <SelectItem value={t("chartSelector.displayTypes.time")}>
+                    {t("chartSelector.displayTypes.time")}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
-        {/* 配置区 */}
-        <div className="space-y-3">
-          <div className="text-md font-medium">
-            {t("chartSelector.config")}
-          </div>
+            {/* 时间粒度 */}
+            <div className="space-y-1">
+              <label className="text-sm">
+                {t("chartSelector.timeGranularity")}
+              </label>
+              <Select value={timeGranularity} onValueChange={setTimeGranularity}>
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={t("chartSelector.granularities.yearMonth")}>
+                    {t("chartSelector.granularities.yearMonth")}
+                  </SelectItem>
+                  <SelectItem value={t("chartSelector.granularities.yearMonthDay")}>
+                    {t("chartSelector.granularities.yearMonthDay")}
+                  </SelectItem>
+                  <SelectItem value={t("chartSelector.granularities.yearMonthDayHour")}>
+                    {t("chartSelector.granularities.yearMonthDayHour")}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
-          {/* 展示类型 */}
-          <div className="space-y-1">
-            <label className="text-sm">
-              {t("chartSelector.displayType")}
-            </label>
-            <Select value={displayType} onValueChange={setDisplayType}>
-              <SelectTrigger className="h-9">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={t("chartSelector.displayTypes.timeRange")}>
-                  {t("chartSelector.displayTypes.timeRange")}
-                </SelectItem>
-                <SelectItem value={t("chartSelector.displayTypes.time")}>
-                  {t("chartSelector.displayTypes.time")}
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+            {/* 默认值 */}
+            <div className="flex items-center gap-2">
+              <Checkbox
+                checked={isDefault}
+                onCheckedChange={() => setIsDefault(prev => !prev)}
+              />
+              <span className="text-sm">
+                {t("chartSelector.setDefault")}
+              </span>
+            </div>
 
-          {/* 时间粒度 */}
-          <div className="space-y-1">
-            <label className="text-sm">
-              {t("chartSelector.timeGranularity")}
-            </label>
-            <Select value={timeGranularity} onValueChange={setTimeGranularity}>
-              <SelectTrigger className="h-9">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={t("chartSelector.granularities.yearMonth")}>
-                  {t("chartSelector.granularities.yearMonth")}
-                </SelectItem>
-                <SelectItem value={t("chartSelector.granularities.yearMonthDay")}>
-                  {t("chartSelector.granularities.yearMonthDay")}
-                </SelectItem>
-                <SelectItem value={t("chartSelector.granularities.yearMonthDayHour")}>
-                  {t("chartSelector.granularities.yearMonthDayHour")}
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* 默认值 */}
-          <div className="flex items-center gap-2">
-            <Checkbox
-              checked={isDefault}
-              onCheckedChange={() => setIsDefault(prev => !prev)}
-            />
-            <span className="text-sm">
-              {t("chartSelector.setDefault")}
-            </span>
-          </div>
-
-          {/* 时间范围 */}
-          <div className="space-y-1 flex flex-1 w-full">
-            <AdvancedDatePicker
-              granularity={getGranularity()}
-              mode={getMode()}
-              value={timeFilter}
-              onChange={(val) => setTimeFilter(val)}
-              placeholder={t("chartSelector.datePicker.placeholder")}
-            />
+            {isDefault && (
+              <div className="space-y-1 flex flex-1 w-full">
+                <AdvancedDatePicker
+                  granularity={getGranularity()}
+                  mode={getMode()}
+                  value={timeFilter}
+                  onChange={(val) => setTimeFilter(val)}
+                  placeholder={t("chartSelector.datePicker.placeholder")}
+                />
+              </div>
+            )}
           </div>
         </div>
-
-        {/* 底部按钮 */}
-        <div className="flex justify-end gap-2 pt-2">
-          <Button variant="outline" onClick={onCancel}>
+      </div>
+      <div className="border-t bg-background p-4 shrink-0">
+        <div className="flex justify-end gap-2">
+          <Button
+            variant="outline"
+            onClick={onCancel}
+            className="flex-1"
+          >
             {t("chartSelector.buttons.cancel")}
           </Button>
-          <Button id="query_save" onClick={handleSave}>
+          <Button
+            id="query_save"
+            onClick={handleSave}
+            className="flex-1"
+          >
             {t("chartSelector.buttons.save")}
           </Button>
         </div>

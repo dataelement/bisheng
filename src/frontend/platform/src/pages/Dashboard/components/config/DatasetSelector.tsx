@@ -53,7 +53,7 @@ const isVirtualMetric = (metric: MetricConfig): boolean => {
     return metric.is_virtual
 }
 
-export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragStart, onFieldsLoaded, onFieldClick }: DatasetSelectorProps) {
+export function DatasetSelector({ selectedDatasetCode, isMetricCard, onDatasetChange, onDragStart, onFieldsLoaded, onFieldClick }: DatasetSelectorProps) {
     const { t } = useTranslation("dashboard")
     const [searchTerm, setSearchTerm] = useState("")
     const [dimensionsExpanded, setDimensionsExpanded] = useState(true)
@@ -76,7 +76,6 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
             (d.description && d.description.toLowerCase().includes(searchLower))
         )
     }, [allDatasets, searchTerm])
-
     // 获取选中的数据集详情
     const selectedDataset = useMemo(() => {
         return allDatasets.find(d => d.dataset_code === selectedDatasetCode)
@@ -92,6 +91,7 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
             fieldId: data.fieldId,
             fieldCode: data.fieldCode,
             fieldType,
+            isDivide: data.isDivide,
             timeGranularity: data.timeGranularity,
         }
 
@@ -112,7 +112,7 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
             fieldCode: d.field,
             fieldId: d.field,
             displayName: d.name,
-            fieldType: d.type === "date" ? "date" : d.type === "integer" ? "number" : "string",
+            fieldType: d.field_type,
             role: "dimension" as const
         }))
 
@@ -120,7 +120,9 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
             fieldCode: m.field,
             fieldId: m.field,
             displayName: m.name,
-            fieldType: "number",
+            fieldType: m.field_type,
+            isVirtual: m.is_virtual,
+            isDivide: m.formula,
             role: "metric" as const
         }))
 
@@ -152,7 +154,7 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
                         {/* 搜索框 */}
                         <div className="px-2 py-1.5">
                             <div className="relative">
-                                <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground z-10" />
                                 <Input
                                     placeholder={t("datasetSelector.searchDataset")}
                                     value={searchTerm}
@@ -174,7 +176,7 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
                         ) : (
                             filteredDatasets.map((dataset) => (
                                 <SelectItem key={dataset.dataset_code} value={dataset.dataset_code}>
-                                    {dataset.dataset_name}
+                                    {t(dataset.dataset_code)}
                                 </SelectItem>
                             ))
                         )}
@@ -184,81 +186,81 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
 
             {/* 字段展示区域 */}
             {selectedDataset && (
-                <div className="flex-1 overflow-y-auto">
-                    {/* 维度区域 */}
-                    <div className="border-b">
-                        <button
-                            className="w-full px-4 py-3 flex items-center justify-between hover:bg-accent/50 transition-colors"
-                            onClick={() => setDimensionsExpanded(!dimensionsExpanded)}
-                        >
-                            <span className="text-sm font-medium">{t("datasetSelector.dimensions")}</span>
-                            {dimensionsExpanded ? (
-                                <ChevronDown className="h-4 w-4" />
-                            ) : (
-                                <ChevronUp className="h-4 w-4" />
+                <div className="flex-1 flex flex-col min-h-0">
+                    {!isMetricCard && (
+                        <div className="flex-1 flex flex-col min-h-0 border-b">
+                            <button
+                                className="w-full px-4 py-3 flex items-center justify-between hover:bg-accent/50 transition-colors shrink-0"
+                                onClick={() => setDimensionsExpanded(!dimensionsExpanded)}
+                            >
+                                <span className="text-sm font-medium">{t("datasetSelector.dimensions")}</span>
+                                {dimensionsExpanded ? (
+                                    <ChevronDown className="h-4 w-4" />
+                                ) : (
+                                    <ChevronUp className="h-4 w-4" />
+                                )}
+                            </button>
+
+                            {dimensionsExpanded && (
+                                <div className="flex-1 overflow-y-auto px-4 pb-2 space-y-0 min-h-0">
+                                    {selectedDataset.schema_config.dimensions.map((dimension) => {
+                                        if (dimension.time_granularitys && dimension.time_granularitys.length > 0) {
+                                            return dimension.time_granularitys.map((g) => {
+                                                const displayName = t(`${dimension.field}.${g}`)
+                                                const field: DatasetField = {
+                                                    fieldCode: dimension.field,
+                                                    displayName,
+                                                    fieldType: "date",
+                                                    role: "dimension",
+                                                    timeGranularity: g,
+                                                }
+                                                return (
+                                                    <div
+                                                        key={dimension.field + g}
+                                                        className="flex items-center gap-2 p-2 rounded hover:bg-accent/30 cursor-move transition-colors"
+                                                        draggable
+                                                        onDragStart={(e) => handleDragStart(e, field, 'dimension')}
+                                                        onClick={(e) => { e.stopPropagation(); onFieldClick?.(field) }}
+                                                    >
+                                                        {TIME_ICONS[g]}
+                                                        <span className="text-sm flex-1">
+                                                            {displayName}
+                                                        </span>
+                                                    </div>
+                                                )
+                                            })
+                                        }
+
+                                        // 普通非时间字段
+                                        const field: DatasetField = {
+                                            fieldCode: dimension.field,
+                                            displayName: t(dimension.field),
+                                            fieldType: dimension.type === "integer" ? "number" : "string",
+                                            role: "dimension",
+                                        }
+
+                                        return (
+                                            <div
+                                                key={dimension.field}
+                                                className="flex items-center gap-2 p-2 rounded hover:bg-accent/30 cursor-move transition-colors"
+                                                draggable
+                                                onDragStart={(e) => handleDragStart(e, field, 'dimension')}
+                                                onClick={(e) => { e.stopPropagation(); onFieldClick?.(field) }}
+                                            >
+                                                {getFieldTypeIcon(field.fieldType)}
+                                                <span className="text-sm flex-1">{t(dimension.field)}</span>
+                                            </div>
+                                        )
+                                    })}
+                                </div>
                             )}
-                        </button>
+                        </div>
+                    )}
 
-                        {dimensionsExpanded && (
-                            <div className="px-4 pb-3 space-y-2">
-                                {selectedDataset.schema_config.dimensions.map((dimension) => {
-                                    if (dimension.time_granularitys && dimension.time_granularitys.length > 0) {
-                                        return dimension.time_granularitys.map((g) => {
-                                            const displayName = `${dimension.name}(${getTimeGranularityLabel(g)})`
-                                            const field: DatasetField = {
-                                                fieldCode: dimension.field,
-                                                displayName,
-                                                fieldType: "date",
-                                                role: "dimension",
-                                                timeGranularity: g,
-                                            }
-                                            return (
-                                                <div
-                                                    key={dimension.field + g}
-                                                    className="flex items-center gap-2 p-2 rounded hover:bg-accent/30 cursor-move transition-colors"
-                                                    draggable
-                                                    onDragStart={(e) => handleDragStart(e, field, 'dimension')}
-                                                    onClick={(e) => { e.stopPropagation(); onFieldClick?.(field) }}
-                                                >
-                                                    {TIME_ICONS[g]}
-                                                    <span className="text-sm flex-1">
-                                                        {dimension.name}
-                                                        {g ? ` (${getTimeGranularityLabel(g)})` : ""}
-                                                    </span>
-                                                </div>
-                                            )
-                                        })
-                                    }
-
-                                    // 普通非时间字段
-                                    const field: DatasetField = {
-                                        fieldCode: dimension.field,
-                                        displayName: dimension.name,
-                                        fieldType: dimension.type === "integer" ? "number" : "string",
-                                        role: "dimension",
-                                    }
-
-                                    return (
-                                        <div
-                                            key={dimension.field}
-                                            className="flex items-center gap-2 p-2 rounded hover:bg-accent/30 cursor-move transition-colors"
-                                            draggable
-                                            onDragStart={(e) => handleDragStart(e, field, 'dimension')}
-                                            onClick={(e) => { e.stopPropagation(); onFieldClick?.(field) }}
-                                        >
-                                            {getFieldTypeIcon(field.fieldType)}
-                                            <span className="text-sm flex-1">{dimension.name}</span>
-                                        </div>
-                                    )
-                                })}
-                            </div>
-                        )}
-                    </div>
-
-                    {/* 指标区域 */}
-                    <div>
+                    {/* 指标区域 - 占据下半部分 */}
+                    <div className="flex-1 flex flex-col min-h-0">
                         <button
-                            className="w-full px-4 py-3 flex items-center justify-between hover:bg-accent/50 transition-colors"
+                            className="w-full px-4 py-3 flex items-center justify-between hover:bg-accent/50 transition-colors shrink-0"
                             onClick={() => setMetricsExpanded(!metricsExpanded)}
                         >
                             <span className="text-sm font-medium">{t("datasetSelector.metrics")}</span>
@@ -268,16 +270,18 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
                                 <ChevronUp className="h-4 w-4" />
                             )}
                         </button>
+
                         {metricsExpanded && (
-                            <div className="px-4 pb-3 space-y-2">
+                            <div className="flex-1 overflow-y-auto px-4 pb-3 space-y-2 min-h-0">
                                 {selectedDataset.schema_config.metrics.map((metric, index) => {
                                     const isVirtual = isVirtualMetric(metric)
                                     const field: DatasetField = {
                                         fieldCode: metric.field,
-                                        displayName: metric.name,
+                                        displayName: t(metric.field),
                                         fieldType: "number",
                                         role: "metric" as const,
-                                        isVirtual: metric.is_virtual
+                                        isVirtual: metric.is_virtual,
+                                        isDivide: metric.formula,
                                     }
                                     return (
                                         <div
@@ -294,7 +298,7 @@ export function DatasetSelector({ selectedDatasetCode, onDatasetChange, onDragSt
                                                 <Hash className="h-4 w-4" />
                                             </div>
                                             <span className="text-sm flex-1 flex items-center gap-1">
-                                                {metric.name}
+                                                {t(metric.field)}
                                                 {isVirtual && <span className="text-muted-foreground text-xs">{t("datasetSelector.virtualMetric")}</span>}
                                             </span>
                                         </div>
