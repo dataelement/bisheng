@@ -157,9 +157,7 @@ export default function App() {
 
   // i18n title
   const { t } = useTranslation()
-  useEffect(() => {
-    document.title = t('title')
-  }, [t])
+
   // init language
   useEffect(() => {
     const lang = user?.user_id ? localStorage.getItem('i18nextLng') : null
@@ -194,17 +192,17 @@ export default function App() {
       {(user?.user_id || noAuthPages.includes(path)) && router ?
         <Suspense fallback={
           <div className='absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared'>
-            <LoadingIcon className="size-48 text-primary" />
+            <LoadingIcon className="w-48 text-primary" />
           </div>
         }>
           <RouterProvider router={router} />
         </Suspense>
         : user ? <div className='absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared'>
-          <LoadingIcon className="size-48 text-primary" />
+          <LoadingIcon className="w-48 text-primary" />
         </div>
           : <Suspense fallback={
             <div className='absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared'>
-              <LoadingIcon className="size-48 text-primary" />
+              <LoadingIcon className="w-48 text-primary" />
             </div>
           }>
             <RouterProvider router={publicRouter} />

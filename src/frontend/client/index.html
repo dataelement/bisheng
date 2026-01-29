@@ -9,6 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="description" content="Deepseek - An open source chat application with support for multiple AI models" />
   <title>BISHENG</title>
+  <script src="/assets/bisheng/config.js?v=<%= Date.now() %>"></script>
   <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content" />
   <style>
     html,
@@ -20,6 +21,8 @@
   </style>
   <!-- <script src="http://192.168.2.224:9000/vditor.js" defer></script> -->
   <script>
+    document.title = window.BRAND_CONFIG.brandName.en
+
     const theme = localStorage.getItem('color-theme');
     const loadingContainerStyle = document.createElement('style');
     let backgroundColor;
