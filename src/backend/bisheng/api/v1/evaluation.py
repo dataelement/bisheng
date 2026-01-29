@@ -35,41 +35,46 @@ def create_evaluation(*,
                       background_tasks: BackgroundTasks,
                       login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """ Create Assessment Task. """
-    user_id = login_user.user_id
-    if not version:
-        version = 0
-
     try:
-        # Try transcoding
-        output_file = convert_encoding_cchardet(file_io=io.BytesIO(file.file.read()))
-        csv_data = EvaluationService.parse_csv(file_data=output_file)
-        data_samples = {
-            "question": [one.get('question') for one in csv_data],
-            "answer": [one.get('answer') for one in csv_data],
-            "ground_truths": [[one.get('ground_truth')] for one in csv_data]
-        }
-        dataset = Dataset.from_dict(data_samples)
-    except Exception:
-        raise UploadFileExtError()
+        user_id = login_user.user_id
+        if not version:
+            version = 0
+
+        try:
+            # Try transcoding
+            output_file = convert_encoding_cchardet(file.file.read(), 'utf-8')
+            csv_data = EvaluationService.parse_csv(file_data=output_file)
+            data_samples = {
+                "question": [one.get('question') for one in csv_data],
+                "answer": [one.get('answer') for one in csv_data],
+                "ground_truths": [[one.get('ground_truth')] for one in csv_data]
+            }
+            dataset = Dataset.from_dict(data_samples)
+        except Exception:
+            raise UploadFileExtError()
+        finally:
+            file.file.seek(0)
+
+        file_name, file_path = EvaluationService.upload_file(file=file)
+        db_evaluation = Evaluation.model_validate(EvaluationCreate(unique_id=unique_id,
+                                                                   exec_type=exec_type,
+                                                                   version=version,
+                                                                   prompt=prompt,
+                                                                   user_id=user_id,
+                                                                   file_name=file_name,
+                                                                   file_path=file_path))
+        with get_sync_db_session() as session:
+            session.add(db_evaluation)
+            session.commit()
+            session.refresh(db_evaluation)
+
+        background_tasks.add_task(add_evaluation_task, evaluation_id=db_evaluation.id)
+
+        return resp_200(db_evaluation.copy())
+    except Exception as e:
+        raise e
     finally:
-        file.file.seek(0)
-
-    file_name, file_path = EvaluationService.upload_file(file=file)
-    db_evaluation = Evaluation.model_validate(EvaluationCreate(unique_id=unique_id,
-                                                               exec_type=exec_type,
-                                                               version=version,
-                                                               prompt=prompt,
-                                                               user_id=user_id,
-                                                               file_name=file_name,
-                                                               file_path=file_path))
-    with get_sync_db_session() as session:
-        session.add(db_evaluation)
-        session.commit()
-        session.refresh(db_evaluation)
-
-    background_tasks.add_task(add_evaluation_task, evaluation_id=db_evaluation.id)
-
-    return resp_200(db_evaluation.copy())
+        file.file.close()
 
 
 @router.delete('/{evaluation_id}', status_code=200)

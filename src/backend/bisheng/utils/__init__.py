@@ -2,7 +2,7 @@ import hashlib
 import io
 import time
 import uuid
-from typing import BinaryIO
+from typing import BinaryIO, Union, IO
 
 from fastapi import Request, WebSocket
 
@@ -35,31 +35,42 @@ def generate_knowledge_index_name() -> str:
     return f"col_{int(time.time())}_{generate_uuid()[:8]}"
 
 
-def calc_data_sha256(data: str | bytes | BinaryIO | None) -> str | None:
-    """ calculate file md5 """
+def calc_data_sha256(data: Union[str, bytes, IO[bytes], None]) -> Union[str, None]:
+    """
+    calculate sha256 hash of data
+    :param data: str, bytes, or a file-like object (with read() method)
+    :return: sha256 hex digest string or None
+    """
     if data is None:
         return None
+
     hasher = hashlib.sha256()
+
+    # Handle str and bytes directly
     if isinstance(data, (str, bytes)):
-        hasher.update(data.encode() if isinstance(data, str) else data)
-    elif isinstance(data, (io.BytesIO, io.IOBase, BinaryIO)) and data.readable():
-        pos = data.tell()
+        if isinstance(data, str):
+            data = data.encode('utf-8')
+        hasher.update(data)
+        return hasher.hexdigest()
+
+    if hasattr(data, 'read'):
+        # Assume it's a file-like object
+        try:
+            current_pos = data.tell()
+        except Exception:
+            current_pos = 0
+
         data.seek(0)
 
-        chunk_size = 8192
+        chunk_size = 65536  # 64KB per chunk
         while True:
             chunk = data.read(chunk_size)
             if not chunk:
                 break
             hasher.update(chunk)
-        data.seek(pos)
-    else:
-        data.seek(0)
-        chunk_size = 8192
-        while True:
-            chunk = data.read(chunk_size)
-            if not chunk:
-                break
-            hasher.update(chunk)
-        data.seek(0)
-    return hasher.hexdigest()
+
+        # Reset the file pointer to its original position
+        data.seek(current_pos)
+        return hasher.hexdigest()
+
+    return None

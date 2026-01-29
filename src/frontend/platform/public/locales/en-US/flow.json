@@ -285,7 +285,26 @@
     },
     "input": {
       "name": "Input",
+      "接收文本":"Receive Text",
       "description": "Receives user input from the chat interface. Supports two input types: dialog input and form input.",
+      "user_inputfile":{
+        "label": "Receive File"
+      },
+      "recommended_questions_flag": {
+        "label": "Smart Recommended Questions",
+        "help": "Based on conversation history, predict possible user input and display it in the conversation"
+      },
+      "recommended_llm": {
+        "label": "Model"
+      },
+      "recommended_system_prompt": {
+        "label": "Prompt",
+        "value": "# Role\nYou are a highly insightful \"Conversation Continuation Prediction Expert.\" Your task is to predict the three phrases or questions the user is most likely to input next, based on the current conversation history.\n\n# Context Awareness\nBefore generating predictions, please carry out the following in-depth reasoning steps:\n1. **Intent Analysis**: Is the user currently seeking facts, expressing emotions, requesting advice, or attempting to end the conversation?\n2. **Logical Inference**: Based on the AI\u2019s previous reply, what is the most natural association or question that would arise for the user?\n3. **Style Alignment**: Observe the user\u2019s wording habits (professional, casual, brief, or detailed). The predictions should maintain a consistent tone.\n\n# Goals\n- **Diversity**: Provide follow-ups from different directions (e.g., an in-depth exploratory question, a related new topic, a feedback-oriented comment).\n- **Conciseness**: Predictions should be short and to the point, typically no more than 15 words, making them easy for the user to click.\n- **Forward-looking**: Anticipate the user\u2019s \u201cpain points\u201d and directly offer an entry point to a solution.\n\n# Output Format\nPlease strictly adhere to JSON format in the output.\nReturn a JSON object containing a single key named \u201csuggestions\u201d.\n- All strings must use **double quotes**.\n- Do not output Markdown code block markers (such as ```json); output the raw JSON string directly.\n**Example:**\n{\"suggestions\": [\"Can you give an example?\", \"What is the cost of this solution?\", \"Sounds good\u2014how do I get started?\"]}"
+      },
+      "recommended_history_num": {
+        "label": "History Message Count",
+        "help": "Number of historical conversation messages for the model to reference when generating recommended questions"
+      },
       "tab_dialog_input": {
         "label": "Dialog Input",
         "help": "Receives free-text input from the user."

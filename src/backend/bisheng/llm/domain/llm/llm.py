@@ -3,7 +3,7 @@ from typing import List, Optional, Any, Sequence, Union, Dict, Type, Callable, I
 
 from langchain_core.callbacks import AsyncCallbackManagerForLLMRun, CallbackManagerForLLMRun
 from langchain_core.language_models import BaseChatModel, LanguageModelInput
-from langchain_core.messages import BaseMessage, ToolMessage, HumanMessage, BaseMessageChunk
+from langchain_core.messages import BaseMessage, ToolMessage, HumanMessage, BaseMessageChunk, AIMessage
 from langchain_core.outputs import ChatResult, ChatGenerationChunk
 from langchain_core.runnables import Runnable
 from langchain_core.tools import BaseTool
@@ -15,8 +15,8 @@ from typing_extensions import Self
 from bisheng.common.errcode.server import NoLlmModelConfigError, LlmModelConfigDeletedError, LlmProviderDeletedError, \
     LlmModelTypeError, LlmModelOfflineError, InitLlmError
 from bisheng.core.ai import ChatOllama, ChatOpenAI, ChatOpenAICompatible, \
-    AzureChatOpenAI, ChatTongyi, ChatZhipuAI, MiniMaxChat, ChatAnthropic, ChatDeepSeek, \
-    MoonshotChat
+    AzureChatOpenAI, ChatTongyi, ChatZhipuAI, MiniMaxChat, ChatAnthropic, MoonshotChat
+from bisheng.core.ai.llm.custom_chat_deepseek import CustomChatDeepSeek
 from bisheng.llm.domain.const import LLMModelType, LLMServerType
 from bisheng.llm.domain.models import LLMServer, LLMModel
 from .base import BishengBase
@@ -167,7 +167,7 @@ _llm_node_type: Dict = {
     LLMServerType.ZHIPU.value: {'client': ChatZhipuAI, 'params_handler': _get_zhipu_params},
     LLMServerType.MINIMAX.value: {'client': MiniMaxChat, 'params_handler': _get_minimax_params},
     LLMServerType.ANTHROPIC.value: {'client': ChatAnthropic, 'params_handler': _get_anthropic_params},
-    LLMServerType.DEEPSEEK.value: {'client': ChatDeepSeek, 'params_handler': _get_openai_params},
+    LLMServerType.DEEPSEEK.value: {'client': CustomChatDeepSeek, 'params_handler': _get_openai_params},
     LLMServerType.SPARK.value: {'client': ChatOpenAICompatible, 'params_handler': _get_spark_params},
     LLMServerType.TENCENT.value: {'client': ChatOpenAICompatible, 'params_handler': _get_openai_params},
     LLMServerType.MOONSHOT.value: {'client': MoonshotChat, 'params_handler': _get_openai_params},

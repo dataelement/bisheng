@@ -1,11 +1,14 @@
 import asyncio
+import base64
 import json
 import time
 from datetime import datetime
-from typing import Optional, Union, List
+from pathlib import Path
+from typing import Optional, Union, List, Type, Tuple
 from urllib.parse import unquote
 from uuid import uuid4
 
+import aiofiles
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, Request, UploadFile
 from fastapi.responses import StreamingResponse
 from langchain_core.documents import Document
@@ -14,6 +17,7 @@ from loguru import logger
 from sse_starlette import EventSourceResponse
 
 from bisheng.api.services import knowledge_imp
+from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.workflow import WorkFlowService
 from bisheng.api.services.workstation import (WorkstationConversation,
@@ -33,7 +37,7 @@ from bisheng.common.schemas.telemetry.event_data_schema import NewMessageSession
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings as bisheng_settings
 from bisheng.core.cache.redis_manager import get_redis_client
-from bisheng.core.cache.utils import file_download, save_download_file, save_uploaded_file
+from bisheng.core.cache.utils import save_download_file, save_uploaded_file, async_file_download
 from bisheng.core.logger import trace_id_var
 from bisheng.core.prompts.manager import get_prompt_manager
 from bisheng.database.models.flow import FlowType
@@ -45,6 +49,7 @@ from bisheng.share_link.api.dependencies import header_share_token_parser
 from bisheng.share_link.domain.models.share_link import ShareLink
 from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
 from bisheng.tool.domain.services.executor import ToolExecutor
+from bisheng.utils import get_request_ip
 
 router = APIRouter(prefix='/workstation', tags=['WorkStation'])
 
@@ -52,6 +57,8 @@ titleInstruction = 'a concise, 5-word-or-less title for the conversation, using 
 promptSearch = '用户的问题是：%s \
 判断用户的问题是否需要联网搜索，如果需要返回数字1，如果不需要返回数字0。只返回1或0，不要返回其他信息。\
 如果问题涉及到实时信息、最新事件或特定数据库查询等超出你知识截止日期（2024年7月）的内容，就需要进行联网搜索来获取最新信息。'
+
+visual_model_file_types = ['png', 'jpg', 'jpeg', 'webp', 'gif']
 
 
 # Customizable JSON Serializer
@@ -166,13 +173,17 @@ def knowledgeUpload(request: Request,
                     background_tasks: BackgroundTasks,
                     file: UploadFile = File(...),
                     login_user: UserPayload = Depends(UserPayload.get_login_user)):
-    file_byte = file.file.read()
-    file_path = save_download_file(file_byte, 'bisheng', file.filename)
-    res = WorkStationService.uploadPersonalKnowledge(request,
-                                                     login_user,
-                                                     file_path=file_path,
-                                                     background_tasks=background_tasks)
-    return resp_200(data=res[0])
+    try:
+        file_path = save_download_file(file.file, 'bisheng', file.filename)
+        res = WorkStationService.uploadPersonalKnowledge(request,
+                                                         login_user,
+                                                         file_path=file_path,
+                                                         background_tasks=background_tasks)
+        return resp_200(data=res[0])
+    except Exception as e:
+        raise ServerError(msg=f'Knowledge base upload failed: {str(e)}', exception=e)
+    finally:
+        file.file.close()
 
 
 @router.get('/queryKnowledge')
@@ -203,25 +214,31 @@ async def upload_file(
     """
     Upload file
     """
-    # Read file contents
-    # Save file
-    file_path = await save_uploaded_file(file, 'bisheng', unquote(file.filename))
+    try:
 
-    # Return to file path
-    return resp_200(
-        data={
-            'filepath': file_path,
-            'filename': unquote(file.filename),
-            'type': file.content_type,
-            'user': login_user.user_id,
-            '_id': uuid4().hex,
-            'createdAt': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'updatedAt': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'temp_file_id': file_id,
-            'file_id': uuid4().hex,
-            'message': 'File uploaded successfully',
-            'context': 'message_attachment',
-        })
+        # Read file contents
+        # Save file
+        file_path = await save_uploaded_file(file, 'bisheng', unquote(file.filename))
+
+        # Return to file path
+        return resp_200(
+            data={
+                'filepath': file_path,
+                'filename': unquote(file.filename),
+                'type': file.content_type,
+                'user': login_user.user_id,
+                '_id': uuid4().hex,
+                'createdAt': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                'updatedAt': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                'temp_file_id': file_id,
+                'file_id': uuid4().hex,
+                'message': 'File uploaded successfully',
+                'context': 'message_attachment',
+            })
+    except Exception as e:
+        raise ServerError(msg=f'File upload failed: {str(e)}', exception=e)
+    finally:
+        await file.close()
 
 
 @router.post('/gen_title')
@@ -265,7 +282,8 @@ async def get_chat_history(conversationId: str,
         return resp_200([])
 
 
-async def genTitle(human: str, assistant: str, llm: BishengLLM, conversationId: str):
+async def genTitle(human: str, assistant: str, llm: BishengLLM, conversationId: str, login_user: UserPayload,
+                   request: Request):
     """
     Generate Title
     """
@@ -279,7 +297,9 @@ async def genTitle(human: str, assistant: str, llm: BishengLLM, conversationId: 
     session = await MessageSessionDao.async_get_one(conversationId)
     if session:
         session.flow_name = title[:200]
-        await MessageSessionDao.async_insert_one(session)
+        session = await MessageSessionDao.async_insert_one(session)
+        # Audit log
+        await AuditLogService.create_chat_message(user=login_user, ip_address=get_request_ip(request), message=session)
 
 
 async def webSearch(query: str, user_id: int):
@@ -304,12 +324,11 @@ async def webSearch(query: str, user_id: int):
     return search_res, search_list
 
 
-def getFileContent(filepath: str, invoke_user_id: int):
+async def getFileContent(filepath_local: str, file_name, invoke_user_id: int):
     """
     Get file contents
     """
-    filepath_local, file_name = file_download(filepath)
-    raw_texts, _, _, _ = knowledge_imp.read_chunk_text(
+    raw_texts, _, _, _ = await knowledge_imp.async_read_chunk_text(
         invoke_user_id,
         filepath_local,
         file_name,
@@ -387,7 +406,7 @@ async def _initialize_chat(data: APIChatCompletion, login_user: UserPayload):
         app_type=ApplicationTypeEnum.DAILY_CHAT,
         user_id=login_user.user_id)
 
-    return wsConfig, conversation, message, bishengllm, model_info.displayName, is_new_conversation
+    return wsConfig, conversation, message, bishengllm, model_info, is_new_conversation
 
 
 async def _log_telemetry_events(user_id: str, conversation_id: str, start_time: float):
@@ -421,12 +440,13 @@ async def _log_telemetry_events(user_id: str, conversation_id: str, start_time: 
 
 @router.post('/chat/completions')
 async def chat_completions(
+        request: Request,
         data: APIChatCompletion,
         login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     start_time = time.time()
     try:
-        wsConfig, conversation, message, bishengllm, modelName, is_new_conv = await _initialize_chat(data, login_user)
+        wsConfig, conversation, message, bishengllm, model_info, is_new_conv = await _initialize_chat(data, login_user)
         conversationId = conversation.chat_id
         conversation_id_for_telemetry = conversationId
     except (BaseErrorCode, ValueError) as e:
@@ -456,7 +476,7 @@ async def chat_completions(
         index = 0
         stepId = None
         source_document = None
-
+        image_bases64 = []
         try:
             # Prepare prompt based on different modes (search, knowledge base, files)
             if data.search_enabled:
@@ -496,9 +516,57 @@ async def chat_completions(
                                                           question=data.text).prompt
                 logger.debug(f'Knowledge prompt: {prompt}')
 
+
             elif data.files:
+
                 logger.info(f'Using file content for prompt.')
-                file_contents = [getFileContent(file.get('filepath'), login_user.user_id) for file in data.files]
+
+                download_tasks = [async_file_download(file.get('filepath')) for file in data.files]
+
+                downloaded_files = await asyncio.gather(*download_tasks)
+
+                visual_tasks = []
+
+                doc_tasks = []
+
+                # image to base64
+                async def _read_image_sync(filepath: str, filename: str) -> str:
+                    async with aiofiles.open(filepath, mode='rb') as f:
+                        image_data = await f.read()
+                        ext = filename.split('.')[-1].lower()
+
+                        mime_type = 'jpeg' if ext == 'jpg' else ext
+
+                        return f"data:image/{mime_type};base64," + base64.b64encode(image_data).decode('utf-8')
+
+                for filepath, filename in downloaded_files:
+
+                    file_ext = filename.split('.')[-1].lower()
+
+                    # Determine task type based on file extension and model capabilities
+                    if model_info.visual and file_ext in visual_model_file_types:
+                        # Image processing task
+                        visual_tasks.append(_read_image_sync(filepath=filepath, filename=filename))
+
+                    else:
+                        # Document processing task
+                        doc_tasks.append(
+                            getFileContent(filepath_local=filepath,
+                                           file_name=filename,
+                                           invoke_user_id=login_user.user_id)
+                        )
+
+                # Execute all tasks concurrently
+                results = await asyncio.gather(
+                    asyncio.gather(*visual_tasks),
+                    asyncio.gather(*doc_tasks)
+                )
+
+                # results[0] is image base64 list
+                # results[1] is document content list
+                image_bases64.extend(results[0])
+                file_contents = results[1]
+
                 file_context = '\n'.join(file_contents)[:max_token]
                 prompt = wsConfig.fileUpload.prompt.format(file_content=file_context, question=data.text)
 
@@ -511,7 +579,16 @@ async def chat_completions(
 
             # Prepare message history and call LLM
             history_messages = (await WorkStationService.get_chat_history(conversationId, 8))[:-1]
-            inputs = [*history_messages, HumanMessage(content=prompt)]
+            content = [
+                {'type': 'text', 'text': prompt},
+            ]
+
+            for img_base64 in image_bases64:
+                content.append({'type': 'image_url', 'image_url': {
+                    'url': img_base64
+                }})
+
+            inputs = [*history_messages, HumanMessage(content=content)]
             if wsConfig.systemPrompt:
                 system_content = wsConfig.systemPrompt.format(cur_date=datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
                 inputs.insert(0, SystemMessage(content=system_content))
@@ -552,11 +629,11 @@ async def chat_completions(
 
         # Send final message and generate title if needed
         yield await final_message(conversation, conversation.flow_name, message, final_content_for_db,
-                                  error, modelName, source_document)
+                                  error, model_info.displayName, source_document)
 
         if is_new_conv:
             asyncio.create_task(
-                genTitle(data.text, final_content_for_db, bishengllm, conversationId))
+                genTitle(data.text, final_content_for_db, bishengllm, conversationId, login_user, request))
 
     try:
         return StreamingResponse(event_stream(), media_type='text/event-stream')

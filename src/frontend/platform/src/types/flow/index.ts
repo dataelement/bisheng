@@ -141,6 +141,8 @@ export interface WorkflowNode {
   group_params: {
     /** group name */
     name?: string;
+    /** group key */
+    groupKey?: string;
     /** group parameters */
     params: WorkflowNodeParam[];
   }[];
@@ -165,6 +167,7 @@ export interface WorkflowNode {
 }
 
 export interface WorkflowNodeParam {
+  groupTitle?: boolean;
   /** Unique key */
   key: string;
   /** Optional display */

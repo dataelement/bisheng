@@ -257,7 +257,7 @@ async def process_flow(
                                    chat_id=session_id,
                                    category='question',
                                    flow_id=flow_id,
-                                   message=json.dumps(inputs))
+                                   message=json.dumps(inputs, ensure_ascii=False))
             message = ChatMessage(user_id=login_user.user_id,
                                   is_bot=True,
                                   chat_id=session_id,
@@ -372,12 +372,17 @@ async def _upload_file(file: UploadFile, object_name_prefix: str, file_supports:
 async def upload_icon(request: Request,
                       login_user: UserPayload = Depends(UserPayload.get_login_user),
                       file: UploadFile = None):
-    bucket = bisheng_settings.object_storage.minio.public_bucket
-    resp = await _upload_file(file,
-                              object_name_prefix='icon',
-                              file_supports=['jpeg', 'jpg', 'png'],
-                              bucket_name=bucket)
-    return resp_200(data=resp)
+    try:
+        bucket = bisheng_settings.object_storage.minio.public_bucket
+        resp = await _upload_file(file,
+                                  object_name_prefix='icon',
+                                  file_supports=['jpeg', 'jpg', 'png'],
+                                  bucket_name=bucket)
+        return resp_200(data=resp)
+    except Exception as e:
+        raise e
+    finally:
+        await file.close()
 
 
 @router.post('/upload/workflow/{workflow_id}')
@@ -385,9 +390,14 @@ async def upload_icon_workflow(request: Request,
                                login_user: UserPayload = Depends(UserPayload.get_login_user),
                                file: UploadFile = None,
                                workflow_id: str = Path(..., description='workflow id')):
-    bucket = bisheng_settings.object_storage.minio.public_bucket
-    resp = await _upload_file(file, object_name_prefix=f'workflow/{workflow_id}', bucket_name=bucket)
-    return resp_200(data=resp)
+    try:
+        bucket = bisheng_settings.object_storage.minio.public_bucket
+        resp = await _upload_file(file, object_name_prefix=f'workflow/{workflow_id}', bucket_name=bucket)
+        return resp_200(data=resp)
+    except Exception as e:
+        raise e
+    finally:
+        await file.close()
 
 
 @router.post('/upload/{flow_id}')
@@ -406,6 +416,8 @@ async def create_upload_file(file: UploadFile, flow_id: str):
     except Exception as exc:
         logger.error(f'Error saving file: {exc}')
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+    finally:
+        await file.close()
 
 
 # get endpoint to return version of bisheng

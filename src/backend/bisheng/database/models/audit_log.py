@@ -59,6 +59,7 @@ class ObjectType(Enum):
     FLOW = "flow"  # Skill
     WORK_FLOW = "work_flow"  # The Workflow
     ASSISTANT = "assistant"  # assistant
+    WORKSTATION = "workstation"  # Workstation
     KNOWLEDGE = "knowledge"  # The knowledge base upon
     FILE = "file"  # Doc.
     USER_CONF = "user_conf"  # User Configuration

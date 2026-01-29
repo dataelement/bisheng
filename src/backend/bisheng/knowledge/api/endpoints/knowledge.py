@@ -1,4 +1,5 @@
 import asyncio
+import gc
 import json
 import urllib.parse
 from datetime import datetime
@@ -18,7 +19,7 @@ from bisheng.api.v1.schemas import (KnowledgeFileProcess, UpdatePreviewFileChunk
                                     UpdateKnowledgeReq, KnowledgeFileReProcess)
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.common.errcode.http_error import UnAuthorizedError, NotFoundError
+from bisheng.common.errcode.http_error import UnAuthorizedError, NotFoundError, ServerError
 from bisheng.common.errcode.knowledge import KnowledgeCPError, KnowledgeQAError, KnowledgeRebuildingError, \
     KnowledgePreviewError, KnowledgeNotQAError, KnowledgeNoEmbeddingError, KnowledgeNotExistError, KnowledgeCPEmptyError
 from bisheng.common.errcode.server import NoLlmModelConfigError
@@ -48,40 +49,65 @@ router = APIRouter(prefix='/knowledge', tags=['Knowledge'])
 
 @router.post('/upload')
 async def upload_file(*, file: UploadFile = File(...)):
-    file_name = file.filename
-    # Cache Local
-    uuid_file_name = await KnowledgeService.save_upload_file_original_name(file_name)
-    file_path = await save_uploaded_file(file, 'bisheng', uuid_file_name)
-    if not isinstance(file_path, str):
-        file_path = str(file_path)
-    return resp_200(UploadFileResponse(file_path=file_path))
+    try:
+        file_name = file.filename
 
+        uuid_file_name = await KnowledgeService.save_upload_file_original_name(file_name)
+
+        file_path = await save_uploaded_file(file, 'bisheng', uuid_file_name)
+
+        if not isinstance(file_path, str):
+            file_path = str(file_path)
+
+        return resp_200(UploadFileResponse(file_path=file_path))
+
+    except Exception as e:
+        logger.error(f'File upload failed: {e}')
+        raise ServerError(msg=f'File upload failed: {e}')
+
+    finally:
+        await file.close()
 
 @router.post('/upload/{knowledge_id}')
-async def upload_knowledge_file(*, request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user),
+async def upload_knowledge_file(*,
+                                request: Request,
+                                login_user: UserPayload = Depends(UserPayload.get_login_user),
                                 knowledge_id: int,
                                 file: UploadFile = File(...)):
-    """ Knowledge base upload file, need to determine if the file is duplicated in the knowledge base """
+    """ Knowledge base upload file """
 
-    file_name = file.filename
-    # Cache Local
-    uuid_file_name = await KnowledgeService.save_upload_file_original_name(file_name)
-    file_path = await save_uploaded_file(file, 'bisheng', uuid_file_name)
-    if not isinstance(file_path, str):
-        file_path = str(file_path)
+    try:
+        file_name = file.filename
 
-    # calc file md5 and check
-    file_md5 = await asyncio.to_thread(calc_data_sha256, file.file)
+        # Save the uploaded file
+        uuid_file_name = await KnowledgeService.save_upload_file_original_name(file_name)
+        file_path = await save_uploaded_file(file, 'bisheng', uuid_file_name)
 
-    repeat_file = await KnowledgeFileDao.get_repeat_file(
-        knowledge_id=knowledge_id, file_name=file_name, md5_=file_md5
-    )
-    ret = UploadFileResponse(file_path=file_path)
-    if repeat_file:
-        ret.repeat = True
-        ret.repeat_update_time = repeat_file.update_time
+        if not isinstance(file_path, str):
+            file_path = str(file_path)
 
-    return resp_200(ret)
+        await file.seek(0)
+
+        # Calculate file md5
+        file_md5 = await asyncio.to_thread(calc_data_sha256, file.file)
+
+        # Check for duplicate files
+        repeat_file = await KnowledgeFileDao.get_repeat_file(
+            knowledge_id=knowledge_id, file_name=file_name, md5_=file_md5
+        )
+
+        ret = UploadFileResponse(file_path=file_path)
+        if repeat_file:
+            ret.repeat = True
+            ret.repeat_update_time = repeat_file.update_time
+
+        return resp_200(ret)
+
+    except Exception as e:
+        raise ServerError(msg=f'File upload failed: {e}')
+
+    finally:
+        await file.close()
 
 
 @router.post('/preview')
@@ -395,7 +421,8 @@ async def get_knowledge_chunk(request: Request,
                               file_ids: List[int] = Query(default=[], description='Doc.ID'),
                               keyword: str = Query(default='', description='Keywords'),
                               page: int = Query(default=1, description='Page'),
-                              limit: int = Query(default=10, description='Number of bars per page Number of bars per page')):
+                              limit: int = Query(default=10,
+                                                 description='Number of bars per page Number of bars per page')):
     """ Get Knowledge Base Block Content """
     # In order to resolvekeywordParameters are sometimes not carried outurldecoderight of privacybug
     if keyword.startswith('%'):
@@ -575,6 +602,7 @@ async def get_export_url():
     bio.seek(0)
     file = UploadFile(filename=file_name, file=bio)
     file_path = await save_uploaded_file(file, 'bisheng', file_name)
+    await file.close()
     return resp_200({"url": file_path})
 
 
@@ -632,6 +660,7 @@ async def get_export_url(*,
         bio.seek(0)
         file_io = UploadFile(filename=file_name, file=bio)
         file_path = await save_uploaded_file(file_io, 'bisheng', file_name)
+        await file_io.close()
         file_list.append(file_path)
         total_num += len(qa_list)
         if len(qa_list) < page_size or total_num >= total_count:
@@ -857,7 +886,8 @@ def update_knowledge_model(*,
     return resp_200()
 
 
-@router.get("/file/info/{file_id}", description="Get knowledge base file information", response_model=UnifiedResponseModel)
+@router.get("/file/info/{file_id}", description="Get knowledge base file information",
+            response_model=UnifiedResponseModel)
 async def get_knowledge_file_info(*,
                                   login_user: UserPayload = Depends(UserPayload.get_login_user),
                                   file_id: int,
@@ -878,7 +908,8 @@ async def get_knowledge_file_info(*,
 
 
 # Adding Metadata Fields to the Knowledge Base
-@router.post('/add_metadata_fields', description="Adding Metadata Fields to the Knowledge Base", response_model=UnifiedResponseModel)
+@router.post('/add_metadata_fields', description="Adding Metadata Fields to the Knowledge Base",
+             response_model=UnifiedResponseModel)
 async def add_metadata_fields(*,
                               login_user: UserPayload = Depends(UserPayload.get_login_user),
                               req_data: AddKnowledgeMetadataFieldsReq,
@@ -893,7 +924,8 @@ async def add_metadata_fields(*,
 
 
 # Modify Knowledge Base Metadata Fields
-@router.put('/update_metadata_fields', description="Modify Knowledge Base Metadata Fields", response_model=UnifiedResponseModel)
+@router.put('/update_metadata_fields', description="Modify Knowledge Base Metadata Fields",
+            response_model=UnifiedResponseModel)
 async def update_metadata_fields(*,
                                  login_user: UserPayload = Depends(UserPayload.get_login_user),
                                  req_data: UpdateKnowledgeMetadataFieldsReq,
@@ -918,11 +950,13 @@ async def update_metadata_fields(*,
 
 
 # Delete Knowledge Base Metadata Field
-@router.delete('/delete_metadata_fields', description="Delete Knowledge Base Metadata Field", response_model=UnifiedResponseModel)
+@router.delete('/delete_metadata_fields', description="Delete Knowledge Base Metadata Field",
+               response_model=UnifiedResponseModel)
 async def delete_metadata_fields(*,
                                  login_user: UserPayload = Depends(UserPayload.get_login_user),
                                  knowledge_id: int = Body(..., embed=True, description="The knowledge base uponID"),
-                                 field_names: List[str] = Body(..., embed=True, description="List of field names to delete"),
+                                 field_names: List[str] = Body(..., embed=True,
+                                                               description="List of field names to delete"),
                                  knowledge_service=Depends(get_knowledge_service),
                                  background_tasks: BackgroundTasks):
     """
@@ -945,7 +979,8 @@ async def delete_metadata_fields(*,
 
 
 # Modify Knowledge Base File User Custom Metadata
-@router.put('/file/user_metadata', description="Modify Knowledge Base File User Custom Metadata", response_model=UnifiedResponseModel)
+@router.put('/file/user_metadata', description="Modify Knowledge Base File User Custom Metadata",
+            response_model=UnifiedResponseModel)
 async def modify_file_user_metadata(*,
                                     login_user: UserPayload = Depends(UserPayload.get_login_user),
                                     req_data: ModifyKnowledgeFileMetaDataReq,

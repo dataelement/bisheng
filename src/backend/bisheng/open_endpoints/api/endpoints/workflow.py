@@ -22,7 +22,7 @@ from bisheng.core.logger import trace_id_var
 from bisheng.database.models.flow import FlowDao, FlowType
 from bisheng.open_endpoints.domain.utils import get_default_operator
 from bisheng.worker.workflow.redis_callback import RedisCallback
-from bisheng.worker.workflow.tasks import execute_workflow, continue_workflow
+from bisheng.worker.workflow.tasks import execute_workflow, continue_workflow, workflow_stateful_worker
 from bisheng.workflow.common.workflow import WorkflowStatus
 
 router = APIRouter(prefix='/workflow', tags=['OpenAPI', 'Workflow'])
@@ -59,6 +59,7 @@ async def invoke_workflow(request: Request,
     logger.debug(f'invoke_workflow: {workflow_id}, {session_id}')
     workflow = RedisCallback(unique_id, workflow_id, chat_id, login_user.user_id, source="api")
 
+    execute_worker = await workflow_stateful_worker.find_task_node(chat_id)
     # Query workflow status
     status_info = workflow.get_workflow_status()
     if not status_info:
@@ -66,13 +67,15 @@ async def invoke_workflow(request: Request,
         workflow.set_workflow_data(workflow_info.data, override=override)
         workflow.set_workflow_status(WorkflowStatus.WAITING.value)
         # Start asynchronous task
-        execute_workflow.delay(unique_id, workflow_id, chat_id, login_user.user_id, source="api")
+        execute_workflow.apply_async([unique_id, workflow_id, chat_id, login_user.user_id, "api"],
+                                     queue=execute_worker)
     else:
         # Set user input
         if status_info['status'] == WorkflowStatus.INPUT.value and user_input:
             workflow.set_user_input(user_input, message_id)
             workflow.set_workflow_status(WorkflowStatus.INPUT_OVER.value)
-            continue_workflow.delay(unique_id, workflow_id, chat_id, login_user.user_id, source="api")
+            continue_workflow.apply_async([unique_id, workflow_id, chat_id, login_user.user_id, "api"],
+                                          queue=execute_worker)
 
     logger.debug(f'waiting workflow over or input: {workflow_id}, {session_id}')
 

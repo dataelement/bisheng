@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 from typing import Dict, List, Optional
@@ -17,7 +18,7 @@ from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.errcode.http_error import ServerError
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
-from bisheng.core.cache.utils import file_download, save_download_file
+from bisheng.core.cache.utils import file_download, save_download_file, async_file_download
 from bisheng.core.logger import trace_id_var
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.interface.embeddings.custom import FakeEmbedding
@@ -25,7 +26,7 @@ from bisheng.knowledge.domain.models.knowledge import (KnowledgeCreate, Knowledg
                                                        KnowledgeUpdate)
 from bisheng.knowledge.domain.models.knowledge_file import (QAKnoweldgeDao, QAKnowledgeUpsert)
 from bisheng.open_endpoints.domain.schemas.filelib import APIAddQAParam, APIAppendQAParam, QueryQAParam
-from bisheng.open_endpoints.domain.utils import get_default_operator
+from bisheng.open_endpoints.domain.utils import get_default_operator, get_default_operator_async
 from bisheng.utils.util import sync_func_to_async
 
 # build router
@@ -107,12 +108,11 @@ async def upload_file(
         if not file_name:
             return resp_500(message='file name must be not empty')
         # Cache Local
-        file_byte = await file.read()
-        file_path = save_download_file(file_byte, 'bisheng', file_name)
+        file_path = await sync_func_to_async(save_download_file)(save_download_file, file.file, 'bisheng', file_name)
     else:
-        file_path, file_name = file_download(file_url)
+        file_path, file_name = await async_file_download(file_url)
 
-    loging_user = get_default_operator()
+    loging_user = await get_default_operator_async()
     req_data = KnowledgeFileProcess(knowledge_id=knowledge_id,
                                     separator=separator,
                                     separator_rule=separator_rule,
@@ -125,10 +125,10 @@ async def upload_file(
                                     callback_url=callback_url,
                                     file_list=[KnowledgeFileOne(file_path=file_path, excel_rule=excel_rule)])
 
-    res = KnowledgeService.process_knowledge_file(request=request,
-                                                  login_user=loging_user,
-                                                  background_tasks=background_tasks,
-                                                  req_data=req_data)
+    res = await sync_func_to_async(KnowledgeService.process_knowledge_file)(request=request,
+                                                                            login_user=loging_user,
+                                                                            background_tasks=background_tasks,
+                                                                            req_data=req_data)
     return resp_200(data=res[0])
 
 
@@ -175,10 +175,9 @@ async def post_chunks(request: Request,
     file_name = file.filename
     if not file_name:
         return resp_500(message='file name must be not empty')
-    file_byte = await file.read()
-    file_path = save_download_file(file_byte, 'bisheng', file_name)
+    file_path = await sync_func_to_async(save_download_file)(file.file, 'bisheng', file_name)
 
-    login_user = get_default_operator()
+    login_user = await get_default_operator_async()
 
     req_data = KnowledgeFileProcess(knowledge_id=knowledge_id,
                                     separator=separator,
@@ -200,9 +199,9 @@ async def post_string_chunks(request: Request, document: ChunkInput):
     content = '\n\n'.join([doc.page_content for doc in document.documents])
     content_bytes = bytes(content, encoding='utf-8')
     file_name = document.documents[0].metadata.get('source')
-    file_path = save_download_file(content_bytes, 'bisheng', file_name)
+    file_path = await sync_func_to_async(save_download_file)(content_bytes, 'bisheng', file_name)
 
-    login_user = get_default_operator()
+    login_user = await get_default_operator_async()
 
     req_data = KnowledgeFileProcess(knowledge_id=document.knowledge_id,
                                     separator=['\n\n'],
@@ -211,12 +210,12 @@ async def post_string_chunks(request: Request, document: ChunkInput):
                                     extra=json.dumps(document.documents[0].metadata,
                                                      ensure_ascii=False))
 
-    knowledge, failed_files, process_files, _ = KnowledgeService.save_knowledge_file(
+    knowledge, failed_files, process_files, _ = await sync_func_to_async(KnowledgeService.save_knowledge_file)(
         login_user, req_data)
     if failed_files:
         return resp_200(data=failed_files[0])
 
-    res = text_knowledge(knowledge, process_files[0], document.documents)
+    res = await sync_func_to_async(text_knowledge)(knowledge, process_files[0], document.documents)
 
     return resp_200(data=res)
 

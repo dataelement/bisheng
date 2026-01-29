@@ -6,7 +6,7 @@ from typing import Dict, List, Optional, Tuple, Union
 
 from pydantic import field_validator
 from sqlalchemy import Column, DateTime, String, and_, func, or_, text
-from sqlmodel import JSON, Field, select, update
+from sqlmodel import JSON, Field, select, update, col
 
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
 from bisheng.common.models.base import SQLModelSerializable
@@ -186,6 +186,15 @@ class FlowDao(FlowBase):
         with get_sync_db_session() as session:
             statement = select(Flow).where(Flow.id.in_(flow_ids))
             return session.exec(statement).all()
+
+    @classmethod
+    async def aget_flow_by_ids(cls, flow_ids: List[str]) -> List[Flow]:
+        if not flow_ids:
+            return []
+        async with get_async_db_session() as session:
+            statement = select(Flow).where(col(Flow.id).in_(flow_ids))
+            result = await session.exec(statement)
+            return result.all()
 
     @classmethod
     def get_flow_by_user(cls, user_id: int) -> List[Flow]:
@@ -430,6 +439,92 @@ class FlowDao(FlowBase):
         with (get_sync_db_session() as session):
             ret = session.exec(statement).all()
             total = session.scalar(count_statement)
+        data = []
+        for one in ret:
+            data.append({
+                'id': one[0],
+                'name': one[1],
+                'description': one[2],
+                'flow_type': one[3],
+                'logo': one[4],
+                'user_id': one[5],
+                'status': one[6],
+                'create_time': one[7],
+                'update_time': one[8]
+            })
+        return data, total
+
+    @classmethod
+    async def aget_all_apps(cls,
+                            name: str = None,
+                            status: int = None,
+                            id_list: list = None,
+                            flow_type: int = None,
+                            user_id: int = None,
+                            id_extra: list = None,
+                            id_list_not_in: list = None,
+                            page: int = 0,
+                            limit: int = 0) -> (List[Dict], int):
+        """
+        Get all apps Contains skills, assistants, workflows
+        Args:
+            name:
+            status:
+            id_list:
+            flow_type:
+            user_id:
+            id_extra:
+            id_list_not_in:
+            page:
+            limit:
+
+        Returns:
+            (List[Dict], int)
+        """
+        sub_query = select(
+            Flow.id, Flow.name, Flow.description, Flow.flow_type, Flow.logo, Flow.user_id,
+            Flow.status, Flow.create_time, Flow.update_time).union_all(
+            select(Assistant.id, Assistant.name, Assistant.desc, FlowType.ASSISTANT.value,
+                   Assistant.logo, Assistant.user_id, Assistant.status, Assistant.create_time,
+                   Assistant.update_time).where(Assistant.is_delete == 0)).subquery()
+
+        statement = select(sub_query.c.id, sub_query.c.name, sub_query.c.description,
+                           sub_query.c.flow_type, sub_query.c.logo, sub_query.c.user_id,
+                           sub_query.c.status, sub_query.c.create_time, sub_query.c.update_time)
+        count_statement = select(func.count(sub_query.c.id))
+        if name:
+            statement = statement.where(sub_query.c.name.like(f'%{name}%'))
+            count_statement = count_statement.where(sub_query.c.name.like(f'%{name}%'))
+        if status is not None:
+            statement = statement.where(sub_query.c.status == status)
+            count_statement = count_statement.where(sub_query.c.status == status)
+        if id_list:
+            statement = statement.where(sub_query.c.id.in_(id_list))
+            count_statement = count_statement.where(sub_query.c.id.in_(id_list))
+        if flow_type is not None:
+            statement = statement.where(sub_query.c.flow_type == flow_type)
+            count_statement = count_statement.where(sub_query.c.flow_type == flow_type)
+        if user_id is not None:
+            if id_extra:
+                statement = statement.where(
+                    or_(sub_query.c.user_id == user_id, sub_query.c.id.in_(id_extra)))
+                count_statement = count_statement.where(
+                    or_(sub_query.c.user_id == user_id, sub_query.c.id.in_(id_extra)))
+            else:
+                statement = statement.where(sub_query.c.user_id == user_id)
+                count_statement = count_statement.where(sub_query.c.user_id == user_id)
+        if id_list_not_in:
+            statement = statement.where(~sub_query.c.id.in_(id_list_not_in))
+            count_statement = count_statement.where(~sub_query.c.id.in_(id_list_not_in))
+        if page and limit:
+            statement = statement.offset((page - 1) * limit).limit(limit)
+        statement = statement.order_by(sub_query.c.update_time.desc())
+
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            ret = result.all()
+            total_result = await session.exec(count_statement)
+            total = total_result.first()
         data = []
         for one in ret:
             data.append({

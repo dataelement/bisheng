@@ -16,7 +16,7 @@ from bisheng.database.models.message import ChatMessageDao, ChatMessage
 from bisheng.utils import generate_uuid
 from bisheng.utils import get_request_ip
 from bisheng.worker.workflow.redis_callback import RedisCallback
-from bisheng.worker.workflow.tasks import execute_workflow, continue_workflow
+from bisheng.worker.workflow.tasks import execute_workflow, continue_workflow, workflow_stateful_worker
 from bisheng.workflow.common.workflow import WorkflowStatus
 
 
@@ -30,6 +30,7 @@ class WorkflowClient(BaseClient):
 
         self.workflow: Optional[RedisCallback] = None
         self.latest_history: Optional[ChatMessage] = None
+        self.hash_key = None
         self.ws_closed = False
         self.run_lock = asyncio.Lock()
 
@@ -126,6 +127,11 @@ class WorkflowClient(BaseClient):
         await self.workflow_run()
         return False, unique_id
 
+    async def get_execute_worker(self) -> Optional[str]:
+        if not self.hash_key:
+            return None
+        return await workflow_stateful_worker.find_task_node(self.hash_key)
+
     async def init_workflow(self, message: dict):
         if self.workflow is not None:
             return
@@ -133,16 +139,18 @@ class WorkflowClient(BaseClient):
             workflow_data = message.get('data')
             workflow_id = message.get('flow_id', self.client_id)
             flag, unique_id = await self.check_status(message, is_init=True)
-            # DescriptionworkflowIn operation or offline
+            # Description workflow In operation or offline
             if not flag:
                 return
-
-            # Start a newworkflow
+            # Start a new workflow
             self.workflow = RedisCallback(unique_id, workflow_id, self.chat_id, self.user_id)
             await self.workflow.async_set_workflow_data(workflow_data)
             await self.workflow.async_set_workflow_status(WorkflowStatus.WAITING.value)
             # Start asynchronous task
-            execute_workflow.delay(unique_id, workflow_id, self.chat_id, self.user_id)
+            self.hash_key = self.chat_id if self.chat_id else generate_uuid()
+
+            execute_workflow.apply_async([unique_id, workflow_id, self.chat_id, self.user_id],
+                                         queue=await self.get_execute_worker())
             await self.send_response('processing', 'begin', '')
             await self.workflow_run()
         except Exception as e:
@@ -198,7 +206,7 @@ class WorkflowClient(BaseClient):
                 break
             await self.workflow.async_set_user_input(user_input, message_id=message_id, message_content=new_message)
             await self.workflow.async_set_workflow_status(WorkflowStatus.INPUT_OVER.value)
-            continue_workflow.delay(self.workflow.unique_id, self.workflow.workflow_id, self.workflow.chat_id,
-                                    self.workflow.user_id)
+            continue_workflow.apply_async([self.workflow.unique_id, self.workflow.workflow_id, self.workflow.chat_id,
+                                           self.workflow.user_id], queue=await self.get_execute_worker())
             await self.workflow_run()
         # await self.workflow_run()
