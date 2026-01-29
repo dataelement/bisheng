@@ -1,16 +1,20 @@
+import asyncio
 import base64
 import contextlib
 import functools
 import hashlib
 import json
 import os
+import shutil
 import tempfile
 from collections import OrderedDict
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Union, BinaryIO
 from urllib.parse import unquote, urlparse
+from uuid import uuid4
 
+import aiofiles
 import cchardet
 import requests
 from appdirs import user_cache_dir
@@ -168,26 +172,36 @@ def detect_encoding_cchardet(file_bytes: bytes, num_bytes=1024):
     return encoding, confidence
 
 
-def convert_encoding_cchardet(file_io: BytesIO, target_encoding='utf-8'):
-    """Convert file to destination encoding"""
-    source_encoding, confidence = detect_encoding_cchardet(file_io.read())
-    file_io.seek(0)
-    if confidence is None or confidence < 0.5 or source_encoding.lower() == target_encoding:  # Undetectable without any processing
-        return file_io
+def convert_encoding_cchardet(content: bytes, target_encoding='utf-8') -> BytesIO:
+    """
+    Convert file encoding to target_encoding using cchardet for detection.
+    Args:
+        content:
+        target_encoding:
+
+    Returns:
+        BytesIO:
+
+    """
+    source_encoding, confidence = detect_encoding_cchardet(content)
+
+    if confidence is None or confidence < 0.5 or source_encoding.lower() == target_encoding:
+        return BytesIO(content)
 
     try:
-        source_content = file_io.read().decode(source_encoding)
+        # decode using detected encoding
+        text = content.decode(source_encoding)
     except (UnicodeDecodeError, LookupError):
-        file_io.seek(0)
-        source_content = file_io.read().decode(target_encoding, errors='replace')
-    output_file = BytesIO(source_content.encode(target_encoding))
-    return output_file
+        # If decoding fails, replace errors
+        text = content.decode(target_encoding, errors='replace')
+
+    # encode to target encoding
+    return BytesIO(text.encode(target_encoding))
 
 
 async def upload_file_to_minio(file: UploadFile, object_name, bucket_name: str) -> str:
     minio_client = await get_minio_storage()
-    file_byte = await file.read()
-    await minio_client.put_object(bucket_name=bucket_name, object_name=object_name, file=file_byte)
+    await minio_client.put_object(bucket_name=bucket_name, object_name=object_name, file=file.file)
     return await minio_client.get_share_link(object_name, bucket_name)
 
 
@@ -208,9 +222,9 @@ async def save_file_to_folder(file: UploadFile, folder_name: str, file_name: str
 
     # Save the file to the specified folder
     file_path = folder_path / file_name
-    with open(file_path, 'wb') as f:
-        content = await file.read()
-        f.write(content)
+    async with aiofiles.open(file_path, 'wb') as out_file:
+        while content := await file.read(8192):
+            await out_file.write(content)
 
     return str(file_path)
 
@@ -230,42 +244,67 @@ async def save_uploaded_file(file: UploadFile, folder_name, file_name, bucket_na
     """
 
     minio_client = await get_minio_storage()
-
     if bucket_name is None:
         bucket_name = minio_client.tmp_bucket
 
     cache_path = Path(CACHE_DIR)
     folder_path = cache_path / folder_name
-
     # Create the folder if it doesn't exist
     if not folder_path.exists():
-        folder_path.mkdir()
+        folder_path.mkdir(parents=True, exist_ok=True)
 
-    # Reset the file cursor to the beginning of the file
-
-    file_io = BytesIO(await file.read())
-    # convert no utf-8 file to utf-8
     file_ext = file_name.split('.')[-1].lower()
-    if file_ext in ('txt', 'md', 'csv'):
-        file_io = convert_encoding_cchardet(file_io)
 
-    await minio_client.put_object_tmp(object_name=file_name, file=file_io)
+    file_data_to_upload = None
+    is_converted_text = False
+
+    try:
+        if file_ext in ('txt', 'md', 'csv'):
+            raw_content = await file.read()
+
+            file_data_to_upload = await asyncio.to_thread(
+                convert_encoding_cchardet,
+                content=raw_content,
+                target_encoding='utf-8'
+            )
+            is_converted_text = True
+
+        else:
+            # For other file types, use the original uploaded file
+            file_data_to_upload = file.file
+            # Reset file pointer to the beginning
+            file_data_to_upload.seek(0)
+            is_converted_text = False
+
+        await minio_client.put_object_tmp(object_name=file_name, file=file_data_to_upload)
+
+    finally:
+        if is_converted_text and file_data_to_upload:
+            file_data_to_upload.close()
+
     file_path = await minio_client.get_share_link(file_name, bucket_name, clear_host=False)
     return file_path
 
 
 @create_cache_folder
-def save_download_file(file_byte, folder_name, filename):
+def save_download_file(file_input: Union[bytes, BinaryIO], folder_name: str, filename: str) -> str:
     """
-    Save an uploaded file to the specified folder with a hash of its content as the file name.
-
-    Args:
-        file: The uploaded file object.
-        folder_name: The name of the folder to save the file in.
-
-    Returns:
-        The path to the saved file.
+    Synchronous I/O intensive tasks:
+    Write data stream to a temporary file
+    Simultaneously calculate SHA256
+    Rename a file based on the hash
     """
+
+    # Convert to stream objects
+    if isinstance(file_input, bytes):
+        src_stream = BytesIO(file_input)
+    else:
+        src_stream = file_input
+        # Make sure the pointer is at the beginning
+        if hasattr(src_stream, 'seek'):
+            src_stream.seek(0)
+
+    # Prepare a temporary file (write a temporary random filename first to avoid not being able to determine the filename before the hash calculation is finished).
     cache_path = Path(CACHE_DIR)
     folder_path = cache_path / folder_name
 
@@ -273,21 +312,50 @@ def save_download_file(file_byte, folder_name, filename):
     if not folder_path.exists():
         folder_path.mkdir(exist_ok=True)
 
-    # Create a hash of the file content
+    temp_filename = f"tmp_{uuid4().hex}"
+    temp_file_path = folder_path / temp_filename
+
     sha256_hash = hashlib.sha256()
-    # Reset the file cursor to the beginning of the file
 
-    sha256_hash.update(file_byte)
+    try:
+        # Write to temporary file and calculate SHA256 simultaneously
+        with open(temp_file_path, 'wb') as dst_file:
+            chunk_size = 65536  # 64KB
+            while True:
+                chunk = src_stream.read(chunk_size)
+                if not chunk:
+                    break
+                sha256_hash.update(chunk)
+                dst_file.write(chunk)
 
-    # Use the hex digest of the hash as the file name
-    hex_dig = sha256_hash.hexdigest()
-    md5_name = hex_dig
-    file_path = folder_path / f'{md5_name}_{filename}'
-    if len(filename) > 60:
-        file_path = folder_path / f'{md5_name}_{filename[-60:]}'
-    with open(file_path, 'wb') as new_file:
-        new_file.write(file_byte)
-    return str(file_path)
+        # calculate final hash
+        file_hash = sha256_hash.hexdigest()
+
+        # Logic for handling filename length limits
+        safe_filename = filename
+        if len(filename) > 60:
+            safe_filename = filename[-60:]
+
+        final_file_name = f'{file_hash}_{safe_filename}'
+        final_file_path = folder_path / final_file_name
+
+        # Rename (Move) Temporary File to Final Path
+        # If the file already exists, decide whether to overwrite or skip it based on your needs. This example demonstrates overwriting.
+        if final_file_path.exists():
+            os.remove(temp_file_path)
+            return str(final_file_path)
+
+        shutil.move(str(temp_file_path), str(final_file_path))
+        return str(final_file_path)
+
+    except Exception as e:
+        # Clean up temporary file in case of error
+        if temp_file_path.exists():
+            os.remove(temp_file_path)
+        raise e
+    finally:
+        if isinstance(file_input, bytes):
+            src_stream.close()
 
 
 def file_download(file_path: str):

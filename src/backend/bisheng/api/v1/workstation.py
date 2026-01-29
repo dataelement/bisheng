@@ -3,6 +3,7 @@ import base64
 import json
 import time
 from datetime import datetime
+from pathlib import Path
 from typing import Optional, Union, List, Type, Tuple
 from urllib.parse import unquote
 from uuid import uuid4
@@ -36,7 +37,7 @@ from bisheng.common.schemas.telemetry.event_data_schema import NewMessageSession
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings as bisheng_settings
 from bisheng.core.cache.redis_manager import get_redis_client
-from bisheng.core.cache.utils import file_download, save_download_file, save_uploaded_file, async_file_download
+from bisheng.core.cache.utils import save_download_file, save_uploaded_file, async_file_download
 from bisheng.core.logger import trace_id_var
 from bisheng.core.prompts.manager import get_prompt_manager
 from bisheng.database.models.flow import FlowType
@@ -172,13 +173,17 @@ def knowledgeUpload(request: Request,
                     background_tasks: BackgroundTasks,
                     file: UploadFile = File(...),
                     login_user: UserPayload = Depends(UserPayload.get_login_user)):
-    file_byte = file.file.read()
-    file_path = save_download_file(file_byte, 'bisheng', file.filename)
-    res = WorkStationService.uploadPersonalKnowledge(request,
-                                                     login_user,
-                                                     file_path=file_path,
-                                                     background_tasks=background_tasks)
-    return resp_200(data=res[0])
+    try:
+        file_path = save_download_file(file.file, 'bisheng', file.filename)
+        res = WorkStationService.uploadPersonalKnowledge(request,
+                                                         login_user,
+                                                         file_path=file_path,
+                                                         background_tasks=background_tasks)
+        return resp_200(data=res[0])
+    except Exception as e:
+        raise ServerError(msg=f'Knowledge base upload failed: {str(e)}', exception=e)
+    finally:
+        file.file.close()
 
 
 @router.get('/queryKnowledge')
@@ -209,25 +214,31 @@ async def upload_file(
     """
     Upload file
     """
-    # Read file contents
-    # Save file
-    file_path = await save_uploaded_file(file, 'bisheng', unquote(file.filename))
+    try:
 
-    # Return to file path
-    return resp_200(
-        data={
-            'filepath': file_path,
-            'filename': unquote(file.filename),
-            'type': file.content_type,
-            'user': login_user.user_id,
-            '_id': uuid4().hex,
-            'createdAt': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'updatedAt': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'temp_file_id': file_id,
-            'file_id': uuid4().hex,
-            'message': 'File uploaded successfully',
-            'context': 'message_attachment',
-        })
+        # Read file contents
+        # Save file
+        file_path = await save_uploaded_file(file, 'bisheng', unquote(file.filename))
+
+        # Return to file path
+        return resp_200(
+            data={
+                'filepath': file_path,
+                'filename': unquote(file.filename),
+                'type': file.content_type,
+                'user': login_user.user_id,
+                '_id': uuid4().hex,
+                'createdAt': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                'updatedAt': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                'temp_file_id': file_id,
+                'file_id': uuid4().hex,
+                'message': 'File uploaded successfully',
+                'context': 'message_attachment',
+            })
+    except Exception as e:
+        raise ServerError(msg=f'File upload failed: {str(e)}', exception=e)
+    finally:
+        await file.close()
 
 
 @router.post('/gen_title')

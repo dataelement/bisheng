@@ -145,7 +145,7 @@ class EvaluationService:
 
         file_ext = os.path.basename(file.filename).split('.')[-1]
         file_path = f'evaluation/dataset/{file_id}.{file_ext}'
-        minio_client.put_object_sync(bucket_name=minio_client.bucket, object_name=file_path, file=file.file.read(),
+        minio_client.put_object_sync(bucket_name=minio_client.bucket, object_name=file_path, file=file.file,
                                      content_type=file.content_type)
         return file_name, file_path
 
