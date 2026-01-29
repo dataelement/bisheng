@@ -223,7 +223,7 @@ class TextClassificationReport:
     @staticmethod
     def _parse_heading_data(heading_str: str) -> Dict:
         heading_level, heading_text = heading_str.split(" ", 1)
-        level = max(len(heading_level.strip()), 6)
+        level = min(len(heading_level.strip()), 6)
         return {"type": "heading", "content": heading_text, "level": level}
 
     def _handle_http_image(self, pattern: MatchPattern, string_data: List[Dict]):
