@@ -6,6 +6,7 @@ from typing import Any, Dict, List
 
 from langchain_core.messages import HumanMessage
 
+from bisheng.core.cache.utils import file_download
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils.exceptions import IgnoreException
 from bisheng.workflow.callback.base_callback import BaseCallback
@@ -156,7 +157,11 @@ class BaseNode(ABC):
             msg = msg_template.format(var_map)
         return msg, variables
 
-    def get_file_base64_data(self, file_path: str) -> str:
+    @staticmethod
+    def get_file_base64_data(file_path: str) -> str:
+        if file_path.startswith(('http', "https")):
+            file_path, _ = file_download(file_path)
+
         with open(file_path, "rb") as f:
             file_data = f.read()
             base64_data = base64.b64encode(file_data).decode('utf-8')

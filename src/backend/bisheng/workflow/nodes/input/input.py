@@ -1,10 +1,11 @@
+import copy
 import json
 import os
 import shutil
 import tempfile
 import time
 from enum import Enum
-from typing import Any, List
+from typing import Any, List, Dict
 from urllib.parse import urlparse, unquote
 
 from json_repair import json_repair
@@ -54,8 +55,12 @@ class InputNode(BaseNode):
             new_node_params['dialog_files_content'] = self.node_params.get('dialog_files_content', [])
         else:
             for value_info in self.node_params['form_input']:
-                new_node_params[value_info['key']] = value_info['value']
-                self._node_params_map[value_info['key']] = value_info
+                value_key = value_info['key']
+                # The file key needs to be re-generated to avoid parse type not ingest to knowledge base
+                if value_info["type"] == "file":
+                    value_key = f"file_{generate_uuid()[:8]}"
+                new_node_params[value_key] = value_info['value']
+                self._node_params_map[value_key] = value_info
 
         self.node_params = new_node_params
         self._image_ext = ['png', 'jpg', 'jpeg', 'bmp']
@@ -81,8 +86,13 @@ class InputNode(BaseNode):
             ]
             return user_input_info
         form_input_info = self.node_data.get_variable_info('form_input')
-        for one in form_input_info.value:
+        form_variables = copy.deepcopy(self._node_params_map)
+        res = []
+        for one_key, one in form_variables.items():
+            one['key'] = one_key
             one['value'], _ = self.parse_msg_with_variables(one['value'])
+            res.append(one)
+        form_input_info.value = res
         return form_input_info
 
     def handle_recommended_questions(self):
@@ -131,23 +141,43 @@ class InputNode(BaseNode):
                                                                        unique_id=generate_uuid(),
                                                                        guide_question=questions[:3]))
 
+    def _parse_upload_file_variables(self, key_info: Dict, key_value: Dict) -> Dict:
+        """
+         parse upload_file variables
+         Documented metadataData, full-text files, minio file paths, image files path
+        """
+        # Compatible processing of historical versions of nodes
+        if self.node_data.v <= self._current_v:
+            return key_value
+
+        file_parse_mode = key_info.get('file_parse_mode', ParseModeEnum.INGEST_TO_KNOWLEDGE_BASE)
+        ret = {}
+        if file_parse_mode == ParseModeEnum.KEEP_RAW:
+            ret[key_info['image_file']] = key_value.get(key_info['image_file'], [])
+            ret[key_info['file_path']] = key_value.get(key_info['file_path'], [])
+        elif file_parse_mode == ParseModeEnum.EXTRACT_TEXT:
+            ret[key_info['file_content']] = key_value.get(key_info['file_content'], "")
+        else:
+            ret[key_info['key']] = key_value.get(key_info['key'], [])
+        return ret
+
     def _run(self, unique_id: str):
         if self.is_dialog_input():
-            # Input in the form of a dialog
-            result = self.parse_upload_file("dialog_files", {
+            key_info = {
                 "key": "dialog_files",
                 "file_content": "dialog_files_content",
                 "file_path": "dialog_file_paths",
                 "image_file": "dialog_image_files",
                 "file_parse_mode": self.node_params.get("file_parse_mode", ParseModeEnum.EXTRACT_TEXT),
                 "file_content_size": self.node_params.get("dialog_files_content_size", 15000)
-            }, self.node_params.get('dialog_files_content', []))
+            }
+            # Input in the form of a dialog
+            result = self.parse_upload_file("dialog_files", key_info, self.node_params.get('dialog_files_content', []))
             res = {
                 'user_input': self.node_params['user_input'],
-                'dialog_files_content': result.get("dialog_files_content", ""),
-                'dialog_file_paths': result.get("dialog_file_paths", []),
-                'dialog_image_files': result.get("dialog_image_files", []),
             }
+            res.update(self._parse_upload_file_variables(key_info, result))
+
             self.graph_state.save_context(content=f'{res["dialog_files_content"]}\n{res["user_input"]}',
                                           msg_sender='human')
             return res
@@ -161,7 +191,8 @@ class InputNode(BaseNode):
             label, _ = self.parse_msg_with_variables(key_info.get('value')) if key_info.get('value') else key
             if key_info['type'] == 'file':
                 new_params = self.parse_upload_file(key, key_info, value)
-                ret.update(new_params)
+                ret.update(self._parse_upload_file_variables(key_info, new_params))
+
                 if new_params[key_info['key']]:
                     content = ""
                     for one in new_params[key_info['key']]:

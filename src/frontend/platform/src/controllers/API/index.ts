@@ -986,6 +986,9 @@ export async function getWorkstationConfigApi(): Promise<any> {
   return await axios.get(`api/v1/workstation/config`);
 }
 
+export async function getChatHistoryApi(chatId: string): Promise<any> {
+  return await axios.get('/api/v1/session/chat/messages/' + chatId);
+}
 
 /***************************
  * ************ 溯源 ************ 

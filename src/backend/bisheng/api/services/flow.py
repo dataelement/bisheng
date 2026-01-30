@@ -204,7 +204,7 @@ class FlowService(BaseService):
 
         flow_version = await FlowVersionDao.aupdate_version(version_info)
 
-        if flow_version.flow_type == FlowType.FLOW.value:
+        if flow_info.flow_type == FlowType.FLOW.value:
             try:
                 # Refresh this version of the form data
                 if not get_L2_param_from_flow(flow_version.data, flow_version.flow_id, flow_version.id):

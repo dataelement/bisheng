@@ -621,7 +621,7 @@ def upload_file(local_path: str):
                 "required": true
             },
             {
-                "key": "file",
+                "key": "file_798",
                 "type": "file",
                 "value": "",
                 "label": "文件类型的输入",

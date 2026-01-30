@@ -15,12 +15,12 @@ from bisheng.api.v1.schema.workflow import WorkflowStream, WorkflowEvent, Workfl
 from bisheng.api.v1.schemas import resp_200
 from bisheng.chat.types import WorkType
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
-from bisheng.common.errcode.http_error import NotFoundError
+from bisheng.common.errcode.http_error import NotFoundError, ServerError
 from bisheng.common.schemas.telemetry.event_data_schema import ApplicationAliveEventData
 from bisheng.common.services import telemetry_service
 from bisheng.core.logger import trace_id_var
 from bisheng.database.models.flow import FlowDao, FlowType
-from bisheng.open_endpoints.domain.utils import get_default_operator
+from bisheng.open_endpoints.domain.utils import get_default_operator, get_default_operator_async
 from bisheng.worker.workflow.redis_callback import RedisCallback
 from bisheng.worker.workflow.tasks import execute_workflow, continue_workflow, workflow_stateful_worker
 from bisheng.workflow.common.workflow import WorkflowStatus
@@ -69,13 +69,16 @@ async def invoke_workflow(request: Request,
         # Start asynchronous task
         execute_workflow.apply_async([unique_id, workflow_id, chat_id, login_user.user_id, "api"],
                                      queue=execute_worker)
-    else:
+    elif status_info['status'] == WorkflowStatus.INPUT.value:
+        if not user_input:
+            raise ServerError(msg="workflow waiting for user input, but user input not provided")
         # Set user input
-        if status_info['status'] == WorkflowStatus.INPUT.value and user_input:
-            workflow.set_user_input(user_input, message_id)
-            workflow.set_workflow_status(WorkflowStatus.INPUT_OVER.value)
-            continue_workflow.apply_async([unique_id, workflow_id, chat_id, login_user.user_id, "api"],
-                                          queue=execute_worker)
+        if not message_id:
+            raise ServerError(msg="message_id is required when providing user input")
+        await workflow.async_set_user_input(user_input, message_id, verify_input=True)
+        await workflow.async_set_workflow_status(WorkflowStatus.INPUT_OVER.value)
+        continue_workflow.apply_async([unique_id, workflow_id, chat_id, login_user.user_id, "api"],
+                                      queue=execute_worker)
 
     logger.debug(f'waiting workflow over or input: {workflow_id}, {session_id}')
 
@@ -90,9 +93,9 @@ async def invoke_workflow(request: Request,
                                              data=WorkFlowService.convert_chat_response_to_workflow_event(event))
             event_list.append(workflow_stream.data)
             yield f'data: {workflow_stream.model_dump_json()}\n\n'
-        tmp_status_info = workflow.get_workflow_status()
+        tmp_status_info = await workflow.async_get_workflow_status()
         if tmp_status_info['status'] in [WorkflowStatus.SUCCESS.value, WorkflowStatus.FAILED.value]:
-            workflow.clear_workflow_status()
+            await workflow.async_clear_workflow_status()
         if tmp_status_info['status'] == WorkflowStatus.SUCCESS.value:
             workflow_stream = WorkflowStream(session_id=session_id,
                                              data=WorkflowEvent(event=WorkflowEventType.Close.value))
@@ -143,11 +146,11 @@ async def stop_workflow(request: Request,
                         workflow_id: UUID = Body(..., description='Workflow UniqueID'),
                         session_id: str = Body(description='SessionsID,Once,workflowUnique identifier of the call')):
     workflow_id = workflow_id.hex
-    login_user = get_default_operator()
+    login_user = await get_default_operator_async()
     chat_id = session_id.split('_', 1)[0]
     unique_id = session_id
     workflow = RedisCallback(unique_id, workflow_id, chat_id, login_user.user_id, source="api")
-    workflow.set_workflow_stop()
+    await workflow.async_set_workflow_stop()
     return resp_200()
 
 
@@ -161,7 +164,7 @@ async def workflow_ws(*,
         workflow_id = workflow_id.hex
         # Authorize.jwt_required(auth_from='websocket', websocket=websocket)
         # payload = Authorize.get_jwt_subject()
-        login_user = get_default_operator()
+        login_user = await get_default_operator_async()
         await chat_manager.dispatch_client(websocket, workflow_id, chat_id, login_user, WorkType.WORKFLOW, websocket)
     except WebSocketException as exc:
         logger.error(f'Websocket exception: {str(exc)}')

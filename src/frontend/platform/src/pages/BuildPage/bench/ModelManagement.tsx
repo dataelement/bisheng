@@ -3,6 +3,8 @@ import { TrashIcon } from "@/components/bs-icons";
 import { Button } from "@/components/bs-ui/button";
 import { Input } from "@/components/bs-ui/input";
 import { Label } from "@/components/bs-ui/label";
+import { Switch } from "@/components/bs-ui/switch";
+import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 import { useModel } from "@/pages/ModelPage/manage";
 import { ModelSelect } from "@/pages/ModelPage/manage/tabs/KnowledgeModel";
 import { Plus } from "lucide-react";
@@ -14,6 +16,7 @@ export interface Model {
     id: string;
     name: string;
     displayName: string;
+    visual?: boolean;
 }
 interface ModelManagementProps {
     models: Model[];
@@ -23,9 +26,10 @@ interface ModelManagementProps {
     onRemove: (index: number) => void;
     onModelChange: (index: number, id: string) => void;
     onNameChange: (index: number, name: string) => void;
+    onVisualToggle?: (index: number, enabled: boolean) => void;
 }
 export const ModelManagement = forwardRef<HTMLDivElement[], ModelManagementProps>(
-    ({ models, errors, error, onAdd, onRemove, onModelChange, onNameChange }, ref) => {
+    ({ models, errors, error, onAdd, onRemove, onModelChange, onNameChange, onVisualToggle }, ref) => {
         const { llmOptions } = useModel();
         const { t } = useTranslation();
 
@@ -45,14 +49,18 @@ export const ModelManagement = forwardRef<HTMLDivElement[], ModelManagementProps
         // }, [models, llmOptions])
 
         return (<div className="mt-2 border p-4 rounded-md bg-muted">
-            <div className="grid mb-4 items-center" style={{ gridTemplateColumns: "repeat(2, 1fr) 40px" }}>
+            <div className="grid mb-4 items-center" style={{ gridTemplateColumns: "repeat(2, 1fr) 80px 40px" }}>
                 <Label className="bisheng-label">{t('bench.model')}</Label>
                 <Label className="bisheng-label">{t('bench.displayName')}</Label>
                 <div></div>
+                <div className="flex">
+                    <Label className="bisheng-label  whitespace-nowrap">{t('bench.vision')}</Label>
+                    <QuestionTooltip content={t('bench.visionText')} />
+                </div>
             </div>
             {models.map((model, index) => (
                 <div key={model.key} className="grid mb-4 items-start"
-                    style={{ gridTemplateColumns: "repeat(2, 1fr) 40px" }}
+                    style={{ gridTemplateColumns: "repeat(2, 1fr) 80px 40px" }}
                     ref={el => setItemRef(el, index)}
                 >
                     <div className="pr-2" id={model.id}>
@@ -79,10 +87,21 @@ export const ModelManagement = forwardRef<HTMLDivElement[], ModelManagementProps
                         />
                         {errors[model.key] && <p className="text-red-500 text-xs mt-1">{errors[model.key]?.[1]}</p>}
                     </div>
-                    <div className="m-auto">
+
+                    <div className="flex items-center justify-center">
                         <TrashIcon
                             className="text-gray-500 cursor-pointer size-4"
                             onClick={() => onRemove(index)}
+                        />
+                    </div>
+                    <div className="flex items-center justify-center">
+                        <Switch
+                            checked={model.visual || false}
+                            onCheckedChange={(checked) => {
+                                if (onVisualToggle) {
+                                    onVisualToggle(index, checked);
+                                }
+                            }}
                         />
                     </div>
                 </div>
