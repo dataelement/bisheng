@@ -407,7 +407,7 @@ wheels = [
 
 [[package]]
 name = "backend"
-version = "2.2.0"
+version = "2.3.0"
 source = { virtual = "." }
 dependencies = [
     { name = "aiofiles" },
@@ -433,6 +433,7 @@ dependencies = [
     { name = "ibm-db" },
     { name = "ibm-db-sa" },
     { name = "jieba" },
+    { name = "json-repair" },
     { name = "langchain" },
     { name = "langchain-anthropic" },
     { name = "langchain-community" },
@@ -513,6 +514,7 @@ requires-dist = [
     { name = "ibm-db", specifier = ">=3.2.7" },
     { name = "ibm-db-sa", specifier = ">=0.4.2" },
     { name = "jieba", specifier = ">=0.42.1" },
+    { name = "json-repair", specifier = ">=0.55.0" },
     { name = "langchain", specifier = ">=0.3.23,<0.4.0" },
     { name = "langchain-anthropic", specifier = ">=0.3.10,<0.4.0" },
     { name = "langchain-community", specifier = ">=0.3.21,<0.4.0" },
@@ -2408,6 +2410,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/e8/5d/447af5ea094b9e4c4054f82e223ada074c552335b9b4b2d14bd9b35a67c4/joblib-1.5.2.tar.gz", hash = "sha256:3faa5c39054b2f03ca547da9b2f52fde67c06240c31853f306aea97f13647b55", size = 331077, upload-time = "2025-08-27T12:15:46.575Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/1e/e8/685f47e0d754320684db4425a0967f7d3fa70126bffd76110b7009a0090f/joblib-1.5.2-py3-none-any.whl", hash = "sha256:4e1f0bdbb987e6d843c70cf43714cb276623def372df3c22fe5266b2670bc241", size = 308396, upload-time = "2025-08-27T12:15:45.188Z" },
+]
+
+[[package]]
+name = "json-repair"
+version = "0.55.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/c0/de/71d6bb078d167c0d0959776cee6b6bb8d2ad843f512a5222d7151dde4955/json_repair-0.55.1.tar.gz", hash = "sha256:b27aa0f6bf2e5bf58554037468690446ef26f32ca79c8753282adb3df25fb888", size = 39231, upload-time = "2026-01-23T09:37:20.93Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/56/da/289ba9eb550ae420cfc457926f6c49b87cacf8083ee9927e96921888a665/json_repair-0.55.1-py3-none-any.whl", hash = "sha256:a1bcc151982a12bc3ef9e9528198229587b1074999cfe08921ab6333b0c8e206", size = 29743, upload-time = "2026-01-23T09:37:19.404Z" },
 ]
 
 [[package]]
