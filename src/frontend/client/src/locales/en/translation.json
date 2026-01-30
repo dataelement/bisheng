@@ -1015,6 +1015,7 @@
   "com_bs_reasoning_thinking": "Thinking",
   "com_bs_reasoning_done": "Deep thinking completed",
   "com_inputfiles_exceed_limit": "File: {{0}} exceeds {{1}}M and has been removed",
+  "com_ui_upload_file_type_error": "This application does not support uploading this file type.",
   "com_inputfiles_upload_failed": "File upload failed: {{0}}",
   "com_inputfiles_parsing": "Parsing...",
   "com_inputfiles_uploading": "Uploading...",
