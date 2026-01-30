@@ -363,11 +363,11 @@ const workflowTemplate = [
                         "tab": "dialog_input",
                         "help": "true",
                         "scope": [
-                            0,
-                            2
+                            1,
+                            10
                         ],
-                        "step": 0.1,
-                        "value": 0.7
+                        "step": 1,
+                        "value": 2
                     }
                 ]
             },
