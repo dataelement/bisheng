@@ -240,7 +240,7 @@ const workflowTemplate = [
         "name": "true",
         "description": "true",
         "type": "input",
-        "v": "2",
+        "v": "3",
         "tab": {
             "value": "dialog_input",
             "options": [

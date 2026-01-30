@@ -37,6 +37,7 @@ const TaskAppChats = lazy(() => import("@/pages/LabelPage/taskAppChats"));
 const TaskApps = lazy(() => import("@/pages/LabelPage/taskApps"));
 const LogPage = lazy(() => import("@/pages/LogPage"));
 const AppChatDetail = lazy(() => import("@/pages/LogPage/useAppLog/appChatDetail"));
+const DailyChatDetail = lazy(() => import("@/pages/LogPage/useAppLog/dailyChatDetail"));
 const Doc = lazy(() => import("@/pages/ModelPage/doc"));
 const Finetune = lazy(() => import("@/pages/ModelPage/finetune").then(module => ({ default: module.Finetune })));
 const Management = lazy(() => import("@/pages/ModelPage/manage"));
@@ -88,6 +89,7 @@ const privateRouter = [
       { path: "sys", element: <SystemPage />, permission: 'sys' },
       { path: "log", element: <LogPage /> },
       { path: "log/chatlog/:fid/:cid/:type", element: <AppChatDetail /> },
+      { path: "log/chatlog/:cid", element: <DailyChatDetail /> },
       { path: "evaluation", element: <EvaluatingPage /> },
       { path: "evaluation/create", element: <EvaluatingCreate /> },
       { path: "dataset", element: <DataSetPage /> },
