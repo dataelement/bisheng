@@ -5,11 +5,26 @@ import { locationContext } from "@/contexts/locationContext";
 import { uploadChatFile } from "@/controllers/API/flow";
 import { getFileExtension } from "@/util/utils";
 import { FileIcon, PaperclipIcon, X } from "lucide-react";
-import { useContext, useRef, useState } from "react";
+import { forwardRef, useContext, useImperativeHandle, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+const checkFileType = (file, accepts) => {
+    if (!accepts || accepts === '*') return true;
+    const fileName = file.name.toLowerCase();
+    const acceptArr = accepts.split(',').map(a => a.trim().toLowerCase());
+
+    // 检查后缀名 (例如 .pdf) 或 MIME type
+    return acceptArr.some(type => {
+        if (type.startsWith('.')) {
+            return fileName.endsWith(type);
+        }
+        return file.type.match(new RegExp(type.replace('*', '.*')));
+    });
+};
+
+
 // @accepts '.png,.jpg'
-export default function ChatFiles({ v, accepts, disabled, onChange }) {
+export default forwardRef(function ChatFiles({ v, accepts, disabled, onChange }, ref) {
 
     const { t } = useTranslation();
     const [files, setFiles] = useState([]);
@@ -23,118 +38,126 @@ export default function ChatFiles({ v, accepts, disabled, onChange }) {
     const fileSizeLimit = appConfig.uploadFileMaxSize * 1024 * 1024; // File size limit in bytes
 
 
-const handleFileChange = (e) => {
-    const selectedFiles = Array.from(e.target.files);
-    const validFiles = [];
-    const invalidTips = []; // 仅存储无效文件的提示文案
+    const handleFileChange = (selectedFiles) => {
+        const validFiles = [];
+        const invalidTips = []; // 仅存储无效文件的提示文案
+        const invalidTypeFiles = [];
 
-    fileInputRef.current.value = '';
-    const allowedExtensions = accepts
-        ? new Set(accepts.split(',').map(ext => ext.trim().toLowerCase().replace(/^\./, '')))
-        : new Set();
+        fileInputRef.current.value = '';
+        const allowedExtensions = accepts
+            ? new Set(accepts.split(',').map(ext => ext.trim().toLowerCase().replace(/^\./, '')))
+            : new Set();
 
-    selectedFiles.forEach((file) => {
-        // 1. 先校验文件类型
-        if (allowedExtensions.size > 0) {
-            const fileExt = getFileExtension(file.name).toLowerCase();
-            if (!allowedExtensions.has(fileExt)) {
-                 invalidTips.push(t('chat.fileTypeNotAllowed', { 
-                    name: file.name, 
-                    type: fileExt
+        selectedFiles.forEach((file) => {
+            // 1. 先校验文件类型
+            if (!checkFileType(file, accepts)) {
+                invalidTypeFiles.push(file);
+            } else if (allowedExtensions.size > 0) {
+                const fileExt = getFileExtension(file.name).toLowerCase();
+                if (!allowedExtensions.has(fileExt)) {
+                    invalidTips.push(t('chat.fileTypeNotAllowed', {
+                        name: file.name,
+                        type: fileExt
                     }));
-                return; // 类型不符合，跳过后续校验
+                    return; // 类型不符合，跳过后续校验
+                }
             }
-        }
 
-        // 2. 再校验文件大小
-        if (file.size > fileSizeLimit) {
-            invalidTips.push(t('chat.fileExceedRemoved', { name: file.name, size: appConfig.uploadFileMaxSize }));
-            return; // 大小不符合，跳过
-        }
+            if (invalidTypeFiles.length > 0) {
+                return toast({
+                    variant: 'error',
+                    description: t('com_ui_upload_file_type_error')
+                }); // 请确保你有对应多语言key或直接写死中文测试
+            }
+            // 2. 再校验文件大小
+            if (file.size > fileSizeLimit) {
+                invalidTips.push(t('chat.fileExceedRemoved', { name: file.name, size: appConfig.uploadFileMaxSize }));
+                return; // 大小不符合，跳过
+            }
 
-        // 3. 所有校验通过，加入有效文件列表
-        validFiles.push({ id: generateUUID(6), file });
-    });
-
-    // 显示无效文件提示（区分类型/大小错误）
-    if (invalidTips.length > 0) {
-        toast({
-            variant: 'info',
-            description: invalidTips.join('；'),
+            // 3. 所有校验通过，加入有效文件列表
+            validFiles.push({ id: generateUUID(6), file });
         });
-    }
 
-    // 只要有有效文件就继续上传流程
-    if (!validFiles.length) return;
+        // 显示无效文件提示（区分类型/大小错误）
+        if (invalidTips.length > 0) {
+            toast({
+                variant: 'info',
+                description: invalidTips.join('；'),
+            });
+        }
 
-    // 以下逻辑完全保留，无需修改
-    onChange(null);
-    const filesWithProgress = validFiles.map(({ file, id }) => {
-        return {
-            name: file.name,
-            size: file.size,
-            type: file.type,
-            isUploading: true,
-            progress: 0,
-            id,
-            file
-        };
-    });
+        // 只要有有效文件就继续上传流程
+        if (!validFiles.length) return;
 
-    setFiles(prevFiles => {
-        const res = [...prevFiles, ...filesWithProgress];
-        filesRef.current = res;
-        return res;
-    });
+        // 以下逻辑完全保留，无需修改
+        onChange(null);
+        const filesWithProgress = validFiles.map(({ file, id }) => {
+            return {
+                name: file.name,
+                size: file.size,
+                type: file.type,
+                isUploading: true,
+                progress: 0,
+                id,
+                file
+            };
+        });
 
-    remainingUploadsRef.current = validFiles.length;
+        setFiles(prevFiles => {
+            const res = [...prevFiles, ...filesWithProgress];
+            filesRef.current = res;
+            return res;
+        });
 
-    const uploadPromises = validFiles.map(({ file, id }) => {
-        return uploadChatFile(v, file, (progress) => {
-            setFiles((prevFiles) => {
-                const updatedFiles = prevFiles.map(f => {
+        remainingUploadsRef.current = validFiles.length;
+
+        const uploadPromises = validFiles.map(({ file, id }) => {
+            return uploadChatFile(v, file, (progress) => {
+                setFiles((prevFiles) => {
+                    const updatedFiles = prevFiles.map(f => {
+                        if (f.id === id) {
+                            return { ...f, progress };
+                        }
+                        return f;
+                    });
+                    filesRef.current = updatedFiles;
+                    return updatedFiles;
+                });
+            }).then(response => {
+                const filePath = response.file_path;
+                filesRef.current = filesRef.current.map(f => {
                     if (f.id === id) {
-                        return { ...f, progress };
+                        return { ...f, isUploading: false, filePath, progress: 100 };
                     }
                     return f;
                 });
-                filesRef.current = updatedFiles;
-                return updatedFiles;
-            });
-        }).then(response => {
-            const filePath = response.file_path;
-            filesRef.current = filesRef.current.map(f => {
-                if (f.id === id) {
-                    return { ...f, isUploading: false, filePath, progress: 100 };
+                setFiles(filesRef.current);
+
+                remainingUploadsRef.current -= 1;
+                if (remainingUploadsRef.current === 0) {
+                    const uploadedFileIds = filesRef.current.filter(f => f.id).map(f => ({ path: f.filePath, name: f.name }));
+                    onChange(uploadedFileIds);
                 }
-                return f;
+            }).catch(() => {
+                toast({
+                    variant: 'error',
+                    description: t('chat.fileUploadFailed', { name: file.name }),
+                });
+                handleFileRemove(file.name);
+                remainingUploadsRef.current -= 1;
+                if (remainingUploadsRef.current === 0) {
+                    const uploadedFileIds = filesRef.current.filter(f => f.id).map(f => ({ path: f.filePath, name: f.name }));
+                    onChange(uploadedFileIds);
+                }
             });
-            setFiles(filesRef.current);
-
-            remainingUploadsRef.current -= 1;
-            if (remainingUploadsRef.current === 0) {
-                const uploadedFileIds = filesRef.current.filter(f => f.id).map(f => ({ path: f.filePath, name: f.name }));
-                onChange(uploadedFileIds);
-            }
-        }).catch(() => {
-            toast({
-                variant: 'error',
-                description: t('chat.fileUploadFailed', { name: file.name }),
-            });
-            handleFileRemove(file.name);
-            remainingUploadsRef.current -= 1;
-            if (remainingUploadsRef.current === 0) {
-                const uploadedFileIds = filesRef.current.filter(f => f.id).map(f => ({ path: f.filePath, name: f.name }));
-                onChange(uploadedFileIds);
-            }
         });
-    });
 
-    Promise.all(uploadPromises).then(() => {
-        const uploadedFileIds = filesRef.current.filter(f => f.id).map(f => ({ path: f.filePath, name: f.name }));
-        onChange(uploadedFileIds);
-    });
-};
+        Promise.all(uploadPromises).then(() => {
+            const uploadedFileIds = filesRef.current.filter(f => f.id).map(f => ({ path: f.filePath, name: f.name }));
+            onChange(uploadedFileIds);
+        });
+    };
 
     const handleFileRemove = (fileName) => {
         const res = filesRef.current.filter(file => file.name !== fileName);
@@ -163,6 +186,13 @@ const handleFileChange = (e) => {
 
         return `${fileSize.toFixed(2)} ${units[index]}`;
     };
+
+    useImperativeHandle(ref, () => ({
+        upload: (fileList) => {
+            if (disabled) return;
+            handleFileChange(Array.from(fileList));
+        }
+    }));
 
     return (
         <div className="relative z-10">
@@ -211,9 +241,9 @@ const handleFileChange = (e) => {
                 ref={fileInputRef}
                 multiple
                 accept={accepts}
-                onChange={handleFileChange}
+                onChange={(e) => handleFileChange(Array.from(e.target.files))}
                 className="hidden"
             />
         </div>
     );
-}
+})

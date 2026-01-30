@@ -935,6 +935,7 @@
   "com_bs_reasoning_thinking": "思考中",
   "com_bs_reasoning_done": "深い思考が完了しました",
   "com_inputfiles_exceed_limit": "ファイル：{{0}} は {{1}}M を超えたため削除しました",
+  "com_ui_upload_file_type_error": "このアプリケーションはこのファイル形式のアップロードに対応していません。",
   "com_inputfiles_upload_failed": "ファイルのアップロードに失敗：{{0}}",
   "com_inputfiles_parsing": "解析中…",
   "com_inputfiles_uploading": "アップロード中…",
