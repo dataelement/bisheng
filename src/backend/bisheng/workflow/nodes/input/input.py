@@ -50,6 +50,8 @@ class InputNode(BaseNode):
         if self.node_data.v < self._current_v:
             raise IgnoreException(f'{self.name} -- workflow node is update')
 
+        self._original_node_params = copy.deepcopy(self.node_params)
+
         if self.is_dialog_input():
             new_node_params['user_input'] = self.node_params['user_input']
             new_node_params['dialog_files_content'] = self.node_params.get('dialog_files_content', [])
@@ -78,7 +80,10 @@ class InputNode(BaseNode):
 
     def get_input_schema(self) -> Any:
         if self.is_dialog_input():
-            self.handle_recommended_questions()
+            try:
+                self.handle_recommended_questions()
+            except Exception as e:
+                logger.exception("handle recommended questions error")
             user_input_info = self.node_data.get_variable_info('user_input')
             user_input_info.value = [
                 self.node_data.get_variable_info('dialog_files_content'),
@@ -96,12 +101,12 @@ class InputNode(BaseNode):
         return form_input_info
 
     def handle_recommended_questions(self):
-        recommended_questions_flag = self.node_params.get('recommended_questions_flag', False)
+        recommended_questions_flag = self._original_node_params.get('recommended_questions_flag', False)
         if not recommended_questions_flag:
             return
-        recommended_llm = self.node_params.get('recommended_llm', 0)
-        recommended_system_prompt = self.node_params.get('recommended_system_prompt', '')
-        recommended_history_num = self.node_params.get('recommended_history_num', 3)
+        recommended_llm = self._original_node_params.get('recommended_llm', 0)
+        recommended_system_prompt = self._original_node_params.get('recommended_system_prompt', '')
+        recommended_history_num = self._original_node_params.get('recommended_history_num', 3)
         if not recommended_llm or not recommended_system_prompt or not recommended_history_num:
             logger.debug(f"{self.name} recommended questions config incomplete")
             return
@@ -109,7 +114,7 @@ class InputNode(BaseNode):
         if not chat_history:
             logger.debug(f"{self.name} recommended questions chat history is empty")
             return
-
+        recommended_system_prompt, _ = self.parse_msg_with_variables(recommended_system_prompt)
         llm_obj = LLMService.get_bisheng_llm_sync(model_id=recommended_llm,
                                                   app_id=self.workflow_id,
                                                   app_name=self.workflow_name,
