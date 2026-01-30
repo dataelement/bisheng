@@ -51,29 +51,38 @@ class StatefulWorker:
             alive_nodes = self.get_all_alive_queues_sync()
             self._base_update_alive_nodes(alive_nodes)
 
-    def _base_get_all_alive_queues(self, all_queues: Dict[bytes, bytes]) -> List[str]:
+    def _base_get_all_alive_queues(self, all_queues: Dict[bytes, bytes]) -> (List[str], List[str]):
         if not all_queues:
-            return []
+            return [], []
         current_timestamp = int(time.time())
         alive_queues = []
+        need_remove_queues = []
         for queue_name, queue_timestamp in all_queues.items():
-            queue_name = queue_name.decode()
-            queue_timestamp = queue_timestamp.decode()
+            queue_name = queue_name.decode() if isinstance(queue_name, bytes) else queue_name
+            queue_timestamp = queue_timestamp.decode() if isinstance(queue_timestamp, bytes) else queue_timestamp
             if not queue_name.startswith(self.queue_prefix):
                 continue
             if current_timestamp - int(queue_timestamp) < self.alive_times:
                 alive_queues.append(queue_name)
-        return alive_queues
+            else:
+                need_remove_queues.append(queue_name)
+        return alive_queues, need_remove_queues
 
-    async def get_all_alive_queues(self):
+    async def get_all_alive_queues(self) -> List[str]:
         redis_client = await get_redis_client()
         all_queues = await redis_client.ahgetall(WORKER_ALIVE_KEY)
-        return self._base_get_all_alive_queues(all_queues)
+        alive_nodes, remove_nodes = self._base_get_all_alive_queues(all_queues)
+        if remove_nodes:
+            await redis_client.ahdel(WORKER_ALIVE_KEY, *remove_nodes)
+        return alive_nodes
 
     def get_all_alive_queues_sync(self):
         redis_client = get_redis_client_sync()
         all_queues = redis_client.hgetall(WORKER_ALIVE_KEY)
-        return self._base_get_all_alive_queues(all_queues)
+        alive_nodes, remove_nodes = self._base_get_all_alive_queues(all_queues)
+        if remove_nodes:
+            redis_client.hdel(WORKER_ALIVE_KEY, *remove_nodes)
+        return alive_nodes
 
     def is_node_alive(self, node: str) -> bool:
         all_nodes = self.consistent_hash.get_all_nodes()
