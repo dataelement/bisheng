@@ -12,6 +12,7 @@ from bisheng.core.logger import trace_id_var
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.database.models.session import MessageSessionDao
 from ..domain.chat import ChatSessionService
+from ...api.services.workstation import WorkstationMessage
 
 router = APIRouter(prefix='/session', tags=['Chat Session'])
 
@@ -26,6 +27,17 @@ async def get_chat_message_public(*,
     """ api for audit module and mark qa """
     history = await ChatSessionService.get_chat_history(chat_id, flow_id, id, page_size)
     return resp_200(data=history)
+
+
+@router.get('/chat/messages/{conversationId}')
+async def get_chat_messages_by_conversation_id(*, conversationId: str,
+                                               login_user: UserPayload = Depends(UserPayload.get_login_user)):
+    """ api for getting chat messages by conversation id """
+    messages = await ChatMessageDao.aget_messages_by_chat_id(chat_id=conversationId, limit=1000)
+    if not messages:
+        raise NotFoundError()
+
+    return resp_200([await WorkstationMessage.from_chat_message(message) for message in messages])
 
 
 @router.post('/chat/message/telemetry')
