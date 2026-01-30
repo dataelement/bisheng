@@ -314,6 +314,14 @@ const workflowTemplate = [
                         "type": "var",
                         "tab": "dialog_input",
                         "help": "true"
+                    },
+                    {
+                        "key": "dialog_file_path",
+                        "global": "key",
+                        "label": "true",
+                        "type": "var",
+                        "tab": "dialog_input",
+                        "help": "true"
                     }
                 ]
             },

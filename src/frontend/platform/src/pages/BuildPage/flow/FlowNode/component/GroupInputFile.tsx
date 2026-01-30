@@ -1,10 +1,14 @@
 import { Switch } from "@/components/bs-ui/switch"
 import { QuestionTooltip } from "@/components/bs-ui/tooltip"
 import { WorkflowNode } from "@/types/flow"
-import { useMemo, useState } from "react"
+import { useMemo, useState, useEffect } from "react"
 import { useTranslation } from "react-i18next"
 import FileTypeSelect from "./FileTypeSelect"
 import InputItem from "./InputItem"
+import { Label } from "@/components/bs-ui/label"
+import { Badge } from "@/components/bs-ui/badge"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select"
+import { Check } from "lucide-react"
 
 type category = WorkflowNode['group_params'][number]
 interface Props {
@@ -27,7 +31,89 @@ export default function GroupInputFile({ nodeId, node, cate, tab,
     const titleItem = useMemo(() => cate.params.find(item => item.groupTitle), [cate.params])
     const fileTypeItem = useMemo(() => cate.params.find(item => item.key === 'dialog_file_accept'), [cate.params])
     const sizeItem = useMemo(() => cate.params.find(item => item.key === 'dialog_files_content_size'), [cate.params])
+    const filePathItem = useMemo(() => cate.params.find(item => item.key === 'dialog_file_paths'), [cate.params])
+    const imageFileItem = useMemo(() => cate.params.find(item => item.key === 'dialog_image_files'), [cate.params])
+
     const [open, setOpen] = useState(titleItem.value ?? false)
+    const [fileStrategy, setFileStrategy] = useState<'parse' | 'raw'>('parse')
+    const [selectedFileType, setSelectedFileType] = useState<any>(null)
+
+    // 初始化
+    useEffect(() => {
+        // 初始化文件处理策略
+        if (filePathItem && filePathItem.value && Object.keys(filePathItem.value).length > 0) {
+            setFileStrategy('raw')
+        } else {
+            setFileStrategy('parse')
+        }
+
+        // 初始化文件类型
+        if (fileTypeItem?.value) {
+            setSelectedFileType(fileTypeItem.value)
+        }
+    }, [filePathItem, fileTypeItem])
+
+    // 处理文件策略变化
+    const handleStrategyChange = (value: 'parse' | 'raw') => {
+        setFileStrategy(value)
+
+        // 重置相关变量值
+        if (value === 'parse') {
+
+            // 解析模式：启用解析结果长度配置
+            if (sizeItem) {
+                sizeItem.value = sizeItem.value || 1000
+            }
+            // 清空文件路径变量
+            if (filePathItem) {
+                filePathItem.value = filePathItem.value || {}
+            }
+            // 清空图片文件变量
+            if (imageFileItem) {
+                imageFileItem.value = imageFileItem.value || {}
+            }
+        } else {
+            // 原始文件模式：设置文件路径变量
+            if (filePathItem) {
+                filePathItem.value = filePathItem.value || {}
+            }
+            // 设置图片文件变量（如果文件类型不是文档）
+            if (imageFileItem && selectedFileType !== 'file') {
+                imageFileItem.value = imageFileItem.value || {}
+            }
+            // 禁用解析结果长度配置
+            if (sizeItem) {
+                sizeItem.value = sizeItem.value || 0
+            }
+        }
+
+        // onFouceUpdate()
+    }
+
+    // 处理文件类型变化
+    const handleFileTypeChange = (val: any) => {
+        setSelectedFileType(val)
+        // 更新图片文件变量隐藏状态
+        if (imageFileItem) {
+            imageFileItem.hidden = val === 'file'
+            // 如果切换到文档类型且当前是原始文件模式，清空图片文件变量
+            if (val === 'file' && fileStrategy === 'raw') {
+                imageFileItem.value = {}
+            }
+            // 如果切换到非文档类型且当前是原始文件模式，设置图片文件变量
+            if (val !== 'file' && fileStrategy === 'raw' && !imageFileItem.value) {
+                imageFileItem.value = {}
+            }
+        }
+        // onFouceUpdate()
+    }
+
+    // 处理开关变化
+    const handleSwitchToggle = (checked: boolean) => {
+        titleItem.value = checked
+        setOpen(checked)
+        // onFouceUpdate()
+    }
 
     return <div className="px-4 py-2 border-t">
         <div className="mt-2 mb-3 flex justify-between items-center">
@@ -38,25 +124,116 @@ export default function GroupInputFile({ nodeId, node, cate, tab,
             <Switch
                 className=""
                 checked={open}
-                onCheckedChange={(checked) => {
-                    titleItem.value = checked
-                    setOpen(checked)
-                }}
+                onCheckedChange={handleSwitchToggle}
             />
         </div>
+
+        {/* 只修改开关展开后的内容 */}
         <div className={!open && 'hidden'}>
-            <FileTypeSelect
-                data={fileTypeItem}
-                onChange={(val) => {
-                    const imageFileItem = node.group_params[0].params.find(param => {
-                        if (param.key === 'dialog_image_files') return true
-                    })
-                    imageFileItem.hidden = val === 'file'
-                }}
-                i18nPrefix={`node.${node.type}.${fileTypeItem.key}.`}
-            />
-            ....
-            <InputItem char type='number' data={sizeItem} onChange={(val) => { }} i18nPrefix={`node.${node.type}.${sizeItem.key}.`} />
+            {/* 上传文件类型 - 始终显示 */}
+            <div className="mb-4">
+                <FileTypeSelect
+                    data={fileTypeItem}
+                    onChange={handleFileTypeChange}
+                    i18nPrefix={`node.${node.type}.${fileTypeItem?.key}.`}
+                />
+            </div>
+
+            {/* 文件处理策略 - 始终显示 */}
+            <div className="mb-4">
+                <div className="node-item flex gap-4 items-center mb-4">
+                    <Label className="bisheng-label min-w-28 flex items-center gap-1">
+                        {t("文件处理策略")}
+                        <QuestionTooltip content={t("选择如何处理用户上传的文件：\n· 解析文件内容：提取文件文本，后续可为大模型等节点提供上下文。\n· 不解析：保留原始文件，后续可被多模态模型或者代码节点处理。")} />
+                    </Label>
+                    <Select value={fileStrategy} onValueChange={handleStrategyChange}>
+                        <SelectTrigger className="w-full">
+                            {fileStrategy === 'parse' ? t("解析文件内容") : t("不解析（原始文件）")}
+                        </SelectTrigger>
+                        <SelectContent className="">
+                            {[
+                                { value: 'parse', label: t("解析文件内容") },
+                                { value: 'raw', label: t("不解析（原始文件）") }
+                            ].map((option) => (
+                                <div
+                                    key={option.value}
+                                    data-focus={fileStrategy === option.value}
+                                    className="flex justify-between w-full select-none items-center mb-1 last:mb-0 rounded-sm p-1.5 text-sm outline-none cursor-pointer hover:bg-[#EBF0FF] data-[focus=true]:bg-[#EBF0FF] dark:hover:bg-gray-700 dark:data-[focus=true]:bg-gray-700 data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+                                    onClick={() => handleStrategyChange(option.value as 'parse' | 'raw')}
+                                >
+                                    <span className="w-64 overflow-hidden text-ellipsis">
+                                        {option.label}
+                                    </span>
+                                    {fileStrategy === option.value && <Check className="h-4 w-4" />}
+                                </div>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
+            </div>
+
+            {/* 动态输出变量 */}
+            <div className="space-y-3">
+
+                {fileStrategy === 'parse' ? (
+                    // 情况3：选择解析 - 显示解析相关配置
+                    <>
+
+                        {sizeItem && (
+                            <InputItem
+                                char
+                                type='number'
+                                data={sizeItem}
+                                onChange={(val) => {
+                                    sizeItem.value = val
+                                    // onFouceUpdate()
+                                }}
+                                i18nPrefix={`node.${node.type}.${sizeItem.key}.`}
+                            />
+                        )}
+
+                        <div className="flex justify-between items-center">
+                            <Label className="bisheng-label">
+                                {t("文件解析结果")}
+                            </Label>
+                            <Badge variant="outline" className="bg-[#E6ECF6] text-[#2B53A0]">
+                                dialog_files_content
+                            </Badge>
+                        </div>
+                    </>
+                ) : (
+                    // 选择不解析 - 根据文件类型显示不同变量
+                    <>
+                        {/* 文件路径 - 始终显示 */}
+                        <div className="flex justify-between items-center">
+                            <div className="flex items-center gap-1">
+                                <Label className="bisheng-label">
+                                    {t("文件路径")}
+                                </Label>
+                                <QuestionTooltip content={t("存储所有上传文件的路径列表，可在代码节点中读取和处理")} />
+                            </div>
+                            <Badge variant="outline" className="bg-[#E6ECF6] text-[#2B53A0]">
+                                dialog_file_paths
+                            </Badge>
+                        </div>
+
+                        {/* 图片文件 - 仅当文件类型不是文档时显示 */}
+                        {selectedFileType !== 'file' && imageFileItem && (
+                            <div className="flex justify-between items-center">
+                                <div className="flex items-center gap-1">
+                                    <Label className="bisheng-label">
+                                        {t(`node.${node.type}.${imageFileItem.key}.label`)}
+                                    </Label>
+                                    <QuestionTooltip content={t("提取上传文件中的图片，当助手或大模型节点使用多模态大模型时，可传入此变量。")} />
+                                </div>
+                                <Badge variant="outline" className="bg-[#E6ECF6] text-[#2B53A0]">
+                                    dialog_image_files
+                                </Badge>
+                            </div>
+                        )}
+                    </>
+                )}
+            </div>
         </div>
     </div>
-};
+}
