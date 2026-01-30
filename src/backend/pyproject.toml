@@ -81,4 +81,5 @@ dependencies = [
     "httpx==0.27.1",
     "alembic>=1.17.1",
     "sync>=1.0.0",
+    "json_repair>=0.55.0",
 ]
