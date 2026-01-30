@@ -11,6 +11,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Check } from "lucide-react"
 
 type category = WorkflowNode['group_params'][number]
+export enum FileParseMode {
+    // 不解析文件
+    KeepRaw = 'keep_raw',
+    // 解析文件
+    ExtractText = 'extract_text'
+}
 interface Props {
     nodeId: string,
     node: WorkflowNode,
@@ -33,18 +39,19 @@ export default function GroupInputFile({ nodeId, node, cate, tab,
     const sizeItem = useMemo(() => cate.params.find(item => item.key === 'dialog_files_content_size'), [cate.params])
     const filePathItem = useMemo(() => cate.params.find(item => item.key === 'dialog_file_paths'), [cate.params])
     const imageFileItem = useMemo(() => cate.params.find(item => item.key === 'dialog_image_files'), [cate.params])
+    const parsemodeItem = useMemo(() => cate.params.find(item => item.key === 'file_parse_mode'), [cate.params])
 
     const [open, setOpen] = useState(titleItem.value ?? false)
-    const [fileStrategy, setFileStrategy] = useState<'parse' | 'raw'>('parse')
+    const [fileStrategy, setFileStrategy] = useState<FileParseMode>(parsemodeItem.value)
     const [selectedFileType, setSelectedFileType] = useState<any>(null)
 
     // 初始化
     useEffect(() => {
         // 初始化文件处理策略
         if (filePathItem && filePathItem.value && Object.keys(filePathItem.value).length > 0) {
-            setFileStrategy('raw')
+            setFileStrategy(FileParseMode.KeepRaw)
         } else {
-            setFileStrategy('parse')
+            setFileStrategy(FileParseMode.ExtractText)
         }
 
         // 初始化文件类型
@@ -54,11 +61,11 @@ export default function GroupInputFile({ nodeId, node, cate, tab,
     }, [filePathItem, fileTypeItem])
 
     // 处理文件策略变化
-    const handleStrategyChange = (value: 'parse' | 'raw') => {
+    const handleStrategyChange = (value: FileParseMode.ExtractText | FileParseMode.KeepRaw) => {
         setFileStrategy(value)
 
         // 重置相关变量值
-        if (value === 'parse') {
+        if (value === FileParseMode.ExtractText) {
 
             // 解析模式：启用解析结果长度配置
             if (sizeItem) {
@@ -87,6 +94,7 @@ export default function GroupInputFile({ nodeId, node, cate, tab,
             }
         }
 
+        parsemodeItem.value = value
         // onFouceUpdate()
     }
 
@@ -97,11 +105,11 @@ export default function GroupInputFile({ nodeId, node, cate, tab,
         if (imageFileItem) {
             imageFileItem.hidden = val === 'file'
             // 如果切换到文档类型且当前是原始文件模式，清空图片文件变量
-            if (val === 'file' && fileStrategy === 'raw') {
+            if (val === 'file' && fileStrategy === FileParseMode.KeepRaw) {
                 imageFileItem.value = {}
             }
             // 如果切换到非文档类型且当前是原始文件模式，设置图片文件变量
-            if (val !== 'file' && fileStrategy === 'raw' && !imageFileItem.value) {
+            if (val !== 'file' && fileStrategy === FileParseMode.KeepRaw && !imageFileItem.value) {
                 imageFileItem.value = {}
             }
         }
@@ -148,18 +156,18 @@ export default function GroupInputFile({ nodeId, node, cate, tab,
                     </Label>
                     <Select value={fileStrategy} onValueChange={handleStrategyChange}>
                         <SelectTrigger className="w-full">
-                            {fileStrategy === 'parse' ? t("parseFile") : t("notParse")}
+                            {fileStrategy === FileParseMode.ExtractText ? t("parseFile") : t("notParse")}
                         </SelectTrigger>
                         <SelectContent className="">
                             {[
-                                { value: 'parse', label: t("parseFile") },
-                                { value: 'raw', label: t("notParse") }
+                                { value: FileParseMode.ExtractText, label: t("parseFile") },
+                                { value: FileParseMode.KeepRaw, label: t("notParse") }
                             ].map((option) => (
                                 <div
                                     key={option.value}
                                     data-focus={fileStrategy === option.value}
                                     className="flex justify-between w-full select-none items-center mb-1 last:mb-0 rounded-sm p-1.5 text-sm outline-none cursor-pointer hover:bg-[#EBF0FF] data-[focus=true]:bg-[#EBF0FF] dark:hover:bg-gray-700 dark:data-[focus=true]:bg-gray-700 data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
-                                    onClick={() => handleStrategyChange(option.value as 'parse' | 'raw')}
+                                    onClick={() => handleStrategyChange(option.value as FileParseMode.ExtractText | FileParseMode.KeepRaw)}
                                 >
                                     <span className="w-64 overflow-hidden text-ellipsis">
                                         {option.label}
@@ -175,7 +183,7 @@ export default function GroupInputFile({ nodeId, node, cate, tab,
             {/* 动态输出变量 */}
             <div className="space-y-3">
 
-                {fileStrategy === 'parse' ? (
+                {fileStrategy === FileParseMode.ExtractText ? (
                     // 情况3：选择解析 - 显示解析相关配置
                     <>
 

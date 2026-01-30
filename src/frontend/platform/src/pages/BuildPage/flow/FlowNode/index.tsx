@@ -326,6 +326,7 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
                         {node.group_params.map(group => group.groupKey ?
                             <ParameterSubGroup
                                 key={group.groupKey}
+                                nodeId={node.id}
                                 node={node}
                                 cate={group}
                                 onStatusChange={((key, obj) => paramValidateEntities.current[key] = obj)}

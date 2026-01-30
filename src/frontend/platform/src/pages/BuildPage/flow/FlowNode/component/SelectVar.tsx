@@ -25,13 +25,14 @@ const isMatch = (obj, expression) => {
 };
 
 // 特殊结构提取变量
-const getSpecialVar = (obj, type, onlyImg = false) => {
+const getSpecialVar = ({ obj, group, onlyImg = false }) => {
+    const type = obj.global
     switch (type) {
         case 'item:form_input':
             return obj.value.reduce((res, item) => {
+                res.push({ label: item.key, value: item.key })
                 if (item.type === 'file') {
                     // if (item.multiple) return res
-                    // res.push({ label: item.key, value: item.key })
                     if (!onlyImg) {
                         res.push({ label: item.file_content, value: item.file_content })
                         res.push({ label: item.file_path, value: item.file_path })
@@ -48,6 +49,11 @@ const getSpecialVar = (obj, type, onlyImg = false) => {
             const param = cloneDeep(obj)
             param.value = param.value.map(item => ({ label: item.label || item.value, value: item.key }))
             return [{ param, label: obj.key, value: obj.key }]
+        case 'item:group_input_file':
+            const paramValue = group.params.find(el => el.key === 'file_parse_mode').value
+            if (paramValue === 'extract_text' && ['dialog_image_files', 'dialog_file_path'].includes(obj.key)) return []
+            if (paramValue === 'keep_raw' && 'dialog_files_content' === obj.key) return []
+            return [{ label: obj.key, value: obj.key }]
     }
     return []
 }
@@ -125,7 +131,7 @@ const SelectVar = forwardRef(({
                     _vars = [..._vars, ...result]
                     // 特殊变量(getSpecialVar前端策略)
                 } else if (param.global.startsWith('item')) {
-                    const result = getSpecialVar(param, param.global, findInputFile)
+                    const result = getSpecialVar({ obj: param, onlyImg: findInputFile, group })
                     _vars = [..._vars, ...result]
                 } else if ((param.global === 'key' && nodeId !== item.id)
                     || (param.global === 'self' && nodeId === item.id)) {
