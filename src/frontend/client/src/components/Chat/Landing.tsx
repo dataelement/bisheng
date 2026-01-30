@@ -15,7 +15,7 @@ import { useInterruptAudio } from '../Voice/textToSpeechStore';
 import ConvoStarter from './ConvoStarter';
 import SegmentSelector from './SegmentSelector';
 
-export default function Landing({ Header, isNew, lingsi, setLingsi }: { Header?: ReactNode; isNew?: boolean, lingsi: boolean }) {
+export default function Landing({ Header, isNew, lingsi, lingsiEntry, setLingsi }: { Header?: ReactNode; isNew?: boolean, lingsi: boolean }) {
   const { conversation } = useChatContext();
   const agentsMap = useAgentsMapContext();
   const assistantMap = useAssistantsMapContext();
@@ -124,12 +124,12 @@ export default function Landing({ Header, isNew, lingsi, setLingsi }: { Header?:
         </div>
 
         {/* 模式切换 */}
-        <div className='mx-auto mb-6 mt-2'>
+        {lingsiEntry && <div className='mx-auto mb-6 mt-2'>
           <SegmentSelector lingsi={lingsi} onChange={(bl) => {
             setLingsi(bl);
             interruptAudio();
           }} />
-        </div>
+        </div>}
       </div>
     </div>
   );

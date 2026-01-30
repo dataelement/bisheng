@@ -991,6 +991,20 @@ export function verifyTwoFactorTemp(
 export function knowledgeUpload(data: any): Promise<t.TRegenerateBackupCodesResponse> {
   return request.postMultiPart(endpoints.knowledgeUpload(), data);
 }
+export async function getUserInfo() {
+  return await request.get(`/api/v1/knowledge/personal_knowledge_info`);
+}
+export async function repeatUpload(data: any, id: string) {
+  return await request.postMultiPart(`/api/v1/knowledge/upload/${id}`, data);
+}
+export async function subUploadLibFile(data: any) {
+  return await request.post(`/api/v1/knowledge/process`, data);
+}
+export async function retryUpload(data: any) {
+  return await request.post(`/api/v1/knowledge/retry`, data);
+}
+
+
 export function queryKnowledge(payload: t.TVerify2FARequest): Promise<f.TFile[]> {
   return request.get(endpoints.queryKnowledge(), { params: payload });
 }
