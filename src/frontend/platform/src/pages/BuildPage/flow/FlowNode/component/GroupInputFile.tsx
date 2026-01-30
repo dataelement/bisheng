@@ -143,17 +143,17 @@ export default function GroupInputFile({ nodeId, node, cate, tab,
             <div className="mb-4">
                 <div className="node-item flex gap-4 items-center mb-4">
                     <Label className="bisheng-label min-w-28 flex items-center gap-1">
-                        {t("文件处理策略")}
-                        <QuestionTooltip content={t("选择如何处理用户上传的文件：\n· 解析文件内容：提取文件文本，后续可为大模型等节点提供上下文。\n· 不解析：保留原始文件，后续可被多模态模型或者代码节点处理。")} />
+                        {t("fileProcessingStrategy")}
+                        <QuestionTooltip content={t("fileProcessingStrategyTip")} />
                     </Label>
                     <Select value={fileStrategy} onValueChange={handleStrategyChange}>
                         <SelectTrigger className="w-full">
-                            {fileStrategy === 'parse' ? t("解析文件内容") : t("不解析（原始文件）")}
+                            {fileStrategy === 'parse' ? t("parseFile") : t("notParse")}
                         </SelectTrigger>
                         <SelectContent className="">
                             {[
-                                { value: 'parse', label: t("解析文件内容") },
-                                { value: 'raw', label: t("不解析（原始文件）") }
+                                { value: 'parse', label: t("parseFile") },
+                                { value: 'raw', label: t("notParse") }
                             ].map((option) => (
                                 <div
                                     key={option.value}
@@ -194,7 +194,7 @@ export default function GroupInputFile({ nodeId, node, cate, tab,
 
                         <div className="flex justify-between items-center">
                             <Label className="bisheng-label">
-                                {t("文件解析结果")}
+                                {t("fileParseResult")}
                             </Label>
                             <Badge variant="outline" className="bg-[#E6ECF6] text-[#2B53A0]">
                                 dialog_files_content
@@ -208,9 +208,9 @@ export default function GroupInputFile({ nodeId, node, cate, tab,
                         <div className="flex justify-between items-center">
                             <div className="flex items-center gap-1">
                                 <Label className="bisheng-label">
-                                    {t("文件路径")}
+                                    {t("filePath")}
                                 </Label>
-                                <QuestionTooltip content={t("存储所有上传文件的路径列表，可在代码节点中读取和处理")} />
+                                <QuestionTooltip content={t("storeUploadFiles")} />
                             </div>
                             <Badge variant="outline" className="bg-[#E6ECF6] text-[#2B53A0]">
                                 dialog_file_paths
@@ -224,7 +224,7 @@ export default function GroupInputFile({ nodeId, node, cate, tab,
                                     <Label className="bisheng-label">
                                         {t(`node.${node.type}.${imageFileItem.key}.label`)}
                                     </Label>
-                                    <QuestionTooltip content={t("提取上传文件中的图片，当助手或大模型节点使用多模态大模型时，可传入此变量。")} />
+                                    <QuestionTooltip content={t("extractImages")} />
                                 </div>
                                 <Badge variant="outline" className="bg-[#E6ECF6] text-[#2B53A0]">
                                     dialog_image_files
