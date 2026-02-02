@@ -353,7 +353,6 @@ const workflowTemplate = [
                         "tab": "dialog_input",
                         "type": "var_textarea",
                         "value": "true",
-                        "placeholder": "true",
                         "required": true
                     },
                     {
