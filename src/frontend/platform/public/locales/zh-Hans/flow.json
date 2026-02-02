@@ -185,7 +185,7 @@
   "parseResultName":"解析结果变量名称",
   "selectFile":"请选择文件处理策略",
   "fileProcessingStrategy":"文件处理策略",
-  "fileProcessingStrategyTip":"选择如何处理用户上传的文件：· 解析文件内容：提取文件文本，后续可为大模型等节点提供上下文。· 文件将上传至临时知识库，可在「文档知识库问答」节点使用。· 不解析：保留原始文件，后续可被多模态模型或者代码节点处理。",
+  "fileProcessingStrategyTip":"选择如何处理用户上传的文件：· 解析文件内容：提取文件文本，后续可为大模型等节点提供上下文。· 不解析：保留原始文件，后续可被多模态模型或者代码节点处理。",
   "tempKnowledgeBaseName": "临时知识库名称",
   "tempKnowledgeBaseNameTip": "文件将会上传到以此命名的临时知识库中，可在文档知识库问答、助手等节点中使用",
   "fileContentVarName": "文件内容变量名称",
@@ -336,13 +336,13 @@
         "label": "上传文件内容"
       },
       "dialog_files_content_size": {
-        "label": "文件内容长度上限"
+        "label": "解析结果长度上限"
       },
       "dialog_file_accept": {
         "label": "上传文件类型"
       },
       "dialog_image_files": {
-        "label": "上传图片文件",
+        "label": "图片文件",
         "help": "提取上传文件中的图片文件，当助手或大模型节点使用多模态大模型时，可传入此图片。"
       },
       "form_input": {

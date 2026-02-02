@@ -143,7 +143,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   } else if (messagesTree && messagesTree.length !== 0) {
     content = <MessagesView readOnly={shareToken} messagesTree={messagesTree} Header={<HeaderTitle readOnly={shareToken} conversation={conversation} logo={null} />} />;
   } else {
-    content = <Landing lingsi={isLingsi} lingsiEntry={bsConfig.linsightConfig.linsight_entry} setLingsi={setIsLingsi} isNew={isNew} />;
+    content = <Landing lingsi={isLingsi} lingsiEntry={bsConfig?.linsightConfig?.linsight_entry} setLingsi={setIsLingsi} isNew={isNew} />;
   }
 
   return (

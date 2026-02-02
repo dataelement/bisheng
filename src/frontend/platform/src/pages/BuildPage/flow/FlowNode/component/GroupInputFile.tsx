@@ -212,19 +212,6 @@ export default function GroupInputFile({ nodeId, node, cate, tab,
                 ) : (
                     // 选择不解析 - 根据文件类型显示不同变量
                     <>
-                        {/* 文件路径 - 始终显示 */}
-                        <div className="flex justify-between items-center">
-                            <div className="flex items-center gap-1">
-                                <Label className="bisheng-label">
-                                    {t("filePath")}
-                                </Label>
-                                <QuestionTooltip content={t("storeUploadFiles")} />
-                            </div>
-                            <Badge variant="outline" className="bg-[#E6ECF6] text-[#2B53A0]">
-                                dialog_file_paths
-                            </Badge>
-                        </div>
-
                         {/* 图片文件 - 仅当文件类型不是文档时显示 */}
                         {selectedFileType !== 'file' && imageFileItem && (
                             <div className="flex justify-between items-center">
@@ -239,6 +226,20 @@ export default function GroupInputFile({ nodeId, node, cate, tab,
                                 </Badge>
                             </div>
                         )}
+
+                        {/* 文件路径 - 始终显示 */}
+                        <div className="flex justify-between items-center">
+                            <div className="flex items-center gap-1">
+                                <Label className="bisheng-label">
+                                    {t("filePath")}
+                                </Label>
+                                <QuestionTooltip content={t("storeUploadFiles")} />
+                            </div>
+                            <Badge variant="outline" className="bg-[#E6ECF6] text-[#2B53A0]">
+                                dialog_file_paths
+                            </Badge>
+                        </div>
+
                     </>
                 )}
             </div>

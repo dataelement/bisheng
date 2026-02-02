@@ -45,8 +45,8 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
         [FormType.File]: t("uploadExample"), // 例如"请上传去年财报"
     };
     const processingStrategyOptions = useMemo(() => [
-        { value: FileProcessingStrategy.TempKnowledge, label: t("temporaryKnowledgeBase") },
         { value: FileProcessingStrategy.ParseContent, label: t("parseFile") },
+        { value: FileProcessingStrategy.TempKnowledge, label: t("temporaryKnowledgeBase") },
         { value: FileProcessingStrategy.OriginalFile, label: t("notParse") },
     ], [t]);
     const [formData, setFormData] = useState({
@@ -62,7 +62,7 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
         isRequired: true,
         allowMultiple: false,  // Allow multiple file uploads
         options: [],  // Options for Select input
-        processingStrategy: FileProcessingStrategy.TempKnowledge, // 文件处理策略
+        processingStrategy: FileProcessingStrategy.ParseContent, // 文件处理策略
     });
     const [errors, setErrors] = useState<any>({});
     const editRef = useRef(false); // 编辑状态
@@ -583,6 +583,17 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
         {/* 解析文件内容 - 显示解析结果长度上限和解析结果变量名称 */}
         {shouldShowField('parseContent') && (
             <>
+                <InputItem
+                    type='number'
+                    char
+                    linefeed
+                    label={t('parseLengthLimit')}
+                    data={{
+                        min: 0,
+                        value: formData.fileContentSize,
+                    }}
+                    onChange={(fileContentSize) => setFormData({ ...formData, fileContentSize })}
+                />
                 <div>
                     <Label className="flex items-center bisheng-label">
                         {t("parseResultName")}
@@ -597,17 +608,6 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
                     />
                     {errors.filecontent && <p className="text-red-500 text-sm">{errors.filecontent}</p>}
                 </div>
-                <InputItem
-                    type='number'
-                    char
-                    linefeed
-                    label={t('parseLengthLimit')}
-                    data={{
-                        min: 0,
-                        value: formData.fileContentSize,
-                    }}
-                    onChange={(fileContentSize) => setFormData({ ...formData, fileContentSize })}
-                />
                 {errors.fileContentSize && <p className="text-red-500 text-sm">{errors.fileContentSize}</p>}
             </>
         )}
@@ -888,7 +888,7 @@ export default function InputFormItem({ data, nodeId, onChange, onValidate, onVa
             {error && <p className="text-red-500 text-sm">{t("atLeastOneFormItem")}</p>}
 
             <Dialog open={isOpen} onOpenChange={setIsOpen}>
-                <DialogContent className="max-h-screen overflow-auto">
+                <DialogContent className="max-h-screen">
                     <DialogHeader>
                         <DialogTitle>
                             {editKey ? t("editFormItem") : t("addFormItem")}
