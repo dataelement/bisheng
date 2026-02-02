@@ -93,6 +93,9 @@ def unmerge_and_read_sheet(sheet_obj):
     for merged_range in merged_cell_ranges:
         min_col, min_row, max_col, max_row = merged_range.bounds
         top_left_cell_value = sheet_obj.cell(row=min_row, column=min_col).value
+        # ignore empty rows
+        if min_row > len(data_grid):
+            continue
         for r in range(min_row, max_row + 1):
             for c in range(min_col, max_col + 1):
                 data_grid[r - 1][c - 1] = top_left_cell_value
@@ -184,10 +187,12 @@ def process_dataframe_to_markdown_files(
     if append_header:
         # Handle header index outliers based on user rules
         if start_header_idx >= rows:
-            logger.warning(f"  Table Header Start Row {start_header_idx} Total lines exceeded {rows}. The first row will be used as the table header.")
+            logger.warning(
+                f"Table Header Start Row {start_header_idx} Total lines exceeded {rows}. The first row will be used as the table header.")
             start_header_idx, end_header_idx = 0, 0
         elif end_header_idx >= rows:
-            logger.warning(f"  Table Header End Row {end_header_idx} Total lines exceeded {rows}. will be truncated to the last line.")
+            logger.warning(
+                f"Table Header End Row {end_header_idx} Total lines exceeded {rows}. will be truncated to the last line.")
             end_header_idx = rows - 1
 
         # Make sure the index is legitimate
