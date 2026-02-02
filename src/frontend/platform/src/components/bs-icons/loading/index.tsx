@@ -15,5 +15,8 @@ export const LoadingIcon = forwardRef<
     SVGSVGElement & { className: any },
     React.PropsWithChildren<{ className?: string }>
 >(({ className, ...props }, ref) => {
+    if (window.BRAND_CONFIG.loadingIcon) {
+        return <img src={window.BRAND_CONFIG.loadingIcon} ref={ref} {...props} className={cname('text-primary max-w-14', className, window.BRAND_CONFIG.loadingAnimation)} />;
+    }
     return <Loading ref={ref} {...props} className={cname('text-primary', className)} />;
 });

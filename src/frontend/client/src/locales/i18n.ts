@@ -55,6 +55,8 @@ export const resources = {
   fi: { translation: translationFi },
 } as const;
 
+const config = window.BRAND_CONFIG || {};
+
 i18n
   .use(LanguageDetector)
   .use(initReactI18next)
@@ -70,7 +72,17 @@ i18n
     debug: false,
     defaultNS,
     resources,
-    interpolation: { escapeValue: false },
+    interpolation: {
+      escapeValue: false,
+      defaultVariables: {
+        bisheng: config.brandName?.en,
+        bishengZh: config.brandName?.zh,
+        linsight: config.linsightAgentName?.en,
+        linsightZh: config.linsightAgentName?.zh,
+        linsightFull: config.linsightFullName?.en,
+        linsightFullZh: config.linsightFullName?.zh
+      }
+    },
   });
 
 export default i18n;

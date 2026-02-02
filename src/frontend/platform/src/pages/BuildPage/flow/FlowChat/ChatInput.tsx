@@ -159,6 +159,8 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
         if (messageDom) {
             messageDom.scrollTop = messageDom.scrollHeight;
         }
+
+        questionsRef.current.clear()
     }
 
     const sendWsMsg = async (msg) => {

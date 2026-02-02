@@ -11,6 +11,9 @@ const GuideQuestions = forwardRef(({ locked, chatId, onClick }, ref) => {
         updateQuestions(newQuestions) { // Expose this method to the parent
             console.log('newQuestions :>> ', newQuestions);
             !questions.length && setQuestions(newQuestions)
+        },
+        clear() {
+            setQuestions([])
         }
     }))
 

@@ -287,7 +287,7 @@ const workflowTemplate = [
                     },
                     {
                         "key": "dialog_files_content",
-                        "global": "key",
+                        "global": "item:group_input_file",
                         "label": "true",
                         "type": "var",
                         "tab": "dialog_input"
@@ -309,7 +309,7 @@ const workflowTemplate = [
                     },
                     {
                         "key": "dialog_image_files",
-                        "global": "key",
+                        "global": "item:group_input_file",
                         "label": "true",
                         "type": "var",
                         "tab": "dialog_input",
@@ -317,7 +317,7 @@ const workflowTemplate = [
                     },
                     {
                         "key": "dialog_file_path",
-                        "global": "key",
+                        "global": "item:group_input_file",
                         "label": "true",
                         "type": "var",
                         "tab": "dialog_input",
@@ -363,11 +363,11 @@ const workflowTemplate = [
                         "tab": "dialog_input",
                         "help": "true",
                         "scope": [
-                            0,
-                            2
+                            1,
+                            10
                         ],
-                        "step": 0.1,
-                        "value": 0.7
+                        "step": 1,
+                        "value": 2
                     }
                 ]
             },

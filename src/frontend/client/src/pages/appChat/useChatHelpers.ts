@@ -113,13 +113,16 @@ export default function useChatHelpers() {
     }
 
     const showGuideQuestion = (chatid, question) => {
-        setRunningState((prev) => ({
-            ...prev,
-            [chatid]: {
-                ...prev[chatid],
-                guideWord: question,
-            },
-        }))
+        setRunningState((prev) => {
+            if (prev[chatid].guideWord?.length) return prev
+            return {
+                ...prev,
+                [chatid]: {
+                    ...prev[chatid],
+                    guideWord: question,
+                },
+            }
+        })
     }
     // const stop = () => {
     // }

@@ -1,6 +1,6 @@
 {
     "chartSelector": {
-        "title": "关联图表配置",
+        "title": "关{{bisheng}}联图表配置$t(bs:menu.user)",
         "componentName": "组件：{{componentName}}",
         "selectCharts": "选择关联图表",
         "selectAll": "全选",
