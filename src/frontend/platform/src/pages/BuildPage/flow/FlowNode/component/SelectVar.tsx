@@ -50,6 +50,7 @@ const getSpecialVar = ({ obj, group, onlyImg = false }) => {
             param.value = param.value.map(item => ({ label: item.label || item.value, value: item.key }))
             return [{ param, label: obj.key, value: obj.key }]
         case 'item:group_input_file':
+            if (onlyImg) return [{ label: obj.key, value: obj.key }]
             const paramValue = group.params.find(el => el.key === 'file_parse_mode').value
             if (paramValue === 'extract_text' && ['dialog_image_files', 'dialog_file_path'].includes(obj.key)) return []
             if (paramValue === 'keep_raw' && 'dialog_files_content' === obj.key) return []
