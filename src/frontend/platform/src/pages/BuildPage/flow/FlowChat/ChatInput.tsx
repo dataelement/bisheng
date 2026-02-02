@@ -37,6 +37,7 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
     const inputNodeIdRef = useRef('') // 当前输入框节点id
     const messageIdRef = useRef('') // 当前输入框节点messageId
     const [accepts, setAccepts] = useState('*') // 接受文件类型
+    const [uploadLock, setUploadLock] = useState(false) // 上传锁
     const { data: linsightConfig, isLoading: loading, refetch: refetchConfig, error } = useLinsightConfig();
 
     const { isLoading: audioOpening } = useAudioStore()
@@ -310,6 +311,8 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
             // 限制文件类型
             if (input_schema.tab === 'dialog_input') {
                 const schemaItem = input_schema.value?.find(el => el.key === 'dialog_file_accept')
+                const uploadSwithItem = input_schema.value?.find(el => el.key === 'user_input_file')
+                setUploadLock(uploadSwithItem?.value)
                 const fileAccept = schemaItem?.value
                 if (fileAccept === 'image') {
                     setAccepts(FileTypes.IMAGE.join(','))
@@ -535,12 +538,12 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
                 }
             </div>
             {/* 语音转文字 */}
-            <div className={` ${!inputLock.locked && 'mr-4'}`}>
+            <div className={` ${!inputLock.locked && uploadLock && 'mr-4'}`}>
                 {linsightConfig?.asr_model?.id && <SpeechToTextComponent disabled={inputLock.locked} onChange={handleSpeechRecognition} />}
             </div>
 
             {/* 附件 */}
-            {!inputLock.locked && <ChatFiles
+            {!inputLock.locked && uploadLock && <ChatFiles
                 ref={inputFilesRef}
                 accepts={accepts}
                 disabled={audioOpening}

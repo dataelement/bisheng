@@ -303,7 +303,7 @@
       "name": "输入",
       "接收文本": "接收文本",
       "description": "接收用户在会话页面的输入，支持 2 种形式：对话框输入，表单输入。",
-      "user_inputfile":{
+      "user_input_file":{
         "label": "接收文件"
       },
       "recommended_questions_flag": {

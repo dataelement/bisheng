@@ -302,7 +302,7 @@
       "name": "Input",
       "接收文本":"Receive Text",
       "description": "Receives user input from the chat interface. Supports two input types: dialog input and form input.",
-      "user_inputfile":{
+      "user_input_file":{
         "label": "Receive File"
       },
       "recommended_questions_flag": {

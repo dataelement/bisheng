@@ -49,18 +49,18 @@ export const ModelManagement = forwardRef<HTMLDivElement[], ModelManagementProps
         // }, [models, llmOptions])
 
         return (<div className="mt-2 border p-4 rounded-md bg-muted">
-            <div className="grid mb-4 items-center" style={{ gridTemplateColumns: "repeat(2, 1fr) 80px 40px" }}>
+            <div className="grid mb-4 items-center" style={{ gridTemplateColumns: "repeat(2, minmax(0, 320px)) 80px 40px" }}>
                 <Label className="bisheng-label">{t('bench.model')}</Label>
                 <Label className="bisheng-label">{t('bench.displayName')}</Label>
                 <div></div>
                 <div className="flex">
-                    <Label className="bisheng-label  whitespace-nowrap">{t('bench.vision')}</Label>
+                    <Label className="bisheng-label whitespace-nowrap mr-0.5">{t('bench.vision')}</Label>
                     <QuestionTooltip content={t('bench.visionText')} />
                 </div>
             </div>
             {models.map((model, index) => (
-                <div key={model.key} className="grid mb-4 items-start"
-                    style={{ gridTemplateColumns: "repeat(2, 1fr) 80px 40px" }}
+                <div key={model.key} className="grid mb-4 items-center"
+                    style={{ gridTemplateColumns: "repeat(2, minmax(0, 320px)) 80px 40px" }}
                     ref={el => setItemRef(el, index)}
                 >
                     <div className="pr-2" id={model.id}>

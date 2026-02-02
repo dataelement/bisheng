@@ -275,7 +275,7 @@ const workflowTemplate = [
                 "params": [
                     {
                         "groupTitle": true,
-                        "key": "user_inputfile",
+                        "key": "user_input_file",
                         "tab": "dialog_input",
                         "value": true
                     },
