@@ -1,5 +1,8 @@
 {
   "title": "BISHENG",
+  "bisheng": "{{bisheng}}",
+  "linsight": "{{linsight}}",
+  "linsightFullName": "{{linsightName}}",
   "prompt": "ヒント",
   "unsupportedFileType": "サポートされていないファイル形式: {{extensions}}",
   "supportedFormatsWithImages": "サポートされているファイル形式は pdf（スキャン含む）、txt、docx、ppt、pptx、md、html、xls、xlsx、csv、doc、png、jpg、jpeg、bmp です。各ファイルの最大サイズは {{maxSize}}MB です。pdf はトレーサビリティ位置特定をサポートします。",
@@ -43,13 +46,14 @@
     "isItStyled": "スタイルは適用されていますか？",
     "accordionAnswer2": "はい。他のコンポーネントと統一されたデフォルトのスタイルが適用されています。",
     "isItAnimated": "アニメーションはありますか？",
-    "accordionAnswer3": "はい。デフォルトでアニメーション付きですが、必要に応じて無効化できます。"
+    "accordionAnswer3": "はい。デフォルトでアニメーション付きですが、必要に応じて無効化できます。",
+    "switch": "スイッチ"
   },
   "theme": {
     "colorConfig": "カラー設定",
     "restoreDefault": "デフォルトに戻す",
     "workflowBackgroundConfig": "ワークフロー背景設定",
-    "bishengLogo": "BISHENG ロゴ",
+    "bishengLogo": "$t(bisheng) ロゴ",
     "themeColorGradientEffect": "テーマカラーグラデーション効果",
     "componentPreview": "コンポーネントプレビュー",
     "primary": "テーマカラー",
@@ -676,9 +680,9 @@
     "noToolsFound": "該当するツールが見つかりません"
   },
   "chatConfig": {
-    "linsightPlaceholder": "リンシは複雑なタスクを得意とするエージェントアシスタントです。タスク目標のほか、どのように実現してほしいかを日常的な言葉で説明すると、より期待に近い結果が得られます。",
-    "linsightTools": "リンシで利用可能なツール",
-    "linsightManual": "リンシ ガイドマニュアルライブラリ",
+    "linsightPlaceholder": "$t(linsight)は複雑なタスクを得意とするエージェントアシスタントです。タスク目標のほか、どのように実現してほしいかを日常的な言葉で説明すると、より期待に近い結果が得られます。",
+    "linsightTools": "$t(linsight)で利用可能なツール",
+    "linsightManual": "$t(linsight) ガイドマニュアルライブラリ",
     "searchManual": "ガイドマニュアルを検索",
     "importFromRecord": "実行記録からインポート",
     "importFromLocal": "ローカルファイルからインポート",
@@ -704,13 +708,13 @@
     "assistantIcon": "ウェルカム画面アイコン & 対話アバター",
     "sidebarSlogan": "左サイドバーのスローガン",
     "welcomeMessage": "ウェルカムメッセージ",
-    "welcomeMessagePlaceholder": "私は xx です。お会いできてうれしいです！",
+    "welcomeMessagePlaceholder": "私は $t(bisheng) です。お会いできてうれしいです！",
     "functionDescription": "機能説明",
     "functionDescriptionPlaceholder": "コード作成、ファイル読込、さまざまなクリエイティブな文章作成などをお手伝いできます。タスクを私に任せてください～",
     "inputPlaceholder": "入力欄のヒント",
     "inputPlaceholderPlaceholder": "xx にメッセージを送る",
     "appCenterWelcome": "アプリセンターのウェルカムメッセージ",
-    "appCenterWelcomePlaceholder": "BISHENG のエージェントを探索しましょう",
+    "appCenterWelcomePlaceholder": "$t(bisheng) のエージェントを探索しましょう",
     "appCenterDescription": "ここで必要なエージェントを選び、業務や生産に活用できます。",
     "modelManagement": "対話モデル管理",
     "maxTokens": "ナレッジベース / Web 検索結果の最大文字数",
@@ -762,7 +766,7 @@
       "modelNameDuplicate": "表示名は重複できません",
       "required": "空にできません"
     },
-    "systemPrompt2": "# Role Setting\n- You are the BISHENG intelligent Q&A assistant, designed to provide users with **information queries, content creation, learning tutoring, programming help, life advice**, and other forms of assistance.\n- You should always maintain a friendly, professional, patient, and helpful attitude, communicating with users in clear, accurate, and understandable language.\n# Code of Conduct\n1. **Role Consistency:** Always interact with users as the BISHENG intelligent Q&A assistant, without impersonating other unrelated roles or characters.\n2. **Information Accuracy:** Strive to provide accurate and reliable information. Clearly state when uncertain about content, avoiding misleading users.\n3. **Privacy Protection:** Do not proactively request or record users' personal information. Do not store or disclose any user privacy data or sensitive information.\n4. **Content Safety:** Comply with laws, regulations, and ethical standards. Do not generate or disseminate content involving politics, illegal activities, violence, pornography, discrimination, hatred, or other inappropriate material.\n5. **Neutrality and Objectivity:** Maintain neutrality on controversial topics, providing multiple perspectives without favoring any side.\n6. **Appropriate Guidance:** If users' questions are vague or incomplete, appropriately guide them to clarify, but do not force them or show impatience.\n# Language and Style:\n- Communicate based on the language type used by the user or their specific needs.\n- Language style should be **clear and concise, polite and friendly, easy to understand**, adjusting expression methods based on the user's background and query content.\n- **Emojis** (such as 😊, 👍) may be used appropriately to increase approachability, but avoid excessive use to maintain a professional image.\n# Time Information\nThe current time is {cur_date}.\n# ECharts Chart Rendering Support\nIf charts need to be rendered in responses, use code blocks starting with ```echarts and write the configuration within.\nExample:\n```echarts\n{{\n  \"title\": {{\n    \"text\": \"ECharts Getting Started Example\"\n  }},\n  \"tooltip\": {{}},\n  \"legend\": {{\n    \"data\": [\"Sales\"]\n  }},\n  \"xAxis\": {{\n    \"data\": [\"Shirts\", \"Wool Sweaters\", \"Chiffon Blouses\", \"Pants\", \"High Heels\", \"Socks\"]\n  }},\n  \"yAxis\": {{}},\n  \"series\": [{{\n    \"name\": \"Sales\",\n    \"type\": \"bar\",\n    \"data\": [5, 20, 36, 10, 10, 20]\n  }}]\n}}\n```",
+    "systemPrompt2": "# Role Setting\n- You are the $t(bisheng) intelligent Q&A assistant, designed to provide users with **information queries, content creation, learning tutoring, programming help, life advice**, and other forms of assistance.\n- You should always maintain a friendly, professional, patient, and helpful attitude, communicating with users in clear, accurate, and understandable language.\n# Code of Conduct\n1. **Role Consistency:** Always interact with users as the BISHENG intelligent Q&A assistant, without impersonating other unrelated roles or characters.\n2. **Information Accuracy:** Strive to provide accurate and reliable information. Clearly state when uncertain about content, avoiding misleading users.\n3. **Privacy Protection:** Do not proactively request or record users' personal information. Do not store or disclose any user privacy data or sensitive information.\n4. **Content Safety:** Comply with laws, regulations, and ethical standards. Do not generate or disseminate content involving politics, illegal activities, violence, pornography, discrimination, hatred, or other inappropriate material.\n5. **Neutrality and Objectivity:** Maintain neutrality on controversial topics, providing multiple perspectives without favoring any side.\n6. **Appropriate Guidance:** If users' questions are vague or incomplete, appropriately guide them to clarify, but do not force them or show impatience.\n# Language and Style:\n- Communicate based on the language type used by the user or their specific needs.\n- Language style should be **clear and concise, polite and friendly, easy to understand**, adjusting expression methods based on the user's background and query content.\n- **Emojis** (such as 😊, 👍) may be used appropriately to increase approachability, but avoid excessive use to maintain a professional image.\n# Time Information\nThe current time is {cur_date}.\n# ECharts Chart Rendering Support\nIf charts need to be rendered in responses, use code blocks starting with ```echarts and write the configuration within.\nExample:\n```echarts\n{{\n  \"title\": {{\n    \"text\": \"ECharts Getting Started Example\"\n  }},\n  \"tooltip\": {{}},\n  \"legend\": {{\n    \"data\": [\"Sales\"]\n  }},\n  \"xAxis\": {{\n    \"data\": [\"Shirts\", \"Wool Sweaters\", \"Chiffon Blouses\", \"Pants\", \"High Heels\", \"Socks\"]\n  }},\n  \"yAxis\": {{}},\n  \"series\": [{{\n    \"name\": \"Sales\",\n    \"type\": \"bar\",\n    \"data\": [5, 20, 36, 10, 10, 20]\n  }}]\n}}\n```",
     "webSearchPrompt": "# 以下は、ユーザーから送信されたメッセージに基づく検索結果です:\n{search_results}\n検索結果の各項目は [webpage X begin]...[webpage X end] 形式で示され、X は各記事のインデックス番号です。必要に応じて文末に引用を付けてください。回答中の該当部分には、[citation:X] 形式でコンテキストを引用してください。1文が複数のコンテキストに基づく場合は、cite[3]:cite[5] のようにすべて列挙してください。引用を最後にまとめて出すのではなく、回答の該当部分ごとに記載してください。\n回答時には以下の点に注意してください：\n- 今日の日付は {cur_date} です。\n- 検索結果のすべてがユーザーの質問と密接に関連するとは限らないため、質問内容に応じて結果を精査・選別してください。\n- 列挙形式の質問（例：利用可能なすべてのフライト情報を列挙など）の場合、回答は 10 項目以内に抑え、完全な情報が必要な場合は検索元を参照するよう案内してください。情報が完全で関連性の高い項目を優先して提示してください。不要な限り、検索結果に含まれていない内容をわざわざ伝える必要はありません。\n- 論文執筆などの創作系タスクでは、本文中の段落ごとに対応する参考番号（例：cite[3]:cite[5]）を必ず記載してください。ユーザーの要件を読み解き、適切な形式を選び、検索結果を最大限活用して重要情報を抽出し、ユーザーの要件に合致した、思想的に深く、創造性と専門性の高い回答を生成してください。可能な限り分量を増やし、各ポイントに対して多角的かつ詳細な論述を行ってください。\n- 回答が長い場合は、構造化し、段落に分けて要点をまとめてください。箇条書きが必要な場合、できるだけ 5 点以内に抑え、関連内容は統合してください。\n- 客観的な Q&A の場合、答えが非常に短いときでも、関連情報を1～2文ほど補足して内容を充実させてください。\n- ユーザーの要件と回答内容に応じて適切で見やすいフォーマットを選択し、可読性を高めてください。\n- 回答は複数の関連 Web ページを総合して行い、同じページだけを繰り返し引用しないでください。\n- ユーザーからの指定がない限り、回答の言語はユーザーの質問に使用された言語と一致させてください。\n\n# ユーザーメッセージ：\n{question}",
     "internationalization": "あなたは知識ベースのQ&Aアシスタントです：\n1. ユーザーが使用する言語で質問に答え、答えが厳密で専門的であることを確認してください。\n2. 次の[参照テキスト]の内容に基づいて回答する必要があります。[参照テキスト]にユーザーの質問に直接関連する情報がある場合のみ回答してください。自分の知識に基づいて回答しないでください。関連する内容に画像が含まれている場合、画像ソースファイルを直接出力してください。`![image](path/IMAGE_1.png)`のようなプレースホルダーがある場合は、それらのプレースホルダーを変更したり削除したりせずに保持してください。\n3. ドキュメントにテーブルが含まれている場合は、変更を加えたり、マークダウン形式でテーブルを返したりしないでください。\n4. 参照テキストには異なる情報源からの情報が含まれている可能性があり、異なるまたは矛盾する回答が得られる場合があります。その場合、矛盾が生じた場合は、これらの回答をリストしてください。矛盾がなければ、最終的な結果のみを提供してください。\n5. 参照テキストの内容がユーザーの質問に関連していない場合は、「関連する内容が見つかりませんでした」と回答してください。\n\n# 参照テキスト\n{retrieved_file_content}\n\n# ユーザーの質問\n{question}"
   },
@@ -905,7 +909,7 @@
   },
   "bench": {
     "daily": "日常",
-    "lingsi": "リンシ",
+    "lingsi": "$t(linsight)",
     "model": "モデル",
     "displayName": "表示名",
     "vision":"画像",
@@ -923,8 +927,8 @@
     "name_over_size": "名前の長さが500文字を超えています",
     "content_over_size": "詳細内容が50000文字を超えています",
     "description_over_size": "説明の長さが1000文字を超えています",
-    "inputPlaceholder": "タスク目標を入力して、BISHENG リンシに任せてください",
-    "inputPlaceholderDescription": "リンシは複雑なタスクを得意とするエージェントアシスタントです。タスク目標のほか、どのように実現してほしいかを日常的な言葉で説明すると、より期待に近い結果が得られます。"
+    "inputPlaceholder": "タスク目標を入力して、$t(bisheng)$t(linsight)に任せてください",
+    "inputPlaceholderDescription": "$t(linsight)は複雑なタスクを得意とするエージェントアシスタントです。タスク目標のほか、どのように実現してほしいかを日常的な言葉で説明すると、より期待に近い結果が得られます。"
   },
   "tools": {
     "addTool": "ツール追加",
@@ -1474,7 +1478,7 @@
     "11060": "マニュアル検索が失敗しました（ベクトル・キーワード検索ともに不可）",
     "11070": "マニュアル検索に失敗しました",
     "11080": "ワークスペースツールの初期化に失敗しました",
-    "11090": "Bisheng LLM エラー",
+    "11090": "$t(bisheng) LLM エラー",
     "11100": "SOP内容の生成に失敗しました",
     "11110": "SOP内容の更新に失敗しました",
     "11120": "セッションは完了済みまたは実行中です",

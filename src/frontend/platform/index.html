@@ -6,11 +6,14 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" href="<%- baseUrl %>/assets/bisheng/favicon.ico" />
+    <script src="/assets/bisheng/config.js?v=<%= Date.now() %>"></script>
     <%- aceScriptSrc %>
     <title>loading...</title>
     <!-- window.APP_CONFIG.baseUrl -->
     <!-- style -->
     <script>
+        document.title = window.BRAND_CONFIG.brandName.en
+        
         fetch('<%- baseUrl %>/api/v1/web/config').then(function (res) {
             return res.json()
         }).then(function (res) {

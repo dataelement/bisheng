@@ -18,6 +18,7 @@ const getBrowserLanguage = () => {
 };
 
 const userLanguage = getBrowserLanguage();
+const config = window.BRAND_CONFIG || {};
 
 i18n.use(Backend)
     .use(initReactI18next)
@@ -30,7 +31,15 @@ i18n.use(Backend)
             loadPath: __APP_ENV__.BASE_URL + '/locales/{{lng}}/{{ns}}.json?v=' + json.version
         },
         interpolation: {
-            escapeValue: false // react already safes from xss
+            escapeValue: false, // react already safes from xss
+            defaultVariables: {
+                bisheng: config.brandName?.en,
+                bishengZh: config.brandName?.zh,
+                linsight: config.linsightAgentName?.en,
+                linsightZh: config.linsightAgentName?.zh,
+                linsightFull: config.linsightFullName?.en,
+                linsightFullZh: config.linsightFullName?.zh
+            }
         }
     });
 
