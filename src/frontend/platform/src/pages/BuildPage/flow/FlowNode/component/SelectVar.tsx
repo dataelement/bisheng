@@ -30,31 +30,47 @@ const getSpecialVar = ({ obj, group, onlyImg = false }) => {
     switch (type) {
         case 'item:form_input':
             return obj.value.reduce((res, item) => {
-                res.push({ label: item.key, value: item.key })
-                if (item.type === 'file') {
-                    // if (item.multiple) return res
-                    if (!onlyImg) {
-                        res.push({ label: item.file_content, value: item.file_content })
-                        res.push({ label: item.file_path, value: item.file_path })
-                    }
-                    item.file_type !== 'file' && res.push({ label: item.image_file, value: item.image_file })
-                } else if (!onlyImg) {
-                    res.push({ label: item.key, value: item.key })
+                const { file_type, file_parse_mode: mode } = item;
+
+                const add = (propKey) => res.push({ label: item[propKey], value: item[propKey] });
+
+                // 1. 优先处理图片 (这是唯一在 onlyImg=true 时可能被添加的项)
+                // 当模式为 keep_raw 且类型为 all 时，包含图片变量
+                if (mode === 'keep_raw' && file_type === 'all') {
+                    add('image_file');
                 }
-                return res
-            }, [])
+
+                // 2. 如果只需要图片，此时直接结束本次循环
+                // 后续所有逻辑默认都处于 !onlyImg 的上下文中，无需重复判断
+                if (onlyImg) return res;
+
+                // 3. 处理文件/文本逻辑 (已隐含 !onlyImg 条件)
+                switch (mode) {
+                    case 'ingest_to_temp_kb':
+                        add('key');
+                        break;
+                    case 'extract_text':
+                        add('file_content');
+                        break;
+                    case 'keep_raw':
+                        // 无论是 'all' 还是 'file'，只要不是 onlyImg (已在上面拦截)，都推入 file_path
+                        if (file_type === 'all' || file_type === 'file') {
+                            add('file_path');
+                        }
+                        break;
+                    default:
+                        add('key');
+                        break;
+                }
+
+                return res;
+            }, []);
         case 'item:input_list':
             if (!obj.value.length) return []
             if (!obj.value[0].value) return []
             const param = cloneDeep(obj)
             param.value = param.value.map(item => ({ label: item.label || item.value, value: item.key }))
             return [{ param, label: obj.key, value: obj.key }]
-        case 'item:group_input_file':
-            if (onlyImg) return [{ label: obj.key, value: obj.key }]
-            const paramValue = group.params.find(el => el.key === 'file_parse_mode').value
-            if (paramValue === 'extract_text' && ['dialog_image_files', 'dialog_file_path'].includes(obj.key)) return []
-            if (paramValue === 'keep_raw' && 'dialog_files_content' === obj.key) return []
-            return [{ label: obj.key, value: obj.key }]
     }
     return []
 }
@@ -193,36 +209,77 @@ const SelectVar = forwardRef(({
     /**
      * 根据文件类型过滤dialog_image_files文件变量
      * 限制findInputFileOnly为true时，过滤其他变量,只返回dialog_image_files文件变量
+     * 处理输入节点数据
+     * @param {Object} inputNodeData 原始节点数据
+     * @param {Boolean} findInputFileOnly 是否仅返回文件变量
      */
     function processInputNode(inputNodeData, findInputFileOnly) {
         if (inputNodeData.tab.value === 'form_input') return inputNodeData;
-        const processedData = cloneDeep(inputNodeData);
-        let acceptType = 'all';
 
-        const groupParam = processedData.group_params.find(group =>
-            group.params.some(param => {
-                if (param.key === "dialog_file_accept") {
-                    acceptType = param.value;
+        const processedData = cloneDeep(inputNodeData);
+
+        // 1. Pre-extract 'dialog_file_accept' value for internal logic
+        let acceptType = 'all';
+        for (const group of processedData.group_params) {
+            const acceptParam = group.params.find(p => p.key === 'dialog_file_accept');
+            if (acceptParam) {
+                acceptType = acceptParam.value;
+                break;
+            }
+        }
+
+        processedData.group_params.forEach(group => {
+            // --- Logic for 'inputfile' group switch ---
+            if (group.groupKey === 'inputfile') {
+                const userInputFileParam = group.params.find(p => p.key === 'user_input_file');
+                // If the file upload feature is disabled, clear the entire group
+                if (userInputFileParam && userInputFileParam.value === false) {
+                    group.params = [];
+                    return;
+                }
+            }
+
+            // Get the parse mode if it exists in this group
+            const parseMode = group.params.find(p => p.key === 'file_parse_mode')?.value;
+
+            group.params = group.params.filter(param => {
+                // HIGHEST PRIORITY: If the parameter does NOT have 'global', keep it (no filtering)
+                if (!Object.prototype.hasOwnProperty.call(param, 'global')) {
                     return true;
                 }
-                return false;
-            })
-        );
 
-        if (!groupParam) return processedData;
+                const { key } = param;
 
-        // 根据文件类型过滤参数
-        if (acceptType === 'file') {
-            groupParam.params = groupParam.params.filter(param =>
-                param.key !== 'dialog_image_files'
-            );
-        }
-        // 如果只需要文件输入参数
-        if (findInputFileOnly) {
-            groupParam.params = groupParam.params.filter(param =>
-                param.key === 'dialog_image_files'
-            );
-        }
+                // --- INTERNAL LOGIC: Specific to 'inputfile' group variables ---
+                if (group.groupKey === 'inputfile') {
+                    // Filter based on file_parse_mode
+                    if (parseMode === 'extract_text' && ['dialog_image_files', 'dialog_file_path'].includes(key)) {
+                        return false;
+                    }
+                    if (parseMode === 'keep_raw' && key === 'dialog_files_content') {
+                        return false;
+                    }
+
+                    // Filter based on dialog_file_accept type
+                    if (acceptType === 'file' && key === 'dialog_image_files') {
+                        return false;
+                    }
+                }
+
+                // --- GLOBAL FILTER: Only applies if findInputFileOnly is requested ---
+                if (findInputFileOnly) {
+                    // Only return dialog_image_files as the valid file variable
+                    return key === 'dialog_image_files';
+                }
+
+                return true;
+            });
+        });
+
+        // 3. Remove groups that are empty after filtering
+        // processedData.group_params = processedData.group_params.filter(
+        //     group => group.params.length > 0
+        // );
 
         return processedData;
     }

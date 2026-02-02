@@ -266,17 +266,17 @@ const comptibleInput = (node) => {
                     },
                     {
                         ...filesContent,
-                        "global": "item:group_input_file" // v3 中变更为 item:group_input_file
+                        "global": "key" // v3 中变更为 var
                     },
                     filesSize,
                     fileAccept,
                     {
                         ...imageFiles,
-                        "global": "item:group_input_file" // v3 中变更为 item:group_input_file
+                        "global": "key" // v3 中变更为 var
                     },
                     {
                         "key": "dialog_file_path",
-                        "global": "item:group_input_file",
+                        "global": "key",
                         "label": "true",
                         "type": "var",
                         "tab": "dialog_input",
