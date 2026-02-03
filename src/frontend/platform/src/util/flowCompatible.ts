@@ -304,6 +304,7 @@ const comptibleInput = (node) => {
                         "type": "bisheng_model",
                         "tab": "dialog_input",
                         "value": "",
+                        "placeholder": "true",
                         "required": true,
                     },
                     {

@@ -93,7 +93,6 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
                 file_path: filepath,
                 file_content_size: fileContentSize,
                 image_file: imageFile,
-                file_parse_mode: processingStrategy,
                 options = [] } = initialData;
             setFormData({
                 formType,
@@ -164,7 +163,8 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
             filepath: initialFilePath,
             imageFile: initialFileImage
         }));
-    }, [initialData, existingOptions])
+    }, [initialData, existingOptions, formData.formType])
+
     const validateForm = () => {
         const newErrors: any = {};
 
@@ -574,7 +574,7 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
                 <QuestionTooltip
                     content={
                         <div className="whitespace-pre-line">
-                            {t("fileProcessingStrategyTip")}
+                            {t("dialogProcessingStrategyTip")}
                         </div>
                     }
                 />

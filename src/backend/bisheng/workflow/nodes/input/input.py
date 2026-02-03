@@ -1,8 +1,5 @@
 import copy
 import json
-import os
-import shutil
-import tempfile
 import time
 from enum import Enum
 from typing import Any, List, Dict
@@ -52,6 +49,9 @@ class InputNode(BaseNode):
 
         self._original_node_params = copy.deepcopy(self.node_params)
 
+        # save user set file key -> file key info
+        self._file_key_map = {}
+
         if self.is_dialog_input():
             new_node_params['user_input'] = self.node_params['user_input']
             new_node_params['dialog_files_content'] = self.node_params.get('dialog_files_content', [])
@@ -61,6 +61,7 @@ class InputNode(BaseNode):
                 # The file key needs to be re-generated to avoid parse type not ingest to knowledge base
                 if value_info["type"] == "file":
                     value_key = f"file_{generate_uuid()[:8]}"
+                    self._file_key_map[value_info['key']] = value_info
                 new_node_params[value_key] = value_info['value']
                 self._node_params_map[value_key] = value_info
 
@@ -174,8 +175,8 @@ class InputNode(BaseNode):
                 "file_content": "dialog_files_content",
                 "file_path": "dialog_file_paths",
                 "image_file": "dialog_image_files",
-                "file_parse_mode": self.node_params.get("file_parse_mode", ParseModeEnum.EXTRACT_TEXT),
-                "file_content_size": self.node_params.get("dialog_files_content_size", 15000)
+                "file_parse_mode": self._original_node_params.get("file_parse_mode", ParseModeEnum.EXTRACT_TEXT),
+                "file_content_size": self._original_node_params.get("dialog_files_content_size", 15000)
             }
             # Input in the form of a dialog
             result = self.parse_upload_file("dialog_files", key_info, self.node_params.get('dialog_files_content', []))
@@ -184,7 +185,7 @@ class InputNode(BaseNode):
             }
             res.update(self._parse_upload_file_variables(key_info, result))
 
-            self.graph_state.save_context(content=f'{res["dialog_files_content"]}\n{res["user_input"]}',
+            self.graph_state.save_context(content=f'{res.get("dialog_files_content", "")}\n{res["user_input"]}',
                                           msg_sender='human')
             return res
 
@@ -192,7 +193,6 @@ class InputNode(BaseNode):
         human_input = ""
         # The corresponding file upload needs to be processed in the form
         for key, value in self.node_params.items():
-            ret[key] = value
             key_info = self._node_params_map[key]
             label, _ = self.parse_msg_with_variables(key_info.get('value')) if key_info.get('value') else key
             if key_info['type'] == 'file':
@@ -202,9 +202,10 @@ class InputNode(BaseNode):
                 if new_params[key_info['key']]:
                     content = ""
                     for one in new_params[key_info['key']]:
-                        content += f"{one.get('source')},"
+                        content += f"{one.get('document_name', '')},"
                     human_input += f"{label}: {content.rstrip(',')}\n"
             else:
+                ret[key] = value
                 human_input += f"{label}: {value}\n"
         self.graph_state.save_context(content=f'{human_input}', msg_sender='human')
         return ret
@@ -212,28 +213,22 @@ class InputNode(BaseNode):
     def parse_log(self, unique_id: str, result: dict) -> Any:
         ret = []
         for k, v in result.items():
-            if self._node_params_map.get(k) and self._node_params_map[k]['type'] == 'file':
+            if (self._node_params_map.get(k) and self._node_params_map[k]['type'] == 'file') or (
+                    self._file_key_map.get(k) and self._file_key_map[k]['type'] == 'file'):
                 continue
             ret.append({"key": f'{self.id}.{k}', "value": v, "type": "variable"})
         return [ret]
 
-    def get_upload_file_path_content(self, file_url: str) -> (str, str, list, list):
+    def get_upload_file_path_content(self, file_url: str) -> (list, list):
         """
         params:
             file_url: upload to minio share url
         return:
-            0: file name
-            1: file path in system
-            2: chunks list
-            3: metadata list
+            0: chunks list
+            1: metadata list
         """
-        file_id = generate_uuid()
         filepath, file_name = file_download(file_url)
-        file_name = KnowledgeService.get_upload_file_original_name(file_name)
 
-        # save original file path, because uns will convert file to pdf
-        original_file_path = os.path.join(tempfile.gettempdir(), f'{file_id}.{file_name.split(".")[-1]}')
-        shutil.copyfile(filepath, original_file_path)
         texts = []
         metadatas = []
         try:
@@ -249,7 +244,7 @@ class InputNode(BaseNode):
             if str(e).find('Type not supported') == -1:
                 raise e
 
-        return file_name, original_file_path, texts, metadatas
+        return texts, metadatas
 
     def init_vector_clients(self):
         if self._vector_client is None:
@@ -290,6 +285,15 @@ class InputNode(BaseNode):
         for one_file_url in value:
             url_obj = urlparse(one_file_url)
             file_name = unquote(url_obj.path.split('/')[-1])
+            # get file original name
+            file_name = KnowledgeService.get_upload_file_original_name(file_name)
+            all_metadata.append({
+                "document_id": file_id,
+                "document_name": file_name,
+                "knowledge_id": self.workflow_id,
+                "upload_time": int(time.time()),
+                "bbox": '',  # Temporary files cannot be traced because the source files are not persisted
+            })
 
             file_ext = file_name.split('.')[-1].lower()
             logger.debug(f"{self.id}.{key} file_parse_mode is keep_raw")
@@ -300,7 +304,7 @@ class InputNode(BaseNode):
             if file_parse_mode == ParseModeEnum.KEEP_RAW:
                 continue
 
-            file_name, file_path, texts, metadatas = self.get_upload_file_path_content(one_file_url)
+            texts, metadatas = self.get_upload_file_path_content(one_file_url)
             if file_content_length < file_content_max_size:
                 file_content = "\n".join(texts)
                 file_content = file_content[:file_content_max_size - file_content_length]
@@ -317,13 +321,7 @@ class InputNode(BaseNode):
             # A file corresponding to the same variable, placed in a file_id mile
             for one in metadatas:
                 metadata = one.model_dump()
-                metadata.update({
-                    'document_id': file_id,
-                    'document_name': file_name,
-                    'knowledge_id': self.workflow_id,
-                    'upload_time': int(time.time()),
-                    'bbox': '',  # Temporary files cannot be traced because the source files are not persisted
-                })
+                metadata.update(all_metadata[-1])
                 new_metadata.append(metadata)
 
             # Uploaded to milvus And es
@@ -334,7 +332,7 @@ class InputNode(BaseNode):
             self._es_client.add_texts(texts=texts, metadatas=new_metadata)
 
             logger.debug(f'workflow_record_file_metadata file={key} file_name={file_name}')
-            all_metadata.append(new_metadata[0])
+            all_metadata[-1] = new_metadata[0]
         # Documentation metadata, other nodes according to metadataData to retrieve corresponding files
         return {
             key_info['key']: all_metadata,

@@ -184,7 +184,8 @@
   "parseResultName":"Parse result variable name",
   "selectFile":"Please select file processing strategy",
   "fileProcessingStrategy":"File processing strategy",
-  "fileProcessingStrategyTip":"Select how to process user uploaded files:· Parse file content: Extract file text, which can provide context for subsequent nodes such as large language models.· Files will be uploaded to a temporary knowledge base and can be used in the 'Document Knowledge Base Q&A' node.· Do not parse: Preserve the original files, which can be processed by multimodal models or code nodes",
+  "fileProcessingStrategyTip":"Choose how to handle user-uploaded files:\n· Parse file content: Extract text from files to provide context for subsequent nodes like large language models.\n· Do not parse: Keep original files for processing by multimodal models or code nodes.",
+  "dialogProcessingStrategyTip": "Choose how to handle user-uploaded files:\n· Parse file content: Extract text from files to provide context for subsequent nodes like large language models.\n· Do not parse: Files will be uploaded to a temporary knowledge base and can be used in 'Document Knowledge Base Q&A' nodes.\n· Do not parse: Keep original files for processing by multimodal models or code nodes.",
   "tempKnowledgeBaseName": "Temporary knowledge base name",
   "tempKnowledgeBaseNameTip": "Files will be uploaded to a temporary knowledge base with this name and can be used in Document QA, Assistant, and other nodes",
   "fileContentVarName": "File content variable name",
@@ -310,7 +311,8 @@
         "help": "Based on conversation history, predict possible user input and display it in the conversation"
       },
       "recommended_llm": {
-        "label": "Model"
+        "label": "Model",
+        "placeholder":"Please select a model"
       },
       "recommended_system_prompt": {
         "label": "Prompt",

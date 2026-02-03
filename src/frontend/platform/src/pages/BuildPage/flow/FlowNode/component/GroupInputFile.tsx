@@ -45,20 +45,6 @@ export default function GroupInputFile({ nodeId, node, cate, tab,
     const [fileStrategy, setFileStrategy] = useState<FileParseMode>(parsemodeItem.value)
     const [selectedFileType, setSelectedFileType] = useState<any>(null)
 
-    // 初始化
-    useEffect(() => {
-        // 初始化文件处理策略
-        if (filePathItem && filePathItem.value && Object.keys(filePathItem.value).length > 0) {
-            setFileStrategy(FileParseMode.KeepRaw)
-        } else {
-            setFileStrategy(FileParseMode.ExtractText)
-        }
-
-        // 初始化文件类型
-        if (fileTypeItem?.value) {
-            setSelectedFileType(fileTypeItem.value)
-        }
-    }, [filePathItem, fileTypeItem])
 
     // 处理文件策略变化
     const handleStrategyChange = (value: FileParseMode.ExtractText | FileParseMode.KeepRaw) => {

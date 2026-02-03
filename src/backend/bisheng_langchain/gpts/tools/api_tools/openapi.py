@@ -2,10 +2,9 @@ from typing import Any, Optional
 
 from langchain_core.tools import BaseTool
 from loguru import logger
-from pydantic import BaseModel, create_model
 
 from bisheng_langchain.utils.openapi import convert_openapi_field_value
-from .base import APIToolBase, Field, MultArgsSchemaTool
+from .base import APIToolBase, MultArgsSchemaTool
 
 
 class OpenApiTools(APIToolBase):
@@ -58,50 +57,56 @@ class OpenApiTools(APIToolBase):
         return params, json_data, path_params
 
     def parse_args_schema(self):
+        args_schema = {
+            "type": "object",
+            "properties": {},
+            "required": []
+        }
         params = self.params['parameters']
-        model_params = {}
         for one in params:
+            if one.get('required'):
+                args_schema['required'].append(one['name'])
             field_type = one['schema']['type']
-            if field_type == 'number':
-                field_type = float
-            elif field_type == 'integer':
-                field_type = int
-            elif field_type == 'string':
-                field_type = str
-            elif field_type == 'boolean':
-                field_type = bool
+            if field_type in ['number', 'integer', 'string', 'boolean']:
+                field_info = {
+                    "type": field_type,
+                    "description": one['description']
+                }
             elif field_type == 'array':
-                field_type = list
+                field_info = {
+                    "type": field_type,
+                    "items": one['schema'].get('items', {}).get('type', 'string'),
+                    "description": one['description']
+                }
             elif field_type in {'object', 'dict'}:
-                param_object_param = {}
+                field_info = {
+                    "type": "object",
+                    "description": one['description'],
+                    "properties": {}
+                }
                 for param in one['schema']['properties'].keys():
                     field_type = one['schema']['properties'][param]['type']
-                    if field_type == 'number':
-                        field_type = float
-                    elif field_type == 'integer':
-                        field_type = int
-                    elif field_type == 'string':
-                        field_type = str
-                    elif field_type == 'boolean':
-                        field_type = bool
+                    if field_type in ['number', 'integer', 'string', 'boolean']:
+                        object_field_info = {
+                            "type": field_type,
+                            "description": one['description']
+                        }
                     elif field_type == 'array':
-                        field_type = list
-                    param_object_param[param] = (
-                        field_type,
-                        Field(default_factory=field_type,
-                              description=one['schema']['properties'][param]['description']))
-                param_model = create_model(
-                    param,
-                    __module__='bisheng_langchain.gpts.tools.api_tools.openapi',
-                    **param_object_param)
-                field_type = param_model
+                        object_field_info = {
+                            "type": field_type,
+                            "items": one['schema'].get('items', {}).get('type', 'string'),
+                            "description": one['description']
+                        }
+                    else:
+                        object_field_info = {
+                            "type": field_type,
+                            "description": one['description']
+                        }
+                    field_info["properties"][param] = object_field_info
             else:
                 raise Exception(f'schema type is not support: {field_type}')
-            model_params[one['name']] = (field_type, Field(default_factory=field_type, description=one['description']))
-        return create_model('InputArgs',
-                            __module__='bisheng_langchain.gpts.tools.api_tools.openapi',
-                            __base__=BaseModel,
-                            **model_params)
+            args_schema[one['name']] = field_info
+        return args_schema
 
     def run(self, **kwargs) -> str:
         """Run query through api and parse result."""
