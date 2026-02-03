@@ -316,7 +316,7 @@ const workflowTemplate = [
                         "help": "true"
                     },
                     {
-                        "key": "dialog_file_path",
+                        "key": "dialog_file_paths",
                         "global": "key",
                         "label": "true",
                         "type": "var",
