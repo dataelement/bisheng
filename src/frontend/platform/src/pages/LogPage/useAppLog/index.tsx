@@ -234,7 +234,7 @@ export default function AppUseLog() {
                     const usefulMsg = !['flow', 'tool_call', 'tool_result'].includes(category) && message
                     usefulMsg && data.push([
                         item.chat_id,
-                        item.flow_name,
+                        item.flow_type === 15 ? t('log.workbench_daily') : item.flow_name,
                         item.create_time.replace('T', ' '),
                         item.user_name,
                         msg.category === 'question' ? t('log.userRole') : t('log.aiRole'),
