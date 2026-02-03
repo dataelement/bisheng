@@ -117,21 +117,20 @@ export default function DataTableKnowledge<TData, TValue>({
           formData.append('filename', file.name);
         }
       });
+      const fileList = repeatFiles.map(repeatFile => ({
+        file_path: repeatFile.file_path,
+        excel_rule: repeatFile.fileType === 'file' ? {} : {
+          "append_header": true,
+          "header_end_row": 1,
+          "header_start_row": 1,
+          "slice_length": 10
+        }
+      }));
 
-      for (let [key, value] of formData.entries()) {
-        console.log(key, value);
-      }
+      // 一次上传所有重复文件
       const params = {
         knowledge_id: infoId,
-        file_list: files.map(file => ({
-          file_path: fileUrl,
-          excel_rule: file.fileType === 'file' ? {} : {
-            "append_header": true,
-            "header_end_row": 1,
-            "header_start_row": 1,
-            "slice_length": 10
-          }
-        })),
+        file_list: fileList, // 数组，包含多个重复文件
         separator: ["\n\n", "\n"],
         separator_rule: ["after", "after"],
         chunk_size: 1000,
@@ -140,23 +139,19 @@ export default function DataTableKnowledge<TData, TValue>({
         enable_formula: true,
         force_ocr: true,
         fileter_page_header_footer: true
-      }
+      };
 
-      const file = await dataService.subUploadLibFile(params);
-      const file_objs = {
-        file_objs: file.data
-      }
-      const res = await dataService.retryUpload(file_objs);
+      const uploadRes = await dataService.subUploadLibFile(params);
 
-      if (res.status_code === 200) {
+      if (uploadRes.status_code === 200) {
         showToast({
-          message: localize('com_tools_file_upload'),
+          message: localize('com_tools_file_upload_success', { count: repeatFiles.length }),
           severity: NotificationSeverity.SUCCESS,
         });
         onUpload();
       } else {
         showToast({
-          message: res.status_message || localize('com_tools_file_upload_failed'),
+          message: uploadRes.status_message || localize('com_tools_file_upload_failed'),
           severity: NotificationSeverity.ERROR,
         });
       }
@@ -178,6 +173,9 @@ export default function DataTableKnowledge<TData, TValue>({
     setLoading(true);
     const files = Array.from(event.target.files);
 
+    // 在函数作用域内声明 duplicateFiles
+    let duplicateFiles = [];
+
     if (!files || files.length === 0) {
       setLoading(false);
       return;
@@ -185,8 +183,8 @@ export default function DataTableKnowledge<TData, TValue>({
     setPendingFiles(files.map(file => ({ file, name: file.name })));
 
     try {
-      const duplicateFiles = [];
       const nonDuplicateFiles = [];
+      duplicateFiles = []; // 重置
 
       for (const file of files) {
         const formData = new FormData();
@@ -194,15 +192,20 @@ export default function DataTableKnowledge<TData, TValue>({
         formData.append('file', file);
 
         const repeatCheckRes = await dataService.repeatUpload(formData, infoId);
-        setFileUrl(repeatCheckRes.data.file_path);
+
         if (repeatCheckRes.data?.repeat === true) {
           duplicateFiles.push({
             file,
             name: file.name,
-            data: repeatCheckRes.data
+            data: repeatCheckRes.data,
+            file_path: repeatCheckRes.data.file_path,
           });
         } else {
-          nonDuplicateFiles.push(file);
+          nonDuplicateFiles.push({
+            file,
+            name: file.name,
+            file_path: repeatCheckRes.data.file_path,
+          });
         }
       }
 
@@ -210,42 +213,60 @@ export default function DataTableKnowledge<TData, TValue>({
         setRepeatFiles(duplicateFiles.map(item => ({
           id: item.name,
           remark: localize('com_tools_knowledge_upload_remark'),
-          file_path: item.data.file_path,
+          file_path: item.file_path,
           fileType: 'file',
           file: item.file,
         })));
-
-        return;
       }
 
       if (nonDuplicateFiles.length > 0) {
         let hasError = false;
 
-        for (const file of nonDuplicateFiles) {
-          const formData = new FormData();
-          formData.append('filename', file.name);
-          formData.append('file', file);
-
-          const uploadRes = await dataService.knowledgeUpload(formData);
-
-          if (uploadRes.status_code === 500) {
-            showToast({
-              message: `${file.name}: ${uploadRes.status_message}`,
-              severity: NotificationSeverity.ERROR,
-            });
-            hasError = true;
-          } else if (uploadRes.data?.remark) {
-            showToast({
-              message: `${file.name}: ${localize('com_tools_knowledge_upload_remark')}`,
-              severity: NotificationSeverity.ERROR,
-            });
-            hasError = true;
+        // 修改这里：将多个文件合并成一个数组上传
+        const fileList = nonDuplicateFiles.map(fileInfo => ({
+          file_path: fileInfo.file_path,
+          excel_rule: fileInfo.file.type === 'file' ? {} : {
+            "append_header": true,
+            "header_end_row": 1,
+            "header_start_row": 1,
+            "slice_length": 10
           }
+        }));
+
+        // 一次上传所有非重复文件
+        const params = {
+          knowledge_id: infoId,
+          file_list: fileList, // 这里是数组，包含多个文件
+          separator: ["\n\n", "\n"],
+          separator_rule: ["after", "after"],
+          chunk_size: 1000,
+          chunk_overlap: 100,
+          retain_images: true,
+          enable_formula: true,
+          force_ocr: true,
+          fileter_page_header_footer: true
+        };
+
+        const uploadRes = await dataService.subUploadLibFile(params);
+
+        if (uploadRes.status_code === 500) {
+          // 如果有错误，尝试解析哪些文件失败了
+          showToast({
+            message: localize('com_tools_file_upload_partial_error'),
+            severity: NotificationSeverity.ERROR,
+          });
+          hasError = true;
+        } else if (uploadRes.data?.remark) {
+          showToast({
+            message: uploadRes.data.remark || localize('com_tools_knowledge_upload_remark'),
+            severity: NotificationSeverity.ERROR,
+          });
+          hasError = true;
         }
 
         if (!hasError) {
           showToast({
-            message: localize('com_tools_file_upload'),
+            message: localize('com_tools_file_upload_success', { count: nonDuplicateFiles.length }),
             severity: NotificationSeverity.SUCCESS,
           });
           onUpload();
@@ -255,11 +276,11 @@ export default function DataTableKnowledge<TData, TValue>({
     } catch (error) {
       console.error('com_tools_file_upload_failed:', error);
       showToast({
-        message: 'com_tools_file_upload_failed: ' + error.message,
+        message: localize('com_tools_file_upload_failed') + ': ' + error.message,
         severity: NotificationSeverity.ERROR,
       });
     } finally {
-      if (repeatFiles.length === 0) {
+      if (duplicateFiles.length === 0) {
         setLoading(false);
       }
     }

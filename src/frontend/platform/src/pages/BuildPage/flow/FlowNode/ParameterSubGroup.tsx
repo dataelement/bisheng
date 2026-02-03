@@ -3,7 +3,7 @@ import GroupInputFile from "./component/GroupInputFile";
 import Parameter from "./Parameter";
 import { useTranslation } from "react-i18next";
 import { Switch } from "@/components/bs-ui/switch";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 
 type category = WorkflowNode['group_params'][number]
@@ -37,7 +37,18 @@ const CustomGroup = ({ nodeId, node, cate, tab,
 
     const titleItem = useMemo(() => cate.params.find(item => item.groupTitle), [cate.params])
     const [open, setOpen] = useState(titleItem.value)
+    const validateCallbackRef = useRef(null)
+    useEffect(() => {
+        if (!validateCallbackRef.current) return
+        const [key, obj] = validateCallbackRef.current
+        if (open) {
+            onStatusChange(key, obj);
+        } else {
+            // onStatusChange();
+            onStatusChange(key, { param: obj.param, validate: () => false });
 
+        }
+    }, [open])
     return <div className="px-4 py-2 border-t">
         <div className="mt-2 mb-3 flex justify-between items-center">
             <div className="flex gap-1 items-center">
@@ -61,7 +72,9 @@ const CustomGroup = ({ nodeId, node, cate, tab,
                     key={item.key}
                     item={item}
                     onOutPutChange={onOutPutChange}
-                    onStatusChange={onStatusChange}
+                    onStatusChange={(item, obj) => {
+                        validateCallbackRef.current = ([item, obj])
+                    }}
                     onVarEvent={onVarEvent}
                     onFouceUpdate={onFouceUpdate}
                     onAddSysPrompt={onAddSysPrompt}
