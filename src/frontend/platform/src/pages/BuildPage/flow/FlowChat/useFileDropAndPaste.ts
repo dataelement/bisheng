@@ -11,6 +11,9 @@ export const useFileDropAndPaste = ({ enabled, onFilesReceived }) => {
         const handleDragEnter = (e) => {
             e.preventDefault();
             e.stopPropagation();
+            if (e.dataTransfer.types.includes("application/my-app-internal")) {// 防止触发拖拽上传
+                return;
+            }
             dragCounter.current += 1;
             // vailte file type
             if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {

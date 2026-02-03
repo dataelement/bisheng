@@ -132,24 +132,30 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
         let counter = 1;
         let initialFileContentCounter = 1;
         let initialFilePathCounter = 1;
-        let initialFileImageCounter = 1
+        let initialFileImageCounter = 1;
+
         while (existingOptions?.some(opt => opt.key === initialVarName)) {
             counter += 1;
             initialVarName = `${names[formData.formType]}${counter}`;
         }
-        const fileOtions = existingOptions?.filter(opt => opt.type === FormType.File)
+
+        const fileOtions = existingOptions?.filter(opt => opt.type === FormType.File);
+
         while (fileOtions?.some(opt => opt.file_content === initialFileContent)) {
             initialFileContentCounter += 1;
             initialFileContent = `file_content${initialFileContentCounter}`;
         }
+
         while (fileOtions?.some(opt => opt.file_path === initialFilePath)) {
             initialFilePathCounter += 1;
             initialFilePath = `file_path${initialFilePathCounter}`;
         }
+
         while (fileOtions?.some(opt => opt.image_file === initialFileImage)) {
             initialFileImageCounter += 1;
             initialFileImage = `image_file${initialFileImageCounter}`;
         }
+
         // 变量重命名
         setFormData((prevData) => ({
             ...prevData,
@@ -158,8 +164,7 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
             filepath: initialFilePath,
             imageFile: initialFileImage
         }));
-    }, [initialData, formData.formType])
-
+    }, [initialData, existingOptions])
     const validateForm = () => {
         const newErrors: any = {};
 
@@ -313,12 +318,41 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
             if (oldFormTypeRef.current === formType) {
                 setFormData({ ...formData, formType, variableName: oldVarNameRef.current, displayName })
             } else {
-                let counter = 1;
-                let initialVarName = names[formType];
-                while (existingOptions?.some(opt => opt.key === initialVarName)) {
-                    counter += 1;
-                    initialVarName = `${names[formType]}${counter}`;
-                }
+                const getNextAvailableName = (baseName, existingValues) => {
+                    let counter = 1;
+                    let name = baseName;
+
+                    if (!existingValues.some(opt => opt.key === baseName)) {
+                        return name;
+                    }
+
+                    const regex = new RegExp(`^${baseName}(\\d+)$`);
+                    let maxCounter = 0;
+
+                    existingValues.forEach(opt => {
+                        if (opt.key) {
+                            const match = opt.key.match(regex);
+                            if (match) {
+                                const num = parseInt(match[1]);
+                                if (num > maxCounter) {
+                                    maxCounter = num;
+                                }
+                            }
+                        }
+                    });
+
+                    counter = maxCounter + 1;
+                    name = `${baseName}${counter}`;
+
+                    while (existingValues.some(opt => opt.key === name)) {
+                        counter += 1;
+                        name = `${baseName}${counter}`;
+                    }
+
+                    return name;
+                };
+
+                let initialVarName = getNextAvailableName(names[formType], existingOptions || []);
                 setFormData({ ...formData, formType, variableName: initialVarName, displayName })
             }
         }
@@ -326,12 +360,7 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
 
     // 处理文件类型变化
     const handleFileTypeChange = (fileType) => {
-        // 当文件类型从 all 变为其他时，重置处理策略为默认值
-        if (formData.fileType === 'all' && fileType !== 'all') {
-            setFormData({ ...formData, fileType, processingStrategy: FileProcessingStrategy.TempKnowledge });
-        } else {
-            setFormData({ ...formData, fileType });
-        }
+        setFormData({ ...formData, fileType });
         // 清空相关错误
         setErrors({});
     }
@@ -542,7 +571,13 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
         <div>
             <Label className="flex items-center bisheng-label">
                 {t("fileProcessingStrategy")}
-                <QuestionTooltip content={t("fileProcessingStrategyTip")} />
+                <QuestionTooltip
+                    content={
+                        <div className="whitespace-pre-line">
+                            {t("fileProcessingStrategyTip")}
+                        </div>
+                    }
+                />
             </Label>
             <Select
                 value={formData.processingStrategy}
@@ -739,47 +774,70 @@ export default function InputFormItem({ data, nodeId, onChange, onValidate, onVa
         } = _data;
 
         const multiple = type === FormType.File ? isMultiple : allowMultiple;
+
+        // 根据文件类型和处理策略清理字段
+        let cleanedImageFile = image_file;
+        let cleanedFileContent = file_content;
+        let cleanedFilePath = file_path;
+        let cleanedFileContentSize = file_content_size;
+
+        if (type === FormType.File) {
+            if (file_type === 'file') {
+                // 文档类型：清空图片相关字段
+                cleanedImageFile = '';
+            }
+
+            // 根据处理策略清理字段
+            if (file_parse_mode === FileProcessingStrategy.TempKnowledge) {
+                // 临时知识库：只保留key，清空其他文件相关字段
+                cleanedFileContent = '';
+                cleanedFilePath = '';
+                cleanedImageFile = '';
+                cleanedFileContentSize = 0;
+            } else if (file_parse_mode === FileProcessingStrategy.ParseContent) {
+                // 解析文件内容：清空图片和路径字段
+                cleanedImageFile = '';
+                cleanedFilePath = '';
+            } else if (file_parse_mode === FileProcessingStrategy.OriginalFile) {
+                // 不解析：清空解析内容字段
+                cleanedFileContent = '';
+                cleanedFileContentSize = 0;
+            }
+        }
+
+        // 创建新的表单项对象
+        const newItem = {
+            key,
+            type,
+            value,
+            required,
+            multiple,
+            options,
+            file_content: cleanedFileContent,
+            file_path: cleanedFilePath,
+            file_type,
+            file_content_size: cleanedFileContentSize,
+            image_file: cleanedImageFile,
+            file_parse_mode
+        };
+
+        let newValue;
+
         if (editKey) {
-            // 编辑模式，更新表单项
-            data.value = data.value.map((opt) =>
-                opt.key === editKey
-                    ? {
-                        key,
-                        type,
-                        value,
-                        required,
-                        multiple,
-                        options,
-                        file_content,
-                        file_path,
-                        file_type,
-                        file_content_size,
-                        image_file,
-                        file_parse_mode
-                    }
-                    : opt
+            // 编辑模式：更新表单项
+            newValue = data.value.map((opt) =>
+                opt.key === editKey ? newItem : opt
             );
         } else {
-            // 新建模式，添加表单项
-            data.value = [...data.value, {
-                key,
-                type,
-                value,
-                required,
-                multiple,
-                file_content,
-                file_path,
-                file_type,
-                options,
-                file_content_size,
-                image_file,
-                file_parse_mode
-            }];
+            // 新建模式：添加表单项
+            newValue = [...data.value, newItem];
             setTimeout(() => {
                 scrollRef.current?.scrollTo(0, scrollRef.current?.scrollHeight); // 滚动到底部
             }, 0);
         }
-        onChange(data.value);
+
+        // 通过 onChange 回调更新数据
+        onChange(newValue);
         setFoucsUpdate(!foucsUpdate);
         setIsOpen(false); // 关闭弹窗
     };
@@ -793,10 +851,12 @@ export default function InputFormItem({ data, nodeId, onChange, onValidate, onVa
 
     // 更新 DragOptions 的顺序变化
     const handleOptionsChange = (newOptions) => {
-        data.value = newOptions.map((el) => {
-            return data.value.find((op) => op.key === el.key);
-        });
-        onChange(data.value);
+        const newValue = newOptions
+            .map((el) => data.value.find((op) => op.key === el.key))
+            .filter(Boolean);
+
+        // 通过 onChange 更新数据
+        onChange(newValue);
     };
 
     // 校验逻辑
@@ -823,8 +883,33 @@ export default function InputFormItem({ data, nodeId, onChange, onValidate, onVa
                 })
             }
 
-            // 为文件类型添加处理策略信息
-            let text = '';
+            // 构建变量列表
+            let variableList = el.key;
+
+            if (el.type === 'file') {
+                // 文件类型需要显示所有相关变量
+                const variableParts = [];
+
+                // 根据处理策略添加不同的变量
+                if (el.file_parse_mode === FileProcessingStrategy.TempKnowledge) {
+                    variableParts.push(el.key);
+                } else if (el.file_parse_mode === FileProcessingStrategy.ParseContent) {
+                    if (el.file_content) variableParts.push(el.file_content);
+                } else if (el.file_parse_mode === FileProcessingStrategy.OriginalFile) {
+                    if (el.file_path) variableParts.push(el.file_path);
+                    if (el.image_file && (el.file_type === 'all' || el.file_type === 'image')) {
+                        variableParts.push(el.image_file);
+                    }
+                }
+
+                if (variableParts.length > 0) {
+                    variableList = variableParts.join(', ');
+                }
+            }
+
+            let text = `${el.value}（${variableList}）`;
+
+            // 如果需要还可以添加处理策略信息（可选）
             if (el.type === 'file') {
                 let strategyText = '';
                 if (el.file_parse_mode === FileProcessingStrategy.TempKnowledge) {
@@ -834,9 +919,6 @@ export default function InputFormItem({ data, nodeId, onChange, onValidate, onVa
                 } else if (el.file_parse_mode === FileProcessingStrategy.OriginalFile) {
                     strategyText = t("notParse");
                 }
-                text = `${el.value}(${el.key}, ${strategyText})`;
-            } else {
-                text = `${el.value}(${el.key})`;
             }
 
             return {

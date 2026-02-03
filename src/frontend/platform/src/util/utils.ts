@@ -170,9 +170,12 @@ export function exportCsv(
     const ws = XLSX.utils.aoa_to_sheet(newData);
     const csv = XLSX.utils.sheet_to_csv(ws);
 
+    const BOM = '\uFEFF';
+    const csvWithBOM = BOM + csv;
+
     if (useBase64) {
         // 处理Unicode字符并转换为Base64
-        const base64String = btoa(unescape(encodeURIComponent(csv)));
+        const base64String = btoa(unescape(encodeURIComponent(csvWithBOM)));
         // 创建Data URL（使用base64编码避免URL编码问题）
         const csvContent = `data:text/csv;charset=utf-8;base64,${base64String}`;
 

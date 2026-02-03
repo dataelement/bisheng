@@ -254,7 +254,7 @@ const comptibleInput = (node) => {
                 "params": [
                     {
                         "groupTitle": true,
-                        "key": "user_inputfile",
+                        "key": "user_input_file",
                         "tab": "dialog_input",
                         "value": true
                     },
@@ -266,17 +266,17 @@ const comptibleInput = (node) => {
                     },
                     {
                         ...filesContent,
-                        "global": "item:group_input_file" // v3 中变更为 item:group_input_file
+                        "global": "key" // v3 中变更为 var
                     },
                     filesSize,
                     fileAccept,
                     {
                         ...imageFiles,
-                        "global": "item:group_input_file" // v3 中变更为 item:group_input_file
+                        "global": "key" // v3 中变更为 var
                     },
                     {
-                        "key": "dialog_file_path",
-                        "global": "item:group_input_file",
+                        "key": "dialog_file_paths",
+                        "global": "key",
                         "label": "true",
                         "type": "var",
                         "tab": "dialog_input",
@@ -305,7 +305,6 @@ const comptibleInput = (node) => {
                         "tab": "dialog_input",
                         "value": "",
                         "required": true,
-                        "placeholder": "true"
                     },
                     {
                         "key": "recommended_system_prompt",
@@ -313,7 +312,6 @@ const comptibleInput = (node) => {
                         "tab": "dialog_input",
                         "type": "var_textarea",
                         "value": "true",
-                        "placeholder": "true",
                         "required": true
                     },
                     {

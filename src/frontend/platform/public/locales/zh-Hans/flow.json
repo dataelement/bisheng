@@ -185,7 +185,7 @@
   "parseResultName":"解析结果变量名称",
   "selectFile":"请选择文件处理策略",
   "fileProcessingStrategy":"文件处理策略",
-  "fileProcessingStrategyTip":"选择如何处理用户上传的文件：· 解析文件内容：提取文件文本，后续可为大模型等节点提供上下文。· 不解析：保留原始文件，后续可被多模态模型或者代码节点处理。",
+  "fileProcessingStrategyTip": "选择如何处理用户上传的文件：\n· 解析文件内容：提取文件文本，后续可为大模型等节点提供上下文。\n· 不解析：保留原始文件，后续可被多模态模型或者代码节点处理。",
   "tempKnowledgeBaseName": "临时知识库名称",
   "tempKnowledgeBaseNameTip": "文件将会上传到以此命名的临时知识库中，可在文档知识库问答、助手等节点中使用",
   "fileContentVarName": "文件内容变量名称",
@@ -303,7 +303,7 @@
       "name": "输入",
       "接收文本": "接收文本",
       "description": "接收用户在会话页面的输入，支持 2 种形式：对话框输入，表单输入。",
-      "user_inputfile":{
+      "user_input_file":{
         "label": "接收文件"
       },
       "recommended_questions_flag": {

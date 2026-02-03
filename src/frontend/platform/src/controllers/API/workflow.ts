@@ -275,7 +275,7 @@ const workflowTemplate = [
                 "params": [
                     {
                         "groupTitle": true,
-                        "key": "user_inputfile",
+                        "key": "user_input_file",
                         "tab": "dialog_input",
                         "value": true
                     },
@@ -287,7 +287,7 @@ const workflowTemplate = [
                     },
                     {
                         "key": "dialog_files_content",
-                        "global": "item:group_input_file",
+                        "global": "key",
                         "label": "true",
                         "type": "var",
                         "tab": "dialog_input"
@@ -309,15 +309,15 @@ const workflowTemplate = [
                     },
                     {
                         "key": "dialog_image_files",
-                        "global": "item:group_input_file",
+                        "global": "key",
                         "label": "true",
                         "type": "var",
                         "tab": "dialog_input",
                         "help": "true"
                     },
                     {
-                        "key": "dialog_file_path",
-                        "global": "item:group_input_file",
+                        "key": "dialog_file_paths",
+                        "global": "key",
                         "label": "true",
                         "type": "var",
                         "tab": "dialog_input",
@@ -345,7 +345,6 @@ const workflowTemplate = [
                         "tab": "dialog_input",
                         "value": "",
                         "required": true,
-                        "placeholder": "true"
                     },
                     {
                         "key": "recommended_system_prompt",
@@ -353,7 +352,6 @@ const workflowTemplate = [
                         "tab": "dialog_input",
                         "type": "var_textarea",
                         "value": "true",
-                        "placeholder": "true",
                         "required": true
                     },
                     {

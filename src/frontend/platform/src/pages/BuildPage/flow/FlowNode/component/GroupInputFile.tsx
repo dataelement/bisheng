@@ -64,63 +64,82 @@ export default function GroupInputFile({ nodeId, node, cate, tab,
     const handleStrategyChange = (value: FileParseMode.ExtractText | FileParseMode.KeepRaw) => {
         setFileStrategy(value)
 
+        // 更新文件处理策略参数
+        if (parsemodeItem) {
+            parsemodeItem.value = value;
+        }
+
         // 重置相关变量值
         if (value === FileParseMode.ExtractText) {
-
             // 解析模式：启用解析结果长度配置
             if (sizeItem) {
-                sizeItem.value = sizeItem.value || 1000
+                sizeItem.value = sizeItem.value || 1000;
             }
             // 清空文件路径变量
             if (filePathItem) {
-                filePathItem.value = filePathItem.value || {}
+                filePathItem.value = filePathItem.value || {};
             }
             // 清空图片文件变量
             if (imageFileItem) {
-                imageFileItem.value = imageFileItem.value || {}
+                imageFileItem.value = imageFileItem.value || {};
             }
         } else {
             // 原始文件模式：设置文件路径变量
             if (filePathItem) {
-                filePathItem.value = filePathItem.value || {}
+                filePathItem.value = filePathItem.value || {};
             }
             // 设置图片文件变量（如果文件类型不是文档）
             if (imageFileItem && selectedFileType !== 'file') {
-                imageFileItem.value = imageFileItem.value || {}
+                imageFileItem.value = imageFileItem.value || {};
             }
             // 禁用解析结果长度配置
             if (sizeItem) {
-                sizeItem.value = sizeItem.value || 0
+                sizeItem.value = sizeItem.value || 0;
             }
         }
-
-        parsemodeItem.value = value
-        // onFouceUpdate()
+        if (onFouceUpdate) {
+            onFouceUpdate();
+        }
     }
 
     // 处理文件类型变化
     const handleFileTypeChange = (val: any) => {
         setSelectedFileType(val)
+
+        // 更新文件类型参数
+        if (fileTypeItem) {
+            fileTypeItem.value = val;
+        }
+
         // 更新图片文件变量隐藏状态
         if (imageFileItem) {
-            imageFileItem.hidden = val === 'file'
+            imageFileItem.hidden = val === 'file';
+
             // 如果切换到文档类型且当前是原始文件模式，清空图片文件变量
             if (val === 'file' && fileStrategy === FileParseMode.KeepRaw) {
-                imageFileItem.value = {}
+                imageFileItem.value = {};
             }
             // 如果切换到非文档类型且当前是原始文件模式，设置图片文件变量
             if (val !== 'file' && fileStrategy === FileParseMode.KeepRaw && !imageFileItem.value) {
-                imageFileItem.value = {}
+                imageFileItem.value = {};
             }
         }
-        // onFouceUpdate()
+
+        if (onFouceUpdate) {
+            onFouceUpdate();
+        }
     }
 
     // 处理开关变化
     const handleSwitchToggle = (checked: boolean) => {
-        titleItem.value = checked
-        setOpen(checked)
-        // onFouceUpdate()
+        if (titleItem) {
+            titleItem.value = checked;
+        }
+        setOpen(checked);
+
+        if (onFouceUpdate) {
+            onFouceUpdate();
+        }
     }
 
     return <div className="px-4 py-2 border-t">
@@ -152,7 +171,13 @@ export default function GroupInputFile({ nodeId, node, cate, tab,
                 <div className="node-item flex gap-4 items-center mb-4">
                     <Label className="bisheng-label min-w-28 flex items-center gap-1">
                         {t("fileProcessingStrategy")}
-                        <QuestionTooltip content={t("fileProcessingStrategyTip")} />
+                        <QuestionTooltip
+                            content={
+                                <div className="whitespace-pre-line">
+                                    {t("fileProcessingStrategyTip")}
+                                </div>
+                            }
+                        />
                     </Label>
                     <Select value={fileStrategy} onValueChange={handleStrategyChange}>
                         <SelectTrigger className="w-full">
@@ -182,19 +207,18 @@ export default function GroupInputFile({ nodeId, node, cate, tab,
 
             {/* 动态输出变量 */}
             <div className="space-y-3">
-
                 {fileStrategy === FileParseMode.ExtractText ? (
                     // 情况3：选择解析 - 显示解析相关配置
                     <>
-
                         {sizeItem && (
                             <InputItem
                                 char
                                 type='number'
                                 data={sizeItem}
                                 onChange={(val) => {
-                                    sizeItem.value = val
-                                    // onFouceUpdate()
+                                    sizeItem.value = val;
+                                    // onStatusChange(sizeItem.key, { param: sizeItem });
+                                    if (onFouceUpdate) onFouceUpdate();
                                 }}
                                 i18nPrefix={`node.${node.type}.${sizeItem.key}.`}
                             />
@@ -239,7 +263,6 @@ export default function GroupInputFile({ nodeId, node, cate, tab,
                                 dialog_file_paths
                             </Badge>
                         </div>
-
                     </>
                 )}
             </div>

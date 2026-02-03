@@ -303,7 +303,7 @@
       "name": "入力",
       "接收文本": "テキスト受信",
       "description": "ユーザーが会話ページで入力する内容を受け取ります。2種類の形式に対応しています：ダイアログ入力、フォーム入力。",
-      "user_inputfile":{
+      "user_input_file":{
         "label": "ファイル受信"
       },
       "recommended_questions_flag": {

@@ -62,7 +62,7 @@ export default function DailyChatDetail() {
                                 onClick={() => window.history.back()}
                             ><ArrowLeft className="side-bar-button-size" /></Button>
                         </ShadTooltip>
-                        <span className=" text-gray-700 text-sm font-black pl-4">{title}</span>
+                        <span className=" text-gray-700 text-sm font-black pl-4">{t('log.detailedSession')}</span>
                     </div>
                 </div>
 
