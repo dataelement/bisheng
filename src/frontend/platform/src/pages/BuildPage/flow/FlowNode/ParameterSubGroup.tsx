@@ -37,17 +37,16 @@ const CustomGroup = ({ nodeId, node, cate, tab,
 
     const titleItem = useMemo(() => cate.params.find(item => item.groupTitle), [cate.params])
     const [open, setOpen] = useState(titleItem.value)
-    const validateCallbackRef = useRef(null)
+    const validatesCallbackRef = useRef({})
+    // Intercept Node Verification
     useEffect(() => {
-        if (!validateCallbackRef.current) return
-        const [key, obj] = validateCallbackRef.current
-        if (open) {
-            onStatusChange(key, obj);
-        } else {
-            // onStatusChange();
-            onStatusChange(key, { param: obj.param, validate: () => false });
-
-        }
+        if (!validatesCallbackRef.current) return
+        Object.keys(validatesCallbackRef.current).forEach(key => {
+            if (validatesCallbackRef.current[key]) {
+                const cacheCallback = validatesCallbackRef.current[key]
+                onStatusChange(key, { param: cacheCallback.param, validate: open ? cacheCallback.validate : () => false })
+            }
+        })
     }, [open])
     return <div className="px-4 py-2 border-t">
         <div className="mt-2 mb-3 flex justify-between items-center">
@@ -72,8 +71,8 @@ const CustomGroup = ({ nodeId, node, cate, tab,
                     key={item.key}
                     item={item}
                     onOutPutChange={onOutPutChange}
-                    onStatusChange={(item, obj) => {
-                        validateCallbackRef.current = ([item, obj])
+                    onStatusChange={(key, obj) => {
+                        validatesCallbackRef.current[key] = obj
                     }}
                     onVarEvent={onVarEvent}
                     onFouceUpdate={onFouceUpdate}
