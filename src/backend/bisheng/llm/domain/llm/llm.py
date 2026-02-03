@@ -15,8 +15,9 @@ from typing_extensions import Self
 from bisheng.common.errcode.server import NoLlmModelConfigError, LlmModelConfigDeletedError, LlmProviderDeletedError, \
     LlmModelTypeError, LlmModelOfflineError, InitLlmError
 from bisheng.core.ai import ChatOllama, ChatOpenAI, ChatOpenAICompatible, \
-    AzureChatOpenAI, ChatTongyi, ChatZhipuAI, MiniMaxChat, ChatAnthropic, MoonshotChat
+    AzureChatOpenAI, ChatZhipuAI, MiniMaxChat, ChatAnthropic, MoonshotChat
 from bisheng.core.ai.llm.custom_chat_deepseek import CustomChatDeepSeek
+from bisheng.core.ai.llm.custom_chat_tongyi import CustomChatTongYi
 from bisheng.llm.domain.const import LLMModelType, LLMServerType
 from bisheng.llm.domain.models import LLMServer, LLMModel
 from .base import BishengBase
@@ -162,7 +163,7 @@ _llm_node_type: Dict = {
     # OfficalapiSERVICES
     LLMServerType.OPENAI.value: {'client': ChatOpenAICompatible, 'params_handler': _get_openai_params},
     LLMServerType.AZURE_OPENAI.value: {'client': AzureChatOpenAI, 'params_handler': _get_azure_openai_params},
-    LLMServerType.QWEN.value: {'client': ChatTongyi, 'params_handler': _get_qwen_params},
+    LLMServerType.QWEN.value: {'client': CustomChatTongYi, 'params_handler': _get_qwen_params},
     LLMServerType.QIAN_FAN.value: {'client': ChatOpenAICompatible, 'params_handler': _get_openai_params},
     LLMServerType.ZHIPU.value: {'client': ChatZhipuAI, 'params_handler': _get_zhipu_params},
     LLMServerType.MINIMAX.value: {'client': MiniMaxChat, 'params_handler': _get_minimax_params},
@@ -314,18 +315,18 @@ class BishengLLM(BishengBase, BaseChatModel):
                                 "name": "$web_search",
                             },
                         })
-        elif self.server_info.type == LLMServerType.QWEN.value:
-            # ChatTongYi The input parameters for multimodality are special and need to be converted to support
-            user_message = messages[-1]
-            if isinstance(user_message, HumanMessage):
-                if isinstance(user_message.content, list):
-                    for one in user_message.content:
-                        if one.get('type') == 'image' and one.get('data'):
-                            one['type'] = 'image'
-                            one['image'] = f"data:{one.get('mime_type')};{one.get('source_type')},{one.get('data')}"
-                        elif one.get('type') == 'image_url' and one.get('image_url'):
-                            one['type'] = 'image'
-                            one['image'] = one.pop('image_url', {}).get('url')
+        # elif self.server_info.type == LLMServerType.QWEN.value:
+        #     # ChatTongYi The input parameters for multimodality are special and need to be converted to support
+        #     user_message = messages[-1]
+        #     if isinstance(user_message, HumanMessage):
+        #         if isinstance(user_message.content, list):
+        #             for one in user_message.content:
+        #                 if one.get('type') == 'image' and one.get('data'):
+        #                     one['type'] = 'image'
+        #                     one['image'] = f"data:{one.get('mime_type')};{one.get('source_type')},{one.get('data')}"
+        #                 elif one.get('type') == 'image_url' and one.get('image_url'):
+        #                     one['type'] = 'image'
+        #                     one['image'] = one.pop('image_url', {}).get('url')
         return messages, kwargs
 
     @wrapper_bisheng_model_limit_check
