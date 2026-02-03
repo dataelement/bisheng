@@ -305,7 +305,6 @@ const comptibleInput = (node) => {
                         "tab": "dialog_input",
                         "value": "",
                         "required": true,
-                        "placeholder": "true"
                     },
                     {
                         "key": "recommended_system_prompt",
