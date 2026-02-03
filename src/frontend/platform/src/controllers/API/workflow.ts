@@ -344,6 +344,7 @@ const workflowTemplate = [
                         "type": "bisheng_model",
                         "tab": "dialog_input",
                         "value": "",
+                        "placeholder": "true",
                         "required": true,
                     },
                     {
