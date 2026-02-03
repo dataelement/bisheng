@@ -1,13 +1,14 @@
 // src/features/chat-config/components/ModelManagement.tsx
 import { TrashIcon } from "@/components/bs-icons";
 import { Button } from "@/components/bs-ui/button";
+import { Checkbox } from "@/components/bs-ui/checkBox";
 import { Input } from "@/components/bs-ui/input";
 import { Label } from "@/components/bs-ui/label";
 import { Switch } from "@/components/bs-ui/switch";
 import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 import { useModel } from "@/pages/ModelPage/manage";
 import { ModelSelect } from "@/pages/ModelPage/manage/tabs/KnowledgeModel";
-import { Plus } from "lucide-react";
+import { Check, Plus } from "lucide-react";
 import { forwardRef } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -52,56 +53,61 @@ export const ModelManagement = forwardRef<HTMLDivElement[], ModelManagementProps
             <div className="grid mb-4 items-center" style={{ gridTemplateColumns: "repeat(2, minmax(0, 320px)) 80px 40px" }}>
                 <Label className="bisheng-label">{t('bench.model')}</Label>
                 <Label className="bisheng-label">{t('bench.displayName')}</Label>
-                <div></div>
-                <div className="flex">
+                <div className="flex items-center justify-center">
                     <Label className="bisheng-label whitespace-nowrap mr-0.5">{t('bench.vision')}</Label>
                     <QuestionTooltip content={t('bench.visionText')} />
                 </div>
+                <div></div>
             </div>
             {models.map((model, index) => (
-                <div key={model.key} className="grid mb-4 items-center"
-                    style={{ gridTemplateColumns: "repeat(2, minmax(0, 320px)) 80px 40px" }}
-                    ref={el => setItemRef(el, index)}
-                >
-                    <div className="pr-2" id={model.id}>
-                        {llmOptions.length > 0 ? <ModelSelect
-                            key={model.id}
-                            label={''}
-                            value={model.id}
-                            options={llmOptions}
-                            onChange={(val) => onModelChange(index, val)}
-                        /> : <ModelSelect
-                            key={'model.id'}
-                            label={''}
-                            value={''}
-                            options={[]}
-                            onChange={(val) => { }}
-                        />}
-                        {errors[model.key] && <p className="text-red-500 text-xs mt-1">{errors[model.key]?.[0]}</p>}
-                    </div>
-                    <div className="pr-2">
-                        <Input
-                            value={model.displayName}
-                            onChange={(e) => onNameChange(index, e.target.value)}
-                            placeholder={t('bench.displayName')}
-                        />
-                        {errors[model.key] && <p className="text-red-500 text-xs mt-1">{errors[model.key]?.[1]}</p>}
+                <div key={model.key} className="flex items-center mb-4">
+                    {/* 主要内容区域 */}
+                    <div className="grid flex-grow items-center mr-4"
+                        style={{ gridTemplateColumns: "repeat(2, minmax(0, 320px)) 80px" }}
+                        ref={el => setItemRef(el, index)}
+                    >
+                        <div className="pr-2" id={model.id}>
+                            {llmOptions.length > 0 ? <ModelSelect
+                                key={model.id}
+                                label={''}
+                                value={model.id}
+                                options={llmOptions}
+                                onChange={(val) => onModelChange(index, val)}
+                            /> : <ModelSelect
+                                key={'model.id'}
+                                label={''}
+                                value={''}
+                                options={[]}
+                                onChange={(val) => { }}
+                            />}
+                            {errors[model.key] && <p className="text-red-500 text-xs mt-1">{errors[model.key]?.[0]}</p>}
+                        </div>
+                        <div className="pr-2">
+                            <Input
+                                value={model.displayName}
+                                onChange={(e) => onNameChange(index, e.target.value)}
+                                placeholder={t('bench.displayName')}
+                            />
+                            {errors[model.key] && <p className="text-red-500 text-xs mt-1">{errors[model.key]?.[1]}</p>}
+                        </div>
+
+                        <div className="flex items-center justify-center">
+                            <Checkbox
+                                checked={model.visual || false}
+                                onCheckedChange={(checked) => {
+                                    if (onVisualToggle) {
+                                        onVisualToggle(index, checked);
+                                    }
+                                }}
+                            />
+                        </div>
                     </div>
 
-                    <div className="flex items-center justify-center">
+                    {/* 删除按钮放在最右边 */}
+                    <div className="flex-shrink-0">
                         <TrashIcon
                             className="text-gray-500 cursor-pointer size-4"
                             onClick={() => onRemove(index)}
-                        />
-                    </div>
-                    <div className="flex items-center justify-center">
-                        <Switch
-                            checked={model.visual || false}
-                            onCheckedChange={(checked) => {
-                                if (onVisualToggle) {
-                                    onVisualToggle(index, checked);
-                                }
-                            }}
                         />
                     </div>
                 </div>
