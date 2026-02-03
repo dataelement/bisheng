@@ -93,6 +93,7 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
                 file_path: filepath,
                 file_content_size: fileContentSize,
                 image_file: imageFile,
+                file_parse_mode: processingStrategy,
                 options = [] } = initialData;
             setFormData({
                 formType,
@@ -128,10 +129,10 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
         let initialFileContent = 'file_content'
         let initialFilePath = 'file_path'
         let initialFileImage = 'image_file'
-        let counter = 1;
-        let initialFileContentCounter = 1;
-        let initialFilePathCounter = 1;
-        let initialFileImageCounter = 1;
+        let counter = 0;
+        let initialFileContentCounter = 0;
+        let initialFilePathCounter = 0;
+        let initialFileImageCounter = 0;
 
         while (existingOptions?.some(opt => opt.key === initialVarName)) {
             counter += 1;

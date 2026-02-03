@@ -145,7 +145,7 @@ export default function DataTableKnowledge<TData, TValue>({
 
       if (uploadRes.status_code === 200) {
         showToast({
-          message: localize('com_tools_file_upload_success', { count: repeatFiles.length }),
+          message: localize('com_tools_file_upload', { count: repeatFiles.length }),
           severity: NotificationSeverity.SUCCESS,
         });
         onUpload();
@@ -209,15 +209,15 @@ export default function DataTableKnowledge<TData, TValue>({
         }
       }
 
-      if (duplicateFiles.length > 0) {
-        setRepeatFiles(duplicateFiles.map(item => ({
-          id: item.name,
-          remark: localize('com_tools_knowledge_upload_remark'),
-          file_path: item.file_path,
-          fileType: 'file',
-          file: item.file,
-        })));
-      }
+      // if (duplicateFiles.length > 0) {
+      //   setRepeatFiles(duplicateFiles.map(item => ({
+      //     id: item.name,
+      //     remark: localize('com_tools_knowledge_upload_remark'),
+      //     file_path: item.file_path,
+      //     fileType: 'file',
+      //     file: item.file,
+      //   })));
+      // }
 
       if (nonDuplicateFiles.length > 0) {
         let hasError = false;
@@ -257,16 +257,16 @@ export default function DataTableKnowledge<TData, TValue>({
           });
           hasError = true;
         } else if (uploadRes.data?.remark) {
-          showToast({
-            message: uploadRes.data.remark || localize('com_tools_knowledge_upload_remark'),
-            severity: NotificationSeverity.ERROR,
-          });
+          // showToast({
+          //   message: uploadRes.data.remark || localize('com_tools_knowledge_upload_remark'),
+          //   severity: NotificationSeverity.ERROR,
+          // });
           hasError = true;
         }
 
         if (!hasError) {
           showToast({
-            message: localize('com_tools_file_upload_success', { count: nonDuplicateFiles.length }),
+            message: localize('com_tools_file_upload', { count: nonDuplicateFiles.length }),
             severity: NotificationSeverity.SUCCESS,
           });
           onUpload();
