@@ -253,7 +253,7 @@ const SelectVar = forwardRef(({
                 // --- INTERNAL LOGIC: Specific to 'inputfile' group variables ---
                 if (group.groupKey === 'inputfile') {
                     // Filter based on file_parse_mode
-                    if (parseMode === 'extract_text' && ['dialog_image_files', 'dialog_file_path'].includes(key)) {
+                    if (parseMode === 'extract_text' && ['dialog_image_files', 'dialog_file_paths'].includes(key)) {
                         return false;
                     }
                     if (parseMode === 'keep_raw' && key === 'dialog_files_content') {

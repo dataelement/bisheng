@@ -275,7 +275,7 @@ const comptibleInput = (node) => {
                         "global": "key" // v3 中变更为 var
                     },
                     {
-                        "key": "dialog_file_path",
+                        "key": "dialog_file_paths",
                         "global": "key",
                         "label": "true",
                         "type": "var",
