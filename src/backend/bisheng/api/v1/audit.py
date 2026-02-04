@@ -11,20 +11,20 @@ router = APIRouter(prefix='/audit', tags=['AuditLog'])
 
 
 @router.get('')
-def get_audit_logs(*,
-                   group_ids: Optional[List[str]] = Query(default=[], description='GroupingidVertical'),
-                   operator_ids: Optional[List[int]] = Query(default=[], description='WhoidVertical'),
-                   start_time: Optional[datetime] = Query(default=None, description='Start when'),
-                   end_time: Optional[datetime] = Query(default=None, description='End time'),
-                   system_id: Optional[str] = Query(default=None, description='Module Item'),
-                   event_type: Optional[str] = Query(default=None, description='Operation behaviors'),
-                   page: Optional[int] = Query(default=0, description='Page'),
-                   limit: Optional[int] = Query(default=0, description='Listings Per Page'),
-                   login_user: UserPayload = Depends(UserPayload.get_login_user)):
+async def get_audit_logs(*,
+                         group_ids: Optional[List[str]] = Query(default=[], description='GroupingidVertical'),
+                         operator_ids: Optional[List[int]] = Query(default=[], description='WhoidVertical'),
+                         start_time: Optional[datetime] = Query(default=None, description='Start when'),
+                         end_time: Optional[datetime] = Query(default=None, description='End time'),
+                         system_id: Optional[str] = Query(default=None, description='Module Item'),
+                         event_type: Optional[str] = Query(default=None, description='Operation behaviors'),
+                         page: Optional[int] = Query(default=0, description='Page'),
+                         limit: Optional[int] = Query(default=0, description='Listings Per Page'),
+                         login_user: UserPayload = Depends(UserPayload.get_login_user)):
     group_ids = [one for one in group_ids if one]
     operator_ids = [one for one in operator_ids if one]
-    return AuditLogService.get_audit_log(login_user, group_ids, operator_ids,
-                                         start_time, end_time, system_id, event_type, page, limit)
+    return await AuditLogService.get_audit_log(login_user, group_ids, operator_ids,
+                                               start_time, end_time, system_id, event_type, page, limit)
 
 
 @router.get('/operators')

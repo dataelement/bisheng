@@ -2,9 +2,11 @@ import asyncio
 import csv
 from datetime import datetime
 from tempfile import NamedTemporaryFile
-from typing import Any, List, Optional, Dict, Union
+from typing import Any, List, Optional, Dict, Union, Tuple
 
 from loguru import logger
+from sqlalchemy import func
+from sqlmodel import col, or_, and_, select
 
 from bisheng.api.v1.schema.chat_schema import AppChatList
 from bisheng.api.v1.schema.workflow import WorkflowEventType
@@ -32,11 +34,11 @@ from bisheng.utils import generate_uuid
 class AuditLogService:
 
     @classmethod
-    def get_audit_log(cls, login_user: UserPayload, group_ids, operator_ids, start_time, end_time,
-                      system_id, event_type, page, limit) -> Any:
+    async def get_audit_log(cls, login_user: UserPayload, group_ids, operator_ids, start_time, end_time,
+                            system_id, event_type, page, limit) -> Any:
         groups = group_ids
         if not login_user.is_admin():
-            groups = [str(one.group_id) for one in UserGroupDao.get_user_admin_group(login_user.user_id)]
+            groups = [one.group_id for one in await UserGroupDao.aget_user_admin_group(login_user.user_id)]
             # Not an administrator of any user groups
             if not groups:
                 return UnAuthorizedError.return_resp()
@@ -45,8 +47,11 @@ class AuditLogService:
                 groups = list(set(groups) & set(group_ids))
                 if not groups:
                     return UnAuthorizedError.return_resp()
-        data, total = AuditLogDao.get_audit_logs(groups, operator_ids, start_time, end_time, system_id, event_type,
-                                                 page, limit)
+
+        data, total = await AuditLogDao.get_audit_logs(groups, operator_ids, start_time, end_time,
+                                                       system_id,
+                                                       event_type,
+                                                       page, limit)
         return resp_200(data={'data': data, 'total': total})
 
     @classmethod
@@ -88,10 +93,12 @@ class AuditLogService:
     @classmethod
     async def _chat_log_async(cls, user: UserPayload, ip_address: str, event_type: EventType,
                               object_type: ObjectType,
-                              object_id: str, object_name: str, resource_type: ResourceTypeEnum):
+                              object_id: str, object_name: str, resource_type: ResourceTypeEnum,
+                              group_ids: List[int] = None):
         # Get the group to which the resource belongs
-        groups = await GroupResourceDao.aget_resource_group(resource_type, object_id)
-        group_ids = [one.group_id for one in groups]
+        if group_ids is None:
+            groups = await GroupResourceDao.aget_resource_group(resource_type, object_id)
+            group_ids = [one.group_id for one in groups]
         audit_log = AuditLog(
             operator_id=user.user_id,
             operator_name=user.user_name,
@@ -154,7 +161,7 @@ class AuditLogService:
         """
         logger.info(f"act=delete_chat_workflow user={user.user_name} ip={ip_address} flow={flow_info.id}")
         await cls._chat_log_async(user, ip_address, EventType.DELETE_CHAT, ObjectType.WORK_FLOW,
-                      flow_info.id, flow_info.name, ResourceTypeEnum.WORK_FLOW)
+                                  flow_info.id, flow_info.name, ResourceTypeEnum.WORK_FLOW)
 
     @classmethod
     async def delete_chat_assistant(cls, user: UserPayload, ip_address: str, assistant_info: Assistant):
@@ -303,8 +310,12 @@ class AuditLogService:
 
         logger.info(f"act=create_chat_message user={user.user_name} ip={ip_address} session={message_session.chat_id}")
 
+        user_groups = await UserGroupDao.aget_user_group(message_session.user_id)
+        group_ids = [ug.group_id for ug in user_groups]
+
         await cls._chat_log_async(user, ip_address, EventType.CREATE_CHAT, ObjectType.WORKSTATION,
-                                  message_session.chat_id, message_session.flow_name, ResourceTypeEnum.WORKSTATION)
+                                  message_session.chat_id, message_session.flow_name, ResourceTypeEnum.WORKSTATION,
+                                  group_ids)
 
     @classmethod
     async def delete_chat_message(cls, user: UserPayload, ip_address: str, message: Union[str, MessageSession]):
@@ -566,7 +577,8 @@ class AuditLogService:
             group_flows = await GroupResourceDao.get_groups_resource(group_admins,
                                                                      resource_types=[ResourceTypeEnum.FLOW,
                                                                                      ResourceTypeEnum.WORK_FLOW,
-                                                                                     ResourceTypeEnum.ASSISTANT])
+                                                                                     ResourceTypeEnum.ASSISTANT,
+                                                                                     ResourceTypeEnum.WORKSTATION])
             # User group under user management has no resources
             if not group_flows:
                 return False, []
@@ -587,109 +599,133 @@ class AuditLogService:
     @classmethod
     async def get_session_list(cls, user: UserPayload, flow_ids: List[str], user_ids: List[int], group_ids: List[int],
                                start_date: datetime, end_date: datetime,
-                               feedback: str, sensitive_status: int, page: int, page_size: int) -> (List[AppChatList],
-                                                                                                    int):
-        """
-        Get Session List
-        Args:
-            user:
-            flow_ids:
-            user_ids:
-            group_ids:
-            start_date:
-            end_date:
-            feedback:
-            sensitive_status:
-            page:
-            page_size:
+                               feedback: str, sensitive_status: int, page: int, page_size: int) -> Tuple[
+        List[AppChatList], int]:
 
-        Returns:
-            List[AppChatList], int: Session List and Total Count
+        if user.is_admin():
+            # Administrator: The frontend sends out what it needs to retrieve; if nothing is sent, it retrieves all (an empty list usually means there are no restrictions or the decision is made by the business logic in subsequent logic).
+            search_group_ids = group_ids or []
+        else:
+            # Regular users: Administrative privileges must be verified
+            user_managed_groups = await UserGroupDao.aget_user_admin_group(user.user_id)
+            if not user_managed_groups:
+                raise UnAuthorizedError.http_exception()
 
-        """
-        # Get the final filtered flow_ids
-        flag, filter_flow_ids = await cls.get_filter_flow_ids(user, flow_ids, group_ids)
-        if not flag:
-            return [], 0
+            managed_group_ids = {one.group_id for one in user_managed_groups}
 
-        # Build filter conditions
-        filter_status = [SensitiveStatus(sensitive_status)] if sensitive_status else []
-        filters = {
-            'sensitive_status': filter_status,
-            'feedback': feedback,
-            'flow_ids': filter_flow_ids,
-            'user_ids': user_ids,
-            'start_date': start_date,
-            'end_date': end_date,
-            'flow_type': [FlowType.FLOW.value, FlowType.WORKFLOW.value,
-                          FlowType.ASSISTANT.value, FlowType.WORKSTATION.value]
+            if group_ids:
+                # Find the intersection: the intersection of the frontend requests
+                valid_group_ids = list(set(group_ids) & managed_group_ids)
+                if not valid_group_ids:
+                    return [], 0
+                search_group_ids = valid_group_ids
+            else:
+                # Default: All managed groups
+                search_group_ids = list(managed_group_ids)
+
+        conditions = []
+
+        # Basic equality/range filtering
+        if sensitive_status:
+            conditions.append(MessageSession.sensitive_status == sensitive_status)
+
+        if user_ids:
+            conditions.append(col(MessageSession.user_id).in_(user_ids))
+
+        if start_date:
+            conditions.append(col(MessageSession.create_time) >= start_date)
+        if end_date:
+            conditions.append(col(MessageSession.create_time) <= end_date)
+
+        if flow_ids:
+            conditions.append(col(MessageSession.flow_id).in_(flow_ids))
+
+        # Process type filtering (fixed enumeration)
+        conditions.append(col(MessageSession.flow_type).in_([
+            FlowType.FLOW.value,
+            FlowType.WORKFLOW.value,
+            FlowType.ASSISTANT.value,
+            FlowType.WORKSTATION.value
+        ]))
+
+        # Feedback status filtering
+        feedback_map = {
+            'like': col(MessageSession.like) > 0,
+            'dislike': col(MessageSession.dislike) > 0,
+            'copied': col(MessageSession.copied) > 0
         }
+        if feedback in feedback_map:
+            conditions.append(feedback_map[feedback])
 
-        # Query session list and total count concurrently
-        res_task = MessageSessionDao.afilter_session(**filters, page=page, limit=page_size)
-        total_task = MessageSessionDao.filter_session_count(**filters)
+        # Group membership filtering
+        if search_group_ids:
+            group_filters = [
+                func.json_contains(MessageSession.group_ids, str(gid))
+                for gid in search_group_ids
+            ]
+            conditions.append(or_(*group_filters))
 
-        # Await both tasks
+        # build query statement
+        statement = select(MessageSession).where(and_(*conditions)).order_by(col(MessageSession.create_time).desc())
+
+        res_task = MessageSessionDao.get_statement_results(statement, page=page, limit=page_size)
+        total_task = MessageSessionDao.get_statement_count(statement)
+
         res, total = await asyncio.gather(res_task, total_task)
 
         if not res:
             return [], total
 
         target_user_ids = set()
-        target_flow_ids = set()
-        target_assigned_ids = set()
+        target_flow_ids = set()  # Flow/Workflow
+        target_assistant_ids = set()  # Assistant
 
-        # Collect user IDs, flow IDs, and assistant IDs from sessions
         for session in res:
             target_user_ids.add(session.user_id)
-
-            if session.flow_type in [FlowType.FLOW.value, FlowType.WORKFLOW.value]:
+            if session.flow_type in [FlowType.FLOW.value, FlowType.WORKFLOW.value, FlowType.WORKSTATION.value]:
                 target_flow_ids.add(session.flow_id)
             elif session.flow_type == FlowType.ASSISTANT.value:
-                target_assigned_ids.add(session.flow_id)
+                target_assistant_ids.add(session.flow_id)
 
-        # Define async function to get user groups for multiple users
-        async def get_all_user_groups(u_ids):
+        target_user_ids_list = list(target_user_ids)
 
+        async def get_users_groups_map(u_ids: List[int]):
+            # get user groups for multiple users
+            if not u_ids: return {}
             tasks = [user.get_user_groups(uid) for uid in u_ids]
             results = await asyncio.gather(*tasks)
             return dict(zip(u_ids, results))
 
-        # Fetch users, flows, assistants, and user groups concurrently
-        fetch_tasks = {
-            "users": UserDao.aget_user_by_ids(list(target_user_ids)),
-            "flows": FlowDao.aget_flow_by_ids(list(target_flow_ids)),
-            "assistants": AssistantDao.aget_assistants_by_ids(list(target_assigned_ids)),
-            "groups": get_all_user_groups(target_user_ids)
-        }
+        users_data, flows_data, assistants_data, user_groups_map = await asyncio.gather(
+            UserDao.aget_user_by_ids(target_user_ids_list),
+            FlowDao.aget_flow_by_ids(list(target_flow_ids)),
+            AssistantDao.aget_assistants_by_ids(list(target_assistant_ids)),
+            get_users_groups_map(target_user_ids_list)
+        )
 
-        # Await all fetch tasks
-        fetched_results = await asyncio.gather(*fetch_tasks.values())
-        data_map = dict(zip(fetch_tasks.keys(), fetched_results))
+        user_map = {u.user_id: u.user_name for u in users_data}
+        flow_map = {f.id: f.name for f in flows_data}
+        assistant_map = {a.id: a.name for a in assistants_data}
 
-        user_map = {u.user_id: u.user_name for u in data_map["users"]}
-        flow_map = {f.id: f.name for f in data_map["flows"]}
-        assistant_map = {a.id: a.name for a in data_map["assistants"]}
-        user_groups_map = data_map["groups"]
-
+        # Construct the return object
         result: List[AppChatList] = []
-        # Construct the final result list
+
         for session in res:
-
-            # Determine flow name based on flow type
-            flow_name = session.flow_name
+            # Determine the current name
+            current_name = session.flow_name
             if session.flow_type in [FlowType.FLOW.value, FlowType.WORKFLOW.value, FlowType.WORKSTATION.value]:
-                flow_name = flow_map.get(session.flow_id, session.flow_name)
+                current_name = flow_map.get(session.flow_id, current_name)
             elif session.flow_type == FlowType.ASSISTANT.value:
-                flow_name = assistant_map.get(session.flow_id, session.flow_name)
+                current_name = assistant_map.get(session.flow_id, current_name)
 
+            # Append to the result set
             result.append(AppChatList(
                 **session.model_dump(exclude={'flow_name'}),
-                flow_name=flow_name,
+                flow_name=current_name,
                 like_count=session.like,
                 dislike_count=session.dislike,
                 copied_count=session.copied,
-                user_name=user_map.get(session.user_id),
+                user_name=user_map.get(session.user_id, ""),  # get user name
                 user_groups=user_groups_map.get(session.user_id, [])
             ))
 
