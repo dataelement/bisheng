@@ -227,115 +227,115 @@ const comptibleInput = (node) => {
         node.v = 2
     }
     // 2 => 3
-    if (node.v == 2) {
-        // 1. 提取 v2 中的原始参数
-        const oldParams = node.group_params[0].params;
-        const findParam = (key) => oldParams.find(p => p.key === key);
+    // if (node.v == 2) {
+    //     // 1. 提取 v2 中的原始参数
+    //     const oldParams = node.group_params[0].params;
+    //     const findParam = (key) => oldParams.find(p => p.key === key);
 
-        const userInput = findParam('user_input');
-        const filesContent = findParam('dialog_files_content');
-        const filesSize = findParam('dialog_files_content_size');
-        const fileAccept = findParam('dialog_file_accept');
-        const imageFiles = findParam('dialog_image_files');
-        const formInput = findParam('form_input');
-        formInput.value = []
+    //     const userInput = findParam('user_input');
+    //     const filesContent = findParam('dialog_files_content');
+    //     const filesSize = findParam('dialog_files_content_size');
+    //     const fileAccept = findParam('dialog_file_accept');
+    //     const imageFiles = findParam('dialog_image_files');
+    //     const formInput = findParam('form_input');
+    //     formInput.value = []
 
-        // 2. 重新构造 group_params 数组，确保顺序和 v3 一致
-        node.group_params = [
-            // group：接收文本
-            {
-                "name": "接收文本",
-                "params": [userInput]
-            },
-            // group：文件配置 (inputfile)
-            {
-                "name": "",
-                "groupKey": "inputfile",
-                "params": [
-                    {
-                        "groupTitle": true,
-                        "key": "user_input_file",
-                        "tab": "dialog_input",
-                        "value": true
-                    },
-                    {
-                        "key": "file_parse_mode",
-                        "type": "select_parsemode",
-                        "tab": "dialog_input",
-                        "value": "extract_text"
-                    },
-                    {
-                        ...filesContent,
-                        "global": "key" // v3 中变更为 var
-                    },
-                    filesSize,
-                    fileAccept,
-                    {
-                        ...imageFiles,
-                        "global": "key" // v3 中变更为 var
-                    },
-                    {
-                        "key": "dialog_file_paths",
-                        "global": "key",
-                        "label": "true",
-                        "type": "var",
-                        "tab": "dialog_input",
-                        "help": "true"
-                    }
-                ]
-            },
-            // group：推荐问题配置 (custom)
-            {
-                "name": "",
-                "groupKey": "custom",
-                "params": [
-                    {
-                        "groupTitle": true,
-                        "key": "recommended_questions_flag",
-                        "label": "true",
-                        "hidden": "true",
-                        "tab": "dialog_input",
-                        "help": "true",
-                        "value": false
-                    },
-                    {
-                        "key": "recommended_llm",
-                        "label": "true",
-                        "type": "bisheng_model",
-                        "tab": "dialog_input",
-                        "value": "",
-                        "placeholder": "true",
-                        "required": true,
-                    },
-                    {
-                        "key": "recommended_system_prompt",
-                        "label": "true",
-                        "tab": "dialog_input",
-                        "type": "var_textarea",
-                        "value": "true",
-                        "required": true
-                    },
-                    {
-                        "key": "recommended_history_num",
-                        "label": "true",
-                        "type": "slide",
-                        "tab": "dialog_input",
-                        "help": "true",
-                        "scope": [1, 10],
-                        "step": 1,
-                        "value": 2
-                    }
-                ]
-            },
-            // group：表单输入
-            {
-                "name": "",
-                "params": [formInput]
-            }
-        ];
+    //     // 2. 重新构造 group_params 数组，确保顺序和 v3 一致
+    //     node.group_params = [
+    //         // group：接收文本
+    //         {
+    //             "name": "接收文本",
+    //             "params": [userInput]
+    //         },
+    //         // group：文件配置 (inputfile)
+    //         {
+    //             "name": "",
+    //             "groupKey": "inputfile",
+    //             "params": [
+    //                 {
+    //                     "groupTitle": true,
+    //                     "key": "user_input_file",
+    //                     "tab": "dialog_input",
+    //                     "value": true
+    //                 },
+    //                 {
+    //                     "key": "file_parse_mode",
+    //                     "type": "select_parsemode",
+    //                     "tab": "dialog_input",
+    //                     "value": "extract_text"
+    //                 },
+    //                 {
+    //                     ...filesContent,
+    //                     "global": "key" // v3 中变更为 var
+    //                 },
+    //                 filesSize,
+    //                 fileAccept,
+    //                 {
+    //                     ...imageFiles,
+    //                     "global": "key" // v3 中变更为 var
+    //                 },
+    //                 {
+    //                     "key": "dialog_file_paths",
+    //                     "global": "key",
+    //                     "label": "true",
+    //                     "type": "var",
+    //                     "tab": "dialog_input",
+    //                     "help": "true"
+    //                 }
+    //             ]
+    //         },
+    //         // group：推荐问题配置 (custom)
+    //         {
+    //             "name": "",
+    //             "groupKey": "custom",
+    //             "params": [
+    //                 {
+    //                     "groupTitle": true,
+    //                     "key": "recommended_questions_flag",
+    //                     "label": "true",
+    //                     "hidden": "true",
+    //                     "tab": "dialog_input",
+    //                     "help": "true",
+    //                     "value": false
+    //                 },
+    //                 {
+    //                     "key": "recommended_llm",
+    //                     "label": "true",
+    //                     "type": "bisheng_model",
+    //                     "tab": "dialog_input",
+    //                     "value": "",
+    //                     "placeholder": "true",
+    //                     "required": true,
+    //                 },
+    //                 {
+    //                     "key": "recommended_system_prompt",
+    //                     "label": "true",
+    //                     "tab": "dialog_input",
+    //                     "type": "var_textarea",
+    //                     "value": "true",
+    //                     "required": true
+    //                 },
+    //                 {
+    //                     "key": "recommended_history_num",
+    //                     "label": "true",
+    //                     "type": "slide",
+    //                     "tab": "dialog_input",
+    //                     "help": "true",
+    //                     "scope": [1, 10],
+    //                     "step": 1,
+    //                     "value": 2
+    //                 }
+    //             ]
+    //         },
+    //         // group：表单输入
+    //         {
+    //             "name": "",
+    //             "params": [formInput]
+    //         }
+    //     ];
 
-        node.v = 3;
-    }
+    //     node.v = 3;
+    // }
 }
 
 
