@@ -33,7 +33,11 @@ const getSpecialVar = ({ obj, group, onlyImg = false }) => {
                 const { file_type, file_parse_mode: mode } = item;
 
                 const add = (propKey) => res.push({ label: item[propKey], value: item[propKey] });
-
+                // 文本use key
+                if (['select', 'text'].includes(item.type)) {
+                    add('key')
+                    return res
+                }
                 // 1. 优先处理图片 (这是唯一在 onlyImg=true 时可能被添加的项)
                 // 当模式为 keep_raw 且类型为 all 时，包含图片变量
                 if (mode === 'keep_raw' && file_type === 'all') {

@@ -127,8 +127,8 @@ export default function Cascader({ error = false, selectClass = '', close = fals
         if (defaultValue && defaultValue.length > 0) {
             setValues(defaultValue)
             selectOptionsRef.current = [...defaultValue]
-            setCols(resetCols(defaultValue, options))
         }
+        setCols(resetCols(defaultValue, options))
     }, [defaultValue, options])
 
     const selectOptionsRef = useRef([])

@@ -34,6 +34,11 @@ class ConfigBase(SQLModelSerializable):
 class Config(ConfigBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
 
+    __table_args__ = {
+        "mysql_charset": "utf8mb4",
+        "mysql_collate": "utf8mb4_unicode_ci"
+    }
+
 
 class ConfigRead(ConfigBase):
     id: int

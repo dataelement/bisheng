@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import List, Optional
 
-from sqlmodel import Field, select, Column, DateTime, text, Text, func, or_, JSON
+from sqlmodel import Field, select, Column, DateTime, text, Text, func, or_, JSON, and_
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session, get_async_db_session
@@ -75,14 +75,16 @@ class AuditLogBase(SQLModelSerializable):
     """
     operator_id: int = Field(index=True, description="Operating User'sID")
     operator_name: Optional[str] = Field(description="Username")
-    group_ids: Optional[List[int | str]] = Field(sa_column=Column(JSON), description="Belongs to a user groupIDVertical")
+    group_ids: Optional[List[int | str]] = Field(sa_column=Column(JSON),
+                                                 description="Belongs to a user groupIDVertical")
     system_id: Optional[str] = Field(index=True, description="Module Item")
     event_type: Optional[str] = Field(index=True, description="Operation behaviors")
     object_type: Optional[str] = Field(index=True, description="Action object type")
     object_id: Optional[str] = Field(index=True, description="Operation ObjectID")
     object_name: Optional[str] = Field(sa_column=Column(Text), description="Action object name")
     note: Optional[str] = Field(sa_column=Column(Text), description="Action notes")
-    ip_address: Optional[str] = Field(index=True, description="Client's at time of operationIP<g id='Bold'>Address:</g>")
+    ip_address: Optional[str] = Field(index=True,
+                                      description="Client's at time of operationIP<g id='Bold'>Address:</g>")
     create_time: Optional[datetime] = Field(sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')), description="operate time")
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
@@ -97,9 +99,10 @@ class AuditLog(AuditLogBase, table=True):
 class AuditLogDao(AuditLogBase):
 
     @classmethod
-    def get_audit_logs(cls, group_ids: List[int], operator_ids: List[int] = 0, start_time: datetime = None,
-                       end_time: datetime = None, system_id: str = None, event_type: str = None,
-                       page: int = 0, limit: int = 0) -> (List[AuditLog], int):
+    async def get_audit_logs(cls, group_ids: List[int], operator_ids: List[int] = 0,
+                             start_time: datetime = None,
+                             end_time: datetime = None, system_id: str = None, event_type: str = None,
+                             page: int = 0, limit: int = 0) -> (List[AuditLog], int):
         """
         Filter logs by user group
         """
@@ -109,6 +112,7 @@ class AuditLogDao(AuditLogBase):
             group_filters = []
             for one in group_ids:
                 group_filters.append(func.json_contains(AuditLog.group_ids, str(one)))
+
             statement = statement.where(or_(*group_filters))
             count_statement = count_statement.where(or_(*group_filters))
         if operator_ids:

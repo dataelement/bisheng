@@ -298,18 +298,19 @@ class RedisCallback(BaseCallback):
         node_id = input_schema_message['node_id']
         if node_id not in user_input:
             raise ServerError(msg="node_id not found in user input")
+        user_input = user_input[node_id]
         input_schema = input_schema_message['input_schema']
         if input_schema["tab"] == "form_input":
             user_input_keys = {one: None for one in user_input.keys()}
             for key_info in input_schema['value']:
                 key = key_info['key']
-                if key not in user_input[node_id]:
+                if key not in user_input:
                     raise ServerError(msg=f"key {key} not found in user input")
                 user_input_keys.pop(key)
             if user_input_keys:
                 raise ServerError(msg=f"extra key {list(user_input_keys.keys())} found in user input")
         else:
-            if input_schema["key"] not in user_input[node_id]:
+            if input_schema["key"] not in user_input:
                 raise ServerError(msg=f"key {input_schema['key']} not found in user input")
 
     @classmethod

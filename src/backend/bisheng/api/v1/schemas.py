@@ -216,6 +216,7 @@ class UploadFileResponse(BaseModel):
     file_path: str
     relative_path: Optional[str] = None  # minioRelative path, i.e.object_name
     repeat: bool = False  # Duplicate in Knowledge Base
+    repeat_file_name: Optional[str] = None  # Returns the file name of a duplicate file if it is a duplicate
     repeat_update_time: Optional[datetime] = None  # Returns the update time of a duplicate file if it is a duplicate
 
 

@@ -2,10 +2,12 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional, List
 
+from sqlalchemy import JSON
 from sqlmodel import Field, Column, DateTime, text, select, func, update
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session, get_async_db_session
+from bisheng.database.models.user_group import UserGroupDao
 
 
 class SensitiveStatus(Enum):
@@ -22,6 +24,8 @@ class MessageSessionBase(SQLModelSerializable):
     flow_description: Optional[str] = Field(default=None, description='App Description')
     flow_logo: Optional[str] = Field(default=None, description='Applicationslogo')
     user_id: int = Field(index=True, description='User who created the sessionID')
+    group_ids: Optional[List[int]] = Field(default=None, sa_column=Column(JSON),
+                                           description="Belongs to a user groupIDVertical")
     is_delete: Optional[bool] = Field(default=False,
                                       description='Whether the corresponding skill or the session itself was deleted')
     like: Optional[int] = Field(default=0, description='Number of liked messages')
@@ -42,6 +46,11 @@ class MessageSessionDao(MessageSessionBase):
 
     @classmethod
     def insert_one(cls, data: MessageSession) -> MessageSession:
+
+        if not data.group_ids:
+            user_groups = UserGroupDao.get_user_group(data.user_id)
+            data.group_ids = [ug.group_id for ug in user_groups]
+
         with get_sync_db_session() as session:
             session.add(data)
             session.commit()
@@ -50,6 +59,11 @@ class MessageSessionDao(MessageSessionBase):
 
     @classmethod
     async def async_insert_one(cls, data: MessageSession) -> MessageSession:
+
+        if not data.group_ids:
+            user_groups = await UserGroupDao.aget_user_group(data.user_id)
+            data.group_ids = [ug.group_id for ug in user_groups]
+
         async with get_async_db_session() as session:
             session.add(data)
             await session.commit()
@@ -183,6 +197,22 @@ class MessageSessionDao(MessageSessionBase):
         async with get_async_db_session() as session:
             result = await session.exec(statement)
             return result.all()
+
+    @classmethod
+    async def get_statement_results(cls, statement, page: int = 0, limit: int = 0) -> List[MessageSession]:
+        if page and limit:
+            statement = statement.offset((page - 1) * limit).limit(limit)
+        statement = statement.order_by(MessageSession.create_time.desc())
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return result.all()
+
+    @classmethod
+    async def get_statement_count(cls, statement) -> int:
+        count_statement = select(func.count()).select_from(statement.subquery())
+        async with get_async_db_session() as session:
+            result = await session.exec(count_statement)
+            return result.first()
 
     @classmethod
     async def filter_session_count(cls,

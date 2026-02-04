@@ -37,6 +37,7 @@ from bisheng.knowledge.domain.models.knowledge_file import (KnowledgeFileDao, Kn
                                                             QAKnoweldgeDao, QAKnowledgeUpsert, QAStatus)
 from bisheng.knowledge.domain.schemas.knowledge_schema import AddKnowledgeMetadataFieldsReq, \
     UpdateKnowledgeMetadataFieldsReq, ModifyKnowledgeFileMetaDataReq
+from bisheng.llm.domain import LLMService
 from bisheng.llm.domain.const import LLMModelType
 from bisheng.llm.domain.models import LLMDao
 from bisheng.user.domain.models.user import UserDao
@@ -67,6 +68,7 @@ async def upload_file(*, file: UploadFile = File(...)):
 
     finally:
         await file.close()
+
 
 @router.post('/upload/{knowledge_id}')
 async def upload_knowledge_file(*,
@@ -100,6 +102,7 @@ async def upload_knowledge_file(*,
         if repeat_file:
             ret.repeat = True
             ret.repeat_update_time = repeat_file.update_time
+            ret.repeat_file_name = repeat_file.file_name
 
         return resp_200(ret)
 
@@ -328,10 +331,21 @@ def delete_knowledge(*,
 # Personal Knowledge Base Information Acquisition
 @router.get('/personal_knowledge_info', status_code=200)
 def get_personal_knowledge_info(
+        *,
+        request: Request,
         login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """ Get personal knowledge base information. """
     knowledge = KnowledgeDao.get_user_knowledge(login_user.user_id, None,
                                                 KnowledgeTypeEnum.PRIVATE)
+
+    if not knowledge:
+        model = LLMService.get_knowledge_llm()
+        knowledgeCreate = KnowledgeCreate(name='Personal Knowledge Base',
+                                          type=KnowledgeTypeEnum.PRIVATE.value,
+                                          user_id=login_user.user_id,
+                                          model=model.embedding_model_id)
+
+        knowledge = KnowledgeService.create_knowledge(request, login_user, knowledgeCreate)
 
     return resp_200(data=knowledge)
 
