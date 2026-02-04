@@ -39,8 +39,8 @@ const getSpecialVar = ({ obj, group, onlyImg = false }) => {
                     return res
                 }
                 // 1. 优先处理图片 (这是唯一在 onlyImg=true 时可能被添加的项)
-                // 当模式为 keep_raw 且类型为 all 时，包含图片变量
-                if (mode === 'keep_raw' && file_type === 'all') {
+                // 当模式为 keep_raw 且类型不为 file 时，包含图片变量
+                if (mode === 'keep_raw' && file_type !== 'file') {
                     add('image_file');
                 }
 

@@ -111,7 +111,7 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
             return;
         }
         if (descRef.current.value && desc.length > 200) {
-            toast({ variant: 'error', description: t('lib.descriptionLimit') });
+            toast({ variant: 'error', description: t('lib.descriptionLimit', { ns: 'bs' }) });
             return;
         }
 
@@ -174,7 +174,7 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
                         </div>
                     )}
                     <div className="">
-                        <label htmlFor="name" className="bisheng-label">{t('lib.libraryName', { ns: 'bs' })}</label>
+                        <label htmlFor="name" className="bisheng-label">{t('system.libraryName', { ns: 'bs' })}</label>
                         <span className="text-red-500">*</span>
                         <Input
                             name="name"

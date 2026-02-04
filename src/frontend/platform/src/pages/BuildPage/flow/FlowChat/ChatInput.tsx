@@ -310,9 +310,9 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
             messageIdRef.current = data.message_id
             // 限制文件类型
             if (input_schema.tab === 'dialog_input') {
-                const schemaItem = input_schema.value?.find(el => el.key === 'dialog_file_accept')
-                const uploadSwithItem = input_schema.value?.find(el => el.key === 'user_input_file')
-                setUploadLock(uploadSwithItem?.value)
+                const schemaItem = input_schema.value?.find(el => el?.key === 'dialog_file_accept')
+                const uploadSwithItem = input_schema.value?.find(el => el?.key === 'user_input_file')
+                setUploadLock(uploadSwithItem?.value ?? false)
                 const fileAccept = schemaItem?.value
                 if (fileAccept === 'image') {
                     setAccepts(FileTypes.IMAGE.join(','))

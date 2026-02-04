@@ -467,7 +467,7 @@ export default function QasPage() {
                                     <Link to='/filelib'><ArrowLeft className="side-bar-button-size" /></Link>
                                 </button>
                             </ShadTooltip>
-                            <span className="text-gray-700 text-sm font-black pl-4 dark:text-white">{title}</span>
+                            <span className="text-gray-700 text-sm font-black pl-4 dark:text-white truncate max-w-80">{title}</span>
                         </div>
                     </div>
                     <div className={selectedItems.length ? 'visible' : 'invisible'}>

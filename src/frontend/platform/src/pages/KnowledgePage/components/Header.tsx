@@ -86,7 +86,7 @@ export default function Header({ fileTitle, onBack, showBackButton = true }: Hea
             <div>
                 <div className="group flex items-center">
                     {fileTitle && (
-                        <span className="text-foreground text-sm font-black pl-4">
+                        <span className="text-foreground text-sm font-black pl-4 truncate max-w-80">
                             {libInfo.name}
                         </span>
                     )}

@@ -49,6 +49,7 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
         { value: FileProcessingStrategy.TempKnowledge, label: t("temporaryKnowledgeBase") },
         { value: FileProcessingStrategy.OriginalFile, label: t("notParse") },
     ], [t]);
+    const [defaultValue] = useState(initialData?.value || "");
     const [formData, setFormData] = useState({
         formType: FormType.Text,
         displayName: "",
@@ -447,7 +448,7 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
                 itemKey={''}
                 nodeId={nodeId}
                 paramItem={nodeData}
-                value={formData.displayName}
+                value={defaultValue}
                 placeholder={namePlaceholders[formData.formType]}
                 onChange={(val) => setFormData({ ...formData, displayName: val })}
                 onVarEvent={(func) => checkVarFuncRef.current = func}

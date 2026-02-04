@@ -133,7 +133,7 @@ export function filterParamByinputCheck(group) {
                 return false;
             }
 
-            if (parseMode === 'extract_text' && ['dialog_image_files', 'dialog_file_path'].includes(key)) {
+            if (parseMode === 'extract_text' && ['dialog_image_files', 'dialog_file_paths'].includes(key)) {
                 return false;
             }
             if (parseMode === 'keep_raw' && key === 'dialog_files_content') {
