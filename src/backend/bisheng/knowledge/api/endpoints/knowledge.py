@@ -345,7 +345,7 @@ def get_personal_knowledge_info(
                                           user_id=login_user.user_id,
                                           model=model.embedding_model_id)
 
-        knowledge = KnowledgeService.create_knowledge(request, login_user, knowledgeCreate)
+        knowledge = [KnowledgeService.create_knowledge(request, login_user, knowledgeCreate)]
 
     return resp_200(data=knowledge)
 
