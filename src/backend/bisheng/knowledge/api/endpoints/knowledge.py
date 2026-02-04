@@ -98,7 +98,7 @@ async def upload_knowledge_file(*,
             knowledge_id=knowledge_id, file_name=file_name, md5_=file_md5
         )
 
-        ret = UploadFileResponse(file_path=file_path)
+        ret = UploadFileResponse(file_path=file_path, file_name=file_name)
         if repeat_file:
             ret.repeat = True
             ret.repeat_update_time = repeat_file.update_time
