@@ -176,6 +176,7 @@ class InputNode(BaseNode):
                 "file_content": "dialog_files_content",
                 "file_path": "dialog_file_paths",
                 "image_file": "dialog_image_files",
+                "file_type": self._original_node_params.get("dialog_file_accept"),
                 "file_parse_mode": self._original_node_params.get("file_parse_mode", ParseModeEnum.EXTRACT_TEXT),
                 "file_content_size": self._original_node_params.get("dialog_files_content_size", 15000)
             }
