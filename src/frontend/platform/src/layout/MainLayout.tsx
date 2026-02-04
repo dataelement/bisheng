@@ -99,6 +99,7 @@ export default function MainLayout() {
                         </TooltipProvider>
                         <Separator className="mx-[4px] dark:bg-[#111111]" orientation="vertical" />
                         <SelectHover
+                            className={"-top-4"}
                             triagger={
                                 <div className="h-8 px-3 bg-header-icon rounded-lg cursor-pointer my-4 flex items-center justify-center">
                                     <span className="text-sm leading-8">{languageNames[language]}</span>
