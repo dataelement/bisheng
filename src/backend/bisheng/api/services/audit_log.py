@@ -38,7 +38,7 @@ class AuditLogService:
                             system_id, event_type, page, limit) -> Any:
         groups = group_ids
         if not login_user.is_admin():
-            groups = [one.group_id for one in await UserGroupDao.aget_user_admin_group(login_user.user_id)]
+            groups = [str(one.group_id) for one in await UserGroupDao.aget_user_admin_group(login_user.user_id)]
             # Not an administrator of any user groups
             if not groups:
                 return UnAuthorizedError.return_resp()
