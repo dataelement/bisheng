@@ -92,7 +92,7 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
                 file_content: filecontent,
                 file_type: fileType,
                 file_path: filepath,
-                file_content_size: fileContentSize,
+                file_content_size: fileContentSize = 15000,
                 image_file: imageFile,
                 file_parse_mode: processingStrategy,
                 options = [] } = initialData;
@@ -106,7 +106,7 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
                 filecontent,
                 fileType,
                 filepath,
-                fileContentSize,
+                fileContentSize: fileContentSize || 15000,
                 imageFile,
                 isMultiple: allowMultiple,
                 processingStrategy: processingStrategy || FileProcessingStrategy.TempKnowledge
@@ -367,31 +367,19 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
 
     // 处理文件处理策略变化
     const handleProcessingStrategyChange = (strategy) => {
-        // 先获取当前表单数据
-        const currentData = { ...formData };
-
-        // 根据新策略设置默认值
-        let updatedData = { ...currentData, processingStrategy: strategy };
-
         // 清空相关错误
         setErrors({});
 
+        // 根据新策略生成需要更新的字段
+        const updates: any = { processingStrategy: strategy };
+
         // 如果切换到临时知识库策略
         if (strategy === FileProcessingStrategy.TempKnowledge) {
-            // 保留主变量名，清空其他文件相关字段
-            updatedData = {
-                ...updatedData,
-                filecontent: '',
-                filepath: '',
-                imageFile: '',
-                fileContentSize: 15000
-            };
         }
         // 如果切换到解析文件内容策略
         else if (strategy === FileProcessingStrategy.ParseContent) {
-            // 如果文件内容变量名为空，设置默认值
-            if (!currentData.filecontent || currentData.filecontent.trim() === '') {
-                // 生成一个唯一的 file_content 变量名
+            // 如果 filecontent 为空，生成默认值
+            if (!formData.filecontent || formData.filecontent.trim() === '') {
                 const fileOtions = existingOptions?.filter(opt => opt.type === FormType.File) || [];
                 let initialFileContent = 'file_content';
                 let fileContentCounter = 1;
@@ -400,26 +388,13 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
                     fileContentCounter += 1;
                     initialFileContent = `file_content${fileContentCounter}`;
                 }
-
-                updatedData = {
-                    ...updatedData,
-                    filecontent: initialFileContent,
-                    filepath: '',
-                    imageFile: ''
-                };
-            } else {
-                // 保留现有的 filecontent，清空其他字段
-                updatedData = {
-                    ...updatedData,
-                    filepath: '',
-                    imageFile: ''
-                };
+                updates.filecontent = initialFileContent;
             }
+            // 否则保留用户已输入的 filecontent
         }
         // 如果切换到不解析（原始文件）策略
         else if (strategy === FileProcessingStrategy.OriginalFile) {
-            // 如果文件路径变量名为空，设置默认值
-            if (!currentData.filepath || currentData.filepath.trim() === '') {
+            if (!formData.filepath || formData.filepath.trim() === '') {
                 const fileOtions = existingOptions?.filter(opt => opt.type === FormType.File) || [];
                 let initialFilePath = 'file_path';
                 let filePathCounter = 1;
@@ -428,38 +403,24 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
                     filePathCounter += 1;
                     initialFilePath = `file_path${filePathCounter}`;
                 }
+                updates.filepath = initialFilePath;
+            }
 
-                // 对于全部类型和图片类型，还需要设置 image_file
-                if (currentData.fileType === 'all' || currentData.fileType === 'image') {
-                    let initialImageFile = 'image_file';
-                    let imageFileCounter = 1;
+            if ((formData.fileType === 'all' || formData.fileType === 'image') &&
+                (!formData.imageFile || formData.imageFile.trim() === '')) {
+                const fileOtions = existingOptions?.filter(opt => opt.type === FormType.File) || [];
+                let initialImageFile = 'image_file';
+                let imageFileCounter = 1;
 
-                    while (fileOtions.some(opt => opt.image_file === initialImageFile)) {
-                        imageFileCounter += 1;
-                        initialImageFile = `image_file${imageFileCounter}`;
-                    }
-
-                    updatedData = {
-                        ...updatedData,
-                        filepath: initialFilePath,
-                        imageFile: initialImageFile,
-                        filecontent: '',
-                        fileContentSize: 15000
-                    };
-                } else {
-                    // 文档类型只需要 file_path
-                    updatedData = {
-                        ...updatedData,
-                        filepath: initialFilePath,
-                        imageFile: '',
-                        filecontent: '',
-                        fileContentSize: 15000
-                    };
+                while (fileOtions.some(opt => opt.image_file === initialImageFile)) {
+                    imageFileCounter += 1;
+                    initialImageFile = `image_file${imageFileCounter}`;
                 }
+                updates.imageFile = initialImageFile;
             }
         }
 
-        setFormData(updatedData);
+        setFormData(prev => ({ ...prev, ...updates }));
     };
     // 获取可用的文件处理策略选项
     const getAvailableProcessingStrategies = () => {
@@ -882,15 +843,16 @@ export default function InputFormItem({ data, nodeId, onChange, onValidate, onVa
                 cleanedFileContent = '';
                 cleanedFilePath = '';
                 cleanedImageFile = '';
-                cleanedFileContentSize = 0;
+                // cleanedFileContentSize = 0;
             } else if (file_parse_mode === FileProcessingStrategy.ParseContent) {
                 // 解析文件内容：清空图片和路径字段
                 cleanedImageFile = '';
                 cleanedFilePath = '';
+                // fileContentSize 应该保留
             } else if (file_parse_mode === FileProcessingStrategy.OriginalFile) {
                 // 不解析：清空解析内容字段
                 cleanedFileContent = '';
-                cleanedFileContentSize = 0;
+                // cleanedFileContentSize = 0;
             }
         }
 
@@ -905,7 +867,7 @@ export default function InputFormItem({ data, nodeId, onChange, onValidate, onVa
             file_content: cleanedFileContent,
             file_path: cleanedFilePath,
             file_type,
-            file_content_size: cleanedFileContentSize,
+            file_content_size: cleanedFileContentSize, // 使用未重置的值
             image_file: cleanedImageFile,
             file_parse_mode
         };
