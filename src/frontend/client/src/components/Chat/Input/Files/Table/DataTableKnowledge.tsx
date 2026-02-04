@@ -209,15 +209,15 @@ export default function DataTableKnowledge<TData, TValue>({
         }
       }
 
-      // if (duplicateFiles.length > 0) {
-      //   setRepeatFiles(duplicateFiles.map(item => ({
-      //     id: item.name,
-      //     remark: localize('com_tools_knowledge_upload_remark'),
-      //     file_path: item.file_path,
-      //     fileType: 'file',
-      //     file: item.file,
-      //   })));
-      // }
+      if (duplicateFiles.length > 0) {
+        setRepeatFiles(duplicateFiles.map(item => ({
+          id: item.name,
+          remark: localize('com_tools_knowledge_upload_remark'),
+          file_path: item.file_path,
+          fileType: 'file',
+          file: item.file,
+        })));
+      }
 
       if (nonDuplicateFiles.length > 0) {
         let hasError = false;
