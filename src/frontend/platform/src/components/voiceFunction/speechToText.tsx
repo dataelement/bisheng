@@ -213,6 +213,8 @@ const SpeechToTextComponent = ({ disabled, onChange }) => {
       }, 1000);
 
     } catch (err) {
+
+      setIsLoading(false);
       toast({
         title: i18next.t('prompt'),
         variant: 'error',

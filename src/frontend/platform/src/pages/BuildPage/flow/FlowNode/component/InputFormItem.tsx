@@ -130,18 +130,16 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
         let initialFileContent = 'file_content'
         let initialFilePath = 'file_path'
         let initialFileImage = 'image_file'
-        let counter = 0;
-        let initialFileContentCounter = 0;
-        let initialFilePathCounter = 0;
-        let initialFileImageCounter = 0;
-
-        while (existingOptions?.some(opt => opt.key === initialVarName)) {
+        let counter = 1;
+        let initialFileContentCounter = 1;
+        let initialFilePathCounter = 1;
+        let initialFileImageCounter = 1;
+        while (existingOptions?.some(opt => !opt.file_content && opt.key === initialVarName)) {
             counter += 1;
             initialVarName = `${names[formData.formType]}${counter}`;
         }
 
         const fileOtions = existingOptions?.filter(opt => opt.type === FormType.File);
-
         while (fileOtions?.some(opt => opt.file_content === initialFileContent)) {
             initialFileContentCounter += 1;
             initialFileContent = `file_content${initialFileContentCounter}`;
@@ -186,7 +184,7 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
             existingOptions?.some(opt => opt.key === formData.variableName) &&
             formData.variableName !== oldVarNameRef.current
         ) {
-            newErrors.variableName = t("variableNameExists");
+            // newErrors.variableName = t("variableNameExists");
         }
 
         if (formData.formType === FormType.Select && !formData.options.length) {
@@ -369,11 +367,100 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
 
     // 处理文件处理策略变化
     const handleProcessingStrategyChange = (strategy) => {
-        setFormData({ ...formData, processingStrategy: strategy });
+        // 先获取当前表单数据
+        const currentData = { ...formData };
+
+        // 根据新策略设置默认值
+        let updatedData = { ...currentData, processingStrategy: strategy };
+
         // 清空相关错误
         setErrors({});
-    }
 
+        // 如果切换到临时知识库策略
+        if (strategy === FileProcessingStrategy.TempKnowledge) {
+            // 保留主变量名，清空其他文件相关字段
+            updatedData = {
+                ...updatedData,
+                filecontent: '',
+                filepath: '',
+                imageFile: '',
+                fileContentSize: 15000
+            };
+        }
+        // 如果切换到解析文件内容策略
+        else if (strategy === FileProcessingStrategy.ParseContent) {
+            // 如果文件内容变量名为空，设置默认值
+            if (!currentData.filecontent || currentData.filecontent.trim() === '') {
+                // 生成一个唯一的 file_content 变量名
+                const fileOtions = existingOptions?.filter(opt => opt.type === FormType.File) || [];
+                let initialFileContent = 'file_content';
+                let fileContentCounter = 1;
+
+                while (fileOtions.some(opt => opt.file_content === initialFileContent)) {
+                    fileContentCounter += 1;
+                    initialFileContent = `file_content${fileContentCounter}`;
+                }
+
+                updatedData = {
+                    ...updatedData,
+                    filecontent: initialFileContent,
+                    filepath: '',
+                    imageFile: ''
+                };
+            } else {
+                // 保留现有的 filecontent，清空其他字段
+                updatedData = {
+                    ...updatedData,
+                    filepath: '',
+                    imageFile: ''
+                };
+            }
+        }
+        // 如果切换到不解析（原始文件）策略
+        else if (strategy === FileProcessingStrategy.OriginalFile) {
+            // 如果文件路径变量名为空，设置默认值
+            if (!currentData.filepath || currentData.filepath.trim() === '') {
+                const fileOtions = existingOptions?.filter(opt => opt.type === FormType.File) || [];
+                let initialFilePath = 'file_path';
+                let filePathCounter = 1;
+
+                while (fileOtions.some(opt => opt.file_path === initialFilePath)) {
+                    filePathCounter += 1;
+                    initialFilePath = `file_path${filePathCounter}`;
+                }
+
+                // 对于全部类型和图片类型，还需要设置 image_file
+                if (currentData.fileType === 'all' || currentData.fileType === 'image') {
+                    let initialImageFile = 'image_file';
+                    let imageFileCounter = 1;
+
+                    while (fileOtions.some(opt => opt.image_file === initialImageFile)) {
+                        imageFileCounter += 1;
+                        initialImageFile = `image_file${imageFileCounter}`;
+                    }
+
+                    updatedData = {
+                        ...updatedData,
+                        filepath: initialFilePath,
+                        imageFile: initialImageFile,
+                        filecontent: '',
+                        fileContentSize: 15000
+                    };
+                } else {
+                    // 文档类型只需要 file_path
+                    updatedData = {
+                        ...updatedData,
+                        filepath: initialFilePath,
+                        imageFile: '',
+                        filecontent: '',
+                        fileContentSize: 15000
+                    };
+                }
+            }
+        }
+
+        setFormData(updatedData);
+    };
     // 获取可用的文件处理策略选项
     const getAvailableProcessingStrategies = () => {
         return processingStrategyOptions;
