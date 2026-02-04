@@ -160,7 +160,8 @@ class InputNode(BaseNode):
         file_parse_mode = key_info.get('file_parse_mode', ParseModeEnum.INGEST_TO_KNOWLEDGE_BASE)
         ret = {}
         if file_parse_mode == ParseModeEnum.KEEP_RAW:
-            ret[key_info['image_file']] = key_value.get(key_info['image_file'], [])
+            if key_info.get("file_type") in ["image", "all"]:
+                ret[key_info['image_file']] = key_value.get(key_info['image_file'], [])
             ret[key_info['file_path']] = key_value.get(key_info['file_path'], [])
         elif file_parse_mode == ParseModeEnum.EXTRACT_TEXT:
             ret[key_info['file_content']] = key_value.get(key_info['file_content'], "")
