@@ -16,6 +16,7 @@ import FileTypeSelect from "./FileTypeSelect";
 import InputItem from "./InputItem";
 import VarInput from "./VarInput";
 import { t } from "i18next";
+import { generateUUID } from "@/utils";
 
 const enum FormType {
     Text = "text",
@@ -81,7 +82,15 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
     const oldStrategyRef = useRef("");
 
     useEffect(() => {
-        editRef.current = false
+        // === 每次弹窗打开都先重置 ===
+        editRef.current = false;
+        oldFormTypeRef.current = '';
+        oldVarNameRef.current = '';
+        oldcontentNameRef.current = '';
+        oldPathNameRef.current = '';
+        oldImageFileRef.current = '';
+        oldStrategyRef.current = '';
+
         if (initialData) {
             const {
                 type: formType,
@@ -95,7 +104,9 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
                 file_content_size: fileContentSize = 15000,
                 image_file: imageFile,
                 file_parse_mode: processingStrategy,
-                options = [] } = initialData;
+                options = [],
+            } = initialData;
+
             setFormData({
                 formType,
                 displayName,
@@ -109,11 +120,11 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
                 fileContentSize: fileContentSize || 15000,
                 imageFile,
                 isMultiple: allowMultiple,
-                processingStrategy: processingStrategy || FileProcessingStrategy.TempKnowledge
+                processingStrategy: processingStrategy || FileProcessingStrategy.TempKnowledge,
             });
 
-            editRef.current = true
-            oldFormTypeRef.current = formType
+            editRef.current = true;
+            oldFormTypeRef.current = formType;
             oldVarNameRef.current = variableName;
             oldcontentNameRef.current = filecontent;
             oldPathNameRef.current = filepath;
@@ -121,6 +132,7 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
             oldStrategyRef.current = processingStrategy;
         }
     }, [initialData]);
+
 
     // 变量重命名
     useEffect(() => {
@@ -134,7 +146,7 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
         let initialFileContentCounter = 1;
         let initialFilePathCounter = 1;
         let initialFileImageCounter = 1;
-        while (existingOptions?.some(opt => !opt.file_content && opt.key === initialVarName)) {
+        while (existingOptions?.some(opt => opt.file_parse_mode === "ingest_to_temp_kb" && opt.type === "file" && opt.key === initialVarName)) {
             counter += 1;
             initialVarName = `${names[formData.formType]}${counter}`;
         }
@@ -309,54 +321,46 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
     };
 
     // if the form type hasn't changed, it keeps the variable name as it was. Otherwise, it generates a new unique variable name.
-    const handleChangeFormType = (formType) => {
+    const handleChangeFormType = (formType: FormType) => {
         displayNameRef.current[formData.formType] = formData.displayName;
         const displayName = displayNameRef.current[formType] || '';
-        setFormData({ ...formData, displayName, formType })
-        setErrors({});
-        if (editRef.current) {
-            if (oldFormTypeRef.current === formType) {
-                setFormData({ ...formData, formType, variableName: oldVarNameRef.current, displayName })
-            } else {
-                const getNextAvailableName = (baseName, existingValues) => {
+
+        setFormData(prev => {
+            // 编辑态保持旧变量名，否则生成唯一变量名
+            let variableName = prev.variableName;
+
+            if (editRef.current) {
+                if (oldFormTypeRef.current === formType) {
+                    variableName = oldVarNameRef.current;
+                } else {
+                    // 新变量名生成逻辑
                     let counter = 1;
+                    let baseName = names[formType];
                     let name = baseName;
-
-                    if (!existingValues.some(opt => opt.key === baseName)) {
-                        return name;
-                    }
-
-                    const regex = new RegExp(`^${baseName}(\\d+)$`);
-                    let maxCounter = 0;
-
-                    existingValues.forEach(opt => {
-                        if (opt.key) {
-                            const match = opt.key.match(regex);
-                            if (match) {
-                                const num = parseInt(match[1]);
-                                if (num > maxCounter) {
-                                    maxCounter = num;
-                                }
-                            }
-                        }
-                    });
-
-                    counter = maxCounter + 1;
-                    name = `${baseName}${counter}`;
-
-                    while (existingValues.some(opt => opt.key === name)) {
+                    while (existingOptions?.some(opt => opt.key === name)) {
                         counter += 1;
                         name = `${baseName}${counter}`;
                     }
-
-                    return name;
-                };
-
-                let initialVarName = getNextAvailableName(names[formType], existingOptions || []);
-                setFormData({ ...formData, formType, variableName: initialVarName, displayName })
+                    variableName = name;
+                }
+            } else {
+                // 新建模式生成唯一变量名
+                let counter = 1;
+                let baseName = names[formType];
+                let name = baseName;
+                while (existingOptions?.some(opt => opt.key === name)) {
+                    counter += 1;
+                    name = `${baseName}${counter}`;
+                }
+                variableName = name;
             }
-        }
-    }
+
+            return { ...prev, formType, displayName, variableName };
+        });
+
+        setErrors({});
+    };
+
 
     // 处理文件类型变化
     const handleFileTypeChange = (fileType) => {
@@ -366,61 +370,66 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
     }
 
     // 处理文件处理策略变化
-    const handleProcessingStrategyChange = (strategy) => {
-        // 清空相关错误
+    const handleProcessingStrategyChange = (strategy: FileProcessingStrategy) => {
         setErrors({});
 
-        // 根据新策略生成需要更新的字段
-        const updates: any = { processingStrategy: strategy };
+        setFormData(prev => {
+            const updates: any = { processingStrategy: strategy };
+            const fileOptions = existingOptions?.filter(opt => opt.type === FormType.File) || [];
+            const isEdit = editRef.current;
 
-        // 如果切换到临时知识库策略
-        if (strategy === FileProcessingStrategy.TempKnowledge) {
-        }
-        // 如果切换到解析文件内容策略
-        else if (strategy === FileProcessingStrategy.ParseContent) {
-            // 如果 filecontent 为空，生成默认值
-            if (!formData.filecontent || formData.filecontent.trim() === '') {
-                const fileOtions = existingOptions?.filter(opt => opt.type === FormType.File) || [];
-                let initialFileContent = 'file_content';
-                let fileContentCounter = 1;
-
-                while (fileOtions.some(opt => opt.file_content === initialFileContent)) {
-                    fileContentCounter += 1;
-                    initialFileContent = `file_content${fileContentCounter}`;
+            // 临时知识库策略
+            if (strategy === FileProcessingStrategy.TempKnowledge) {
+                let name = 'file';
+                let counter = 1;
+                while (fileOptions.some(opt => opt.key === name)) {
+                    counter += 1;
+                    name = `file${counter}`;
                 }
-                updates.filecontent = initialFileContent;
-            }
-            // 否则保留用户已输入的 filecontent
-        }
-        // 如果切换到不解析（原始文件）策略
-        else if (strategy === FileProcessingStrategy.OriginalFile) {
-            if (!formData.filepath || formData.filepath.trim() === '') {
-                const fileOtions = existingOptions?.filter(opt => opt.type === FormType.File) || [];
-                let initialFilePath = 'file_path';
-                let filePathCounter = 1;
-
-                while (fileOtions.some(opt => opt.file_path === initialFilePath)) {
-                    filePathCounter += 1;
-                    initialFilePath = `file_path${filePathCounter}`;
-                }
-                updates.filepath = initialFilePath;
+                updates.variableName = name;
             }
 
-            if ((formData.fileType === 'all' || formData.fileType === 'image') &&
-                (!formData.imageFile || formData.imageFile.trim() === '')) {
-                const fileOtions = existingOptions?.filter(opt => opt.type === FormType.File) || [];
-                let initialImageFile = 'image_file';
-                let imageFileCounter = 1;
-
-                while (fileOtions.some(opt => opt.image_file === initialImageFile)) {
-                    imageFileCounter += 1;
-                    initialImageFile = `image_file${imageFileCounter}`;
-                }
-                updates.imageFile = initialImageFile;
+            if (isEdit && prev.processingStrategy === FileProcessingStrategy.TempKnowledge && strategy !== FileProcessingStrategy.TempKnowledge) {
+                const uuid = `file_${generateUUID(6)}`;
+                updates.variableName = uuid;
             }
-        }
 
-        setFormData(prev => ({ ...prev, ...updates }));
+            // 解析文件内容策略
+            if (strategy === FileProcessingStrategy.ParseContent && (!prev.filecontent || prev.filecontent.trim() === '')) {
+                let name = 'file_content';
+                let counter = 1;
+                while (fileOptions.some(opt => opt.file_content === name)) {
+                    counter += 1;
+                    name = `file_content${counter}`;
+                }
+                updates.filecontent = name;
+            }
+
+            // 不解析原始文件策略
+            if (strategy === FileProcessingStrategy.OriginalFile) {
+                if (!prev.filepath || prev.filepath.trim() === '') {
+                    let name = 'file_path';
+                    let counter = 1;
+                    while (fileOptions.some(opt => opt.file_path === name)) {
+                        counter += 1;
+                        name = `file_path${counter}`;
+                    }
+                    updates.filepath = name;
+                }
+
+                if ((prev.fileType === 'all' || prev.fileType === 'image') && (!prev.imageFile || prev.imageFile.trim() === '')) {
+                    let name = 'image_file';
+                    let counter = 1;
+                    while (fileOptions.some(opt => opt.image_file === name)) {
+                        counter += 1;
+                        name = `image_file${counter}`;
+                    }
+                    updates.imageFile = name;
+                }
+            }
+
+            return { ...prev, ...updates };
+        });
     };
     // 获取可用的文件处理策略选项
     const getAvailableProcessingStrategies = () => {
@@ -814,7 +823,7 @@ export default function InputFormItem({ data, nodeId, onChange, onValidate, onVa
             formType: type,
             isRequired: required,
             options,
-            variableName: key,
+            variableName,
             filecontent: file_content,
             filepath: file_path,
             fileType: file_type,
@@ -822,7 +831,18 @@ export default function InputFormItem({ data, nodeId, onChange, onValidate, onVa
             imageFile: image_file,
             processingStrategy: file_parse_mode
         } = _data;
-
+        let key
+        if (type === FormType.File) {
+            if (file_parse_mode === FileProcessingStrategy.TempKnowledge) {
+                // 临时知识库：key 永远等于 variableName
+                key = variableName;
+            } else {
+                // 非临时策略
+                key = editKey || generateUUID(6);
+            }
+        } else {
+            key = editKey || generateUUID(6);
+        }
         const multiple = type === FormType.File ? isMultiple : allowMultiple;
 
         // 根据文件类型和处理策略清理字段
@@ -867,7 +887,7 @@ export default function InputFormItem({ data, nodeId, onChange, onValidate, onVa
             file_content: cleanedFileContent,
             file_path: cleanedFilePath,
             file_type,
-            file_content_size: cleanedFileContentSize, // 使用未重置的值
+            file_content_size: cleanedFileContentSize,
             image_file: cleanedImageFile,
             file_parse_mode
         };
@@ -1029,6 +1049,7 @@ export default function InputFormItem({ data, nodeId, onChange, onValidate, onVa
                     </DialogHeader>
 
                     {isOpen && <Form
+                        key={editKey || 'new'}
                         nodeId={nodeId}
                         nodeData={data}
                         initialData={
