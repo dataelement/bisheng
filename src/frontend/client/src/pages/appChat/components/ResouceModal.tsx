@@ -27,7 +27,8 @@ const Anwser = ({ id, msg, onInit, onAdd, fullScreen = false }) => {
                 }
                 // 匹配
                 const reg = new RegExp(`(${data.join('|')})`, 'g')
-                setHtml(msg.replace(reg, '<span>$1</span>'))
+                // markdown images replace imgname
+                setHtml(msg.replace(/!\[.+\]\(.+\/(.+?)\)/g, '$1').replace(reg, '<span>$1</span>'))
                 onInit(data)
             })
         }

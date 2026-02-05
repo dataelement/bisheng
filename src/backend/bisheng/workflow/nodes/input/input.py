@@ -185,6 +185,7 @@ class InputNode(BaseNode):
             res = {
                 'user_input': self.node_params['user_input'],
             }
+            result.pop("dialog_files", None)
             res.update(self._parse_upload_file_variables(key_info, result))
 
             self.graph_state.save_context(content=f'{res.get("dialog_files_content", "")}\n{res["user_input"]}',

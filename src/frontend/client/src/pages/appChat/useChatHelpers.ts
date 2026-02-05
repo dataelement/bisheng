@@ -96,14 +96,12 @@ export default function useChatHelpers() {
 
         let showUpload = false
         if (tab === "dialog_input") {
-            const schemaItem = value?.find((el) => el.key === "dialog_file_accept")
+            const schemaItem = value?.find((el) => el?.key === "dialog_file_accept")
             const fileAccept = schemaItem?.value
             emitAreaTextEvent({ action: EVENT_TYPE.FILE_ACCEPTS, chatId, fileAccept })
 
-            const switchItem = value?.find((el) => el.key === "user_input_file")
-            if (switchItem) {
-                showUpload = switchItem.value
-            }
+            const switchItem = value?.find((el) => el?.key === "user_input_file")
+            showUpload = switchItem ? switchItem.value : true
         }
 
         const runstate = tab === "form_input" ? { inputDisabled: true, inputForm: inputSchema } : { showUpload, inputDisabled: false }

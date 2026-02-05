@@ -4,18 +4,16 @@ import { Input } from "@/components/bs-ui/input";
 import { Label } from "@/components/bs-ui/label";
 import { Switch } from "@/components/bs-ui/switch";
 import { QuestionTooltip } from "@/components/bs-ui/tooltip";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import { isVarInFlow } from "@/util/flowUtils";
 import { cloneDeep } from "lodash-es";
 import { ChevronsDown, CloudUpload, Type } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
+import { useTranslation } from "react-i18next"; // 引入国际化
 import useFlowStore from "../../flowStore";
 import DragOptions from "./DragOptions";
 import FileTypeSelect from "./FileTypeSelect";
 import InputItem from "./InputItem";
 import VarInput from "./VarInput";
-import { t } from "i18next";
 
 const enum FormType {
     Text = "text",
@@ -29,27 +27,14 @@ const names = {
     [FormType.File]: "file",
 }
 
-// 文件处理策略枚举
-const enum FileProcessingStrategy {
-    TempKnowledge = "ingest_to_temp_kb",  // 存入临时知识库
-    ParseContent = "extract_text",    // 解析文件内容
-    OriginalFile = "keep_raw",    // 不解析（原始文件）
-}
-
-
 function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptions }) {
     const { t } = useTranslation('flow');
     const namePlaceholders = {
-        [FormType.Text]: t("nameExample"), // 例如"姓名"
-        [FormType.Select]: t("categoryExample"), // 例如"保险类别"
-        [FormType.File]: t("uploadExample"), // 例如"请上传去年财报"
+        [FormType.Text]: t("nameExample"), // 例如“姓名”
+        [FormType.Select]: t("categoryExample"), // 例如“保险类别”
+        [FormType.File]: t("uploadExample"), // 例如“请上传去年财报”
     };
-    const processingStrategyOptions = useMemo(() => [
-        { value: FileProcessingStrategy.ParseContent, label: t("parseFile") },
-        { value: FileProcessingStrategy.TempKnowledge, label: t("temporaryKnowledgeBase") },
-        { value: FileProcessingStrategy.OriginalFile, label: t("notParse") },
-    ], [t]);
-    const [defaultValue] = useState(initialData?.value || "");
+
     const [formData, setFormData] = useState({
         formType: FormType.Text,
         displayName: "",
@@ -63,7 +48,6 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
         isRequired: true,
         allowMultiple: false,  // Allow multiple file uploads
         options: [],  // Options for Select input
-        processingStrategy: FileProcessingStrategy.ParseContent, // 文件处理策略
     });
     const [errors, setErrors] = useState<any>({});
     const editRef = useRef(false); // 编辑状态
@@ -74,12 +58,11 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
         [FormType.File]: '',
     });
 
+
     const oldVarNameRef = useRef("");
     const oldcontentNameRef = useRef("");
     const oldPathNameRef = useRef("");
     const oldImageFileRef = useRef("");
-    const oldStrategyRef = useRef("");
-
     useEffect(() => {
         editRef.current = false
         if (initialData) {
@@ -92,9 +75,8 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
                 file_content: filecontent,
                 file_type: fileType,
                 file_path: filepath,
-                file_content_size: fileContentSize = 15000,
+                file_content_size: fileContentSize,
                 image_file: imageFile,
-                file_parse_mode: processingStrategy,
                 options = [] } = initialData;
             setFormData({
                 formType,
@@ -106,10 +88,9 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
                 filecontent,
                 fileType,
                 filepath,
-                fileContentSize: fileContentSize || 15000,
+                fileContentSize,
                 imageFile,
-                isMultiple: allowMultiple,
-                processingStrategy: processingStrategy || FileProcessingStrategy.TempKnowledge
+                isMultiple: allowMultiple
             });
 
             editRef.current = true
@@ -118,7 +99,6 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
             oldcontentNameRef.current = filecontent;
             oldPathNameRef.current = filepath;
             oldImageFileRef.current = imageFile;
-            oldStrategyRef.current = processingStrategy;
         }
     }, [initialData]);
 
@@ -133,29 +113,26 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
         let counter = 1;
         let initialFileContentCounter = 1;
         let initialFilePathCounter = 1;
-        let initialFileImageCounter = 1;
-        while (existingOptions?.some(opt => !opt.file_content && opt.key === initialVarName)) {
+        let initialFileImageCounter = 1
+        while (existingOptions?.some(opt => opt.key === initialVarName)) {
             counter += 1;
             initialVarName = `${names[formData.formType]}${counter}`;
         }
-
-        const fileOtions = existingOptions?.filter(opt => opt.type === FormType.File);
+        const fileOtions = existingOptions?.filter(opt => opt.type === FormType.File)
         while (fileOtions?.some(opt => opt.file_content === initialFileContent)) {
             initialFileContentCounter += 1;
             initialFileContent = `file_content${initialFileContentCounter}`;
         }
-
         while (fileOtions?.some(opt => opt.file_path === initialFilePath)) {
             initialFilePathCounter += 1;
             initialFilePath = `file_path${initialFilePathCounter}`;
         }
-
         while (fileOtions?.some(opt => opt.image_file === initialFileImage)) {
             initialFileImageCounter += 1;
             initialFileImage = `image_file${initialFileImageCounter}`;
         }
-
         // 变量重命名
+        // existingOptions.
         setFormData((prevData) => ({
             ...prevData,
             variableName: initialVarName,
@@ -163,7 +140,7 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
             filepath: initialFilePath,
             imageFile: initialFileImage
         }));
-    }, [initialData, existingOptions, formData.formType])
+    }, [initialData, formData.formType])
 
     const validateForm = () => {
         const newErrors: any = {};
@@ -184,7 +161,7 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
             existingOptions?.some(opt => opt.key === formData.variableName) &&
             formData.variableName !== oldVarNameRef.current
         ) {
-            // newErrors.variableName = t("variableNameExists");
+            newErrors.variableName = t("variableNameExists");
         }
 
         if (formData.formType === FormType.Select && !formData.options.length) {
@@ -193,65 +170,40 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
 
         // Validation for file upload variables (if multiple files are allowed)
         if (formData.formType === FormType.File) {
-            // 根据文件类型和处理策略验证不同的字段
-            if (formData.fileType === 'all') {
-                // 全部类型文件
-                if (formData.processingStrategy === FileProcessingStrategy.TempKnowledge) {
-                    // 存入临时知识库 - 需要验证 variableName
-                    // 上面已经验证过了
-                } else if (formData.processingStrategy === FileProcessingStrategy.ParseContent) {
-                    // 解析文件内容 - 验证解析结果变量名称和长度
-                    if (!formData.filecontent.trim()) {
-                        newErrors.filecontent = "variableNameRequired";
-                    } else if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(formData.filecontent)) {
-                        newErrors.filecontent = "variableNameInvalid";
-                    } else if (formData.filecontent.length > 50) {
-                        newErrors.filecontent = t("variableNameTooLong");
-                    } else if (
-                        existingOptions?.some(opt => opt.type === 'file'
-                            && opt.file_content === formData.filecontent)
-                        && formData.filecontent !== oldcontentNameRef.current
-                    ) {
-                        newErrors.filecontent = t("variableNameExists");
-                    }
-                } else if (formData.processingStrategy === FileProcessingStrategy.OriginalFile) {
-                    // 不解析（原始文件）- 验证图片变量名称和文件路径变量名称
-                    const _error = validateImageFileVariableName(formData.imageFile, existingOptions);
-                    if (_error) {
-                        newErrors.imageFile = _error
-                    }
+            // Validate file content variable name
+            if (!formData.filecontent.trim()) {
+                newErrors.filecontent = t("variableNameRequired");
+            } else if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(formData.filecontent)) {
+                newErrors.filecontent = t("variableNameInvalid");
+            } else if (formData.filecontent.length > 50) {
+                newErrors.filecontent = t("variableNameTooLong");
+            } else if (
+                existingOptions?.some(opt => opt.type === 'file'
+                    && opt.file_content === formData.filecontent)
+                && formData.filecontent !== oldcontentNameRef.current
+            ) {
+                newErrors.filecontent = t("variableNameExists");
+            }
 
-                    // 验证文件路径变量名称
-                    if (!formData.filepath.trim()) {
-                        newErrors.filepath = t("variableNameRequired");
-                    } else if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(formData.filepath)) {
-                        newErrors.filepath = t("variableNameInvalid");
-                    } else if (formData.filepath.length > 50) {
-                        newErrors.filepath = t("variableNameTooLong");
-                    } else if (
-                        existingOptions?.some(opt => opt.type === 'file'
-                            && opt.file_path === formData.filepath)
-                        && formData.filepath !== oldPathNameRef.current
-                    ) {
-                        newErrors.filepath = t("variableNameExists");
-                    }
-                }
-            } else {
-                // 文档类型文件
-                if (formData.processingStrategy === FileProcessingStrategy.OriginalFile) {
-                    if (!formData.filepath.trim()) {
-                        newErrors.filepath = t("variableNameRequired");
-                    } else if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(formData.filepath)) {
-                        newErrors.filepath = t("variableNameInvalid");
-                    } else if (formData.filepath.length > 50) {
-                        newErrors.filepath = t("variableNameTooLong");
-                    } else if (
-                        existingOptions?.some(opt => opt.type === 'file'
-                            && opt.file_path === formData.filepath)
-                        && formData.filepath !== oldPathNameRef.current
-                    ) {
-                        newErrors.filepath = t("variableNameExists");
-                    }
+            // Validate file path variable name
+            if (!formData.filepath.trim()) {
+                newErrors.filepath = t("variableNameRequired");
+            } else if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(formData.filepath)) {
+                newErrors.filepath = t("variableNameInvalid");
+            } else if (formData.filepath.length > 50) {
+                newErrors.filepath = t("variableNameTooLong");
+            } else if (
+                existingOptions?.some(opt => opt.type === 'file'
+                    && opt.file_path === formData.filepath)
+                && formData.filepath !== oldPathNameRef.current
+            ) {
+                newErrors.filepath = t("variableNameExists");
+            }
+
+            if (formData.fileType !== 'file') {
+                const _error = validateImageFileVariableName(formData.imageFile, existingOptions);
+                if (_error) {
+                    newErrors.imageFile = _error
                 }
             }
         }
@@ -286,8 +238,8 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
 
         // 5. 不能重复
         if (existingOptions?.some(opt => opt.type === 'file'
-            && opt.image_file === varName)
-            && varName !== oldImageFileRef.current) {
+            && opt.image_file === formData.imageFile)
+            && formData.imageFile !== oldImageFileRef.current) {
             return t('variableNameAlreadyExists');
         }
 
@@ -318,151 +270,13 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
             if (oldFormTypeRef.current === formType) {
                 setFormData({ ...formData, formType, variableName: oldVarNameRef.current, displayName })
             } else {
-                const getNextAvailableName = (baseName, existingValues) => {
-                    let counter = 1;
-                    let name = baseName;
-
-                    if (!existingValues.some(opt => opt.key === baseName)) {
-                        return name;
-                    }
-
-                    const regex = new RegExp(`^${baseName}(\\d+)$`);
-                    let maxCounter = 0;
-
-                    existingValues.forEach(opt => {
-                        if (opt.key) {
-                            const match = opt.key.match(regex);
-                            if (match) {
-                                const num = parseInt(match[1]);
-                                if (num > maxCounter) {
-                                    maxCounter = num;
-                                }
-                            }
-                        }
-                    });
-
-                    counter = maxCounter + 1;
-                    name = `${baseName}${counter}`;
-
-                    while (existingValues.some(opt => opt.key === name)) {
-                        counter += 1;
-                        name = `${baseName}${counter}`;
-                    }
-
-                    return name;
-                };
-
-                let initialVarName = getNextAvailableName(names[formType], existingOptions || []);
+                let counter = 1;
+                let initialVarName = names[formType];
+                while (existingOptions?.some(opt => opt.key === initialVarName)) {
+                    counter += 1;
+                    initialVarName = `${names[formType]}${counter}`;
+                }
                 setFormData({ ...formData, formType, variableName: initialVarName, displayName })
-            }
-        }
-    }
-
-    // 处理文件类型变化
-    const handleFileTypeChange = (fileType) => {
-        setFormData({ ...formData, fileType });
-        // 清空相关错误
-        setErrors({});
-    }
-
-    // 处理文件处理策略变化
-    const handleProcessingStrategyChange = (strategy) => {
-        // 清空相关错误
-        setErrors({});
-
-        // 根据新策略生成需要更新的字段
-        const updates: any = { processingStrategy: strategy };
-
-        // 如果切换到临时知识库策略
-        if (strategy === FileProcessingStrategy.TempKnowledge) {
-        }
-        // 如果切换到解析文件内容策略
-        else if (strategy === FileProcessingStrategy.ParseContent) {
-            // 如果 filecontent 为空，生成默认值
-            if (!formData.filecontent || formData.filecontent.trim() === '') {
-                const fileOtions = existingOptions?.filter(opt => opt.type === FormType.File) || [];
-                let initialFileContent = 'file_content';
-                let fileContentCounter = 1;
-
-                while (fileOtions.some(opt => opt.file_content === initialFileContent)) {
-                    fileContentCounter += 1;
-                    initialFileContent = `file_content${fileContentCounter}`;
-                }
-                updates.filecontent = initialFileContent;
-            }
-            // 否则保留用户已输入的 filecontent
-        }
-        // 如果切换到不解析（原始文件）策略
-        else if (strategy === FileProcessingStrategy.OriginalFile) {
-            if (!formData.filepath || formData.filepath.trim() === '') {
-                const fileOtions = existingOptions?.filter(opt => opt.type === FormType.File) || [];
-                let initialFilePath = 'file_path';
-                let filePathCounter = 1;
-
-                while (fileOtions.some(opt => opt.file_path === initialFilePath)) {
-                    filePathCounter += 1;
-                    initialFilePath = `file_path${filePathCounter}`;
-                }
-                updates.filepath = initialFilePath;
-            }
-
-            if ((formData.fileType === 'all' || formData.fileType === 'image') &&
-                (!formData.imageFile || formData.imageFile.trim() === '')) {
-                const fileOtions = existingOptions?.filter(opt => opt.type === FormType.File) || [];
-                let initialImageFile = 'image_file';
-                let imageFileCounter = 1;
-
-                while (fileOtions.some(opt => opt.image_file === initialImageFile)) {
-                    imageFileCounter += 1;
-                    initialImageFile = `image_file${imageFileCounter}`;
-                }
-                updates.imageFile = initialImageFile;
-            }
-        }
-
-        setFormData(prev => ({ ...prev, ...updates }));
-    };
-    // 获取可用的文件处理策略选项
-    const getAvailableProcessingStrategies = () => {
-        return processingStrategyOptions;
-
-    };
-
-    // 检查是否需要显示某个字段
-    const shouldShowField = (fieldType) => {
-        if (formData.formType !== FormType.File) return false;
-
-        if (formData.fileType === 'all' || formData.fileType === 'image') {
-            // 全部类型和图片类型
-            switch (fieldType) {
-                case 'tempKnowledge':
-                    return formData.processingStrategy === FileProcessingStrategy.TempKnowledge;
-                case 'parseContent':
-                    return formData.processingStrategy === FileProcessingStrategy.ParseContent;
-                case 'imageFile':
-                    // 全部类型和图片类型的不解析需要显示图片变量
-                    return formData.processingStrategy === FileProcessingStrategy.OriginalFile;
-                case 'filePath':
-                    // 全部类型和图片类型的不解析需要显示文件路径
-                    return formData.processingStrategy === FileProcessingStrategy.OriginalFile;
-                default:
-                    return false;
-            }
-        } else {
-            // 文档类型文件
-            switch (fieldType) {
-                case 'tempKnowledge':
-                    return formData.processingStrategy === FileProcessingStrategy.TempKnowledge;
-                case 'parseContent':
-                    return formData.processingStrategy === FileProcessingStrategy.ParseContent;
-                case 'filePath':
-                    // 文档类型的不解析只显示文件路径
-                    return formData.processingStrategy === FileProcessingStrategy.OriginalFile;
-                case 'imageFile':
-                    // 文档类型不显示图片变量名称
-                    return false;
-                default:
-                    return false;
             }
         }
     }
@@ -496,7 +310,7 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
                 itemKey={''}
                 nodeId={nodeId}
                 paramItem={nodeData}
-                value={defaultValue}
+                value={formData.displayName}
                 placeholder={namePlaceholders[formData.formType]}
                 onChange={(val) => setFormData({ ...formData, displayName: val })}
                 onVarEvent={(func) => checkVarFuncRef.current = func}
@@ -608,130 +422,80 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
                 onCheckedChange={(checked) => setFormData({ ...formData, isMultiple: checked })}
             />
         </div>
-
-        <FileTypeSelect
-            data={{
-                label: t('uploadFileTypes'),
-                value: formData.fileType,
-            }}
-            onChange={handleFileTypeChange}
-        />
-
-        {/* 文件处理策略选择 - 下拉框 */}
+        <FileTypeSelect data={{
+            label: t('uploadFileTypes'),
+            value: formData.fileType,
+        }} onChange={(fileType) => setFormData({ ...formData, fileType })} />
         <div>
             <Label className="flex items-center bisheng-label">
-                {t("fileProcessingStrategy")}
-                <QuestionTooltip
-                    content={
-                        <div className="whitespace-pre-line">
-                            {t("dialogProcessingStrategyTip")}
-                        </div>
-                    }
-                />
+                {t('tempKnowledgeBaseName')}
+                <QuestionTooltip content={t('tempKnowledgeBaseNameTip')} />
             </Label>
-            <Select
-                value={formData.processingStrategy}
-                onValueChange={handleProcessingStrategyChange}
-            >
-                <SelectTrigger className="mt-2">
-                    <SelectValue placeholder={t("selectFile")} />
-                </SelectTrigger>
-                <SelectContent>
-                    {getAvailableProcessingStrategies().map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                        </SelectItem>
-                    ))}
-                </SelectContent>
-            </Select>
+            <Input
+                className={`mt-2 ${errors.variableName ? "border-red-500" : ""}`}
+                id="variableName"
+                placeholder={t("enterVariableName")}
+                value={formData.variableName}
+                onChange={(e) => setFormData({ ...formData, variableName: e.target.value })}
+            />
+            {errors.variableName && <p className="text-red-500 text-sm">{errors.variableName}</p>}
         </div>
 
-        {/* 存入临时知识库 - 显示临时知识库名称 */}
-        {shouldShowField('tempKnowledge') && (
-            <div>
-                <Label className="flex items-center bisheng-label">
-                    {t('tempKnowledgeBaseName')}
-
-                    <QuestionTooltip content={t('tempKnowledgeBaseNameTip')} />
-                </Label>
-                <Input
-                    className={`mt-2 ${errors.variableName ? "border-red-500" : ""}`}
-                    id="variableName"
-                    placeholder={t("enterVariableName")}
-                    value={formData.variableName}
-                    onChange={(e) => setFormData({ ...formData, variableName: e.target.value })}
-                />
-                {errors.variableName && <p className="text-red-500 text-sm">{errors.variableName}</p>}
-            </div>
-        )}
-
-        {/* 解析文件内容 - 显示解析结果长度上限和解析结果变量名称 */}
-        {shouldShowField('parseContent') && (
-            <>
-                <InputItem
-                    type='number'
-                    char
-                    linefeed
-                    label={t('parseLengthLimit')}
-                    data={{
-                        min: 0,
-                        value: formData.fileContentSize,
-                    }}
-                    onChange={(fileContentSize) => setFormData({ ...formData, fileContentSize })}
-                />
-                <div>
-                    <Label className="flex items-center bisheng-label">
-                        {t("parseResultName")}
-                        <QuestionTooltip content={t("storeVariableName")} />
-                    </Label>
-                    <Input
-                        className={`mt-2 ${errors.filecontent ? "border-red-500" : ""}`}
-                        id="filecontent"
-                        placeholder={t("enterVariableName")}
-                        value={formData.filecontent}
-                        onChange={(e) => setFormData({ ...formData, filecontent: e.target.value })}
-                    />
-                    {errors.filecontent && <p className="text-red-500 text-sm">{errors.filecontent}</p>}
-                </div>
-                {errors.fileContentSize && <p className="text-red-500 text-sm">{errors.fileContentSize}</p>}
-            </>
-        )}
-
-        {/* 不解析（原始文件） - 显示图片变量名称和文件路径变量名称（仅全部类型） */}
-        {shouldShowField('imageFile') && (
-            <div>
-                <Label className="flex items-center bisheng-label">
-                    {t("imageVariableName")}
-                    <QuestionTooltip content={t('extractImages')} />
-                </Label>
-                <Input
-                    className={`mt-2 ${errors.imageFile ? "border-red-500" : ""}`}
-                    id="imageFile"
-                    placeholder={t("enterVariableName")}
-                    value={formData.imageFile}
-                    onChange={(e) => setFormData({ ...formData, imageFile: e.target.value })}
-                />
-                {errors.imageFile && <p className="text-red-500 text-sm">{errors.imageFile}</p>}
-            </div>
-        )}
-
-        {/* 文件路径变量名称（全部类型的原始文件，或文档类型的原始文件） */}
-        {shouldShowField('filePath') && (
-            <div>
-                <Label className="flex items-center bisheng-label">
-                    {t("filePathName")}
-                    <QuestionTooltip content={t('storeUploadFiles')} />
-                </Label>
-                <Input
-                    className={`mt-2 ${errors.filepath ? "border-red-500" : ""}`}
-                    id="filepath"
-                    placeholder={t("enterVariableName")}
-                    value={formData.filepath}
-                    onChange={(e) => setFormData({ ...formData, filepath: e.target.value })}
-                />
-                {errors.filepath && <p className="text-red-500 text-sm">{errors.filepath}</p>}
-            </div>
-        )}
+        <div>
+            <Label className="flex items-center bisheng-label">
+                {t('fileContentVarName')}
+                <QuestionTooltip content={t('fileContentVarTip')} />
+            </Label>
+            <Input
+                className={`mt-2 ${errors.filecontent ? "border-red-500" : ""}`}
+                id="filecontent"
+                placeholder={t("enterVariableName")}
+                value={formData.filecontent}
+                onChange={(e) => setFormData({ ...formData, filecontent: e.target.value })}
+            />
+            {errors.filecontent && <p className="text-red-500 text-sm">{errors.filecontent}</p>}
+        </div>
+        <InputItem
+            type='number'
+            char
+            linefeed
+            label={t('fileContentMaxLength')}
+            data={
+                {
+                    min: 0,
+                    value: formData.fileContentSize,
+                }
+            }
+            onChange={(fileContentSize) => setFormData({ ...formData, fileContentSize })}
+        />
+        <div>
+            <Label className="flex items-center bisheng-label">
+                {t('filePathVarName')}
+                <QuestionTooltip content={t('filePathVarTip')} />
+            </Label>
+            <Input
+                className={`mt-2 ${errors.filepath ? "border-red-500" : ""}`}
+                id="filepath"
+                placeholder={t("enterVariableName")}
+                value={formData.filepath}
+                onChange={(e) => setFormData({ ...formData, filepath: e.target.value })}
+            />
+            {errors.filepath && <p className="text-red-500 text-sm">{errors.filepath}</p>}
+        </div>
+        {formData.fileType !== 'file' && <div>
+            <Label className="flex items-center bisheng-label">
+                {t('uploadImageFile')}
+                <QuestionTooltip content={t('uploadImageFileTip')} />
+            </Label>
+            <Input
+                className={`mt-2 ${errors.imageFile ? "border-red-500" : ""}`}
+                id="imageFile"
+                placeholder={t("enterVariableName")}
+                value={formData.imageFile}
+                onChange={(e) => setFormData({ ...formData, imageFile: e.target.value })}
+            />
+            {errors.imageFile && <p className="text-red-500 text-sm">{errors.imageFile}</p>}
+        </div>}
     </div>;
 
     return (
@@ -787,7 +551,7 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
 
 // node input form item
 export default function InputFormItem({ data, nodeId, onChange, onValidate, onVarEvent, i18nPrefix }) {
-    const { t } = useTranslation('flow');
+    const { t } = useTranslation('flow'); // 使用国际化
     const [isOpen, setIsOpen] = useState(false);
     const [editKey, setEditKey] = useState(""); // 控制编辑模式
     const [foucsUpdate, setFoucsUpdate] = useState(false);
@@ -819,76 +583,49 @@ export default function InputFormItem({ data, nodeId, onChange, onValidate, onVa
             filepath: file_path,
             fileType: file_type,
             fileContentSize: file_content_size,
-            imageFile: image_file,
-            processingStrategy: file_parse_mode
+            imageFile: image_file
         } = _data;
 
         const multiple = type === FormType.File ? isMultiple : allowMultiple;
-
-        // 根据文件类型和处理策略清理字段
-        let cleanedImageFile = image_file;
-        let cleanedFileContent = file_content;
-        let cleanedFilePath = file_path;
-        let cleanedFileContentSize = file_content_size;
-
-        if (type === FormType.File) {
-            if (file_type === 'file') {
-                // 文档类型：清空图片相关字段
-                cleanedImageFile = '';
-            }
-
-            // 根据处理策略清理字段
-            if (file_parse_mode === FileProcessingStrategy.TempKnowledge) {
-                // 临时知识库：只保留key，清空其他文件相关字段
-                cleanedFileContent = '';
-                cleanedFilePath = '';
-                cleanedImageFile = '';
-                // cleanedFileContentSize = 0;
-            } else if (file_parse_mode === FileProcessingStrategy.ParseContent) {
-                // 解析文件内容：清空图片和路径字段
-                cleanedImageFile = '';
-                cleanedFilePath = '';
-                // fileContentSize 应该保留
-            } else if (file_parse_mode === FileProcessingStrategy.OriginalFile) {
-                // 不解析：清空解析内容字段
-                cleanedFileContent = '';
-                // cleanedFileContentSize = 0;
-            }
-        }
-
-        // 创建新的表单项对象
-        const newItem = {
-            key,
-            type,
-            value,
-            required,
-            multiple,
-            options,
-            file_content: cleanedFileContent,
-            file_path: cleanedFilePath,
-            file_type,
-            file_content_size: cleanedFileContentSize, // 使用未重置的值
-            image_file: cleanedImageFile,
-            file_parse_mode
-        };
-
-        let newValue;
-
         if (editKey) {
-            // 编辑模式：更新表单项
-            newValue = data.value.map((opt) =>
-                opt.key === editKey ? newItem : opt
+            // 编辑模式，更新表单项
+            data.value = data.value.map((opt) =>
+                opt.key === editKey
+                    ? {
+                        key,
+                        type,
+                        value,
+                        required,
+                        multiple,
+                        options,
+                        file_content,
+                        file_path,
+                        file_type,
+                        file_content_size,
+                        image_file
+                    }
+                    : opt
             );
         } else {
-            // 新建模式：添加表单项
-            newValue = [...data.value, newItem];
+            // 新建模式，添加表单项
+            data.value = [...data.value, {
+                key,
+                type,
+                value,
+                required,
+                multiple,
+                file_content,
+                file_path,
+                file_type,
+                options,
+                file_content_size,
+                image_file
+            }];
             setTimeout(() => {
                 scrollRef.current?.scrollTo(0, scrollRef.current?.scrollHeight); // 滚动到底部
             }, 0);
         }
-
-        // 通过 onChange 回调更新数据
-        onChange(newValue);
+        onChange(data.value);
         setFoucsUpdate(!foucsUpdate);
         setIsOpen(false); // 关闭弹窗
     };
@@ -902,12 +639,10 @@ export default function InputFormItem({ data, nodeId, onChange, onValidate, onVa
 
     // 更新 DragOptions 的顺序变化
     const handleOptionsChange = (newOptions) => {
-        const newValue = newOptions
-            .map((el) => data.value.find((op) => op.key === el.key))
-            .filter(Boolean);
-
-        // 通过 onChange 更新数据
-        onChange(newValue);
+        data.value = newOptions.map((el) => {
+            return data.value.find((op) => op.key === el.key);
+        });
+        onChange(data.value);
     };
 
     // 校验逻辑
@@ -934,47 +669,9 @@ export default function InputFormItem({ data, nodeId, onChange, onValidate, onVa
                 })
             }
 
-            // 构建变量列表
-            let variableList = el.key;
-
-            if (el.type === 'file') {
-                // 文件类型需要显示所有相关变量
-                const variableParts = [];
-
-                // 根据处理策略添加不同的变量
-                if (el.file_parse_mode === FileProcessingStrategy.TempKnowledge) {
-                    variableParts.push(el.key);
-                } else if (el.file_parse_mode === FileProcessingStrategy.ParseContent) {
-                    if (el.file_content) variableParts.push(el.file_content);
-                } else if (el.file_parse_mode === FileProcessingStrategy.OriginalFile) {
-                    if (el.file_path) variableParts.push(el.file_path);
-                    if (el.image_file && (el.file_type === 'all' || el.file_type === 'image')) {
-                        variableParts.push(el.image_file);
-                    }
-                }
-
-                if (variableParts.length > 0) {
-                    variableList = variableParts.join(', ');
-                }
-            }
-
-            let text = `${el.value}（${variableList}）`;
-
-            // 如果需要还可以添加处理策略信息（可选）
-            if (el.type === 'file') {
-                let strategyText = '';
-                if (el.file_parse_mode === FileProcessingStrategy.TempKnowledge) {
-                    strategyText = t('temporaryKnowledgeBase');
-                } else if (el.file_parse_mode === FileProcessingStrategy.ParseContent) {
-                    strategyText = t("parseFile");
-                } else if (el.file_parse_mode === FileProcessingStrategy.OriginalFile) {
-                    strategyText = t("notParse");
-                }
-            }
-
             return {
                 key: el.key,
-                text,
+                text: el.type === 'file' ? `${el.value}(${el.key},${el.file_content},${el.file_path})` : `${el.value}(${el.key})`,
                 type: el.type,
             }
         });
@@ -1021,7 +718,7 @@ export default function InputFormItem({ data, nodeId, onChange, onValidate, onVa
             {error && <p className="text-red-500 text-sm">{t("atLeastOneFormItem")}</p>}
 
             <Dialog open={isOpen} onOpenChange={setIsOpen}>
-                <DialogContent className="max-h-screen">
+                <DialogContent className="max-h-screen overflow-auto">
                     <DialogHeader>
                         <DialogTitle>
                             {editKey ? t("editFormItem") : t("addFormItem")}

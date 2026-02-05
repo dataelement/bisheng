@@ -285,7 +285,11 @@ export default function FileView({
 
 
         pdfjsLib.GlobalWorkerOptions.workerSrc = __APP_ENV__.BASE_URL + '/pdf.worker.min.js';
-        pdfjsLib.getDocument(pdfUrl).promise.then(async (pdfDocument) => {
+        pdfjsLib.getDocument({
+            url: pdfUrl,
+            cMapUrl: __APP_ENV__.BASE_URL + '/cmaps/',
+            cMapPacked: true,
+        }).promise.then(async (pdfDocument) => {
             pdfPageCache = {}
             const page = pdfPageCache[1] || await pdfDocument.getPage(1);
             pdfPageCache[1] = page

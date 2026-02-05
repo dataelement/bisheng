@@ -58,9 +58,9 @@ const getSpecialVar = ({ obj, group, onlyImg = false }) => {
                         break;
                     case 'keep_raw':
                         // 无论是 'all' 还是 'file'，只要不是 onlyImg (已在上面拦截)，都推入 file_path
-                        if (file_type === 'all' || file_type === 'file') {
+                        // if (file_type === 'all' || file_type === 'file') {
                             add('file_path');
-                        }
+                        // }
                         break;
                     default:
                         add('key');

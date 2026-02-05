@@ -89,7 +89,7 @@ export default function DataTableKnowledge<TData, TValue>({
   useEffect(() => {
     const fetchUserInfo = async () => {
       const res = await dataService.getUserInfo();
-      setInfoId(res.data[0].id);
+      setInfoId(res?.data[0]?.id || '');
     }
     fetchUserInfo();
   }, [])
@@ -197,6 +197,9 @@ export default function DataTableKnowledge<TData, TValue>({
           duplicateFiles.push({
             file,
             name: file.name,
+            file_name: repeatCheckRes.data.file_name,
+            repeat_file_name: repeatCheckRes.data.repeat_file_name,
+            repeat_update_time: repeatCheckRes.data.repeat_update_time,
             data: repeatCheckRes.data,
             file_path: repeatCheckRes.data.file_path,
           });
@@ -212,7 +215,7 @@ export default function DataTableKnowledge<TData, TValue>({
       if (duplicateFiles.length > 0) {
         setRepeatFiles(duplicateFiles.map(item => ({
           id: item.name,
-          remark: localize('com_tools_knowledge_upload_remark'),
+          remark: `${item.file_name} 对应已存在文件 ${item.repeat_file_name}`,
           file_path: item.file_path,
           fileType: 'file',
           file: item.file,
