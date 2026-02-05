@@ -841,10 +841,10 @@ export default function InputFormItem({ data, nodeId, onChange, onValidate, onVa
                 key = variableName;
             } else {
                 // 非临时策略
-                key = editKey || generateUUID(6);
+                key = editKey || `file_${generateUUID(6)}`;
             }
         } else {
-            key = variableName;
+            key = variableName || `file_${generateUUID(6)}`;
         }
         const multiple = type === FormType.File ? isMultiple : allowMultiple;
 
