@@ -155,6 +155,8 @@ class InputNode(BaseNode):
         """
         # Compatible processing of historical versions of nodes
         if self.node_data.v <= self._current_v:
+            if self.is_dialog_input():
+                key_value.pop("dialog_file_paths", None)
             return key_value
 
         file_parse_mode = key_info.get('file_parse_mode', ParseModeEnum.INGEST_TO_KNOWLEDGE_BASE)

@@ -7,6 +7,7 @@ import { compression } from 'vite-plugin-compression2';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import { VitePWA } from 'vite-plugin-pwa';
 import { viteStaticCopy } from 'vite-plugin-static-copy';
+import { createHtmlPlugin } from 'vite-plugin-html';
 
 const app_env = {
   BASE_URL: '/workspace',
@@ -128,6 +129,13 @@ export default defineConfig(({ command }) => ({
     compression({
       threshold: 10240,
     }),
+    createHtmlPlugin({}),
+    {
+      name: 'clear-placeholder',
+      transformIndexHtml(html) {
+        return html.replace('PROTOCAL_IGNORE/', '/');
+      }
+    },
     viteStaticCopy({
       targets: [
         {

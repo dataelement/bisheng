@@ -49,37 +49,43 @@ export const ModelManagement = forwardRef<HTMLDivElement[], ModelManagementProps
         // })
         // }, [models, llmOptions])
 
-        return (<div className="mt-2 border p-4 rounded-md bg-muted">
-            <div className="grid mb-4 items-center" style={{ gridTemplateColumns: "repeat(2, minmax(0, 320px)) 80px 40px" }}>
-                <Label className="bisheng-label">{t('bench.model')}</Label>
-                <Label className="bisheng-label">{t('bench.displayName')}</Label>
-                <div className="flex items-center justify-center">
-                    <Label className="bisheng-label whitespace-nowrap mr-0.5">{t('bench.vision')}</Label>
-                    <QuestionTooltip content={t('bench.visionText')} />
+        return (
+            <div className="mt-2 border p-4 rounded-md bg-muted">
+                <div className="grid mb-4 items-center" style={{ gridTemplateColumns: "1fr 1fr 120px 60px" }}>
+                    <div className="">
+                        <Label className="bisheng-label">{t('bench.model')}</Label>
+                    </div>
+                    <div className="">
+                        <Label className="bisheng-label">{t('bench.displayName')}</Label>
+                    </div>
+                    <div className="flex items-center justify-center">
+                        <Label className="bisheng-label whitespace-nowrap mr-0.5">{t('bench.vision')}</Label>
+                        <QuestionTooltip content={t('bench.visionText')} />
+                    </div>
+                    <div className="text-center">
+                    </div>
                 </div>
-                <div></div>
-            </div>
-            {models.map((model, index) => (
-                <div key={model.key} className="flex items-center mb-4">
-                    {/* 主要内容区域 */}
-                    <div className="grid flex-grow items-center mr-4"
-                        style={{ gridTemplateColumns: "repeat(2, minmax(0, 320px)) 80px" }}
-                        ref={el => setItemRef(el, index)}
-                    >
+
+                {models.map((model, index) => (
+                    <div key={model.key} className="grid items-center mb-4" style={{ gridTemplateColumns: "1fr 1fr 120px 60px" }}>
                         <div className="pr-2" id={model.id}>
-                            {llmOptions.length > 0 ? <ModelSelect
-                                key={model.id}
-                                label={''}
-                                value={model.id}
-                                options={llmOptions}
-                                onChange={(val) => onModelChange(index, val)}
-                            /> : <ModelSelect
-                                key={'model.id'}
-                                label={''}
-                                value={''}
-                                options={[]}
-                                onChange={(val) => { }}
-                            />}
+                            {llmOptions.length > 0 ? (
+                                <ModelSelect
+                                    key={model.id}
+                                    label={''}
+                                    value={model.id}
+                                    options={llmOptions}
+                                    onChange={(val) => onModelChange(index, val)}
+                                />
+                            ) : (
+                                <ModelSelect
+                                    key={'model.id'}
+                                    label={''}
+                                    value={''}
+                                    options={[]}
+                                    onChange={(val) => { }}
+                                />
+                            )}
                             {errors[model.key] && <p className="text-red-500 text-xs mt-1">{errors[model.key]?.[0]}</p>}
                         </div>
                         <div className="pr-2">
@@ -101,22 +107,29 @@ export const ModelManagement = forwardRef<HTMLDivElement[], ModelManagementProps
                                 }}
                             />
                         </div>
-                    </div>
 
-                    {/* 删除按钮放在最右边 */}
-                    <div className="flex-shrink-0">
-                        <TrashIcon
-                            className="text-gray-500 cursor-pointer size-4"
-                            onClick={() => onRemove(index)}
-                        />
+                        {/* 删除按钮 */}
+                        <div className="flex items-center justify-center">
+                            <TrashIcon
+                                className="text-gray-500 cursor-pointer size-4 hover:text-red-500 transition-colors"
+                                onClick={() => onRemove(index)}
+                            />
+                        </div>
                     </div>
-                </div>
-            ))}
-            <Button variant="outline" className="border-none size-7 bg-gray-200" size="icon" onClick={onAdd}>
-                <Plus className="size-5" />
-            </Button>
-            {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
-        </div>)
+                ))}
+
+                <Button
+                    variant="outline"
+                    className="border-none size-7 bg-gray-200 hover:bg-gray-300 transition-colors mt-2"
+                    size="icon"
+                    onClick={onAdd}
+                >
+                    <Plus className="size-5" />
+                </Button>
+
+                {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
+            </div>
+        );
 
     }
 )
