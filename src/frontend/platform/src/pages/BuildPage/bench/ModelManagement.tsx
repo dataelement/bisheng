@@ -60,7 +60,7 @@ export const ModelManagement = forwardRef<HTMLDivElement[], ModelManagementProps
                     </div>
                     <div className="flex items-center justify-center">
                         <Label className="bisheng-label whitespace-nowrap mr-0.5">{t('bench.vision')}</Label>
-                        <QuestionTooltip content={t('bench.visionText')} />
+                        <QuestionTooltip className="text-[#999999]" content={t('bench.visionText')} />
                     </div>
                     <div className="text-center">
                     </div>
