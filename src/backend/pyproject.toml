@@ -82,4 +82,5 @@ dependencies = [
     "alembic>=1.17.1",
     "sync>=1.0.0",
     "json-repair>=0.55.0",
+    "arxiv>=2.4.0"
 ]
