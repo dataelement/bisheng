@@ -102,7 +102,7 @@ export function LocationProvider({ children }: { children: ReactNode }) {
             setAppConfig(prev => ({
               ...prev,
               benchMenu: bench?.menuShow ?? true,
-              worksapceIcon: bench?.assistantIcon.image ?? '',
+              worksapceIcon: bench?.assistantIcon?.image ?? '',
             }));
           })
           .catch(error => {
