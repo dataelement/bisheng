@@ -129,7 +129,7 @@ class WorkflowClient(BaseClient):
 
     async def get_execute_worker(self) -> Optional[str]:
         if not self.hash_key:
-            return None
+            self.hash_key = self.chat_id if self.chat_id else generate_uuid()
         return await workflow_stateful_worker.find_task_node(self.hash_key)
 
     async def init_workflow(self, message: dict):
@@ -147,7 +147,6 @@ class WorkflowClient(BaseClient):
             await self.workflow.async_set_workflow_data(workflow_data)
             await self.workflow.async_set_workflow_status(WorkflowStatus.WAITING.value)
             # Start asynchronous task
-            self.hash_key = self.chat_id if self.chat_id else generate_uuid()
 
             execute_workflow.apply_async([unique_id, workflow_id, self.chat_id, self.user_id],
                                          queue=await self.get_execute_worker())
