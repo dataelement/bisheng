@@ -50,11 +50,12 @@ export const getKnowledgeColumns = (
       },
       cell: ({ row }) => {
         const statusTexts = [
-          '', 
-          localize('com_knowledge_processing'), 
-          localize('com_knowledge_success'), 
-          localize('com_knowledge_failed'), 
-          localize('com_knowledge_model_switching')
+          '',
+          localize('com_knowledge_processing'),
+          localize('com_knowledge_success'),
+          localize('com_knowledge_failed'),
+          localize('com_knowledge_model_switching'),
+          localize('com_knowledge_processing'),
         ];
         return statusTexts[row.original.status];
       },

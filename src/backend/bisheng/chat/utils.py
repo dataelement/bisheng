@@ -135,7 +135,7 @@ def sync_judge_source(result, source_document, chat_id, extra: Dict):
         if any(not doc.metadata.get('right', True) for doc in source_document):
             source = SourceType.NO_PERMISSION.value
         elif all(
-                doc.metadata.get('user_metadata') and json.loads(doc.metadata.get('user_metadata', '{}')).get('url')
+                doc.metadata.get('user_metadata') and doc.metadata.get('user_metadata', {}).get('url')
                 for doc in source_document):
             source = SourceType.LINK.value
             repeat_doc = {}
@@ -143,7 +143,7 @@ def sync_judge_source(result, source_document, chat_id, extra: Dict):
             # The source document should be de-emphasized and the original order cannot be changed.
             for one in source_document:
                 title = one.metadata.get('source') or one.metadata.get('document_name')
-                url = json.loads(one.metadata.get('user_metadata', '{}')).get('url')
+                url = one.metadata.get('user_metadata', {}).get('url')
                 repeat_key = (title, url)
                 # Repeatedly discarded, do not return
                 if repeat_doc.get(repeat_key):

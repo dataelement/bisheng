@@ -245,9 +245,8 @@ class InputNode(BaseNode):
                                                      file_rule.force_ocr,
                                                      file_rule.filter_page_header_footer, file_rule.excel_rule)
         except KnowledgeFileNotSupportedError as e:
-            logger.exception('parse input node file error')
-            if str(e).find('Type not supported') == -1:
-                raise e
+            logger.warning('input node file type is not support')
+            pass
 
         return texts, metadatas
 

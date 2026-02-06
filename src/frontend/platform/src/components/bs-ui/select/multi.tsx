@@ -221,7 +221,7 @@ const MultiSelect = ({
                         {
                             values.map(item =>
                                 <Badge onPointerDown={(e) => e.stopPropagation()} key={item.value}
-                                    className={`flex whitespace-normal items-center gap-1 select-none bg-primary/20 text-primary hover:bg-primary/15 m-[2px] ${errorKeys.includes(item.value) && 'bg-red-100 border-red-600'}`}>
+                                    className={`flex whitespace-normal items-center gap-1 select-none bg-primary/20 text-primary hover:bg-primary/15 m-[2px] break-all ${errorKeys.includes(item.value) && 'bg-red-100 border-red-600'}`}>
                                     {item.label}
                                     {lockedValues.includes(item.value) || <X className="h-3 w-3 min-w-3" onClick={() => handleDelete(item.value)}></X>}
                                 </Badge>
@@ -231,7 +231,7 @@ const MultiSelect = ({
                         {
                             // 使用key反推label
                             options.filter(option => (values as string[]).includes(option.value)).map(option =>
-                                <Badge onPointerDown={(e) => e.stopPropagation()} key={option.value} className="flex whitespace-normal items-center gap-1 select-none bg-primary/20 text-primary hover:bg-primary/15 m-[2px] break-all">
+                                <Badge onPointerDown={(e) => e.stopPropagation()} key={option.value} className="flex whitespace-normal items-center gap-1 select-none bg-primary/20 text-primary hover:bg-primary/15 m-[2px] break-all  11">
                                     {option.label}
                                     {lockedValues.includes(option.value) || <X className="h-3 w-3 min-w-3" onClick={() => handleDelete(option.value)}></X>}
                                 </Badge>

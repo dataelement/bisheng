@@ -150,7 +150,10 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
             counter += 1;
             initialVarName = `${names[formData.formType]}${counter}`;
         }
-
+        while (existingOptions?.some(opt => opt.file_parse_mode !== "ingest_to_temp_kb" && opt.file_parse_mode && opt.key === initialVarName)) {
+            counter += 1;
+            initialVarName = `${names[formData.formType]}${counter}`;
+        }
         const fileOtions = existingOptions?.filter(opt => opt.type === FormType.File);
         while (fileOtions?.some(opt => opt.file_content === initialFileContent)) {
             initialFileContentCounter += 1;
@@ -838,10 +841,10 @@ export default function InputFormItem({ data, nodeId, onChange, onValidate, onVa
                 key = variableName;
             } else {
                 // 非临时策略
-                key = editKey || generateUUID(6);
+                key = editKey || `file_${generateUUID(6)}`;
             }
         } else {
-            key = editKey || generateUUID(6);
+            key = variableName || `file_${generateUUID(6)}`;
         }
         const multiple = type === FormType.File ? isMultiple : allowMultiple;
 
