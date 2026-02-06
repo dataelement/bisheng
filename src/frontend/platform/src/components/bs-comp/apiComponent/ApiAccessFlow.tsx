@@ -41,6 +41,8 @@ const ApiAccessFlow = () => {
         })
     }
 
+    const brand = t('bisheng') === 'BISHENG' ? '' : t('bisheng')
+
     const scrollToSection = (params) => {
 
     }
@@ -384,8 +386,9 @@ print(response.text)# 输出工作流的响应`
                         </TableHeader>
                         <TableBody>
                             <TableRow>
-                                <TableCell className='align-top'>
-                                    <div className='max-w-[300px]'><img src={__APP_ENV__.BASE_URL + '/assets/api/chat1.png'} className='size-full' alt="" /></div>
+                                <TableCell className='align-top relative'>
+                                    {brand && <div className='absolute w-40 top-4 left-4 z-10 bg-[#EFF1F5] text-gray-400 text-xs'>{brand}</div>}
+                                    <div className='max-w-[300px]'><img src={__APP_ENV__.BASE_URL + '/assets/api/chat1.png'} className='size-full min-w-72' alt="" /></div>
                                 </TableCell>
                                 <TableCell className='align-top'>
                                     <SyntaxHighlighter
@@ -419,8 +422,9 @@ print(response.text)# 输出工作流的响应`
                         </TableHeader>
                         <TableBody>
                             <TableRow>
-                                <TableCell className='align-top'>
-                                    <div className='max-w-[300px]'><img src={__APP_ENV__.BASE_URL + '/assets/api/chat2.png'} className='size-full' alt="" /></div>
+                                <TableCell className='align-top relative'>
+                                    {brand && <div className='absolute w-40 top-4 left-4 z-10 bg-[#EFF1F5] text-gray-400 text-xs'>{brand}</div>}
+                                    <div className='max-w-[300px]'><img src={__APP_ENV__.BASE_URL + '/assets/api/chat2.png'} className='size-full min-w-72' alt="" /></div>
                                 </TableCell>
                                 <TableCell className='align-top'>
                                     <SyntaxHighlighter
@@ -462,8 +466,9 @@ print(response.text)# 输出工作流的响应`
                         </TableHeader>
                         <TableBody>
                             <TableRow>
-                                <TableCell className='align-top'>
-                                    <div className='max-w-[300px]'><img src={__APP_ENV__.BASE_URL + '/assets/api/output.png'} className='size-full' alt="" /></div>
+                                <TableCell className='align-top relative'>
+                                    {brand && <div className='absolute w-40 top-4 left-4 z-10 bg-[#EFF1F5] text-gray-400 text-xs'>{brand}</div>}
+                                    <div className='max-w-[300px]'><img src={__APP_ENV__.BASE_URL + '/assets/api/output.png'} className='size-full min-w-72' alt="" /></div>
                                 </TableCell>
                                 <TableCell className='align-top'>
                                     <SyntaxHighlighter
@@ -596,8 +601,9 @@ def upload_file(local_path: str):
                         </TableHeader>
                         <TableBody>
                             <TableRow>
-                                <TableCell className='align-top'>
-                                    <div className='max-w-[300px]'><img src={__APP_ENV__.BASE_URL + '/assets/api/chat4.png'} className='size-full' alt="" /></div>
+                                <TableCell className='align-top relative'>
+                                    {brand && <div className='absolute w-40 top-4 left-4 z-10 bg-[#EFF1F5] text-gray-400 text-xs'>{brand}</div>}
+                                    <div className='max-w-[300px]'><img src={__APP_ENV__.BASE_URL + '/assets/api/chat4.png'} className='size-full min-w-72' alt="" /></div>
                                 </TableCell>
                                 <TableCell className='align-top'>
                                     <SyntaxHighlighter
@@ -621,7 +627,7 @@ def upload_file(local_path: str):
                 "required": true
             },
             {
-                "key": "file",
+                "key": "file_qu798wan",
                 "type": "file",
                 "value": "",
                 "label": "文件类型的输入",
@@ -716,9 +722,10 @@ def upload_file(local_path: str):
                         <TableBody>
                             <TableRow>
                                 <TableCell className='align-top'>
-                                    <div className='max-w-[300px]'>
-                                        <img src={__APP_ENV__.BASE_URL + '/assets/api/chat5.png'} className='size-full' alt="" />
-                                        <img src={__APP_ENV__.BASE_URL + '/assets/api/chat6.png'} className='size-full' alt="" />
+                                    <div className='max-w-[300px] relative'>
+                                        {brand && <div className='absolute w-40 top-1 left-2 z-10 bg-[#EFF1F5] text-gray-400 text-xs'>{brand}</div>}
+                                        <img src={__APP_ENV__.BASE_URL + '/assets/api/chat5.png'} className='size-full min-w-72' alt="" />
+                                        {!brand && <img src={__APP_ENV__.BASE_URL + '/assets/api/chat6.png'} className='size-full' alt="" />}
                                     </div>
                                 </TableCell>
                                 <TableCell className='align-top'>
@@ -773,7 +780,8 @@ def upload_file(local_path: str):
                         <TableBody>
                             <TableRow>
                                 <TableCell className='align-top'>
-                                    <div className='max-w-[300px]'>
+                                    <div className='max-w-[300px] relative'>
+                                        {brand && <div className='absolute w-40 top-1 left-2 z-10 bg-[#EFF1F5] text-gray-400 text-xs'>{brand}</div>}
                                         <img src={__APP_ENV__.BASE_URL + '/assets/api/chat6.png'} className='size-full' alt="" />
                                     </div>
                                 </TableCell>
@@ -859,8 +867,9 @@ def upload_file(local_path: str):
                         <TableBody>
                             <TableRow>
                                 <TableCell className='align-top'>
-                                    <div className='max-w-[300px]'>
-                                        <img src={__APP_ENV__.BASE_URL + '/assets/api/chat7.png'} className='size-full' alt="" />
+                                    <div className='max-w-[300px] relative'>
+                                        {brand && <div className='absolute w-40 top-1 left-2 z-10 bg-[#EFF1F5] text-gray-400 text-xs'>{brand}</div>}
+                                        <img src={__APP_ENV__.BASE_URL + '/assets/api/chat7.png'} className='size-full min-w-72' alt="" />
                                     </div>
                                 </TableCell>
                                 <TableCell className='align-top'>

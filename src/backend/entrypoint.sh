@@ -11,7 +11,7 @@ start_knowledge(){
 }
 
 start_workflow(){
-  # 工作流相关的celery worker
+  # 工作流相关的celery worker。支持多节点运行，但是需要保证各节点的队列名称不冲突且都以workflow_celery开头
     celery -A bisheng.worker.main worker -l info -c 100 -P threads -Q workflow_celery -n workflow@%h
 }
 

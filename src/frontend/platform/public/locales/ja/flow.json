@@ -171,6 +171,22 @@
   "allowMultipleSelect": "複数選択を許可",
   "allowUploadMultipleFiles": "複数ファイルのアップロードを許可",
   "uploadFileTypes": "アップロード可能なファイルタイプ",
+  "temporaryKnowledgeBase": "一時ナレッジベースに保存します",
+  "parseFile": "ファイル内容を解析します",
+  "notParse":"解析せず（元ファイルのまま）",
+  "fileParseResult": "ファイル解析結果",  
+  "filePath": "ファイルパス",
+  "filePathName":"ファイルパス変数名",
+  "storeUploadFiles":"アップロードされたすべてのファイルのパスリストを保存し、コードノードで読み取りと処理が可能です",  
+  "imageVariableName":"画像変数名",
+  "extractImages":" アップロードされたファイルから画像を抽出し、アシスタントや大規模モデルノードがマルチモーダルモデルを使用する場合にこの変数を渡せます",
+  "parseLengthLimit":"解析結果の長さ上限",
+  "storeVariableName":"ファイル解析結果を保存する変数名",
+  "parseResultName":"解析結果変数名",
+  "selectFile":"ファイル処理戦略を選択してください",
+  "fileProcessingStrategy":"ファイル処理戦略",
+  "fileProcessingStrategyTip":"ユーザーがアップロードしたファイルの処理方法を選択してください：\n· ファイル内容を解析：ファイルからテキストを抽出し、大規模言語モデルなどの後続ノードにコンテキストを提供します。\n· 解析しない：元のファイルを保持し、マルチモーダルモデルまたはコードノードでの処理に使用します。",
+  "dialogProcessingStrategyTip": "ユーザーがアップロードしたファイルの処理方法を選択してください：\n· ファイル内容を解析：ファイルからテキストを抽出し、大規模言語モデルなどの後続ノードにコンテキストを提供します。\n· 一時知識庫に保存:ファイルは一時的なナレッジベースにアップロードされ、「文書ナレッジベースQ＆A」ノードで使用できます。\n· 解析しない：元のファイルを保持し、マルチモーダルモデルまたはコードノードでの処理に使用します。",
   "tempKnowledgeBaseName": "一時知識ベース名",
   "tempKnowledgeBaseNameTip": "この名前でファイルは一時知識ベースにアップロードされ、ドキュメント知識ベースのQAやアシスタントノードで使用できます",
   "fileContentVarName": "ファイル内容変数名",
@@ -286,7 +302,27 @@
     },
     "input": {
       "name": "入力",
+      "接收文本": "テキスト受信",
       "description": "ユーザーが会話ページで入力する内容を受け取ります。2種類の形式に対応しています：ダイアログ入力、フォーム入力。",
+      "user_input_file":{
+        "label": "ファイル受信"
+      },
+      "recommended_questions_flag": {
+        "label": "インテリジェント推奨質問",
+        "help": "会話履歴に基づいて、ユーザーが入力する可能性のある内容を予測し、会話中に表示します"
+      },
+      "recommended_llm": {
+        "label": "モデル",
+        "placeholder":"モデルを選択してください"
+      },
+      "recommended_system_prompt": {
+        "label": "プロンプト",
+        "value": "# Role\nYou are a highly insightful \"Conversation Continuation Prediction Expert.\" Your task is to predict the three phrases or questions the user is most likely to input next, based on the current conversation history.\n\n# Context Awareness\nBefore generating predictions, please carry out the following in-depth reasoning steps:\n1. **Intent Analysis**: Is the user currently seeking facts, expressing emotions, requesting advice, or attempting to end the conversation?\n2. **Logical Inference**: Based on the AI\u2019s previous reply, what is the most natural association or question that would arise for the user?\n3. **Style Alignment**: Observe the user\u2019s wording habits (professional, casual, brief, or detailed). The predictions should maintain a consistent tone.\n\n# Goals\n- **Diversity**: Provide follow-ups from different directions (e.g., an in-depth exploratory question, a related new topic, a feedback-oriented comment).\n- **Conciseness**: Predictions should be short and to the point, typically no more than 15 words, making them easy for the user to click.\n- **Forward-looking**: Anticipate the user\u2019s \u201cpain points\u201d and directly offer an entry point to a solution.\n\n# Output Format\nPlease strictly adhere to JSON format in the output.\nReturn a JSON object containing a single key named \u201csuggestions\u201d.\n- All strings must use **double quotes**.\n- Do not output Markdown code block markers (such as ```json); output the raw JSON string directly.\n**Example:**\n{\"suggestions\": [\"Can you give an example?\", \"What is the cost of this solution?\", \"Sounds good\u2014how do I get started?\"]}"
+      },
+      "recommended_history_num": {
+        "label": "履歴メッセージ数",
+        "help": "推奨質問を生成する際にモデルが参照する履歴対話のメッセージ数"
+      },
       "tab_dialog_input": {
         "label": "ダイアログ入力",
         "help": "ユーザーがダイアログボックスに入力した内容を受け取ります。"

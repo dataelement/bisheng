@@ -108,8 +108,17 @@ async def update_job(*, req_data: FinetuneChangeModelName,
 async def upload_file(*,
                       files: list[UploadFile] = File(description='Training File List'),
                       login_user: UserPayload = Depends(UserPayload.get_login_user)):
-    ret = await FinetuneFileService.upload_file(files, False, login_user)
-    return resp_200(ret)
+    try:
+        ret = await FinetuneFileService.upload_file(files, False, login_user)
+        return resp_200(ret)
+    except Exception as e:
+        logger.error(f'upload finetune file error: {e}')
+        raise e
+
+    finally:
+        if files:
+            for file in files:
+                await file.close()
 
 
 @router.post('/job/file/preset')

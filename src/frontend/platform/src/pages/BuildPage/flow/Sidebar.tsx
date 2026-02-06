@@ -175,15 +175,19 @@ export default function Sidebar({ dropdown = false, disabledNodes = [], onInitSt
                                             className={`flex gap-2 items-center p-2 cursor-pointer border border-transparent rounded-md hover:border-gray-200 dark:hover:border-gray-800`}
                                             onMouseEnter={(event) => {
                                                 // 如果正在拖拽，不移除hover样式
+                                                event.stopPropagation()
                                                 if (!event.currentTarget.classList.contains('border-gray-200')) {
                                                     event.currentTarget.classList.add('bg-muted');
                                                 }
                                             }}
                                             onMouseLeave={(event) => {
+                                                event.stopPropagation()
                                                 event.currentTarget.classList.remove('bg-muted');
                                             }}
                                             draggable={!dropdown}
                                             onDragStart={(event) => {
+                                                event.stopPropagation()
+                                                event.dataTransfer.setData("application/my-app-internal", "true"); // 防止触发拖拽上传
                                                 onDragStart(event, { type: item.type, node: tempData.find(tmp => tmp.type === item.type) })
                                             }}
                                             onDragEnd={(event) => {

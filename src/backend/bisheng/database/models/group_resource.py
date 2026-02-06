@@ -16,7 +16,7 @@ class ResourceTypeEnum(Enum):
     GPTS_TOOL = 4
     WORK_FLOW = 5
     DASHBOARD = 6  # KANBAN
-
+    WORKSTATION = 7  # Workstation
 
 class GroupResourceBase(SQLModelSerializable):
     group_id: str = Field(index=True)
@@ -97,13 +97,13 @@ class GroupResourceDao(GroupResourceBase):
             return result.all()
 
     @classmethod
-    def get_groups_resource(cls,
+    async def get_groups_resource(cls,
                             group_ids: List[int],
                             resource_types: List[ResourceTypeEnum] = None,
                             name: str = None,
                             page_size: int = None,
                             page_num: int = None) -> list[GroupResource]:
-        with get_sync_db_session() as session:
+        async with get_async_db_session() as session:
             statement = select(GroupResource).where(GroupResource.group_id.in_(group_ids))
             if resource_types:
                 statement = statement.where(GroupResource.type.in_([r.value for r in resource_types]))
@@ -111,7 +111,9 @@ class GroupResourceDao(GroupResourceBase):
                 statement = statement.where(GroupResource.third_id.like(f'%{name}%'))
             if page_num and page_size:
                 statement = statement.offset(page_size * (page_num - 1)).limit(page_size)
-            return session.exec(statement).all()
+
+            result = await session.exec(statement)
+            return result.all()
 
     @classmethod
     def get_resource_group(cls, resource_type: ResourceTypeEnum, third_id: str) -> list[GroupResource]:

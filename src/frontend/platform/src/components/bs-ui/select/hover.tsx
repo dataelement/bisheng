@@ -1,5 +1,6 @@
-import { Button } from "../button";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../tooltip";
+import { cn } from "@/utils";
+import { useRef, useState } from "react";
+import { Popover, PopoverContent, PopoverTrigger } from "../popover";
 
 export function SelectHoverItem({ children, ...props }) {
 
@@ -8,16 +9,44 @@ export function SelectHoverItem({ children, ...props }) {
     </div>
 }
 
-export function SelectHover({ triagger, children }) {
 
-    return <TooltipProvider delayDuration={100}>
-        <Tooltip>
-            <TooltipTrigger asChild>
-                {triagger}
-            </TooltipTrigger>
-            <TooltipContent className="text-popover-foreground bg-popover dark:bg-[#2A2B2E] shadow-md">
+export function SelectHover({ triagger, className, children }) {
+    const [open, setOpen] = useState(false);
+    const timerRef = useRef(null);
+
+    const handleMouseEnter = () => {
+        if (timerRef.current) clearTimeout(timerRef.current);
+        setOpen(true);
+    };
+
+    const handleMouseLeave = () => {
+        timerRef.current = setTimeout(() => {
+            setOpen(false);
+        }, 150);
+    };
+
+    return (
+        <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger
+                asChild
+                onMouseEnter={handleMouseEnter}
+                onMouseLeave={handleMouseLeave}
+                onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }}
+            >
+                <div className="inline-block cursor-pointer">{triagger}</div>
+            </PopoverTrigger>
+
+            <PopoverContent
+                side="top"
+                className={cn("text-popover-foreground w-auto bg-popover dark:bg-[#2A2B2E] shadow-md p-2 relative", className)}
+                onMouseEnter={handleMouseEnter}
+                onMouseLeave={handleMouseLeave}
+            >
                 {children}
-            </TooltipContent>
-        </Tooltip>
-    </TooltipProvider>
-};
+            </PopoverContent>
+        </Popover>
+    );
+}

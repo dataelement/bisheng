@@ -71,10 +71,11 @@ export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent
                 group.params.forEach(param => {
                     if (param.key === 'form_input') {
                         param.value.forEach(val => {
-                            val.type === 'file' && files.push({
-                                label: `${val.key}(${val.value})`,
-                                value: `${node.id}.${val.key}`
-                            })
+                            val.file_parse_mode === 'ingest_to_temp_kb' && val.type === 'file'
+                                && files.push({
+                                    label: `${val.key}(${val.value})`,
+                                    value: `${node.id}.${val.key}`
+                                })
                         })
                     }
                 })

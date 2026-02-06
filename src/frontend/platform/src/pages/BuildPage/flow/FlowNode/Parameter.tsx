@@ -6,7 +6,8 @@ import ConditionItem from "./component/ConditionItem";
 import FileTypeSelect from "./component/FileTypeSelect";
 import HistoryNumItem from "./component/HistoryNumItem";
 import ImagePromptItem from "./component/ImagePromptItem";
-import InputFormItem from "./component/InputFormItem";
+import InputFormItemNew from "./component/InputFormItem";
+import InputFormItemOld from "./component/InputFormItemOld";
 import InputItem from "./component/InputItem";
 import InputListItem from "./component/InputListItem";
 import KnowledgeQaSelectItem from "./component/KnowledgeQaSelectItem";
@@ -69,6 +70,8 @@ export default function Parameter({
     const i18nPrefix = `node.${node.type}.${item.key}.`
 
     if (item.hidden) return null;
+
+    const InputFormItem = node.v == 3 ? InputFormItemNew : InputFormItemOld;
 
     switch (item.type) {
         case 'textarea':

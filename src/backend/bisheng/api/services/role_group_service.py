@@ -374,22 +374,22 @@ class RoleGroupService():
             return paged_res, len(res)
         return res, len(res)
 
-    def get_manage_resources(self, login_user: UserPayload, keyword: str, page: int, page_size: int) -> (list, int):
+    async def get_manage_resources(self, login_user: UserPayload, keyword: str, page: int, page_size: int) -> (list, int):
         """ Get a list of apps under a user group managed by a user Contains skills, assistants, workflows"""
         groups = []
         if not login_user.is_admin():
-            groups = [str(one.group_id) for one in UserGroupDao.get_user_admin_group(login_user.user_id)]
+            groups = [str(one.group_id) for one in await UserGroupDao.aget_user_admin_group(login_user.user_id)]
             if not groups:
                 return [], 0
 
         resource_ids = []
         # Description is a user group administrator, need to filter to get the resources under the corresponding group
         if groups:
-            group_resources = GroupResourceDao.get_groups_resource(groups, resource_types=[ResourceTypeEnum.FLOW,
+            group_resources = await GroupResourceDao.get_groups_resource(groups, resource_types=[ResourceTypeEnum.FLOW,
                                                                                            ResourceTypeEnum.ASSISTANT,
                                                                                            ResourceTypeEnum.WORK_FLOW])
             if not group_resources:
                 return [], 0
             resource_ids = [one.third_id for one in group_resources]
 
-        return FlowDao.get_all_apps(keyword, id_list=resource_ids, page=page, limit=page_size)
+        return await FlowDao.aget_all_apps(keyword, id_list=resource_ids, page=page, limit=page_size)

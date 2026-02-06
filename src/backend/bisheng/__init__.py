@@ -7,7 +7,7 @@ from bisheng.interface.custom.custom_component import CustomComponent
 
 try:
     # SetujuciGo to automatic modification
-    __version__ = '2.3.0'
+    __version__ = '2.4.0-beta1'
 except metadata.PackageNotFoundError:
     # Case where package metadata is not available.
     __version__ = ''

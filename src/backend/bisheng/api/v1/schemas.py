@@ -215,7 +215,9 @@ class UploadFileResponse(BaseModel):
     flowId: Optional[str] = None
     file_path: str
     relative_path: Optional[str] = None  # minioRelative path, i.e.object_name
+    file_name: Optional[str] = None
     repeat: bool = False  # Duplicate in Knowledge Base
+    repeat_file_name: Optional[str] = None  # Returns the file name of a duplicate file if it is a duplicate
     repeat_update_time: Optional[datetime] = None  # Returns the update time of a duplicate file if it is a duplicate
 
 
@@ -261,8 +263,10 @@ class AssistantUpdateReq(BaseModel):
 
     tool_list: List[int] | None = Field(default=None,
                                         description='Tools for assistantsIDVertical,An empty list empties the bound tool forNonethen do not update')
-    flow_list: List[str] | None = Field(default=None, description="Assistant's SkillsIDVertical,An empty list clears the bound skills forNonethen do not update")
-    knowledge_list: List[int] | None = Field(default=None, description='The knowledge base uponIDlist, forNonethen do not update')
+    flow_list: List[str] | None = Field(default=None,
+                                        description="Assistant's SkillsIDVertical,An empty list clears the bound skills forNonethen do not update")
+    knowledge_list: List[int] | None = Field(default=None,
+                                             description='The knowledge base uponIDlist, forNonethen do not update')
 
     @field_validator('model_name', mode='before')
     @classmethod
@@ -324,12 +328,16 @@ class CreateUserReq(BaseModel):
 
 
 class OpenAIChatCompletionReq(BaseModel):
-    messages: List[dict] = Field(..., description='Chat message list, only supporteduser、assistant。systemUse data from within the database')
+    messages: List[dict] = Field(...,
+                                 description='Chat message list, only supporteduser、assistant。systemUse data from within the database')
     model: str = Field(..., description='The only assistantID')
-    n: int = Field(default=1, description='Number of answers returned, The assistant side defaults to1, multiple answers are not supported at this time')
+    n: int = Field(default=1,
+                   description='Number of answers returned, The assistant side defaults to1, multiple answers are not supported at this time')
     stream: bool = Field(default=False, description='Whether to turn on streaming replies')
-    temperature: float = Field(default=0.0, description="Model Temperature, Incoming0or don't post means don't overwrite")
-    tools: List[dict] = Field(default_factory=list, description='Tools List, The assistant is temporarily unsupported, use the configuration of the assistant')
+    temperature: float = Field(default=0.0,
+                               description="Model Temperature, Incoming0or don't post means don't overwrite")
+    tools: List[dict] = Field(default_factory=list,
+                              description='Tools List, The assistant is temporarily unsupported, use the configuration of the assistant')
 
 
 class OpenAIChoice(BaseModel):
@@ -360,6 +368,7 @@ class WSModel(BaseModel):
     id: str
     name: Optional[str] = None
     displayName: Optional[str] = None
+    visual: Optional[bool] = False
 
 
 class WSPrompt(BaseModel):
@@ -376,12 +385,12 @@ class LinsightConfig(BaseModel):
     """
     Ideas Management Configuration
     """
+    linsight_entry: bool = Field(default=True, description='Whether to open the Ideas entrance')
     input_placeholder: str = Field(..., description='Input Box Prompt')
     tools: Optional[List[Dict]] = Field(None, description='List of optional tools for Ideas')
 
 
 class WorkstationConfig(BaseModel):
-    menuShow: bool = Field(default=True, description='Whether to show the left menu bar')
     maxTokens: Optional[int] = Field(default=1500, description='MaxtokenQuantity')
     sidebarIcon: Optional[Icon] = None
     assistantIcon: Optional[Icon] = None
@@ -414,7 +423,8 @@ class ExcelRule(BaseModel):
 # File Split Request Base Parameters
 class FileProcessBase(BaseModel):
     knowledge_id: int = Field(..., description='The knowledge base uponID')
-    separator: Optional[List[str]] = Field(default=None, description='Split text rule, If not passed on, it is the default')
+    separator: Optional[List[str]] = Field(default=None,
+                                           description='Split text rule, If not passed on, it is the default')
     separator_rule: Optional[List[str]] = Field(default=None,
                                                 description='Segmentation before or after the segmentation rule;before/after')
     chunk_size: Optional[int] = Field(default=1000, description='Split text length, default if not passed')
@@ -424,7 +434,8 @@ class FileProcessBase(BaseModel):
     enable_formula: Optional[int] = Field(default=1, description='latexFormula Recognition')
     filter_page_header_footer: Optional[int] = Field(default=0, description='Filter Header Footer')
     excel_rule: Optional[ExcelRule] = Field(default=None, description="excel rule")
-    cache: Optional[bool] = Field(default=True, description='Whether to fetch data from the cache when previewing the document')
+    cache: Optional[bool] = Field(default=True,
+                                  description='Whether to fetch data from the cache when previewing the document')
 
     @model_validator(mode='before')
     @classmethod
@@ -504,7 +515,9 @@ class FrequentlyUsedChat(BaseModel):
 class UpdateKnowledgeReq(BaseModel):
     """Update Knowledge Base Model Request"""
     model_id: int = Field(..., description='embeddingModelsID')
-    model_type: Optional[str] = Field(default=None, description='Model type, when not passed on, it will be based onmodel_idAuto Query')
-    knowledge_id: Optional[int] = Field(default=None, description='The knowledge base uponID, if empty, update all private repositories')
+    model_type: Optional[str] = Field(default=None,
+                                      description='Model type, when not passed on, it will be based onmodel_idAuto Query')
+    knowledge_id: Optional[int] = Field(default=None,
+                                        description='The knowledge base uponID, if empty, update all private repositories')
     knowledge_name: Optional[str] = Field(default=None, description='Library Name')
     description: Optional[str] = Field(default=None, description='KB Description')

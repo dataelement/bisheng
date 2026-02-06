@@ -1,6 +1,6 @@
 
 import { X } from "lucide-react";
-import { useRef, useState } from "react";
+import { forwardRef, useImperativeHandle, useRef, useState } from "react";
 import { uploadChatFile } from "~/api/apps";
 import { AttachmentIcon } from "~/components/svg";
 import { FileIcon, getFileTypebyFileName } from "~/components/ui/icon/File/FileIcon";
@@ -8,8 +8,22 @@ import useLocalize from "~/hooks/useLocalize";
 import { useToastContext } from "~/Providers";
 import { cn, generateUUID, getFileExtension } from "~/utils";
 
+const checkFileType = (file, accepts) => {
+    if (!accepts || accepts === '*') return true;
+    const fileName = file.name.toLowerCase();
+    const acceptArr = accepts.split(',').map(a => a.trim().toLowerCase());
+
+    // 检查后缀名 (例如 .pdf) 或 MIME type
+    return acceptArr.some(type => {
+        if (type.startsWith('.')) {
+            return fileName.endsWith(type);
+        }
+        return file.type.match(new RegExp(type.replace('*', '.*')));
+    });
+};
+
 // @accepts '.png,.jpg'
-export default function InputFiles({ v, showVoice, accepts, disabled = false, size, onChange }) {
+const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, onChange }, ref) => {
     const t = useLocalize()
     const [files, setFiles] = useState([]);
     const filesRef = useRef([]);
@@ -19,21 +33,27 @@ export default function InputFiles({ v, showVoice, accepts, disabled = false, si
     const fileInputRef = useRef(null);
     const fileSizeLimit = size * 1024 * 1024; // File size limit in bytes
 
-    const handleFileChange = (e) => {
-        const selectedFiles = Array.from(e.target.files);
+    const handleFileChange = (selectedFiles) => {
         const validFiles = [];
         const invalidFiles = [];
+        const invalidTypeFiles = [];
 
         fileInputRef.current.value = ''
         // Validate files based on file extensions
         selectedFiles.forEach((file) => {
-            if (file.size <= fileSizeLimit) {
+            if (!checkFileType(file, accepts)) {
+                invalidTypeFiles.push(file);
+                return;
+            } else if (file.size <= fileSizeLimit) {
                 validFiles.push({ id: generateUUID(6), file });
             } else {
                 invalidFiles.push({ id: generateUUID(6), file });
             }
         });
 
+        if (invalidTypeFiles.length > 0) {
+            showToast({ message: t('com_ui_upload_file_type_error'), status: 'error' }); // 请确保你有对应多语言key或直接写死中文测试
+        }
         // Show invalid file toast
         if (invalidFiles.length > 0) {
             invalidFiles.map(file =>
@@ -120,6 +140,13 @@ export default function InputFiles({ v, showVoice, accepts, disabled = false, si
         });
     };
 
+    useImperativeHandle(ref, () => ({
+        upload: (fileList) => {
+            if (disabled) return;
+            handleFileChange(Array.from(fileList));
+        }
+    }));
+
     const handleFileRemove = (fileName) => {
         const res = filesRef.current.filter(file => file.name !== fileName);
         filesRef.current = res
@@ -197,9 +224,11 @@ export default function InputFiles({ v, showVoice, accepts, disabled = false, si
                 ref={fileInputRef}
                 multiple
                 accept={accepts}
-                onChange={handleFileChange}
+                onChange={(e) => handleFileChange(Array.from(e.target.files))}
                 className="hidden"
             />
         </div>
     );
-}
+});
+
+export default InputFiles;

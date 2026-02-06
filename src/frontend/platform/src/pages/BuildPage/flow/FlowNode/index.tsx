@@ -16,6 +16,7 @@ import RunLog from './RunLog';
 import { RunTest } from './RunTest';
 import { useUpdateVariableState } from './flowNodeStore';
 import { useTranslation } from 'react-i18next';
+import ParameterSubGroup from './ParameterSubGroup';
 
 export const CustomHandle = ({ id = '', node, isLeft = false, className = '' }) => {
     const [openLeft, setOpenLeft] = useState(false);
@@ -248,8 +249,8 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
                 {/* top */}
                 <RunLog node={node}>
                     <div className='bisheng-node-top flex items-center'>
-                        <LoadingIcon className='size-5 text-[#B3BBCD]' />
-                        <span className='node-face text-sm text-[#B3BBCD]'>BISHENG</span>
+                        {t('bisheng', { ns: 'bs' }) === 'BISHENG' && <LoadingIcon className='size-5 text-[#B3BBCD]' />}
+                        <span className='node-face text-sm text-[#B3BBCD]'>{t('bisheng', { ns: 'bs' })}</span>
                     </div>
                 </RunLog>
 
@@ -322,8 +323,17 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
                                     })
                                 })
                             }} />}
-                        {node.group_params.map(group =>
-                            <ParameterGroup
+                        {node.group_params.map(group => group.groupKey ?
+                            <ParameterSubGroup
+                                key={group.groupKey}
+                                nodeId={node.id}
+                                node={node}
+                                cate={group}
+                                onStatusChange={((key, obj) => paramValidateEntities.current[key] = obj)}
+                                onVarEvent={((key, obj) => varValidateEntities.current[key] = obj)}
+                                tab={currentTab}
+                            />
+                            : <ParameterGroup
                                 nodeId={node.id}
                                 key={group.name}
                                 tab={currentTab}

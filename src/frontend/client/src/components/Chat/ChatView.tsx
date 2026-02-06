@@ -22,6 +22,7 @@ import InvitationCodeForm from './InviteCode';
 import Landing from './Landing';
 import MessagesView from './Messages/MessagesView';
 import Presentation from './Presentation';
+import { useGetBsConfig } from '~/data-provider';
 
 
 const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?: number, shareToken?: string }) => {
@@ -34,6 +35,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   const [inputFloat, setInputFloat] = useState(false);
   const [inputWidth, setInputWidth] = useState(0); // To hold the calculated width
 
+  const { data: bsConfig } = useGetBsConfig();
   const navigate = useNavigate();
   const fileMap = useFileMapContext();
 
@@ -141,7 +143,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   } else if (messagesTree && messagesTree.length !== 0) {
     content = <MessagesView readOnly={shareToken} messagesTree={messagesTree} Header={<HeaderTitle readOnly={shareToken} conversation={conversation} logo={null} />} />;
   } else {
-    content = <Landing lingsi={isLingsi} setLingsi={setIsLingsi} isNew={isNew} />;
+    content = <Landing lingsi={isLingsi} lingsiEntry={bsConfig?.linsightConfig?.linsight_entry} setLingsi={setIsLingsi} isNew={isNew} />;
   }
 
   return (

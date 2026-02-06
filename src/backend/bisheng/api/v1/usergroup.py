@@ -178,7 +178,7 @@ async def get_manage_resources(login_user: UserPayload = Depends(UserPayload.get
                                page: int = 1,
                                page_size: int = 10):
     """ Get a list of apps under a managed user group """
-    res, total = RoleGroupService().get_manage_resources(login_user, keyword, page, page_size)
+    res, total = await RoleGroupService().get_manage_resources(login_user, keyword, page, page_size)
     return resp_200(data={
         "data": res,
         "total": total

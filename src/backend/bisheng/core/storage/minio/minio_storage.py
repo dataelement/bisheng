@@ -1,4 +1,5 @@
 import json
+import os
 from abc import ABC
 from datetime import timedelta
 from io import BytesIO
@@ -112,21 +113,8 @@ class MinioStorage(BaseStorage, ABC):
         if bucket_name is None:
             bucket_name = self.bucket
 
-        if isinstance(file, (bytes, BinaryIO, BytesIO)):
-            if isinstance(file, bytes):
-                file = BytesIO(file)
-            if 'length' not in kwargs:
-                length = len(file.getbuffer())
-                kwargs['length'] = length
-                file.seek(0)
-            await self.minio_client.put_object(
-                bucket_name=bucket_name,
-                object_name=object_name,
-                data=file,
-                content_type=content_type,
-                **kwargs
-            )
-        elif isinstance(file, (Path, str)):
+        #
+        if isinstance(file, (Path, str)):
             file_path = str(file)
             await self.minio_client.fput_object(
                 bucket_name=bucket_name,
@@ -135,14 +123,39 @@ class MinioStorage(BaseStorage, ABC):
                 content_type=content_type,
                 **kwargs
             )
-        else:
-            await self.minio_client.put_object(
-                bucket_name=bucket_name,
-                object_name=object_name,
-                data=file,
-                content_type=content_type,
-                **kwargs
-            )
+            return
+
+        data_stream = file
+
+        if isinstance(file, bytes):
+            data_stream = BytesIO(file)
+
+        if 'length' not in kwargs:
+            try:
+                if hasattr(data_stream, "getbuffer"):
+                    kwargs['length'] = data_stream.getbuffer().nbytes
+
+                elif hasattr(data_stream, "fileno"):
+                    kwargs['length'] = os.fstat(data_stream.fileno()).st_size
+
+                else:
+                    data_stream.seek(0, 2)
+                    kwargs['length'] = data_stream.tell()
+                    data_stream.seek(0)
+
+            except Exception as e:
+                raise ValueError(f"Could not determine file length for upload: {str(e)}")
+
+        if hasattr(data_stream, "seek") and callable(data_stream.seek):
+            data_stream.seek(0)
+
+        await self.minio_client.put_object(
+            bucket_name=bucket_name,
+            object_name=object_name,
+            data=data_stream,
+            content_type=content_type,
+            **kwargs
+        )
 
     def put_object_sync(self, *, bucket_name: Optional[str] = None, object_name: str,
                         file: Union[bytes, BinaryIO, Path, str],
@@ -150,22 +163,8 @@ class MinioStorage(BaseStorage, ABC):
 
         if bucket_name is None:
             bucket_name = self.bucket
-        if isinstance(file, (bytes, BinaryIO, BytesIO)):
-            if isinstance(file, bytes):
-                file = BytesIO(file)
-            if 'length' not in kwargs:
-                length = len(file.getbuffer())
-                kwargs['length'] = length
-                file.seek(0)
-            self.minio_client_sync.put_object(
-                bucket_name=bucket_name,
-                object_name=object_name,
-                data=file,
-                content_type=content_type,
-                **kwargs
-            )
 
-        elif isinstance(file, (Path, str)):
+        if isinstance(file, (Path, str)):
             file_path = str(file)
             self.minio_client_sync.fput_object(
                 bucket_name=bucket_name,
@@ -174,14 +173,44 @@ class MinioStorage(BaseStorage, ABC):
                 content_type=content_type,
                 **kwargs
             )
-        else:
-            self.minio_client_sync.put_object(
-                bucket_name=bucket_name,
-                object_name=object_name,
-                data=file,
-                content_type=content_type,
-                **kwargs
-            )
+            return
+
+        data_stream = file
+
+        if isinstance(file, bytes):
+            data_stream = BytesIO(file)
+
+        if 'length' not in kwargs:
+            try:
+                if hasattr(data_stream, "getbuffer"):
+                    kwargs['length'] = data_stream.getbuffer().nbytes
+
+                elif hasattr(data_stream, "fileno"):
+                    try:
+                        kwargs['length'] = os.fstat(data_stream.fileno()).st_size
+                    except Exception:
+
+                        data_stream.seek(0, 2)
+                        kwargs['length'] = data_stream.tell()
+                        data_stream.seek(0)
+                else:
+                    data_stream.seek(0, 2)
+                    kwargs['length'] = data_stream.tell()
+                    data_stream.seek(0)
+
+            except Exception as e:
+                raise ValueError(f"Could not determine file length for upload: {str(e)}")
+
+        if hasattr(data_stream, "seek") and callable(data_stream.seek):
+            data_stream.seek(0)
+
+        self.minio_client_sync.put_object(
+            bucket_name=bucket_name,
+            object_name=object_name,
+            data=data_stream,
+            content_type=content_type,
+            **kwargs
+        )
 
     async def put_object_tmp(self, object_name: str, file: Union[bytes, BinaryIO, Path, str],
                              content_type: str = "application/octet-stream", **kwargs) -> None:

@@ -179,6 +179,26 @@ class UserGroupDao(UserGroupBase):
             return session.exec(statement).all()
 
     @classmethod
+    async def aget_group_users(cls,
+                        group_ids: List[int],
+                        page: int = 0,
+                        limit: int = 0) -> List[UserGroup]:
+        """
+        Batch Get Users Under Grouping
+        Args:
+            group_ids:
+            page:
+            limit:
+
+        Returns:
+
+        """
+        statement = select(UserGroup).where(UserGroup.group_id.in_(group_ids))
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return result.all()
+
+    @classmethod
     def is_users_in_group(cls, group_id: int, user_ids: List[int]) -> List[UserGroup]:
         with get_sync_db_session() as session:
             statement = select(UserGroup).where(UserGroup.group_id == group_id,

@@ -11,10 +11,13 @@ from bisheng.core.logger import trace_id_var
 from bisheng.database.models.flow import FlowDao
 from bisheng.utils.exceptions import IgnoreException
 from bisheng.worker.main import bisheng_celery
+from bisheng.worker.utils.stateful_worker import StatefulWorker
 from bisheng.worker.workflow.redis_callback import RedisCallback
 from bisheng.workflow.common.workflow import WorkflowStatus
 from bisheng.workflow.graph.workflow import Workflow
 
+# workflow execute stateful worker for assigning tasks to bound workers
+workflow_stateful_worker = StatefulWorker(queue_prefix="workflow_celery", bound_nodes_prefix="workflow_bound_nodes:")
 # Stores global workflow objects
 _global_workflow: dict[str, Workflow] = {}
 

@@ -99,6 +99,7 @@ export default function MainLayout() {
                         </TooltipProvider>
                         <Separator className="mx-[4px] dark:bg-[#111111]" orientation="vertical" />
                         <SelectHover
+                            className={"-top-4"}
                             triagger={
                                 <div className="h-8 px-3 bg-header-icon rounded-lg cursor-pointer my-4 flex items-center justify-center">
                                     <span className="text-sm leading-8">{languageNames[language]}</span>
@@ -123,7 +124,7 @@ export default function MainLayout() {
                                     {user.user_name} <ChevronDown className="inline-block mt-[-2px]" />
                                 </span>
                             }>
-                            {appConfig.benchMenu && isMenu('frontend') && <SelectHoverItem onClick={() => window.open('/workspace/')}><GanttChartIcon className="w-4 h-4 mr-1" /><span>{t('menu.workspace')}</span></SelectHoverItem>}
+                            {isMenu('frontend') && <SelectHoverItem onClick={() => window.open('/workspace/')}><GanttChartIcon className="w-4 h-4 mr-1" /><span>{t('menu.workspace')}</span></SelectHoverItem>}
                             <SelectHoverItem onClick={JumpResetPage}><Lock className="w-4 h-4 mr-1" /><span>{t('menu.changePwd')}</span></SelectHoverItem>
                             <SelectHoverItem onClick={handleLogout}><QuitIcon className="w-4 h-4 mr-1" /><span>{t('menu.logout')}</span></SelectHoverItem>
                         </SelectHover>

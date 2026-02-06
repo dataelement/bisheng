@@ -10,7 +10,10 @@ const GuideQuestions = forwardRef(({ locked, chatId, onClick }, ref) => {
     useImperativeHandle(ref, () => ({
         updateQuestions(newQuestions) { // Expose this method to the parent
             console.log('newQuestions :>> ', newQuestions);
-            setQuestions(newQuestions)
+            !questions.length && setQuestions(newQuestions)
+        },
+        clear() {
+            setQuestions([])
         }
     }))
 

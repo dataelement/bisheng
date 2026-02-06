@@ -201,6 +201,13 @@ class ConfigService(Settings):
         tmp.bisheng_pro = os.getenv('BISHENG_PRO') == 'true'
         return tmp
 
+    async def aget_system_login_method(self) -> SystemLoginMethod:
+        # Get password-related configuration items
+        all_config = await self.aget_all_config()
+        tmp = SystemLoginMethod(**all_config.get('system_login_method', {}))
+        tmp.bisheng_pro = os.getenv('BISHENG_PRO') == 'true'
+        return tmp
+
     def get_workflow_conf(self) -> WorkflowConf:
         # Get password-related configuration items
         all_config = self.get_all_config()

@@ -170,6 +170,22 @@
   "allowMultipleSelect": "Allow multiple selection",
   "allowUploadMultipleFiles": "Allow uploading multiple files",
   "uploadFileTypes": "Upload file types",
+  "temporaryKnowledgeBase": "Save to temporary knowledge base",
+  "parseFile": "Parse file content",
+  "notParse":"Do not parse (raw file)",
+  "fileParseResult": "File parsing results",
+  "filePath": "File path",
+  "filePathName":"File path variable name",
+  "storeUploadFiles":"Store the path list of all uploaded files, which can be read and processed in code nodes",  
+  "imageVariableName":"Image variable name",
+  "extractImages":"Extract images from uploaded files, this variable can be passed when assistant or large model nodes use multimodal models",
+  "parseLengthLimit":"Parse result length limit",
+  "storeVariableName":"Variable name for storing file parsing results",
+  "parseResultName":"Parse result variable name",
+  "selectFile":"Please select file processing strategy",
+  "fileProcessingStrategy":"File processing strategy",
+  "fileProcessingStrategyTip":"Choose how to handle user-uploaded files:\n· Parse file content: Extract text from files to provide context for subsequent nodes like large language models.\n· Do not parse: Keep original files for processing by multimodal models or code nodes.",
+  "dialogProcessingStrategyTip": "Choose how to handle user-uploaded files:\n· Parse file content: Extract text from files to provide context for subsequent nodes like large language models.\n·Save to Temporary Knowledge Base: Files will be uploaded to a temporary knowledge base and can be used in 'Document Knowledge Base Q&A' nodes.\n· Do not parse: Keep original files for processing by multimodal models or code nodes.",
   "tempKnowledgeBaseName": "Temporary knowledge base name",
   "tempKnowledgeBaseNameTip": "Files will be uploaded to a temporary knowledge base with this name and can be used in Document QA, Assistant, and other nodes",
   "fileContentVarName": "File content variable name",
@@ -285,7 +301,27 @@
     },
     "input": {
       "name": "Input",
+      "接收文本":"Receive Text",
       "description": "Receives user input from the chat interface. Supports two input types: dialog input and form input.",
+      "user_input_file":{
+        "label": "Receive File"
+      },
+      "recommended_questions_flag": {
+        "label": "Smart Recommended Questions",
+        "help": "Based on conversation history, predict possible user input and display it in the conversation"
+      },
+      "recommended_llm": {
+        "label": "Model",
+        "placeholder":"Please select a model"
+      },
+      "recommended_system_prompt": {
+        "label": "Prompt",
+        "value": "# Role\nYou are a highly insightful \"Conversation Continuation Prediction Expert.\" Your task is to predict the three phrases or questions the user is most likely to input next, based on the current conversation history.\n\n# Context Awareness\nBefore generating predictions, please carry out the following in-depth reasoning steps:\n1. **Intent Analysis**: Is the user currently seeking facts, expressing emotions, requesting advice, or attempting to end the conversation?\n2. **Logical Inference**: Based on the AI\u2019s previous reply, what is the most natural association or question that would arise for the user?\n3. **Style Alignment**: Observe the user\u2019s wording habits (professional, casual, brief, or detailed). The predictions should maintain a consistent tone.\n\n# Goals\n- **Diversity**: Provide follow-ups from different directions (e.g., an in-depth exploratory question, a related new topic, a feedback-oriented comment).\n- **Conciseness**: Predictions should be short and to the point, typically no more than 15 words, making them easy for the user to click.\n- **Forward-looking**: Anticipate the user\u2019s \u201cpain points\u201d and directly offer an entry point to a solution.\n\n# Output Format\nPlease strictly adhere to JSON format in the output.\nReturn a JSON object containing a single key named \u201csuggestions\u201d.\n- All strings must use **double quotes**.\n- Do not output Markdown code block markers (such as ```json); output the raw JSON string directly.\n**Example:**\n{\"suggestions\": [\"Can you give an example?\", \"What is the cost of this solution?\", \"Sounds good\u2014how do I get started?\"]}"
+      },
+      "recommended_history_num": {
+        "label": "History Message Count",
+        "help": "Number of historical conversation messages for the model to reference when generating recommended questions"
+      },
       "tab_dialog_input": {
         "label": "Dialog Input",
         "help": "Receives free-text input from the user."

@@ -14,10 +14,16 @@ import {
 } from '@tanstack/react-table';
 import { dataService, FileContext } from '~/data-provider/data-provider/src';
 import { debounce } from 'lodash';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { NotificationSeverity, type AugmentedColumnDef } from '~/common';
 import {
   Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
   Table,
   TableBody,
   TableCell,
@@ -68,48 +74,218 @@ export default function DataTableKnowledge<TData, TValue>({
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
   const { deleteFiles } = useDeleteFilesFromTable(() => setIsDeleting(false));
 
-  // const { handleFileChange, abortUpload } = useFileHandling();
+  // 重复文件相关状态
+  const [repeatFiles, setRepeatFiles] = useState([]);
+  const [retryLoad, setRetryLoad] = useState(false);
+  const [pendingFiles, setPendingFiles] = useState([]);
+  const [infoId, setInfoId] = useState('');
+  const [fileUrl, setFileUrl] = useState('');
   const handleSearch = useCallback(
     debounce((event: any) => {
       onSearch(event.target.value);
     }, 300),
     [onSearch],
   );
+  useEffect(() => {
+    const fetchUserInfo = async () => {
+      const res = await dataService.getUserInfo();
+      setInfoId(res?.data[0]?.id || '');
+    }
+    fetchUserInfo();
+  }, [])
 
-  const [loading, setLoading] = useState(false)
-  const { showToast } = useToast()
-  const handleUpload = async (event) => {
-    setLoading(true); // 开始上传，设置 loading 为 true
-    const files = Array.from(event.target.files); // 将 FileList 转换为数组
+  const [loading, setLoading] = useState(false);
+  const { showToast } = useToast();
+
+  const unRetry = () => {
+    setRepeatFiles([]);
+    setPendingFiles([]);
+    setLoading(false);
+  };
+
+  const onRetry = async (files) => {
+    setRetryLoad(true);
     try {
-      // 遍历所有文件并上传
+      const formData = new FormData();
+      formData.append('retry', 'true');
+
+      files.forEach(file => {
+        if (file.file) {
+          formData.append('file', file.file);
+        }
+        if (file.name) {
+          formData.append('filename', file.name);
+        }
+      });
+      const fileList = repeatFiles.map(repeatFile => ({
+        file_path: repeatFile.file_path,
+        excel_rule: repeatFile.fileType === 'file' ? {} : {
+          "append_header": true,
+          "header_end_row": 1,
+          "header_start_row": 1,
+          "slice_length": 10
+        }
+      }));
+
+      // 一次上传所有重复文件
+      const params = {
+        knowledge_id: infoId,
+        file_list: fileList, // 数组，包含多个重复文件
+        separator: ["\n\n", "\n"],
+        separator_rule: ["after", "after"],
+        chunk_size: 1000,
+        chunk_overlap: 100,
+        retain_images: true,
+        enable_formula: true,
+        force_ocr: true,
+        fileter_page_header_footer: true
+      };
+
+      const uploadRes = await dataService.subUploadLibFile(params);
+
+      if (uploadRes.status_code === 200) {
+        showToast({
+          message: localize('com_tools_file_upload', { count: repeatFiles.length }),
+          severity: NotificationSeverity.SUCCESS,
+        });
+        onUpload();
+      } else {
+        showToast({
+          message: uploadRes.status_message || localize('com_tools_file_upload_failed'),
+          severity: NotificationSeverity.ERROR,
+        });
+      }
+    } catch (error) {
+      console.error('com_tools_file_upload_failed:', error);
+      showToast({
+        message: localize('com_tools_file_upload_failed') + error.message,
+        severity: NotificationSeverity.ERROR,
+      });
+    } finally {
+      setRetryLoad(false);
+      setRepeatFiles([]);
+      setPendingFiles([]);
+      setLoading(false);
+    }
+  };
+
+  const handleUpload = async (event) => {
+    setLoading(true);
+    const files = Array.from(event.target.files);
+
+    // 在函数作用域内声明 duplicateFiles
+    let duplicateFiles = [];
+
+    if (!files || files.length === 0) {
+      setLoading(false);
+      return;
+    }
+    setPendingFiles(files.map(file => ({ file, name: file.name })));
+
+    try {
+      const nonDuplicateFiles = [];
+      duplicateFiles = []; // 重置
+
       for (const file of files) {
         const formData = new FormData();
         formData.append('filename', file.name);
         formData.append('file', file);
-        const res = await dataService.knowledgeUpload(formData); // 等待每个文件上传完成
-        console.log(`File ${file.name} uploaded successfully`, res);
-        if (res.status_code === 500) {
-          showToast({
-            message: res.status_message,
-            severity: NotificationSeverity.ERROR,
-          })
-        } else if (res.data.remark) {
-          showToast({
-            message: localize('com_tools_knowledge_upload_remark'),
-            severity: NotificationSeverity.ERROR,
-          })
+
+        const repeatCheckRes = await dataService.repeatUpload(formData, infoId);
+
+        if (repeatCheckRes.data?.repeat === true) {
+          duplicateFiles.push({
+            file,
+            name: file.name,
+            file_name: repeatCheckRes.data.file_name,
+            repeat_file_name: repeatCheckRes.data.repeat_file_name,
+            repeat_update_time: repeatCheckRes.data.repeat_update_time,
+            data: repeatCheckRes.data,
+            file_path: repeatCheckRes.data.file_path,
+          });
+        } else {
+          nonDuplicateFiles.push({
+            file,
+            name: file.name,
+            file_path: repeatCheckRes.data.file_path,
+          });
         }
       }
+
+      if (duplicateFiles.length > 0) {
+        setRepeatFiles(duplicateFiles.map(item => ({
+          id: item.name,
+          remark: `${item.file_name} 对应已存在文件 ${item.repeat_file_name}`,
+          file_path: item.file_path,
+          fileType: 'file',
+          file: item.file,
+        })));
+      }
+
+      if (nonDuplicateFiles.length > 0) {
+        let hasError = false;
+
+        // 修改这里：将多个文件合并成一个数组上传
+        const fileList = nonDuplicateFiles.map(fileInfo => ({
+          file_path: fileInfo.file_path,
+          excel_rule: fileInfo.file.type === 'file' ? {} : {
+            "append_header": true,
+            "header_end_row": 1,
+            "header_start_row": 1,
+            "slice_length": 10
+          }
+        }));
+
+        // 一次上传所有非重复文件
+        const params = {
+          knowledge_id: infoId,
+          file_list: fileList, // 这里是数组，包含多个文件
+          separator: ["\n\n", "\n"],
+          separator_rule: ["after", "after"],
+          chunk_size: 1000,
+          chunk_overlap: 100,
+          retain_images: true,
+          enable_formula: true,
+          force_ocr: true,
+          fileter_page_header_footer: true
+        };
+
+        const uploadRes = await dataService.subUploadLibFile(params);
+
+        if (uploadRes.status_code === 500) {
+          // 如果有错误，尝试解析哪些文件失败了
+          showToast({
+            message: localize('com_tools_file_upload_partial_error'),
+            severity: NotificationSeverity.ERROR,
+          });
+          hasError = true;
+        } else if (uploadRes.data?.remark) {
+          // showToast({
+          //   message: uploadRes.data.remark || localize('com_tools_knowledge_upload_remark'),
+          //   severity: NotificationSeverity.ERROR,
+          // });
+          hasError = true;
+        }
+
+        if (!hasError) {
+          showToast({
+            message: localize('com_tools_file_upload', { count: nonDuplicateFiles.length }),
+            severity: NotificationSeverity.SUCCESS,
+          });
+          onUpload();
+        }
+      }
+
     } catch (error) {
+      console.error('com_tools_file_upload_failed:', error);
       showToast({
-        message: 'Error uploading files:' + error,
+        message: localize('com_tools_file_upload_failed') + ': ' + error.message,
         severity: NotificationSeverity.ERROR,
-      })
-      console.error('Error uploading files:', error);
+      });
     } finally {
-      setLoading(false);
-      onUpload()
+      if (duplicateFiles.length === 0) {
+        setLoading(false);
+      }
     }
   };
 
@@ -124,7 +300,7 @@ export default function DataTableKnowledge<TData, TValue>({
     onColumnVisibilityChange: setColumnVisibility,
     getPaginationRowModel: getPaginationRowModel(),
     onRowSelectionChange: setRowSelection,
-    manualPagination: true,  // 启用手动分页
+    manualPagination: true,
     pageCount: Math.ceil(data.total / 20),
     state: {
       sorting,
@@ -136,6 +312,37 @@ export default function DataTableKnowledge<TData, TValue>({
 
   return (
     <div className="flex h-full flex-col gap-4">
+      <Dialog open={!!repeatFiles.length} onOpenChange={(b) => !b && setRepeatFiles([])}>
+        <DialogContent className="sm:max-w-[425px]" close={false}>
+          <DialogHeader>
+            <DialogTitle>{localize('com_tools_file_detected')}</DialogTitle>
+            <DialogDescription>
+              {localize('com_tools_file_following')}
+            </DialogDescription>
+          </DialogHeader>
+          <ul className="overflow-y-auto max-h-[400px] py-2">
+            {repeatFiles.map(el => (
+              <li key={el.id} className="py-1 text-red-500 text-sm">
+                {el.remark}
+              </li>
+            ))}
+          </ul>
+          <DialogFooter>
+            <Button className="h-8" variant="outline" onClick={unRetry}>
+              {localize('com_tools_file_not_overwrite')}
+            </Button>
+            <Button
+              className="h-8"
+              disabled={retryLoad}
+              onClick={() => onRetry(pendingFiles)}
+            >
+              {retryLoad && <span className="loading loading-spinner loading-xs mr-1"></span>}
+              {localize('com_tools_file_overwrite')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <div className="flex flex-wrap items-center justify-between gap-2 py-2 sm:gap-4 sm:py-4">
         <div className='flex gap-2 sm:gap-4'>
           {/* <Input
@@ -147,15 +354,21 @@ export default function DataTableKnowledge<TData, TValue>({
           /> */}
         </div>
         <div>
-          {building ? <Button onClick={() => {
-            showToast({
-              message: localize('com_tools_knowledge_rebuilding'),
-              severity: NotificationSeverity.WARNING,
-            })
-          }}>{localize('com_knowledge_add_file')}</Button> :
-            <AttachFileButton disabled={loading} handleFileChange={handleUpload} />}
+          {building ? (
+            <Button onClick={() => {
+              showToast({
+                message: localize('com_tools_knowledge_rebuilding'),
+                severity: NotificationSeverity.WARNING,
+              });
+            }}>
+              {localize('com_knowledge_add_file')}
+            </Button>
+          ) : (
+            <AttachFileButton disabled={loading} handleFileChange={handleUpload} />
+          )}
         </div>
       </div>
+
       <div className="relative grid h-full max-h-[calc(100vh-20rem)] w-full flex-1 overflow-hidden overflow-x-auto overflow-y-auto rounded-md border border-black/10 dark:border-white/10">
         <Table className="w-full min-w-[300px] border-separate border-spacing-0">
           <TableHeader className="sticky top-0 z-50">
@@ -239,8 +452,7 @@ export default function DataTableKnowledge<TData, TValue>({
             })}
           </span> */}
           <span className="sm:hidden">
-            {`${table.getFilteredSelectedRowModel().rows.length}/${table.getFilteredRowModel().rows.length
-              }`}
+            {`${table.getFilteredSelectedRowModel().rows.length}/${table.getFilteredRowModel().rows.length}`}
           </span>
         </div>
         <div className="flex items-center space-x-1 pr-2 text-xs font-bold text-text-primary sm:text-sm">
@@ -268,6 +480,6 @@ export default function DataTableKnowledge<TData, TValue>({
           {localize('com_ui_next')}
         </Button>
       </div>
-    </div >
+    </div>
   );
 }

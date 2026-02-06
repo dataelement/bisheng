@@ -191,6 +191,11 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
       methods.setValue("text", e.target.value, { shouldValidate: true });
     },
   });
+  const isVisual = useMemo(() => {
+    if (!bsConfig?.models || !chatModel?.id) return false;
+    const model = bsConfig.models.find(item => item.id == chatModel.id);
+    return !!model?.visual;
+  }, [bsConfig?.models, chatModel?.id]);
   useEffect(() => {
     if (!isSearching && textAreaRef.current && !disableInputs) {
       textAreaRef.current.focus();
@@ -505,7 +510,7 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
           <FileFormWrapper
             accept={accept}
             showVoice={showVoice}
-            fileTip={!isLingsi}
+            fileTip={!isLingsi && !isVisual}
             noUpload={!bsConfig?.fileUpload.enabled}
             disableInputs={disableInputs || audioOpening}
             disabledSearch={isSearch && !isLingsi}

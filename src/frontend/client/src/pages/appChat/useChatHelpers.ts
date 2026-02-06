@@ -94,13 +94,17 @@ export default function useChatHelpers() {
     const showInputForm = (inputSchema) => {
         const { tab, value } = inputSchema
 
+        let showUpload = false
         if (tab === "dialog_input") {
-            const schemaItem = value?.find((el) => el.key === "dialog_file_accept")
+            const schemaItem = value?.find((el) => el?.key === "dialog_file_accept")
             const fileAccept = schemaItem?.value
             emitAreaTextEvent({ action: EVENT_TYPE.FILE_ACCEPTS, chatId, fileAccept })
+
+            const switchItem = value?.find((el) => el?.key === "user_input_file")
+            showUpload = switchItem ? switchItem.value : true
         }
 
-        const runstate = tab === "form_input" ? { inputDisabled: true, inputForm: inputSchema } : { showUpload: true, inputDisabled: false }
+        const runstate = tab === "form_input" ? { inputDisabled: true, inputForm: inputSchema } : { showUpload, inputDisabled: false }
 
         setRunningState((prev) => ({
             ...prev,
@@ -113,13 +117,16 @@ export default function useChatHelpers() {
     }
 
     const showGuideQuestion = (chatid, question) => {
-        setRunningState((prev) => ({
-            ...prev,
-            [chatid]: {
-                ...prev[chatid],
-                guideWord: question,
-            },
-        }))
+        setRunningState((prev) => {
+            if (prev[chatid].guideWord?.length) return prev
+            return {
+                ...prev,
+                [chatid]: {
+                    ...prev[chatid],
+                    guideWord: question,
+                },
+            }
+        })
     }
     // const stop = () => {
     // }

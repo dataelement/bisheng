@@ -178,7 +178,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
     const addModel = () => {
         setFormData(prev => ({
             ...prev,
-            models: [...prev.models, { key: generateUUID(4), id: '', name: '', displayName: '' }]
+            models: [...prev.models, { key: generateUUID(4), id: '', name: '', displayName: '', visual: false }]
         }));
     };
     const handleOpenWebSearchSettings = () => {
@@ -198,16 +198,24 @@ export default function index({ formData: parentFormData, setFormData: parentSet
         }));
 
     }, [setFormData]);
+    const handleVisualToggle = (index: number, enabled: boolean) => {
+        const newModels = [...formData.models];
+        newModels[index] = {
+            ...newModels[index],
+            visual: enabled
+        };
+        setFormData(prev => ({ ...prev, models: newModels }));
+    };
     return (
         <div className=" h-full overflow-y-scroll scrollbar-hide relative border-t">
             <div className="pt-4 relative">
                 <CardContent className="pt-4 relative  ">
                     <div className="w-full  max-h-[calc(100vh-180px)] overflow-y-scroll scrollbar-hide">
-                        <ToggleSection
+                        {/* <ToggleSection
                             title={t('chatConfig.workstationEntry')}
                             enabled={formData.menuShow}
                             onToggle={(enabled) => setFormData(prev => ({ ...prev, menuShow: enabled }))}
-                        >{null}</ToggleSection>
+                        >{null}</ToggleSection> */}
                         {/* Icon Uploads */}
                         <p className="text-lg font-bold mb-2">{t('chatConfig.iconUpload')}</p>
                         <div className="flex gap-8 mb-6">
@@ -307,6 +315,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                                     }}
                                     onModelChange={handleModelChange}
                                     onNameChange={handleModelNameChange}
+                                    onVisualToggle={handleVisualToggle}
                                 />
                             </div>
                             <FormInput
@@ -448,7 +457,7 @@ const useChatConfig = (refs: UseChatConfigProps, parentFormData, parentSetFormDa
     const { t } = useTranslation()
 
     const [formData, setFormData] = useState<ChatConfigForm>(parentFormData || {
-        menuShow: true,
+        // menuShow: true,
         systemPrompt: t('chatConfig.systemPrompt2'),
         sidebarIcon: { enabled: true, image: '', relative_path: '' },
         assistantIcon: { enabled: true, image: '', relative_path: '' },
@@ -458,7 +467,7 @@ const useChatConfig = (refs: UseChatConfigProps, parentFormData, parentSetFormDa
         inputPlaceholder: '',
         applicationCenterWelcomeMessage: '',
         applicationCenterDescription: '',
-        models: [{ key: generateUUID(4), id: null, name: '', displayName: '' }],
+        models: [{ key: generateUUID(4), id: null, name: '', displayName: '', visual: false }],
         maxTokens: 15000,
         voiceInput: { enabled: false, model: '' },
         webSearch: {

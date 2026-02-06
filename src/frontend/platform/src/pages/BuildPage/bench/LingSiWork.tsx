@@ -31,6 +31,7 @@ import { useNavigate } from "react-router-dom";
 import { FormInput } from "./FormInput";
 import { Model } from "./ModelManagement";
 import Preview from "./Preview";
+import { ToggleSection } from "./ToggleSection";
 
 export interface FormErrors {
     sidebarSlogan: string;
@@ -128,7 +129,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
         isBatch: false
     });
     const defaultFormValues = {
-        menuShow: false,
+        // menuShow: false,
         systemPrompt: '',
         sidebarIcon: {
             enabled: true,
@@ -165,8 +166,9 @@ export default function index({ formData: parentFormData, setFormData: parentSet
             prompt: ''
         },
         linsightConfig: {
+            linsight_entry: true,
             input_placeholder: t('bench.inputPlaceholderDescription'),
-            tools: []
+            tools: [],
         }
     };
     const [formData, setFormData] = useState<ChatConfigForm>(parentFormData || defaultFormValues);
@@ -381,6 +383,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                             ...defaultFormValues.linsightConfig,
                             ...config.linsightConfig,
                             input_placeholder: config.linsightConfig?.input_placeholder || '',
+                            linsight_entry: config.linsightConfig?.linsight_entry || false,
                         }
                     });
 
@@ -864,6 +867,17 @@ export default function index({ formData: parentFormData, setFormData: parentSet
             <Card className="rounded-none">
                 <CardContent className="pt-4 relative  ">
                     <div className="w-full  max-h-[calc(100vh-180px)] overflow-y-scroll scrollbar-hide">
+                        <ToggleSection
+                            title={t('chatConfig.workstationEntry')}
+                            enabled={formData.linsightConfig?.linsight_entry}
+                            onToggle={(enabled) => setFormData(prev => ({
+                                ...prev,
+                                linsightConfig: {
+                                    ...prev.linsightConfig,
+                                    linsight_entry: enabled
+                                }
+                            }))}
+                        >{null}</ToggleSection>
                         <FormInput
                             label={t('chatConfig.inputPlaceholder')}
                             value={formData.linsightConfig?.input_placeholder}
@@ -1044,7 +1058,8 @@ const useChatConfig = (
             applicationCenterDescription: (formData.applicationCenterDescription?.trim?.() || t('chatConfig.appCenterDescriptionPlaceholder')),
             linsightConfig: {
                 input_placeholder: formData.linsightConfig?.input_placeholder || '',
-                tools: processedTools
+                tools: processedTools,
+                linsight_entry: formData.linsightConfig?.linsight_entry || false,
             }
         };
 

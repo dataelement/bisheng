@@ -14,6 +14,7 @@ from bisheng.chat.utils import sync_judge_source, sync_process_source_document
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
 from bisheng.common.errcode.flow import WorkFlowNodeRunMaxTimesError, WorkFlowWaitUserTimeoutError, \
     WorkFlowNodeUpdateError, WorkFlowVersionUpdateError, WorkFlowTaskBusyError, WorkFlowTaskOtherError
+from bisheng.common.errcode.http_error import ServerError
 from bisheng.common.schemas.telemetry.event_data_schema import NewMessageSessionEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
@@ -273,31 +274,57 @@ class RedisCallback(BaseCallback):
                     continue
                 yield chat_response
 
-    def set_user_input(self, data: dict, message_id: int = None, message_content: str = None):
+    def set_user_input(self, data: dict, message_id: int = None, message_content: str = None,
+                       verify_input: bool = False):
         if self.chat_id and message_id:
             message_db = ChatMessageDao.get_message_by_id(message_id)
-            if message_db:
-                self.update_old_message(data, message_db, message_content)
+            self.update_old_message(data, message_db, message_content, verify_input)
         # Notify Asynchronous Task User Input
         self.redis_client.set(self.workflow_input_key, data, expiration=self.workflow_expire_time)
         return
 
-    async def async_set_user_input(self, data: dict, message_id: int = None, message_content: str = None):
+    async def async_set_user_input(self, data: dict, message_id: int = None, message_content: str = None,
+                                   verify_input: bool = False):
         if self.chat_id and message_id:
             message_db = await ChatMessageDao.aget_message_by_id(message_id)
-            if message_db:
-                await self.async_update_old_message(data, message_db, message_content)
+            await self.async_update_old_message(data, message_db, message_content, verify_input)
         # Notify Asynchronous Task User Input
         await self.redis_client.aset(self.workflow_input_key, data, expiration=self.workflow_expire_time)
         return
 
     @staticmethod
-    def _update_old_message(user_input: dict, message_db: ChatMessage, message_content: str):
+    def _verify_input_schema(input_schema_message: Dict, user_input: Dict):
+        """ Verify that the user input matches the input schema """
+        node_id = input_schema_message['node_id']
+        if node_id not in user_input:
+            raise ServerError(msg="node_id not found in user input")
+        user_input = user_input[node_id]
+        input_schema = input_schema_message['input_schema']
+        if input_schema["tab"] == "form_input":
+            user_input_keys = {one: None for one in user_input.keys()}
+            for key_info in input_schema['value']:
+                key = key_info['key']
+                if key not in user_input:
+                    raise ServerError(msg=f"key {key} not found in user input")
+                user_input_keys.pop(key)
+            if user_input_keys:
+                raise ServerError(msg=f"extra key {list(user_input_keys.keys())} found in user input")
+        else:
+            if input_schema["key"] not in user_input:
+                raise ServerError(msg=f"key {input_schema['key']} not found in user input")
+
+    @classmethod
+    def _update_old_message(cls, user_input: dict, message_db: ChatMessage, message_content: str,
+                            verify_input: bool = False):
         """
         if ChatResponse is not None: add new message
         if ChatMessage is not None: update old message
         return ChatResponse | None, ChatMessage | None
         """
+        if not message_db:
+            if verify_input:
+                raise ServerError(msg="message info not found by message id")
+            return None
         # Update the input and selection of the user in the output to be entered message
         old_message = json.loads(message_db.message)
         if message_db.category == WorkflowEventType.OutputWithInput.value:
@@ -305,6 +332,8 @@ class RedisCallback(BaseCallback):
         elif message_db.category == WorkflowEventType.OutputWithChoose.value:
             old_message['hisValue'] = user_input[old_message['node_id']][old_message['key']]
         elif message_db.category == WorkflowEventType.UserInput.value:
+            if verify_input:
+                cls._verify_input_schema(old_message, user_input)
             user_input = user_input[old_message['node_id']]
 
             # If the front-end passes user input, the front-end content is used.
@@ -328,16 +357,18 @@ class RedisCallback(BaseCallback):
         message_db.message = json.dumps(old_message, ensure_ascii=False)
         return None, message_db
 
-    def update_old_message(self, user_input: dict, message_db: ChatMessage, message_content: str):
-        chat_response, message = self._update_old_message(user_input, message_db, message_content)
+    def update_old_message(self, user_input: dict, message_db: ChatMessage, message_content: str,
+                           verify_input: bool = False):
+        chat_response, message = self._update_old_message(user_input, message_db, message_content, verify_input)
         if chat_response:
             self.save_chat_message(chat_response)
             return
         if message:
             ChatMessageDao.update_message_model(message)
 
-    async def async_update_old_message(self, user_input: dict, message_db: ChatMessage, message_content: str):
-        chat_response, message = self._update_old_message(user_input, message_db, message_content)
+    async def async_update_old_message(self, user_input: dict, message_db: ChatMessage, message_content: str,
+                                       verify_input: bool = False):
+        chat_response, message = self._update_old_message(user_input, message_db, message_content, verify_input)
         if chat_response:
             self.save_chat_message(chat_response)
             return

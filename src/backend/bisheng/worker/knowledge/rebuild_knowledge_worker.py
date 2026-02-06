@@ -41,7 +41,7 @@ def rebuild_knowledge_celery(knowledge_id: int, new_model_id: int, invoke_user_i
             logger.error(f"knowledge_id={knowledge_id} not found")
             return f"knowledge {knowledge_id} not found"
 
-        # 1. accordingknowledge_idFound knowledgefileAll in the tablestatus=2Andstatus=4File, put thestatusto4
+        # 1. according knowledge_id Found knowledgefile All in the tablestatus=2Andstatus=4File, put thestatusto4
         files = KnowledgeFileDao.get_files_by_multiple_status(
             knowledge_id,
             [KnowledgeFileStatus.SUCCESS.value, KnowledgeFileStatus.REBUILDING.value]
@@ -120,7 +120,7 @@ def _delete_es_files(knowledge: Knowledge, file_ids: List[int]):
             delete_query = {
                 "query": {
                     "match": {
-                        "metadata.file_id": file_id
+                        "metadata.document_id": file_id
                     }
                 }
             }
@@ -160,7 +160,8 @@ def _rebuild_embeddings(knowledge: Knowledge, files: List[KnowledgeFile], new_mo
         # TestembeddingIs the model available
         try:
             test_result = new_embeddings.embed_query("Test text")
-            logger.info(f"[DEBUG] EmbeddingModel tested successfully, dimension returned: {len(test_result) if test_result else 'None'}")
+            logger.info(
+                f"[DEBUG] EmbeddingModel tested successfully, dimension returned: {len(test_result) if test_result else 'None'}")
         except Exception as e:
             logger.error(f"[DEBUG] EmbeddingModel Test Failed: {str(e)}")
             # Model test failure should terminate the entire process, not continue
@@ -175,13 +176,6 @@ def _rebuild_embeddings(knowledge: Knowledge, files: List[KnowledgeFile], new_mo
             # Index does not exist, all files failed
             failed_files = [f.id for f in files]
             return success_files, failed_files
-
-        # DapatkanES(Indexed)mappingInformation (for debugging)
-        try:
-            mapping = es_client.client.indices.get_mapping(index=index_name)
-            logger.debug(f"ES index mapping for {index_name}: {mapping}")
-        except Exception as e:
-            logger.warning(f"Failed to get ES mapping: {str(e)}")
 
         # Regenerate for each fileembeddings
         for file in files:
@@ -212,7 +206,7 @@ def _process_single_file(file, es_client, index_name, vector_client):
     search_query = {
         "query": {
             "match": {
-                "metadata.file_id": file.id
+                "metadata.document_id": file.id
             }
         },
         "size": 10000

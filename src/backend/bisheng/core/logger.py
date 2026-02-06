@@ -65,6 +65,8 @@ def set_logger_config(logger_config: LoggerConf):
     logging.getLogger("elastic_transport").setLevel(logging.INFO)
     logging.getLogger("elasticsearch").setLevel(logging.INFO)
     logging.getLogger("urllib3").setLevel(logging.INFO)
+    logging.getLogger("python_multipart").setLevel(logging.INFO)
+    logging.getLogger("aiohttp_retry").setLevel(logging.INFO)
 
     # Block all existing loggers
     for name in logging.root.manager.loggerDict.keys():

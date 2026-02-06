@@ -118,6 +118,7 @@ const DragOptions = forwardRef(({ edges = false, edit = false, scroll = false, o
                                             {...provided.draggableProps}
                                             style={{ ...provided.draggableProps.style, position: 'relative', top: 0, left: 0 }}
                                             className="flex items-center gap-2 relative"
+                                            title={item.text}
                                         >
                                             <div className='group w-full flex items-center rounded-md border border-input bg-search-input shadow-sm'>
                                                 <div {...provided.dragHandleProps} className="flex flex-col justify-center border-r px-1">

@@ -17,6 +17,8 @@ import useFlowStore from "../flowStore";
 import ChatFiles from "./ChatFiles";
 import GuideQuestions from "./GuideQuestions";
 import { useMessageStore } from "./messageStore";
+import DragDropOverlay from "./DragDropOverlay";
+import { useFileDropAndPaste } from "./useFileDropAndPaste";
 const GuideQuestionsAny = GuideQuestions as any;
 
 export const FileTypes = {
@@ -35,6 +37,7 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
     const inputNodeIdRef = useRef('') // 当前输入框节点id
     const messageIdRef = useRef('') // 当前输入框节点messageId
     const [accepts, setAccepts] = useState('*') // 接受文件类型
+    const [uploadLock, setUploadLock] = useState(false) // 上传锁
     const { data: linsightConfig, isLoading: loading, refetch: refetchConfig, error } = useLinsightConfig();
 
     const { isLoading: audioOpening } = useAudioStore()
@@ -157,6 +160,8 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
         if (messageDom) {
             messageDom.scrollTop = messageDom.scrollHeight;
         }
+
+        questionsRef.current.clear()
     }
 
     const sendWsMsg = async (msg) => {
@@ -305,7 +310,9 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
             messageIdRef.current = data.message_id
             // 限制文件类型
             if (input_schema.tab === 'dialog_input') {
-                const schemaItem = input_schema.value?.find(el => el.key === 'dialog_file_accept')
+                const schemaItem = input_schema.value?.find(el => el?.key === 'dialog_file_accept')
+                const uploadSwithItem = input_schema.value?.find(el => el?.key === 'user_input_file')
+                setUploadLock(uploadSwithItem ? uploadSwithItem.value : true)
                 const fileAccept = schemaItem?.value
                 if (fileAccept === 'image') {
                     setAccepts(FileTypes.IMAGE.join(','))
@@ -495,8 +502,17 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
         inputRef.current.dispatchEvent(event);
     };
 
-    return <div className="absolute bottom-0 w-full pt-1 bg-[#fff] dark:bg-[#1B1B1B] z-10">
+    // handle drop and paste
+    const inputFilesRef = useRef(null)
+    const { isDragging, handlePaste } = useFileDropAndPaste({
+        enabled: !inputLock.locked,
+        onFilesReceived: (files) => {
+            inputFilesRef.current?.upload(files);
+        }
+    });
 
+    return <div className="absolute bottom-0 w-full pt-1 bg-[#fff] dark:bg-[#1B1B1B] z-10">
+        {isDragging && <DragDropOverlay />}
         <div className={`relative pr-4 ${clear && 'pl-9'}`}>
 
             {/* 引导问题 */}
@@ -522,12 +538,17 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
                 }
             </div>
             {/* 语音转文字 */}
-            <div className={` ${!inputLock.locked && 'mr-4'}`}>
+            <div className={` ${!inputLock.locked && uploadLock && 'mr-4'}`}>
                 {linsightConfig?.asr_model?.id && <SpeechToTextComponent disabled={inputLock.locked} onChange={handleSpeechRecognition} />}
             </div>
 
             {/* 附件 */}
-            {!inputLock.locked && <ChatFiles accepts={accepts} disabled={audioOpening} v={location.href.indexOf('/chat/flow/') === -1 ? 'v1' : 'v2'} onChange={loadingChange} />}
+            {!inputLock.locked && uploadLock && <ChatFiles
+                ref={inputFilesRef}
+                accepts={accepts}
+                disabled={audioOpening}
+                v={location.href.indexOf('/chat/flow/') === -1 ? 'v1' : 'v2'}
+                onChange={loadingChange} />}
             {/* send */}
             <div className="flex gap-2 absolute right-7 top-4 z-10">
                 <div
@@ -557,6 +578,7 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
                 style={{ height: 56 }}
                 disabled={inputLock.locked}
                 onInput={handleTextAreaHeight}
+                onPaste={handlePaste}
                 placeholder={placholder}
                 className={"resize-none py-4 pr-10 text-md min-h-6 max-h-[200px] scrollbar-hide dark:bg-[#131415] text-gray-800" + (form && ' pl-10')}
                 onKeyDown={(event) => {

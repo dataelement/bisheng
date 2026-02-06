@@ -234,7 +234,7 @@ export default function AppUseLog() {
                     const usefulMsg = !['flow', 'tool_call', 'tool_result'].includes(category) && message
                     usefulMsg && data.push([
                         item.chat_id,
-                        item.flow_name,
+                        item.flow_type === 15 ? t('log.workbench_daily') : item.flow_name,
                         item.create_time.replace('T', ' '),
                         item.user_name,
                         msg.category === 'question' ? t('log.userRole') : t('log.aiRole'),
@@ -332,7 +332,10 @@ export default function AppUseLog() {
                     {processedData.map((el: any) => (
                         <TableRow key={el.id}>
                             <TableCell className="font-medium max-w-[200px]">
-                                <div className=" truncate-multiline">{el.flow_name}</div>
+                                {/* <div className=" truncate-multiline"></div> */}
+                                <div className="truncate-multiline">
+                                    {el.flow_type === 15 ? t('log.workbench_daily') : el.flow_name}
+                                </div>
                             </TableCell>
                             <TableCell>{el.user_name}</TableCell>
                             <TableCell>{el.userGroupsString}</TableCell>
@@ -372,7 +375,7 @@ export default function AppUseLog() {
                                 {/* <Button variant="link" className="" onClick={() => setOpenData(true)}>Add to dataset</Button> */}
                                 {
                                     el.chat_id && <Link
-                                        to={`/log/chatlog/${el.flow_id}/${el.chat_id}/${el.flow_type}`}
+                                        to={el.flow_type === 15 ? `/log/chatlog/${el.chat_id}` : `/log/chatlog/${el.flow_id}/${el.chat_id}/${el.flow_type}`}
                                         className="no-underline hover:underline text-primary"
                                         onClick={handleCachePage}
                                     >{t('lib.details')}</Link>

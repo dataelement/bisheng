@@ -3,17 +3,16 @@ import typing
 from typing import Dict, Optional
 
 import redis
-from redis.asyncio.client import Pipeline
-
 from loguru import logger
 from redis import ConnectionPool, RedisCluster
+from redis.asyncio import Redis as AsyncRedis
+from redis.asyncio.client import Pipeline
+from redis.asyncio.cluster import RedisCluster as AsyncRedisCluster
+from redis.asyncio.sentinel import Sentinel as AsyncSentinel
 from redis.backoff import ExponentialBackoff
 from redis.cluster import ClusterNode
 from redis.retry import Retry
 from redis.sentinel import Sentinel
-from redis.asyncio.sentinel import Sentinel as AsyncSentinel
-from redis.asyncio.cluster import RedisCluster as AsyncRedisCluster
-from redis.asyncio import Redis as AsyncRedis
 
 
 class RedisClient:
@@ -40,7 +39,7 @@ class RedisClient:
                     cluster_url, **redis_conf, retry=Retry(ExponentialBackoff(), 6), cluster_error_retry_attempts=1)
                 return
             hosts = [eval(x) for x in redis_conf.pop('sentinel_hosts')]
-            password = redis_conf.pop('sentinel_password')
+            password = redis_conf.pop('sentinel_password', None)
             master = redis_conf.pop('sentinel_master')
             sentinel = Sentinel(sentinels=hosts, socket_timeout=0.1, sentinel_kwargs={'password': password})
             async_sentinel = AsyncSentinel(sentinels=hosts, socket_timeout=0.1, sentinel_kwargs={'password': password})

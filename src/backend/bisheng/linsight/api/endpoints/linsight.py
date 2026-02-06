@@ -40,7 +40,8 @@ from bisheng.linsight.domain.models.linsight_session_version import LinsightSess
     LinsightSessionVersion
 from bisheng.linsight.domain.models.linsight_sop import LinsightSOPDao, LinsightSOPRecord
 from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum, KnowledgeDao
-from bisheng.linsight.domain.services.state_message_manager import LinsightStateMessageManager, MessageData, MessageEventType
+from bisheng.linsight.domain.services.state_message_manager import LinsightStateMessageManager, MessageData, \
+    MessageEventType
 from bisheng.share_link.api.dependencies import header_share_token_parser
 from bisheng.share_link.domain.models.share_link import ShareLink
 from bisheng.utils import util
@@ -76,13 +77,17 @@ async def upload_file(
     except Exception as e:
         logger.error(f"Upload Failed: {str(e)}")
         return FileUploadError.return_resp()
+    finally:
+        await file.close()
 
     # Back to upload results
-    return resp_200(data=result, message="Key file uploaded successfully! and start parsing. Please check the resolution status later.")
+    return resp_200(data=result,
+                    message="Key file uploaded successfully! and start parsing. Please check the resolution status later.")
 
 
 # Get file resolution status
-@router.post("/workbench/file-parsing-status", summary="Get file resolution status", response_model=UnifiedResponseModel)
+@router.post("/workbench/file-parsing-status", summary="Get file resolution status",
+             response_model=UnifiedResponseModel)
 async def get_file_parsing_status(
         file_ids: List[str] = Body(..., description="Doc.IDVertical", embed=True),
         login_user: UserPayload = Depends(UserPayload.get_login_user)) -> UnifiedResponseModel:
@@ -219,7 +224,8 @@ async def generate_sop(
     :return:
     """
 
-    logger.info(f"Start Generating and Redesigning IdeasSOP, Inscription Conversation VersionID: {linsight_session_version_id} ")
+    logger.info(
+        f"Start Generating and Redesigning IdeasSOP, Inscription Conversation VersionID: {linsight_session_version_id} ")
     start_time = time.time()
 
     session_version = await LinsightSessionVersionDao.get_by_id(linsight_session_version_id)
@@ -378,7 +384,8 @@ async def start_execute_sop(
         await InviteCodeService.revoke_invite_code(user_id=login_user.user_id)
         return LinsightStartTaskError.return_resp(data=str(e))
 
-    return resp_200(data=True, message="Ideas execution task has started, execution results will be returned via message flow")
+    return resp_200(data=True,
+                    message="Ideas execution task has started, execution results will be returned via message flow")
 
 
 # workbench User input
@@ -419,7 +426,8 @@ async def user_input(
 
 
 # workbench Submitting Execution Result Feedback
-@router.post("/workbench/submit-feedback", summary="Submitting Execution Result Feedback", response_model=UnifiedResponseModel)
+@router.post("/workbench/submit-feedback", summary="Submitting Execution Result Feedback",
+             response_model=UnifiedResponseModel)
 async def submit_feedback(
         background_tasks: BackgroundTasks,
         linsight_session_version_id: str = Body(..., description="Inspiration Conversation VersionID"),
@@ -501,7 +509,8 @@ async def submit_feedback(
 
 
 # workbench Termination
-@router.post("/workbench/terminate-execute", summary="Termination of execution of Ideas", response_model=UnifiedResponseModel)
+@router.post("/workbench/terminate-execute", summary="Termination of execution of Ideas",
+             response_model=UnifiedResponseModel)
 async def terminate_execute(
         linsight_session_version_id: str = Body(..., description="Inspiration Conversation VersionID", embed=True),
         login_user: UserPayload = Depends(UserPayload.get_login_user)) -> UnifiedResponseModel:
@@ -562,7 +571,8 @@ async def terminate_execute(
 
 
 # Get all the Inspiration information for the current session
-@router.get("/workbench/session-version-list", summary="Get all the Inspiration information for the current session", response_model=UnifiedResponseModel)
+@router.get("/workbench/session-version-list", summary="Get all the Inspiration information for the current session",
+            response_model=UnifiedResponseModel)
 async def get_linsight_session_version_list(
         session_id: str = Query(..., description="SessionsID"),
         login_user: UserPayload = Depends(UserPayload.get_login_user),
@@ -859,20 +869,26 @@ async def upload_sop_file(
         file: UploadFile = File(..., description="Uploaded bySOPDoc."),
         override: Optional[bool] = Body(default=False, description="Force override or not"),
         save_new: Optional[bool] = Body(default=False, description="Do you want to save as newsop"),
-        ignore_error: Optional[bool] = Body(default=False, description="Whether to ignore the file and find the wrong record"),
+        ignore_error: Optional[bool] = Body(default=False,
+                                            description="Whether to ignore the file and find the wrong record"),
         login_user: UserPayload = Depends(UserPayload.get_admin_user)) -> UnifiedResponseModel:
     """
     Batch importSOPWarehousing
     """
 
-    success_rows, error_rows, repeat_rows = await SOPManageService.upload_sop_file(login_user, file, ignore_error,
-                                                                                   override, save_new)
+    try:
+        success_rows, error_rows, repeat_rows = await SOPManageService.upload_sop_file(login_user, file, ignore_error,
+                                                                                       override, save_new)
 
-    return resp_200(data={
-        "success_rows": success_rows,
-        "error_rows": error_rows,
-        "repeat_rows": repeat_rows,
-    })
+        return resp_200(data={
+            "success_rows": success_rows,
+            "error_rows": error_rows,
+            "repeat_rows": repeat_rows,
+        })
+    except Exception as e:
+        raise e
+    finally:
+        await file.close()
 
 
 @router.delete("/sop/remove", summary="Delete IdeasSOP", response_model=UnifiedResponseModel)
@@ -901,7 +917,8 @@ async def get_sop_banner(
     return resp_200(data=sop_pages)
 
 
-@router.post("/sop/showcase", summary="Set or unset a featured case for Inspirations", response_model=UnifiedResponseModel)
+@router.post("/sop/showcase", summary="Set or unset a featured case for Inspirations",
+             response_model=UnifiedResponseModel)
 async def set_sop_banner(
         sop_id: int = Body(..., description="SOPUniqueness quantificationID"),
         showcase: bool = Body(..., description="Set as featured case or not"),
@@ -927,10 +944,12 @@ async def set_sop_banner(
     return resp_200()
 
 
-@router.get("/sop/showcase/result", summary="Obtain the results of the execution of the selected cases of Lingsi", response_model=UnifiedResponseModel)
+@router.get("/sop/showcase/result", summary="Obtain the results of the execution of the selected cases of Lingsi",
+            response_model=UnifiedResponseModel)
 async def get_sop_showcase_result(
         sop_id: int = Query(None, description="SOPUniqueness quantificationID"),
-        linsight_version_id: str = Query(None, description="Inspiration Conversation VersionID, use this parameter first"),
+        linsight_version_id: str = Query(None,
+                                         description="Inspiration Conversation VersionID, use this parameter first"),
         login_user: UserPayload = Depends(UserPayload.get_login_user)) -> UnifiedResponseModel:
     if not linsight_version_id:
         # CorrectionSOPpresence or does it
@@ -987,7 +1006,8 @@ async def integrated_execute(
         body_param = IntegratedExecuteRequestBody.model_validate_json(body_param)
 
         if not body_param.query and not body_param.sop_content:
-            logger.error(f"Users {login_user.user_id} Bad request body parameters: queryAndsop_contentCannot be empty at the same time")
+            logger.error(
+                f"Users {login_user.user_id} Bad request body parameters: queryAndsop_contentCannot be empty at the same time")
             return EventSourceResponse(iter([{
                 "event": "error",
                 "data": json.dumps({
@@ -1201,7 +1221,8 @@ async def integrated_execute(
                                 knowledge_res.extend(org_knowledge)
                                 logger.debug(f"Get {len(org_knowledge)} organization knowledge")
                         except Exception as e:
-                            logger.warning(f"Users {login_user.user_id} Failed to get organization knowledge base: {str(e)}")
+                            logger.warning(
+                                f"Users {login_user.user_id} Failed to get organization knowledge base: {str(e)}")
                             # Proceed without interrupting the process
 
                     # Get your own knowledge base
@@ -1214,7 +1235,8 @@ async def integrated_execute(
                                 knowledge_res.extend(personal_knowledge)
                                 logger.debug(f"Get {len(personal_knowledge)} personal knowledge")
                         except Exception as e:
-                            logger.warning(f"Users {login_user.user_id} Failed to get personal knowledge base: {str(e)}")
+                            logger.warning(
+                                f"Users {login_user.user_id} Failed to get personal knowledge base: {str(e)}")
                             # Proceed without interrupting the process
 
                     # BuatSOP
