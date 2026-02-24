@@ -52,10 +52,10 @@ const getGroupName = (date: Date) => {
   if (isWithinInterval(date, { start: subDays(now, 30), end: now })) {
     return dateKeys.previous30Days;
   }
-  if (isWithinInterval(date, { start: startOfYear(now), end: now })) {
-    const month = format(date, 'MMMM').toLowerCase();
-    return dateKeys[month];
-  }
+  // if (isWithinInterval(date, { start: startOfYear(now), end: now })) {
+  //   const month = format(date, 'MMMM').toLowerCase();
+  //   return dateKeys[month];
+  // }
   return ' ' + getYear(date).toString();
 };
 

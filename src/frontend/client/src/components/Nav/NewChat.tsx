@@ -99,22 +99,11 @@ export default function NewChat({
     <div className="sticky left-0 right-0 top-0 z-50 bg-[#F9FBFF]">
       <div className="pb-0.5 last:pb-0" style={{ transform: 'none' }}>
         <div className="mb-3 flex justify-between gap-3 px-3 py-2">
-          <div className="flex items-center gap-2">
-            {bsConfig?.sidebarIcon.image && <img className='w-10 overflow' src={__APP_ENV__.BASE_URL + bsConfig?.sidebarIcon.image} />}
-            <div className='dark:text-gray-50'>{bsConfig?.sidebarSlogan}</div>
-          </div>
           <div className="cursor-pointer rounded-md p-1 hover:bg-slate-100">
             {/* <CloseToggleIcon className="size-5" /> */}
           </div>
         </div>
         <div className='flex gap-1 w-full'>
-          <Button variant="outline" className='shadow-sm h-10 rounded-xl px-3 flex-shrink-0'
-            onClick={() => {
-              navigate('/apps');
-            }}>
-            <AppsIcon />
-            <span className="text-sm font-normal whitespace-nowrap ml-0.5">{localize('com_nav_app_center')}</span>
-          </Button>
           {/* 新建btn */}
           <Button
             variant="outline"

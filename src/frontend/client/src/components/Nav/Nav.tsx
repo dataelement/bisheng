@@ -167,7 +167,7 @@ const Nav = ({
                     )}
                   </div>
                   {/* 左下角设置 */}
-                  <AccountSettings />
+                  {/* <AccountSettings /> */}
                 </nav>
               </div>
             </div>

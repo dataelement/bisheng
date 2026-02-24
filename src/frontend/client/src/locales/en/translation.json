@@ -1221,5 +1221,9 @@
     "16000": "Dataset name already exists",
     "11111": "The application has been deleted",
     "90001": "You do not have permission to access the admin backend. Please contact the administrator to request access if needed."
-  }
+  },
+  "com_ui_session": "Session",
+  "com_ui_channel": "Channel",
+  "com_ui_subscription": "Subscription",
+  "com_ui_knowledge_space": "Knowledge Space"
 }
