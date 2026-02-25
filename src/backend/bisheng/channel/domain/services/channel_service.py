@@ -2,11 +2,15 @@ from bisheng.channel.domain.models.channel import Channel
 from bisheng.channel.domain.repositories.interfaces.channel_repository import ChannelRepository
 from bisheng.channel.domain.schemas.channel_manager_schema import CreateChannelRequest
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.models.space_channel_member import BusinessTypeEnum, UserRoleEnum
+from bisheng.common.repositories.interfaces.space_channel_member_repository import SpaceChannelMemberRepository
 
 
 class ChannelService:
-    def __init__(self, channel_repository: 'ChannelRepository'):
+    def __init__(self, channel_repository: 'ChannelRepository',
+                 space_channel_member_repository: 'SpaceChannelMemberRepository'):
         self.channel_repository = channel_repository
+        self.space_channel_member_repository = space_channel_member_repository
 
     async def create_channel(self, channel_data: CreateChannelRequest, login_user: UserPayload):
         """Create a new channel based on the provided data and the logged-in user."""
@@ -17,11 +21,21 @@ class ChannelService:
 
         channel_model = Channel(
             name=channel_data.name,
-            source_list =channel_data.source_list,
-            visibility = channel_data.visibility,
-            filter_rules= [] if not channel_data.filter_rules else [f.model_dump() for f in channel_data.filter_rules],
-            user_id= login_user.user_id,
-            is_released= channel_data.is_released
+            source_list=channel_data.source_list,
+            visibility=channel_data.visibility,
+            filter_rules=[] if not channel_data.filter_rules else [f.model_dump() for f in channel_data.filter_rules],
+            user_id=login_user.user_id,
+            is_released=channel_data.is_released
         )
 
-        return await self.channel_repository.save(channel_model)
+        channel_model = await self.channel_repository.save(channel_model)
+
+        # If the channel is created successfully, you can also add the creator as a member of the channel
+        await self.space_channel_member_repository.add_member(
+            business_id=channel_model.id,
+            business_type=BusinessTypeEnum.CHANNEL,
+            user_id=login_user.user_id,
+            role=UserRoleEnum.CREATOR
+        )
+
+        return channel_model

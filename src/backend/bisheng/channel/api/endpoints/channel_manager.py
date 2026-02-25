@@ -6,7 +6,7 @@ from bisheng.channel.domain.services.channel_service import ChannelService
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.schemas.api import resp_200
 
-router = APIRouter(prefix='/manager', tags=['Channel Manager'])
+router = APIRouter(prefix='/manager', tags=['Channel Management'])
 
 
 @router.post("/create")
