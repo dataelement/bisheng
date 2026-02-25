@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 from abc import ABC
@@ -7,8 +8,6 @@ from pathlib import Path
 from typing import BinaryIO, Union, Optional
 
 import minio
-import miniopy_async
-import miniopy_async.commonconfig as miniopy_async_commonconfig
 from loguru import logger
 from minio.commonconfig import Filter
 from minio.lifecycleconfig import LifecycleConfig, Rule, Expiration
@@ -33,13 +32,13 @@ class MinioStorage(BaseStorage, ABC):
             cert_check=minio_config.cert_check
         )
 
-        self.minio_client = miniopy_async.Minio(
-            endpoint=minio_config.endpoint,
-            access_key=minio_config.access_key,
-            secret_key=minio_config.secret_key,
-            secure=minio_config.secure,
-            cert_check=minio_config.cert_check
-        )
+        # self.minio_client = miniopy_async.Minio(
+        #     endpoint=minio_config.endpoint,
+        #     access_key=minio_config.access_key,
+        #     secret_key=minio_config.secret_key,
+        #     secure=minio_config.secure,
+        #     cert_check=minio_config.cert_check
+        # )
         self._init_bucket_conf()
 
     def _init_bucket_conf(self):
@@ -80,28 +79,26 @@ class MinioStorage(BaseStorage, ABC):
             self.minio_client_sync.set_bucket_lifecycle(self.tmp_bucket, lifecycle_conf)
 
     async def create_bucket(self, bucket_name: str) -> None:
-        if not await self.minio_client.bucket_exists(bucket_name):
-            await self.minio_client.make_bucket(bucket_name)
+        return await asyncio.to_thread(self.create_bucket_sync, bucket_name=bucket_name)
 
     def create_bucket_sync(self, bucket_name: str) -> None:
         if not self.minio_client_sync.bucket_exists(bucket_name):
             self.minio_client_sync.make_bucket(bucket_name)
 
     async def check_bucket_exists(self, bucket_name: str) -> bool:
-        return await self.minio_client.bucket_exists(bucket_name)
+        return await asyncio.to_thread(self.check_bucket_exists, bucket_name=bucket_name)
 
     def check_bucket_exists_sync(self, bucket_name: str) -> bool:
         return self.minio_client_sync.bucket_exists(bucket_name)
 
     async def get_all_buckets(self) -> list:
-        return await self.minio_client.list_buckets()
+        return await asyncio.to_thread(self.get_all_buckets_sync)
 
     def get_all_buckets_sync(self) -> list:
         return self.minio_client_sync.list_buckets()
 
     async def remove_bucket(self, bucket_name: str) -> None:
-        if await self.minio_client.bucket_exists(bucket_name):
-            await self.minio_client.remove_bucket(bucket_name)
+        return await asyncio.to_thread(self.remove_bucket_sync, bucket_name=bucket_name)
 
     def remove_bucket_sync(self, bucket_name: str) -> None:
         if self.minio_client_sync.bucket_exists(bucket_name):
@@ -110,52 +107,8 @@ class MinioStorage(BaseStorage, ABC):
     async def put_object(self, *, bucket_name: Optional[str] = None, object_name: str,
                          file: Union[bytes, BinaryIO, Path, str],
                          content_type: str = "application/octet-stream", **kwargs) -> None:
-        if bucket_name is None:
-            bucket_name = self.bucket
-
-        #
-        if isinstance(file, (Path, str)):
-            file_path = str(file)
-            await self.minio_client.fput_object(
-                bucket_name=bucket_name,
-                object_name=object_name,
-                file_path=file_path,
-                content_type=content_type,
-                **kwargs
-            )
-            return
-
-        data_stream = file
-
-        if isinstance(file, bytes):
-            data_stream = BytesIO(file)
-
-        if 'length' not in kwargs:
-            try:
-                if hasattr(data_stream, "getbuffer"):
-                    kwargs['length'] = data_stream.getbuffer().nbytes
-
-                elif hasattr(data_stream, "fileno"):
-                    kwargs['length'] = os.fstat(data_stream.fileno()).st_size
-
-                else:
-                    data_stream.seek(0, 2)
-                    kwargs['length'] = data_stream.tell()
-                    data_stream.seek(0)
-
-            except Exception as e:
-                raise ValueError(f"Could not determine file length for upload: {str(e)}")
-
-        if hasattr(data_stream, "seek") and callable(data_stream.seek):
-            data_stream.seek(0)
-
-        await self.minio_client.put_object(
-            bucket_name=bucket_name,
-            object_name=object_name,
-            data=data_stream,
-            content_type=content_type,
-            **kwargs
-        )
+        return await asyncio.to_thread(self.put_object_sync, bucket_name=bucket_name, object_name=object_name,
+                                       file=file, content_type=content_type, **kwargs)
 
     def put_object_sync(self, *, bucket_name: Optional[str] = None, object_name: str,
                         file: Union[bytes, BinaryIO, Path, str],
@@ -233,23 +186,7 @@ class MinioStorage(BaseStorage, ABC):
         )
 
     async def get_object(self, bucket_name: Optional[str] = None, object_name: str = None) -> bytes | None:
-
-        if bucket_name is None:
-            bucket_name = self.bucket
-
-        if object_name is None:
-            raise ValueError("get_object: object_name must be provided")
-
-        response = await self.minio_client.get_object(bucket_name, object_name)
-
-        try:
-            data = await response.read()
-            return data
-        except Exception:
-            raise
-
-        finally:
-            response.close()
+        return await asyncio.to_thread(self.get_object_sync, bucket_name=bucket_name, object_name=object_name)
 
     def get_object_sync(self, bucket_name: Optional[str] = None, object_name: str = None) -> bytes | None:
 
@@ -273,20 +210,7 @@ class MinioStorage(BaseStorage, ABC):
 
     async def object_exists(self, bucket_name: Optional[str] = None, object_name: str = None) -> bool:
 
-        if not bucket_name:
-            bucket_name = self.bucket
-
-        if not object_name:
-            logger.warning("object_exists_sync: object_name must be provided")
-            return False
-
-        try:
-            await self.minio_client.stat_object(bucket_name, object_name)
-            return True
-        except Exception as e:
-            if 'code: NoSuchKey' in str(e):
-                return False
-            raise e
+        return await asyncio.to_thread(self.object_exists_sync, bucket_name=bucket_name, object_name=object_name)
 
     def object_exists_sync(self, bucket_name: Optional[str] = None, object_name: str = None) -> bool:
 
@@ -308,21 +232,8 @@ class MinioStorage(BaseStorage, ABC):
     async def copy_object(self, source_bucket: str = None, source_object: str = None,
                           dest_bucket: str = None, dest_object: str = None) -> None:
 
-        if source_bucket is None:
-            source_bucket = self.tmp_bucket
-
-        if dest_bucket is None:
-            dest_bucket = self.bucket
-
-        source = miniopy_async_commonconfig.CopySource(
-            bucket_name=source_bucket,
-            object_name=source_object
-        )
-        await self.minio_client.copy_object(
-            bucket_name=dest_bucket,
-            object_name=dest_object,
-            source=source
-        )
+        return await asyncio.to_thread(self.copy_object_sync, source_bucket=source_bucket, source_object=source_object,
+                                       dest_bucket=dest_bucket, dest_object=dest_object)
 
     def copy_object_sync(self, source_bucket: str = None, source_object: str = None,
                          dest_bucket: str = None, dest_object: str = None) -> None:
@@ -344,13 +255,7 @@ class MinioStorage(BaseStorage, ABC):
         )
 
     async def remove_object(self, bucket_name: Optional[str] = None, object_name: str = None) -> None:
-        if bucket_name is None:
-            bucket_name = self.bucket
-
-        if object_name is None:
-            raise ValueError("remove_object: object_name must be provided")
-
-        await self.minio_client.remove_object(bucket_name, object_name)
+        return await asyncio.to_thread(self.remove_object_sync, bucket_name=bucket_name, object_name=object_name)
 
     def remove_object_sync(self, bucket_name: Optional[str] = None, object_name: str = None) -> None:
         if bucket_name is None:
@@ -371,17 +276,8 @@ class MinioStorage(BaseStorage, ABC):
         :return:
         """
 
-        if bucket is None:
-            bucket = self.bucket
-        # filepath "/" There will be at the beginningnginxQuestions
-        if object_name[0] == '/':
-            object_name = object_name[1:]
-
-        share_link = await self.minio_client.presigned_get_object(bucket, object_name,
-                                                                  expires=timedelta(days=expire_days))
-        if clear_host:
-            share_link = self.clear_minio_share_host(share_link)
-        return share_link
+        return await asyncio.to_thread(self.get_share_link_sync, object_name, bucket=bucket, clear_host=clear_host,
+                                       expire_days=expire_days)
 
     def get_share_link_sync(self, object_name, bucket=None, clear_host: bool = True, expire_days: int = 7) -> str:
         """
@@ -425,7 +321,8 @@ class MinioStorage(BaseStorage, ABC):
 
     async def close(self) -> None:
         """Close Minio Client link"""
-        await self.minio_client.close_session()
+        # await self.minio_client.close_session()
+        pass
 
     def close_sync(self) -> None:
         """Sync off Minio Client link"""
