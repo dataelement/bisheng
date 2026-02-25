@@ -11,6 +11,7 @@ import minio
 from loguru import logger
 from minio.commonconfig import Filter
 from minio.lifecycleconfig import LifecycleConfig, Rule, Expiration
+from urllib3 import BaseHTTPResponse
 
 from bisheng.core.config.settings import MinioConf
 from bisheng.core.storage.base import BaseStorage
@@ -207,6 +208,17 @@ class MinioStorage(BaseStorage, ABC):
         finally:
             response.close()
             response.release_conn()
+
+    def download_object_sync(self, bucket_name: Optional[str] = None, object_name: str = None) -> BaseHTTPResponse:
+        # This method is intended for streaming downloads, returning the raw response object for the caller to handle the stream.
+        # The caller is responsible for closing the response and releasing the connection after consuming the stream.
+        if bucket_name is None:
+            bucket_name = self.bucket
+
+        if object_name is None:
+            raise ValueError("download_object_sync: object_name must be provided")
+        response = self.minio_client_sync.get_object(bucket_name, object_name)
+        return response
 
     async def object_exists(self, bucket_name: Optional[str] = None, object_name: str = None) -> bool:
 

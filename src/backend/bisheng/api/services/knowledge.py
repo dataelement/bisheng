@@ -756,8 +756,7 @@ class KnowledgeService(KnowledgeUtils):
                 "new_name": original_file_name,
                 "old_name": old_name}, ensure_ascii=False)
             # Uploaded tominio, do not modify the database, it is up to the front-end to decide whether to overwrite or not. If it is overwritten, the retry interface
-            with open(filepath, "rb") as file:
-                minio_client.put_object_tmp_sync(db_file.object_name, file.read())
+            minio_client.put_object_tmp_sync(db_file.object_name, filepath)
             db_file.status = KnowledgeFileStatus.FAILED.value
             db_file.split_rule = str_split_rule
             # Update file size information
