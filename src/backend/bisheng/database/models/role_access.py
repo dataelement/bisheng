@@ -39,6 +39,9 @@ class WebMenuResource(Enum):
     KNOWLEDGE = 'knowledge'  # Knowledge Menu
     MODEL = 'model'  # Model Menu
     EVALUATION = 'evaluation'  # Evaluation Menu
+    BOARD = 'board'  # 看板菜单栏
+    KNOWLEDGE_SPACE = 'knowledge_space'  # Knowledge Space
+    SUBSCRIPTION = 'subscription'  # Subscription Management
 
     FRONTEND = 'frontend'  # Front-end permissions
     BACKEND = 'backend'  # Backend Access

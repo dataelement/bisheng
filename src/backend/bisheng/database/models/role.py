@@ -15,6 +15,8 @@ class RoleBase(SQLModelSerializable):
     role_name: str = Field(index=False, description='Frontend Display Name')
     group_id: Optional[int] = Field(default=None, index=True)
     remark: Optional[str] = Field(default=None, index=False)
+    knowledge_space_file_limit: Optional[int] = Field(default=0, index=False,
+                                                      description='Knowledge Space total file size limit')
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
