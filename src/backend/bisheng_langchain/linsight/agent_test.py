@@ -4,9 +4,9 @@ import os
 from langchain_community.chat_models import ChatTongyi
 from pydantic import SecretStr
 
-from bisheng.linsight.domain.services.workbench_impl import LinsightWorkbenchImpl
 from bisheng.api.services.workstation import WorkStationService
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
+from bisheng.linsight.domain.services.workbench_impl import LinsightWorkbenchImpl
 from bisheng.tool.domain.services.executor import ToolExecutor
 from bisheng.tool.domain.services.tool import ToolServices
 from bisheng_langchain.linsight.agent import LinsightAgent
@@ -31,8 +31,8 @@ async def get_linsight_agent():
     #                        max_tokens=1000)
 
     # 获取工作台配置的工具
-    ws_config = await WorkStationService.aget_config()
-    config_tool_ids = LinsightWorkbenchImpl._extract_tool_ids(ws_config.linsightConfig.tools or [])
+    linsight_config = await WorkStationService.get_linsight_config()
+    config_tool_ids = LinsightWorkbenchImpl._extract_tool_ids(linsight_config.tools or [])
     tools = await ToolExecutor.init_by_tool_ids(config_tool_ids, app_id='linsight_test', app_name='linsight_test',
                                                 app_type=ApplicationTypeEnum.LINSIGHT,
                                                 user_id=0, llm=chat)
