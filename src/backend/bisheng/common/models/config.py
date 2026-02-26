@@ -17,7 +17,11 @@ class ConfigKeyEnum(Enum):
     ASSISTANT_LLM = 'assistant_llm'  # Assistant Default Model Configuration
     EVALUATION_LLM = 'evaluation_llm'  # Review default model configuration
     WORKFLOW_LLM = 'workflow_llm'  # Workflow default model configuration
-    WORKSTATION = 'workstation'  # Workbench default model configuration
+    WORKSTATION = 'workstation'  # Daily Chat configuration
+    WORKSTATION_LINSIGHT = 'workstation_linsight'  # Linsight configuration
+    WORKSTATION_SUBSCRIPTION = 'workstation_subscription'  # Subscription configuration
+    WORKSTATION_KNOWLEDGE_SPACE = 'workstation_knowledge_space'  # Knowledge Space Configuration
+
     LINSIGHT_LLM = 'linsight_llm'  # Ideas Default Model Configuration
 
 
@@ -86,3 +90,22 @@ class ConfigDao(ConfigBase):
             await session.commit()
             await session.refresh(config)
             return config
+
+    @classmethod
+    async def insert_or_update_config(cls, key: str, value: str) -> Config:
+        async with get_async_db_session() as session:
+            statement = select(Config).where(Config.key == key)
+            config = await session.exec(statement)
+            config = config.first()
+            if config:
+                config.value = value
+                session.add(config)
+                await session.commit()
+                await session.refresh(config)
+                return config
+            else:
+                new_config = Config(key=key, value=value)
+                session.add(new_config)
+                await session.commit()
+                await session.refresh(new_config)
+                return new_config
