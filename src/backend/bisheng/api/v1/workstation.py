@@ -138,20 +138,22 @@ async def final_message(conversation: MessageSession, title: str, requestMessage
 
 
 @router.get('/config', summary='Get workbench configuration', response_model=UnifiedResponseModel)
-def get_config(
+async def get_config(
         request: Request,
         login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """ Get model configurations related to reviews """
-    ret = WorkStationService.get_config()
+    ret = await WorkStationService.get_daily_chat_config()
+    linsight_config = await WorkStationService.get_linsight_config()
 
-    etl_for_lm_url = bisheng_settings.get_knowledge().etl4lm.url
+    etl_for_lm_url = (await bisheng_settings.async_get_knowledge()).etl4lm.url
     ret = ret.model_dump() if ret else {}
+    ret['linsightConfig'] = linsight_config.model_dump() if linsight_config else {}
 
     ret['enable_etl4lm'] = bool(etl_for_lm_url)
-    linsight_invitation_code = bisheng_settings.get_all_config().get('linsight_invitation_code', None)
+    linsight_invitation_code = (await bisheng_settings.aget_all_config()).get('linsight_invitation_code', None)
     ret['linsight_invitation_code'] = linsight_invitation_code if linsight_invitation_code else False
     ret['linsight_cache_dir'] = "./"
-    ret['waiting_list_url'] = bisheng_settings.get_linsight_conf().waiting_list_url
+    ret['waiting_list_url'] = (await bisheng_settings.aget_linsight_conf()).waiting_list_url
 
     return resp_200(data=ret)
 

@@ -383,17 +383,17 @@ class LinsightConfig(BaseModel):
     """
     model_config = ConfigDict(validate_by_alias=True, validate_by_name=True)
 
-    linsight_entry: bool = Field(default=True, description='Whether to open the Ideas entrance', alias='linsightEntry')
-    input_placeholder: str = Field(..., description='Input Box Prompt', alias='inputPlaceholder')
+    linsight_entry: bool = Field(default=True, description='Whether to open the Ideas entrance')
+    input_placeholder: str = Field(..., description='Input Box Prompt')
     tools: Optional[List[Dict]] = Field(default=None, description='List of optional tools for Ideas')
-    tab_display_name: Optional[str] = Field(default='Linsight', alias='tabDisplayName', description='Tab Display Name')
+    tab_display_name: Optional[str] = Field(default='Linsight', description='Tab Display Name')
 
 
 # Daily Chat Configuration
 class WorkstationConfig(BaseModel):
     model_config = ConfigDict(validate_by_alias=True, validate_by_name=True)
 
-    tab_display_name: Optional[str] = Field(default='', alias='tabDisplayName', description='Tab Display Name')
+    tabDisplayName: Optional[str] = Field(default='', alias='tabDisplayName', description='Tab Display Name')
     maxTokens: Optional[int] = Field(default=15000, description='Max chunk size for knowledge rag or web search')
     sidebarIcon: Optional[Icon] = None
     assistantIcon: Optional[Icon] = None
@@ -415,21 +415,16 @@ class WorkstationConfig(BaseModel):
 
 
 class SubscriptionConfig(BaseModel):
-    model_config = ConfigDict(validate_by_alias=True, validate_by_name=True)
-
-    system_prompt: Optional[str] = Field(default='', alias='systemPrompt', description='System Prompt')
-    user_prompt: Optional[str] = Field(default='', alias='userPrompt', description='User Prompt')
-    max_chunk_size: Optional[int] = Field(default=15000, alias='maxChunkSize',
-                                          description='Max chunk size for file chunks')
-    feedback_tips: Optional[str] = Field(default='', alias='feedbackTips', description='Feedback Tips')
+    system_prompt: Optional[str] = Field(default='', description='System Prompt')
+    user_prompt: Optional[str] = Field(default='', description='User Prompt')
+    max_chunk_size: Optional[int] = Field(default=15000, description='Max chunk size for file chunks')
+    feedback_tips: Optional[str] = Field(default='', description='Feedback Tips')
 
 
 class KnowledgeSpaceConfig(BaseModel):
-    model_config = ConfigDict(validate_by_alias=True, validate_by_name=True)
-    system_prompt: Optional[str] = Field(default='', alias='systemPrompt', description='System Prompt')
-    user_prompt: Optional[str] = Field(default='', alias='userPrompt', description='User Prompt')
-    max_chunk_size: Optional[int] = Field(default=15000, alias='maxChunkSize',
-                                          description='Max chunk size for file chunks')
+    system_prompt: Optional[str] = Field(default='', description='System Prompt')
+    user_prompt: Optional[str] = Field(default='', description='User Prompt')
+    max_chunk_size: Optional[int] = Field(default=15000, description='Max chunk size for file chunks')
 
 
 class ExcelRule(BaseModel):

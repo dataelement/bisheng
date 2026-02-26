@@ -22,7 +22,7 @@ class ConfigKeyEnum(Enum):
     WORKSTATION_SUBSCRIPTION = 'workstation_subscription'  # Subscription configuration
     WORKSTATION_KNOWLEDGE_SPACE = 'workstation_knowledge_space'  # Knowledge Space Configuration
 
-    LINSIGHT_LLM = 'linsight_llm'  # Ideas Default Model Configuration
+    LINSIGHT_LLM = 'linsight_llm'  # workstation Default Model Configuration
 
 
 class ConfigBase(SQLModelSerializable):
