@@ -222,6 +222,17 @@ class LLMService:
             if assistant_change:
                 await cls.update_assistant_llm(assistant_llm)
 
+            workbench_llm = await cls.get_workbench_llm()
+            workbench_change = False
+            if not workbench_llm.knowledge_space_llm:
+                workbench_llm.knowledge_space_llm = WSModel(id=str(model.id), name=model.model_name)
+                workbench_change = True
+            if not workbench_llm.chat_title_llm:
+                workbench_llm.chat_title_llm = WSModel(id=str(model.id), name=model.model_name)
+                workbench_change = True
+            if workbench_change:
+                await cls.update_workbench_llm(0, workbench_llm, BackgroundTasks())
+
         elif model.model_type == LLMModelType.EMBEDDING.value:
             knowledge_llm = cls.get_knowledge_llm()
             if not knowledge_llm.embedding_model_id:
@@ -338,10 +349,10 @@ class LLMService:
         if not knowledge_llm.source_model_id:
             return None
         return await cls.get_bisheng_llm(model_id=knowledge_llm.source_model_id,
-                                        app_id=ApplicationTypeEnum.RAG_TRACEABILITY.value,
-                                        app_name=ApplicationTypeEnum.RAG_TRACEABILITY.value,
-                                        app_type=ApplicationTypeEnum.RAG_TRACEABILITY,
-                                        user_id=invoke_user_id)
+                                         app_id=ApplicationTypeEnum.RAG_TRACEABILITY.value,
+                                         app_name=ApplicationTypeEnum.RAG_TRACEABILITY.value,
+                                         app_type=ApplicationTypeEnum.RAG_TRACEABILITY,
+                                         user_id=invoke_user_id)
 
     @classmethod
     def get_knowledge_similar_llm(cls, invoke_user_id: int) -> Optional[BaseChatModel]:
