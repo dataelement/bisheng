@@ -1,6 +1,8 @@
 # Some constants or enums for the module
 from enum import Enum
 
+from cachetools import TTLCache
+
 
 # Service Provider Enumeration
 class LLMServerType(Enum):
@@ -38,3 +40,6 @@ class LLMModelStatus(Enum):
     NORMAL = 0  # Normal
     ERROR = 1  # Abnormal
     UNKNOWN = 2  # Unknown
+
+
+LLM_CACHE = TTLCache(maxsize=30, ttl=60)
