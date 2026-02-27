@@ -11,6 +11,7 @@ import aiofiles
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, Request, UploadFile
 from fastapi.responses import StreamingResponse
 from langchain_core.documents import Document
+from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
 from loguru import logger
 from sse_starlette import EventSourceResponse
@@ -43,7 +44,6 @@ from bisheng.database.models.flow import FlowType
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.llm.domain import LLMService
-from bisheng.llm.domain.llm import BishengLLM
 from bisheng.share_link.api.dependencies import header_share_token_parser
 from bisheng.share_link.domain.models.share_link import ShareLink
 from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
@@ -345,7 +345,7 @@ async def get_chat_history(conversationId: str,
         return resp_200([])
 
 
-async def genTitle(human: str, assistant: str, llm: BishengLLM, conversationId: str, login_user: UserPayload,
+async def genTitle(human: str, assistant: str, llm: BaseChatModel, conversationId: str, login_user: UserPayload,
                    request: Request):
     """
     Generate Title
@@ -650,6 +650,8 @@ async def chat_completions(
                 content.append({'type': 'image_url', 'image_url': {
                     'url': img_base64
                 }})
+            if not image_bases64:
+                content = prompt
 
             inputs = [*history_messages, HumanMessage(content=content)]
             if wsConfig.systemPrompt:
@@ -701,7 +703,7 @@ async def chat_completions(
     try:
         return StreamingResponse(event_stream(), media_type='text/event-stream')
     finally:
-        await _log_telemetry_events(login_user.user_id, conversation_id_for_telemetry, start_time)
+        await _log_telemetry_events(str(login_user.user_id), conversation_id_for_telemetry, start_time)
 
 
 @router.get('/app/frequently_used')
