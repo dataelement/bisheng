@@ -13,7 +13,7 @@ import { useTranslation } from "react-i18next";
 import { useQuery } from "react-query";
 import { useModel } from "..";
 
-export const ModelSelect = ({ required = false, close = false, label, tooltipText = '', value, options, onChange,placeholder = '' }) => {
+export const ModelSelect = ({ required = false, close = false, label, tooltipText = '', value, options, onChange, placeholder = '' }) => {
     const defaultValue = useMemo(() => {
         let _defaultValue = []
         if (!value || !options || options.length === 0) return _defaultValue
@@ -61,7 +61,12 @@ export default function WorkbenchModel({ onBack }) {
         extractModelId: null,
         executionMode: 'ReAct',
         asrModelId: null,
-        ttsModelId: null
+        ttsModelId: null,
+        knowledgeSpaceLlmId: null,
+        chatTitleLlmId: null,
+    });
+
+    useEffect(() => {
     });
     const lastSaveFormDataRef = useRef(null)
     const [saveload, setSaveLoad] = useState(false)
@@ -69,7 +74,7 @@ export default function WorkbenchModel({ onBack }) {
     const { data: linsightConfig, isLoading: loading, refetch: refetchConfig, error } = useLinsightConfig();
 
     const handleSave = async () => {
-        const { extractModelId, sourceModelId, executionMode, asrModelId, ttsModelId } = form;
+        const { extractModelId, sourceModelId, executionMode, asrModelId, ttsModelId, chatTitleLlmId, knowledgeSpaceLlmId } = form;
         const errors = [];
         if (errors.length) return message({ variant: 'error', description: errors });
         setSaveLoad(true);
@@ -79,7 +84,9 @@ export default function WorkbenchModel({ onBack }) {
                 embedding_model: { id: String(sourceModelId) },
                 linsight_executor_mode: executionMode,
                 asr_model: asrModelId ? { id: String(asrModelId) } : null, // 支持空值
-                tts_model: ttsModelId ? { id: String(ttsModelId) } : null
+                tts_model: ttsModelId ? { id: String(ttsModelId) } : null, // 支持空值
+                chat_title_llm: knowledgeSpaceLlmId ? { id: String(knowledgeSpaceLlmId) } : null, // 支持空值
+                knowledge_space_llm: chatTitleLlmId ? { id: String(chatTitleLlmId) } : null, // 支持空值
             };
 
             // 提交更新并通过 refetch 获取最新配置（无需再次调用 getLinsightModelConfig）
@@ -93,7 +100,9 @@ export default function WorkbenchModel({ onBack }) {
                 extractModelId: newConfig?.task_model?.id || null,
                 executionMode: newConfig?.linsight_executor_mode || 'ReAct',
                 asrModelId: newConfig?.asr_model?.id || null,
-                ttsModelId: newConfig?.tts_model?.id || null
+                ttsModelId: newConfig?.tts_model?.id || null,
+                chatTitleLlmId: newConfig?.chat_title_llm?.id || null,
+                knowledgeSpaceLlmId: newConfig?.knowledge_space_llm?.id || null
             });
 
             lastSaveFormDataRef.current = {
@@ -102,9 +111,11 @@ export default function WorkbenchModel({ onBack }) {
                 linsight_executor_mode: newConfig?.linsight_executor_mode || 'ReAct',
                 abstract_prompt: newConfig?.abstract_prompt || defalutPrompt,
                 asr_model: { id: newConfig?.asr_model?.id },
-                tts_model: { id: newConfig?.tts_model?.id }
+                tts_model: { id: newConfig?.tts_model?.id },
+                chat_title_llm: { id: newConfig?.chat_title_llm?.id },
+                knowledge_space_llm: { id: newConfig?.knowledge_space_llm?.id },
             };
-            if(response !== false){
+            if (response !== false) {
                 message({ variant: 'success', description: t('model.saveSuccess') });
             }
         } catch (err) {
@@ -152,7 +163,9 @@ export default function WorkbenchModel({ onBack }) {
                 extractModelId: linsightConfig.task_model?.id || null,
                 executionMode: linsightConfig.linsight_executor_mode || 'ReAct',
                 asrModelId: linsightConfig.asr_model?.id || null,
-                ttsModelId: linsightConfig.tts_model?.id || null
+                ttsModelId: linsightConfig.tts_model?.id || null,
+                chatTitleLlmId: linsightConfig.chat_title_llm?.id || null,
+                knowledgeSpaceLlmId: linsightConfig.knowledge_space_llm?.id || null
             });
 
             lastSaveFormDataRef.current = {
@@ -161,7 +174,9 @@ export default function WorkbenchModel({ onBack }) {
                 linsight_executor_mode: linsightConfig.linsight_executor_mode || 'ReAct',
                 abstract_prompt: linsightConfig.abstract_prompt || defalutPrompt,
                 asr_model: { id: linsightConfig.asr_model?.id },
-                tts_model: { id: linsightConfig.tts_model?.id }
+                tts_model: { id: linsightConfig.tts_model?.id },
+                chat_title_llm: { id: linsightConfig.chat_title_llm?.id },
+                knowledge_space_llm: { id: linsightConfig.knowledge_space_llm?.id }
             };
         }
     }, [linsightConfig, error, message, defalutPrompt, t]);
@@ -237,7 +252,22 @@ export default function WorkbenchModel({ onBack }) {
                     onChange={(val) => setForm({ ...form, ttsModelId: val })}
                 />
             </div>
-
+            <ModelSelect
+                close
+                label={t('model.knowledgeSpaceQAModel')}
+                tooltipText={t('model.aiQASceneDescription')}
+                value={form.knowledgeSpaceLlmId}
+                options={llmOptions}
+                onChange={(val) => setForm({ ...form, knowledgeSpaceLlmId: val })}
+                required
+            />
+            <ModelSelect
+                close
+                label={t('model.sessionTitleGenerationModel')}
+                value={form.chatTitleLlmId}
+                options={llmOptions}
+                onChange={(val) => setForm({ ...form, chatTitleLlmId: val })}
+            />
             <div className="mt-10 text-center space-x-6">
                 <Button className="px-6" variant="outline" onClick={onBack}>{t('model.cancel')}</Button>
                 <Button
@@ -265,6 +295,8 @@ export function useLinsightConfig() {
                 linsight_executor_mode: "ReAct",
                 asr_model: null,
                 tts_model: null,
+                knowledge_space_llm: null,
+                chat_title_llm: null,
             };
             return safeConfig;
         },
