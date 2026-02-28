@@ -3,7 +3,7 @@ from typing import List, Optional, Any, Sequence, Union, Dict, Type, Callable, I
 
 from langchain_core.callbacks import AsyncCallbackManagerForLLMRun, CallbackManagerForLLMRun
 from langchain_core.language_models import BaseChatModel, LanguageModelInput
-from langchain_core.messages import BaseMessage, ToolMessage, HumanMessage, BaseMessageChunk, AIMessage
+from langchain_core.messages import BaseMessage, ToolMessage, BaseMessageChunk
 from langchain_core.outputs import ChatResult, ChatGenerationChunk
 from langchain_core.runnables import Runnable
 from langchain_core.tools import BaseTool
@@ -63,6 +63,22 @@ def _get_openai_params(params: dict, server_config: dict, model_config: dict) ->
             'base_url': server_config.get('openai_api_base') or server_config.get('base_url'),
         })
         params['base_url'] = params['base_url'].rstrip('/')
+    if server_config.get('openai_proxy'):
+        params['openai_proxy'] = server_config.get('openai_proxy')
+    params['stream_usage'] = True
+
+    user_kwargs = _get_user_kwargs(model_config)
+    user_kwargs.update(params)
+    return user_kwargs
+
+
+def _get_deepseek_params(params: dict, server_config: dict, model_config: dict) -> dict:
+    if server_config:
+        params.update({
+            'api_key': server_config.get('openai_api_key') or server_config.get('api_key') or "empty",
+            'api_base': server_config.get('openai_api_base') or server_config.get('base_url'),
+        })
+        params['api_base'] = params['base_url'].rstrip('/')
     if server_config.get('openai_proxy'):
         params['openai_proxy'] = server_config.get('openai_proxy')
     params['stream_usage'] = True
@@ -168,7 +184,7 @@ _llm_node_type: Dict = {
     LLMServerType.ZHIPU.value: {'client': ChatZhipuAI, 'params_handler': _get_zhipu_params},
     LLMServerType.MINIMAX.value: {'client': MiniMaxChat, 'params_handler': _get_minimax_params},
     LLMServerType.ANTHROPIC.value: {'client': ChatAnthropic, 'params_handler': _get_anthropic_params},
-    LLMServerType.DEEPSEEK.value: {'client': CustomChatDeepSeek, 'params_handler': _get_openai_params},
+    LLMServerType.DEEPSEEK.value: {'client': CustomChatDeepSeek, 'params_handler': _get_deepseek_params},
     LLMServerType.SPARK.value: {'client': ChatOpenAICompatible, 'params_handler': _get_spark_params},
     LLMServerType.TENCENT.value: {'client': ChatOpenAICompatible, 'params_handler': _get_openai_params},
     LLMServerType.MOONSHOT.value: {'client': MoonshotChat, 'params_handler': _get_openai_params},
