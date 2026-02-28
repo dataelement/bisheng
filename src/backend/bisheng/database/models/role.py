@@ -91,7 +91,7 @@ class RoleDao(RoleBase):
         if not role.id:
             raise ValueError("Role ID is required for update")
         async with get_async_db_session() as session:
-            await session.add(role)
+            session.add(role)
             await session.commit()
             await session.refresh(role)
             return role
