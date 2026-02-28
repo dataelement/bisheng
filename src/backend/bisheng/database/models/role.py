@@ -35,6 +35,7 @@ class RoleRead(RoleBase):
 class RoleUpdate(RoleBase):
     role_name: Optional[str] = None
     remark: Optional[str] = None
+    knowledge_space_file_limit: Optional[int] = None
 
 
 class RoleCreate(RoleBase):
@@ -83,6 +84,16 @@ class RoleDao(RoleBase):
             session.add(role)
             session.commit()
             session.refresh(role)
+            return role
+
+    @classmethod
+    async def update_role(cls, role: Role):
+        if not role.id:
+            raise ValueError("Role ID is required for update")
+        async with get_async_db_session() as session:
+            await session.add(role)
+            await session.commit()
+            await session.refresh(role)
             return role
 
     @classmethod
