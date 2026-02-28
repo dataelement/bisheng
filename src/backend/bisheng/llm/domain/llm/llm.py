@@ -78,7 +78,7 @@ def _get_deepseek_params(params: dict, server_config: dict, model_config: dict) 
             'api_key': server_config.get('openai_api_key') or server_config.get('api_key') or "empty",
             'api_base': server_config.get('openai_api_base') or server_config.get('base_url'),
         })
-        params['api_base'] = params['base_url'].rstrip('/')
+        params['api_base'] = params['api_base'].rstrip('/')
     if server_config.get('openai_proxy'):
         params['openai_proxy'] = server_config.get('openai_proxy')
     params['stream_usage'] = True
