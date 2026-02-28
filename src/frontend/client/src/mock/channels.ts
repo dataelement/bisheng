@@ -256,7 +256,7 @@ export function getMockChannels(params: {
         channels = sortChannels(channels, params.sortBy);
     }
 
-    return channels;
+    return  channels;
 }
 
 // 排序频道

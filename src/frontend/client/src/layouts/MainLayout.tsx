@@ -73,7 +73,7 @@ function Sidebar() {
   const displayName = user?.name ?? user?.username ?? localize('com_nav_user');
 
   return (
-    <div className="w-16 h-screen flex flex-col items-center justify-between py-4 px-2 bg-white border-r border-[#ececec] shrink-0">
+    <div className="w-16 h-screen flex flex-col items-center justify-between py-4 px-2 shrink-0">
       <div className="flex flex-col gap-10 items-center">
         <div className="size-10 relative">
           <img src={__APP_ENV__.BASE_URL + bsConfig?.sidebarIcon.image} className="size-full" alt="logo" />
@@ -121,15 +121,17 @@ export default function MainLayout() {
   }, [pathname]);
 
   return (
-    <div className="flex">
+    <div className="flex bg-[#F9F9F9]">
       <Sidebar />
-      <main className="flex-1 h-screen overflow-hidden relative">
+      <main className="flex-1 h-screen relative p-2 pl-0">
         <KeepAlive
           name={cacheKey}
           id={cacheKey}
           saveScroll={true}
         >
-          {outlet}
+          <div className='bg-white rounded-xl shadow-xl overflow-hidden h-[calc(100vh-16px)]'>
+            {outlet}
+          </div>
         </KeepAlive>
       </main>
     </div>

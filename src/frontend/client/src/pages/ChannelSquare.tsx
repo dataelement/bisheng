@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { Search, ArrowLeft, Lightbulb, FileText, TrendingUp, Globe } from "lucide-react";
+import { Search, ArrowLeft, Lightbulb, FileText, TrendingUp, Globe, PanelLeftOpenIcon } from "lucide-react";
 import { Input } from "~/components/ui/Input";
 import { Button } from "~/components/ui/Button";
-import { ChannelSquareCard } from "~/components/ChannelSquareCard";
+import { ChannelSquareCard } from "./ChannelSquareCard";
 import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
 
@@ -163,7 +163,7 @@ export default function ChannelSquare({ onBack }: ChannelSquareProps) {
                 onClick={onBack}
                 className="text-[#666] hover:text-[#335cff]"
               >
-                <ArrowLeft className="size-4 mr-1" />
+                <PanelLeftOpenIcon className="size-4 mr-1" />
                 返回
               </Button>
             </div>

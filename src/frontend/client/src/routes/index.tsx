@@ -18,10 +18,10 @@ import Sop from '@/components/Sop';
 import MainLayout from '@/Layouts/MainLayout';
 import Knowledge from '@/pages/Knowledge';
 import Page404 from '@/pages/Page404';
-import Subscription from '@/pages/Subscription';
-import Root from './Root';
 import { AliveScope } from 'react-activation';
+import Subscription from '~/pages/Subscription';
 import AppRoot from './AppRoot';
+import Root from './Root';
 
 const AuthLayout = () => (
   <AuthContextProvider>

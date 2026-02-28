@@ -2963,3 +2963,7 @@ button.scroll-convo {
   background: rgba(53, 126, 249, .60);
   transform: rotate(50deg) translate(0, 0);
 }
+
+.noscrollbar {
+  scrollbar-width: none;
+}
