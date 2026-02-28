@@ -63,7 +63,6 @@ export default defineConfig(() => {
   return {
     base: app_env.BASE_URL || '/',
     build: {
-      sourcemap: true,
       // minify: 'esbuild', // 使用 esbuild 进行 Tree Shaking 和压缩
       outDir: "build",
       rollupOptions: {

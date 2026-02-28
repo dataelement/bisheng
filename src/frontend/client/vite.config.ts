@@ -151,7 +151,7 @@ export default defineConfig(({ command }) => ({
   ],
   publicDir: './public',
   build: {
-    sourcemap: true,
+    sourcemap: process.env.NODE_ENV === 'development',
     outDir: './build',
     minify: 'terser',
     rollupOptions: {
