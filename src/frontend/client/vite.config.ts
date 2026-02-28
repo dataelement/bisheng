@@ -30,7 +30,7 @@ export default defineConfig(({ command }) => ({
       //   changeOrigin: true,
       // },
       '^(/workspace)?/bisheng': {
-        target: "http://192.168.106.120:3002",
+        target: "http://192.168.106.120:3003",
         changeOrigin: true,
         secure: false,
         rewrite: (path) => {
@@ -38,7 +38,7 @@ export default defineConfig(({ command }) => ({
         },
       },
       '/workspace/api': {
-        target: 'http://192.168.106.120:3002',
+        target: 'http://192.168.106.120:3003',
         changeOrigin: true,
         secure: false,
         ws: true,
@@ -52,7 +52,7 @@ export default defineConfig(({ command }) => ({
         },
       },
       '/workspace/tmp-dir': {
-        target: 'http://192.168.106.120:3002',
+        target: 'http://192.168.106.120:3003',
         changeOrigin: true,
         secure: false,
         rewrite: (path) => {
@@ -151,7 +151,7 @@ export default defineConfig(({ command }) => ({
   ],
   publicDir: './public',
   build: {
-    sourcemap: process.env.NODE_ENV === 'development',
+    sourcemap: true,
     outDir: './build',
     minify: 'terser',
     rollupOptions: {

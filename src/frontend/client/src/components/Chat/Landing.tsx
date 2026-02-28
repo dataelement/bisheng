@@ -125,7 +125,7 @@ export default function Landing({ Header, isNew, lingsi, lingsiEntry, setLingsi 
 
         {/* 模式切换 */}
         {lingsiEntry && <div className='mx-auto mb-6 mt-2'>
-          <SegmentSelector lingsi={lingsi} onChange={(bl) => {
+          <SegmentSelector lingsi={lingsi} bsConfig={bsConfig} onChange={(bl) => {
             setLingsi(bl);
             interruptAudio();
           }} />
