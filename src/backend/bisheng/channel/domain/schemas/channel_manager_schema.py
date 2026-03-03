@@ -11,3 +11,11 @@ class CreateChannelRequest(BaseModel):
     visibility: ChannelVisibilityEnum = Field(..., description='Channel Visibility')
     filter_rules: Optional[List[ChannelFilterRules]] = Field(default_factory=list, description='Filter Conditions')
     is_released: bool = Field(default=False, description='Whether the channel is released')
+
+
+class AddInformationSourceRequest(BaseModel):
+    url: str = Field(..., description='URL of the information source to add')
+
+
+class CrawlWebsiteRequest(BaseModel):
+    url: str = Field(..., description='URL of the website to crawl')

@@ -4,6 +4,7 @@ from bisheng.channel.domain.schemas.channel_manager_schema import CreateChannelR
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.models.space_channel_member import BusinessTypeEnum, UserRoleEnum
 from bisheng.common.repositories.interfaces.space_channel_member_repository import SpaceChannelMemberRepository
+from bisheng.core.external.bisheng_information_client.bisheng_information_manager import get_bisheng_information_client
 
 
 class ChannelService:
@@ -37,5 +38,9 @@ class ChannelService:
             user_id=login_user.user_id,
             role=UserRoleEnum.CREATOR
         )
+
+        bisheng_information_client = await get_bisheng_information_client()
+        # Subscribe to the information sources associated with the channel
+        await bisheng_information_client.subscribe_information_source(channel_data.source_list)
 
         return channel_model

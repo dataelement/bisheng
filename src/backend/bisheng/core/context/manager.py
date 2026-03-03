@@ -90,6 +90,10 @@ class ApplicationContextManager:
             from bisheng.core.prompts.manager import PromptManager
             self.register_context(PromptManager())
 
+            from bisheng.core.external.bisheng_information_client.bisheng_information_manager import BishengInformationManager
+            http_client = self._registry.get_context(HttpClientManager.name)
+            self.register_context(BishengInformationManager(http_client, config.get_intelligence_center_conf()))
+
             logger.debug("Default contexts registered")
         except ImportError as e:
             logger.warning(f"Failed to import default context managers: {e}")
