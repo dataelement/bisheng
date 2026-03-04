@@ -30,6 +30,8 @@ class SpaceChannelMember(SQLModelSerializable, table=True):
     user_role: UserRoleEnum = Field(..., description='User Role',
                                     sa_column=Column(SQLEnum(UserRoleEnum), nullable=False))
     status: bool = Field(default=True, description='Membership Status', sa_type=Boolean, nullable=False)
+    is_pinned: bool = Field(default=False, description='Whether the channel is pinned to top',
+                            sa_column=Column(Boolean, nullable=False, server_default=text('0')))
 
     create_time: datetime = Field(default_factory=datetime.now, description='Creation Time',
                                   sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))

@@ -1,6 +1,14 @@
+from enum import Enum
+
 from bisheng.core.external.bisheng_information_client.response_schema import InformationSourceResponse, \
     CrawlWebsiteResponse
 from bisheng.core.external.http_client.client import AsyncHttpClient
+
+
+class BusinessType(str, Enum):
+    """Business types for information sources."""
+    WECHAT = 'wechat'
+    WEBSITE = 'website'
 
 
 class InformationSourceAddError(Exception):
@@ -40,11 +48,19 @@ class BishengInformationClient(object):
 
         return information_source_data
 
-    async def list_information_sources(self) -> list[InformationSourceResponse]:
+    async def list_information_sources(self, business_type: BusinessType, page: int = 1, page_size: int = 20) -> list[
+        InformationSourceResponse]:
         """List all information sources."""
         endpoint = f"{self.base_url}/information/list"
         headers = {"X-API-Key": self.api_key}
-        response = await self.http_client.get(endpoint, headers=headers)
+
+        params = {
+            "business_type": business_type.value,
+            "page": page,
+            "page_size": page_size
+        }
+
+        response = await self.http_client.get(endpoint, headers=headers, params=params)
 
         if response.status_code != 200:
             raise InformationSourceListError(
