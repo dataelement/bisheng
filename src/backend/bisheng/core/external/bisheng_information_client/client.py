@@ -1,4 +1,5 @@
 from enum import Enum
+from typing import Optional
 
 from bisheng.core.external.bisheng_information_client.response_schema import InformationSourceResponse, \
     CrawlWebsiteResponse
@@ -33,9 +34,9 @@ class BishengInformationClient(object):
         self.base_url = base_url
         self.api_key = api_key
 
-    async def add_information_source(self, url: str) -> InformationSourceResponse:
+    async def add_website_information_source(self, url: str) -> InformationSourceResponse:
         """Add a new information source by URL."""
-        endpoint = f"{self.base_url}/information/add"
+        endpoint = f"{self.base_url}/information/add_website"
         headers = {"X-API-Key": self.api_key}
         data = {"url": url}
         response = await self.http_client.post(endpoint, json=data, headers=headers)
@@ -47,6 +48,44 @@ class BishengInformationClient(object):
         information_source_data = InformationSourceResponse.model_validate(response.body.get("data"))
 
         return information_source_data
+
+    async def add_wechat_information_source(self, url: str) -> InformationSourceResponse:
+        """Add a new WeChat information source by URL."""
+        endpoint = f"{self.base_url}/information/add_wechat"
+        headers = {"X-API-Key": self.api_key}
+        data = {"url": url}
+        response = await self.http_client.post(endpoint, json=data, headers=headers)
+
+        if response.status_code != 200:
+            raise InformationSourceAddError(
+                f"Failed to add WeChat information source: {response.status_code} - {response.error}")
+
+        information_source_data = InformationSourceResponse.model_validate(response.body.get("data"))
+
+        return information_source_data
+
+    async def search_information_sources(self, query: str, business_type: Optional[BusinessType] = None, page: int = 1,
+                                         page_size: int = 20) -> list[
+        InformationSourceResponse]:
+        """Search information sources by keyword."""
+        endpoint = f"{self.base_url}/information/search"
+        headers = {"X-API-Key": self.api_key}
+
+        params = {
+            "keyword": query,
+            "business_type": business_type.value if business_type else None,
+            "page": page,
+            "page_size": page_size
+        }
+
+        response = await self.http_client.get(endpoint, headers=headers, params=params)
+
+        if response.status_code != 200:
+            raise InformationSourceListError(
+                f"Failed to search information sources: {response.status_code} - {response.error}")
+
+        information_sources_data = response.body.get("data", [])
+        return [InformationSourceResponse.model_validate(item) for item in information_sources_data]
 
     async def list_information_sources(self, business_type: BusinessType, page: int = 1, page_size: int = 20) -> list[
         InformationSourceResponse]:

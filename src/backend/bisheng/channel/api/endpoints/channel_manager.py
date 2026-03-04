@@ -54,15 +54,15 @@ async def list_channel_information_sources(
         return resp_500(message="Failed to list information sources")
 
 
-@router.post("/add_source")
-async def add_information_source(
+@router.post("/add_website_source")
+async def add_website_information_source(
         req_param: AddInformationSourceRequest,
         login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     """Endpoint to add a new information source by URL."""
     try:
         client = await get_bisheng_information_client()
-        result = await client.add_information_source(req_param.url)
+        result = await client.add_website_information_source(req_param.url)
         return resp_200(data=result.model_dump())
     except InformationSourceAddError as e:
         logger.error(f"Failed to add information source: {e}")
@@ -70,6 +70,24 @@ async def add_information_source(
     except Exception as e:
         logger.error(f"Unexpected error adding information source: {e}")
         return resp_500(message="Failed to add information source")
+
+
+@router.post("/add_wechat_source")
+async def add_wechat_information_source(
+        req_param: AddInformationSourceRequest,
+        login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    """Endpoint to add a new WeChat information source by URL."""
+    try:
+        client = await get_bisheng_information_client()
+        result = await client.add_wechat_information_source(req_param.url)
+        return resp_200(data=result.model_dump())
+    except InformationSourceAddError as e:
+        logger.error(f"Failed to add WeChat information source: {e}")
+        return resp_500(message=str(e))
+    except Exception as e:
+        logger.error(f"Unexpected error adding WeChat information source: {e}")
+        return resp_500(message="Failed to add WeChat information source")
 
 
 @router.post("/crawl")
