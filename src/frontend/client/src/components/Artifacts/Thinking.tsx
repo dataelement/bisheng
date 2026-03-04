@@ -65,7 +65,7 @@ const Thinking: React.ElementType = memo(({ children }: { children: React.ReactN
 
   return (
     <>
-      <div className="mb-5">
+      <div className="">
         <ThinkingButton isExpanded={isExpanded} onClick={handleClick} label={label} />
       </div>
       <div
@@ -74,7 +74,7 @@ const Thinking: React.ElementType = memo(({ children }: { children: React.ReactN
           gridTemplateRows: isExpanded ? '1fr' : '0fr',
         }}
       >
-        <div className="overflow-hidden">
+        <div className="overflow-hidden mt-4">
           <ThinkingContent isPart={true}>{children}</ThinkingContent>
         </div>
       </div>

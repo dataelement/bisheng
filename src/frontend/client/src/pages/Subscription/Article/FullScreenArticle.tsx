@@ -126,7 +126,9 @@ export default function FullScreenArticle({ article, onExit, showAiAssistant, se
 
             {/* Right AI Assistant area */}
             <div className="flex-1 h-full min-w-[360px] bg-white">
-                <AiAssistantPanel onClose={() => setShowAiAssistant(false)} />
+                <AiAssistantPanel
+                    features={{ tools: false, modelSelect: false, knowledgeBase: false, fileUpload: false }}
+                    onClose={() => setShowAiAssistant(false)} />
             </div>
         </div >
     );

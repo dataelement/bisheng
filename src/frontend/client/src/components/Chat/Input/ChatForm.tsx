@@ -50,6 +50,7 @@ import SendButton from "./SendButton";
 import StopButton from "./StopButton";
 import { ChatKnowledge } from "./ChatKnowledge";
 
+// 废弃
 const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
   const submitButtonRef = useRef<HTMLButtonElement>(null);
   const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -581,7 +582,7 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
               config={bsConfig}
               searchType={searchType}
               setSearchType={setSearchType}
-              disabled={!!files.size || readOnly }
+              disabled={!!files.size || readOnly}
             />
           </div>
         </div>

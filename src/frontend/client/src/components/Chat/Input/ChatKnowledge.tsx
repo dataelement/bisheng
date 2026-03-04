@@ -234,10 +234,11 @@ export const ChatKnowledge = ({
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild disabled={disabled}>
+      <DropdownMenuTrigger disabled={disabled}>
         <div className={cn(
-          "flex bg-white items-center gap-2 h-7 px-3 rounded-full border border-slate-200 cursor-pointer hover:border-blue-400 transition-all outline-none",
-          hasAnySelection && "bg-blue-50 border-blue-200 text-blue-600"
+          "flex bg-white items-center gap-2 h-7 px-3 rounded-full border border-slate-200 text-gray-500 cursor-pointer hover:border-blue-400 transition-all outline-none disabled:opacity-0",
+          hasAnySelection && "bg-blue-50 border-blue-200 text-blue-600",
+          disabled && "opacity-50 hover:border-slate-200 cursor-not-allowed"
         )}>
           <BookOpenText size={16} />
           <span className="text-xs break-keep">知识库</span>
