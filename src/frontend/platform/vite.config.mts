@@ -70,23 +70,38 @@ export default defineConfig(() => {
           chunkFileNames: 'assets/js/[name]-[hash].js',
           entryFileNames: 'assets/js/[name]-[hash].js',
           assetFileNames: 'assets/[ext]/[name]-[hash].[ext]',
+          experimentalMinChunkSize: 10_000,
           manualChunks(id) {
             if (id.includes('node_modules')) {
-              if (id.includes('react-ace') || id.includes('ace-builds') || id.includes('react-syntax-highlighter') || id.includes('rehype-mathjax') || id.includes('react-markdown')) {
-                return 'acebuilds';
-              }
-              if (id.includes('@xyflow/react')) {
-                return 'reactflow';
-              }
+              // ── Isolated heavy packages (no React init-time dep, safe to split) ──
+
+              // PDF viewer — completely standalone
               if (id.includes('pdfjs-dist')) {
-                return 'pdfjs';
+                return 'vendor-pdf';
               }
-              if (id.includes('react-window') || id.includes('react-beautiful-dnd') || id.includes('react-dropzone')) {
-                return 'reactdrop';
+              // Document processing — standalone (xlsx, mammoth + their transitive deps)
+              if (/[\\/](xlsx|mammoth|xmlbuilder|@xmldom|bluebird|lop|underscore)[\\/]/.test(id)) {
+                return 'vendor-xlsx';
+              }
+              // Editor suite — heavy, lazy-loaded, self-contained subgraph
+              // Includes transitive deps: refractor, highlight.js, prismjs
+              if (/[\\/](react-ace|ace-builds|react-syntax-highlighter|vditor|refractor|highlight\.js|prismjs)[\\/]/.test(id)) {
+                return 'vendor-editor';
+              }
+              // Markdown + MathJax — heavy, lazy-loaded, self-contained subgraph
+              if (
+                id.includes('mathjax') ||
+                /[\\/](react-markdown|rehype-|remark-|dompurify|mdast-|hast|micromark|property-information)/.test(id)
+              ) {
+                return 'vendor-markdown';
               }
 
-              return
+              // ── Everything else → single vendor chunk (avoids circular deps) ──
+              // Includes: react, radix, recharts/d3, lucide, i18n, xyflow,
+              // dnd libs, lodash, axios, zustand, etc.
+              return 'vendor';
             }
+            // Business code: let Rollup handle via lazy-import code splitting
           }
         }
       }
