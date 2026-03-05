@@ -7,6 +7,11 @@ from pydantic import BaseModel, Field
 from bisheng.channel.domain.models.channel import ChannelVisibilityEnum, ChannelFilterRules
 
 
+class SubscribeChannelRequest(BaseModel):
+    """Subscribe Channel Request"""
+    channel_id: str = Field(..., description='Channel ID')
+
+
 class CreateChannelRequest(BaseModel):
     name: str = Field(..., description='Channel Name')
     source_list: List[str] = Field(default_factory=list, description='Data Source List')
@@ -91,3 +96,32 @@ class RemoveMemberRequest(BaseModel):
     """Remove Channel Member Request"""
     channel_id: str = Field(..., description='Channel ID')
     user_id: int = Field(..., description='Target User ID to Remove')
+
+
+class SubscriptionStatusEnum(str, Enum):
+    """Subscription Status Enum"""
+    SUBSCRIBED = 'subscribed'
+    PENDING = 'pending'
+    NOT_SUBSCRIBED = 'not_subscribed'
+
+
+class ChannelSquareItemResponse(BaseModel):
+    """Channel Square List Item Response"""
+    id: str = Field(..., description='Channel ID')
+    name: str = Field(..., description='Channel Name')
+    description: Optional[str] = Field(None, description='Channel Description/Brief')
+    source_list: List[str] = Field(default_factory=list, description='Data Source List')
+    visibility: ChannelVisibilityEnum = Field(..., description='Channel Visibility')
+    latest_article_update_time: Optional[datetime] = Field(None, description='Latest Article Update Time')
+    create_time: Optional[datetime] = Field(None, description='Channel Creation Time')
+    update_time: Optional[datetime] = Field(None, description='Channel Update Time')
+    subscription_status: SubscriptionStatusEnum = Field(...,
+                                                         description='Current user subscription status')
+    subscriber_count: int = Field(default=0, description='Number of subscribers')
+
+
+class ChannelSquarePageResponse(BaseModel):
+    """Channel Square Page Response"""
+    data: List[ChannelSquareItemResponse] = Field(default_factory=list,
+                                                   description='List of channel square items')
+    total: int = Field(..., description='Total number of matching channels')

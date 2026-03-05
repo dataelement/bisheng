@@ -4,7 +4,7 @@ from enum import Enum
 from typing import List, Dict, Optional, Literal
 
 from anthropic import BaseModel
-from sqlalchemy import CHAR, Column, VARCHAR, JSON, Enum as SQLEnum, DateTime, Boolean, text
+from sqlalchemy import CHAR, Column, VARCHAR, JSON, Enum as SQLEnum, DateTime, Boolean, text, Text
 from sqlmodel import Field
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -46,6 +46,8 @@ class Channel(SQLModelSerializable, table=True):
     id: str = Field(default_factory=lambda: uuid.uuid4().hex, description='Channel ID',
                     sa_column=Column(CHAR(36), unique=True, nullable=False, primary_key=True))
     name: str = Field(..., description='Channel Name', sa_column=Column(VARCHAR(255), nullable=False))
+    description: Optional[str] = Field(None, description='Channel Description/Brief',
+                                       sa_column=Column(Text, nullable=True))
     source_list: List[str] = Field(default_factory=list, description='Data Source List',
                                    sa_column=Column(JSON, nullable=False))
     visibility: ChannelVisibilityEnum = Field(..., sa_column=Column(SQLEnum(ChannelVisibilityEnum)),
@@ -55,6 +57,9 @@ class Channel(SQLModelSerializable, table=True):
     user_id: int = Field(..., description='UsersID', foreign_key="user.user_id", nullable=False)
     latest_article_update_time: datetime = Field(None, description='Latest Article Update Time',
                                                  sa_column=Column(DateTime, nullable=True))
+
+    is_pinned: bool = Field(default=False, description='Whether the channel is pinned',
+                            sa_column=Column(Boolean, nullable=False))
 
     is_released: bool = Field(default=False, description='Whether the channel is released',
                               sa_column=Column(Boolean, nullable=False))

@@ -1,4 +1,5 @@
 import logging
+from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
 
@@ -13,6 +14,7 @@ from bisheng.channel.domain.schemas.channel_manager_schema import (
     RemoveMemberRequest,
     QueryTypeEnum,
     SortByEnum,
+    SubscribeChannelRequest,
 )
 from bisheng.channel.domain.services.channel_service import ChannelService
 from bisheng.common.dependencies.user_deps import UserPayload
@@ -120,6 +122,46 @@ async def get_my_channels(
     except Exception as e:
         logger.error(f"Failed to get my channels: {e}")
         return resp_500(message="Failed to get my channels")
+
+
+@router.get("/square")
+async def get_channel_square(
+        keyword: Optional[str] = Query(None, description='模糊搜索关键词（频道名称/简介）'),
+        page: int = Query(1, ge=1, description='页码，默认1'),
+        page_size: int = Query(20, ge=1, le=100, description='每页数量，默认20'),
+        login_user: UserPayload = Depends(UserPayload.get_login_user),
+        channel_service: 'ChannelService' = Depends(get_channel_service)
+):
+    """频道广场查询：分页查询所有已发布频道，支持模糊搜索，展示订阅状态和订阅人数。"""
+    try:
+        result = await channel_service.get_channel_square(
+            keyword=keyword,
+            page=page,
+            page_size=page_size,
+            login_user=login_user
+        )
+        return resp_200(data=result.model_dump())
+    except Exception as e:
+        logger.error(f"Failed to get channel square: {e}")
+        return resp_500(message="Failed to get channel square")
+
+
+@router.post("/subscribe")
+async def subscribe_channel(
+        req_param: SubscribeChannelRequest,
+        login_user: UserPayload = Depends(UserPayload.get_login_user),
+        channel_service: 'ChannelService' = Depends(get_channel_service)
+):
+    """订阅频道申请接口：根据频道类型（公开、私密、需要审批）处理订阅申请。"""
+    try:
+        status = await channel_service.subscribe_channel(req_param, login_user)
+        return resp_200(data=status.value)
+    except ValueError as e:
+        logger.warning(f"Subscribe channel failed: {e}")
+        return resp_500(message=str(e))
+    except Exception as e:
+        logger.error(f"Failed to subscribe to channel: {e}")
+        return resp_500(message="Failed to subscribe to channel")
 
 
 @router.post("/set_pin")

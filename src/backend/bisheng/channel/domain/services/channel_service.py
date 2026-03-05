@@ -13,6 +13,10 @@ from bisheng.channel.domain.schemas.channel_manager_schema import (
     RemoveMemberRequest,
     QueryTypeEnum,
     SortByEnum,
+    SubscriptionStatusEnum,
+    ChannelSquareItemResponse,
+    ChannelSquarePageResponse,
+    SubscribeChannelRequest,
 )
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.models.space_channel_member import BusinessTypeEnum, UserRoleEnum
@@ -345,3 +349,105 @@ class ChannelService:
         await self.space_channel_member_repository.update(target_membership)
 
         return True
+
+    async def get_channel_square(self, keyword: Optional[str], page: int, page_size: int,
+                                 login_user: UserPayload) -> ChannelSquarePageResponse:
+        """
+        Get the channel square: paginated list of all released channels with subscription status
+        and subscriber count for the current user.
+        - Supports fuzzy search by channel name and description
+        - Unsubscribed/unapplied channels are shown first
+        - Subscribed/applied channels are shown last
+        - Within each group, sorted by update_time descending
+        """
+        # 1. Multi-table join query for channels with subscription info
+        rows = await self.channel_repository.find_square_channels(
+            user_id=login_user.user_id,
+            keyword=keyword,
+            page=page,
+            page_size=page_size
+        )
+
+        # 2. Count total matching channels
+        total = await self.channel_repository.count_square_channels(keyword=keyword)
+
+        # 3. Map results to response items
+        result_list: List[ChannelSquareItemResponse] = []
+        for row in rows:
+            channel = row[0]  # Channel object
+            user_subscription_status = row[1]  # None / True / False
+            subscriber_count = row[2]  # int
+
+            # Determine subscription status enum
+            if user_subscription_status is None:
+                status = SubscriptionStatusEnum.NOT_SUBSCRIBED
+            elif user_subscription_status:
+                status = SubscriptionStatusEnum.SUBSCRIBED
+            else:
+                status = SubscriptionStatusEnum.PENDING
+
+            result_list.append(ChannelSquareItemResponse(
+                id=channel.id,
+                name=channel.name,
+                description=channel.description,
+                source_list=channel.source_list,
+                visibility=channel.visibility,
+                latest_article_update_time=channel.latest_article_update_time,
+                create_time=channel.create_time,
+                update_time=channel.update_time,
+                subscription_status=status,
+                subscriber_count=subscriber_count,
+            ))
+
+        return ChannelSquarePageResponse(data=result_list, total=total)
+
+    async def subscribe_channel(self, req: SubscribeChannelRequest, login_user: UserPayload) -> SubscriptionStatusEnum:
+        """
+        Subscribe to a channel (public or review).
+        - Private channels cannot be subscribed to.
+        - Public channels can be subscribed to directly.
+        - Review channels require approval, so status is set to False (pending).
+        """
+        # 1. Verify channel existence
+        channels = await self.channel_repository.find_channels_by_ids([req.channel_id])
+        if not channels:
+            raise ValueError(f"Channel not found")
+        channel = channels[0]
+
+        # 2. Check channel visibility
+        if channel.visibility == ChannelVisibilityEnum.PRIVATE:
+            raise ValueError("Private channels cannot be subscribed to")
+
+        # 3. Check existing membership
+        existing_membership = await self.space_channel_member_repository.find_membership(
+            business_id=req.channel_id,
+            business_type=BusinessTypeEnum.CHANNEL,
+            user_id=login_user.user_id
+        )
+
+        if existing_membership:
+            if existing_membership.status:
+                raise ValueError("You are already subscribed to this channel")
+            else:
+                raise ValueError("Your subscription request is pending approval")
+
+        # 4. Determine subscription status based on channel visibility
+        if channel.visibility == ChannelVisibilityEnum.PUBLIC:
+            status = True
+            return_status = SubscriptionStatusEnum.SUBSCRIBED
+        elif channel.visibility == ChannelVisibilityEnum.REVIEW:
+            status = False
+            return_status = SubscriptionStatusEnum.PENDING
+        else:
+            raise ValueError(f"Unsupported channel visibility: {channel.visibility}")
+
+        # 5. Add membership record
+        await self.space_channel_member_repository.add_member(
+            business_id=req.channel_id,
+            business_type=BusinessTypeEnum.CHANNEL,
+            user_id=login_user.user_id,
+            role=UserRoleEnum.MEMBER,
+            status=status
+        )
+
+        return return_status
