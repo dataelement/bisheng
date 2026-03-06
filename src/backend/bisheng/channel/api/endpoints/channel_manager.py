@@ -243,3 +243,40 @@ async def remove_member(
     except Exception as e:
         logger.error(f"Failed to remove member: {e}")
         return resp_500(message="Failed to remove member")
+
+
+@router.get("/articles")
+async def search_channel_articles(
+        channel_id: str = Query(..., description='频道 ID'),
+        keyword: Optional[str] = Query(None, description='搜索关键词（标题、正文、发布者）'),
+        source_ids: Optional[str] = Query(None, description='指定信源ID列表，逗号分隔'),
+        sub_channel_name: Optional[str] = Query(None, description='子频道名称'),
+        page: int = Query(1, ge=1, description='页码，默认1'),
+        page_size: int = Query(20, ge=1, le=100, description='每页数量，默认20'),
+        login_user: UserPayload = Depends(UserPayload.get_login_user),
+        channel_service: 'ChannelService' = Depends(get_channel_service)
+):
+    """根据频道分页检索文章，支持关键词搜索、信源过滤、子频道过滤，结果高亮显示。"""
+    try:
+        # 解析逗号分隔的信源ID列表
+        parsed_source_ids = None
+        if source_ids:
+            parsed_source_ids = [s.strip() for s in source_ids.split(',') if s.strip()]
+
+        result = await channel_service.search_channel_articles(
+            channel_id=channel_id,
+            keyword=keyword,
+            source_ids=parsed_source_ids,
+            sub_channel_name=sub_channel_name,
+            page=page,
+            page_size=page_size,
+            login_user=login_user,
+        )
+        return resp_200(data=result.model_dump())
+    except ValueError as e:
+        logger.warning(f"Search channel articles failed: {e}")
+        return resp_500(message=str(e))
+    except Exception as e:
+        logger.error(f"Failed to search channel articles: {e}")
+        return resp_500(message="Failed to search channel articles")
+

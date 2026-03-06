@@ -3,6 +3,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.channel.domain.repositories.implementations.channel_repository_impl import ChannelRepositoryImpl
 from bisheng.channel.domain.repositories.interfaces.channel_repository import ChannelRepository
+from bisheng.channel.domain.services.article_es_service import ArticleEsService
 from bisheng.channel.domain.services.channel_service import ChannelService
 from bisheng.common.dependencies.core_deps import get_db_session
 from bisheng.common.repositories.implementations.space_channel_member_repository_impl import \
@@ -24,11 +25,20 @@ async def get_space_channel_member_repository(
     return SpaceChannelMemberRepositoryImpl(session)
 
 
+def get_article_es_service() -> ArticleEsService:
+    """Get ArticleEsService instance"""
+    return ArticleEsService()
+
+
 async def get_channel_service(
         channel_repository: ChannelRepository = Depends(get_channel_repository),
-        space_channel_member_repository: SpaceChannelMemberRepository = Depends(get_space_channel_member_repository)
+        space_channel_member_repository: SpaceChannelMemberRepository = Depends(get_space_channel_member_repository),
+        article_es_service: ArticleEsService = Depends(get_article_es_service),
 ) -> 'ChannelService':
     """Adaptation ChannelServiceInstance Dependencies"""
-    from bisheng.channel.domain.services.channel_service import ChannelService
-    return ChannelService(channel_repository=channel_repository,
-                          space_channel_member_repository=space_channel_member_repository)
+    return ChannelService(
+        channel_repository=channel_repository,
+        space_channel_member_repository=space_channel_member_repository,
+        article_es_service=article_es_service,
+    )
+

@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
 from bisheng.channel.domain.models.channel import Channel, ChannelVisibilityEnum
 from bisheng.channel.domain.repositories.interfaces.channel_repository import ChannelRepository
@@ -18,6 +18,8 @@ from bisheng.channel.domain.schemas.channel_manager_schema import (
     ChannelSquarePageResponse,
     SubscribeChannelRequest,
 )
+from bisheng.channel.domain.schemas.article_schema import ArticleSearchPageResponse
+from bisheng.channel.domain.services.article_es_service import ArticleEsService
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.models.space_channel_member import BusinessTypeEnum, UserRoleEnum
 from bisheng.common.repositories.interfaces.space_channel_member_repository import SpaceChannelMemberRepository
@@ -26,16 +28,14 @@ from bisheng.user.domain.models.user import UserDao
 
 MAX_ADMIN_COUNT = 5
 
-from typing import List, Optional
-
-
-# Assuming necessary imports like CreateChannelRequest, UserPayload, Channel, etc. are defined elsewhere
 
 class ChannelService:
     def __init__(self, channel_repository: 'ChannelRepository',
-                 space_channel_member_repository: 'SpaceChannelMemberRepository'):
+                 space_channel_member_repository: 'SpaceChannelMemberRepository',
+                 article_es_service: 'ArticleEsService' = None):
         self.channel_repository = channel_repository
         self.space_channel_member_repository = space_channel_member_repository
+        self.article_es_service = article_es_service or ArticleEsService()
 
     async def create_channel(self, channel_data: CreateChannelRequest, login_user: UserPayload):
         """Create a new channel based on the provided data and the logged-in user."""
@@ -451,3 +451,82 @@ class ChannelService:
         )
 
         return return_status
+
+    async def search_channel_articles(
+            self,
+            channel_id: str,
+            keyword: Optional[str] = None,
+            source_ids: Optional[List[str]] = None,
+            sub_channel_name: Optional[str] = None,
+            page: int = 1,
+            page_size: int = 20,
+            login_user: UserPayload = None,
+    ) -> ArticleSearchPageResponse:
+        """
+        根据频道分页检索文章。
+
+        1. 根据 channel_id 查询频道，获取 source_list 和 filter_rules
+        2. 判断是否指定子频道，应用对应过滤规则
+        3. 构建 ES 查询：信源过滤 + 过滤规则 + 关键词检索 + 高亮 + 排序 + 分页
+
+        Args:
+            channel_id: 频道 ID
+            keyword: 搜索关键词（标题、正文、发布者）
+            source_ids: 前端指定的信源 ID 列表（必须是频道 source_list 的子集）
+            sub_channel_name: 子频道名称，若指定则使用对应子频道的过滤规则
+            page: 页码
+            page_size: 每页数量
+            login_user: 当前登录用户
+
+        Returns:
+            ArticleSearchPageResponse
+        """
+        # 1. 查询频道信息
+        channels = await self.channel_repository.find_channels_by_ids([channel_id])
+        if not channels:
+            raise ValueError("频道不存在")
+        channel = channels[0]
+
+        # 2. 确定信源列表
+        channel_source_ids = channel.source_list or []
+        if source_ids:
+            # 前端传入的信源必须是频道信源的子集
+            effective_source_ids = [sid for sid in source_ids if sid in channel_source_ids]
+            if not effective_source_ids:
+                # 传入的信源均不在频道中，返回空结果
+                return ArticleSearchPageResponse(data=[], total=0, page=page, page_size=page_size)
+        else:
+            effective_source_ids = channel_source_ids
+
+        # 3. 解析过滤规则
+        filter_rules_raw: List[Dict[str, Any]] = channel.filter_rules or []
+
+        # 解析过滤规则，区分主频道和子频道
+        main_rules: List[Dict[str, Any]] = []
+        sub_channel_rules: Dict[str, List[Dict[str, Any]]] = {}
+
+        for fr in filter_rules_raw:
+            channel_type = fr.get("channel_type", "main")
+            rules = fr.get("rules", [])
+            name = fr.get("name")
+
+            if channel_type == "sub" and name:
+                sub_channel_rules.setdefault(name, []).extend(rules)
+            else:
+                main_rules.extend(rules)
+
+        # 确定使用哪组规则
+        if sub_channel_name and sub_channel_name in sub_channel_rules:
+            effective_rules = sub_channel_rules[sub_channel_name]
+        else:
+            effective_rules = main_rules
+
+        # 4. 调用 ArticleEsService 进行搜索
+        return await self.article_es_service.search_articles(
+            source_ids=effective_source_ids,
+            keyword=keyword,
+            filter_rules=effective_rules if effective_rules else None,
+            page=page,
+            page_size=page_size,
+        )
+
