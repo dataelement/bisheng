@@ -1,6 +1,8 @@
 from typing import List, Optional, Dict, Any
 
 from bisheng.channel.domain.models.channel import Channel, ChannelVisibilityEnum
+from bisheng.channel.domain.models.channel_info_source import ChannelInfoSource
+from bisheng.channel.domain.repositories.interfaces.channel_info_source_repository import ChannelInfoSourceRepository
 from bisheng.channel.domain.repositories.interfaces.channel_repository import ChannelRepository
 from bisheng.channel.domain.schemas.channel_manager_schema import (
     CreateChannelRequest,
@@ -32,9 +34,11 @@ MAX_ADMIN_COUNT = 5
 class ChannelService:
     def __init__(self, channel_repository: 'ChannelRepository',
                  space_channel_member_repository: 'SpaceChannelMemberRepository',
+                 channel_info_source_repository: 'ChannelInfoSourceRepository',
                  article_es_service: 'ArticleEsService' = None):
         self.channel_repository = channel_repository
         self.space_channel_member_repository = space_channel_member_repository
+        self.channel_info_source_repository = channel_info_source_repository
         self.article_es_service = article_es_service or ArticleEsService()
 
     async def create_channel(self, channel_data: CreateChannelRequest, login_user: UserPayload):
@@ -60,7 +64,31 @@ class ChannelService:
 
         bisheng_information_client = await get_bisheng_information_client()
         # Subscribe to the information sources associated with the channel
-        await bisheng_information_client.subscribe_information_source(channel_data.source_list)
+        if channel_data.source_list:
+            await bisheng_information_client.subscribe_information_source(channel_data.source_list)
+
+            # Sync information sources to local database
+            existing_sources = await self.channel_info_source_repository.find_by_ids(channel_data.source_list)
+            existing_source_ids = {source.id for source in existing_sources}
+
+            missing_source_ids = [sid for sid in channel_data.source_list if sid not in existing_source_ids]
+
+            if missing_source_ids:
+                missing_information_sources = await bisheng_information_client.get_information_source_by_ids(missing_source_ids)
+                
+                new_channel_info_sources = []
+                for info_source in missing_information_sources:
+                    new_source = ChannelInfoSource(
+                        id=info_source.id,
+                        source_name=info_source.name,
+                        source_icon=info_source.icon,
+                        source_type=info_source.business_type,
+                        description=info_source.description
+                    )
+                    new_channel_info_sources.append(new_source)
+                
+                if new_channel_info_sources:
+                    await self.channel_info_source_repository.batch_add(new_channel_info_sources)
 
         return channel_model
 

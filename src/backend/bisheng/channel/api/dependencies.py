@@ -1,7 +1,10 @@
 from fastapi import Depends
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from bisheng.channel.domain.repositories.implementations.channel_info_source_repository_impl import \
+    ChannelInfoSourceRepositoryImpl
 from bisheng.channel.domain.repositories.implementations.channel_repository_impl import ChannelRepositoryImpl
+from bisheng.channel.domain.repositories.interfaces.channel_info_source_repository import ChannelInfoSourceRepository
 from bisheng.channel.domain.repositories.interfaces.channel_repository import ChannelRepository
 from bisheng.channel.domain.services.article_es_service import ArticleEsService
 from bisheng.channel.domain.services.channel_service import ChannelService
@@ -25,20 +28,32 @@ async def get_space_channel_member_repository(
     return SpaceChannelMemberRepositoryImpl(session)
 
 
+async def get_channel_info_source_repository(
+        session: AsyncSession = Depends(get_db_session),
+) -> 'ChannelInfoSourceRepository':
+    """Adaptation ChannelInfoSourceRepository Dependencies"""
+    return ChannelInfoSourceRepositoryImpl(session)
+
+
 def get_article_es_service() -> ArticleEsService:
     """Get ArticleEsService instance"""
     return ArticleEsService()
 
 
 async def get_channel_service(
-        channel_repository: ChannelRepository = Depends(get_channel_repository),
-        space_channel_member_repository: SpaceChannelMemberRepository = Depends(get_space_channel_member_repository),
-        article_es_service: ArticleEsService = Depends(get_article_es_service),
+        session: AsyncSession = Depends(get_db_session),
 ) -> 'ChannelService':
     """Adaptation ChannelServiceInstance Dependencies"""
+
+    channel_repository = await get_channel_repository(session)
+    space_channel_member_repository = await get_space_channel_member_repository(session)
+    channel_info_source_repository = await get_channel_info_source_repository(session)
+    article_es_service = get_article_es_service()
+
     return ChannelService(
         channel_repository=channel_repository,
         space_channel_member_repository=space_channel_member_repository,
+        channel_info_source_repository=channel_info_source_repository,
         article_es_service=article_es_service,
     )
 

@@ -85,6 +85,22 @@ class BishengInformationClient(object):
                 f"Failed to search information sources: {response.status_code} - {response.error}")
 
         information_sources_data = response.body.get("data", [])
+
+        return [InformationSourceResponse.model_validate(item) for item in information_sources_data]
+
+
+    async def get_information_source_by_ids(self, source_ids: list[str]) -> list[InformationSourceResponse]:
+        """Get information sources by a list of source IDs."""
+        endpoint = f"{self.base_url}/information/sources_by_ids"
+        headers = {"X-API-Key": self.api_key}
+        data = {"information_ids": source_ids}
+        response = await self.http_client.post(endpoint, json=data, headers=headers)
+
+        if response.status_code != 200:
+            raise InformationSourceListError(
+                f"Failed to get information sources by IDs: {response.status_code} - {response.error}")
+
+        information_sources_data = response.body.get("data", [])
         return [InformationSourceResponse.model_validate(item) for item in information_sources_data]
 
     async def list_information_sources(self, business_type: BusinessType, page: int = 1, page_size: int = 20) -> list[
