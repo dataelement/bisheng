@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { KnowledgeSpaceSidebar } from "~/components/KnowledgeSpaceSidebar";
-import { KnowledgeSpaceContent } from "~/components/KnowledgeSpaceContent";
+import { KnowledgeSpaceSidebar } from "./sidebar/KnowledgeSpaceSidebar";
+import { KnowledgeSpaceContent } from "./SpaceDetail";
 import { KnowledgeSpace, KnowledgeFile, FileStatus, SortType, SortDirection } from "~/api/knowledge";
 import { getMockKnowledgeSpaces, getMockFiles } from "~/mock/knowledge";
 import { useToastContext } from "~/Providers";
@@ -237,7 +237,7 @@ export default function Knowledge() {
     };
 
     return (
-        <div className="h-screen flex">
+        <div className="relative h-full flex">
             <KnowledgeSpaceSidebar
                 createdSpaces={createdSpaces}
                 joinedSpaces={joinedSpaces}

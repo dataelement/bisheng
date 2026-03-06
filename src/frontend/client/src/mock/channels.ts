@@ -1,4 +1,4 @@
-import { Channel, Article, SortType, ChannelRole } from "~/api/channels";
+import { Channel, ChannelPreview, Article, SortType, ChannelRole } from "~/api/channels";
 
 // 模拟频道数据
 export const mockChannels: Channel[] = [
@@ -157,6 +157,7 @@ export const mockArticles: Article[] = [
     {
         id: "article-1",
         title: `2025年北京PM2.5年均浓度首次低于"30微克"，全年348个"蓝天"为有监测以来最蓝`,
+        url: "https://bjrb.example.com/article/001",
         content: `北京市各级机关2026年度考试录用公务员笔试成绩将在2026年1月5日公布，考生可在北京人事考试网中查询。"北京人社"微信公众号1月3日发布提醒称，考生若需查询考试成绩，可使用该笔试准考证号及身份证号进行查询。若有疑问，请拨打北京市人力资源和社会保障局咨询电话12333进行咨询。`,
         sourceName: "北京日报",
         sourceAvatar: "/sources/bjrb.png",
@@ -170,6 +171,7 @@ export const mockArticles: Article[] = [
     {
         id: "article-2",
         title: "北京市各级机关2026年度考试录用公务员笔试成绩分格线数线",
+        url: "https://bjrb.example.com/article/002",
         content: "北京市各级机关2026年度考试录用公务员笔试成绩将在2026年1月5日公布，考生可在北京人事考试网中查询。",
         sourceName: "北京日报",
         sourceAvatar: "/sources/bjrb.png",
@@ -183,6 +185,7 @@ export const mockArticles: Article[] = [
     {
         id: "article-3",
         title: "慎防边全球人工智能创新高地",
+        url: "https://xinhuanet.example.com/article/003",
         content: `2026北京人工智能创新发展战略会"火热召开，大会发布了一系列前沿成果、探独创应用，为首都AI产业发展再添新力量。`,
         sourceName: "新华网",
         sourceAvatar: "/sources/xhw.png",
@@ -196,6 +199,7 @@ export const mockArticles: Article[] = [
     {
         id: "article-4",
         title: `2025年北京PM2.5年均浓度首次低于"30微克"，全年348个"蓝天"为有监测以来最蓝`,
+        url: "https://bjrb.example.com/article/004",
         content: "北京市环境保护局公布，2025年北京PM2.5年均浓度首次低于30微克/立方米，达到29.8微克/立方米，创历史最好水平。全年蓝天数达348天，为有监测以来最多。",
         sourceName: "北京日报",
         sourceAvatar: "/sources/bjrb.png",
@@ -209,6 +213,7 @@ export const mockArticles: Article[] = [
     {
         id: "article-5",
         title: "北京市各级机关2026年度考试录用公务员笔试成绩分格线数线",
+        url: "https://bjrb.example.com/article/005",
         content: "考试成绩将在1月5日公布，考生可登录北京人事考试网查询。",
         sourceName: "北京日报",
         sourceAvatar: "/sources/bjrb.png",
@@ -222,6 +227,7 @@ export const mockArticles: Article[] = [
     {
         id: "article-6",
         title: "AI技术助力北京智慧城市建设",
+        url: "https://kjrb.example.com/article/006",
         content: "北京市加大人工智能技术在城市管理中的应用，推动智慧城市建设迈上新台阶。",
         sourceName: "科技日报",
         sourceAvatar: "/sources/kjrb.png",
@@ -256,7 +262,7 @@ export function getMockChannels(params: {
         channels = sortChannels(channels, params.sortBy);
     }
 
-    return  channels;
+    return channels;
 }
 
 // 排序频道
@@ -342,5 +348,69 @@ export function getMockArticles(params: {
         data: filtered.slice(start, end),
         total: filtered.length,
         hasMore: end < filtered.length
+    };
+}
+
+// 模拟获取频道预览信息
+export function getMockChannelPreview(channelId: string): ChannelPreview {
+    // 模拟「已删除」的频道
+    if (channelId === "deleted-channel") {
+        return {
+            id: channelId,
+            name: "",
+            articleCount: 0,
+            subscriberCount: 0,
+            sources: [],
+            articles: [],
+            isSubscribed: false,
+            needsApproval: false,
+            isPending: false,
+            isDeleted: true,
+            creator: "",
+        };
+    }
+
+    const channel = mockChannels.find(c => c.id === channelId);
+    if (!channel) {
+        // 找不到的频道也视为已删除
+        return {
+            id: channelId,
+            name: "",
+            articleCount: 0,
+            subscriberCount: 0,
+            sources: [],
+            articles: [],
+            isSubscribed: false,
+            needsApproval: false,
+            isPending: false,
+            isDeleted: true,
+            creator: "",
+        };
+    }
+
+    const articles = mockArticles.filter(a => a.channelId === channelId);
+
+    // 模拟不同频道的状态
+    // channel-4: 需要审批
+    // channel-5: 已订阅
+    // channel-8: 申请中
+    const needsApproval = channelId === "channel-4";
+    const isSubscribed = channelId === "channel-5";
+    const isPending = channelId === "channel-8";
+
+    return {
+        id: channel.id,
+        name: channel.name,
+        description: channel.description,
+        creator: channel.creator,
+        creatorAvatar: "/avatars/user1.png",
+        articleCount: channel.articleCount,
+        subscriberCount: channel.subscriberCount,
+        sources: mockSources.slice(0, 3),
+        articles,
+        isSubscribed,
+        needsApproval,
+        isPending,
+        isDeleted: false,
     };
 }

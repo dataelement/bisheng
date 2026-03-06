@@ -3,3 +3,8 @@ export * from './ShareOutlineIcon';
 export * from './AddSpaceIcon';
 export * from './FullScreenIcon';
 export * from './AiChatIcon';
+export * from './FolderIcon';
+export * from './XlsxIcon';
+export * from './DocxIcon';
+export * from './PptxIcon';
+export * from './TxtIcon';

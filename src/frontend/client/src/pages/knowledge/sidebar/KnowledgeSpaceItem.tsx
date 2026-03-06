@@ -1,15 +1,15 @@
 import {
-    BlendIcon,
+    BookText,
     MinimizeIcon,
     MoreHorizontal,
     Pin,
     PinOff,
     Settings,
     Users,
-    X
+    LogOut,
 } from "lucide-react";
 import { useState } from "react";
-import { Channel, ChannelRole } from "~/api/channels";
+import { KnowledgeSpace, SpaceRole } from "~/api/knowledge";
 import { NotificationSeverity } from "~/common";
 import {
     DropdownMenu,
@@ -19,29 +19,29 @@ import {
 } from "~/components/ui/DropdownMenu";
 import { useConfirm, useToastContext } from "~/Providers";
 
-interface ChannelItemProps {
-    channel: Channel;
+interface KnowledgeSpaceItemProps {
+    space: KnowledgeSpace;
     isActive: boolean;
-    type: "created" | "subscribed";
-    onSelect: (channel: Channel) => void;
-    onUpdate: (channel: Channel) => void;
+    type: "created" | "joined";
+    onSelect: (space: KnowledgeSpace) => void;
+    onUpdate: (space: KnowledgeSpace) => void;
     onDelete: (id: string) => void;
-    onUnsubscribe: (id: string) => void;
-    onPin: (id: string, pinned: boolean, type: "created" | "subscribed") => void;
+    onLeave: (id: string) => void;
+    onPin: (id: string, pinned: boolean) => void;
 }
 
-export default function ChannelItem({
-    channel,
+export default function KnowledgeSpaceItem({
+    space,
     isActive,
     type,
     onSelect,
     onUpdate,
     onDelete,
-    onUnsubscribe,
+    onLeave,
     onPin
-}: ChannelItemProps) {
+}: KnowledgeSpaceItemProps) {
     const [isEditing, setIsEditing] = useState(false);
-    const [menuOpen, setMenuOpen] = useState(false); // 控制菜单打开时的状态显示
+    const [menuOpen, setMenuOpen] = useState(false);
     const { showToast } = useToastContext();
     const confirm = useConfirm()
 
@@ -55,8 +55,8 @@ export default function ChannelItem({
                 severity: NotificationSeverity.ERROR
             });
         }
-        if (newName && newName !== channel.name) {
-            onUpdate({ ...channel, name: newName });
+        if (newName && newName !== space.name) {
+            onUpdate({ ...space, name: newName });
         }
     }
 
@@ -66,18 +66,17 @@ export default function ChannelItem({
                 ? "bg-[#E6EDFC] border-primary shadow-sm"
                 : "border-transparent hover:bg-[#F7F7F7]"
                 }`}
-            onClick={() => !isEditing && onSelect(channel)}
+            onClick={() => !isEditing && onSelect(space)}
         >
             <div className="flex items-center gap-1 flex-1 min-w-0">
-                {/* 左侧图标保持不变 */}
                 <div className={`flex-shrink-0 flex items-center justify-center size-5 rounded-md ${isActive ? "bg-white border border-[#165dff]/20 shadow-sm" : ""}`}>
-                    <BlendIcon className={`size-3.5 ${isActive ? "text-[#165dff]" : "text-[#86909c]"}`} />
+                    <BookText className={`size-3 ${isActive ? "text-[#165dff]" : "text-[#86909c]"}`} />
                 </div>
 
                 {isEditing ? (
                     <input
                         type="text"
-                        defaultValue={channel.name}
+                        defaultValue={space.name}
                         className="flex-1 px-1 min-w-0 text-[14px] bg-white rounded focus:outline-none"
                         autoFocus
                         onBlur={rename}
@@ -90,30 +89,22 @@ export default function ChannelItem({
                 ) : (
                     <div className="flex items-center gap-1 flex-1 min-w-0">
                         <span onDoubleClick={() => setIsEditing(true)} className="text-[14px] truncate text-[#1d2129]">
-                            {channel.name}
+                            {space.name}
                         </span>
-                        {channel.isPinned && (
-                            <Pin className="size-3 text-[#5773B4] flex-shrink-0 rotate-45" fill="#AEC9FF" />
-                        )}
                     </div>
                 )}
             </div>
 
-            {/* 右侧区域 */}
             <div className="flex items-center justify-end flex-shrink-0 w-8 h-5 relative">
-                {/* 1. 徽标：非菜单打开 且 非Hover 时可见 */}
-                {channel.unreadCount > 0 && (
-                    <span className={`
-                        absolute right-0 flex items-center justify-center
-                        text-[10px] px-1.5 py-[1px] rounded-md font-medium bg-[#335CFF33]/20 text-primary
+                {space.isPinned && (
+                    <div className={`
+                        absolute right-0 flex items-center justify-center p-1 pointer-events-none
                         transition-opacity duration-200
-                        ${menuOpen ? "opacity-0" : "group-hover:opacity-0"}
+                        ${menuOpen ? "opacity-0" : "opacity-100 group-hover:opacity-0"}
                     `}>
-                        {channel.unreadCount}
-                    </span>
+                        <Pin className="size-3.5 text-[#5773B4] rotate-45" fill="#AEC9FF" />
+                    </div>
                 )}
-
-                {/* 2. 操作按钮：菜单打开 或 Hover 时可见 */}
                 <DropdownMenu onOpenChange={setMenuOpen}>
                     <DropdownMenuTrigger asChild>
                         <button
@@ -137,48 +128,46 @@ export default function ChannelItem({
                             className="py-2 px-0 cursor-pointer focus:bg-[#f2f3f5]"
                         >
                             <Settings className="size-4 mr-2 text-[#4e5969]" />
-                            <span className="">频道设置</span>
+                            <span className="">空间设置</span>
                         </DropdownMenuItem>}
-                        {type === "created" || channel.role === ChannelRole.ADMIN && (
-                            <>
-                                <DropdownMenuItem className="py-2 px-0 cursor-pointer focus:bg-[#f2f3f5]">
-                                    <Users className="size-4 mr-2 text-[#4e5969]" />
-                                    <span className="text-[14px] text-[#1d2129]">成员管理</span>
-                                </DropdownMenuItem>
-                            </>
+                        {(type === "created" || space.role === SpaceRole.ADMIN) && (
+                            <DropdownMenuItem className="py-2 px-0 cursor-pointer focus:bg-[#f2f3f5]">
+                                <Users className="size-4 mr-2 text-[#4e5969]" />
+                                <span className="text-[14px] text-[#1d2129]">成员管理</span>
+                            </DropdownMenuItem>
                         )}
                         <DropdownMenuItem
-                            onClick={() => onPin(channel.id, !channel.isPinned, type)}
+                            onClick={() => onPin(space.id, !space.isPinned)}
                             className="py-2 px-0 cursor-pointer focus:bg-[#f2f3f5]"
                         >
-                            {channel.isPinned ? (
+                            {space.isPinned ? (
                                 <><PinOff className="size-4 mr-2 text-[#4e5969]" /><span className="text-[14px] text-[#1d2129]">取消置顶</span></>
                             ) : (
-                                <><Pin className="size-4 mr-2 text-[#4e5969]" /><span className="text-[14px] text-[#1d2129]">置顶频道</span></>
+                                <><Pin className="size-4 mr-2 text-[#4e5969]" /><span className="text-[14px] text-[#1d2129]">置顶知识空间</span></>
                             )}
                         </DropdownMenuItem>
+
                         <div className="h-px bg-[#f2f3f5] mx-2 my-1" />
 
                         <DropdownMenuItem
                             onClick={async () => {
+                                const actionName = type === "created" ? "解散知识空间" : "退出知识空间";
+                                const description = type === "created" ? "确认操作吗？" : "确定退出该知识空间吗？";
                                 const ok = await confirm({
                                     title: "提示",
-                                    description: type === "created" ? "其他已订阅成员处的该频道也将被删除，确认操作吗？" : "确定取消对该频道及其子频道的订阅吗？",
-                                    confirmText: type === "created" ? "解散" : "确定",
+                                    description,
+                                    confirmText: actionName === "解散知识空间" ? "删除" : "退出",
                                     cancelText: "取消"
                                 })
 
                                 if (ok) {
-                                    console.log("执行删除逻辑...")
-                                    type === "created" ? onDelete(channel.id) : onUnsubscribe(channel.id);
-                                } else {
-                                    console.log("用户取消了操作")
+                                    type === "created" ? onDelete(space.id) : onLeave(space.id);
                                 }
                             }}
                             className="text-[#f53f3f] py-2 px-0 cursor-pointer focus:bg-[#f2f3f5] focus:text-[#f53f3f]"
                         >
-                            <MinimizeIcon className="size-4 mr-2" />
-                            <span className="text-[14px] font-medium">{type === "created" ? "解散频道" : "取消订阅"}</span>
+                            {type === "created" ? <MinimizeIcon className="size-4 mr-2" /> : <LogOut className="size-4 mr-2" />}
+                            <span className="text-[14px] font-medium">{type === "created" ? "删除空间" : "退出空间"}</span>
                         </DropdownMenuItem>
                     </DropdownMenuContent>
                 </DropdownMenu>

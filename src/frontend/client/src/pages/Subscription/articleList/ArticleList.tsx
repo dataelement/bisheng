@@ -4,11 +4,14 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Article, Channel } from "~/api/channels";
+import { NotificationSeverity } from "~/common";
 import { InfiniteScroll } from "~/components/InfiniteScroll";
 import { Button } from "~/components/ui/Button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
 import { useDebounce } from "~/hooks";
 import { getMockArticles } from "~/mock/channels";
+import { useToastContext } from "~/Providers";
+import { copyText } from "~/utils";
 import { ArticleCard } from "./ArticleCard";
 import { MultiSourceSelect } from "./MultiSourceSelect";
 import { SearchInput } from "./SearchInput";
@@ -37,6 +40,7 @@ export function ArticleList({ channel, selectedArticleId, onArticleSelect }: Art
     const [onlyUnread, setOnlyUnread] = useState(false);
     const [selectedSources, setSelectedSources] = useState<string[]>([]);
     const searchQuery = useDebounce(searchKey, 500)
+    const { showToast } = useToastContext();
 
     const loadArticles = (page: number) => {
         if (!channel) return;
@@ -137,7 +141,13 @@ export function ArticleList({ channel, selectedArticleId, onArticleSelect }: Art
                     </div>
 
                     <Button
-                        onClick={() => console.log("分享频道")}
+                        onClick={() => {
+                            const shareUrl = `${window.location.origin}${__APP_ENV__.BASE_URL}/channel/share/${channel.id}`;
+                            const shareText = `欢迎加入频道【${channel.name}】 ，点击链接：${shareUrl} 一键订阅。`;
+                            copyText(shareText).then(() => {
+                                showToast({ message: '分享链接已复制到粘贴板', severity: NotificationSeverity.SUCCESS });
+                            });
+                        }}
                         variant="outline"
                         className="h-8 px-4 text-[14px] rounded-md font-normal"
                     >

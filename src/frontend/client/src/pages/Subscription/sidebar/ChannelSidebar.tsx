@@ -171,7 +171,7 @@ export function ChannelSidebar({
     }
 
     return (
-        <div className="w-60 h-full bg-white border-r border-[#e5e6eb] flex flex-col px-3 py-5">
+        <div className="w-60 min-w-60 h-full bg-white border-r border-[#e5e6eb] flex flex-col px-3 py-5">
             {/* 顶部操作区 */}
             <div className="border-b border-[#e5e6eb] space-y-4 pb-4">
                 <div className="px-2 flex justify-between items-center text-[14px] font-medium">

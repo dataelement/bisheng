@@ -1,0 +1,98 @@
+import React, { useLayoutEffect, useRef, useState } from 'react';
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from '~/components/ui/Tooltip2';
+
+const TagGroup = ({ tags }) => {
+    const containerRef = useRef(null);
+    const [visibleCount, setVisibleCount] = useState(1); // 初始默认显示1个
+
+    useLayoutEffect(() => {
+        const calculateVisibleTags = () => {
+            if (!containerRef.current) return;
+
+            const containerWidth = containerRef.current.offsetWidth;
+            // 获取所有用于测量的临时标签元素
+            const tagElements = containerRef.current.querySelectorAll('.tag-measure');
+            const moreBadgeWidth = 40; // 预留给 "+N" 的宽度
+            const gap = 6; // gap-1.5 (6px)
+
+            let currentWidth = (tagElements[0]?.offsetWidth || 0) + gap;
+            let count = 1;
+
+            // 从第二个标签开始计算
+            for (let i = 1; i < tagElements.length; i++) {
+                const itemWidth = tagElements[i].offsetWidth + gap;
+                // 如果当前总宽 + 这一项 + (若后面还有则预留+N宽) > 容器总宽
+                if (currentWidth + itemWidth + (i < tags.length - 1 ? moreBadgeWidth : 0) > containerWidth) {
+                    break;
+                }
+                currentWidth += itemWidth;
+                count++;
+            }
+            setVisibleCount(count);
+        };
+
+        calculateVisibleTags();
+        const observer = new ResizeObserver(calculateVisibleTags);
+        observer.observe(containerRef.current);
+        return () => observer.disconnect();
+    }, [tags]);
+
+    const visibleTags = tags.slice(0, visibleCount);
+    const hiddenTags = tags.slice(visibleCount);
+
+    return (
+        <TooltipProvider delayDuration={200}>
+            <div
+                ref={containerRef}
+                className="flex gap-1.5 flex-nowrap items-center min-w-0 flex-1 relative overflow-hidden"
+            >
+                {/* 1. 实际显示的标签 */}
+                {visibleTags.map((tag, index) => (
+                    <div
+                        key={index}
+                        className={`bg-[#f2f3f5] text-[#4e5969] text-xs px-1.5 py-0.5 rounded-sm whitespace-nowrap
+              ${index === 0 ? 'min-w-[30px] truncate flex-shrink' : 'flex-shrink-0'}`}
+                    >
+                        {tag}
+                    </div>
+                ))}
+
+                {/* 2. 折叠后的 +N (使用 Shadcn Tooltip) */}
+                {hiddenTags.length > 0 && (
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <div className="bg-[#f2f3f5] text-[#4e5969] font-medium text-xs px-1.5 py-0.5 rounded-sm cursor-pointer flex-shrink-0">
+                                +{hiddenTags.length}
+                            </div>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" noArrow className="bg-white p-2 border border-gray-100 shadow-md">
+                            <div className="flex flex-wrap gap-1 max-w-[200px]">
+                                {hiddenTags.map((tag, i) => (
+                                    <span key={i} className="bg-[#f2f3f5] text-[#4e5969] text-xs px-1.5 py-0.5 rounded-sm">
+                                        {tag}
+                                    </span>
+                                ))}
+                            </div>
+                        </TooltipContent>
+                    </Tooltip>
+                )}
+
+                {/* 3. 用于测量的隐藏元素 (不参与 Flex 布局) */}
+                <div className="absolute top-0 left-0 invisible flex -z-10">
+                    {tags.map((tag, index) => (
+                        <div key={index} className="tag-measure px-1.5 py-0.5 text-xs whitespace-nowrap">
+                            {tag}
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </TooltipProvider>
+    );
+};
+
+export default TagGroup;

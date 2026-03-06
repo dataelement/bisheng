@@ -39,7 +39,7 @@ function TooltipContent({
     children,
     noArrow = false,
     ...props
-}: React.ComponentProps<typeof TooltipPrimitive.Content>) {
+}: React.ComponentProps<typeof TooltipPrimitive.Content> & { noArrow?: boolean }) {
     return (
         <TooltipPrimitive.Portal>
             <TooltipPrimitive.Content

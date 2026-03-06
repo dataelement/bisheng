@@ -16,12 +16,12 @@ import RouteErrorBoundary from './RouteErrorBoundary';
 // import ShareRoute from './ShareRoute';
 import Sop from '@/components/Sop';
 import MainLayout from '@/Layouts/MainLayout';
-import Knowledge from '@/pages/Knowledge';
 import Page404 from '@/pages/Page404';
 import { AliveScope } from 'react-activation';
-import Subscription from '~/pages/Subscription';
+import Subscription from '~/pages/subscription';
 import AppRoot from './AppRoot';
 import Root from './Root';
+import Knowledge from '~/pages/knowledge';
 
 const AuthLayout = () => (
   <AuthContextProvider>
@@ -83,6 +83,7 @@ export const router = createBrowserRouter([
           { path: 'apps', element: <AgentCenter /> },
           { path: 'apps/explore', element: <ExplorePlaza /> },
           { path: 'channel', element: <Subscription /> },
+          { path: 'channel/share/:channelId', element: <Subscription /> },
           { path: 'knowledge', element: <Knowledge /> },
           { path: 'share/:token/:vid?', element: <Share /> },
         ],

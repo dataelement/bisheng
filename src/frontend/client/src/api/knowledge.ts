@@ -2,9 +2,12 @@ import request from "./request";
 
 // 文件状态
 export enum FileStatus {
+    UPLOADING = "uploading",
+    QUEUED = "queued",
+    PROCESSING = "processing",
     SUCCESS = "success",
     FAILED = "failed",
-    PROCESSING = "processing"
+    TIMEOUT = "timeout"
 }
 
 // 文件类型

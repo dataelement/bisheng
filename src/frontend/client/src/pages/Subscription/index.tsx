@@ -1,18 +1,37 @@
 import { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { Article, Channel } from "~/api/channels";
 import { NotificationSeverity } from "~/common";
 import { useToastContext } from "~/Providers";
 import ChannelSquare from "../ChannelSquare";
 import { ChannelLayout } from "./ChannelLayout";
+import { ChannelPreviewDrawer } from "./ChannelPreviewDrawer";
 import FullScreenArticle from "./Article/FullScreenArticle";
 import { ChannelSidebar } from "./sidebar/ChannelSidebar";
 
 export default function Subscription() {
+    const { channelId: previewChannelId } = useParams<{ channelId?: string }>();
+    const navigate = useNavigate();
     const [activeChannel, setActiveChannel] = useState<Channel | null>(null);
     const [showChannelSquare, setShowChannelSquare] = useState(false);
     const [fullScreenArticle, setFullScreenArticle] = useState<Article | null>(null);
     const [showAiAssistant, setShowAiAssistant] = useState(false);
+    const [previewDrawerOpen, setPreviewDrawerOpen] = useState(false);
     const { showToast } = useToastContext();
+
+    // Open preview drawer when channelId route param is present
+    useEffect(() => {
+        if (previewChannelId) {
+            setPreviewDrawerOpen(true);
+        }
+    }, [previewChannelId]);
+
+    const handlePreviewDrawerClose = (open: boolean) => {
+        setPreviewDrawerOpen(open);
+        if (!open) {
+            navigate("/channel", { replace: true });
+        }
+    };
 
     // Handle channel selection
     const handleChannelSelect = (channel: Channel | null) => {
@@ -99,6 +118,13 @@ export default function Subscription() {
                     />
                 </div>
             )}
+
+            {/* Channel Preview Drawer (opened via share link route) */}
+            <ChannelPreviewDrawer
+                channelId={previewChannelId}
+                open={previewDrawerOpen}
+                onOpenChange={handlePreviewDrawerClose}
+            />
         </div>
     );
 }

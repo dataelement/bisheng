@@ -42,6 +42,7 @@ export interface Channel {
 export interface Article {
     id: string;
     title: string;
+    url: string;               // 原文链接
     content: string;           // 正文
     summary?: string;          // 摘要
     coverImage?: string;       // 封面图
@@ -159,4 +160,28 @@ export async function shareChannelApi(channelId: string): Promise<{
     shareUrl: string;
 }> {
     return await request.post(`/api/v1/channels/${channelId}/share`);
+}
+
+// 频道预览数据（分享链接访问时返回）
+export interface ChannelPreview {
+    id: string;
+    name: string;
+    description?: string;
+    creator: string;
+    creatorAvatar?: string;
+    articleCount: number;
+    subscriberCount: number;
+    sources: { id: string; name: string; avatar?: string }[];
+    articles: Article[];
+    isSubscribed: boolean;       // 当前用户已订阅
+    needsApproval: boolean;      // 频道需要审批才能订阅
+    isPending: boolean;          // 当前用户已申请，等待审批
+    isDeleted: boolean;          // 频道已删除
+}
+
+/**
+ * 获取频道预览信息（分享链接用）
+ */
+export async function getChannelPreviewApi(channelId: string): Promise<ChannelPreview> {
+    return await request.get(`/api/v1/channels/${channelId}/preview`);
 }
