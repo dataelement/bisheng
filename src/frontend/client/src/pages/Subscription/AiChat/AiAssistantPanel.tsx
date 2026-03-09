@@ -22,6 +22,8 @@ interface AiAssistantPanelProps {
     onClose: () => void;
     conversationId?: string;
     features?: AiChatInputFeatures;
+    /** When true, the header won't render a bottom border */
+    noBorder?: boolean;
 }
 
 /**
@@ -31,6 +33,7 @@ export function AiAssistantPanel({
     onClose,
     conversationId = "new",
     features,
+    noBorder,
 }: AiAssistantPanelProps) {
     const {
         messages,
@@ -64,7 +67,7 @@ export function AiAssistantPanel({
     return (
         <div className="flex flex-col h-full bg-white relative">
             {/* Header */}
-            <div className="flex items-center justify-between px-3 py-[15px] border-b border-gray-100 shrink-0">
+            <div className={`flex items-center justify-between px-3 py-[15px] shrink-0 ${noBorder ? '' : 'border-b border-gray-100'}`}>
                 <h3 className="text-sm leading-6 font-medium text-gray-900">
                     AI 助手
                 </h3>

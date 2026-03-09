@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import {
     LayoutGrid,
     List,
@@ -9,7 +9,11 @@ import {
     Home,
     Info,
     ArrowDownNarrowWideIcon,
-    FunnelIcon
+    FunnelIcon,
+    Download,
+    Tag,
+    RotateCcw,
+    Trash2
 } from "lucide-react";
 import { KnowledgeSpace, FileStatus, SortType, SortDirection, SpaceRole } from "~/api/knowledge";
 import { cn, copyText } from "~/utils";
@@ -41,7 +45,19 @@ interface KnowledgeSpaceHeaderProps {
     sortDirection: SortDirection;
     onSort: (sortBy: SortType) => void;
     onCreateFolder: () => void;
-    onUploadFile: () => void;
+    onUploadFile: (files?: FileList | File[]) => void;
+
+    // Batch Operation Props
+    selectedCount: number;
+    hasFoldersSelected: boolean;
+    hasFailedFiles: boolean;
+    onClearSelection: () => void;
+    onBatchDownload: () => void;
+    onBatchTag: () => void;
+    onBatchRetry: () => void;
+    onBatchDelete: () => void;
+    onToggleAiAssistant?: () => void;
+    isAiAssistantOpen?: boolean;
 }
 
 export function KnowledgeSpaceHeader({
@@ -58,10 +74,54 @@ export function KnowledgeSpaceHeader({
     sortDirection,
     onSort,
     onCreateFolder,
-    onUploadFile
+    onUploadFile,
+    selectedCount,
+    hasFoldersSelected,
+    hasFailedFiles,
+    onClearSelection,
+    onBatchDownload,
+    onBatchTag,
+    onBatchRetry,
+    onBatchDelete,
+    onToggleAiAssistant,
+    isAiAssistantOpen
 }: KnowledgeSpaceHeaderProps) {
     const isAdmin = space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
     const { showToast } = useToastContext();
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const handleUploadClick = () => {
+        fileInputRef.current?.click();
+    };
+
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files.length > 0) {
+            const filesList = Array.from(e.target.files);
+
+            if (filesList.length > 50) {
+                showToast({ message: "单次最多允许上传 50 个文件", status: "error" });
+                if (fileInputRef.current) fileInputRef.current.value = "";
+                return;
+            }
+
+            for (let f of filesList) {
+                if (f.size > 200 * 1024 * 1024) {
+                    showToast({ message: `文件 ${f.name} 超过 200MB 限制`, status: "error" });
+                    if (fileInputRef.current) fileInputRef.current.value = "";
+                    return;
+                }
+                const ext = f.name.split('.').pop()?.toLowerCase();
+                if (!ext || !['pdf', 'txt', 'docx', 'ppt', 'pptx', 'md', 'html', 'xls', 'xlsx', 'csv', 'doc', 'png', 'jpg', 'jpeg', 'bmp'].includes(ext)) {
+                    showToast({ message: `不支持文件 ${f.name} 的格式`, status: "error" });
+                    if (fileInputRef.current) fileInputRef.current.value = "";
+                    return;
+                }
+            }
+
+            onUploadFile(filesList);
+            if (fileInputRef.current) fileInputRef.current.value = "";
+        }
+    };
 
     const handleShare = () => {
         const shareText = `欢迎加入知识空间【${space.name}】`;
@@ -74,6 +134,15 @@ export function KnowledgeSpaceHeader({
 
     return (
         <div className="pt-5 space-y-4">
+            {/* Hidden File Input */}
+            <input
+                type="file"
+                multiple
+                className="hidden"
+                ref={fileInputRef}
+                onChange={handleFileChange}
+                accept=".pdf,.txt,.docx,.ppt,.pptx,.md,.html,.xls,.xlsx,.csv,.doc,.png,.jpg,.jpeg,.bmp"
+            />
             {/* 面包屑 / Title */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 {/* 左侧：标题与信息 / 面包屑 */}
@@ -134,11 +203,9 @@ export function KnowledgeSpaceHeader({
                 <div className="flex items-center gap-3 self-end sm:self-auto shrink-0 mt-2 sm:mt-0">
                     <Button
                         variant="ghost"
-                        className="h-8 px-1.5 gap-1 bg-gradient-to-br from-[#335CFF] to-[#7433FF] bg-clip-text text-transparent hover:text-transparent"
+                        className={`h-8 px-1.5 gap-1 bg-gradient-to-br from-[#335CFF] to-[#7433FF] bg-clip-text text-transparent hover:text-transparent ${isAiAssistantOpen ? 'bg-[#f0f5ff] rounded-md' : ''}`}
                         disabled={!!searchQuery}
-                        onClick={() => {
-                            // TODO: AI Assistant
-                        }}
+                        onClick={onToggleAiAssistant}
                     >
                         <AiChatIcon className="size-3.5" stroke={!!searchQuery ? "#c9cdd4" : "#335CFF"} />
                         AI 助手
@@ -277,10 +344,46 @@ export function KnowledgeSpaceHeader({
                 {/* Actions */}
                 {isAdmin && (
                     <div className="flex items-center gap-2 self-end sm:self-auto shrink-0 mt-2 sm:mt-0">
+                        {selectedCount > 1 && (
+                            <>
+                                {/* <Button variant="ghost" size="sm" className="h-8 font-normal text-[#4e5969]" onClick={onClearSelection}>
+                                    取消选择
+                                </Button> */}
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <Button size="sm" variant="outline" className="h-8 font-normal rounded-md border-[#e5e6eb] text-[#4e5969]" disabled={!!searchQuery}>
+                                            批量操作 <ChevronDown className="size-4 ml-1" />
+                                        </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                        <DropdownMenuItem onClick={onBatchDownload} className="cursor-pointer">
+                                            <Download className="size-4 mr-2" />
+                                            批量下载
+                                        </DropdownMenuItem>
+                                        {!hasFoldersSelected && (
+                                            <DropdownMenuItem onClick={onBatchTag} className="cursor-pointer">
+                                                <Tag className="size-4 mr-2" />
+                                                批量添加标签
+                                            </DropdownMenuItem>
+                                        )}
+                                        {hasFailedFiles && (
+                                            <DropdownMenuItem onClick={onBatchRetry} className="cursor-pointer">
+                                                <RotateCcw className="size-4 mr-2" />
+                                                批量重试
+                                            </DropdownMenuItem>
+                                        )}
+                                        <DropdownMenuItem onClick={onBatchDelete} className="cursor-pointer text-[#f53f3f] focus:text-[#f53f3f]">
+                                            <Trash2 className="size-4 mr-2" />
+                                            批量删除
+                                        </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                            </>
+                        )}
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                                 <Button size="sm" className="h-8 font-normal rounded-md" disabled={!!searchQuery}>
-                                    新增 <ChevronDown className="size-4" />
+                                    新增 <ChevronDown className="size-4 ml-1" />
                                 </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
@@ -288,9 +391,9 @@ export function KnowledgeSpaceHeader({
                                     <FolderPlus className="size-4 mr-2" />
                                     新建文件夹
                                 </DropdownMenuItem>
-                                <DropdownMenuItem onClick={onUploadFile} className="cursor-pointer">
+                                <DropdownMenuItem onClick={handleUploadClick} className="cursor-pointer">
                                     <Upload className="size-4 mr-2" />
-                                    新建文件
+                                    上传文件
                                 </DropdownMenuItem>
                             </DropdownMenuContent>
                         </DropdownMenu>

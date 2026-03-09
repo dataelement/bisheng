@@ -1,4 +1,4 @@
-import React, { useLayoutEffect, useRef, useState } from 'react';
+import React, { useLayoutEffect, useRef, useState, ReactNode } from 'react';
 import {
     Tooltip,
     TooltipContent,
@@ -6,8 +6,8 @@ import {
     TooltipTrigger,
 } from '~/components/ui/Tooltip2';
 
-const TagGroup = ({ tags }) => {
-    const containerRef = useRef(null);
+const TagGroup = ({ tags, actionButton }: { tags: string[], actionButton?: ReactNode }) => {
+    const containerRef = useRef<HTMLDivElement>(null);
     const [visibleCount, setVisibleCount] = useState(1); // 初始默认显示1个
 
     useLayoutEffect(() => {
@@ -16,9 +16,10 @@ const TagGroup = ({ tags }) => {
 
             const containerWidth = containerRef.current.offsetWidth;
             // 获取所有用于测量的临时标签元素
-            const tagElements = containerRef.current.querySelectorAll('.tag-measure');
+            const tagElements = containerRef.current.querySelectorAll('.tag-measure') as NodeListOf<HTMLElement>;
             const moreBadgeWidth = 40; // 预留给 "+N" 的宽度
             const gap = 6; // gap-1.5 (6px)
+            const actionBtnWidth = actionButton ? 28 : 0; // button reserved space
 
             let currentWidth = (tagElements[0]?.offsetWidth || 0) + gap;
             let count = 1;
@@ -26,8 +27,8 @@ const TagGroup = ({ tags }) => {
             // 从第二个标签开始计算
             for (let i = 1; i < tagElements.length; i++) {
                 const itemWidth = tagElements[i].offsetWidth + gap;
-                // 如果当前总宽 + 这一项 + (若后面还有则预留+N宽) > 容器总宽
-                if (currentWidth + itemWidth + (i < tags.length - 1 ? moreBadgeWidth : 0) > containerWidth) {
+                // 如果当前总宽 + 这一项 + (若后面还有则预留+N宽) + 按钮保留宽 > 容器总宽
+                if (currentWidth + itemWidth + (i < tags.length - 1 ? moreBadgeWidth : 0) + actionBtnWidth > containerWidth) {
                     break;
                 }
                 currentWidth += itemWidth;
@@ -38,7 +39,9 @@ const TagGroup = ({ tags }) => {
 
         calculateVisibleTags();
         const observer = new ResizeObserver(calculateVisibleTags);
-        observer.observe(containerRef.current);
+        if (containerRef.current) {
+            observer.observe(containerRef.current);
+        }
         return () => observer.disconnect();
     }, [tags]);
 
@@ -80,6 +83,13 @@ const TagGroup = ({ tags }) => {
                             </div>
                         </TooltipContent>
                     </Tooltip>
+                )}
+
+                {/* 3. Action button */}
+                {actionButton && (
+                    <div className="flex-shrink-0 ml-1 flex items-center h-full">
+                        {actionButton}
+                    </div>
                 )}
 
                 {/* 3. 用于测量的隐藏元素 (不参与 Flex 布局) */}

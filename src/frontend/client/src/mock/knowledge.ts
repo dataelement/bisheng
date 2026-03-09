@@ -264,3 +264,8 @@ export function getMockFiles(params: {
         total: filtered.length
     };
 }
+
+// Mock tags for AI assistant tag filtering
+export function getMockTags(): string[] {
+    return ["政策", "国际", "粮食", "大豆油", "小麦", "财务报表", "技术文档", "产品需求", "会议纪要", "合同协议", "用户手册", "水果"];
+}

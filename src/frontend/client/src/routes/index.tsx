@@ -22,6 +22,7 @@ import Subscription from '~/pages/subscription';
 import AppRoot from './AppRoot';
 import Root from './Root';
 import Knowledge from '~/pages/knowledge';
+import FilePreviewPage from '~/pages/knowledge/FilePreview/FilePreviewPage';
 
 const AuthLayout = () => (
   <AuthContextProvider>
@@ -88,6 +89,7 @@ export const router = createBrowserRouter([
           { path: 'share/:token/:vid?', element: <Share /> },
         ],
       },
+      { path: 'knowledge/file/:fileId', element: <FilePreviewPage /> },
     ],
   },
   { path: '/html', element: <WebView /> },

@@ -1,13 +1,31 @@
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { FileStatus, FileType, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceRole, VisibilityType } from "~/api/knowledge";
+import { NotificationSeverity } from "~/common";
+import { KnowledgeSpaceMemberDialog } from "~/components/KnowledgeSpaceMemberDialog";
+import { getMockFiles, getMockKnowledgeSpaces, getMockTags } from "~/mock/knowledge";
+import { useToastContext } from "~/Providers";
+import ChannelSquare from "../ChannelSquare";
+import { CreateKnowledgeSpaceDrawer, type CreateKnowledgeSpaceFormData } from "./CreateKnowledgeSpaceDrawer";
 import { KnowledgeSpaceSidebar } from "./sidebar/KnowledgeSpaceSidebar";
 import { KnowledgeSpaceContent } from "./SpaceDetail";
-import { KnowledgeSpace, KnowledgeFile, FileStatus, SortType, SortDirection, SpaceRole, VisibilityType } from "~/api/knowledge";
-import { getMockKnowledgeSpaces, getMockFiles } from "~/mock/knowledge";
-import { useToastContext } from "~/Providers";
-import { NotificationSeverity } from "~/common";
-import { CreateKnowledgeSpaceDrawer, type CreateKnowledgeSpaceFormData } from "./CreateKnowledgeSpaceDrawer";
-import { KnowledgeSpaceMemberDialog } from "~/components/KnowledgeSpaceMemberDialog";
-import ChannelSquare from "../ChannelSquare";
+import { KnowledgeAiPanel } from "./SpaceDetail/AiChat/KnowledgeAiPanel";
+
+function getFileType(name: string): FileType {
+    const ext = name.split('.').pop()?.toLowerCase();
+    switch (ext) {
+        case 'pdf': return FileType.PDF;
+        case 'doc': return FileType.DOC;
+        case 'docx': return FileType.DOCX;
+        case 'xls': return FileType.XLS;
+        case 'xlsx': return FileType.XLSX;
+        case 'ppt': return FileType.PPT;
+        case 'pptx': return FileType.PPTX;
+        case 'jpg': return FileType.JPG;
+        case 'jpeg': return FileType.JPEG;
+        case 'png': return FileType.PNG;
+        default: return FileType.OTHER;
+    }
+}
 
 export default function Knowledge() {
     const MAX_USER_SPACES = 30;
@@ -16,7 +34,8 @@ export default function Knowledge() {
     const [activeSpace, setActiveSpace] = useState<KnowledgeSpace | null>(null);
     const [files, setFiles] = useState<KnowledgeFile[]>([]);
     const [currentPage, setCurrentPage] = useState(1);
-    const [hasMore, setHasMore] = useState(false);
+    const [pageSize, setPageSize] = useState(20);
+    const [total, setTotal] = useState(0);
     const [loading, setLoading] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
     const [statusFilter, setStatusFilter] = useState<FileStatus[]>([]);
@@ -28,6 +47,17 @@ export default function Knowledge() {
     const [showKnowledgeSquare, setShowKnowledgeSquare] = useState(false);
     const [memberDialogOpen, setMemberDialogOpen] = useState(false);
     const [memberDialogSpace, setMemberDialogSpace] = useState<KnowledgeSpace | null>(null);
+    const [isDragging, setIsDragging] = useState(false);
+    const [dragError, setDragError] = useState<string | null>(null);
+    const [uploadingFiles, setUploadingFiles] = useState<KnowledgeFile[]>([]);
+    const [creatingFolder, setCreatingFolder] = useState<KnowledgeFile | null>(null);
+    const [showAiAssistant, setShowAiAssistant] = useState(false);
+    const [aiSplitWidth, setAiSplitWidth] = useState<number>(() => {
+        const saved = localStorage.getItem("knowledge-ai-split-ratio");
+        return saved ? parseInt(saved, 10) : 0; // 0 means "use default on first open"
+    });
+    const [isResizingSplit, setIsResizingSplit] = useState(false);
+    const splitContainerRef = useRef<HTMLDivElement>(null);
     const { showToast } = useToastContext();
 
     // 加载知识空间列表
@@ -41,7 +71,7 @@ export default function Knowledge() {
         // 默认选中第一个空间
         if (!activeSpace && created.length > 0) {
             setActiveSpace(created[0]);
-            setCurrentPath([{ name: created[0].name }]);
+            setCurrentPath([{ id: '1', name: created[0].name + 1 }]);
         }
     };
 
@@ -60,13 +90,8 @@ export default function Knowledge() {
                 pageSize: 20
             });
 
-            if (page === 1) {
-                setFiles(response.data);
-            } else {
-                setFiles(prev => [...prev, ...response.data]);
-            }
-
-            setHasMore(response.total > page * 20);
+            setFiles(response.data);
+            setTotal(response.total);
             setCurrentPage(page);
             setLoading(false);
         }, 300);
@@ -82,7 +107,7 @@ export default function Knowledge() {
         if (activeSpace) {
             setCurrentPage(1);
             setCurrentFolderId(undefined);
-            setCurrentPath([{ name: activeSpace.name }]);
+            setCurrentPath([{ id: '1', name: activeSpace.name }, { id: '2', name: '测试' }]);
             setSearchQuery("");
             setStatusFilter([]);
             loadFiles(1);
@@ -208,9 +233,9 @@ export default function Knowledge() {
         });
     };
 
-    // 加载更多文件
-    const handleLoadMore = () => {
-        loadFiles(currentPage + 1);
+    // 页码切换
+    const handlePageChange = (page: number) => {
+        loadFiles(page);
     };
 
     // 文件夹导航
@@ -220,7 +245,32 @@ export default function Knowledge() {
     };
 
     // 文件操作
-    const handleUploadFile = () => {
+    const handleUploadFile = (files?: FileList | File[]) => {
+        if (files && files.length > 0) {
+            console.log("Uploading files:", files);
+            const newUploading = Array.from(files).map(file => ({
+                id: `upload_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+                name: file.name,
+                type: getFileType(file.name),
+                size: file.size,
+                status: FileStatus.PROCESSING,
+                tags: [],
+                path: (currentPath.map(p => p.name).join('/') + '/' + file.name),
+                parentId: currentFolderId,
+                spaceId: activeSpace?.id || '',
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+            }));
+
+            // Add to uploadingFiles
+            setUploadingFiles(prev => [...newUploading, ...prev]);
+
+            showToast({
+                message: `已开始处理 ${files.length} 个文件`,
+                severity: NotificationSeverity.SUCCESS
+            });
+            return;
+        }
         showToast({
             message: "上传文件功能开发中",
             severity: NotificationSeverity.INFO
@@ -228,10 +278,36 @@ export default function Knowledge() {
     };
 
     const handleCreateFolder = () => {
-        showToast({
-            message: "创建文件夹功能开发中",
-            severity: NotificationSeverity.INFO
-        });
+        if (currentPath.length >= 10) {
+            showToast({
+                message: "已达文件夹层级上限 10 级",
+                severity: NotificationSeverity.WARNING
+            } as any);
+            return;
+        }
+
+        const genRandomStr = () => Math.random().toString(36).substring(2, 8).toUpperCase() + Math.random().toString(36).substring(2, 8).toUpperCase();
+        const randomStr = genRandomStr().substring(0, 12);
+
+        const newFolder: KnowledgeFile = {
+            id: `temp_folder_${Date.now()}`,
+            name: `未命名文件夹_${randomStr}`,
+            type: FileType.FOLDER,
+            tags: [],
+            path: currentPath.map(p => p.name).join('/') + '/' + `未命名文件夹_${randomStr}`,
+            parentId: currentFolderId,
+            spaceId: activeSpace?.id || '',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            status: FileStatus.SUCCESS,
+            isCreating: true
+        } as any;
+
+        setCreatingFolder(newFolder);
+    };
+
+    const handleCancelCreateFolder = () => {
+        setCreatingFolder(null);
     };
 
     const handleDownloadFile = (fileId: string) => {
@@ -241,11 +317,31 @@ export default function Knowledge() {
         });
     };
 
-    const handleRenameFile = (fileId: string) => {
+    const handleRenameFile = (fileId: string, newName: string) => {
+        if (creatingFolder && fileId === creatingFolder.id) {
+            // Confirm creation
+            showToast({
+                message: `文件夹新建成功`,
+                severity: NotificationSeverity.SUCCESS
+            } as any);
+
+            const newFile: KnowledgeFile = {
+                ...creatingFolder,
+                id: `new_folder_${Date.now()}`,
+                name: newName,
+            };
+            delete (newFile as any).isCreating;
+
+            setFiles(prev => [newFile, ...prev]);
+            setCreatingFolder(null);
+            return;
+        }
+
+        setFiles(prev => prev.map(f => f.id === fileId ? { ...f, name: newName } : f));
         showToast({
-            message: "重命名功能开发中",
-            severity: NotificationSeverity.INFO
-        });
+            message: "重命名成功",
+            severity: NotificationSeverity.SUCCESS
+        } as any);
     };
 
     const handleDeleteFile = (fileId: string) => {
@@ -278,10 +374,114 @@ export default function Knowledge() {
     const handleKnowledgeSquare = () => {
         setShowKnowledgeSquare(true);
     };
+    const handleDragStateChange = (dragging: boolean, error?: string | null) => {
+        setIsDragging(dragging);
+        setDragError(error || null);
+    };
+
+    // --- AI Split-pane logic ---
+    const AI_MIN_LEFT = 480;
+    const AI_MIN_RIGHT = 360;
+
+    const handleToggleAiAssistant = useCallback(() => {
+        setShowAiAssistant(prev => {
+            if (!prev && splitContainerRef.current) {
+                const containerWidth = splitContainerRef.current.getBoundingClientRect().width;
+                if (containerWidth < AI_MIN_LEFT + AI_MIN_RIGHT) {
+                    showToast({ message: "窗口宽度不足，无法打开 AI 助手", severity: NotificationSeverity.WARNING } as any);
+                    return false;
+                }
+                // Set default width if not previously saved
+                if (!aiSplitWidth || aiSplitWidth <= 0) {
+                    setAiSplitWidth(Math.floor(containerWidth * 0.6));
+                }
+            }
+            return !prev;
+        });
+    }, [aiSplitWidth, showToast]);
+
+    // ResizeObserver: auto-close AI panel when container is too narrow
+    useEffect(() => {
+        if (!showAiAssistant || !splitContainerRef.current) return;
+        const el = splitContainerRef.current;
+        const ro = new ResizeObserver((entries) => {
+            for (const entry of entries) {
+                const w = entry.contentRect.width;
+                if (w < AI_MIN_LEFT + AI_MIN_RIGHT) {
+                    setShowAiAssistant(false);
+                }
+                // Clamp leftWidth if it exceeds available space
+                if (w - aiSplitWidth < AI_MIN_RIGHT) {
+                    setAiSplitWidth(Math.max(AI_MIN_LEFT, w - AI_MIN_RIGHT));
+                }
+            }
+        });
+        ro.observe(el);
+        return () => ro.disconnect();
+    }, [showAiAssistant, aiSplitWidth]);
+
+    // Splitter drag handlers
+    const startSplitResize = useCallback((e: React.MouseEvent) => {
+        e.preventDefault();
+        setIsResizingSplit(true);
+    }, []);
+
+    const stopSplitResize = useCallback(() => {
+        setIsResizingSplit(false);
+        if (aiSplitWidth > 0) {
+            localStorage.setItem("knowledge-ai-split-ratio", aiSplitWidth.toString());
+        }
+    }, [aiSplitWidth]);
+
+    const resizeSplit = useCallback((e: MouseEvent) => {
+        if (!isResizingSplit || !splitContainerRef.current) return;
+        const rect = splitContainerRef.current.getBoundingClientRect();
+        const newLeft = e.clientX - rect.left;
+        // Clamp
+        if (newLeft >= AI_MIN_LEFT && (rect.width - newLeft) >= AI_MIN_RIGHT) {
+            setAiSplitWidth(newLeft);
+        }
+    }, [isResizingSplit]);
+
+    useEffect(() => {
+        if (isResizingSplit) {
+            window.addEventListener("mousemove", resizeSplit);
+            window.addEventListener("mouseup", stopSplitResize);
+        } else {
+            window.removeEventListener("mousemove", resizeSplit);
+            window.removeEventListener("mouseup", stopSplitResize);
+        }
+        return () => {
+            window.removeEventListener("mousemove", resizeSplit);
+            window.removeEventListener("mouseup", stopSplitResize);
+        };
+    }, [isResizingSplit, resizeSplit, stopSplitResize]);
+
+    // Compute locationKey and context label
+    const locationKey = currentFolderId || activeSpace?.id || "";
+    const contextLabel = currentFolderId ? "文件夹" : "知识空间";
 
     return (
         <div className="relative h-full flex">
-            {showKnowledgeSquare ? (
+            {/* Drag and Drop Overlay */}
+            {isDragging && (
+                <div className={`absolute inset-0.5 z-[100] rounded-[12px] bg-[rgba(255,255,255,0.7)] backdrop-blur-[16px] flex flex-col items-center justify-center pointer-events-none transition-all duration-300 ${dragError ? 'border border-dashed border-red-500' : 'border border-dashed'}`}>
+                    <div className="flex flex-col items-center justify-center p-8 bg-white/50 rounded-2xl">
+                        {dragError ? (
+                            <p className="text-xl font-medium text-red-500 mb-2">{dragError}</p>
+                        ) : (
+                            <p className="text-xl font-medium text-[#161616] mb-2">松手即可上传文件至此处</p>
+                        )}
+                        <div className="text-center text-xs text-gray-400 leading-5">
+                            <p>支持的文件格式为：</p>
+                            <p>pdf(含扫描件)、txt、docx、ppt、pptx、md、html、xls、xlsx、csv、doc、png、jpg、jpeg、bmp</p>
+                            <p>每个文件最大支持200mb</p>
+                            <p>单次最多上传50个</p>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {showKnowledgeSquare && (
                 <ChannelSquare
                     onBack={() => setShowKnowledgeSquare(false)}
                     title="探索知识广场"
@@ -290,27 +490,33 @@ export default function Knowledge() {
                     emptyText="未找到匹配知识空间"
                     joinToastPrefix="已申请加入知识空间："
                 />
-            ) : (
-                <>
-                    <KnowledgeSpaceSidebar
-                        createdSpaces={createdSpaces}
-                        joinedSpaces={joinedSpaces}
-                        activeSpaceId={activeSpace?.id}
-                        onSpaceSelect={handleSpaceSelect}
-                        onCreateSpace={handleCreateSpace}
-                        onUpdateSpace={handleUpdateSpace}
-                        onDeleteSpace={handleDeleteSpace}
-                        onLeaveSpace={handleLeaveSpace}
-                        onPinSpace={handlePinSpace}
-                        onKnowledgeSquare={handleKnowledgeSquare}
-                    />
+            )}
+            <KnowledgeSpaceSidebar
+                createdSpaces={createdSpaces}
+                joinedSpaces={joinedSpaces}
+                activeSpaceId={activeSpace?.id}
+                onSpaceSelect={handleSpaceSelect}
+                onCreateSpace={handleCreateSpace}
+                onUpdateSpace={handleUpdateSpace}
+                onDeleteSpace={handleDeleteSpace}
+                onLeaveSpace={handleLeaveSpace}
+                onPinSpace={handlePinSpace}
+            />
 
-                    {activeSpace ? (
+            {activeSpace && (
+                <div ref={splitContainerRef} className="flex-1 flex h-full overflow-hidden">
+                    {/* Left: file list */}
+                    <div
+                        style={{ width: showAiAssistant ? `${aiSplitWidth}px` : '100%' }}
+                        className="h-full flex-shrink-0 overflow-hidden"
+                    >
                         <KnowledgeSpaceContent
                             space={activeSpace}
                             files={files}
-                            onLoadMore={handleLoadMore}
-                            hasMore={hasMore}
+                            currentPage={currentPage}
+                            pageSize={pageSize}
+                            total={total}
+                            onPageChange={handlePageChange}
                             loading={loading}
                             onSearch={setSearchQuery}
                             onFilterStatus={setStatusFilter}
@@ -324,13 +530,40 @@ export default function Knowledge() {
                             onEditTags={handleEditTags}
                             onRetryFile={handleRetryFile}
                             currentPath={currentPath}
+                            onDragStateChange={handleDragStateChange}
+                            uploadingFiles={uploadingFiles}
+                            creatingFolder={creatingFolder}
+                            onCancelCreateFolder={handleCancelCreateFolder}
+                            onToggleAiAssistant={handleToggleAiAssistant}
+                            isAiAssistantOpen={showAiAssistant}
                         />
-                    ) : (
-                        <div className="flex-1 flex items-center justify-center text-[#86909c]">
-                            请选择一个知识空间
+                    </div>
+
+                    {/* Splitter */}
+                    {showAiAssistant && (
+                        <div
+                            onMouseDown={startSplitResize}
+                            className="group relative w-[1px] cursor-col-resize bg-[#e5e6eb] transition-all hover:w-1 hover:bg-primary active:w-1 active:bg-primary z-20 shrink-0"
+                        >
+                            {/* Expand click area */}
+                            <div className="absolute inset-y-0 -left-1.5 -right-1.5 z-10" />
                         </div>
                     )}
-                </>
+
+                    {/* Right: AI assistant */}
+                    {showAiAssistant && (
+                        <div className="flex-1 h-full min-w-[360px] bg-white border-l border-[#e5e6eb]">
+                            <KnowledgeAiPanel
+                                spaceId={activeSpace.id}
+                                folderId={currentFolderId}
+                                locationKey={locationKey}
+                                contextLabel={contextLabel}
+                                availableTags={getMockTags()}
+                                onClose={() => setShowAiAssistant(false)}
+                            />
+                        </div>
+                    )}
+                </div>
             )}
 
             <CreateKnowledgeSpaceDrawer

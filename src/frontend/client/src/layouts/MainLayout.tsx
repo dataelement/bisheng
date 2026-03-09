@@ -121,9 +121,9 @@ export default function MainLayout() {
   }, [pathname]);
 
   return (
-    <div className="flex bg-[#F9F9F9]">
+    <div className="flex bg-[#F9F9F9] overflow-hidden w-screen">
       <Sidebar />
-      <main className="flex-1 h-screen relative p-2 pl-0">
+      <main className="flex-1 h-screen relative p-2 pl-0 min-w-0">
         <KeepAlive
           name={cacheKey}
           id={cacheKey}

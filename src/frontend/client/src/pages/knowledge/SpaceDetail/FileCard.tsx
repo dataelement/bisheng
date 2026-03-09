@@ -1,5 +1,5 @@
-import { Circle, MoreVertical } from "lucide-react";
-import { useState } from "react";
+import { Circle, MoreVertical, X } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
 import { FileStatus, FileType, KnowledgeFile, SpaceRole } from "~/api/knowledge";
 import { Button, Checkbox } from "~/components";
 import { Card, CardContent } from "~/components/ui/Card";
@@ -12,6 +12,7 @@ import {
 import { cn } from "~/utils";
 import FileIconRenderer from "./FileIcon";
 import TagGroup from "./TagGroup";
+import { useToastContext } from "~/Providers";
 
 interface FileCardProps {
     file: KnowledgeFile;
@@ -19,10 +20,12 @@ interface FileCardProps {
     isSelected: boolean;
     onSelect: (selected: boolean) => void;
     onDownload: () => void;
-    onRename: () => void;
+    onRename: (newName: string) => void;
     onDelete: () => void;
     onEditTags: () => void;
     onRetry?: () => void;
+    onValidateName?: (newName: string) => string | null;
+    onCancelCreate?: () => void;
 }
 
 export function FileCard({
@@ -34,11 +37,78 @@ export function FileCard({
     onRename,
     onDelete,
     onEditTags,
-    onRetry
+    onRetry,
+    onValidateName,
+    onCancelCreate
 }: FileCardProps) {
+    const isCreating = !!(file as any).isCreating;
     const [hovered, setHovered] = useState(false);
+    const [isRenaming, setIsRenaming] = useState(isCreating);
+    const [renameValue, setRenameValue] = useState(file.name);
+    const inputRef = useRef<HTMLInputElement>(null);
+    const { showToast } = useToastContext();
+
     const isAdmin = userRole === SpaceRole.CREATOR || userRole === SpaceRole.ADMIN;
     const isFolder = file.type === FileType.FOLDER;
+
+    useEffect(() => {
+        if (isRenaming && inputRef.current) {
+            inputRef.current.focus();
+            // Select text before extension if possible
+            const dotIndex = file.name.lastIndexOf('.');
+            if (dotIndex > 0 && !isFolder) {
+                inputRef.current.setSelectionRange(0, dotIndex);
+            } else {
+                inputRef.current.select();
+            }
+        }
+    }, [isRenaming, isFolder, file.name]);
+
+    const handleRenameSubmit = () => {
+        const trimmed = renameValue.trim();
+
+        if (isCreating && !trimmed) {
+            showToast({ message: "文件夹名称不能为空", status: "error", severity: "error" } as any);
+            inputRef.current?.focus();
+            return;
+        }
+
+        if (!isCreating && !trimmed) {
+            setRenameValue(file.name);
+            setIsRenaming(false);
+            return;
+        }
+
+        if (trimmed === file.name && !isCreating) {
+            setIsRenaming(false);
+            return;
+        }
+
+        if (onValidateName) {
+            const err = onValidateName(trimmed);
+            if (err) {
+                showToast({ message: err, status: "error", severity: "error" } as any);
+                inputRef.current?.focus();
+                return;
+            }
+        }
+
+        onRename(trimmed);
+        setIsRenaming(false);
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter') {
+            handleRenameSubmit();
+        } else if (e.key === 'Escape') {
+            if (isCreating) {
+                onCancelCreate?.();
+            } else {
+                setRenameValue(file.name);
+                setIsRenaming(false);
+            }
+        }
+    };
 
     const formatTime = (dateString: string) => {
         const date = new Date(dateString);
@@ -59,6 +129,23 @@ export function FileCard({
     };
 
     const getStatusText = () => {
+        if (isRenaming) {
+            return (
+                <div className="flex-1 min-w-0 pr-1">
+                    <input
+                        ref={inputRef}
+                        type="text"
+                        value={renameValue}
+                        onChange={(e) => setRenameValue(e.target.value)}
+                        onBlur={handleRenameSubmit}
+                        onKeyDown={handleKeyDown}
+                        onClick={(e) => e.stopPropagation()}
+                        className="w-full h-6 px-1.5 text-sm border border-[#165dff] rounded outline-none shadow-[0_0_0_2px_rgba(22,93,255,0.2)] bg-white font-normal"
+                    />
+                </div>
+            );
+        }
+
         if (!isAdmin || isFolder) {
             return <span className="truncate">{file.name}</span>;
         }
@@ -87,6 +174,12 @@ export function FileCard({
         }
     };
 
+    const handleCardClick = () => {
+        if (isFolder || isCreating || isRenaming) return;
+        const url = `${__APP_ENV__.BASE_URL}/knowledge/file/${file.id}?name=${encodeURIComponent(file.name)}&type=${encodeURIComponent(file.type)}`;
+        window.open(url, '_blank');
+    };
+
     return (
         <Card
             className={cn(
@@ -96,6 +189,7 @@ export function FileCard({
             )}
             onMouseEnter={() => setHovered(true)}
             onMouseLeave={() => setHovered(false)}
+            onClick={handleCardClick}
         >
             <CardContent className="p-0 flex flex-col">
                 {/* 缩略图或图标区域 */}
@@ -104,8 +198,8 @@ export function FileCard({
 
                     {/* Hover 时显示的操作 */}
                     {(hovered || isSelected) && (
-                        <div className="absolute top-2 left-2">
-                            <Checkbox className={isSelected ? "border-primary" : "border-gray-400"} checked={isSelected} onCheckedChange={(checked) => onSelect(checked)} onClick={(e) => e.stopPropagation()} />
+                        <div className="absolute top-2 left-2 z-10">
+                            <Checkbox className={isSelected ? "border-primary" : "border-gray-400"} checked={isSelected} onCheckedChange={(checked) => onSelect(!!checked)} onClick={(e) => e.stopPropagation()} />
                         </div>
                     )}
 
@@ -135,7 +229,10 @@ export function FileCard({
                                 {isAdmin && (
                                     <>
                                         <DropdownMenuItem onClick={onEditTags}>编辑标签</DropdownMenuItem>
-                                        <DropdownMenuItem onClick={onRename}>重命名</DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => {
+                                            setRenameValue(file.name);
+                                            setIsRenaming(true);
+                                        }}>重命名</DropdownMenuItem>
                                         <DropdownMenuItem onClick={onDelete} className="text-[#f53f3f] focus:text-[#f53f3f]">
                                             删除
                                         </DropdownMenuItem>

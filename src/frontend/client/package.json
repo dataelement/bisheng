@@ -113,6 +113,7 @@
     "vite-plugin-compression2": "^2.3.0",
     "vite-plugin-html": "^3.2.2",
     "vite-plugin-static-copy": "^3.1.1",
+    "xlsx-populate": "^1.21.0",
     "zod": "^3.22.4"
   },
   "devDependencies": {

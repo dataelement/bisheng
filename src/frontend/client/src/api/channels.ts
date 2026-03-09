@@ -2,9 +2,9 @@ import request from "./request";
 
 // 排序方式
 export enum SortType {
-    RECENT_UPDATE = "recent_update",    // 最近更新
-    RECENT_ADDED = "recent_added",      // 最近添加
-    NAME = "name"                        // 频道名称
+    RECENT_UPDATE = "latest_update",    // 最近更新
+    RECENT_ADDED = "latest_added",      // 最近添加
+    NAME = "channel_name"               // 频道名称
 }
 
 // 频道权限
@@ -56,6 +56,19 @@ export interface Article {
     createdAt: string;         // 创建时间（加入频道的时间）
 }
 
+export interface ChannelItemResponse {
+    id: string;
+    name: string;
+    source_list: string[];
+    visibility: "public" | "private" | "approval";
+    is_released: boolean;
+    latest_article_update_time?: string;
+    create_time?: string;
+    user_role: "creator" | "admin" | "member";
+    is_pinned: boolean;
+    subscribed_at?: string;
+}
+
 /**
  * 获取频道列表
  */
@@ -63,7 +76,32 @@ export async function getChannelsApi(params: {
     type: "created" | "subscribed";  // 我创建的 / 我关注的
     sortBy?: SortType;
 }): Promise<Channel[]> {
-    return await request.get(`/api/v1/channels`, { params });
+    const query_type = params.type === "subscribed" ? "followed" : params.type;
+    const res: any = await request.get(`/api/v1/channel/manager/my_channels`, {
+        params: {
+            query_type,
+            sort_by: params.sortBy || SortType.RECENT_UPDATE
+        }
+    });
+    // map ChannelItemResponse to Channel for now to minimize refactoring, 
+    // or modify types later. Since we are just checking interface returns, returning raw or mapped data.
+    // Assuming backend returns an unwrapped array or wrapped in data. We will map to matched fields.
+    const data = res.data || res;
+    return (Array.isArray(data) ? data : []).map((item: any) => ({
+        id: item.id,
+        name: item.name,
+        creator: "",
+        creatorId: "",
+        subscriberCount: 0,
+        articleCount: 0,
+        unreadCount: 0,
+        role: item.user_role as ChannelRole,
+        isPinned: item.is_pinned,
+        createdAt: item.create_time,
+        updatedAt: item.latest_article_update_time || item.update_time, // fallback
+        subChannels: [],
+        ...item
+    }));
 }
 
 /**
