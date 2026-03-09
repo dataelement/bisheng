@@ -619,6 +619,7 @@ export function CreateChannelDrawer({
                 onAddSource={(source) => {
                     setSources((prev) => [...prev, source]);
                     setCrawlDialogOpen(false);
+                    setShowAddSourcePanel(false);
                 }}
             />
 

@@ -28,6 +28,7 @@ export function CrawlPreviewDialog({
     onAddSource
 }: CrawlPreviewDialogProps) {
     const [status, setStatus] = useState<CrawlStatus>("loading");
+    const [adding, setAdding] = useState(false);
     const [previewData, setPreviewData] = useState<{ name: string; articles?: { title: string; url: string }[] } | null>(null);
     const localize = useLocalize();
 
@@ -38,7 +39,8 @@ export function CrawlPreviewDialog({
         (async () => {
             try {
                 const res = await crawlTempSourceApi({ url });
-                const raw: any = (res as any)?.data ?? res ?? {};
+                const root: any = res as any;
+                const raw: any = root.data ?? root ?? {};
 
                 // 是否判断为单篇文章/非列表页，由后端字段或回退到 URL 规则
                 const lowerUrl = url.toLowerCase();
@@ -62,9 +64,10 @@ export function CrawlPreviewDialog({
                 }
 
                 const articles: { title: string; url: string }[] =
-                    raw.articles ??
-                    raw.items ??
-                    [];
+                    (raw.article_links as any[] | undefined)?.map((item) => ({
+                        title: String(item.title ?? ""),
+                        url: String(item.url ?? url)
+                    })) ?? [];
 
                 setPreviewData({
                     name: name || url,
@@ -80,6 +83,7 @@ export function CrawlPreviewDialog({
     const handleAddSource = () => {
         (async () => {
             try {
+                setAdding(true);
                 let created: InformationSource | null = null;
                 try {
                     const res = await addWebsiteSourceApi({ url });
@@ -106,6 +110,7 @@ export function CrawlPreviewDialog({
                     onAddSource(created);
                 }
             } finally {
+                setAdding(false);
                 onOpenChange(false);
             }
         })();
@@ -231,9 +236,10 @@ export function CrawlPreviewDialog({
                         </Button>
                         <Button
                             onClick={handleAddSource}
-                            disabled={status !== "success"}
-                            className="bg-[#165DFF] hover:bg-[#4080FF] text-white disabled:opacity-50"
+                            disabled={status !== "success" || adding}
+                            className="bg-[#165DFF] hover:bg-[#4080FF] text-white disabled:opacity-50 flex items-center gap-2"
                         >
+                            {adding && <Loader2 className="size-4 animate-spin" />}
                             {localize("add_source")}
                         </Button>
                     </div>
