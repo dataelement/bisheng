@@ -34,6 +34,7 @@ class FlowType(Enum):
     WORKFLOW = 10
     WORKSTATION = 15
     LINSIGHT = 20  # Inspiration Mode
+    CHANNEL_ARTICLE = 25  # Channel Article AI Assistant
 
 
 class AppEnum(Enum):

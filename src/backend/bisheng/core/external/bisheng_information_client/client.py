@@ -1,6 +1,7 @@
 from enum import Enum
 from typing import Optional
 
+from bisheng.common.errcode.channel import BishengInformationUnAuthorizedError, BishengInformationServiceError
 from bisheng.core.external.bisheng_information_client.response_schema import InformationSourceResponse, \
     CrawlWebsiteResponse
 from bisheng.core.external.http_client.client import AsyncHttpClient
@@ -88,7 +89,6 @@ class BishengInformationClient(object):
 
         return [InformationSourceResponse.model_validate(item) for item in information_sources_data]
 
-
     async def get_information_source_by_ids(self, source_ids: list[str]) -> list[InformationSourceResponse]:
         """Get information sources by a list of source IDs."""
         endpoint = f"{self.base_url}/information/sources_by_ids"
@@ -103,8 +103,8 @@ class BishengInformationClient(object):
         information_sources_data = response.body.get("data", [])
         return [InformationSourceResponse.model_validate(item) for item in information_sources_data]
 
-    async def list_information_sources(self, business_type: BusinessType, page: int = 1, page_size: int = 20) -> list[
-        InformationSourceResponse]:
+    async def list_information_sources(self, business_type: BusinessType, page: int = 1, page_size: int = 20) -> tuple[
+        list[InformationSourceResponse], int]:
         """List all information sources."""
         endpoint = f"{self.base_url}/information/list"
         headers = {"X-API-Key": self.api_key}
@@ -118,11 +118,20 @@ class BishengInformationClient(object):
         response = await self.http_client.get(endpoint, headers=headers, params=params)
 
         if response.status_code != 200:
-            raise InformationSourceListError(
-                f"Failed to list information sources: {response.status_code} - {response.error}")
+            raise BishengInformationServiceError()
+
+        code = response.body.get("code", -1)
+        if code == 401:
+            raise BishengInformationUnAuthorizedError()
+        elif code != 200:
+            raise BishengInformationServiceError(
+                msg=f"Failed to list information sources: {response.status_code} - {response.error}")
 
         information_sources_data = response.body.get("data", [])
-        return [InformationSourceResponse.model_validate(item) for item in information_sources_data]
+        total = response.body.get("totalCount", 0)
+        res = [InformationSourceResponse.model_validate(item) for item in information_sources_data]
+
+        return res, total
 
     async def subscribe_information_source(self, source_ids: list[str]) -> None:
         """Subscribe to an information source by source_id."""

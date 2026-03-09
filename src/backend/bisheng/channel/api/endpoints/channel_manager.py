@@ -47,13 +47,14 @@ async def list_channel_information_sources(
         login_user: UserPayload = Depends(UserPayload.get_login_user)
 ):
     """Endpoint to list information sources of a channel."""
-    try:
-        client = await get_bisheng_information_client()
-        sources = await client.list_information_sources(business_type=business_type, page=page, page_size=page_size)
-        return resp_200(data=[source.model_dump() for source in sources])
-    except Exception as e:
-        logger.error(f"Failed to list information sources: {e}")
-        return resp_500(message="Failed to list information sources")
+
+    client = await get_bisheng_information_client()
+    sources, total = await client.list_information_sources(business_type=business_type, page=page,
+                                                           page_size=page_size)
+    return resp_200(data={
+        "sources": [s.model_dump() for s in sources],
+        "total": total
+    })
 
 
 @router.post("/add_website_source")
@@ -279,4 +280,3 @@ async def search_channel_articles(
     except Exception as e:
         logger.error(f"Failed to search channel articles: {e}")
         return resp_500(message="Failed to search channel articles")
-
