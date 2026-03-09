@@ -116,13 +116,9 @@ async def get_my_channels(
         channel_service: 'ChannelService' = Depends(get_channel_service)
 ):
     """Endpoint to get channels related to the logged-in user, either created or followed, with sorting options."""
-    try:
-        query_data = MyChannelQueryRequest(query_type=query_type, sort_by=sort_by)
-        result = await channel_service.get_my_channels(query_data, login_user)
-        return resp_200(data=[item.model_dump() for item in result])
-    except Exception as e:
-        logger.error(f"Failed to get my channels: {e}")
-        return resp_500(message="Failed to get my channels")
+    query_data = MyChannelQueryRequest(query_type=query_type, sort_by=sort_by)
+    result = await channel_service.get_my_channels(query_data, login_user)
+    return resp_200(data=[item.model_dump() for item in result])
 
 
 @router.get("/square")
