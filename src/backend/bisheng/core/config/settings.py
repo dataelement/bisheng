@@ -224,6 +224,7 @@ class IntelligenceCenterConf(BaseModel):
     """ Intelligence Center Configure """
     base_url: str = Field(default='', description='Intelligence Center Service Address')
     api_key: str = Field(default='', description='Intelligence Center Service API Key')
+    kwargs: Dict = Field(default_factory=dict, description='Additional Arguments')
 
 
 class Settings(BaseModel):
@@ -364,6 +365,3 @@ class Settings(BaseModel):
         if not self.telemetry_elasticsearch.elasticsearch_url:
             return self.vector_stores.elasticsearch
         return self.telemetry_elasticsearch
-
-    def get_intelligence_center_conf(self) -> IntelligenceCenterConf:
-        return self.intelligence_center_conf

@@ -1,6 +1,8 @@
 from enum import Enum
 from typing import Optional
 
+from aiohttp import ClientTimeout
+
 from bisheng.common.errcode.channel import BishengInformationUnAuthorizedError, BishengInformationServiceError
 from bisheng.core.external.bisheng_information_client.response_schema import InformationSourceResponse, \
     CrawlWebsiteResponse
@@ -30,17 +32,22 @@ class InformationSourceSubscribeError(Exception):
 
 class BishengInformationClient(object):
 
-    def __init__(self, http_client: AsyncHttpClient, base_url: str, api_key: str):
+    def __init__(self, http_client: AsyncHttpClient, base_url: str, api_key: str, **kwargs):
         self.http_client = http_client
         self.base_url = base_url
         self.api_key = api_key
+
+        self.timeout = None
+
+        if kwargs.get("timeout"):
+            self.timeout = ClientTimeout(total=kwargs["timeout"])
 
     async def add_website_information_source(self, url: str) -> InformationSourceResponse:
         """Add a new information source by URL."""
         endpoint = f"{self.base_url}/information/add_website"
         headers = {"X-API-Key": self.api_key}
         data = {"url": url}
-        response = await self.http_client.post(endpoint, body=data, headers=headers)
+        response = await self.http_client.post(endpoint, body=data, headers=headers, timeout=self.timeout)
 
         if response.status_code != 200:
             raise BishengInformationServiceError()
@@ -62,7 +69,7 @@ class BishengInformationClient(object):
         endpoint = f"{self.base_url}/information/add_wechat"
         headers = {"X-API-Key": self.api_key}
         data = {"url": url}
-        response = await self.http_client.post(endpoint, body=data, headers=headers)
+        response = await self.http_client.post(endpoint, body=data, headers=headers, timeout=self.timeout)
 
         if response.status_code != 200:
             raise BishengInformationServiceError()
@@ -93,7 +100,7 @@ class BishengInformationClient(object):
             "page_size": page_size
         }
 
-        response = await self.http_client.get(endpoint, headers=headers, params=params)
+        response = await self.http_client.get(endpoint, headers=headers, params=params, timeout=self.timeout)
 
         if response.status_code != 200:
             raise InformationSourceListError(
@@ -108,7 +115,7 @@ class BishengInformationClient(object):
         endpoint = f"{self.base_url}/information/source_by_ids"
         headers = {"X-API-Key": self.api_key}
         data = {"information_ids": source_ids}
-        response = await self.http_client.post(endpoint, body=data, headers=headers)
+        response = await self.http_client.post(endpoint, body=data, headers=headers, timeout=self.timeout)
 
         if response.status_code != 200:
             raise BishengInformationServiceError()
@@ -136,7 +143,7 @@ class BishengInformationClient(object):
             "page_size": page_size
         }
 
-        response = await self.http_client.get(endpoint, headers=headers, params=params)
+        response = await self.http_client.get(endpoint, headers=headers, params=params, timeout=self.timeout)
 
         if response.status_code != 200:
             raise BishengInformationServiceError()
@@ -159,7 +166,7 @@ class BishengInformationClient(object):
         endpoint = f"{self.base_url}/information/subscribe"
         headers = {"X-API-Key": self.api_key}
         data = {"information_ids": source_ids}
-        response = await self.http_client.post(endpoint, body=data, headers=headers)
+        response = await self.http_client.post(endpoint, body=data, headers=headers, timeout=self.timeout)
 
         if response.status_code != 200:
             raise InformationSourceSubscribeError(
@@ -177,7 +184,7 @@ class BishengInformationClient(object):
         endpoint = f"{self.base_url}/information/unsubscribe"
         headers = {"X-API-Key": self.api_key}
         data = {"information_ids": source_ids}
-        response = await self.http_client.post(endpoint, body=data, headers=headers)
+        response = await self.http_client.post(endpoint, body=data, headers=headers, timeout=self.timeout)
 
         if response.status_code != 200:
             raise InformationSourceSubscribeError(
@@ -188,7 +195,7 @@ class BishengInformationClient(object):
         endpoint = f"{self.base_url}/information/crawl"
         headers = {"X-API-Key": self.api_key}
         data = {"url": url}
-        response = await self.http_client.post(endpoint, body=data, headers=headers)
+        response = await self.http_client.post(endpoint, body=data, headers=headers, timeout=self.timeout)
 
         if response.status_code != 200:
             raise Exception(

@@ -8,7 +8,7 @@ from bisheng.common.models.config import ConfigKeyEnum, Config
 from bisheng.common.repositories.implementations.config_repository_impl import ConfigRepositoryImpl
 from bisheng.core.cache.redis_manager import get_redis_client_sync
 from bisheng.core.config.settings import Settings, PasswordConf, SystemLoginMethod, \
-    WorkflowConf, LinsightConf, KnowledgeConf
+    WorkflowConf, LinsightConf, KnowledgeConf, IntelligenceCenterConf
 from bisheng.core.database import get_sync_db_session, get_async_db_session
 
 config_file = os.getenv('config', 'config.yaml')
@@ -233,6 +233,15 @@ class ConfigService(Settings):
         for k, v in linsight_conf.items():
             setattr(conf, k, v)
         return conf
+
+    async def aget_intelligence_center_conf(self) -> IntelligenceCenterConf:
+        # Get Intelligence Center-related configuration items
+        all_config = await self.aget_all_config()
+        intelligence_center_conf = all_config.get('information_conf', {})
+        if intelligence_center_conf:
+            return IntelligenceCenterConf.model_validate(intelligence_center_conf)
+
+        return self.intelligence_center_conf
 
     def get_from_db(self, key: str):
         # Get all of them firstkey

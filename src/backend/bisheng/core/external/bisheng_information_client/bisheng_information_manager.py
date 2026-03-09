@@ -45,7 +45,8 @@ async def get_bisheng_information_client() -> BishengInformationClient:
         from bisheng.common.services.config_service import settings
         from bisheng.core.external.http_client.http_client_manager import get_http_client
         http_client = await get_http_client()
+        config = await settings.aget_intelligence_center_conf()
         app_context.register_context(
-            BishengInformationManager(http_client, settings.get_intelligence_center_conf())
+            BishengInformationManager(http_client, config)
         )
         return await app_context.async_get_instance(BishengInformationManager.name)
