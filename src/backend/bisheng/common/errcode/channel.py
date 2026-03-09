@@ -25,6 +25,11 @@ class ChannelAlreadySubscribedError(BaseErrorCode):
     Code: int = 13012
     Msg: str = '已订阅该频道或已提交申请'
 
+# 没有权限操作频道
+class ChannelPermissionDeniedError(BaseErrorCode):
+    Code: int = 13013
+    Msg: str = '没有权限操作该频道'
+
 
 # Channel module error codes, module code: 130
 # Article not found

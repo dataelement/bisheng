@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional
+from typing import List, Optional, Literal
 
 from pydantic import BaseModel, Field
 
@@ -89,7 +89,7 @@ class UpdateMemberRoleRequest(BaseModel):
     """Update Channel Member Role Request"""
     channel_id: str = Field(..., description='Channel ID')
     user_id: int = Field(..., description='Target User ID')
-    role: str = Field(..., description='New Role to Set: admin / member')
+    role: Literal['admin', 'member'] = Field(..., description='New Role to Assign: admin / member')
 
 
 class RemoveMemberRequest(BaseModel):

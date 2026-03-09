@@ -165,7 +165,6 @@ async def set_channel_pin(
     return resp_200(data=True)
 
 
-
 @router.get("/members")
 async def list_channel_members(
         channel_id: str = Query(..., description='频道 ID'),
@@ -200,15 +199,9 @@ async def update_member_role(
         channel_service: 'ChannelService' = Depends(get_channel_service)
 ):
     """设置成员角色（管理员/普通成员）。"""
-    try:
-        await channel_service.update_member_role(req_param, login_user)
-        return resp_200(data=True)
-    except ValueError as e:
-        logger.warning(f"Update member role failed: {e}")
-        return resp_500(message=str(e))
-    except Exception as e:
-        logger.error(f"Failed to update member role: {e}")
-        return resp_500(message="Failed to update member role")
+
+    await channel_service.update_member_role(req_param, login_user)
+    return resp_200(data=True)
 
 
 @router.post("/remove_member")
@@ -218,15 +211,9 @@ async def remove_member(
         channel_service: 'ChannelService' = Depends(get_channel_service)
 ):
     """移除频道成员。"""
-    try:
-        await channel_service.remove_member(req_param, login_user)
-        return resp_200(data=True)
-    except ValueError as e:
-        logger.warning(f"Remove member failed: {e}")
-        return resp_500(message=str(e))
-    except Exception as e:
-        logger.error(f"Failed to remove member: {e}")
-        return resp_500(message="Failed to remove member")
+
+    await channel_service.remove_member(req_param, login_user)
+    return resp_200(data=True)
 
 
 @router.get("/articles")

@@ -23,7 +23,8 @@ from bisheng.channel.domain.schemas.channel_manager_schema import (
 from bisheng.channel.domain.schemas.article_schema import ArticleSearchPageResponse
 from bisheng.channel.domain.services.article_es_service import ArticleEsService
 from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.common.errcode.channel import ChannelNotFoundError, ChannelAccessDeniedError, ChannelAlreadySubscribedError
+from bisheng.common.errcode.channel import ChannelNotFoundError, ChannelAccessDeniedError, \
+    ChannelAlreadySubscribedError, ChannelPermissionDeniedError
 from bisheng.common.models.space_channel_member import BusinessTypeEnum, UserRoleEnum
 from bisheng.common.repositories.interfaces.space_channel_member_repository import SpaceChannelMemberRepository
 from bisheng.core.external.bisheng_information_client.bisheng_information_manager import get_bisheng_information_client
@@ -283,10 +284,10 @@ class ChannelService:
             user_id=login_user.user_id
         )
         if not current_membership or not current_membership.status:
-            raise ValueError("You are not a member of this channel")
+            raise ChannelNotFoundError()
 
         if current_membership.user_role not in (UserRoleEnum.CREATOR, UserRoleEnum.ADMIN):
-            raise ValueError("You do not have permission to modify member roles")
+            raise ChannelPermissionDeniedError()
 
         # 2. Query target member
         target_membership = await self.space_channel_member_repository.find_membership(
