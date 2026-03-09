@@ -1,4 +1,4 @@
-from typing import Optional, List
+from typing import Optional, List, Dict
 
 from pydantic import BaseModel
 
@@ -17,7 +17,7 @@ class InformationSourceResponse(BaseModel):
 
 class CrawlWebsiteResponse(BaseModel):
     """Temporary crawling of website returned data"""
-    name: str
-    url: str
-    icon: Optional[str] = None
-    article_links: List[str] = []
+    name: str  # 网站名称
+    url: str  # 网址
+    icon: Optional[str] = None  # 网站icon
+    article_links: List[Dict] = []  # 文章链接列表

@@ -158,28 +158,23 @@ class ChannelService:
         """
         Sort channels with pinned channels always on top, then sort by the selected criteria:
         """
-        from datetime import datetime
-
-        # Define a minimum datetime for comparison when the timestamp is None
-        min_dt = datetime.min
-
         if sort_by == SortByEnum.LATEST_UPDATE:
             def sort_key(item: ChannelItemResponse):
                 # Pinned channels get pin_order=0, others get pin_order=1, so pinned channels come first.
                 pin_order = 0 if item.is_pinned else 1
-                update_time = item.latest_article_update_time or min_dt
-                return pin_order, -update_time.timestamp()
+                timestamp = item.latest_article_update_time.timestamp() if item.latest_article_update_time else 0.0
+                return pin_order, -timestamp
 
         elif sort_by == SortByEnum.LATEST_ADDED:
             def sort_key(item: ChannelItemResponse):
                 pin_order = 0 if item.is_pinned else 1
-                added_time = item.subscribed_at or min_dt
-                return pin_order, -added_time.timestamp()
+                timestamp = item.subscribed_at.timestamp() if item.subscribed_at else 0.0
+                return pin_order, -timestamp
 
         else:  # CHANNEL_NAME
             def sort_key(item: ChannelItemResponse):
                 pin_order = 0 if item.is_pinned else 1
-                return (pin_order, item.name)
+                return (pin_order, item.name or "")
 
         return sorted(items, key=sort_key)
 

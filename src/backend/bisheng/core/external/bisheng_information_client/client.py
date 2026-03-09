@@ -40,11 +40,18 @@ class BishengInformationClient(object):
         endpoint = f"{self.base_url}/information/add_website"
         headers = {"X-API-Key": self.api_key}
         data = {"url": url}
-        response = await self.http_client.post(endpoint, json=data, headers=headers)
+        response = await self.http_client.post(endpoint, body=data, headers=headers)
 
         if response.status_code != 200:
-            raise InformationSourceAddError(
-                f"Failed to add information source: {response.status_code} - {response.error}")
+            raise BishengInformationServiceError()
+
+        code = response.body.get("code", -1)
+        if code == 401:
+            raise BishengInformationUnAuthorizedError()
+
+        elif code != 200:
+            raise BishengInformationServiceError(
+                msg=f"Failed to list information sources: {response.status_code} - {response.error}")
 
         information_source_data = InformationSourceResponse.model_validate(response.body.get("data"))
 
@@ -55,11 +62,18 @@ class BishengInformationClient(object):
         endpoint = f"{self.base_url}/information/add_wechat"
         headers = {"X-API-Key": self.api_key}
         data = {"url": url}
-        response = await self.http_client.post(endpoint, json=data, headers=headers)
+        response = await self.http_client.post(endpoint, body=data, headers=headers)
 
         if response.status_code != 200:
-            raise InformationSourceAddError(
-                f"Failed to add WeChat information source: {response.status_code} - {response.error}")
+            raise BishengInformationServiceError()
+
+        code = response.body.get("code", -1)
+        if code == 401:
+            raise BishengInformationUnAuthorizedError()
+
+        elif code != 200:
+            raise BishengInformationServiceError(
+                msg=f"Failed to list information sources: {response.status_code} - {response.error}")
 
         information_source_data = InformationSourceResponse.model_validate(response.body.get("data"))
 
@@ -91,14 +105,21 @@ class BishengInformationClient(object):
 
     async def get_information_source_by_ids(self, source_ids: list[str]) -> list[InformationSourceResponse]:
         """Get information sources by a list of source IDs."""
-        endpoint = f"{self.base_url}/information/sources_by_ids"
+        endpoint = f"{self.base_url}/information/source_by_ids"
         headers = {"X-API-Key": self.api_key}
         data = {"information_ids": source_ids}
-        response = await self.http_client.post(endpoint, json=data, headers=headers)
+        response = await self.http_client.post(endpoint, body=data, headers=headers)
 
         if response.status_code != 200:
-            raise InformationSourceListError(
-                f"Failed to get information sources by IDs: {response.status_code} - {response.error}")
+            raise BishengInformationServiceError()
+
+        code = response.body.get("code", -1)
+        if code == 401:
+            raise BishengInformationUnAuthorizedError()
+
+        elif code != 200:
+            raise BishengInformationServiceError(
+                msg=f"Failed to list information sources: {response.status_code} - {response.error}")
 
         information_sources_data = response.body.get("data", [])
         return [InformationSourceResponse.model_validate(item) for item in information_sources_data]
@@ -138,9 +159,16 @@ class BishengInformationClient(object):
         endpoint = f"{self.base_url}/information/subscribe"
         headers = {"X-API-Key": self.api_key}
         data = {"information_ids": source_ids}
-        response = await self.http_client.post(endpoint, json=data, headers=headers)
+        response = await self.http_client.post(endpoint, body=data, headers=headers)
 
         if response.status_code != 200:
+            raise InformationSourceSubscribeError(
+                f"Failed to subscribe to information source: {response.status_code} - {response.error}")
+
+        code = response.body.get("code", -1)
+        if code == 401:
+            raise BishengInformationUnAuthorizedError()
+        elif code != 200:
             raise InformationSourceSubscribeError(
                 f"Failed to subscribe to information source: {response.status_code} - {response.error}")
 
@@ -149,7 +177,7 @@ class BishengInformationClient(object):
         endpoint = f"{self.base_url}/information/unsubscribe"
         headers = {"X-API-Key": self.api_key}
         data = {"information_ids": source_ids}
-        response = await self.http_client.post(endpoint, json=data, headers=headers)
+        response = await self.http_client.post(endpoint, body=data, headers=headers)
 
         if response.status_code != 200:
             raise InformationSourceSubscribeError(
@@ -160,7 +188,7 @@ class BishengInformationClient(object):
         endpoint = f"{self.base_url}/information/crawl"
         headers = {"X-API-Key": self.api_key}
         data = {"url": url}
-        response = await self.http_client.post(endpoint, json=data, headers=headers)
+        response = await self.http_client.post(endpoint, body=data, headers=headers)
 
         if response.status_code != 200:
             raise Exception(
