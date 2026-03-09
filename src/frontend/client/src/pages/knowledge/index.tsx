@@ -1,12 +1,16 @@
 import { useState, useEffect } from "react";
 import { KnowledgeSpaceSidebar } from "./sidebar/KnowledgeSpaceSidebar";
 import { KnowledgeSpaceContent } from "./SpaceDetail";
-import { KnowledgeSpace, KnowledgeFile, FileStatus, SortType, SortDirection } from "~/api/knowledge";
+import { KnowledgeSpace, KnowledgeFile, FileStatus, SortType, SortDirection, SpaceRole, VisibilityType } from "~/api/knowledge";
 import { getMockKnowledgeSpaces, getMockFiles } from "~/mock/knowledge";
 import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
+import { CreateKnowledgeSpaceDrawer, type CreateKnowledgeSpaceFormData } from "./CreateKnowledgeSpaceDrawer";
+import { KnowledgeSpaceMemberDialog } from "~/components/KnowledgeSpaceMemberDialog";
+import ChannelSquare from "../ChannelSquare";
 
 export default function Knowledge() {
+    const MAX_USER_SPACES = 30;
     const [createdSpaces, setCreatedSpaces] = useState<KnowledgeSpace[]>([]);
     const [joinedSpaces, setJoinedSpaces] = useState<KnowledgeSpace[]>([]);
     const [activeSpace, setActiveSpace] = useState<KnowledgeSpace | null>(null);
@@ -20,6 +24,10 @@ export default function Knowledge() {
     const [sortDirection, setSortDirection] = useState(SortDirection.DESC);
     const [currentFolderId, setCurrentFolderId] = useState<string | undefined>();
     const [currentPath, setCurrentPath] = useState<Array<{ id?: string; name: string }>>([]);
+    const [showCreateDrawer, setShowCreateDrawer] = useState(false);
+    const [showKnowledgeSquare, setShowKnowledgeSquare] = useState(false);
+    const [memberDialogOpen, setMemberDialogOpen] = useState(false);
+    const [memberDialogSpace, setMemberDialogSpace] = useState<KnowledgeSpace | null>(null);
     const { showToast } = useToastContext();
 
     // 加载知识空间列表
@@ -96,9 +104,40 @@ export default function Knowledge() {
 
     // 创建空间
     const handleCreateSpace = () => {
+        if (createdSpaces.length >= MAX_USER_SPACES) {
+            showToast({
+                message: "您已达到创建知识空间的上限",
+                severity: NotificationSeverity.WARNING
+            });
+            return;
+        }
+        setShowCreateDrawer(true);
+    };
+
+    const handleConfirmCreateSpace = (form: CreateKnowledgeSpaceFormData) => {
+        const now = new Date().toISOString();
+        const newSpace: KnowledgeSpace = {
+            id: `space-${Date.now()}`,
+            name: form.name,
+            description: form.description,
+            visibility: form.joinPolicy === "private" ? VisibilityType.PRIVATE : VisibilityType.PUBLIC,
+            creator: "当前用户",
+            creatorId: "current-user",
+            memberCount: 1,
+            fileCount: 0,
+            totalFileCount: 0,
+            role: SpaceRole.CREATOR,
+            isPinned: false,
+            createdAt: now,
+            updatedAt: now,
+            tags: []
+        };
+        setCreatedSpaces((prev) => [newSpace, ...prev]);
+        setActiveSpace(newSpace);
+        setCurrentPath([{ name: newSpace.name }]);
         showToast({
-            message: "创建空间功能开发中",
-            severity: NotificationSeverity.INFO
+            message: "知识空间创建成功",
+            severity: NotificationSeverity.SUCCESS
         });
     };
 
@@ -236,45 +275,83 @@ export default function Knowledge() {
         setSortDirection(newDirection);
     };
 
+    const handleKnowledgeSquare = () => {
+        setShowKnowledgeSquare(true);
+    };
+
     return (
         <div className="relative h-full flex">
-            <KnowledgeSpaceSidebar
-                createdSpaces={createdSpaces}
-                joinedSpaces={joinedSpaces}
-                activeSpaceId={activeSpace?.id}
-                onSpaceSelect={handleSpaceSelect}
-                onCreateSpace={handleCreateSpace}
-                onUpdateSpace={handleUpdateSpace}
-                onDeleteSpace={handleDeleteSpace}
-                onLeaveSpace={handleLeaveSpace}
-                onPinSpace={handlePinSpace}
-            />
-
-            {activeSpace ? (
-                <KnowledgeSpaceContent
-                    space={activeSpace}
-                    files={files}
-                    onLoadMore={handleLoadMore}
-                    hasMore={hasMore}
-                    loading={loading}
-                    onSearch={setSearchQuery}
-                    onFilterStatus={setStatusFilter}
-                    onSort={handleSort}
-                    onNavigateFolder={handleNavigateFolder}
-                    onUploadFile={handleUploadFile}
-                    onCreateFolder={handleCreateFolder}
-                    onDownloadFile={handleDownloadFile}
-                    onRenameFile={handleRenameFile}
-                    onDeleteFile={handleDeleteFile}
-                    onEditTags={handleEditTags}
-                    onRetryFile={handleRetryFile}
-                    currentPath={currentPath}
+            {showKnowledgeSquare ? (
+                <ChannelSquare
+                    onBack={() => setShowKnowledgeSquare(false)}
+                    title="探索知识广场"
+                    subtitle="您可以在这里探索更多的知识空间"
+                    searchPlaceholder="输入知识空间名称或描述进行搜索"
+                    emptyText="未找到匹配知识空间"
+                    joinToastPrefix="已申请加入知识空间："
                 />
             ) : (
-                <div className="flex-1 flex items-center justify-center text-[#86909c]">
-                    请选择一个知识空间
-                </div>
+                <>
+                    <KnowledgeSpaceSidebar
+                        createdSpaces={createdSpaces}
+                        joinedSpaces={joinedSpaces}
+                        activeSpaceId={activeSpace?.id}
+                        onSpaceSelect={handleSpaceSelect}
+                        onCreateSpace={handleCreateSpace}
+                        onUpdateSpace={handleUpdateSpace}
+                        onDeleteSpace={handleDeleteSpace}
+                        onLeaveSpace={handleLeaveSpace}
+                        onPinSpace={handlePinSpace}
+                        onKnowledgeSquare={handleKnowledgeSquare}
+                    />
+
+                    {activeSpace ? (
+                        <KnowledgeSpaceContent
+                            space={activeSpace}
+                            files={files}
+                            onLoadMore={handleLoadMore}
+                            hasMore={hasMore}
+                            loading={loading}
+                            onSearch={setSearchQuery}
+                            onFilterStatus={setStatusFilter}
+                            onSort={handleSort}
+                            onNavigateFolder={handleNavigateFolder}
+                            onUploadFile={handleUploadFile}
+                            onCreateFolder={handleCreateFolder}
+                            onDownloadFile={handleDownloadFile}
+                            onRenameFile={handleRenameFile}
+                            onDeleteFile={handleDeleteFile}
+                            onEditTags={handleEditTags}
+                            onRetryFile={handleRetryFile}
+                            currentPath={currentPath}
+                        />
+                    ) : (
+                        <div className="flex-1 flex items-center justify-center text-[#86909c]">
+                            请选择一个知识空间
+                        </div>
+                    )}
+                </>
             )}
+
+            <CreateKnowledgeSpaceDrawer
+                open={showCreateDrawer}
+                onOpenChange={setShowCreateDrawer}
+                onConfirm={handleConfirmCreateSpace}
+                onViewSpace={() => {
+                    setShowCreateDrawer(false);
+                }}
+                onManageMembers={() => {
+                    setShowCreateDrawer(false);
+                    setMemberDialogSpace(activeSpace);
+                    setMemberDialogOpen(true);
+                }}
+            />
+
+            <KnowledgeSpaceMemberDialog
+                open={memberDialogOpen}
+                onOpenChange={setMemberDialogOpen}
+                space={memberDialogSpace}
+            />
         </div>
     );
 }

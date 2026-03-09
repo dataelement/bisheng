@@ -8,10 +8,9 @@ import {
     Plus
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Channel, SortType } from "~/api/channels";
+import { Channel, SortType, getChannelsApi } from "~/api/channels";
 import { NotificationSeverity } from "~/common";
 import { Button } from "~/components/ui/Button";
-import { getMockChannels } from "~/mock/channels";
 import { useToastContext } from "~/Providers";
 import ChannelItem from "./ChannelItem";
 
@@ -54,12 +53,12 @@ export function ChannelSidebar({
 
     const { data: createdChannels = [] } = useQuery({
         queryKey: ["channels", "created", createdSortBy],
-        queryFn: () => getMockChannels({ type: "created", sortBy: createdSortBy })
+        queryFn: () => getChannelsApi({ type: "created", sortBy: createdSortBy })
     });
 
     const { data: subscribedChannels = [] } = useQuery({
         queryKey: ["channels", "subscribed", subscribedSortBy],
-        queryFn: () => getMockChannels({ type: "subscribed", sortBy: subscribedSortBy })
+        queryFn: () => getChannelsApi({ type: "subscribed", sortBy: subscribedSortBy })
     });
 
     // 默认选中第一个频道

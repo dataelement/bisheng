@@ -1,143 +1,154 @@
-import { useState } from "react";
-import { Search, ArrowLeft, Lightbulb, FileText, TrendingUp, Globe, PanelLeftOpenIcon } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Search, Lightbulb, FileText, TrendingUp, Globe, ArrowLeft } from "lucide-react";
 import { Input } from "~/components/ui/Input";
 import { Button } from "~/components/ui/Button";
 import { ChannelSquareCard } from "./ChannelSquareCard";
 import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
+import { getChannelSquareApi } from "~/api/channels";
+import { useLocalize } from "~/hooks";
 
-// 模拟频道数据
-const mockChannels = [
-  {
-    id: "1",
-    title: "国家粮食安全政策",
-    description: "汇总国家层面粮食安全、储备调控、农业补贴与进出口管理政策，提供权威政策文本与解读。",
-    creator: "庄婧瑶",
-    creatorAvatar: "/avatars/user1.png",
-    articleCount: 504,
-    subscriberCount: 27,
-    status: "join" as const,
-    isHighlighted: true
-  },
-  {
-    id: "2",
-    title: "全球粮食市场监测库",
-    description: "跟踪主要粮食出口国供需变化、国际粮价走势与贸易政策，支持全球市场分析。",
-    creator: "庄婧瑶",
-    creatorAvatar: "/avatars/user2.png",
-    articleCount: 504,
-    subscriberCount: 27,
-    status: "joined" as const
-  },
-  {
-    id: "3",
-    title: "玉米产业链",
-    description: "覆盖玉米种植、收储、加工、贸易及终端应用的全产业链资料与研究报告。",
-    creator: "庄婧瑶",
-    creatorAvatar: "/avatars/user3.png",
-    articleCount: 504,
-    subscriberCount: 27,
-    status: "join" as const
-  },
-  {
-    id: "4",
-    title: "小麦与面粉行业资料库",
-    description: "收录小麦产区数据、质量标准、加工技术及行业政策与趋势分析。",
-    creator: "庄婧瑶",
-    creatorAvatar: "/avatars/user4.png",
-    articleCount: 504,
-    subscriberCount: 27,
-    status: "pending" as const
-  },
-  {
-    id: "5",
-    title: "大豆与油脂政策研究",
-    description: "聚焦大豆进口、国储拍卖、豆粕等副产品及油脂政策与贸易动态。",
-    creator: "庄婧瑶",
-    creatorAvatar: "/avatars/user5.png",
-    articleCount: 504,
-    subscriberCount: 27,
-    status: "join" as const
-  },
-  {
-    id: "6",
-    title: "农业可持续政策研究",
-    description: "探讨促进农产品供应链低碳化、循环经济等政策导向的知识库。",
-    creator: "庄婧瑶",
-    creatorAvatar: "/avatars/user1.png",
-    articleCount: 504,
-    subscriberCount: 27,
-    status: "join" as const
-  },
-  {
-    id: "7",
-    title: "粮食物流与储备管理",
-    description: "涵盖粮食仓储设施、运输网络、损耗管理与智能仓储技术相关内容。",
-    creator: "庄婧瑶",
-    creatorAvatar: "/avatars/user2.png",
-    articleCount: 504,
-    subscriberCount: 27,
-    status: "join" as const
-  },
-  {
-    id: "8",
-    title: "农业补贴与扶持政策",
-    description: "汇总各地区生产补贴、科技补贴、金融扶持等政策文件与实操指南。",
-    creator: "庄婧瑶",
-    creatorAvatar: "/avatars/user3.png",
-    articleCount: 504,
-    subscriberCount: 27,
-    status: "join" as const
-  },
-  {
-    id: "9",
-    title: "粮食贸易与关税政策",
-    description: "追踪进出口配额、关税调整、贸易协定及国际粮食组织政策与报告数据。",
-    creator: "庄婧瑶",
-    creatorAvatar: "/avatars/user4.png",
-    articleCount: 504,
-    subscriberCount: 27,
-    status: "private" as const
-  }
-];
+type SquareStatus = "join" | "joined" | "pending" | "private";
+
+interface SquareChannel {
+  id: string;
+  title: string;
+  description: string;
+  creator: string;
+  creatorAvatar?: string;
+  articleCount: number;
+  subscriberCount: number;
+  status: SquareStatus;
+  isHighlighted?: boolean;
+}
 
 interface ChannelSquareProps {
   onBack?: () => void;
+  title?: string;
+  subtitle?: string;
+  searchPlaceholder?: string;
+  emptyText?: string;
+  joinToastPrefix?: string;
 }
 
-export default function ChannelSquare({ onBack }: ChannelSquareProps) {
+export default function ChannelSquare({
+  onBack,
+  title,
+  subtitle,
+  searchPlaceholder,
+  emptyText,
+  joinToastPrefix
+}: ChannelSquareProps) {
   const [searchQuery, setSearchQuery] = useState("");
+  const [visibleCount, setVisibleCount] = useState(12);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [page, setPage] = useState(1);
+  const [hasMorePage, setHasMorePage] = useState(true);
+  const [allChannels, setAllChannels] = useState<SquareChannel[]>([]);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
   const { showToast } = useToastContext();
+  const localize = useLocalize();
+
+  const tTitle = title || localize("explore_channel_plaza");
+  const tSubtitle = subtitle || localize("explore_more_channel");
+  const tSearchPlaceholder = searchPlaceholder || localize("enter_channel_search");
+  const tEmptyText = emptyText || localize("nofound_matching_channel");
+  const tJoinPrefix = joinToastPrefix || localize("applied_join_channel");
 
   const handleJoinChannel = (channelId: string, channelTitle: string) => {
     showToast({
-      message: `已申请加入频道：${channelTitle}`,
+      message: `${tJoinPrefix}${channelTitle}`,
       severity: NotificationSeverity.SUCCESS
     });
   };
 
-  const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setSearchQuery(e.target.value);
+  const handleSearch = (e) => {
+    const next = e.target.value ?? "";
+    if (next.length > 40) {
+      showToast({
+        message: localize("maximum_character"),
+        severity: NotificationSeverity.WARNING
+      });
+      setSearchQuery(next.slice(0, 40));
+      return;
+    }
+    setSearchQuery(next);
   };
 
+  // 首次加载 & 翻页加载
+  useEffect(() => {
+    const load = async (nextPage: number) => {
+      try {
+        const res = await getChannelSquareApi({ page: nextPage, page_size: 20 });
+        const list: any[] = (res?.data || res?.list || res || []) as any[];
+        const mapped: SquareChannel[] = list.map((item: any, index: number) => ({
+          id: String(item.id ?? item.channel_id ?? index),
+          title: String(item.title ?? item.name ?? ""),
+          description: String(item.description ?? item.desc ?? "") || "暂无简介",
+          creator: String(item.creator ?? item.creator_name ?? ""),
+          creatorAvatar: item.creatorAvatar ?? item.creator_avatar,
+          articleCount: Number(item.articleCount ?? item.article_count ?? 0),
+          subscriberCount: Number(item.subscriberCount ?? item.subscriber_count ?? 0),
+          status: (item.status as SquareStatus) || "join",
+          isHighlighted: Boolean(item.isHighlighted ?? item.highlight)
+        }));
+
+        setAllChannels(prev =>
+          nextPage === 1 ? mapped : [...prev, ...mapped]
+        );
+        setHasMorePage(mapped.length >= 20);
+        setPage(nextPage);
+      } catch {
+        // 出错时不打断现有列表
+      }
+    };
+
+    load(1);
+  }, []);
+
   const filteredChannels = searchQuery
-    ? mockChannels.filter(
-        (channel) =>
-          channel.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          channel.description.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    : mockChannels;
+    ? allChannels.filter(
+      (channel) =>
+        channel.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        channel.description.toLowerCase().includes(searchQuery.toLowerCase())
+    )
+    : allChannels;
+
+  const visibleChannels = filteredChannels.slice(0, visibleCount);
+  const hasMore = visibleCount < filteredChannels.length;
+
+  useEffect(() => {
+    setVisibleCount(12);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    const node = scrollRef.current;
+    if (!node) return;
+    const onScroll = () => {
+      if (loadingMore || !hasMore) return;
+      const threshold = 60;
+      if (node.scrollTop + node.clientHeight >= node.scrollHeight - threshold) {
+        setLoadingMore(true);
+        setTimeout(() => {
+          setVisibleCount((prev) => Math.min(prev + 9, filteredChannels.length));
+          setLoadingMore(false);
+        }, 280);
+      }
+    };
+    node.addEventListener("scroll", onScroll);
+    return () => node.removeEventListener("scroll", onScroll);
+  }, [filteredChannels.length, hasMore, loadingMore]);
 
   // 将频道分成每行3个
-  const channelRows = [];
-  for (let i = 0; i < filteredChannels.length; i += 3) {
-    channelRows.push(filteredChannels.slice(i, i + 3));
+  const channelRows: typeof visibleChannels[] = [];
+  for (let i = 0; i < visibleChannels.length; i += 3) {
+    channelRows.push(visibleChannels.slice(i, i + 3));
   }
 
   return (
-    <div className="h-screen flex flex-col bg-white overflow-hidden">
+    <div className="h-full w-full flex flex-col bg-white overflow-hidden">
       {/* 头部区域 */}
-      <div className="bg-[#fafcff] w-full relative overflow-hidden border-b border-[#ececec]">
+      <div className="bg-[#FAFBFF] w-full relative overflow-hidden border-b border-[#F0F1F5]">
         {/* 装饰性图标 */}
         <div className="absolute left-[32%] top-6 opacity-30">
           <Lightbulb className="size-6 text-[#d0ddff]" strokeWidth={1.5} />
@@ -152,56 +163,62 @@ export default function ChannelSquare({ onBack }: ChannelSquareProps) {
           <Globe className="size-7 text-[#d0ddff]" strokeWidth={1.5} />
         </div>
 
-        {/* 主要内容 */}
-        <div className="relative flex flex-col items-center justify-center py-8 px-4">
-          {/* 返回按钮 */}
-          {onBack && (
-            <div className="absolute left-6 top-8">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onBack}
-                className="text-[#666] hover:text-[#335cff]"
-              >
-                <PanelLeftOpenIcon className="size-4 mr-1" />
-                返回
-              </Button>
-            </div>
-          )}
+        {/* 返回按钮：固定在头部左上，不跟随居中容器偏移 */}
+        {onBack && (
+          <div className="absolute left-4 top-4 z-10">
+            <Button
+              variant="ghost"
+              onClick={onBack}
+              className="h-7 w-7 p-0 rounded-md border border-[#E5E6EB] bg-white text-[#4E5969] hover:bg-[#F7F8FA] hover:text-[#165DFF]"
+            >
+              <ArrowLeft className="size-3.5" />
+            </Button>
+          </div>
+        )}
 
-          <h1 className="text-2xl font-semibold text-[#335cff] mb-1">
-            探索频道广场
+        {/* 主要内容 */}
+        <div className="relative max-w-[1140px] mx-auto w-full flex flex-col items-center justify-center pt-7 pb-5 px-4">
+
+          <h1 className="text-[26px] font-semibold text-[#335CFF] mb-1">
+            {tTitle}
           </h1>
-          <p className="text-sm text-[#666] mb-6">
-            您可以探索更多的频道并加入订阅
+          <p className="text-[13px] text-[#86909C] mb-3">
+            {tSubtitle}
           </p>
 
           {/* 搜索栏 */}
-          <div className="relative w-full max-w-[480px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#8B8FA8] pointer-events-none" />
-            <Input
-              type="text"
-              placeholder="输入频道名称或简介进行搜索"
-              value={searchQuery}
-              onChange={handleSearch}
-              className="pl-9 h-9 text-sm rounded-md bg-white"
-            />
-          </div>
+
         </div>
       </div>
 
       {/* 频道列表区域 */}
-      <div className="flex-1 overflow-y-auto bg-white">
-        <div className="max-w-[1200px] mx-auto px-6 py-6">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto bg-white">
+        <div className="relative w-full max-w-[380px] mx-auto mt-2 mb-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#8B8FA8] pointer-events-none" />
+          <Input
+            type="text"
+            placeholder={tSearchPlaceholder}
+            value={searchQuery}
+            onChange={handleSearch}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                // 回车触发，当前为实时搜索，保留该交互语义
+              }
+            }}
+            className="pl-9 h-8 text-[12px] rounded-md bg-white border-[#E5E6EB] focus:border-[#165DFF]"
+          />
+        </div>
+        <div className="max-w-[1032px] mx-auto px-4 py-4">
+
           {channelRows.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 text-[#86909c]">
-              <Search className="size-12 mb-4 opacity-50" />
-              <p>未找到匹配的频道</p>
+              <Search className="size-12 mb-3 opacity-40" />
+              <p className="text-[14px] text-[#86909C]">{tEmptyText}</p>
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-3">
               {channelRows.map((row, rowIndex) => (
-                <div key={rowIndex} className="flex gap-4">
+                <div key={rowIndex} className="flex gap-3">
                   {row.map((channel) => (
                     <ChannelSquareCard
                       key={channel.id}
@@ -219,6 +236,9 @@ export default function ChannelSquare({ onBack }: ChannelSquareProps) {
                   )}
                 </div>
               ))}
+              <div className="h-10 flex items-center justify-center text-[12px] text-[#C9CDD4]">
+                {loadingMore ? "加载中..." : !hasMore ? "没有更多内容了" : ""}
+              </div>
             </div>
           )}
         </div>

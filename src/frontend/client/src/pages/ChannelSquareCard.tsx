@@ -3,6 +3,7 @@ import { Avatar, AvatarImage } from "~/components/ui/avatar";
 import { Button } from "~/components/ui/Button";
 import { Card, CardContent } from "~/components/ui/Card";
 import { cn } from "~/utils";
+import { useLocalize } from "~/hooks";
 
 interface ChannelSquareCardProps {
   title: string;
@@ -27,16 +28,17 @@ export function ChannelSquareCard({
   isHighlighted = false,
   onAction
 }: ChannelSquareCardProps) {
+  const localize = useLocalize();
   const getButtonConfig = () => {
     switch (status) {
       case "joined":
-        return { text: "已加入", variant: "secondary" as const, disabled: false };
+        return { text: localize("joined"), variant: "secondary" as const, disabled: false };
       case "pending":
-        return { text: "申请中", variant: "secondary" as const, disabled: true };
+        return { text: localize("pending"), variant: "secondary" as const, disabled: true };
       case "private":
-        return { text: "私有", variant: "secondary" as const, disabled: true };
+        return { text: localize("private"), variant: "secondary" as const, disabled: true };
       default:
-        return { text: "加入", variant: "outline" as const, disabled: false };
+        return { text: localize("join"), variant: "outline" as const, disabled: false };
     }
   };
 
@@ -46,18 +48,15 @@ export function ChannelSquareCard({
   return (
     <Card
       className={cn(
-        "flex-1 min-w-0 transition-all hover:shadow-lg cursor-pointer",
-        isHighlighted && "border-[#335cff] shadow-[0px_8px_20px_0px_rgba(117,145,212,0.12)]"
+        "flex-1 min-w-0 py-2 transition-all cursor-pointer border-[#E5E6EB] hover:border-[#BDD0FF] hover:shadow-sm bg-white",
+        isHighlighted && "border-[#7EA6FF] shadow-[0px_4px_12px_0px_rgba(22,93,255,0.12)]"
       )}
     >
-      <CardContent className="p-4">
+      <CardContent className="">
         {/* 标题和按钮 */}
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between mt-1 mb-3">
           <div className="flex items-center gap-2 flex-1 min-w-0">
-            <div className="flex-shrink-0 bg-[#f0f5ff] p-1.5 rounded">
-              <BookOpen className="size-4 text-[#335cff]" />
-            </div>
-            <h3 className="font-medium text-base text-[#212121] truncate">
+            <h3 className="font-medium text-[15px] text-[#1D2129] truncate">
               {title}
             </h3>
             {isPrivate && (
@@ -69,9 +68,11 @@ export function ChannelSquareCard({
             size="sm"
             disabled={buttonConfig.disabled}
             className={cn(
-              "h-7 px-3 text-sm rounded-md flex-shrink-0 ml-2",
+              "h-6 px-2.5 text-[12px] rounded-md flex-shrink-0 ml-2 border",
               buttonConfig.variant === "secondary" &&
-                "bg-[#f8f8f8] hover:bg-[#f0f0f0] text-[#212121] border-[#ececec]"
+              "bg-[#F7F8FA] hover:bg-[#F2F3F5] text-[#86909C] border-[#E5E6EB]",
+              buttonConfig.variant === "outline" &&
+              "text-[#4E5969] border-[#E5E6EB] hover:text-[#165DFF] hover:border-[#165DFF]"
             )}
             onClick={(e) => {
               e.stopPropagation();
@@ -83,20 +84,21 @@ export function ChannelSquareCard({
         </div>
 
         {/* 描述 */}
-        <p className="text-sm text-[#a9aeb8] mb-3 line-clamp-2 leading-relaxed min-h-[40px]">
+        <p className="text-[12px] text-[#86909C] line-clamp-2 leading-[18px] truncate  mb-3">
           {description}
         </p>
 
         {/* 创建者和统计信息 */}
-        <div className="flex items-center gap-3 text-sm text-[#818181]">
+        <div className="flex items-center gap-2.5 text-[12px] text-[#86909C]">
           <div className="flex items-center gap-1.5">
             <Avatar className="size-5">
               <AvatarImage src={creatorAvatar || "/default-avatar.png"} alt={creator} />
             </Avatar>
-            <span>{creator}</span>
           </div>
-          <span>{articleCount} 篇内容</span>
-          <span>{subscriberCount} 订阅</span>
+          <span>
+            {articleCount} {localize("articles")}
+          </span>
+          <span>{subscriberCount}</span>
         </div>
       </CardContent>
     </Card>
