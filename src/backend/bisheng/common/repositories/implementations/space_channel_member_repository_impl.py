@@ -9,7 +9,7 @@ from bisheng.common.repositories.implementations.base_repository_impl import Bas
 from bisheng.common.repositories.interfaces.space_channel_member_repository import SpaceChannelMemberRepository
 
 
-class SpaceChannelMemberRepositoryImpl(BaseRepositoryImpl[SpaceChannelMember, str], SpaceChannelMemberRepository):
+class SpaceChannelMemberRepositoryImpl(BaseRepositoryImpl[SpaceChannelMember, int], SpaceChannelMemberRepository):
     """SpaceChannelMember repository implementation for managing space and channel memberships."""
 
     def __init__(self, session: AsyncSession):
@@ -51,7 +51,7 @@ class SpaceChannelMemberRepositoryImpl(BaseRepositoryImpl[SpaceChannelMember, st
         result = await self.session.exec(query)
         return result.first()
 
-    async def update_pin_status(self, member_id: str, is_pinned: bool) -> Optional[SpaceChannelMember]:
+    async def update_pin_status(self, member_id: int, is_pinned: bool) -> Optional[SpaceChannelMember]:
         """Update the pin status of a channel membership."""
         member = await self.find_by_id(member_id)
         if member:

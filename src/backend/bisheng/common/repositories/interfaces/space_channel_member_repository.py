@@ -5,7 +5,7 @@ from bisheng.common.models.space_channel_member import SpaceChannelMember, Busin
 from bisheng.common.repositories.interfaces.base_repository import BaseRepository
 
 
-class SpaceChannelMemberRepository(BaseRepository[SpaceChannelMember, str], ABC):
+class SpaceChannelMemberRepository(BaseRepository[SpaceChannelMember, int], ABC):
     """SpaceChannelMember repository interface for managing space and channel memberships."""
     pass
 
@@ -28,7 +28,7 @@ class SpaceChannelMemberRepository(BaseRepository[SpaceChannelMember, str], ABC)
         pass
 
     @abstractmethod
-    async def update_pin_status(self, member_id: str, is_pinned: bool) -> Optional[SpaceChannelMember]:
+    async def update_pin_status(self, member_id: int, is_pinned: bool) -> Optional[SpaceChannelMember]:
         """Update the pin status of a channel membership."""
         pass
 

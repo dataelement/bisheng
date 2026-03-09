@@ -154,15 +154,8 @@ async def subscribe_channel(
         channel_service: 'ChannelService' = Depends(get_channel_service)
 ):
     """订阅频道申请接口：根据频道类型（公开、私密、需要审批）处理订阅申请。"""
-    try:
-        status = await channel_service.subscribe_channel(req_param, login_user)
-        return resp_200(data=status.value)
-    except ValueError as e:
-        logger.warning(f"Subscribe channel failed: {e}")
-        return resp_500(message=str(e))
-    except Exception as e:
-        logger.error(f"Failed to subscribe to channel: {e}")
-        return resp_500(message="Failed to subscribe to channel")
+    status = await channel_service.subscribe_channel(req_param, login_user)
+    return resp_200(data=status.value)
 
 
 @router.post("/set_pin")
@@ -172,15 +165,9 @@ async def set_channel_pin(
         channel_service: 'ChannelService' = Depends(get_channel_service)
 ):
     """设置频道置顶状态。"""
-    try:
-        await channel_service.set_channel_pin(req_param, login_user)
-        return resp_200(data=True)
-    except ValueError as e:
-        logger.warning(f"Set pin failed: {e}")
-        return resp_500(message=str(e))
-    except Exception as e:
-        logger.error(f"Failed to set channel pin: {e}")
-        return resp_500(message="Failed to set channel pin")
+    await channel_service.set_channel_pin(req_param, login_user)
+    return resp_200(data=True)
+
 
 
 @router.get("/members")

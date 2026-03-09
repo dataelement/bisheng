@@ -23,6 +23,7 @@ from bisheng.channel.domain.schemas.channel_manager_schema import (
 from bisheng.channel.domain.schemas.article_schema import ArticleSearchPageResponse
 from bisheng.channel.domain.services.article_es_service import ArticleEsService
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.channel import ChannelNotFoundError, ChannelAccessDeniedError, ChannelAlreadySubscribedError
 from bisheng.common.models.space_channel_member import BusinessTypeEnum, UserRoleEnum
 from bisheng.common.repositories.interfaces.space_channel_member_repository import SpaceChannelMemberRepository
 from bisheng.core.external.bisheng_information_client.bisheng_information_manager import get_bisheng_information_client
@@ -192,7 +193,7 @@ class ChannelService:
         )
 
         if not membership:
-            raise ValueError("User is not a member of the channel")
+            raise ChannelNotFoundError()
 
         await self.space_channel_member_repository.update_pin_status(
             member_id=membership.id,
@@ -413,7 +414,6 @@ class ChannelService:
                 id=channel.id,
                 name=channel.name,
                 description=channel.description,
-                source_list=channel.source_list,
                 visibility=channel.visibility,
                 latest_article_update_time=channel.latest_article_update_time,
                 create_time=channel.create_time,
@@ -434,14 +434,10 @@ class ChannelService:
         # 1. Verify channel existence
         channels = await self.channel_repository.find_channels_by_ids([req.channel_id])
         if not channels:
-            raise ValueError(f"Channel not found")
+            raise ChannelNotFoundError()
         channel = channels[0]
 
-        # 2. Check channel visibility
-        if channel.visibility == ChannelVisibilityEnum.PRIVATE:
-            raise ValueError("Private channels cannot be subscribed to")
-
-        # 3. Check existing membership
+        # 2. Check if the user is already subscribed or has a pending request
         existing_membership = await self.space_channel_member_repository.find_membership(
             business_id=req.channel_id,
             business_type=BusinessTypeEnum.CHANNEL,
@@ -449,10 +445,12 @@ class ChannelService:
         )
 
         if existing_membership:
-            if existing_membership.status:
-                raise ValueError("You are already subscribed to this channel")
-            else:
-                raise ValueError("Your subscription request is pending approval")
+            raise ChannelAlreadySubscribedError()
+
+        # 3. Check channel visibility
+        if channel.visibility == ChannelVisibilityEnum.PRIVATE:
+            raise ChannelAccessDeniedError()
+
 
         # 4. Determine subscription status based on channel visibility
         if channel.visibility == ChannelVisibilityEnum.PUBLIC:

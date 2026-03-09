@@ -110,7 +110,6 @@ class ChannelSquareItemResponse(BaseModel):
     id: str = Field(..., description='Channel ID')
     name: str = Field(..., description='Channel Name')
     description: Optional[str] = Field(None, description='Channel Description/Brief')
-    source_list: List[str] = Field(default_factory=list, description='Data Source List')
     visibility: ChannelVisibilityEnum = Field(..., description='Channel Visibility')
     latest_article_update_time: Optional[datetime] = Field(None, description='Latest Article Update Time')
     create_time: Optional[datetime] = Field(None, description='Channel Creation Time')

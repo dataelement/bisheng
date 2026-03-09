@@ -78,14 +78,14 @@ class ChannelRepositoryImpl(BaseRepositoryImpl[Channel, str], ChannelRepository)
             )
 
         # Sorting: unsubscribed/unapplied first (status IS NULL → 0), subscribed/applied last (→ 1)
-        # Within same group, sort by update_time desc
+        # Within same group, sort by update_time desc (fallback to create_time if NULL)
         subscription_order = case(
             (SpaceChannelMember.status.is_(None), 0),
             else_=1
         )
         query = query.order_by(
             subscription_order.asc(),
-            Channel.update_time.desc()
+            func.coalesce(Channel.update_time, Channel.create_time).desc()
         )
 
         # Pagination
