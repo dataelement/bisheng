@@ -9,7 +9,7 @@ interface ChannelSquareCardProps {
   title: string;
   description: string;
   creator: string;
-  creatorAvatar?: string;
+  creatorAvatars?: string[];
   articleCount: number;
   subscriberCount: number;
   status: "join" | "joined" | "pending" | "private";
@@ -21,7 +21,7 @@ export function ChannelSquareCard({
   title,
   description,
   creator,
-  creatorAvatar,
+  creatorAvatars,
   articleCount,
   subscriberCount,
   status,
@@ -91,9 +91,19 @@ export function ChannelSquareCard({
         {/* 创建者和统计信息 */}
         <div className="flex items-center gap-2.5 text-[12px] text-[#86909C]">
           <div className="flex items-center gap-1.5">
-            <Avatar className="size-5">
-              <AvatarImage src={creatorAvatar || "/default-avatar.png"} alt={creator} />
-            </Avatar>
+            {creatorAvatars && creatorAvatars.length > 0 ? (
+              <div className="flex -space-x-2">
+                {creatorAvatars.slice(0, 3).map((src, idx) => (
+                  <Avatar key={idx} className="border border-white h-6 w-6">
+                    <AvatarImage src={src} alt={creator} />
+                  </Avatar>
+                ))}
+              </div>
+            ) : (
+              <Avatar className="border border-white h-6 w-6">
+                <AvatarImage src="/default-avatar.png" alt={creator} />
+              </Avatar>
+            )}
           </div>
           <span>
             {articleCount} {localize("articles")}

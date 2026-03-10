@@ -1227,5 +1227,6 @@
   "crawling_waiting": "爬取中,可能需要1-2分钟,请耐心等待...",
   "subscribe": "订阅",
   "subscribed": "已订阅",
-  "subscribe_success": "订阅成功"
+  "subscribe_success": "订阅成功",
+  "detect_wechat_link": "检测到是公众号链接，正在添加中..."
 }
