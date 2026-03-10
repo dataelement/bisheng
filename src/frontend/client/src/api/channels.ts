@@ -186,15 +186,6 @@ export async function updateChannelApi(
 }
 
 /**
- * 获取频道详情（用于回显）
- * GET /api/v1/channel/manager/{channel_id}
- */
-export async function getChannelDetailApi(channelId: string): Promise<any> {
-    const res: any = await request.get(`/api/v1/channel/manager/${channelId}`);
-    return res?.data ?? res;
-}
-
-/**
  * 订阅频道
  */
 export async function subscribeChannelApi(channelId: string): Promise<void> {
