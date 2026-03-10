@@ -26,8 +26,11 @@ class ChannelInfoSourceRepositoryImpl(BaseRepositoryImpl[ChannelInfoSource, str]
         self.session.add_all(sources)
         await self.session.commit()
 
-    def get_by_page(self, page: int = 1, page_size: int = 20) -> List[ChannelInfoSource]:
+    def get_by_page(self, information_id: str = None, page: int = 1, page_size: int = 20) -> List[ChannelInfoSource]:
         offset = (page - 1) * page_size
-        statement = select(ChannelInfoSource).offset(offset).limit(page_size).order_by(ChannelInfoSource.create_time)
+        statement = select(ChannelInfoSource)
+        if information_id:
+            statement = statement.where(ChannelInfoSource.id == information_id)
+        statement = statement.offset(offset).limit(page_size).order_by(ChannelInfoSource.create_time)
         result = self.session.exec(statement)
         return list(result.all())

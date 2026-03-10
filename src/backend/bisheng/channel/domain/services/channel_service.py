@@ -1,12 +1,13 @@
 import asyncio
 from typing import List, Optional, Dict, Any
 
+from bisheng.channel.domain.models.article_read_record import ArticleReadRecord
 from bisheng.channel.domain.models.channel import Channel, ChannelVisibilityEnum
 from bisheng.channel.domain.models.channel_info_source import ChannelInfoSource
+from bisheng.channel.domain.repositories.interfaces.article_read_repository import ArticleReadRepository
 from bisheng.channel.domain.repositories.interfaces.channel_info_source_repository import ChannelInfoSourceRepository
 from bisheng.channel.domain.repositories.interfaces.channel_repository import ChannelRepository
-from bisheng.channel.domain.repositories.interfaces.article_read_repository import ArticleReadRepository
-from bisheng.channel.domain.models.article_read_record import ArticleReadRecord
+from bisheng.channel.domain.schemas.article_schema import ArticleSearchPageResponse
 from bisheng.channel.domain.schemas.channel_manager_schema import (
     CreateChannelRequest,
     UpdateChannelRequest,
@@ -25,7 +26,6 @@ from bisheng.channel.domain.schemas.channel_manager_schema import (
     ChannelSquarePageResponse,
     SubscribeChannelRequest,
 )
-from bisheng.channel.domain.schemas.article_schema import ArticleSearchPageResponse
 from bisheng.channel.domain.services.article_es_service import ArticleEsService
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.channel import ChannelNotFoundError, ChannelAccessDeniedError, \
@@ -34,6 +34,7 @@ from bisheng.common.models.space_channel_member import BusinessTypeEnum, UserRol
 from bisheng.common.repositories.interfaces.space_channel_member_repository import SpaceChannelMemberRepository
 from bisheng.core.external.bisheng_information_client.bisheng_information_manager import get_bisheng_information_client
 from bisheng.user.domain.models.user import UserDao
+from bisheng.worker.information.article import sync_information_article
 
 MAX_ADMIN_COUNT = 5
 
@@ -100,6 +101,9 @@ class ChannelService:
 
                 if new_channel_info_sources:
                     await self.channel_info_source_repository.batch_add(new_channel_info_sources)
+                    for one in new_channel_info_sources:
+                        # Sync articles for the new information source one hour later
+                        sync_information_article.apply_async(args=(one.id,), countdown=3600)
 
         return channel_model
 

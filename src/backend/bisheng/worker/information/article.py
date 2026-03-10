@@ -16,7 +16,7 @@ from bisheng.worker.main import bisheng_celery
 
 
 @bisheng_celery.task
-def sync_information_article():
+def sync_information_article(information_id: str = None):
     trace_id_var.set(f"sync_all_information_articles_{generate_uuid()}")
     logger.debug("Starting to sync information articles for all sources.")
     article_service = ArticleEsService()
@@ -25,7 +25,7 @@ def sync_information_article():
         channel_info_repository = ChannelInfoSourceRepositoryImpl(session)
         page, page_size = 1, 1000
         while True:
-            information_list = channel_info_repository.get_by_page(page, page_size)
+            information_list = channel_info_repository.get_by_page(information_id, page, page_size)
             if not information_list:
                 break
             for one in information_list:
