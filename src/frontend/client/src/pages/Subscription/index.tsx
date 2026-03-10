@@ -248,6 +248,18 @@ export default function Subscription() {
                 channelId={previewChannelId}
                 open={previewDrawerOpen}
                 onOpenChange={handlePreviewDrawerClose}
+                onNavigateToChannel={(channelId) => {
+                    // Find the channel from cached lists and auto-select it
+                    const allChannels = [
+                        ...(queryClient.getQueryData<Channel[]>(["channels", "created", SortType.RECENT_UPDATE]) || []),
+                        // ...(queryClient.getQueryData<Channel[]>(["channels", "subscribed", SortType.RECENT_UPDATE]) || []),
+                    ];
+                    const found = allChannels.find(c => c.id === channelId);
+                    if (found) {
+                        setActiveChannel(found);
+                    }
+                    navigate("/channel", { replace: true });
+                }}
             />
         </div>
     );

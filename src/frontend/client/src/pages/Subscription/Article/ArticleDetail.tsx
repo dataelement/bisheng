@@ -9,11 +9,11 @@ import {
 
 import { useEffect, useRef, useState } from "react";
 import { Article } from "~/api/channels";
-import { AddToKnowledgeModal } from "./AddToKnowledgeModal";
-import { OriginalWebIcon, ShareOutlineIcon, AddSpaceIcon, FullScreenIcon, AiChatIcon } from "~/components/icons";
+import { AddSpaceIcon, AiChatIcon, FullScreenIcon, OriginalWebIcon, ShareOutlineIcon } from "~/components/icons";
 import { useToastContext } from "~/Providers";
-import { copyText } from "~/utils";
-import { Separator } from "~/components";
+import { formatTime } from "~/utils";
+import { useArticleShare } from "../hooks/useArticleShare";
+import { AddToKnowledgeModal } from "./AddToKnowledgeModal";
 
 interface ArticleDetailProps {
     article: Article;
@@ -31,7 +31,7 @@ export function ArticleDetail({ article, loading = false, screenFull = false, ai
     const [showBackTop, setShowBackTop] = useState(false);
     const [showKnowledgeModal, setShowKnowledgeModal] = useState(false);
     const iframeRef = useRef<HTMLIFrameElement>(null);
-    const { showToast } = useToastContext();
+    const { handleShare } = useArticleShare();
 
     // 使用文章的真实 HTML 内容
     const articleHtml = article.content_html || article.content || '';
@@ -113,19 +113,6 @@ export function ArticleDetail({ article, loading = false, screenFull = false, ai
         iframeRef.current?.contentWindow?.postMessage({ type: 'DO_SCROLL_TOP' }, '*');
     };
 
-    const handleFullScreen = () => {
-        onFullScreen?.()
-    }
-
-    const handleShare = () => {
-        const shareText = `我正在阅读【${article.title}】${article.url}`;
-        copyText(shareText).then(() => {
-            showToast({ message: '分享链接已复制到粘贴板', status: 'success' });
-        }).catch(() => {
-            showToast({ message: '复制失败，请重试', status: 'error' });
-        });
-    }
-
     const hasKnowledge = true
     return (
         <div className={`flex px-4 py-5 flex-col h-full  ${screenFull ? '' : 'border-l border-gray-100'}`}>
@@ -149,7 +136,7 @@ export function ArticleDetail({ article, loading = false, screenFull = false, ai
 
                         <button
                             className="flex items-center gap-1 text-xs transition-colors text-gray-900"
-                            onClick={handleShare}
+                            onClick={() => handleShare(article)}
                         >
                             <ShareOutlineIcon className="size-3.5 text-[#94BFFF]" />
                             分享
@@ -177,14 +164,20 @@ export function ArticleDetail({ article, loading = false, screenFull = false, ai
                             全屏
                         </button>}
 
-                        <div className="ml-auto">
-                            <button
+                        <div className="ml-auto flex gap-3 items-center">
+                            {screenFull && <div className="flex items-center text-[12px]">
+                                <img className="size-4 mr-1.5" src={article.sourceAvatar} alt="" />
+                                <span className="text-[#212121]">{article.sourceName}</span>
+                                <span className="text-[#e5e6eb] mx-2">|</span>
+                                <span className="text-[#999]">{formatTime(article.publishedAt || '', true)}</span>
+                            </div>}
+                            {!aiAssistantOpen && <button
                                 className="flex items-center gap-1 text-xs transition-colors bg-gradient-to-br from-[#335CFF] to-[#7433FF] bg-clip-text text-transparent"
                                 onClick={() => onAiAssistant?.()}
                             >
                                 <AiChatIcon className="size-3.5 text-primary" />
                                 AI 问答
-                            </button>
+                            </button>}
                         </div>
                     </div>
                 </div>

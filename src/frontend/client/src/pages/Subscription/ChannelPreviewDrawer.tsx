@@ -1,9 +1,16 @@
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ChannelPreview } from "~/api/channels";
+import {
+    type ChannelDetailResponse,
+    getArticlesApi,
+    getChannelDetailApi,
+    subscribeManagerChannelApi,
+} from "~/api/channels";
 import { NotificationSeverity } from "~/common";
 import { Avatar, AvatarImage, AvatarName } from "~/components/ui/avatar";
 import { Button } from "~/components/ui/Button";
+import { LoadingIcon } from "~/components/ui/icon/Loading";
 import {
     Sheet,
     SheetContent,
@@ -11,169 +18,212 @@ import {
     SheetTitle,
 } from "~/components/ui/Sheet";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
-import { getMockChannelPreview } from "~/mock/channels";
+import { useAuthContext } from "~/hooks/AuthContext";
 import { useToastContext } from "~/Providers";
 import { ArticleCard } from "./ArticleList/ArticleCard";
+import { mapToArticle } from "./ArticleList/ArticleList";
 
-const MAX_SUBSCRIPTIONS = 20;
-// Mock: simulate current user subscription count
-const MOCK_CURRENT_SUBSCRIPTION_COUNT = 5;
+const PREVIEW_PAGE_SIZE = 10;
 
 interface ChannelPreviewDrawerProps {
     channelId: string | undefined;
     open: boolean;
     onOpenChange: (open: boolean) => void;
+    onNavigateToChannel?: (channelId: string) => void;
 }
 
-export function ChannelPreviewDrawer({ channelId, open, onOpenChange }: ChannelPreviewDrawerProps) {
+type SubscribeStatus = "none" | "subscribed" | "pending";
+
+export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onNavigateToChannel }: ChannelPreviewDrawerProps) {
     const navigate = useNavigate();
     const { showToast } = useToastContext();
-    const [preview, setPreview] = useState<ChannelPreview | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [subscribeStatus, setSubscribeStatus] = useState<
-        "none" | "subscribed" | "pending" | "needsApproval"
-    >("none");
+    const { user } = useAuthContext();
+    const [subscribeStatus, setSubscribeStatus] = useState<SubscribeStatus>("none");
+    const [subscribing, setSubscribing] = useState(false);
 
-    useEffect(() => {
-        if (!channelId || !open) return;
-        setLoading(true);
-        setPreview(null);
-        // Simulate API call
-        setTimeout(() => {
-            const data = getMockChannelPreview(channelId);
-            if (data.isDeleted) {
-                showToast({ message: "该频道已失效或被删除", severity: NotificationSeverity.WARNING });
-                onOpenChange(false);
-                navigate("/channel", { replace: true });
-                return;
+    // Fetch channel detail
+    const {
+        data: channelDetail,
+        isLoading: isDetailLoading,
+        isError: isDetailError,
+    } = useQuery({
+        queryKey: ["channelPreviewDetail", channelId],
+        queryFn: async () => {
+            const res: any = await getChannelDetailApi(channelId!);
+            if (res?.status_code && res.status_code !== 200) {
+                throw new Error(res.status_message || "频道加载失败");
             }
-            setPreview(data);
-            if (data.isSubscribed) {
-                setSubscribeStatus("subscribed");
-            } else if (data.isPending) {
+            return res;
+        },
+        enabled: !!channelId && open,
+        staleTime: 30_000,
+    });
+
+    // Fetch article list
+    const {
+        data: articlesData,
+        isLoading: isArticlesLoading,
+    } = useQuery({
+        queryKey: ["channelPreviewArticles", channelId],
+        queryFn: async () => {
+            const res: any = await getArticlesApi({
+                channelId: channelId!,
+                page: 1,
+                pageSize: PREVIEW_PAGE_SIZE,
+            });
+            if (res?.status_code && res.status_code !== 200) {
+                throw new Error(res.status_message || "文章加载失败");
+            }
+            return res;
+        },
+        enabled: !!channelId && open,
+        staleTime: 30_000,
+    });
+
+    console.log('channelDetail :>> ', channelDetail, articlesData);
+
+    const articles = (articlesData?.data || []).map(item => mapToArticle(item, channelId || ""));
+    const isLoading = isDetailLoading || isArticlesLoading;
+
+    // Handle subscribe action
+    const handleSubscribe = async () => {
+        if (!channelId || subscribing || subscribeStatus === "subscribed" || subscribeStatus === "pending") return;
+
+        setSubscribing(true);
+        try {
+            await subscribeManagerChannelApi({ channel_id: channelId });
+
+            if (channelDetail?.visibility === "review") {
                 setSubscribeStatus("pending");
-            } else if (data.needsApproval) {
-                setSubscribeStatus("needsApproval");
+                showToast({ message: "已发送订阅申请，审批通过即可订阅。", severity: NotificationSeverity.SUCCESS });
             } else {
-                setSubscribeStatus("none");
+                setSubscribeStatus("subscribed");
+                showToast({ message: "订阅成功", severity: NotificationSeverity.SUCCESS });
             }
-            setLoading(false);
-        }, 300);
-    }, [channelId, open]);
-
-    const handleSubscribe = () => {
-        if (subscribeStatus === "subscribed" || subscribeStatus === "pending") return;
-
-        if (MOCK_CURRENT_SUBSCRIPTION_COUNT >= MAX_SUBSCRIPTIONS) {
-            showToast({ message: `您已达到订阅频道的上限${MAX_SUBSCRIPTIONS}`, severity: NotificationSeverity.WARNING });
-            return;
-        }
-
-        if (subscribeStatus === "needsApproval") {
-            setSubscribeStatus("pending");
-            showToast({ message: "已发送订阅申请，审批通过即可订阅。", severity: NotificationSeverity.SUCCESS });
-        } else {
-            setSubscribeStatus("subscribed");
-            showToast({ message: "订阅成功", severity: NotificationSeverity.SUCCESS });
+        } catch (e: any) {
+            const msg = e?.response?.data?.status_message || e?.message || "订阅失败，请重试";
+            showToast({ message: msg, severity: NotificationSeverity.ERROR });
+        } finally {
+            setSubscribing(false);
         }
     };
 
-    const getButtonConfig = () => {
-        switch (subscribeStatus) {
-            case "subscribed":
-                return { text: "已订阅", disabled: true, variant: "secondary" as const };
-            case "pending":
-                return { text: "申请中", disabled: true, variant: "secondary" as const };
-            case "needsApproval":
-                return { text: "申请订阅", disabled: false, variant: "outline" as const };
-            default:
-                return { text: "订阅", disabled: false, variant: "outline" as const };
+    // Button config based on visibility and subscribe status
+    const getButtonConfig = (detail?: ChannelDetailResponse) => {
+        if (subscribeStatus === "subscribed") {
+            return { text: "已订阅", disabled: true, variant: "secondary" as const };
         }
+        if (subscribeStatus === "pending") {
+            return { text: "申请中", disabled: true, variant: "secondary" as const };
+        }
+        if (detail?.visibility === "review") {
+            return { text: "申请订阅", disabled: false, variant: "outline" as const };
+        }
+        return { text: "订阅", disabled: false, variant: "outline" as const };
     };
 
-    const hideArticles = preview?.isPending || subscribeStatus === "pending";
-    const btnConfig = getButtonConfig();
+    const btnConfig = getButtonConfig(channelDetail);
+    // Hide articles when channel requires review and user hasn't subscribed yet
+    const hideArticles = channelDetail?.visibility === "review" && subscribeStatus !== "subscribed";
+
+    // Redirect creator to channel detail page instead of showing preview
+    useEffect(() => {
+        if (channelDetail && open && user?.name && channelDetail.creator_name === user.name) {
+            onOpenChange(false);
+            onNavigateToChannel?.(channelId!);
+        }
+    }, [channelDetail, open, user?.name]);
+
+    // Handle error — channel not found or inaccessible (must be in useEffect to avoid side-effects during render)
+    useEffect(() => {
+        if (isDetailError && open) {
+            showToast({ message: "该频道已失效或无法访问", severity: NotificationSeverity.WARNING });
+            onOpenChange(false);
+            navigate("/channel", { replace: true });
+        }
+    }, [isDetailError, open]);
 
     return (
         <Sheet open={open} onOpenChange={onOpenChange}>
             <SheetContent hideClose side="right" className="w-[1000px] sm:max-w-[1000px] p-0 px-16 flex flex-col">
-                {loading ? (
-                    <div className="flex items-center justify-center h-full text-[#86909c] text-sm">
-                        加载中...
+                {isLoading ? (
+                    <div className="flex flex-col items-center justify-center h-full gap-3 text-[#86909c]">
+                        <LoadingIcon className="size-16 text-primary" />
                     </div>
-                ) : preview ? (
+                ) : channelDetail ? (
                     <>
                         {/* Channel Info Header */}
                         <SheetHeader className="px-6 pt-6 pb-4 gap-0 border-b border-gray-100 text-left">
                             {/* Channel Name */}
                             <SheetTitle className="font-semibold text-[#1d2129] leading-tight mb-1">
-                                {preview.name}
+                                {channelDetail.name}
                             </SheetTitle>
 
                             {/* Description (2-line clamp + tooltip) */}
-                            {preview.description && (
+                            {channelDetail.description && (
                                 <Tooltip>
                                     <TooltipTrigger asChild>
-                                        <p className="text-sm text-[#86909c] leading-relaxed line-clamp-2 cursor-default mb-4 text-left">
-                                            {preview.description}
+                                        <p className="text-sm text-[#86909c] leading-relaxed line-clamp-2 cursor-default text-left">
+                                            {channelDetail.description}
                                         </p>
                                     </TooltipTrigger>
-                                    <TooltipContent
-                                        className="shadow-lg py-2 max-w-md text-sm"
-                                    >
-                                        {preview.description}
+                                    <TooltipContent className="shadow-lg py-2 max-w-md text-sm">
+                                        {channelDetail.description}
                                     </TooltipContent>
                                 </Tooltip>
                             )}
 
                             {/* Creator Info */}
-                            <div className="flex items-center gap-0.5 mb-3">
+                            <div className="flex items-center gap-1.5 mb-3 mt-4">
                                 <Avatar className="w-5 h-5">
-                                    <AvatarImage src={preview.creatorAvatar} alt={preview.creator} />
-                                    <span>preview.creator</span>
+                                    {/* Backend currently doesn't provide creator_avatar, use AvatarName fallback directly for now */}
+                                    <AvatarName name={channelDetail.creator_name} className="text-xs" />
                                 </Avatar>
-                                <span className="text-sm text-[#86909c]">{preview.creator}</span>
+                                <span className="text-sm text-[#86909c]">{channelDetail.creator_name}</span>
                             </div>
 
                             {/* Data Overview Row & Button */}
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center text-sm text-[#86909c]">
-                                    {/* Source Icons Stacked */}
-                                    {preview.sources.length > 0 && (
+                                    {channelDetail.source_infos && channelDetail.source_infos.length > 0 && (
                                         <div className="flex items-center mr-3">
                                             <div className="flex -space-x-1.5">
-                                                {preview.sources.slice(0, 4).map((source, index) => (
+                                                {channelDetail.source_infos.slice(0, 4).map((source: any, index: number) => (
                                                     <div
                                                         key={source.id}
                                                         className="size-5 rounded-[4px] border border-white overflow-hidden bg-gray-100"
                                                         style={{ zIndex: 4 - index }}
                                                     >
                                                         <img
-                                                            src={source.avatar || "/default-source.png"}
-                                                            alt={source.name}
-                                                            className="w-full h-full object-cover"
+                                                            src={source.source_icon || source.icon || "/default-source.png"}
+                                                            alt={source.source_name || source.name}
+                                                            className="w-full h-full object-cover rounded-md"
                                                         />
                                                     </div>
                                                 ))}
                                             </div>
                                         </div>
                                     )}
-                                    <span className="mr-3">{preview.articleCount} 篇内容</span>
-                                    <span>{preview.subscriberCount} 订阅</span>
+                                    <span className="mr-3">{channelDetail.article_count ?? 0} 篇内容</span>
+                                    <span>{channelDetail.subscriber_count ?? 0} 订阅</span>
                                 </div>
-                                <Button
-                                    variant={btnConfig.variant}
-                                    disabled={btnConfig.disabled}
-                                    onClick={handleSubscribe}
-                                    className={`h-8 px-5 py-1 text-sm font-normal rounded-md flex-shrink-0 ${subscribeStatus === "subscribed"
-                                        ? "bg-[#f2f3f5] text-[#86909c] border-[#e5e6eb] cursor-default"
-                                        : subscribeStatus === "pending"
-                                            ? "bg-[#f2f3f5] text-[#c9cdd4] border-[#e5e6eb] cursor-not-allowed"
-                                            : "text-[#1d2129] border-[#e5e6eb] hover:bg-gray-50"
-                                        }`}
-                                >
-                                    {btnConfig.text}
-                                </Button>
+
+                                {/* Hide subscribe button for private channels or if the user is the creator */}
+                                {channelDetail.visibility !== "private" && (
+                                    <Button
+                                        variant={btnConfig.variant}
+                                        disabled={btnConfig.disabled || subscribing}
+                                        onClick={handleSubscribe}
+                                        className={`h-8 px-5 py-1 text-sm font-normal rounded-md flex-shrink-0 ${subscribeStatus === "subscribed"
+                                            ? "bg-[#f2f3f5] text-[#86909c] border-[#e5e6eb] cursor-default"
+                                            : subscribeStatus === "pending"
+                                                ? "bg-[#f2f3f5] text-[#c9cdd4] border-[#e5e6eb] cursor-not-allowed"
+                                                : "text-[#1d2129] border-[#e5e6eb] hover:bg-gray-50"
+                                            }`}
+                                    >
+                                        {subscribing ? "处理中..." : btnConfig.text}
+                                    </Button>
+                                )}
                             </div>
                         </SheetHeader>
 
@@ -190,9 +240,9 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange }: ChannelP
                                         该频道内容需申请通过后方可查看
                                     </div>
                                 </div>
-                            ) : preview.articles.length > 0 ? (
+                            ) : articles.length > 0 ? (
                                 <div>
-                                    {preview.articles.map(article => (
+                                    {articles.map(article => (
                                         <ArticleCard
                                             key={article.id}
                                             article={article}

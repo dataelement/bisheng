@@ -1,6 +1,7 @@
 import { BookOpen, SquareArrowOutUpLeftIcon } from "lucide-react"; // 更换了更接近设计稿的图标
 import { useState } from "react";
 import { Article } from "~/api/channels";
+import { useArticleShare } from "../hooks/useArticleShare";
 
 interface ArticleCardProps {
     article: Article;
@@ -11,6 +12,7 @@ interface ArticleCardProps {
 
 export function ArticleCard({ article, onSelect, isSelected, searchQuery }: ArticleCardProps) {
     const [hovered, setHovered] = useState(false);
+    const { handleShare } = useArticleShare();
 
     // 格式化时间逻辑保持不变
     const formatTime = (dateString: string) => {
@@ -105,7 +107,7 @@ export function ArticleCard({ article, onSelect, isSelected, searchQuery }: Arti
                         <button
                             onClick={(e) => {
                                 e.stopPropagation();
-                                // TODO: implement share
+                                handleShare(article);
                             }}
                             className=" rounded-full bg-gray-50 flex items-center justify-center size-8 text-gray-800 hover:bg-gray-100 transition-colors cursor-pointer"
                             title="分享"

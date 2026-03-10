@@ -15,6 +15,7 @@ import {
 import { NotificationSeverity } from "~/common";
 import { InfiniteScroll } from "~/components/InfiniteScroll";
 import { Button } from "~/components/ui/Button";
+import { LoadingIcon } from "~/components/ui/icon/Loading";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
 import { useDebounce } from "~/hooks";
 import { useToastContext } from "~/Providers";
@@ -30,7 +31,7 @@ interface ArticleListProps {
 }
 
 /** Strip HTML tags from a string, extracting body content first */
-function stripHtmlTags(html: string): string {
+export function stripHtmlTags(html: string): string {
     if (!html) return "";
     // Extract content within <body> tags if present
     const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
@@ -44,7 +45,7 @@ function stripHtmlTags(html: string): string {
 }
 
 /** Map backend ArticleSearchResultItem to frontend Article */
-function mapToArticle(item: ArticleSearchResultItem, channelId: string): Article {
+export function mapToArticle(item: ArticleSearchResultItem, channelId: string): Article {
     return {
         id: item.doc_id,
         title: item.title,
@@ -189,8 +190,8 @@ export function ArticleList({ channel, selectedArticleId, onArticleSelect }: Art
         setSelectedSubChannelName(subChannelName === "all" ? undefined : subChannelName);
     };
 
-    // Fetch channel detail for the tooltip
-    const { data: channelDetail } = useQuery({
+    // Fetch channel detail for the tooltip; isLoading drives the page-level loading state
+    const { data: channelDetail, isLoading: isChannelDetailLoading } = useQuery({
         queryKey: ["channelDetail", channel.id],
         queryFn: () => getChannelDetailApi(channel.id),
         staleTime: 60_000, // Cache for 1 minute
@@ -201,6 +202,7 @@ export function ArticleList({ channel, selectedArticleId, onArticleSelect }: Art
         .filter(fr => fr.channel_type === 'sub' && fr.name)
         .map((fr, idx) => ({ id: `sub-${idx}`, name: fr.name! }));
 
+    console.log('channelDetail :>> ', channelDetail);
     return (
         <div className="flex-1 px-4 h-full flex flex-col max-w-[1000px] mx-auto">
             {/* header */}
@@ -232,7 +234,7 @@ export function ArticleList({ channel, selectedArticleId, onArticleSelect }: Art
                         </Tooltip>
                     </div>
 
-                    <Button
+                    {channelDetail?.visibility !== 'private' && <Button
                         onClick={() => {
                             const shareUrl = `${window.location.origin}${__APP_ENV__.BASE_URL}/channel/share/${channel.id}`;
                             const shareText = `欢迎加入频道【${channel.name}】 ，点击链接：${shareUrl} 一键订阅。`;
@@ -245,7 +247,7 @@ export function ArticleList({ channel, selectedArticleId, onArticleSelect }: Art
                     >
                         <SquareArrowOutUpLeftIcon className="size-3.5" />
                         分享
-                    </Button>
+                    </Button>}
                 </div>
 
                 {/* 第二行：子频道 Tabs 与 工具栏 (搜索/筛选) */}
@@ -306,10 +308,13 @@ export function ArticleList({ channel, selectedArticleId, onArticleSelect }: Art
                 </div>
             </div>
 
-            {/* 文章列表区 */}
+            {/* Article list area */}
             <div className="flex-1 overflow-y-auto noscrollbar">
-                {loading && articles.length === 0 ? (
-                    <div className="flex items-center justify-center h-64 text-[#86909c] text-sm">加载中...</div>
+                {/* Show loading spinner while channel detail or initial article list is loading */}
+                {(isChannelDetailLoading || (loading && articles.length === 0)) ? (
+                    <div className="flex flex-col items-center justify-center h-64 gap-3 text-[#86909c]">
+                        <LoadingIcon className="size-16 text-primary" />
+                    </div>
                 ) : articles.length === 0 ? (
                     <div className="flex items-center justify-center h-64 text-[#86909c] text-sm">无结果</div>
                 ) : (

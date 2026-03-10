@@ -125,6 +125,14 @@ export interface ChannelDetailResponse {
         channel_type: "main" | "sub";
         name?: string;
     }>;
+    source_infos?: Array<{
+        id: string;
+        source_name?: string;
+        name?: string;
+        source_icon?: string;
+        icon?: string;
+        source_type?: string;
+    }>;
 }
 
 /**
