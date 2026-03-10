@@ -30,3 +30,13 @@ class ArticleReadRepositoryImpl(BaseRepositoryImpl[ArticleReadRecord, str], Arti
         )
         result = await self.session.exec(statement)
         return list(result.all())
+
+    async def find_article_ids_by_user_and_sources(self, user_id: int, source_ids: Optional[list[str]] = None) -> list[str]:
+        """Find read article IDs by user ID and optional source IDs"""
+        conditions = [ArticleReadRecord.user_id == user_id]
+        if source_ids:
+            conditions.append(ArticleReadRecord.source_id.in_(source_ids))
+            
+        statement = select(ArticleReadRecord.article_id).where(*conditions)
+        result = await self.session.exec(statement)
+        return list(result.all())

@@ -333,6 +333,7 @@ class ArticleEsService:
             filter_rules: Optional[List[Dict[str, Any]]] = None,
             page: int = 1,
             page_size: int = 20,
+            exclude_article_ids: Optional[List[str]] = None,
     ) -> ArticleSearchPageResponse:
         """
         检索文章，支持信源过滤、关键词搜索、过滤规则、高亮和分页。
@@ -345,6 +346,7 @@ class ArticleEsService:
                                         "keywords": [...], "relation": "and"/"or"}
             page: 页码（从 1 开始）
             page_size: 每页数量
+            exclude_article_ids: 排除的文章 ID 列表
 
         Returns:
             ArticleSearchPageResponse
@@ -360,6 +362,12 @@ class ArticleEsService:
         if source_ids:
             filter_clauses.append({
                 "terms": {"source_id": source_ids}
+            })
+
+        # 1.5 排除指定文章 ID
+        if exclude_article_ids:
+            must_not_clauses.append({
+                "terms": {"_id": exclude_article_ids}
             })
 
         # 2. 关键词搜索（标题 + 正文 + 信源ID）

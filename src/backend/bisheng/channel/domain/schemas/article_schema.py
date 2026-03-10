@@ -36,6 +36,7 @@ class ArticleSearchResultItem(BaseModel):
     update_time: Optional[datetime] = Field(None, description='更新时间')
     score: Optional[float] = Field(None, description='搜索相关性得分')
     highlight: Optional[Dict[str, List[str]]] = Field(None, description='高亮字段，key为字段名，value为高亮片段列表')
+    is_read: Optional[bool] = Field(False, description='是否已读')
 
 
 class ArticleSearchPageResponse(BaseModel):

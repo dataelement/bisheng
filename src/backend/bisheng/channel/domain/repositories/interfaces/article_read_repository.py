@@ -17,3 +17,8 @@ class ArticleReadRepository(BaseRepository[ArticleReadRecord, str], ABC):
     async def get_all_read_article_ids(self, user_id: int) -> list[str]:
         """Get all read article ids for a given user"""
         pass
+
+    @abstractmethod
+    async def find_article_ids_by_user_and_sources(self, user_id: int, source_ids: Optional[list[str]] = None) -> list[str]:
+        """Find read article IDs by user ID and optional source IDs"""
+        pass

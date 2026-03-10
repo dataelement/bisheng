@@ -645,6 +645,8 @@ class ChannelService:
             channel.is_released = req.is_released
         if req.filter_rules is not None:
             channel.filter_rules = [f.model_dump() for f in req.filter_rules]
+        if req.visibility is not None:
+            channel.visibility = ChannelVisibilityEnum(req.visibility)
         if req.source_list is not None:
 
             # Calculate the difference between old and new source lists to minimize calls to bisheng_information_client
@@ -839,6 +841,7 @@ class ChannelService:
             page: int = 1,
             page_size: int = 20,
             login_user: UserPayload = None,
+            only_unread: bool = False,
     ) -> ArticleSearchPageResponse:
         """
         根据频道分页检索文章。
@@ -899,21 +902,31 @@ class ChannelService:
         else:
             effective_rules = main_rules
 
-        # 4. 调用 ArticleEsService 进行搜索
+        # 4. 获取已读文章 ID 列表
+        read_article_ids = []
+        if login_user and self.article_read_repository:
+            read_article_ids = await self.article_read_repository.find_article_ids_by_user_and_sources(
+                user_id=login_user.user_id,
+                source_ids=effective_source_ids
+            )
+
+        # 5. 调用 ArticleEsService 进行搜索
+        exclude_article_ids = read_article_ids if only_unread else None
         article_search_response = await self.article_es_service.search_articles(
             source_ids=effective_source_ids,
             keyword=keyword,
             filter_rules=effective_rules if effective_rules else None,
             page=page,
-            page_size=page_size
+            page_size=page_size,
+            exclude_article_ids=exclude_article_ids
         )
 
-        source_ids = [item.source_id for item in article_search_response.data]
+        source_ids_in_result = [item.source_id for item in article_search_response.data]
 
         # 批量查询信源信息
         source_info_map = {}
-        if source_ids:
-            sources = await self.channel_info_source_repository.find_by_ids(source_ids)
+        if source_ids_in_result:
+            sources = await self.channel_info_source_repository.find_by_ids(source_ids_in_result)
             for s in sources:
                 source_info_map[s.id] = {
                     "id": s.id,
@@ -923,9 +936,12 @@ class ChannelService:
                     "description": s.description
                 }
 
+        read_ids_set = set(read_article_ids)
         for item in article_search_response.data:
             if item.source_id in source_info_map:
                 item.source_info = source_info_map[item.source_id]
+            # 设置是否已读状态
+            item.is_read = item.doc_id in read_ids_set
 
         return article_search_response
 

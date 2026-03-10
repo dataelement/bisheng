@@ -225,6 +225,7 @@ async def search_channel_articles(
         sub_channel_name: Optional[str] = Query(None, description='子频道名称'),
         page: int = Query(1, ge=1, description='页码，默认1'),
         page_size: int = Query(20, ge=1, le=100, description='每页数量，默认20'),
+        only_unread: Optional[bool] = Query(False, description='仅看未读'),
         login_user: UserPayload = Depends(UserPayload.get_login_user),
         channel_service: 'ChannelService' = Depends(get_channel_service)
 ):
@@ -243,6 +244,7 @@ async def search_channel_articles(
             page=page,
             page_size=page_size,
             login_user=login_user,
+            only_unread=only_unread,
         )
         return resp_200(data=result.model_dump())
     except ValueError as e:
