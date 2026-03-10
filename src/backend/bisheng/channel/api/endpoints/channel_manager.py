@@ -58,6 +58,28 @@ async def list_channel_information_sources(
     })
 
 
+@router.get("/search_sources")
+async def search_channel_information_sources(
+        keyword: str = Query(..., min_length=1, description='Search keyword, fuzzy match name and URL'),
+        business_type: Optional[BusinessType] = Query(None, description='Information source type: website / wechat'),
+        page: int = Query(1, ge=1, description='Page number, default 1'),
+        page_size: int = Query(20, ge=1, le=100, description='Page size, default 20'),
+        login_user: UserPayload = Depends(UserPayload.get_login_user)
+):
+    """Endpoint to search information sources of a channel by keyword."""
+    client = await get_bisheng_information_client()
+    sources, total = await client.search_information_sources(
+        query=keyword,
+        business_type=business_type,
+        page=page,
+        page_size=page_size
+    )
+    return resp_200(data={
+        "sources": [s.model_dump() for s in sources],
+        "total": total
+    })
+
+
 @router.post("/add_website_source")
 async def add_website_information_source(
         req_param: AddInformationSourceRequest,
@@ -292,7 +314,6 @@ async def get_channel_detail(
     except Exception as e:
         logger.error(f"Failed to get channel detail: {e}")
         return resp_500(message="Failed to get channel detail")
-
 
 
 @router.put("/{channel_id}")

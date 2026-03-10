@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Optional
+from typing import Optional, Any, Coroutine
 
 import httpx
 from aiohttp import ClientTimeout
@@ -88,8 +88,7 @@ class BishengInformationClient(object):
         return information_source_data
 
     async def search_information_sources(self, query: str, business_type: Optional[BusinessType] = None, page: int = 1,
-                                         page_size: int = 20) -> list[
-        InformationSourceResponse]:
+                                         page_size: int = 20) -> tuple[list[InformationSourceResponse], int]:
         """Search information sources by keyword."""
         endpoint = f"{self.base_url}/information/search"
         headers = {"X-API-Key": self.api_key}
@@ -104,12 +103,20 @@ class BishengInformationClient(object):
         response = await self.http_client.get(endpoint, headers=headers, params=params, timeout=self.timeout)
 
         if response.status_code != 200:
-            raise InformationSourceListError(
-                f"Failed to search information sources: {response.status_code} - {response.error}")
+            raise BishengInformationServiceError()
+
+        code = response.body.get("code", -1)
+        if code == 401:
+            raise BishengInformationUnAuthorizedError()
+
+        elif code != 200:
+            raise BishengInformationServiceError(
+                msg=f"Failed to list information sources: {response.status_code} - {response.error}")
 
         information_sources_data = response.body.get("data", [])
+        total = response.body.get("totalCount", 0)
 
-        return [InformationSourceResponse.model_validate(item) for item in information_sources_data]
+        return [InformationSourceResponse.model_validate(item) for item in information_sources_data], total
 
     async def get_information_source_by_ids(self, source_ids: list[str]) -> list[InformationSourceResponse]:
         """Get information sources by a list of source IDs."""
