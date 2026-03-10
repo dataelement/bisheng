@@ -98,7 +98,7 @@ export function ChannelSquareCard({
           <span>
             {articleCount} {localize("articles")}
           </span>
-          <span>{subscriberCount}</span>
+          <span>{subscriberCount}{localize("com_ui_subscription")}</span>
         </div>
       </CardContent>
     </Card>

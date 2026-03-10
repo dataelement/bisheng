@@ -7,7 +7,7 @@ import { generateUUID } from "~/utils";
 const MAX_CHANNEL_NAME = 10;
 const MAX_SUB_CHANNELS = 6;
 
-type VisibilityType = "private" | "approval" | "public";
+type VisibilityType = "private" | "review" | "public";
 type PublishToSquare = "yes" | "no";
 
 function nanoid() {

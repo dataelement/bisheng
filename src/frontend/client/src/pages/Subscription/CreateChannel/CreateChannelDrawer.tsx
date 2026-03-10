@@ -47,7 +47,7 @@ export interface CreateChannelFormData {
     sources: InformationSource[];
     channelName: string;
     channelDesc: string;
-    visibility: "private" | "approval" | "public";
+    visibility: "private" | "review" | "public";
     publishToSquare: "yes" | "no";
     contentFilter: boolean;
     filterGroups: FilterGroup[];
@@ -166,7 +166,7 @@ export function CreateChannelDrawer({
                                                 form.setChannelName(v);
                                             }
                                         }}
-                                        placeholder={localize("enter_channel_name") || "请输入频道名称"}
+                                        placeholder={localize("enter_channel_name")}
                                         className="flex-1 h-10 text-[14px] border-[#E5E6EB]"
                                     />
                                     <span className="absolute right-4 flex-shrink-0 text-[12px] text-[#86909C]">
@@ -195,7 +195,7 @@ export function CreateChannelDrawer({
                                                 form.setChannelDesc(v);
                                             }
                                         }}
-                                        placeholder={localize("enter_channel_description") || "请输入频道简介"}
+                                        placeholder={localize("enter_channel_description")}
                                         className="min-h-[80px] text-[14px] border-[#E5E6EB] pr-14"
                                     />
                                 </div>
@@ -219,14 +219,14 @@ export function CreateChannelDrawer({
                                             desc: localize("cannot_subscribe")
                                         },
                                         {
-                                            value: "approval",
+                                            value: "review",
                                             label: localize("approval_required"),
                                             desc: localize("require_approval")
                                         },
                                         {
                                             value: "public",
                                             label: localize("publice"),
-                                            desc: localize("anyone_can_subscribe") || "任何人可直接订阅,无需审核"
+                                            desc: localize("anyone_can_subscribe")
                                         }
                                     ].map((opt) => (
                                         <label

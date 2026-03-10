@@ -19,7 +19,7 @@ interface SquareChannel {
   articleCount: number;
   subscriberCount: number;
   status: SquareStatus;
-  visibility?: "public" | "private" | "approval";
+  visibility?: "public" | "private" | "review";
   isHighlighted?: boolean;
 }
 
@@ -131,7 +131,7 @@ export default function ChannelSquare({
           creatorAvatar: item.creatorAvatar ?? item.creator_avatar,
           articleCount: Number(item.article_count ?? item.articleCount ?? 0),
           subscriberCount: Number(item.subscriber_count ?? item.subscriberCount ?? 0),
-          visibility: item.visibility as "public" | "private" | "approval" | undefined,
+          visibility: item.visibility as "public" | "private" | "review" | undefined,
           status:
             (item.subscription_status === "subscribed"
               ? "joined"

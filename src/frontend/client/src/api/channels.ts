@@ -89,7 +89,7 @@ export interface ChannelItemResponse {
     id: string;
     name: string;
     source_list: string[];
-    visibility: "public" | "private" | "approval";
+    visibility: "public" | "private" | "review";
     is_released: boolean;
     latest_article_update_time?: string;
     create_time?: string;

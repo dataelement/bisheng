@@ -180,15 +180,12 @@ export default function Subscribe() {
                                     <Input
                                         className="mt-3"
                                         value={formData.feedbackTips}
-                                        maxLength={1000}
                                         onChange={(e) => {
                                             const val = e.target.value;
                                             setFormData(prev => ({ ...prev, feedbackTips: val }));
                                             setErrors(prev => ({
                                                 ...prev,
-                                                feedbackTips: val.length >= 1000
-                                                    ? t('chatConfig.errors.maxCharacters', { count: 1000 })
-                                                    : '',
+                                                feedbackTips: '',
                                             }));
                                         }}
                                     />
@@ -239,7 +236,7 @@ const useChatConfig = (refs: UseChatConfigProps) => {
         systemPrompt: t('chatConfig.systemPrompt2'),
         userPrompt: '',
         maxChunkSize: 15000,
-        feedbackTips: '',
+        feedbackTips: '请将您的网站爬取需求发送至邮箱：XXXX@XX',
     });
 
     useEffect(() => {
@@ -333,10 +330,7 @@ const useChatConfig = (refs: UseChatConfigProps) => {
 
         const feedback = (formData.feedbackTips || '').trim();
         if (!feedback) {
-            newErrors.feedbackTips = t('chatConfig.errors.required');
-            isValid = false;
-        } else if (feedback.length > 1000) {
-            newErrors.feedbackTips = t('chatConfig.errors.maxCharacters', { count: 1000 });
+            newErrors.feedbackTips = '请输入需求反馈提示文案';
             isValid = false;
         }
 
@@ -346,8 +340,18 @@ const useChatConfig = (refs: UseChatConfigProps) => {
 
     const handleSave = async () => {
         if (!validateForm()) {
+            // 主要针对反馈提示文案为空的场景，给出明确的 toast
+            const feedback = (formData.feedbackTips || '').trim();
+            if (!feedback) {
+                toast({
+                    variant: 'error',
+                    description: '请输入需求反馈提示文案',
+                });
+            }
             return false;
         }
+        const feedback = (formData.feedbackTips || '').trim();
+        const feedbackTooLong = feedback.length > 1000;
         const dataToSave = {
             system_prompt: formData.systemPrompt,
             user_prompt: formData.userPrompt,
@@ -357,10 +361,17 @@ const useChatConfig = (refs: UseChatConfigProps) => {
 
         captureAndAlertRequestErrorHoc(setSubConfigApi(dataToSave)).then((res) => {
             if (res) {
-                toast({
-                    variant: 'success',
-                    description: t('chatConfig.saveSuccess'),
-                })
+                if (feedbackTooLong) {
+                    toast({
+                        variant: 'warning',
+                        description: '提示文案不可超过 1000 个字符',
+                    });
+                } else {
+                    toast({
+                        variant: 'success',
+                        description: t('chatConfig.saveSuccess'),
+                    });
+                }
                 reloadConfig()
             }
         })

@@ -18,7 +18,7 @@ import { useLocalize } from "~/hooks";
 const MAX_SPACE_NAME = 20;
 const MAX_SPACE_DESC = 200;
 
-export type JoinPolicy = "private" | "approval" | "public";
+export type JoinPolicy = "private" | "review" | "public";
 export type PublishToSquare = "yes" | "no";
 
 export interface CreateKnowledgeSpaceFormData {
@@ -47,19 +47,19 @@ export function CreateKnowledgeSpaceDrawer({
     const localize = useLocalize();
     const [name, setName] = useState("");
     const [description, setDescription] = useState("");
-    const [joinPolicy, setJoinPolicy] = useState<JoinPolicy>("approval");
+    const [joinPolicy, setJoinPolicy] = useState<JoinPolicy>("review");
     const [publishToSquare, setPublishToSquare] = useState<PublishToSquare>("no");
     const [showSuccess, setShowSuccess] = useState(false);
 
     const needPublishOption = useMemo(
-        () => joinPolicy === "approval" || joinPolicy === "public",
+        () => joinPolicy === "review" || joinPolicy === "public",
         [joinPolicy]
     );
 
     const resetForm = () => {
         setName("");
         setDescription("");
-        setJoinPolicy("approval");
+        setJoinPolicy("review");
         setPublishToSquare("no");
         setShowSuccess(false);
     };
@@ -118,7 +118,7 @@ export function CreateKnowledgeSpaceDrawer({
                                     onOpenChange(false);
                                 }}
                             >
-                            {localize("member_management")}
+                                {localize("member_management")}
                             </Button>
                         </div>
                     </div>
@@ -199,7 +199,7 @@ export function CreateKnowledgeSpaceDrawer({
                                             desc: localize("cannot_subscribe")
                                         },
                                         {
-                                            value: "approval",
+                                            value: "review",
                                             label: localize("approval_required"),
                                             desc: localize("require_approval")
                                         },
