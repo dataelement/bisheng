@@ -17,7 +17,7 @@ export function ChannelLayout({ channel, onFullScreen }: ChannelLayoutProps) {
     const [detailLoading, setDetailLoading] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
 
-    const { leftWidth, startResizing } = useResizablePanel({
+    const { leftWidth, isResizing, startResizing } = useResizablePanel({
         storageKey: "article-split-ratio",
         defaultWidth: 600,
         minLeftWidth: MIN_LEFT_WIDTH,
@@ -60,6 +60,10 @@ export function ChannelLayout({ channel, onFullScreen }: ChannelLayoutProps) {
 
     return (
         <div ref={containerRef} className="flex h-full w-full overflow-hidden bg-white">
+            {/* Transparent overlay during drag — prevents children from stealing mouse events */}
+            {isResizing && (
+                <div className="fixed inset-0 z-50 cursor-col-resize" />
+            )}
             {/* Left list area */}
             <div
                 style={{ width: selectedArticle ? `${leftWidth}px` : '100%' }}

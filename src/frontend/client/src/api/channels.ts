@@ -60,14 +60,14 @@ export interface Article {
     source_type?: number;      // 信源类型: 0-公众号 1-网站
 }
 
-// 后端文章搜索结果项
+// Backend article search result item
 export interface ArticleSearchResultItem {
     doc_id: string;
     source_type: number;       // 0-公众号 1-网站
     source_id: string;
     title: string;
-    content: string;           // 纯文本正文
-    content_html: string;      // HTML 内容
+    content: string;           // May contain HTML markup
+    content_html: string;      // Full HTML content
     cover_image?: string;
     publish_time?: string;
     source_url?: string;
@@ -75,6 +75,14 @@ export interface ArticleSearchResultItem {
     update_time?: string;
     score?: number;
     highlight?: Record<string, string[]>;
+    is_read?: boolean;
+    source_info?: {
+        id: string;
+        source_name: string;
+        source_icon: string;
+        source_type: string;
+        description?: string;
+    };
 }
 
 // 后端文章搜索分页响应
@@ -97,6 +105,26 @@ export interface ChannelItemResponse {
     is_pinned: boolean;
     subscribed_at?: string;
     unread_count?: number;
+}
+
+// Channel detail response from GET /api/v1/channel/manager/{channel_id}
+export interface ChannelDetailResponse {
+    id: string;
+    name: string;
+    description?: string;
+    source_list: string[];
+    visibility: "public" | "private" | "review";
+    is_released: boolean;
+    latest_article_update_time?: string;
+    create_time?: string;
+    creator_name: string;
+    subscriber_count: number;
+    article_count: number;
+    filter_rules?: Array<{
+        rules: Array<{ rule_type: string; keywords: string[]; relation: string }>;
+        channel_type: "main" | "sub";
+        name?: string;
+    }>;
 }
 
 /**
@@ -130,7 +158,7 @@ export async function getChannelsApi(params: {
         createdAt: item.create_time,
         updatedAt: item.latest_article_update_time || item.update_time,
         subChannels: [],
-        ...item
+        ...item,
     }));
 }
 
@@ -209,9 +237,10 @@ export async function pinChannelApi(channelId: string, pinned: boolean): Promise
  */
 export async function getArticlesApi(params: {
     channelId: string;
-    subChannelName?: string;   // 子频道名称（可选）
-    keyword?: string;          // 搜索关键词
-    sourceIds?: string[];      // 信息源ID列表
+    subChannelName?: string;   // Sub-channel name
+    keyword?: string;          // Search keyword
+    sourceIds?: string[];      // Source ID list
+    onlyUnread?: boolean;      // Only show unread articles
     page?: number;
     pageSize?: number;
 }): Promise<ArticleSearchPageResponse> {
@@ -221,6 +250,7 @@ export async function getArticlesApi(params: {
             keyword: params.keyword || undefined,
             source_ids: params.sourceIds?.length ? params.sourceIds.join(',') : undefined,
             sub_channel_name: params.subChannelName || undefined,
+            only_unread: params.onlyUnread || undefined,
             page: params.page || 1,
             page_size: params.pageSize || 20,
         }
@@ -234,6 +264,15 @@ export async function getArticlesApi(params: {
  */
 export async function getArticleDetailApi(articleId: string): Promise<ArticleSearchResultItem> {
     const res: any = await request.get(`/api/v1/channel/manager/articles/detail/${articleId}`);
+    return res?.data ?? res;
+}
+
+/**
+ * 获取频道详情
+ * GET /api/v1/channel/manager/{channel_id}
+ */
+export async function getChannelDetailApi(channelId: string): Promise<ChannelDetailResponse> {
+    const res: any = await request.get(`/api/v1/channel/manager/${channelId}`);
     return res?.data ?? res;
 }
 
