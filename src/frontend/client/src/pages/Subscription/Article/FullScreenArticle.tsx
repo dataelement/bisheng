@@ -1,68 +1,25 @@
 import { ArrowLeftIcon } from "lucide-react";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef } from "react";
 import { Button } from "~/components";
 import { ArticleDetail } from "./ArticleDetail";
 import { AiAssistantPanel } from "../AiChat/AiAssistantPanel";
+import { useResizablePanel } from "../hooks/useResizablePanel";
 
-const STORAGE_KEY = "ai-assistant-split-ratio";
 const MIN_LEFT_WIDTH = 480;
 const MIN_RIGHT_WIDTH = 360;
 
 export default function FullScreenArticle({ article, onExit, showAiAssistant, setShowAiAssistant }) {
     const containerRef = useRef<HTMLDivElement>(null);
-    const [leftWidth, setLeftWidth] = useState<number>(() => {
-        const saved = localStorage.getItem(STORAGE_KEY);
-        return saved ? parseInt(saved, 10) : window.innerWidth / 2;
+
+    const { leftWidth, setLeftWidth, startResizing } = useResizablePanel({
+        storageKey: "ai-assistant-split-ratio",
+        defaultWidth: typeof window !== "undefined" ? window.innerWidth / 2 : 600,
+        minLeftWidth: MIN_LEFT_WIDTH,
+        minRightWidth: MIN_RIGHT_WIDTH,
+        containerRef,
     });
-    const [isResizing, setIsResizing] = useState(false);
 
-    // Start drag
-    const startResizing = useCallback((e: React.MouseEvent) => {
-        e.preventDefault();
-        setIsResizing(true);
-    }, []);
-
-    // Stop drag
-    const stopResizing = useCallback(() => {
-        setIsResizing(false);
-        localStorage.setItem(STORAGE_KEY, leftWidth.toString());
-    }, [leftWidth]);
-
-    // Dragging
-    const resize = useCallback((e: MouseEvent) => {
-        if (!isResizing || !containerRef.current) return;
-
-        const containerRect = containerRef.current.getBoundingClientRect();
-        const newLeftWidth = e.clientX - containerRect.left;
-        const availableWidth = containerRect.width;
-
-        // If total width is insufficient to meet left and right min width, force close AI Assistant (can be handled via CSS or resize logic, but temporarily handling as auto-boundary)
-        if (availableWidth < MIN_LEFT_WIDTH + MIN_RIGHT_WIDTH) {
-            setShowAiAssistant(false);
-            stopResizing();
-            return;
-        }
-
-        if (newLeftWidth >= MIN_LEFT_WIDTH && (availableWidth - newLeftWidth) >= MIN_RIGHT_WIDTH) {
-            setLeftWidth(newLeftWidth);
-        }
-    }, [isResizing, setShowAiAssistant, stopResizing]);
-
-    useEffect(() => {
-        if (isResizing) {
-            window.addEventListener("mousemove", resize);
-            window.addEventListener("mouseup", stopResizing);
-        } else {
-            window.removeEventListener("mousemove", resize);
-            window.removeEventListener("mouseup", stopResizing);
-        }
-        return () => {
-            window.removeEventListener("mousemove", resize);
-            window.removeEventListener("mouseup", stopResizing);
-        };
-    }, [isResizing, resize, stopResizing]);
-
-    // Update width initially if out of bounds
+    // Auto-close AI panel when container is too narrow
     useEffect(() => {
         if (showAiAssistant && containerRef.current) {
             const containerRect = containerRef.current.getBoundingClientRect();
@@ -72,7 +29,7 @@ export default function FullScreenArticle({ article, onExit, showAiAssistant, se
                 setLeftWidth(containerRect.width - MIN_RIGHT_WIDTH);
             }
         }
-    }, [showAiAssistant, leftWidth, setShowAiAssistant]);
+    }, [showAiAssistant, leftWidth, setShowAiAssistant, setLeftWidth]);
 
 
     if (!showAiAssistant) {

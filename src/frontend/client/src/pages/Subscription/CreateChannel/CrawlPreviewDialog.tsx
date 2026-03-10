@@ -10,7 +10,7 @@ import { Button } from "~/components/ui/Button";
 import { Input } from "~/components/ui/Input";
 import { useLocalize } from "~/hooks";
 import { addWebsiteSourceApi, crawlTempSourceApi } from "~/api/channels";
-import type { InformationSource } from "~/mock/sources";
+import type { InformationSource } from "~/api/channels";
 
 interface CrawlPreviewDialogProps {
     open: boolean;

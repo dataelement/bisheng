@@ -36,14 +36,16 @@ export interface Channel {
     createdAt: string;         // 创建时间
     updatedAt: string;         // 最近更新时间
     subChannels: SubChannel[]; // 子频道列表
+    source_list?: string[];    // 信息源 ID 列表（后端返回）
 }
 
-// 文章接口
+// 文章接口（前端展示用，兼容旧字段）
 export interface Article {
     id: string;
     title: string;
     url: string;               // 原文链接
-    content: string;           // 正文
+    content: string;           // 正文（纯文本）
+    content_html?: string;     // HTML 内容
     summary?: string;          // 摘要
     coverImage?: string;       // 封面图
     sourceName: string;        // 信息源名称
@@ -54,6 +56,33 @@ export interface Article {
     isRead: boolean;           // 是否已读
     publishedAt: string;       // 发布时间
     createdAt: string;         // 创建时间（加入频道的时间）
+    highlight?: Record<string, string[]>;  // 搜索高亮
+    source_type?: number;      // 信源类型: 0-公众号 1-网站
+}
+
+// 后端文章搜索结果项
+export interface ArticleSearchResultItem {
+    doc_id: string;
+    source_type: number;       // 0-公众号 1-网站
+    source_id: string;
+    title: string;
+    content: string;           // 纯文本正文
+    content_html: string;      // HTML 内容
+    cover_image?: string;
+    publish_time?: string;
+    source_url?: string;
+    create_time?: string;
+    update_time?: string;
+    score?: number;
+    highlight?: Record<string, string[]>;
+}
+
+// 后端文章搜索分页响应
+export interface ArticleSearchPageResponse {
+    data: ArticleSearchResultItem[];
+    total: number;
+    page: number;
+    page_size: number;
 }
 
 export interface ChannelItemResponse {
@@ -67,6 +96,7 @@ export interface ChannelItemResponse {
     user_role: "creator" | "admin" | "member";
     is_pinned: boolean;
     subscribed_at?: string;
+    unread_count?: number;
 }
 
 /**
@@ -94,11 +124,11 @@ export async function getChannelsApi(params: {
         creatorId: "",
         subscriberCount: 0,
         articleCount: 0,
-        unreadCount: 0,
+        unreadCount: item.unread_count || 0,
         role: item.user_role as ChannelRole,
         isPinned: item.is_pinned,
         createdAt: item.create_time,
-        updatedAt: item.latest_article_update_time || item.update_time, // fallback
+        updatedAt: item.latest_article_update_time || item.update_time,
         subChannels: [],
         ...item
     }));
@@ -110,20 +140,21 @@ export async function getChannelsApi(params: {
 export async function createChannelApi(data: {
     name: string;
     description?: string;
-    subChannels?: string[];  // 子频道名称列表
+    subChannels?: string[];
 }): Promise<Channel> {
     return await request.post(`/api/v1/channels`, data);
 }
 
 /**
- * 更新频道
+ * 更新频道信息
+ * PUT /api/v1/channel/manager/{channel_id}
  */
 export async function updateChannelApi(channelId: string, data: {
     name?: string;
     description?: string;
-    subChannels?: string[];
-}): Promise<Channel> {
-    return await request.put(`/api/v1/channels/${channelId}`, data);
+}): Promise<any> {
+    const res: any = await request.put(`/api/v1/channel/manager/${channelId}`, data);
+    return res?.data ?? res;
 }
 
 /**
@@ -135,42 +166,66 @@ export async function subscribeChannelApi(channelId: string): Promise<void> {
 
 /**
  * 取消订阅频道
+ * POST /api/v1/channel/manager/{channel_id}/unsubscribe
  */
-export async function unsubscribeChannelApi(channelId: string): Promise<void> {
-    return await request.post(`/api/v1/channels/${channelId}/unsubscribe`);
+export async function unsubscribeChannelApi(channelId: string): Promise<any> {
+    const res: any = await request.post(`/api/v1/channel/manager/${channelId}/unsubscribe`);
+    return res?.data ?? res;
 }
 
 /**
  * 解散频道
+ * DELETE /api/v1/channel/manager/{channel_id}
  */
-export async function deleteChannelApi(channelId: string): Promise<void> {
-    return await request.delete(`/api/v1/channels/${channelId}`);
+export async function deleteChannelApi(channelId: string): Promise<any> {
+    const res: any = await request.delete(`/api/v1/channel/manager/${channelId}`);
+    return res?.data ?? res;
 }
 
 /**
  * 置顶/取消置顶频道
+ * POST /api/v1/channel/manager/set_pin
  */
-export async function pinChannelApi(channelId: string, pinned: boolean): Promise<void> {
-    return await request.post(`/api/v1/channels/${channelId}/pin`, { pinned });
+export async function pinChannelApi(channelId: string, pinned: boolean): Promise<any> {
+    const res: any = await request.post(`/api/v1/channel/manager/set_pin`, {
+        channel_id: channelId,
+        is_pinned: pinned
+    });
+    return res?.data ?? res;
 }
 
 /**
  * 获取频道文章列表
+ * GET /api/v1/channel/manager/articles
  */
 export async function getArticlesApi(params: {
     channelId: string;
-    subChannelId?: string;     // 子频道ID（可选）
-    search?: string;           // 搜索关键词
+    subChannelName?: string;   // 子频道名称（可选）
+    keyword?: string;          // 搜索关键词
     sourceIds?: string[];      // 信息源ID列表
-    onlyUnread?: boolean;      // 仅看未读
     page?: number;
     pageSize?: number;
-}): Promise<{
-    data: Article[];
-    total: number;
-    hasMore: boolean;
-}> {
-    return await request.get(`/api/v1/channels/${params.channelId}/articles`, { params });
+}): Promise<ArticleSearchPageResponse> {
+    const res: any = await request.get(`/api/v1/channel/manager/articles`, {
+        params: {
+            channel_id: params.channelId,
+            keyword: params.keyword || undefined,
+            source_ids: params.sourceIds?.length ? params.sourceIds.join(',') : undefined,
+            sub_channel_name: params.subChannelName || undefined,
+            page: params.page || 1,
+            page_size: params.pageSize || 20,
+        }
+    });
+    return res?.data ?? res;
+}
+
+/**
+ * 获取文章详情
+ * GET /api/v1/channel/manager/articles/detail/{article_id}
+ */
+export async function getArticleDetailApi(articleId: string): Promise<ArticleSearchResultItem> {
+    const res: any = await request.get(`/api/v1/channel/manager/articles/detail/${articleId}`);
+    return res?.data ?? res;
 }
 
 /**
@@ -415,3 +470,24 @@ export async function removeChannelMemberApi(body: {
 }): Promise<any> {
     return await request.post(`/api/v1/channel/manager/remove_member`, body);
 }
+
+// ── Information Source types (migrated from ~/mock/sources) ──
+
+/** Source type */
+export type SourceType = "official_account" | "website";
+
+/** Information source entity */
+export interface InformationSource {
+    id: string;
+    name: string;
+    avatar?: string;
+    type: SourceType;
+    url?: string;
+}
+
+/** Truncate name with ellipsis */
+export function truncateName(name: string, max = 20): string {
+    if (name.length <= max) return name;
+    return name.slice(0, max) + "...";
+}
+

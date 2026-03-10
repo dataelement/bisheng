@@ -1,18 +1,20 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-    ArrowLeftRightIcon,
-    ChevronDown,
     LayoutGridIcon,
     PanelLeftOpenIcon,
     PanelRightOpenIcon,
     Plus
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Channel, SortType, getChannelsApi } from "~/api/channels";
-import { NotificationSeverity } from "~/common";
+import {
+    Channel,
+    SortType,
+    getChannelsApi,
+} from "~/api/channels";
 import { Button } from "~/components/ui/Button";
-import { useToastContext } from "~/Providers";
 import ChannelItem from "./ChannelItem";
+import { SectionHeader } from "./SectionHeader";
+import { useChannelActions } from "../hooks/useChannelActions";
 
 interface ChannelSidebarProps {
     activeChannelId?: string;
@@ -20,21 +22,6 @@ interface ChannelSidebarProps {
     onCreateChannel: () => void;
     onChannelSquare: () => void;
     onManageMembers: (channel: Channel) => void;
-}
-
-function SectionHeader({ title, collapsed, onToggle, sortText, onSort }: any) {
-    return (
-        <div className="flex items-center justify-between mb-2">
-            <button onClick={onToggle} className="flex items-center gap-1 text-[12px] text-[#86909c] hover:text-[#4e5969]">
-                <ChevronDown className={`size-4 transition-transform ${collapsed ? "-rotate-90" : ""}`} />
-                {title}
-            </button>
-            <button onClick={onSort} className="flex items-center gap-1 text-[12px] text-[#86909c] hover:text-[#4e5969]">
-                {sortText}
-                <ArrowLeftRightIcon className="size-3" />
-            </button>
-        </div>
-    );
 }
 
 export function ChannelSidebar({
@@ -50,20 +37,36 @@ export function ChannelSidebar({
     const [createdSortBy, setCreatedSortBy] = useState<SortType>(SortType.RECENT_UPDATE);
     const [subscribedSortBy, setSubscribedSortBy] = useState<SortType>(SortType.RECENT_UPDATE);
 
-    const { showToast } = useToastContext();
     const queryClient = useQueryClient();
 
     const { data: createdChannels = [] } = useQuery({
         queryKey: ["channels", "created", createdSortBy],
-        queryFn: () => getChannelsApi({ type: "created", sortBy: createdSortBy })
+        queryFn: () => getChannelsApi({ type: "created", sortBy: createdSortBy }),
+        placeholderData: (prev) => prev,
     });
 
     const { data: subscribedChannels = [] } = useQuery({
         queryKey: ["channels", "subscribed", subscribedSortBy],
-        queryFn: () => getChannelsApi({ type: "subscribed", sortBy: subscribedSortBy })
+        queryFn: () => getChannelsApi({ type: "subscribed", sortBy: subscribedSortBy }),
+        placeholderData: (prev) => prev,
     });
 
-    // 默认选中第一个频道
+    // Channel CRUD operations (optimistic updates)
+    const {
+        handleUpdateChannel,
+        handleDeleteChannel,
+        handleUnsubscribeChannel,
+        handlePinChannel,
+    } = useChannelActions({
+        activeChannelId,
+        createdSortBy,
+        subscribedSortBy,
+        createdChannels,
+        subscribedChannels,
+        onChannelSelect,
+    });
+
+    // Default select first channel
     useEffect(() => {
         if (!activeChannelId && createdChannels.length > 0) {
             onChannelSelect(createdChannels[0]);
@@ -82,83 +85,14 @@ export function ChannelSidebar({
         const sortTypes = [SortType.RECENT_UPDATE, SortType.RECENT_ADDED, SortType.NAME];
         const currentSort = type === "created" ? createdSortBy : subscribedSortBy;
         const nextSort = sortTypes[(sortTypes.indexOf(currentSort) + 1) % sortTypes.length];
-        type === "created" ? setCreatedSortBy(nextSort) : setSubscribedSortBy(nextSort);
-    };
 
-    const updateCache = (updater: (channels: Channel[]) => Channel[]) => {
-        queryClient.setQueryData(["channels", "created", createdSortBy], (old: Channel[] = []) => updater(old));
-        queryClient.setQueryData(["channels", "subscribed", subscribedSortBy], (old: Channel[] = []) => updater(old));
-    };
-
-    const handleUpdateChannel = (channel: Channel) => {
-        updateCache(channels => channels.map(c => c.id === channel.id ? channel : c));
-        if (activeChannelId === channel.id) {
-            onChannelSelect(channel);
-        }
-        showToast({ message: "频道已更新", severity: NotificationSeverity.SUCCESS });
-    };
-
-    const handleDeleteChannel = (channelId: string) => {
-        let nextActive: Channel | null = null;
-
-        // Update created channels
-        queryClient.setQueryData(["channels", "created", createdSortBy], (old: Channel[] = []) => {
-            const newData = old.filter(c => c.id !== channelId);
-            if (activeChannelId === channelId && newData.length > 0) nextActive = newData[0];
-            return newData;
-        });
-
-        // If not found in created, check subscribed (or fallback to it)
-        if (activeChannelId === channelId && !nextActive) {
-            const subscribed = queryClient.getQueryData<Channel[]>(["channels", "subscribed", subscribedSortBy]) || [];
-            const newSubscribed = subscribed.filter(c => c.id !== channelId);
-            // Update subscribed cache
-            queryClient.setQueryData(["channels", "subscribed", subscribedSortBy], newSubscribed);
-
-            if (newSubscribed.length > 0) nextActive = newSubscribed[0];
+        if (type === "created") {
+            queryClient.removeQueries({ queryKey: ["channels", "created", currentSort] });
+            setCreatedSortBy(nextSort);
         } else {
-            // Just remove from subscribed
-            queryClient.setQueryData(["channels", "subscribed", subscribedSortBy], (old: Channel[] = []) => old.filter(c => c.id !== channelId));
+            queryClient.removeQueries({ queryKey: ["channels", "subscribed", currentSort] });
+            setSubscribedSortBy(nextSort);
         }
-
-        if (activeChannelId === channelId) {
-            onChannelSelect(nextActive);
-        }
-        showToast({ message: "频道已解散", severity: NotificationSeverity.WARNING });
-    };
-
-    const handleUnsubscribeChannel = (channelId: string) => {
-        let nextActive: Channel | null = null;
-        queryClient.setQueryData(["channels", "subscribed", subscribedSortBy], (old: Channel[] = []) => {
-            const newData = old.filter(c => c.id !== channelId);
-            if (activeChannelId === channelId && newData.length > 0) nextActive = newData[0];
-            return newData;
-        });
-
-        if (activeChannelId === channelId) {
-            // If we unsubscribed from active, try to find another one, prefer created
-            if (!nextActive && createdChannels.length > 0) nextActive = createdChannels[0];
-            onChannelSelect(nextActive);
-        }
-        showToast({ message: "已取消订阅", severity: NotificationSeverity.WARNING });
-    };
-
-    const handlePinChannel = (channelId: string, pinned: boolean, type: "created" | "subscribed") => {
-        const channels = type === "created" ? createdChannels : subscribedChannels;
-        if (pinned && channels.filter(c => c.isPinned).length >= 5) {
-            showToast({ message: "已达置顶数量限制", severity: NotificationSeverity.INFO });
-            return;
-        }
-
-        const updater = (list: Channel[]) => list.map(c => c.id === channelId ? { ...c, isPinned: pinned } : c);
-        updateCache(updater);
-
-        if (activeChannelId === channelId) {
-            // We need to find the channel to update the active state object
-            const channel = channels.find(c => c.id === channelId);
-            if (channel) onChannelSelect({ ...channel, isPinned: pinned });
-        }
-        showToast({ message: pinned ? "已置顶" : "已取消置顶", severity: NotificationSeverity.SUCCESS });
     };
 
     if (collapsed) {

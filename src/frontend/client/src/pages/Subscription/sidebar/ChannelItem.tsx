@@ -91,7 +91,7 @@ export default function ChannelItem({
                     />
                 ) : (
                     <div className="flex items-center gap-1 flex-1 min-w-0">
-                        <span onDoubleClick={() => setIsEditing(true)} className="text-[14px] truncate text-[#1d2129]">
+                        <span onDoubleClick={() => type === "created" && setIsEditing(true)} className="text-[14px] truncate text-[#1d2129]">
                             {channel.name}
                         </span>
                         {channel.isPinned && (
@@ -141,16 +141,14 @@ export default function ChannelItem({
                             <Settings className="size-4 mr-2 text-[#4e5969]" />
                             <span className="">频道设置</span>
                         </DropdownMenuItem>}
-                        {type === "created" || channel.role === ChannelRole.ADMIN && (
-                            <>
-                                <DropdownMenuItem
-                                    className="py-2 px-0 cursor-pointer focus:bg-[#f2f3f5]"
-                                    onClick={() => onManageMembers(channel)}
-                                >
-                                    <Users className="size-4 mr-2 text-[#4e5969]" />
-                                    <span className="text-[14px] text-[#1d2129]">成员管理</span>
-                                </DropdownMenuItem>
-                            </>
+                        {(type === "created" || channel.role === ChannelRole.ADMIN) && (
+                            <DropdownMenuItem
+                                className="py-2 px-0 cursor-pointer focus:bg-[#f2f3f5]"
+                                onClick={() => onManageMembers(channel)}
+                            >
+                                <Users className="size-4 mr-2 text-[#4e5969]" />
+                                <span className="text-[14px] text-[#1d2129]">成员管理</span>
+                            </DropdownMenuItem>
                         )}
                         <DropdownMenuItem
                             onClick={() => onPin(channel.id, !channel.isPinned, type)}
@@ -174,10 +172,7 @@ export default function ChannelItem({
                                 })
 
                                 if (ok) {
-                                    console.log("执行删除逻辑...")
                                     type === "created" ? onDelete(channel.id) : onUnsubscribe(channel.id);
-                                } else {
-                                    console.log("用户取消了操作")
                                 }
                             }}
                             className="text-[#f53f3f] py-2 px-0 cursor-pointer focus:bg-[#f2f3f5] focus:text-[#f53f3f]"

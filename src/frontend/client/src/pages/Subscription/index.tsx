@@ -8,23 +8,20 @@ import {
     getChannelsApi,
     SortType,
     createManagerChannelApi,
-    type CreateManagerChannelPayload,
-    type ManagerChannelFilterRule,
-    type ManagerChannelRuleItem
 } from "~/api/channels";
-import { type KnowledgeSpace, SpaceRole, VisibilityType } from "~/api/knowledge";
+import { type KnowledgeSpace } from "~/api/knowledge";
 import { NotificationSeverity } from "~/common";
 import { useToastContext } from "~/Providers";
-import { useLocalize } from "~/hooks";
 import { KnowledgeSpaceMemberDialog } from "~/components/KnowledgeSpaceMemberDialog";
 import { ChannelMemberDialog } from "~/components/ChannelMemberDialog";
 import ChannelSquare from "../ChannelSquare";
 import { ChannelLayout } from "./ChannelLayout";
 import { ChannelPreviewDrawer } from "./ChannelPreviewDrawer";
 import FullScreenArticle from "./Article/FullScreenArticle";
-import { ChannelSidebar } from "./sidebar/ChannelSidebar";
-import { CreateChannelDrawer } from "./CreateChannelDrawer";
-import type { CreateChannelFormData } from "./CreateChannelDrawer";
+import { ChannelSidebar } from "./Sidebar/ChannelSidebar";
+import { CreateChannelDrawer } from "./CreateChannel/CreateChannelDrawer";
+import type { CreateChannelFormData } from "./CreateChannel/CreateChannelDrawer";
+import { buildCreateChannelPayload } from "./channelUtils";
 
 const MAX_USER_CHANNELS = 10;
 
@@ -42,7 +39,6 @@ export default function Subscription() {
     const [channelMemberOpen, setChannelMemberOpen] = useState(false);
     const [channelMemberChannel, setChannelMemberChannel] = useState<Channel | null>(null);
     const { showToast } = useToastContext();
-    const localize = useLocalize();
     const queryClient = useQueryClient();
 
     // Open preview drawer when channelId route param is present
@@ -83,120 +79,20 @@ export default function Subscription() {
     };
 
     const handleCreateChannelConfirm = async (data: CreateChannelFormData): Promise<{ channelId: string }> => {
-            const buildFilterRules = (): ManagerChannelFilterRule[] => {
-                const rules: ManagerChannelFilterRule[] = [];
-
-                // 主频道内容筛选
-                if (data.contentFilter && data.filterGroups.length) {
-                    for (const group of data.filterGroups) {
-                        const groupRules: ManagerChannelRuleItem[] = group.conditions.map((cond) => {
-                            const keywords =
-                                cond.keywords
-                                    ?.split(/[;；]/)
-                                    .map((k: string) => k.trim())
-                                    .filter(Boolean) || [];
-                            return {
-                                rule_type: cond.include ? "include" : "exclude",
-                                keywords,
-                                relation: group.relation
-                            };
-                        });
-                        rules.push({
-                            rules: groupRules,
-                            channel_type: "main",
-                            name: "main"
-                        });
-                    }
-                }
-
-                // 子频道筛选
-                if (data.createSubChannel && data.subChannels.length) {
-                    for (const sub of data.subChannels) {
-                        if (!sub.groups || !sub.groups.length) continue;
-                        for (const group of sub.groups) {
-                            const groupRules: ManagerChannelRuleItem[] = group.conditions.map((cond) => {
-                                const keywords =
-                                    cond.keywords
-                                        ?.split(/[;；]/)
-                                        .map((k: string) => k.trim())
-                                        .filter(Boolean) || [];
-                                return {
-                                    rule_type: cond.include ? "include" : "exclude",
-                                    keywords,
-                                    relation: group.relation
-                                };
-                            });
-                            rules.push({
-                                rules: groupRules,
-                                channel_type: "sub",
-                                name: sub.name || "sub"
-                            });
-                        }
-                    }
-                }
-
-                return rules;
-            };
-
-            const payload: CreateManagerChannelPayload = {
-                name: data.channelName.trim(),
-                source_list: data.sources.map((s) => s.id),
-                visibility: data.visibility,
-                filter_rules: buildFilterRules(),
-                is_released: data.publishToSquare === "yes"
-            };
-
-            const res: any = await createManagerChannelApi(payload);
-            await queryClient.invalidateQueries({ queryKey: ["channels"] });
-            const root = res?.data ?? res;
-            const payloadRes = root?.data ?? root;
-            const channelId = String(
-                payloadRes?.id ??
-                payloadRes?.channel_id ??
-                payloadRes?.data?.id ??
-                payloadRes?.data?.channel_id ??
-                ""
-            );
-            if (!channelId) throw new Error("missing channel id");
-            return { channelId };
-    };
-
-    const toMemberDialogSpace = (channel?: Channel | null): KnowledgeSpace => {
-        const c = channel || activeChannel || createdChannels[0];
-        if (c) {
-            return {
-                id: c.id,
-                name: c.name,
-                description: c.description || "",
-                visibility: VisibilityType.PUBLIC,
-                creator: c.creator,
-                creatorId: c.creatorId,
-                memberCount: c.subscriberCount || 0,
-                fileCount: 0,
-                totalFileCount: 0,
-                role: c.role as unknown as SpaceRole,
-                isPinned: c.isPinned,
-                createdAt: c.createdAt,
-                updatedAt: c.updatedAt,
-                tags: []
-            };
-        }
-        return {
-            id: "temp-channel-space",
-            name: "频道成员",
-            description: "",
-            visibility: VisibilityType.PUBLIC,
-            creator: "创建者",
-            creatorId: "creator",
-            memberCount: 0,
-            fileCount: 0,
-            totalFileCount: 0,
-            role: SpaceRole.CREATOR,
-            isPinned: false,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            tags: []
-        };
+        const payload = buildCreateChannelPayload(data);
+        const res: any = await createManagerChannelApi(payload);
+        await queryClient.invalidateQueries({ queryKey: ["channels"] });
+        const root = res?.data ?? res;
+        const payloadRes = root?.data ?? root;
+        const channelId = String(
+            payloadRes?.id ??
+            payloadRes?.channel_id ??
+            payloadRes?.data?.id ??
+            payloadRes?.data?.channel_id ??
+            ""
+        );
+        if (!channelId) throw new Error("missing channel id");
+        return { channelId };
     };
 
     // Channel square

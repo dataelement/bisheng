@@ -17,6 +17,7 @@ import { Separator } from "~/components";
 
 interface ArticleDetailProps {
     article: Article;
+    loading?: boolean;
     screenFull?: boolean;
     aiAssistantOpen?: boolean;
     onFullScreen?: () => void;
@@ -24,26 +25,16 @@ interface ArticleDetailProps {
     onAiAssistant?: () => void;
 }
 
-const html = `<article>
-    <h1>2025年北京PM2.5年均浓度首破“30微克”</h1>
-    <p>元旦假期，天坛公园上空万里无云，澄澈蓝天之下游客人如织。</p>
-    
-    <img src="http://192.168.2.224:4001/workspace/bisheng/icon/f31edaaeb8e9406085bf8c270cb2af63.png?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=minioadmin%2F20260226%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260226T142350Z&X-Amz-Expires=604800&X-Amz-SignedHeaders=host&X-Amz-Signature=0b077cc95e4c21959000e6b1446ada908b4ed1c2723dd70e9c6e716e2518d285" alt="天坛风景" />
-    
-    <p>1月4日上午，北京市人民政府新闻办公室举行北京市空气质量状况新闻发布会...</p>
-    <p style="margin-top: 1000px;">这里故意增加间距，用于测试“回到顶部”按钮出现的情况...</p>
-    <img src="https://example.com/images/chart.png" alt="数据图表" />
-    
-    <p>多项指标创有监测以来最优。PM2.5优良天数达348天，占比95.3%。</p>
-</article>`
-
-export function ArticleDetail({ article, screenFull = false, aiAssistantOpen = false, onFullScreen, onExitAiAssistant, onAiAssistant }: ArticleDetailProps) {
+export function ArticleDetail({ article, loading = false, screenFull = false, aiAssistantOpen = false, onFullScreen, onExitAiAssistant, onAiAssistant }: ArticleDetailProps) {
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
     const [scale, setScale] = useState(1);
     const [showBackTop, setShowBackTop] = useState(false);
     const [showKnowledgeModal, setShowKnowledgeModal] = useState(false);
     const iframeRef = useRef<HTMLIFrameElement>(null);
     const { showToast } = useToastContext();
+
+    // 使用文章的真实 HTML 内容
+    const articleHtml = article.content_html || article.content || '';
 
     const processedHtml = `
     <html>
@@ -55,7 +46,7 @@ export function ArticleDetail({ article, screenFull = false, aiAssistantOpen = f
         </style>
       </head>
       <body>
-        ${html}
+        ${articleHtml}
        <script>
           // Image click
           document.querySelectorAll('img').forEach(img => {
@@ -187,34 +178,6 @@ export function ArticleDetail({ article, screenFull = false, aiAssistantOpen = f
                         </button>}
 
                         <div className="ml-auto">
-                            {/* <div className="flex items-center gap-3 text-[14px] antialiased">
-                                <div className="flex-shrink-0">
-                                    <svg
-                                        width="18"
-                                        height="18"
-                                        viewBox="0 0 24 24"
-                                        fill="none"
-                                        className="text-[#e60012]" 
-                                        xmlns="http://www.w3.org/2000/svg"
-                                    >
-                                        <path
-                                            d="M12 2L4 7V17L12 22L20 17V7L12 2Z"
-                                            stroke="currentColor"
-                                            strokeWidth="2"
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                        />
-                                        <circle cx="12" cy="12" r="3" fill="currentColor" />
-                                    </svg>
-                                </div>
-                                <span className="font-medium text-slate-800 tracking-tight">
-                                    北京日报
-                                </span>
-                                <Separator orientation="vertical" className="h-4 bg-slate-200" />
-                                <span className="text-slate-400 font-normal tabular-nums">
-                                    2026-01-05 08:22
-                                </span>
-                            </div> */}
                             <button
                                 className="flex items-center gap-1 text-xs transition-colors bg-gradient-to-br from-[#335CFF] to-[#7433FF] bg-clip-text text-transparent"
                                 onClick={() => onAiAssistant?.()}
@@ -229,11 +192,17 @@ export function ArticleDetail({ article, screenFull = false, aiAssistantOpen = f
 
             {/* Iframe Content Area */}
             <div className="flex-1 bg-white relative">
-                <iframe
-                    ref={iframeRef}
-                    srcDoc={processedHtml}
-                    className="w-full h-full border-none"
-                />
+                {loading ? (
+                    <div className="flex items-center justify-center h-full text-[#86909c] text-sm">加载中...</div>
+                ) : !articleHtml ? (
+                    <div className="flex items-center justify-center h-full text-[#86909c] text-sm">暂无内容</div>
+                ) : (
+                    <iframe
+                        ref={iframeRef}
+                        srcDoc={processedHtml}
+                        className="w-full h-full border-none"
+                    />
+                )}
 
                 {/* Back to Top Button */}
                 {showBackTop && (

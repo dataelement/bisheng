@@ -104,8 +104,7 @@ export function KnowledgeSpaceSidebar({
     };
 
     const handleSquareClick = () => {
-        if (onKnowledgeSquare) onKnowledgeSquare();
-        else showToast({ message: "前往广场功能开发中", severity: NotificationSeverity.INFO });
+        onKnowledgeSquare();
     };
 
     if (collapsed) {

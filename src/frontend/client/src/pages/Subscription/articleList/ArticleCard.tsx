@@ -36,7 +36,7 @@ export function ArticleCard({ article, onSelect, isSelected, searchQuery }: Arti
         );
     };
 
-    const hasSpaceAuth = true
+
 
     return (
         <div
@@ -92,20 +92,20 @@ export function ArticleCard({ article, onSelect, isSelected, searchQuery }: Arti
 
                     {/* 4. Hover 操作按钮 - 按照截图移动到右下角 */}
                     <div className={`absolute right-0 flex items-center gap-3 animate-in fade-in slide-in-from-right-1 transition-opacity ${hovered ? "opacity-100" : "opacity-0"}`}>
-                        {hasSpaceAuth && <button
+                        <button
                             onClick={(e) => {
                                 e.stopPropagation();
-                                console.log("阅读", article.id);
+                                onSelect(article);
                             }}
                             className=" rounded-full bg-gray-50 flex items-center justify-center size-8 text-gray-800 hover:bg-gray-100 transition-colors cursor-pointer"
                             title="阅读详情"
                         >
                             <BookOpen className="size-3.5" />
-                        </button>}
+                        </button>
                         <button
                             onClick={(e) => {
                                 e.stopPropagation();
-                                console.log("分享", article.id);
+                                // TODO: implement share
                             }}
                             className=" rounded-full bg-gray-50 flex items-center justify-center size-8 text-gray-800 hover:bg-gray-100 transition-colors cursor-pointer"
                             title="分享"
