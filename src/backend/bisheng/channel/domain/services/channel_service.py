@@ -55,6 +55,7 @@ class ChannelService:
         channel_model = Channel(
             name=channel_data.name,
             source_list=channel_data.source_list,
+            description=channel_data.description,
             visibility=channel_data.visibility,
             filter_rules=[] if not channel_data.filter_rules else [f.model_dump() for f in channel_data.filter_rules],
             user_id=login_user.user_id,
