@@ -31,9 +31,7 @@ def sync_information_article():
             for one in information_list:
                 try:
                     logger.debug(f"Syncing information for {one.id} - {one.source_name}")
-                    update_flag = _sync_one_information_article(one, article_service)
-                    if update_flag:
-                        ChannelInfoSourceRepositoryImpl(session).update(one)
+                    _sync_one_information_article(one, article_service)
                 except Exception as e:
                     logger.exception(f"Failed to sync information article for source {one.id}: {e}")
             page += 1
@@ -41,9 +39,6 @@ def sync_information_article():
 
 
 def _sync_one_information_article(information: ChannelInfoSource, article_service: ArticleEsService):
-    return_information, update_flag = False, False
-    if information.source_type == "wechat" and not information.source_icon:
-        return_information = True
     latest_create_time = article_service.get_source_latest_article_time_sync(source_id=information.id)
     if latest_create_time:
         latest_create_time = datetime.fromisoformat(latest_create_time).timestamp()
@@ -52,14 +47,10 @@ def _sync_one_information_article(information: ChannelInfoSource, article_servic
 
     page, page_size, current = 1, 10, 0
     while True:
-        resp = information_client.get_information_articles(information.id, return_information,
+        resp = information_client.get_information_articles(information.id, False,
                                                            min_create_time=latest_create_time,
                                                            page=page,
                                                            page_size=page_size)
-        # wx need to update icon
-        if resp.information and resp.information.icon:
-            update_flag = True
-            information.source_icon = resp.information.icon
         articles = []
         doc_ids = []
         for article in resp.articles:
@@ -84,7 +75,5 @@ def _sync_one_information_article(information: ChannelInfoSource, article_servic
             break
         if not latest_create_time and current >= 36:
             break
-        return_information = False
         page += 1
     logger.debug(f"Finished syncing information for {information.id}. article nums: {current}")
-    return update_flag
