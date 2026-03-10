@@ -326,6 +326,7 @@ export interface ManagerChannelFilterRule {
 // 创建频道（manager）接口入参
 export interface CreateManagerChannelPayload {
     name: string;                         // 频道名称（必填）
+    description?: string | null;          // 频道简介（可选）
     source_list: string[];                // 信息源 ID 列表（必填）
     visibility: string;                   // 可见性（如 private / approval / public）
     filter_rules: ManagerChannelFilterRule[]; // 筛选规则（必填）
