@@ -11,14 +11,14 @@ from elasticsearch import AsyncElasticsearch, helpers as es_helpers
 
 from bisheng.channel.domain.es.article_index import (
     ARTICLE_INDEX_NAME,
-    ensure_article_index_exists,
+    ensure_article_index_exists, ensure_article_index_exists_sync,
 )
 from bisheng.channel.domain.schemas.article_schema import (
     ArticleDocument,
     ArticleSearchResultItem,
     ArticleSearchPageResponse,
 )
-from bisheng.core.search.elasticsearch.manager import get_es_connection
+from bisheng.core.search.elasticsearch.manager import get_es_connection, get_es_connection_sync
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +39,12 @@ class ArticleEsService:
         """确保文章索引存在"""
         client = await self._get_client()
         await ensure_article_index_exists(client)
+
+    @staticmethod
+    def ensure_index_sync() -> None:
+        """确保文章索引存在（同步方法）"""
+        client = get_es_connection_sync()
+        ensure_article_index_exists_sync(client)
 
     # ──────────────────────────────────────────
     #  Create
@@ -95,6 +101,27 @@ class ArticleEsService:
             actions.append(action)
 
         success, errors = await es_helpers.async_bulk(client, actions, raise_on_error=False)
+        if errors:
+            logger.warning(f"Bulk index completed with {len(errors)} errors: {errors[:3]}")
+        return success
+
+    @staticmethod
+    def bulk_index_articles_sync(articles: List[ArticleDocument],
+                                 doc_ids: Optional[List[str]] = None) -> int:
+        """同步版本：批量索引文章。"""
+        if not articles:
+            return 0
+        client = get_es_connection_sync()
+        actions = []
+        for i, article in enumerate(articles):
+            action = {
+                "_index": ARTICLE_INDEX_NAME,
+                "_source": article.model_dump(mode='json'),
+            }
+            if doc_ids and i < len(doc_ids) and doc_ids[i]:
+                action["_id"] = doc_ids[i]
+            actions.append(action)
+        success, errors = es_helpers.bulk(client, actions, raise_on_error=False)
         if errors:
             logger.warning(f"Bulk index completed with {len(errors)} errors: {errors[:3]}")
         return success
@@ -319,3 +346,21 @@ class ArticleEsService:
             page=page,
             page_size=page_size,
         )
+
+    @staticmethod
+    def get_source_latest_article_time_sync(source_id: str) -> Optional[str]:
+        """获取信源最新文章的更新时间（同步方法）"""
+        client = get_es_connection_sync()
+        body = {
+            "size": 1,
+            "query": {
+                "term": {"source_id": source_id}
+            },
+            "sort": [{"create_time": {"order": "desc"}}],
+            "_source": ["create_time"],
+        }
+        response = client.search(index=ARTICLE_INDEX_NAME, body=body)
+        hits = response["hits"]["hits"]
+        if hits:
+            return hits[0]["_source"]["create_time"]
+        return None

@@ -50,3 +50,16 @@ async def get_bisheng_information_client() -> BishengInformationClient:
             BishengInformationManager(http_client, config)
         )
         return await app_context.async_get_instance(BishengInformationManager.name)
+
+
+def get_bisheng_information_client_sync() -> BishengInformationClient:
+    """Get Bisheng Information Client Instance"""
+    from bisheng.core.context.manager import app_context
+    try:
+        return app_context.sync_get_instance(BishengInformationManager.name)
+    except KeyError:
+        from bisheng.common.services.config_service import settings
+        app_context.register_context(
+            BishengInformationManager(None, settings.get_intelligence_center_conf())
+        )
+        return app_context.sync_get_instance(BishengInformationManager.name)

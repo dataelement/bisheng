@@ -1,11 +1,12 @@
 from enum import Enum
 from typing import Optional
 
+import httpx
 from aiohttp import ClientTimeout
 
 from bisheng.common.errcode.channel import BishengInformationUnAuthorizedError, BishengInformationServiceError
 from bisheng.core.external.bisheng_information_client.response_schema import InformationSourceResponse, \
-    CrawlWebsiteResponse
+    CrawlWebsiteResponse, InformationArticlesResponse
 from bisheng.core.external.http_client.client import AsyncHttpClient
 
 
@@ -204,3 +205,31 @@ class BishengInformationClient(object):
         result = response.body.get("data", {})
 
         return CrawlWebsiteResponse.model_validate(result)
+
+    def get_information_articles(self, information_id: str, return_information: bool = False,
+                                 min_create_time: int = None, page: int = 1, page_size: int = 20) \
+            -> InformationArticlesResponse:
+        """Get articles of an information source by source_id."""
+        endpoint = f"{self.base_url}/information/articles/{information_id}"
+        headers = {"X-API-Key": self.api_key}
+
+        params = {
+            "return_information": return_information,
+            "page": page,
+            "page_size": page_size,
+        }
+        if min_create_time:
+            params["min_create_time"] = min_create_time
+        with httpx.Client() as client:
+            response = client.get(endpoint, headers=headers, params=params)
+
+        if response.status_code != 200:
+            raise BishengInformationServiceError(
+                msg=f"Failed to get information articles: {response.status_code} - {response.text}")
+        result = response.json()
+        if result.get("code") != 200:
+            raise BishengInformationServiceError(
+                msg=f"Failed to get information articles: {response.status_code} - {response.text}")
+        return InformationArticlesResponse(information=result.get("data", {}).get("information"),
+                                           articles=result.get("data", {}).get("articles", []),
+                                           total=result.get("data", {}).get("totalCount", 0))

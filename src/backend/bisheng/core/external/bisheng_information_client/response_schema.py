@@ -21,3 +21,23 @@ class CrawlWebsiteResponse(BaseModel):
     url: str  # 网址
     icon: Optional[str] = None  # 网站icon
     article_links: List[Dict] = []  # 文章链接列表
+
+
+class ArticleInfo(BaseModel):
+    """Article Information Schema for external client"""
+    id: str
+    title: str
+    original_url: str
+    icon: Optional[str] = None
+    markdown_content: Optional[str] = None
+    html_content: Optional[str] = None
+    publish_date: Optional[str] = None  # 发布日期，格式为 ISO 8601 字符串
+    create_time: Optional[str] = None  # 创建时间，格式为 ISO 8601 字符串
+    update_time: Optional[str] = None
+
+
+class InformationArticlesResponse(BaseModel):
+    """Information Source Articles Response Schema for external client"""
+    information: Optional[InformationSourceResponse] = None  # 信息源信息
+    articles: List[ArticleInfo] = []  # 文章列表
+    total: int = 0  # 文章总数
