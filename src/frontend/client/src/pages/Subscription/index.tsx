@@ -4,6 +4,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import {
     Article,
     Channel,
+    ChannelRole,
     getChannelsApi,
     SortType,
     createManagerChannelApi,
@@ -16,6 +17,7 @@ import { NotificationSeverity } from "~/common";
 import { useToastContext } from "~/Providers";
 import { useLocalize } from "~/hooks";
 import { KnowledgeSpaceMemberDialog } from "~/components/KnowledgeSpaceMemberDialog";
+import { ChannelMemberDialog } from "~/components/ChannelMemberDialog";
 import ChannelSquare from "../ChannelSquare";
 import { ChannelLayout } from "./ChannelLayout";
 import { ChannelPreviewDrawer } from "./ChannelPreviewDrawer";
@@ -37,6 +39,8 @@ export default function Subscription() {
     const [previewDrawerOpen, setPreviewDrawerOpen] = useState(false);
     const [memberDialogOpen, setMemberDialogOpen] = useState(false);
     const [memberDialogSpace, setMemberDialogSpace] = useState<KnowledgeSpace | null>(null);
+    const [channelMemberOpen, setChannelMemberOpen] = useState(false);
+    const [channelMemberChannel, setChannelMemberChannel] = useState<Channel | null>(null);
     const { showToast } = useToastContext();
     const localize = useLocalize();
     const queryClient = useQueryClient();
@@ -78,8 +82,7 @@ export default function Subscription() {
         setShowCreateChannelDrawer(true);
     };
 
-    const handleCreateChannelConfirm = async (data: CreateChannelFormData) => {
-        try {
+    const handleCreateChannelConfirm = async (data: CreateChannelFormData): Promise<{ channelId: string }> => {
             const buildFilterRules = (): ManagerChannelFilterRule[] => {
                 const rules: ManagerChannelFilterRule[] = [];
 
@@ -143,18 +146,19 @@ export default function Subscription() {
                 is_released: data.publishToSquare === "yes"
             };
 
-            await createManagerChannelApi(payload);
+            const res: any = await createManagerChannelApi(payload);
             await queryClient.invalidateQueries({ queryKey: ["channels"] });
-            showToast({
-                message: localize("channel_created") || "频道创建成功",
-                severity: NotificationSeverity.SUCCESS
-            });
-        } catch (e) {
-            showToast({
-                message: localize("channel_create_failed") || "频道创建失败，请稍后重试",
-                severity: NotificationSeverity.ERROR
-            });
-        }
+            const root = res?.data ?? res;
+            const payloadRes = root?.data ?? root;
+            const channelId = String(
+                payloadRes?.id ??
+                payloadRes?.channel_id ??
+                payloadRes?.data?.id ??
+                payloadRes?.data?.channel_id ??
+                ""
+            );
+            if (!channelId) throw new Error("missing channel id");
+            return { channelId };
     };
 
     const toMemberDialogSpace = (channel?: Channel | null): KnowledgeSpace => {
@@ -222,6 +226,10 @@ export default function Subscription() {
                         onChannelSelect={handleChannelSelect}
                         onCreateChannel={handleCreateChannel}
                         onChannelSquare={handleChannelSquare}
+                        onManageMembers={(channel) => {
+                            setChannelMemberChannel(channel);
+                            setChannelMemberOpen(true);
+                        }}
                     />
 
                     {activeChannel ? (
@@ -262,9 +270,22 @@ export default function Subscription() {
                 onViewChannel={() => {
                     // 预留：后续可跳转到新建频道
                 }}
-                onManageMembers={() => {
-                    setMemberDialogSpace(toMemberDialogSpace());
-                    setMemberDialogOpen(true);
+                onManageMembers={(channelId) => {
+                    setChannelMemberChannel({
+                        id: channelId,
+                        name: "",
+                        creator: "",
+                        creatorId: "",
+                        subscriberCount: 0,
+                        articleCount: 0,
+                        unreadCount: 0,
+                        role: ChannelRole.CREATOR,
+                        isPinned: false,
+                        createdAt: "",
+                        updatedAt: "",
+                        subChannels: []
+                    });
+                    setChannelMemberOpen(true);
                 }}
             />
 
@@ -272,6 +293,13 @@ export default function Subscription() {
                 open={memberDialogOpen}
                 onOpenChange={setMemberDialogOpen}
                 space={memberDialogSpace}
+            />
+
+            <ChannelMemberDialog
+                open={channelMemberOpen}
+                onOpenChange={setChannelMemberOpen}
+                channelId={channelMemberChannel?.id || null}
+                currentUserRole={channelMemberChannel?.role || null}
             />
 
             {/* Full-screen overlay — absolute inset-0 covers the entire Subscription (including the channel sidebar), but doesn't affect MainLayout's primary navigation */}

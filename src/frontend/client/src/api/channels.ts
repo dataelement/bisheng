@@ -378,7 +378,19 @@ export async function getChannelMembersApi(params: {
     data: ChannelMember[];
     total: number;
 }> {
-    return await request.get(`/api/v1/channel/manager/members`, { params });
+    const res: any = await request.get(`/api/v1/channel/manager/members`, { params });
+    // 标准返回: { status_code, status_message, data: { data: [], total } }
+    const payload = res?.status_code ? res.data : (res?.data ?? res);
+    return {
+        data: (payload?.data ?? payload?.members ?? []).map((m: any) => ({
+            user_id: Number(m.user_id),
+            user_name: String(m.user_name ?? ""),
+            avatar: m.avatar ?? m.icon,
+            role: (m.user_role ?? m.role ?? "member") as ChannelMember["role"],
+            groups: (m.user_groups ?? m.groups ?? []).map((g: any) => String(g.name ?? g)).filter(Boolean)
+        })),
+        total: payload?.total ?? 0
+    };
 }
 
 /**

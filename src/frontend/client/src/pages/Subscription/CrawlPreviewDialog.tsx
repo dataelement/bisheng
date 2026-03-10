@@ -120,7 +120,7 @@ export function CrawlPreviewDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-[500px] max-h-[80vh] flex flex-col bg-white">
+            <DialogContent className="w-[600px] max-w-[600px] flex flex-col bg-white text-[14px]">
                 <DialogHeader>
                     <DialogTitle className="text-[16px] font-medium">
                         {localize("confirm_crawled_content")}
@@ -139,7 +139,11 @@ export function CrawlPreviewDialog({
 
                     {status === "loading" && (
                         <div className="flex flex-col items-center justify-center py-12 gap-4">
-                            <Loader2 className="size-12 animate-spin text-[#165DFF]" />
+                            <img
+                                src={`${__APP_ENV__.BASE_URL}/assets/channel/loading.svg`}
+                                alt=""
+                                className="w-[100px] h-[100px]"
+                            />
                             <p className="text-[14px] text-[#4E5969]">
                                 {localize("crawling_waiting") || "爬取中,可能需要1-2分钟,请耐心等待..."}
                             </p>
@@ -198,7 +202,11 @@ export function CrawlPreviewDialog({
                     {status === "singlePageWarning" && (
                         <div className="rounded border border-[#E5E6EB] bg-[#F7F8FA] min-h-[270px] px-6 py-8 flex flex-col justify-between">
                             <div className="flex-1 flex flex-col items-center justify-center text-center">
-                                <FileText className="size-14 text-[#165DFF] mb-5" strokeWidth={1.3} />
+                                <img
+                                    src={`${__APP_ENV__.BASE_URL}/assets/channel/book.svg`}
+                                    alt=""
+                                    className="w-[100px] h-[100px] mb-5"
+                                />
                                 <p className="text-[14px] text-[#4E5969] leading-6">
                                     {localize("detected_as")}
                                     <span className="font-medium text-[#1D2129]">

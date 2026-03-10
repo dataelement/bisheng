@@ -70,12 +70,12 @@ export interface CreateChannelFormData {
 interface CreateChannelDrawerProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    onConfirm?: (data: CreateChannelFormData) => void;
+    onConfirm?: (data: CreateChannelFormData) => Promise<{ channelId: string }>;
     createdChannelCount?: number;
     /** 创建成功后点击「查看频道」 */
     onViewChannel?: () => void;
     /** 创建成功后点击「成员管理」 */
-    onManageMembers?: () => void;
+    onManageMembers?: (channelId: string) => void;
 }
 
 const MAX_USER_CHANNELS = 10;
@@ -110,6 +110,8 @@ export function CreateChannelDrawer({
     const [crawlDialogOpen, setCrawlDialogOpen] = useState(false);
     const [crawlUrl, setCrawlUrl] = useState("");
     const [showSuccess, setShowSuccess] = useState(false);
+    const [submitting, setSubmitting] = useState(false);
+    const [createdChannelId, setCreatedChannelId] = useState<string | null>(null);
     /** 刚添加的子频道 id，用于自动进入编辑并全选「子频道名称」 */
     const [lastAddedSubChannelId, setLastAddedSubChannelId] = useState<string | null>(null);
 
@@ -130,6 +132,8 @@ export function CreateChannelDrawer({
         setCrawlDialogOpen(false);
         setCrawlUrl("");
         setShowSuccess(false);
+        setSubmitting(false);
+        setCreatedChannelId(null);
     }, []);
 
     const handleClose = (nextOpen: boolean) => {
@@ -208,7 +212,9 @@ export function CreateChannelDrawer({
                                 onOpenChange(false);
                             }}
                             onManageMembers={() => {
-                                onManageMembers?.();
+                                if (createdChannelId) {
+                                    onManageMembers?.(createdChannelId);
+                                }
                                 resetForm();
                                 onOpenChange(false);
                             }}
@@ -542,7 +548,8 @@ export function CreateChannelDrawer({
                                 {localize("cancel")}
                             </Button>
                             <Button
-                                onClick={() => {
+                                disabled={submitting}
+                                onClick={async () => {
                                     // 校验顺序：信息源 → 频道名称 → 子频道筛选条件
                                     if (sources.length < 1) {
                                         showToast({
@@ -599,12 +606,24 @@ export function CreateChannelDrawer({
                                         createSubChannel,
                                         subChannels
                                     };
-                                    onConfirm?.(data);
-                                    setShowSuccess(true);
+                                    if (!onConfirm) return;
+                                    try {
+                                        setSubmitting(true);
+                                        const res = await onConfirm(data);
+                                        setCreatedChannelId(res.channelId);
+                                        setShowSuccess(true);
+                                    } catch {
+                                        showToast({
+                                            message: localize("channel_create_failed") || "频道创建失败，请稍后重试",
+                                            severity: NotificationSeverity.ERROR
+                                        });
+                                    } finally {
+                                        setSubmitting(false);
+                                    }
                                 }}
                                 className="h-9 px-5 bg-[#165DFF] hover:bg-[#4080FF] text-white border-none text-[14px] disabled:opacity-50"
                             >
-                                确认创建
+                                {submitting ? (localize("creating") || "创建中...") : (localize("confirm_creation") || "确认创建")}
                             </Button>
                         </div>
                     )}
@@ -628,7 +647,7 @@ export function CreateChannelDrawer({
                     <AlertDialogHeader>
                         <AlertDialogTitle>{localize("confirm_close")}</AlertDialogTitle>
                         <AlertDialogDescription>
-                            {localize("close_without_saving") || "关闭后将不保存任何数据，返回原页面"}
+                            {"关闭后将不保存任何数据，返回原页面"}
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>

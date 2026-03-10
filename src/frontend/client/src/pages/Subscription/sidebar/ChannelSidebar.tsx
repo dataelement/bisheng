@@ -19,6 +19,7 @@ interface ChannelSidebarProps {
     onChannelSelect: (channel: Channel | null) => void;
     onCreateChannel: () => void;
     onChannelSquare: () => void;
+    onManageMembers: (channel: Channel) => void;
 }
 
 function SectionHeader({ title, collapsed, onToggle, sortText, onSort }: any) {
@@ -40,7 +41,8 @@ export function ChannelSidebar({
     activeChannelId,
     onChannelSelect,
     onCreateChannel,
-    onChannelSquare
+    onChannelSquare,
+    onManageMembers
 }: ChannelSidebarProps) {
     const [collapsed, setCollapsed] = useState(false);
     const [createdCollapsed, setCreatedCollapsed] = useState(false);
@@ -212,6 +214,7 @@ export function ChannelSidebar({
                                     onDelete={handleDeleteChannel}
                                     onUnsubscribe={handleUnsubscribeChannel}
                                     onPin={handlePinChannel}
+                                    onManageMembers={onManageMembers}
                                 />
                             ))}
                             {!createdChannels.length && <div className="py-6 text-center text-sm text-[#818181]">暂无数据</div>}
@@ -241,6 +244,7 @@ export function ChannelSidebar({
                                     onDelete={handleDeleteChannel}
                                     onUnsubscribe={handleUnsubscribeChannel}
                                     onPin={handlePinChannel}
+                                    onManageMembers={onManageMembers}
                                 />
                             ))}
                             {!subscribedChannels.length && <div className="py-6 text-center text-sm text-[#818181]">暂无数据</div>}

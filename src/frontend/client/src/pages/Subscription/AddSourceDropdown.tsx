@@ -334,8 +334,12 @@ export function AddSourceDropdown({
                     >
                         {viewMode === "noResultNonUrl" && (
                             <div className="h-[432px] flex flex-col items-center justify-center text-center">
-                                <div className="mb-4 rounded-full border border-dashed border-[#165DFF] p-3">
-                                    <FileText className="size-8 text-[#165DFF]" strokeWidth={1.6} />
+                                <div className="mb-4 rounded-full p-3">
+                                    <img
+                                        src={`${__APP_ENV__.BASE_URL}/assets/channel/book.svg`}
+                                        alt=""
+                                        className="w-[120px] h-[120px] mb-5"
+                                    />
                                 </div>
                                 <p className="text-[14px] leading-6 text-[#4E5969]">
                                     {localize("no_source_collected") ||
@@ -372,8 +376,12 @@ export function AddSourceDropdown({
                         )}
                         {viewMode === "wechatProcessing" && (
                             <div className="h-[432px] flex flex-col items-center justify-center text-center">
-                                <div className="mb-4 rounded-full border border-dashed border-[#165DFF] p-3">
-                                    <FileText className="size-8 text-[#165DFF]" strokeWidth={1.6} />
+                                <div className="mb-4">
+                                    <img
+                                        src={`${__APP_ENV__.BASE_URL}/assets/channel/loading.svg`}
+                                        alt=""
+                                        className="w-[120px] h-[120px]"
+                                    />
                                 </div>
                                 <p className="text-[14px] text-[#4E5969] mb-5">
                                     {localize("detect_wechat_link") || "检测到是公众号链接，正在添加中..."}
