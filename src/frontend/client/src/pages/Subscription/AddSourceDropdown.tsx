@@ -92,11 +92,11 @@ export function AddSourceDropdown({
             setLoadingSources(true);
             try {
                 const res = await listManagerSourcesApi({ business_type, page: 1, page_size: 20 });
-                const mapped: InformationSource[] = (res.data || []).map((s: ManagerSource) => ({
+                const mapped: InformationSource[] = (res.sources || []).map((s: ManagerSource) => ({
                     id: s.id,
                     name: s.name,
-                    avatar: s.avatar,
-                    url: s.url,
+                    avatar: s.icon,
+                    url: s.original_url,
                     type: s.business_type === "wechat" ? "official_account" : "website"
                 }));
                 if (business_type === "wechat") setWechatSources(mapped);

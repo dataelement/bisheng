@@ -5,7 +5,7 @@ import { Button } from "~/components/ui/Button";
 import { ChannelSquareCard } from "./ChannelSquareCard";
 import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
-import { getChannelSquareApi } from "~/api/channels";
+import { getChannelSquareApi, subscribeManagerChannelApi } from "~/api/channels";
 import { useLocalize } from "~/hooks";
 
 type SquareStatus = "join" | "joined" | "pending" | "private";
@@ -19,6 +19,7 @@ interface SquareChannel {
   articleCount: number;
   subscriberCount: number;
   status: SquareStatus;
+  visibility?: "public" | "private" | "approval";
   isHighlighted?: boolean;
 }
 
@@ -48,6 +49,7 @@ export default function ChannelSquare({
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const { showToast } = useToastContext();
   const localize = useLocalize();
+  const [joiningId, setJoiningId] = useState<string | null>(null);
 
   const tTitle = title || localize("explore_channel_plaza");
   const tSubtitle = subtitle || localize("explore_more_channel");
@@ -56,10 +58,44 @@ export default function ChannelSquare({
   const tJoinPrefix = joinToastPrefix || localize("applied_join_channel");
 
   const handleJoinChannel = (channelId: string, channelTitle: string) => {
-    showToast({
-      message: `${tJoinPrefix}${channelTitle}`,
-      severity: NotificationSeverity.SUCCESS
-    });
+    const target = allChannels.find((c) => c.id === channelId);
+    if (!target || target.status !== "join" || joiningId) return;
+
+    (async () => {
+      try {
+        setJoiningId(channelId);
+        const nextStatus: SquareStatus =
+          target.visibility === "public" ? "joined" : "pending";
+
+        // 先乐观更新为目标状态
+        setAllChannels((prev) =>
+          prev.map((c) => (c.id === channelId ? { ...c, status: nextStatus } : c))
+        );
+        await subscribeManagerChannelApi({ channel_id: channelId });
+        if (target.visibility === "public") {
+          showToast({
+            message: localize("subscribe_success") || "订阅成功",
+            severity: NotificationSeverity.SUCCESS
+          });
+        } else {
+          showToast({
+            message: localize("apply_sent") || "申请已发送",
+            severity: NotificationSeverity.SUCCESS
+          });
+        }
+      } catch {
+        // 失败时回滚状态
+        setAllChannels((prev) =>
+          prev.map((c) => (c.id === channelId ? { ...c, status: target.status } : c))
+        );
+        showToast({
+          message: localize("channel_subscribe_failed") || "订阅频道失败，请稍后重试",
+          severity: NotificationSeverity.ERROR
+        });
+      } finally {
+        setJoiningId(null);
+      }
+    })();
   };
 
   const handleSearch = (e) => {
@@ -75,21 +111,31 @@ export default function ChannelSquare({
     setSearchQuery(next);
   };
 
-  // 首次加载 & 翻页加载
+  // 根据搜索词加载频道广场数据
   useEffect(() => {
     const load = async (nextPage: number) => {
       try {
-        const res = await getChannelSquareApi({ page: nextPage, page_size: 20 });
-        const list: any[] = (res?.data || res?.list || res || []) as any[];
+        const res = await getChannelSquareApi({
+          keyword: searchQuery.trim() || undefined,
+          page: nextPage,
+          page_size: 20
+        });
+        const root: any = res;
+        const payload = root.data ?? root;
+        const list: any[] = (payload?.data || payload?.list || []) as any[];
         const mapped: SquareChannel[] = list.map((item: any, index: number) => ({
           id: String(item.id ?? item.channel_id ?? index),
-          title: String(item.title ?? item.name ?? ""),
+          title: String(item.name ?? item.title ?? ""),
           description: String(item.description ?? item.desc ?? "") || "暂无简介",
           creator: String(item.creator ?? item.creator_name ?? ""),
           creatorAvatar: item.creatorAvatar ?? item.creator_avatar,
-          articleCount: Number(item.articleCount ?? item.article_count ?? 0),
-          subscriberCount: Number(item.subscriberCount ?? item.subscriber_count ?? 0),
-          status: (item.status as SquareStatus) || "join",
+          articleCount: Number(item.article_count ?? item.articleCount ?? 0),
+          subscriberCount: Number(item.subscriber_count ?? item.subscriberCount ?? 0),
+          visibility: item.visibility as "public" | "private" | "approval" | undefined,
+          status:
+            (item.subscription_status === "subscribed"
+              ? "joined"
+              : (item.status as SquareStatus)) || "join",
           isHighlighted: Boolean(item.isHighlighted ?? item.highlight)
         }));
 
@@ -104,7 +150,7 @@ export default function ChannelSquare({
     };
 
     load(1);
-  }, []);
+  }, [searchQuery]);
 
   const filteredChannels = searchQuery
     ? allChannels.filter(
@@ -119,7 +165,7 @@ export default function ChannelSquare({
 
   useEffect(() => {
     setVisibleCount(12);
-  }, [searchQuery]);
+  }, [searchQuery, allChannels.length]);
 
   useEffect(() => {
     const node = scrollRef.current;

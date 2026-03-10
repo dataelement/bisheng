@@ -81,25 +81,58 @@ export default function Subscription() {
     const handleCreateChannelConfirm = async (data: CreateChannelFormData) => {
         try {
             const buildFilterRules = (): ManagerChannelFilterRule[] => {
-                if (!data.contentFilter || !data.filterGroups.length) return [];
-                const groups = data.filterGroups;
-                return groups.map((group): ManagerChannelFilterRule => {
-                    const rules: ManagerChannelRuleItem[] = group.conditions.map((cond) => {
-                        const keywords =
-                            cond.keywords
-                                ?.split(/[;；]/)
-                                .map((k: string) => k.trim())
-                                .filter(Boolean) || [];
-                        return {
-                            rule_type: cond.include ? "include" : "exclude",
-                            keywords
-                        };
-                    });
-                    return {
-                        rules,
-                        relation: group.relation
-                    };
-                });
+                const rules: ManagerChannelFilterRule[] = [];
+
+                // 主频道内容筛选
+                if (data.contentFilter && data.filterGroups.length) {
+                    for (const group of data.filterGroups) {
+                        const groupRules: ManagerChannelRuleItem[] = group.conditions.map((cond) => {
+                            const keywords =
+                                cond.keywords
+                                    ?.split(/[;；]/)
+                                    .map((k: string) => k.trim())
+                                    .filter(Boolean) || [];
+                            return {
+                                rule_type: cond.include ? "include" : "exclude",
+                                keywords,
+                                relation: group.relation
+                            };
+                        });
+                        rules.push({
+                            rules: groupRules,
+                            channel_type: "main",
+                            name: "main"
+                        });
+                    }
+                }
+
+                // 子频道筛选
+                if (data.createSubChannel && data.subChannels.length) {
+                    for (const sub of data.subChannels) {
+                        if (!sub.groups || !sub.groups.length) continue;
+                        for (const group of sub.groups) {
+                            const groupRules: ManagerChannelRuleItem[] = group.conditions.map((cond) => {
+                                const keywords =
+                                    cond.keywords
+                                        ?.split(/[;；]/)
+                                        .map((k: string) => k.trim())
+                                        .filter(Boolean) || [];
+                                return {
+                                    rule_type: cond.include ? "include" : "exclude",
+                                    keywords,
+                                    relation: group.relation
+                                };
+                            });
+                            rules.push({
+                                rules: groupRules,
+                                channel_type: "sub",
+                                name: sub.name || "sub"
+                            });
+                        }
+                    }
+                }
+
+                return rules;
             };
 
             const payload: CreateManagerChannelPayload = {

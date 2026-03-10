@@ -32,13 +32,13 @@ export function ChannelSquareCard({
   const getButtonConfig = () => {
     switch (status) {
       case "joined":
-        return { text: localize("joined"), variant: "secondary" as const, disabled: false };
+        return { text: localize("subscribed") || "已订阅", variant: "secondary" as const, disabled: true };
       case "pending":
         return { text: localize("pending"), variant: "secondary" as const, disabled: true };
       case "private":
         return { text: localize("private"), variant: "secondary" as const, disabled: true };
       default:
-        return { text: localize("join"), variant: "outline" as const, disabled: false };
+        return { text: localize("subscribe") || "订阅", variant: "outline" as const, disabled: false };
     }
   };
 

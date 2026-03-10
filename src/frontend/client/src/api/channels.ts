@@ -235,9 +235,12 @@ export type ChannelBusinessType = "wechat" | "website";
 // manager 侧的信息源结构（根据后端约定，可后续再细化）
 export interface ManagerSource {
     id: string;
+    source_id?: string;
     name: string;
-    avatar?: string;
-    url?: string;
+    icon?: string;
+    original_url?: string;
+    description?: string | null;
+    follow_num?: number;
     business_type: ChannelBusinessType;
 }
 
@@ -245,14 +248,15 @@ export interface ManagerSource {
 export interface ManagerChannelRuleItem {
     rule_type?: string;        // 规则类型，例如 include / exclude 等
     keywords?: string[];       // 关键词列表
-    channel_type?: string;     // 频道类型（如有）
-    name?: string;             // 规则名称（如有）
+    relation?: string;         // and / or，规则内部关系
 }
 
 // 一组条件 + 关系
 export interface ManagerChannelFilterRule {
     rules?: ManagerChannelRuleItem[];
-    relation?: string;         // and / or 等
+    relation?: string;         // 预留（目前后端示例不用）
+    channel_type?: "main" | "sub"; // 频道类型：主频道 / 子频道
+    name?: string;                 // 分组名称（例如子频道名称）
 }
 
 // 创建频道（manager）接口入参
@@ -284,10 +288,16 @@ export async function listManagerSourcesApi(params: {
     page?: number;
     page_size?: number;
 }): Promise<{
-    data: ManagerSource[];
+    sources: ManagerSource[];
     total: number;
 }> {
-    return await request.get(`/api/v1/channel/manager/list_sources`, { params });
+    const res: any = await request.get(`/api/v1/channel/manager/list_sources`, { params });
+    const root = res?.data ?? res;
+    const payload = root?.data ?? root;
+    return {
+        sources: payload?.sources ?? [],
+        total: payload?.total ?? 0
+    };
 }
 
 /**
@@ -329,9 +339,67 @@ export async function crawlTempSourceApi(body: {
  * （后端返回结构目前未知，这里先用 any，后续根据实际返回再补类型）
  */
 export async function getChannelSquareApi(params?: {
+    keyword?: string;
     page?: number;
     page_size?: number;
-    [key: string]: any;
 }): Promise<any> {
     return await request.get(`/api/v1/channel/manager/square`, { params });
+}
+
+/**
+ * POST /api/v1/channel/manager/subscribe
+ * 订阅频道申请
+ */
+export async function subscribeManagerChannelApi(body: {
+    channel_id: string;
+}): Promise<any> {
+    return await request.post(`/api/v1/channel/manager/subscribe`, body);
+}
+
+// 频道成员
+export interface ChannelMember {
+    user_id: number;
+    user_name: string;
+    avatar?: string;
+    role: "creator" | "admin" | "member";
+    groups?: string[];
+}
+
+/**
+ * GET /api/v1/channel/manager/members
+ * 查询频道成员
+ */
+export async function getChannelMembersApi(params: {
+    channel_id: string;
+    keyword?: string;
+    page?: number;
+    page_size?: number;
+}): Promise<{
+    data: ChannelMember[];
+    total: number;
+}> {
+    return await request.get(`/api/v1/channel/manager/members`, { params });
+}
+
+/**
+ * POST /api/v1/channel/manager/update_member_role
+ * 设置成员角色（管理员 / 普通成员）
+ */
+export async function updateChannelMemberRoleApi(body: {
+    channel_id: string;
+    user_id: number;
+    role: "admin" | "member";
+}): Promise<any> {
+    return await request.post(`/api/v1/channel/manager/update_member_role`, body);
+}
+
+/**
+ * POST /api/v1/channel/manager/remove_member
+ * 移除频道成员
+ */
+export async function removeChannelMemberApi(body: {
+    channel_id: string;
+    user_id: number;
+}): Promise<any> {
+    return await request.post(`/api/v1/channel/manager/remove_member`, body);
 }
