@@ -16,6 +16,7 @@ class CreateChannelRequest(BaseModel):
     name: str = Field(..., description='Channel Name')
     source_list: List[str] = Field(default_factory=list, description='Data Source List')
     visibility: ChannelVisibilityEnum = Field(..., description='Channel Visibility')
+    description: Optional[str] = Field(None, description='Channel Description/Brief')
     filter_rules: Optional[List[ChannelFilterRules]] = Field(default_factory=list, description='Filter Conditions')
     is_released: bool = Field(default=False, description='Whether the channel is released')
 
@@ -23,6 +24,10 @@ class CreateChannelRequest(BaseModel):
 class UpdateChannelRequest(BaseModel):
     name: Optional[str] = Field(None, description='Channel Name')
     description: Optional[str] = Field(None, description='Channel Description/Brief')
+    source_list: Optional[List[str]] = Field(default_factory=list, description='Data Source List')
+    visibility: Optional[ChannelVisibilityEnum] = Field(None, description='Channel Visibility')
+    filter_rules: Optional[List[ChannelFilterRules]] = Field(default_factory=list, description='Filter Conditions')
+    is_released: Optional[bool] = Field(None, description='Whether the channel is released')
 
 
 class AddInformationSourceRequest(BaseModel):
@@ -75,20 +80,29 @@ class ChannelItemResponse(BaseModel):
     unread_count: int = Field(default=0, description='Number of unread articles in this channel')
 
 
+class ChannelInfoSourceResponse(BaseModel):
+    """Channel Info Source Item Response"""
+    id: str = Field(..., description='Channel Information Source ID')
+    source_name: str = Field(..., description='Information Source Name')
+    source_icon: Optional[str] = Field(None, description='Information Source Icon URL')
+    source_type: str = Field(..., description='Information Source Type')
+    description: Optional[str] = Field(None, description='Information Source Description')
+
+
 class ChannelDetailResponse(BaseModel):
     """Channel Detail Response"""
     id: str = Field(..., description='Channel ID')
     name: str = Field(..., description='Channel Name')
     description: Optional[str] = Field(None, description='Channel Description/Brief')
-    source_list: List[str] = Field(default_factory=list, description='Data Source List')
+    source_infos: List[ChannelInfoSourceResponse] = Field(default_factory=list, description='Data Source List')
     visibility: ChannelVisibilityEnum = Field(..., description='Channel Visibility')
+    filter_rules: Optional[List[ChannelFilterRules]] = Field(default_factory=list, description='Filter Conditions')
     is_released: bool = Field(default=False, description='Whether the channel is released')
     latest_article_update_time: Optional[datetime] = Field(None, description='Channel Latest Article Update Time')
     create_time: Optional[datetime] = Field(None, description='Channel Creation Time')
     creator_name: str = Field(..., description='Channel Creator Name')
     subscriber_count: int = Field(default=0, description='Number of subscribers')
     article_count: int = Field(default=0, description='Total number of articles in the main channel')
-
 
 
 class ChannelMemberResponse(BaseModel):
@@ -127,15 +141,6 @@ class SubscriptionStatusEnum(str, Enum):
     NOT_SUBSCRIBED = 'not_subscribed'
 
 
-class ChannelInfoSourceResponse(BaseModel):
-    """Channel Info Source Item Response"""
-    id: str = Field(..., description='Channel Information Source ID')
-    source_name: str = Field(..., description='Information Source Name')
-    source_icon: Optional[str] = Field(None, description='Information Source Icon URL')
-    source_type: str = Field(..., description='Information Source Type')
-    description: Optional[str] = Field(None, description='Information Source Description')
-
-
 class ChannelSquareItemResponse(BaseModel):
     """Channel Square List Item Response"""
     id: str = Field(..., description='Channel ID')
@@ -146,14 +151,15 @@ class ChannelSquareItemResponse(BaseModel):
     create_time: Optional[datetime] = Field(None, description='Channel Creation Time')
     update_time: Optional[datetime] = Field(None, description='Channel Update Time')
     subscription_status: SubscriptionStatusEnum = Field(...,
-                                                         description='Current user subscription status')
+                                                        description='Current user subscription status')
     subscriber_count: int = Field(default=0, description='Number of subscribers')
     article_count: int = Field(default=0, description='Number of articles matching the main channel filters')
-    source_infos: List[ChannelInfoSourceResponse] = Field(default_factory=list, description='Top 5 data sources for the channel')
+    source_infos: List[ChannelInfoSourceResponse] = Field(default_factory=list,
+                                                          description='Top 5 data sources for the channel')
 
 
 class ChannelSquarePageResponse(BaseModel):
     """Channel Square Page Response"""
     data: List[ChannelSquareItemResponse] = Field(default_factory=list,
-                                                   description='List of channel square items')
+                                                  description='List of channel square items')
     total: int = Field(..., description='Total number of matching channels')

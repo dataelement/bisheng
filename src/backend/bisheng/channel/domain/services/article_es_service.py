@@ -436,7 +436,9 @@ class ArticleEsService:
             "sort": [{"update_time": {"order": "desc"}}],
             "from": from_offset,
             "size": page_size,
-            "_source": True,
+            "_source": {
+                "excludes": ["content_html"]  # 默认不返回 content_html 字段，减少网络传输和解析开销
+             }
         }
         if highlight_config:
             body["highlight"] = highlight_config

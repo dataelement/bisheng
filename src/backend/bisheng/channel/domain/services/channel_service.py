@@ -83,8 +83,9 @@ class ChannelService:
             missing_source_ids = [sid for sid in channel_data.source_list if sid not in existing_source_ids]
 
             if missing_source_ids:
-                missing_information_sources = await bisheng_information_client.get_information_source_by_ids(missing_source_ids)
-                
+                missing_information_sources = await bisheng_information_client.get_information_source_by_ids(
+                    missing_source_ids)
+
                 new_channel_info_sources = []
                 for info_source in missing_information_sources:
                     new_source = ChannelInfoSource(
@@ -95,7 +96,7 @@ class ChannelService:
                         description=info_source.description
                     )
                     new_channel_info_sources.append(new_source)
-                
+
                 if new_channel_info_sources:
                     await self.channel_info_source_repository.batch_add(new_channel_info_sources)
 
@@ -148,7 +149,7 @@ class ChannelService:
             if query_data.query_type == QueryTypeEnum.FOLLOWED:
                 if channel.visibility == ChannelVisibilityEnum.PRIVATE:
                     continue
-            
+
             channels_to_process.append((channel, membership))
 
         # Concurrently calculate unread counts for all applicable channels
@@ -513,7 +514,7 @@ class ChannelService:
             top_5_sources = (channel.source_list or [])[:5]
             channel_to_top_sources[channel.id] = top_5_sources
             all_needed_source_ids.update(top_5_sources)
-            
+
         # Batch fetch all needed sources
         source_map = {}
         if all_needed_source_ids:
@@ -592,7 +593,6 @@ class ChannelService:
         if channel.visibility == ChannelVisibilityEnum.PRIVATE:
             raise ChannelAccessDeniedError()
 
-
         # 4. Determine subscription status based on channel visibility
         if channel.visibility == ChannelVisibilityEnum.PUBLIC:
             status = True
@@ -620,10 +620,9 @@ class ChannelService:
         Only the creator can update the channel.
         """
         # 1. Verify channel existence
-        channels = await self.channel_repository.find_channels_by_ids([channel_id])
-        if not channels:
+        channel = await self.channel_repository.find_by_id(channel_id)
+        if not channel:
             raise ChannelNotFoundError()
-        channel = channels[0]
 
         # 2. Verify current user is the creator
         current_membership = await self.space_channel_member_repository.find_membership(
@@ -635,15 +634,35 @@ class ChannelService:
             raise ValueError("You are not a member of this channel")
 
         if current_membership.user_role != UserRoleEnum.CREATOR:
-            raise ChannelPermissionDeniedError("Only the creator can update the channel information")
+            raise ChannelPermissionDeniedError(msg="Only the creator can update the channel information")
 
-        # 3. Update fields
+        # 3. Update channel information
         if req.name is not None:
             channel.name = req.name
         if req.description is not None:
             channel.description = req.description
+        if req.is_released is not None:
+            channel.is_released = req.is_released
+        if req.filter_rules is not None:
+            channel.filter_rules = [f.model_dump() for f in req.filter_rules]
+        if req.source_list is not None:
 
-        await self.channel_repository.update(channel)
+            # Calculate the difference between old and new source lists to minimize calls to bisheng_information_client
+            old_sources = set(channel.source_list or [])
+            new_sources = set(req.source_list)
+            to_add_sources = list(new_sources - old_sources)
+            to_remove_sources = list(old_sources - new_sources)
+
+            bisheng_information_client = await get_bisheng_information_client()
+            if to_add_sources:
+                await bisheng_information_client.subscribe_information_source(to_add_sources)
+            if to_remove_sources:
+                await bisheng_information_client.unsubscribe_information_source(to_remove_sources)
+
+            channel.source_list = req.source_list
+
+        channel = await self.channel_repository.update(channel)
+
         return channel
 
     async def get_channel_detail(self, channel_id: str, login_user: UserPayload) -> ChannelDetailResponse:
@@ -665,7 +684,7 @@ class ChannelService:
         if not current_membership or not current_membership.status:
             # If private, only members can view unless special requirement
             if channel.visibility == ChannelVisibilityEnum.PRIVATE:
-                raise ChannelAccessDeniedError("You do not have permission to view this channel")
+                raise ChannelAccessDeniedError(msg="You do not have permission to view this channel")
 
         # 3. Get Creator Name
         creators = await self.space_channel_member_repository.find_members_by_role(
@@ -692,7 +711,7 @@ class ChannelService:
             else:
                 channel_type = getattr(fr, "channel_type", "main")
                 rules = getattr(fr, "rules", [])
-                
+
             rules_dicts = []
             for r in rules:
                 if isinstance(r, dict):
@@ -704,7 +723,7 @@ class ChannelService:
                 else:
                     rules_dicts.append(r)
 
-            if channel_type == "main" or not channel_type: # Fallback or main
+            if channel_type == "main" or not channel_type:  # Fallback or main
                 main_rules.extend(rules_dicts)
 
         article_count = await self.article_es_service.count_articles(
@@ -712,12 +731,37 @@ class ChannelService:
             filter_rules=main_rules if main_rules else None
         )
 
+        # 信息源列表补全
+        source_infos = []
+        if channel.source_list:
+            sources = await self.channel_info_source_repository.find_by_ids(channel.source_list)
+            source_map = {s.id: s for s in sources}
+            for sid in channel.source_list:
+                if sid in source_map:
+                    s = source_map[sid]
+                    source_infos.append({
+                        "id": s.id,
+                        "source_name": s.source_name,
+                        "source_icon": s.source_icon,
+                        "source_type": s.source_type,
+                        "description": s.description
+                    })
+                else:
+                    source_infos.append({
+                        "id": sid,
+                        "source_name": "Unknown",
+                        "source_icon": "",
+                        "source_type": "",
+                        "description": ""
+                    })
+
         return ChannelDetailResponse(
             id=channel.id,
             name=channel.name,
             description=channel.description,
-            source_list=channel.source_list or [],
+            source_infos=source_infos,
             visibility=channel.visibility,
+            filter_rules=channel.filter_rules or [],
             is_released=channel.is_released,
             latest_article_update_time=channel.latest_article_update_time,
             create_time=channel.create_time,
@@ -747,11 +791,11 @@ class ChannelService:
             user_id=login_user.user_id
         )
         if not current_membership or not current_membership.status or current_membership.user_role != UserRoleEnum.CREATOR:
-            raise ChannelPermissionDeniedError("Only the creator can dismiss the channel")
+            raise ChannelPermissionDeniedError(msg="Only the creator can dismiss the channel")
 
         # 3. Delete all user relationships
         members = await self.space_channel_member_repository.find_all(
-            business_id=channel_id, 
+            business_id=channel_id,
             business_type=BusinessTypeEnum.CHANNEL
         )
         for member in members:
@@ -856,13 +900,34 @@ class ChannelService:
             effective_rules = main_rules
 
         # 4. 调用 ArticleEsService 进行搜索
-        return await self.article_es_service.search_articles(
+        article_search_response = await self.article_es_service.search_articles(
             source_ids=effective_source_ids,
             keyword=keyword,
             filter_rules=effective_rules if effective_rules else None,
             page=page,
-            page_size=page_size,
+            page_size=page_size
         )
+
+        source_ids = [item.source_id for item in article_search_response.data]
+
+        # 批量查询信源信息
+        source_info_map = {}
+        if source_ids:
+            sources = await self.channel_info_source_repository.find_by_ids(source_ids)
+            for s in sources:
+                source_info_map[s.id] = {
+                    "id": s.id,
+                    "source_name": s.source_name,
+                    "source_icon": s.source_icon,
+                    "source_type": s.source_type,
+                    "description": s.description
+                }
+
+        for item in article_search_response.data:
+            if item.source_id in source_info_map:
+                item.source_info = source_info_map[item.source_id]
+
+        return article_search_response
 
     async def get_article_detail(self, article_id: str, login_user: UserPayload):
         """
@@ -889,5 +954,15 @@ class ChannelService:
                 )
                 await self.article_read_repository.save(new_record)
 
-        return article
+        if article.source_id:
+            source = await self.channel_info_source_repository.find_by_id(article.source_id)
+            if source:
+                article.source_info = {
+                    "id": source.id,
+                    "source_name": source.source_name,
+                    "source_icon": source.source_icon,
+                    "source_type": source.source_type,
+                    "description": source.description
+                }
 
+        return article
