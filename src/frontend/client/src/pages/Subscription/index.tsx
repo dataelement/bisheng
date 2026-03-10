@@ -8,6 +8,8 @@ import {
     getChannelsApi,
     SortType,
     createManagerChannelApi,
+    updateChannelApi,
+    getChannelDetailApi,
 } from "~/api/channels";
 import { type KnowledgeSpace } from "~/api/knowledge";
 import { NotificationSeverity } from "~/common";
@@ -38,6 +40,7 @@ export default function Subscription() {
     const [memberDialogSpace, setMemberDialogSpace] = useState<KnowledgeSpace | null>(null);
     const [channelMemberOpen, setChannelMemberOpen] = useState(false);
     const [channelMemberChannel, setChannelMemberChannel] = useState<Channel | null>(null);
+    const [editingChannel, setEditingChannel] = useState<Channel | null>(null);
     const { showToast } = useToastContext();
     const queryClient = useQueryClient();
 
@@ -68,6 +71,7 @@ export default function Subscription() {
 
     // Create channel - opens drawer (with limit check)
     const handleCreateChannel = () => {
+        setEditingChannel(null);
         if (createdChannelCount >= MAX_USER_CHANNELS) {
             showToast({
                 message: "您已达到创建频道数量的最大上限",
@@ -80,6 +84,15 @@ export default function Subscription() {
 
     const handleCreateChannelConfirm = async (data: CreateChannelFormData): Promise<{ channelId: string }> => {
         const payload = buildCreateChannelPayload(data);
+
+        // 编辑模式：使用 PUT /api/v1/channel/manager/{channel_id}，保证权限设置、内容筛选、子频道等一起更新
+        if (editingChannel) {
+            await updateChannelApi(editingChannel.id, payload);
+            await queryClient.invalidateQueries({ queryKey: ["channels"] });
+            return { channelId: editingChannel.id };
+        }
+
+        // 创建模式：POST /api/v1/channel/manager/create
         const res: any = await createManagerChannelApi(payload);
         await queryClient.invalidateQueries({ queryKey: ["channels"] });
         const root = res?.data ?? res;
@@ -126,6 +139,21 @@ export default function Subscription() {
                             setChannelMemberChannel(channel);
                             setChannelMemberOpen(true);
                         }}
+                        onChannelSettings={(channel) => {
+                            // 打开抽屉 + 用详情接口回显
+                            setShowCreateChannelDrawer(true);
+                            setEditingChannel(null);
+                            (async () => {
+                                try {
+                                    const detail = await getChannelDetailApi(channel.id);
+                                    // 以 /my_channels 的列表项为基础，叠加详情字段（description / visibility / is_released / source_list 等）
+                                    setEditingChannel({ ...channel, ...detail });
+                                } catch {
+                                    // 如果详情接口失败，至少保证能用列表里的基础字段编辑名称
+                                    setEditingChannel(channel);
+                                }
+                            })();
+                        }}
                     />
 
                     {activeChannel ? (
@@ -163,6 +191,8 @@ export default function Subscription() {
                 onOpenChange={setShowCreateChannelDrawer}
                 onConfirm={handleCreateChannelConfirm}
                 createdChannelCount={createdChannelCount}
+                mode={editingChannel ? "edit" : "create"}
+                editingChannel={editingChannel}
                 onViewChannel={() => {
                     // 预留：后续可跳转到新建频道
                 }}

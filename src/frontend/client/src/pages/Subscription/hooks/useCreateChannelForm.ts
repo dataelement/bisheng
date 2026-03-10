@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
-import type { InformationSource } from "~/api/channels";
+import type { Channel, InformationSource } from "~/api/channels";
+import { listManagerSourcesApi } from "~/api/channels";
 import type { FilterGroup, FilterRelation } from "../CreateChannel/FilterConditionEditor";
 import type { SubChannelData } from "../CreateChannel/SubChannelBlock";
 import { generateUUID } from "~/utils";
@@ -57,6 +58,133 @@ export function useCreateChannelForm() {
         setShowSuccess(false);
         setSubmitting(false);
         setCreatedChannelId(null);
+    }, []);
+
+    const initFromChannel = useCallback((channel: Channel) => {
+        // 基础信息
+        setChannelName(channel.name || "");
+        setChannelDesc((channel as any).description || "");
+
+        // 可见方式
+        const vis = (channel as any).visibility;
+        if (vis) {
+            setVisibility(vis as VisibilityType);
+        }
+
+        // 是否发布到广场
+        const released = (channel as any).is_released;
+        if (typeof released === "boolean") {
+            setPublishToSquare(released ? "yes" : "no");
+        }
+
+        const rawRules = (channel as any).filter_rules as any[] | undefined;
+
+        // 主频道筛选条件 filter_rules（channel_type === "main"）→ filterGroups/topRelation
+        const mainRules = Array.isArray(rawRules)
+            ? rawRules.filter((g: any) => g.channel_type === "main")
+            : [];
+
+        if (mainRules.length > 0) {
+            setContentFilter(true);
+            const groups: FilterGroup[] = mainRules.map((g: any) => {
+                const rules = Array.isArray(g.rules) ? g.rules : [];
+                const relation: FilterRelation =
+                    (rules[0]?.relation === "or" ? "or" : "and") as FilterRelation;
+                return {
+                    id: nanoid(),
+                    relation,
+                    conditions: rules.map((r: any) => ({
+                        id: nanoid(),
+                        include: r.rule_type !== "exclude",
+                        keywords: Array.isArray(r.keywords) ? r.keywords.join(";") : ""
+                    }))
+                };
+            });
+            setFilterGroups(groups);
+            setTopFilterRelation(groups[0]?.relation ?? "and");
+            setContentFilterCollapsed(false);
+        } else {
+            setContentFilter(false);
+            setFilterGroups([]);
+            setTopFilterRelation("and");
+        }
+
+        // 子频道筛选条件 filter_rules（channel_type === "sub"）→ createSubChannel/subChannels
+        const subRules = Array.isArray(rawRules)
+            ? rawRules.filter((g: any) => g.channel_type === "sub")
+            : [];
+
+        if (subRules.length > 0) {
+            setCreateSubChannel(true);
+
+            // 以 name 分组，每个 name 一个子频道
+            const groupedByName = new Map<string, typeof subRules>();
+            for (const g of subRules) {
+                const key = (g.name as string) || "子频道名称";
+                if (!groupedByName.has(key)) {
+                    groupedByName.set(key, []);
+                }
+                groupedByName.get(key)!.push(g);
+            }
+
+            const nextSubChannels: SubChannelData[] = [];
+            for (const [name, groupList] of groupedByName.entries()) {
+                const groups: FilterGroup[] = groupList.map((g: any) => {
+                    const rules = Array.isArray(g.rules) ? g.rules : [];
+                    const relation: FilterRelation =
+                        (rules[0]?.relation === "or" ? "or" : "and") as FilterRelation;
+                    return {
+                        id: nanoid(),
+                        relation,
+                        conditions: rules.map((r: any) => ({
+                            id: nanoid(),
+                            include: r.rule_type !== "exclude",
+                            keywords: Array.isArray(r.keywords) ? r.keywords.join(";") : ""
+                        }))
+                    };
+                });
+
+                nextSubChannels.push({
+                    id: nanoid(),
+                    name,
+                    collapsed: false,
+                    groups,
+                    topRelation: groups[0]?.relation ?? "and"
+                });
+            }
+
+            setSubChannels(nextSubChannels);
+        } else {
+            setCreateSubChannel(false);
+            setSubChannels([]);
+        }
+    }, []);
+
+    const loadSourcesByIds = useCallback(async (ids: string[]) => {
+        if (!ids || ids.length === 0) {
+            setSources([]);
+            return;
+        }
+        try {
+            const { sources: all } = await listManagerSourcesApi({
+                page: 1,
+                page_size: 200
+            });
+            const map = new Map(all.map((s) => [s.id, s]));
+            const selected: InformationSource[] = ids
+                .map((id) => map.get(id))
+                .filter((s): s is NonNullable<typeof s> => Boolean(s))
+                .map((s) => ({
+                    id: s.id,
+                    name: s.name,
+                    avatar: s.icon,
+                    url: s.original_url,
+                    type: s.business_type === "wechat" ? "official_account" : "website"
+                }));
+            setSources(selected);
+        } catch {
+            // 如果拉取失败，不影响其它字段的编辑
+        }
     }, []);
 
     // Sub-channel handlers
@@ -138,6 +266,8 @@ export function useCreateChannelForm() {
 
         // Handlers
         resetForm,
+        initFromChannel,
+        loadSourcesByIds,
         handleAddSubChannel,
         handleRemoveSubChannel,
         handleSubChannelNameChange,

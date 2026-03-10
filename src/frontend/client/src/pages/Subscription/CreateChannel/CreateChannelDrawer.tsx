@@ -1,6 +1,7 @@
 import { ChevronDown, ChevronRight, PlusSquare } from "lucide-react";
 import * as RadioGroup from "@radix-ui/react-radio-group";
-import { useToastContext } from "~/Providers";
+import { useEffect } from "react";
+import { useConfirm, useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
 import {
     Sheet,
@@ -32,7 +33,7 @@ import {
     type FilterGroup,
 } from "./FilterConditionEditor";
 import { validateCreateChannelForm } from "../channelUtils";
-import type { InformationSource } from "~/api/channels";
+import type { Channel, InformationSource } from "~/api/channels";
 import { cn } from "~/utils";
 import { useLocalize } from "~/hooks";
 import { useCreateChannelForm } from "../hooks/useCreateChannelForm";
@@ -63,6 +64,8 @@ interface CreateChannelDrawerProps {
     createdChannelCount?: number;
     onViewChannel?: () => void;
     onManageMembers?: (channelId: string) => void;
+    mode?: "create" | "edit";
+    editingChannel?: Channel | null;
 }
 
 export function CreateChannelDrawer({
@@ -71,30 +74,75 @@ export function CreateChannelDrawer({
     onConfirm,
     createdChannelCount = 0,
     onViewChannel,
-    onManageMembers
+    onManageMembers,
+    mode = "create",
+    editingChannel = null
 }: CreateChannelDrawerProps) {
     const { showToast } = useToastContext();
     const localize = useLocalize();
     const form = useCreateChannelForm();
+    const isEditMode = mode === "edit" && !!editingChannel;
+    const confirm = useConfirm();
 
-    const handleClose = (nextOpen: boolean) => {
+    useEffect(() => {
+        if (open && editingChannel) {
+            // 使用统一表单初始化逻辑（名称 / 简介 / 权限 / 是否发布 / filter_rules）
+            form.initFromChannel(editingChannel);
+
+            // 信息源回显：
+            const sourceInfos = (editingChannel as any).source_infos as
+                | { id: string; source_name: string; source_icon?: string; source_type?: string }[]
+                | undefined;
+
+            if (Array.isArray(sourceInfos) && sourceInfos.length > 0) {
+                // 详情接口直接返回了完整的信息源信息，优先使用它
+                form.setSources(
+                    sourceInfos.map((s) => ({
+                        id: s.id,
+                        name: s.source_name,
+                        avatar: s.source_icon,
+                        type: s.source_type === "wechat" ? "official_account" : "website",
+                    }))
+                );
+            } else {
+                // 退化为根据 source_list ID 列表去 list_sources 反查
+                const ids = (editingChannel as any).source_list as string[] | undefined;
+                if (ids && ids.length > 0) {
+                    form.loadSourcesByIds(ids);
+                } else {
+                    form.setSources([]);
+                }
+            }
+        }
+    }, [
+        open,
+        editingChannel,
+        form.setChannelName,
+        form.setChannelDesc,
+        form.initFromChannel,
+        form.loadSourcesByIds,
+        form.setSources
+    ]);
+
+    const handleClose = async (nextOpen: boolean) => {
         if (!nextOpen) {
             if (form.showSuccess) {
                 form.resetForm();
                 onOpenChange(false);
                 return;
             }
-            form.setShowCancelConfirm(true);
+            const confirmed = await confirm({
+                description: "当前标签尚未保存，确认关闭吗？",
+                cancelText: "继续编辑",
+                confirmText: "确认关闭"
+            });
+            if (!confirmed) return;
+            form.resetForm();
+            onOpenChange(false);
         } else {
             form.resetForm();
             onOpenChange(nextOpen);
         }
-    };
-
-    const confirmClose = () => {
-        form.resetForm();
-        form.setShowCancelConfirm(false);
-        onOpenChange(false);
     };
 
     return (
@@ -106,11 +154,11 @@ export function CreateChannelDrawer({
                 >
                     <SheetHeader className="ml-6 mr-6 pt-6 pb-4 border-b border-[#E5E6EB]">
                         <SheetTitle className="text-[16px] -ml-4 font-medium text-[#1D2129]">
-                            {localize("create_channel")}
+                            {isEditMode ? "频道设置" : localize("create_channel")}
                         </SheetTitle>
                     </SheetHeader>
 
-                    {form.showSuccess ? (
+                    {form.showSuccess && !isEditMode ? (
                         <CreateChannelSuccessContent
                             onViewChannel={() => {
                                 onViewChannel?.();
@@ -423,7 +471,7 @@ export function CreateChannelDrawer({
                     )}
 
                     {/* 底部操作按钮 */}
-                    {!form.showSuccess && (
+                    {(!form.showSuccess || isEditMode) && (
                         <div className="flex justify-end gap-3 px-6 py-4 border-t border-[#E5E6EB] bg-white">
                             <Button
                                 variant="secondary"
@@ -447,20 +495,41 @@ export function CreateChannelDrawer({
                                         createSubChannel: form.createSubChannel,
                                         subChannels: form.subChannels
                                     };
-                                    const validationError = validateCreateChannelForm(data, localize);
-                                    if (validationError) {
-                                        showToast({
-                                            message: validationError,
-                                            severity: NotificationSeverity.WARNING
-                                        });
-                                        return;
+
+                                    if (!isEditMode) {
+                                        const validationError = validateCreateChannelForm(data, localize);
+                                        if (validationError) {
+                                            showToast({
+                                                message: validationError,
+                                                severity: NotificationSeverity.WARNING
+                                            });
+                                            return;
+                                        }
+                                    } else {
+                                        if (!data.channelName) {
+                                            showToast({
+                                                message: "频道名称不能为空",
+                                                severity: NotificationSeverity.WARNING
+                                            });
+                                            return;
+                                        }
                                     }
+
                                     if (!onConfirm) return;
                                     try {
                                         form.setSubmitting(true);
                                         const res = await onConfirm(data);
-                                        form.setCreatedChannelId(res.channelId);
-                                        form.setShowSuccess(true);
+                                        if (!isEditMode) {
+                                            form.setCreatedChannelId(res.channelId);
+                                            form.setShowSuccess(true);
+                                        } else {
+                                            showToast({
+                                                message: "保存成功",
+                                                severity: NotificationSeverity.SUCCESS
+                                            });
+                                            form.resetForm();
+                                            onOpenChange(false);
+                                        }
                                     } catch {
                                         showToast({
                                             message: localize("channel_create_failed") || "频道创建失败，请稍后重试",
@@ -472,7 +541,11 @@ export function CreateChannelDrawer({
                                 }}
                                 className="h-9 px-5 bg-[#165DFF] hover:bg-[#4080FF] text-white border-none text-[14px] disabled:opacity-50"
                             >
-                                {form.submitting ? (localize("creating") || "创建中...") : (localize("confirm_creation") || "确认创建")}
+                                {isEditMode
+                                    ? form.submitting ? "保存中..." : "保存"
+                                    : form.submitting
+                                        ? (localize("creating") || "创建中...")
+                                        : (localize("confirm_creation") || "确认创建")}
                             </Button>
                         </div>
                     )}
@@ -489,23 +562,6 @@ export function CreateChannelDrawer({
                     form.setShowAddSourcePanel(false);
                 }}
             />
-
-            <AlertDialog open={form.showCancelConfirm} onOpenChange={form.setShowCancelConfirm}>
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>{localize("confirm_close")}</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            {"关闭后将不保存任何数据，返回原页面"}
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel>{localize("continue_editing")}</AlertDialogCancel>
-                        <AlertDialogAction onClick={confirmClose}>
-                            {localize("confirm_close")}
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
         </>
     );
 }

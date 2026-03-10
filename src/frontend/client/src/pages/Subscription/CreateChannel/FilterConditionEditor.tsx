@@ -287,7 +287,7 @@ export function FilterConditionEditor({
                                     )}
                                 >
                                     {/* 包含/不包含 */}
-                                    <div className="flex rounded-lg mt-1 border border-[#E5E6EB] overflow-hidden flex-shrink-0">
+                                    <div className="flex rounded-sm mt-1 border-[3px] border-[#F8F8F8] overflow-hidden flex-shrink-0">
                                         <button
                                             type="button"
                                             onClick={() =>
@@ -296,10 +296,10 @@ export function FilterConditionEditor({
                                                 })
                                             }
                                             className={cn(
-                                                "px-3 py-1.5 text-[13px] transition-colors",
+                                                "px-1 py-1 text-[13px] transition-colors max-h-[26px]",
                                                 cond.include
                                                     ? "bg-[#E8F3FF] text-[#165DFF]"
-                                                    : "bg-white text-[#4E5969] hover:bg-[#F2F3F5]"
+                                                    : "bg-[#F8F8F8] text-[#4E5969] hover:bg-[#F2F3F5]"
                                             )}
                                         >
                                             包含
@@ -312,19 +312,19 @@ export function FilterConditionEditor({
                                                 })
                                             }
                                             className={cn(
-                                                "px-3 py-1.5 text-[13px] transition-colors",
+                                                "px-1 py-1 text-[13px] transition-colors max-h-[26px]",
                                                 !cond.include
                                                     ? "bg-[#E8F3FF] text-[#165DFF]"
-                                                    : "bg-white text-[#4E5969] hover:bg-[#F2F3F5]"
+                                                    : "bg-[#F8F8F8] text-[#4E5969] hover:bg-[#F2F3F5]"
                                             )}
                                         >
                                             不包含
                                         </button>
                                     </div>
 
-                                    {/* 关键词输入：底纹、200 字上限、中文分号转英文、自适应高度，输入框大一些 */}
-                                    <div className="flex-1 min-w-[200px] max-w-[620px]">
-                                        <TextareaAutosize
+                                    {/* 关键词输入：使用单行 input，高度 32px */}
+                                    <div className="flex-1 min-w-[200px] mt-1 max-w-[620px]">
+                                        <input
                                             value={cond.keywords}
                                             onChange={(e) =>
                                                 handleKeywordsChange(
@@ -334,13 +334,12 @@ export function FilterConditionEditor({
                                                 )
                                             }
                                             placeholder='请输入关键词, 以分号";"分隔'
-                                            className="w-full min-h-[36px] max-h-[120px] px-3 py-2 text-[14px] rounded-lg border border-[#E5E6EB] resize-none focus:outline-none focus:ring-2 focus:ring-[#165DFF]/30 focus:border-[#165DFF]"
-                                            rows={1}
+                                            className="w-full h-8 px-3 text-[14px] rounded-lg border border-[#E5E6EB] focus:outline-none focus:ring-2 focus:ring-[#165DFF]/30 focus:border-[#165DFF]"
                                         />
                                     </div>
 
                                     {/* 第一层 & 第二层：所有条目都可以删；仅当全局只剩 1 条时不展示 - */}
-                                    <div className="flex items-center gap-1 mt-0.5 flex-shrink-0">
+                                    <div className="flex items-center gap-1 mt-1 flex-shrink-0">
                                         {/* 第一层：group 仅 1 条时，这一条既是第一层，也有 + */}
                                         {group.conditions.length === 1 && !atTotalLimit && (
                                             <button

@@ -29,6 +29,7 @@ interface ChannelItemProps {
     onUnsubscribe: (id: string) => void;
     onPin: (id: string, pinned: boolean, type: "created" | "subscribed") => void;
     onManageMembers: (channel: Channel) => void;
+    onChannelSettings: (channel: Channel) => void;
 }
 
 export default function ChannelItem({
@@ -40,7 +41,8 @@ export default function ChannelItem({
     onDelete,
     onUnsubscribe,
     onPin,
-    onManageMembers
+    onManageMembers,
+    onChannelSettings
 }: ChannelItemProps) {
     const [isEditing, setIsEditing] = useState(false);
     const [menuOpen, setMenuOpen] = useState(false); // 控制菜单打开时的状态显示
@@ -135,12 +137,15 @@ export default function ChannelItem({
                         className="w-40 px-4 py-3 rounded-lg"
                         onClick={(e) => e.stopPropagation()}
                     >
-                        {type === "created" && <DropdownMenuItem
-                            className="py-2 px-0 cursor-pointer focus:bg-[#f2f3f5]"
-                        >
-                            <Settings className="size-4 mr-2 text-[#4e5969]" />
-                            <span className="">频道设置</span>
-                        </DropdownMenuItem>}
+                        {type === "created" && (
+                            <DropdownMenuItem
+                                className="py-2 px-0 cursor-pointer focus:bg-[#f2f3f5]"
+                                onClick={() => onChannelSettings(channel)}
+                            >
+                                <Settings className="size-4 mr-2 text-[#4e5969]" />
+                                <span className="text-[14px] text-[#1d2129]">频道设置</span>
+                            </DropdownMenuItem>
+                        )}
                         {(type === "created" || channel.role === ChannelRole.ADMIN) && (
                             <DropdownMenuItem
                                 className="py-2 px-0 cursor-pointer focus:bg-[#f2f3f5]"

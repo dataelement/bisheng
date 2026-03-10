@@ -22,6 +22,7 @@ interface ChannelSidebarProps {
     onCreateChannel: () => void;
     onChannelSquare: () => void;
     onManageMembers: (channel: Channel) => void;
+    onChannelSettings: (channel: Channel) => void;
 }
 
 export function ChannelSidebar({
@@ -29,7 +30,8 @@ export function ChannelSidebar({
     onChannelSelect,
     onCreateChannel,
     onChannelSquare,
-    onManageMembers
+    onManageMembers,
+    onChannelSettings
 }: ChannelSidebarProps) {
     const [collapsed, setCollapsed] = useState(false);
     const [createdCollapsed, setCreatedCollapsed] = useState(false);
@@ -149,6 +151,7 @@ export function ChannelSidebar({
                                     onUnsubscribe={handleUnsubscribeChannel}
                                     onPin={handlePinChannel}
                                     onManageMembers={onManageMembers}
+                                    onChannelSettings={onChannelSettings}
                                 />
                             ))}
                             {!createdChannels.length && <div className="py-6 text-center text-sm text-[#818181]">暂无数据</div>}
@@ -179,6 +182,7 @@ export function ChannelSidebar({
                                     onUnsubscribe={handleUnsubscribeChannel}
                                     onPin={handlePinChannel}
                                     onManageMembers={onManageMembers}
+                                    onChannelSettings={onChannelSettings}
                                 />
                             ))}
                             {!subscribedChannels.length && <div className="py-6 text-center text-sm text-[#818181]">暂无数据</div>}

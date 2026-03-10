@@ -1224,5 +1224,8 @@
   "website_not_indexed": "网站尚未入库，是否需要爬取",
   "no_source_collected": "暂时没有收录该信源，试试在上方输入框中输入完整的网址，进行检索或添加",
   "confirm_add": "确认添加",
-  "crawling_waiting": "爬取中,可能需要1-2分钟,请耐心等待..."
+  "crawling_waiting": "爬取中,可能需要1-2分钟,请耐心等待...",
+  "subscribe": "订阅",
+  "subscribed": "已订阅",
+  "subscribe_success": "订阅成功"
 }

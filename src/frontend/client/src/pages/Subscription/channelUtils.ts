@@ -105,6 +105,7 @@ export function buildCreateChannelPayload(data: CreateChannelFormData): CreateMa
     return {
         name: data.channelName.trim(),
         source_list: data.sources.map((s) => s.id),
+        // 权限设置：直接按 "public" | "private" | "review" 传给后端
         visibility: data.visibility,
         filter_rules: buildFilterRules(data),
         is_released: data.publishToSquare === "yes"

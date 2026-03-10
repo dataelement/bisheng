@@ -149,11 +149,20 @@ export async function createChannelApi(data: {
  * 更新频道信息
  * PUT /api/v1/channel/manager/{channel_id}
  */
-export async function updateChannelApi(channelId: string, data: {
-    name?: string;
-    description?: string;
-}): Promise<any> {
+export async function updateChannelApi(
+    channelId: string,
+    data: any
+): Promise<any> {
     const res: any = await request.put(`/api/v1/channel/manager/${channelId}`, data);
+    return res?.data ?? res;
+}
+
+/**
+ * 获取频道详情（用于回显）
+ * GET /api/v1/channel/manager/{channel_id}
+ */
+export async function getChannelDetailApi(channelId: string): Promise<any> {
+    const res: any = await request.get(`/api/v1/channel/manager/${channelId}`);
     return res?.data ?? res;
 }
 
