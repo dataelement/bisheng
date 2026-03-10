@@ -20,6 +20,11 @@ class CreateChannelRequest(BaseModel):
     is_released: bool = Field(default=False, description='Whether the channel is released')
 
 
+class UpdateChannelRequest(BaseModel):
+    name: Optional[str] = Field(None, description='Channel Name')
+    description: Optional[str] = Field(None, description='Channel Description/Brief')
+
+
 class AddInformationSourceRequest(BaseModel):
     url: str = Field(..., description='URL of the information source to add')
 
@@ -67,6 +72,7 @@ class ChannelItemResponse(BaseModel):
     is_pinned: bool = Field(default=False, description='Whether the channel is pinned by the user')
     subscribed_at: Optional[datetime] = Field(None,
                                               description='The time when the user subscribed to the channel, null if not subscribed')
+    unread_count: int = Field(default=0, description='Number of unread articles in this channel')
 
 
 class ChannelMemberResponse(BaseModel):

@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Query
 from bisheng.channel.api.dependencies import get_channel_service
 from bisheng.channel.domain.schemas.channel_manager_schema import (
     CreateChannelRequest,
+    UpdateChannelRequest,
     AddInformationSourceRequest,
     CrawlWebsiteRequest,
     MyChannelQueryRequest,
@@ -271,3 +272,58 @@ async def get_article_detail(
     except Exception as e:
         logger.error(f"Failed to get article detail: {e}")
         return resp_500(message="Failed to get article detail")
+
+
+@router.put("/{channel_id}")
+async def update_channel_info(
+        channel_id: str,
+        req_param: UpdateChannelRequest,
+        login_user: UserPayload = Depends(UserPayload.get_login_user),
+        channel_service: 'ChannelService' = Depends(get_channel_service)
+):
+    """更新频道信息接口"""
+    try:
+        result = await channel_service.update_channel(channel_id, req_param, login_user)
+        return resp_200(data=result.model_dump())
+    except ValueError as e:
+        logger.warning(f"Update channel info failed: {e}")
+        return resp_500(message=str(e))
+    except Exception as e:
+        logger.error(f"Failed to update channel: {e}")
+        return resp_500(message="Failed to update channel")
+
+
+@router.delete("/{channel_id}")
+async def dismiss_channel(
+        channel_id: str,
+        login_user: UserPayload = Depends(UserPayload.get_login_user),
+        channel_service: 'ChannelService' = Depends(get_channel_service)
+):
+    """解散频道接口"""
+    try:
+        await channel_service.dismiss_channel(channel_id, login_user)
+        return resp_200(data=True)
+    except ValueError as e:
+        logger.warning(f"Dismiss channel failed: {e}")
+        return resp_500(message=str(e))
+    except Exception as e:
+        logger.error(f"Failed to dismiss channel: {e}")
+        return resp_500(message="Failed to dismiss channel")
+
+
+@router.post("/{channel_id}/unsubscribe")
+async def unsubscribe_channel(
+        channel_id: str,
+        login_user: UserPayload = Depends(UserPayload.get_login_user),
+        channel_service: 'ChannelService' = Depends(get_channel_service)
+):
+    """取消订阅频道接口"""
+    try:
+        await channel_service.unsubscribe_channel(channel_id, login_user)
+        return resp_200(data=True)
+    except ValueError as e:
+        logger.warning(f"Unsubscribe channel failed: {e}")
+        return resp_500(message=str(e))
+    except Exception as e:
+        logger.error(f"Failed to unsubscribe channel: {e}")
+        return resp_500(message="Failed to unsubscribe channel")

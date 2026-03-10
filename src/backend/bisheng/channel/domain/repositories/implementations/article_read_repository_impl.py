@@ -22,3 +22,11 @@ class ArticleReadRepositoryImpl(BaseRepositoryImpl[ArticleReadRecord, str], Arti
         )
         result = await self.session.exec(statement)
         return result.first()
+
+    async def get_all_read_article_ids(self, user_id: int) -> list[str]:
+        """Get all read article ids for a given user"""
+        statement = select(ArticleReadRecord.article_id).where(
+            ArticleReadRecord.user_id == user_id
+        )
+        result = await self.session.exec(statement)
+        return list(result.all())

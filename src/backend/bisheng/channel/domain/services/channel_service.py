@@ -1,3 +1,4 @@
+import asyncio
 from typing import List, Optional, Dict, Any
 
 from bisheng.channel.domain.models.channel import Channel, ChannelVisibilityEnum
@@ -8,6 +9,7 @@ from bisheng.channel.domain.repositories.interfaces.article_read_repository impo
 from bisheng.channel.domain.models.article_read_record import ArticleReadRecord
 from bisheng.channel.domain.schemas.channel_manager_schema import (
     CreateChannelRequest,
+    UpdateChannelRequest,
     MyChannelQueryRequest,
     SetPinRequest,
     ChannelItemResponse,
@@ -125,11 +127,17 @@ class ChannelService:
         channels = await self.channel_repository.find_channels_by_ids(channel_ids)
         channel_map = {ch.id: ch for ch in channels}
 
+        # Get all read article IDs for the current user
+        all_read_ids = []
+        if self.article_read_repository:
+            all_read_ids = await self.article_read_repository.get_all_read_article_ids(login_user.user_id)
+
         # Build a map of business_id to membership for quick lookup
         membership_map = {m.business_id: m for m in memberships}
 
         # Construct the result list, filtering out private channels for "followed" query type
         result: List[ChannelItemResponse] = []
+        channels_to_process = []
         for channel_id, membership in membership_map.items():
             channel = channel_map.get(channel_id)
             if not channel:
@@ -139,7 +147,17 @@ class ChannelService:
             if query_data.query_type == QueryTypeEnum.FOLLOWED:
                 if channel.visibility == ChannelVisibilityEnum.PRIVATE:
                     continue
+            
+            channels_to_process.append((channel, membership))
 
+        # Concurrently calculate unread counts for all applicable channels
+        unread_counts = []
+        if channels_to_process:
+            unread_counts = await asyncio.gather(
+                *[self._calculate_unread_count(channel, all_read_ids) for channel, _ in channels_to_process]
+            )
+
+        for (channel, membership), unread_count in zip(channels_to_process, unread_counts):
             item = ChannelItemResponse(
                 id=channel.id,
                 name=channel.name,
@@ -151,6 +169,7 @@ class ChannelService:
                 user_role=membership.user_role.value,
                 is_pinned=membership.is_pinned,
                 subscribed_at=membership.create_time,
+                unread_count=unread_count,
             )
             result.append(item)
 
@@ -158,6 +177,52 @@ class ChannelService:
         result = self._sort_channels(result, query_data.sort_by)
 
         return result
+
+    async def _calculate_unread_count(self, channel: Channel, all_read_ids: List[str]) -> int:
+        """Calculate the exact number of unread articles for a given channel."""
+        # 1. Parse filter rules, using only the main channel rules
+        filter_rules_raw: List[Dict[str, Any]] = channel.filter_rules or []
+        main_rules: List[Dict[str, Any]] = []
+        for fr in filter_rules_raw:
+            channel_type = fr.get("channel_type", "main")
+            if channel_type == "main":
+                main_rules.extend(fr.get("rules", []))
+
+        # 2. Get total number of articles for this channel
+        total_count = await self.article_es_service.count_articles(
+            source_ids=channel.source_list,
+            filter_rules=main_rules if main_rules else None
+        )
+
+        if total_count == 0:
+            return 0
+
+        # If user hasn't read any articles, everything is unread
+        if not all_read_ids:
+            return total_count
+
+        # 3. Calculate how many read articles belong to this channel
+        # Chunk requests to avoid Elasticsearch TooManyClauses exception (default limit is 1024)
+        chunk_size = 1000
+        matching_read_count = 0
+
+        tasks = []
+        for i in range(0, len(all_read_ids), chunk_size):
+            chunked_ids = all_read_ids[i:i + chunk_size]
+            tasks.append(
+                self.article_es_service.count_articles(
+                    source_ids=channel.source_list,
+                    filter_rules=main_rules if main_rules else None,
+                    include_article_ids=chunked_ids
+                )
+            )
+
+        if tasks:
+            counts = await asyncio.gather(*tasks)
+            matching_read_count = sum(counts)
+
+        # Ensure no negative count just in case
+        return max(0, total_count - matching_read_count)
 
     @staticmethod
     def _sort_channels(items: List[ChannelItemResponse], sort_by: SortByEnum) -> List[ChannelItemResponse]:
@@ -477,6 +542,98 @@ class ChannelService:
         )
 
         return return_status
+
+    async def update_channel(self, channel_id: str, req: UpdateChannelRequest, login_user: UserPayload):
+        """
+        Update channel information (name and description).
+        Only the creator can update the channel.
+        """
+        # 1. Verify channel existence
+        channels = await self.channel_repository.find_channels_by_ids([channel_id])
+        if not channels:
+            raise ChannelNotFoundError()
+        channel = channels[0]
+
+        # 2. Verify current user is the creator
+        current_membership = await self.space_channel_member_repository.find_membership(
+            business_id=channel_id,
+            business_type=BusinessTypeEnum.CHANNEL,
+            user_id=login_user.user_id
+        )
+        if not current_membership or not current_membership.status:
+            raise ValueError("You are not a member of this channel")
+
+        if current_membership.user_role != UserRoleEnum.CREATOR:
+            raise ChannelPermissionDeniedError("Only the creator can update the channel information")
+
+        # 3. Update fields
+        if req.name is not None:
+            channel.name = req.name
+        if req.description is not None:
+            channel.description = req.description
+
+        await self.channel_repository.update(channel)
+        return channel
+
+    async def dismiss_channel(self, channel_id: str, login_user: UserPayload):
+        """
+        Dismiss a channel:
+        - Must be creator
+        - Delete all user relationships
+        - Delete channel
+        - Call bisheng_information_client.unsubscribe_information_source
+        """
+        # 1. Verify channel existence
+        channels = await self.channel_repository.find_channels_by_ids([channel_id])
+        if not channels:
+            raise ChannelNotFoundError()
+        channel = channels[0]
+
+        # 2. Verify current user is the creator
+        current_membership = await self.space_channel_member_repository.find_membership(
+            business_id=channel_id,
+            business_type=BusinessTypeEnum.CHANNEL,
+            user_id=login_user.user_id
+        )
+        if not current_membership or not current_membership.status or current_membership.user_role != UserRoleEnum.CREATOR:
+            raise ChannelPermissionDeniedError("Only the creator can dismiss the channel")
+
+        # 3. Delete all user relationships
+        members = await self.space_channel_member_repository.find_all(
+            business_id=channel_id, 
+            business_type=BusinessTypeEnum.CHANNEL
+        )
+        for member in members:
+            await self.space_channel_member_repository.delete(member.id)
+
+        # 4. Delete channel
+        await self.channel_repository.delete(channel_id)
+
+        # 5. Unsubscribe information source
+        if channel.source_list:
+            bisheng_information_client = await get_bisheng_information_client()
+            await bisheng_information_client.unsubscribe_information_source(channel.source_list)
+
+        return True
+
+    async def unsubscribe_channel(self, channel_id: str, login_user: UserPayload):
+        """
+        Unsubscribe from a channel:
+        - Remove current user and channel relationship
+        """
+        # 1. Verify current user is a member
+        current_membership = await self.space_channel_member_repository.find_membership(
+            business_id=channel_id,
+            business_type=BusinessTypeEnum.CHANNEL,
+            user_id=login_user.user_id
+        )
+        if not current_membership or not current_membership.status:
+            raise ValueError("You are not subscribed to this channel")
+
+        # 2. Remove relationship
+        await self.space_channel_member_repository.delete(current_membership.id)
+
+        return True
 
     async def search_channel_articles(
             self,

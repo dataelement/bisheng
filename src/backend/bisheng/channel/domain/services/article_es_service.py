@@ -199,8 +199,78 @@ class ArticleEsService:
             return False
 
     # ──────────────────────────────────────────
-    #  Search
+    #  Search & Count
     # ──────────────────────────────────────────
+
+    async def count_articles(
+            self,
+            source_ids: Optional[List[str]] = None,
+            filter_rules: Optional[List[Dict[str, Any]]] = None,
+            include_article_ids: Optional[List[str]] = None,
+    ) -> int:
+        """
+        统计文章数量，支持信源过滤、过滤规则和文章 ID 列表包含。
+        """
+        client = await self._get_client()
+
+        must_clauses = []
+        must_not_clauses = []
+        filter_clauses = []
+
+        if source_ids is not None:
+            if not source_ids:
+                return 0
+            filter_clauses.append({"terms": {"source_id": source_ids}})
+
+        if include_article_ids is not None:
+            if not include_article_ids:
+                return 0
+            filter_clauses.append({"terms": {"_id": include_article_ids}})
+
+        if filter_rules:
+            for rule in filter_rules:
+                rule_type = rule.get("rule_type")
+                keywords = rule.get("keywords", [])
+                relation = rule.get("relation", "or")
+
+                if not keywords:
+                    continue
+
+                keyword_queries = []
+                for kw in keywords:
+                    keyword_queries.append({
+                        "multi_match": {
+                            "query": kw,
+                            "fields": ["title", "content"],
+                            "type": "best_fields",
+                        }
+                    })
+
+                if relation == "and":
+                    combined = {"bool": {"must": keyword_queries}}
+                else:
+                    combined = {"bool": {"should": keyword_queries, "minimum_should_match": 1}}
+
+                if rule_type == "include":
+                    must_clauses.append(combined)
+                elif rule_type == "exclude":
+                    must_not_clauses.append(combined)
+
+        bool_query: Dict[str, Any] = {}
+        if must_clauses:
+            bool_query["must"] = must_clauses
+        if must_not_clauses:
+            bool_query["must_not"] = must_not_clauses
+        if filter_clauses:
+            bool_query["filter"] = filter_clauses
+
+        if bool_query:
+            query = {"bool": bool_query}
+        else:
+            query = {"match_all": {}}
+
+        response = await client.count(index=ARTICLE_INDEX_NAME, query=query)
+        return response["count"]
 
     async def search_articles(
             self,

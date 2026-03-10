@@ -12,3 +12,8 @@ class ArticleReadRepository(BaseRepository[ArticleReadRecord, str], ABC):
     async def find_by_user_and_article(self, user_id: int, article_id: str) -> Optional[ArticleReadRecord]:
         """Find an article read record by user ID and article ID"""
         pass
+
+    @abstractmethod
+    async def get_all_read_article_ids(self, user_id: int) -> list[str]:
+        """Get all read article ids for a given user"""
+        pass
