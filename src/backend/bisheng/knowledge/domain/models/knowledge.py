@@ -47,14 +47,16 @@ class MetadataFieldType(str, Enum):
 
 class KnowledgeBase(SQLModelSerializable):
     user_id: Optional[int] = Field(default=None, index=True)
-    name: str = Field(index=True, min_length=1, max_length=200, description='Knowledge Base Name, Minimum one character, maximum30characters')
-    type: int = Field(index=False, default=0, description='0 is a general knowledge base,1 areQAThe knowledge base upon')
+    name: str = Field(index=True, min_length=1, max_length=200,
+                      description='Knowledge Base Name')
+    type: int = Field(index=False, default=0,
+                      description='Knowledge Base Type, value from KnowledgeTypeEnum')
     description: Optional[str] = Field(default=None, index=True)
     model: Optional[str] = Field(default=None, index=False)
     collection_name: Optional[str] = Field(default=None, index=False)
     index_name: Optional[str] = Field(default=None, index=False)
     state: Optional[int] = Field(index=False, default=KnowledgeState.PUBLISHED.value,
-                                 description='0 is unpublished,1 Is Published, 2 Is copying')
+                                 description='value from KnowledgeState')
 
     metadata_fields: Optional[List[Dict]] = Field(default=None, sa_column=Column(JSON, nullable=True),
                                                   description="Metadata Field Configuration for Knowledge Base")
@@ -198,12 +200,6 @@ class KnowledgeDao(KnowledgeBase):
             statement = statement.where(Knowledge.id.in_(filter_knowledge))
         if knowledge_type:
             statement = statement.where(Knowledge.type == knowledge_type.value)
-        elif knowledge_type is False:
-            # When explicitly passed inFalse, do not filter personal knowledge base
-            pass
-        else:
-            # Filter personal knowledge base by default
-            statement = statement.where(Knowledge.type != KnowledgeTypeEnum.PRIVATE.value)
         if name:
 
             conditions = [col(Knowledge.name).like(f'%{name}%'), col(Knowledge.description).like(f'%{name}%')]

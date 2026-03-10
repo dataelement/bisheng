@@ -273,6 +273,7 @@ export default function useChatHelpers() {
                             create_time: formatDate(new Date(), "yyyy-MM-ddTHH:mm:ss"),
                             source: data.source,
                             end: data.type === "end",
+                            extra: data.extra,
                         }
                         return updatedMessages
                     }

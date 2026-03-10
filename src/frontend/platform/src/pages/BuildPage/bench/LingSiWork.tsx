@@ -383,7 +383,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                             ...defaultFormValues.linsightConfig,
                             ...config.linsightConfig,
                             input_placeholder: config.linsightConfig?.input_placeholder || '',
-                            linsight_entry: config.linsightConfig?.linsight_entry || false,
+                            linsight_entry: config.linsightConfig?.linsight_entry || true,
                         }
                     });
 

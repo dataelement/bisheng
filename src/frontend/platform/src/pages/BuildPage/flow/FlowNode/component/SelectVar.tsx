@@ -27,6 +27,7 @@ const isMatch = (obj, expression) => {
 // 特殊结构提取变量
 const getSpecialVar = ({ obj, group, onlyImg = false }) => {
     const type = obj.global
+    
     switch (type) {
         case 'item:form_input':
             return obj.value.reduce((res, item) => {
@@ -35,7 +36,7 @@ const getSpecialVar = ({ obj, group, onlyImg = false }) => {
                 const add = (propKey) => res.push({ label: item[propKey], value: item[propKey] });
                 // 文本use key
                 if (['select', 'text'].includes(item.type)) {
-                    add('key')
+                    !onlyImg && add('key')
                     return res
                 }
                 // 1. 优先处理图片 (这是唯一在 onlyImg=true 时可能被添加的项)

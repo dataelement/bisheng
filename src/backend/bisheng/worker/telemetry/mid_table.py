@@ -24,7 +24,8 @@ def get_yesterday_date_range(mid_table: BaseMidTable, start_date: str = None, en
     if start_date is None or end_date is None:
         # default to yesterday's date
         now = datetime.now()
-        start_date = (now - timedelta(days=1)).strftime("%Y-%m-%d 00:00:00")
+        yesterday = now - timedelta(days=1)
+        start_date = datetime(year=yesterday.year, month=yesterday.month, day=yesterday.day, hour=0, minute=0, second=0)
         end_date = datetime(year=now.year, month=now.month, day=now.day, hour=0, minute=0, second=0)
     else:
         start_date = datetime.fromisoformat(start_date)
