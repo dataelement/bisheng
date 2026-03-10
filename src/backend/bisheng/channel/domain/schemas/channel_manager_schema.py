@@ -123,6 +123,7 @@ class ChannelSquareItemResponse(BaseModel):
     subscription_status: SubscriptionStatusEnum = Field(...,
                                                          description='Current user subscription status')
     subscriber_count: int = Field(default=0, description='Number of subscribers')
+    article_count: int = Field(default=0, description='Number of articles matching the main channel filters')
 
 
 class ChannelSquarePageResponse(BaseModel):

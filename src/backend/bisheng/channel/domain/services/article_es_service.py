@@ -202,29 +202,25 @@ class ArticleEsService:
     #  Search & Count
     # ──────────────────────────────────────────
 
-    async def count_articles(
+    def _build_count_query(
             self,
             source_ids: Optional[List[str]] = None,
             filter_rules: Optional[List[Dict[str, Any]]] = None,
             include_article_ids: Optional[List[str]] = None,
-    ) -> int:
-        """
-        统计文章数量，支持信源过滤、过滤规则和文章 ID 列表包含。
-        """
-        client = await self._get_client()
-
+    ) -> Optional[Dict[str, Any]]:
+        """构建 count 查询语句，如果确定结果为 0，则返回 None"""
         must_clauses = []
         must_not_clauses = []
         filter_clauses = []
 
         if source_ids is not None:
             if not source_ids:
-                return 0
+                return None
             filter_clauses.append({"terms": {"source_id": source_ids}})
 
         if include_article_ids is not None:
             if not include_article_ids:
-                return 0
+                return None
             filter_clauses.append({"terms": {"_id": include_article_ids}})
 
         if filter_rules:
@@ -265,12 +261,70 @@ class ArticleEsService:
             bool_query["filter"] = filter_clauses
 
         if bool_query:
-            query = {"bool": bool_query}
+            return {"bool": bool_query}
         else:
-            query = {"match_all": {}}
+            return {"match_all": {}}
 
+    async def count_articles(
+            self,
+            source_ids: Optional[List[str]] = None,
+            filter_rules: Optional[List[Dict[str, Any]]] = None,
+            include_article_ids: Optional[List[str]] = None,
+    ) -> int:
+        """
+        统计文章数量，支持信源过滤、过滤规则和文章 ID 列表包含。
+        """
+        query = self._build_count_query(source_ids, filter_rules, include_article_ids)
+        if query is None:
+            return 0
+
+        client = await self._get_client()
         response = await client.count(index=ARTICLE_INDEX_NAME, query=query)
         return response["count"]
+
+    async def count_articles_batch(
+            self,
+            requests: List[Dict[str, Any]]
+    ) -> List[int]:
+        """
+        批量统计文章数量。
+        requests 是一个字典列表，每个字典包含 count_articles 的参数：
+        - source_ids
+        - filter_rules
+        - include_article_ids
+        """
+        if not requests:
+            return []
+
+        client = await self._get_client()
+        body = []
+        zero_indices = set()
+        
+        for i, req in enumerate(requests):
+            query = self._build_count_query(
+                source_ids=req.get("source_ids"),
+                filter_rules=req.get("filter_rules"),
+                include_article_ids=req.get("include_article_ids")
+            )
+            if query is None:
+                zero_indices.add(i)
+                # msearch requires valid query even if we know it's zero to maintain order easily
+                body.append({"index": ARTICLE_INDEX_NAME})
+                body.append({"query": {"match_none": {}}, "size": 0})
+            else:
+                body.append({"index": ARTICLE_INDEX_NAME})
+                body.append({"query": query, "size": 0})
+
+        response = await client.msearch(body=body)
+        
+        counts = []
+        for i, r in enumerate(response["responses"]):
+            if i in zero_indices:
+                counts.append(0)
+            else:
+                total = r["hits"]["total"]
+                counts.append(total["value"] if isinstance(total, dict) else total)
+        return counts
 
     async def search_articles(
             self,

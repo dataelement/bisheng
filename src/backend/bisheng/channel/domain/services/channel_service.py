@@ -466,11 +466,50 @@ class ChannelService:
         total = await self.channel_repository.count_square_channels(keyword=keyword)
 
         # 3. Map results to response items
-        result_list: List[ChannelSquareItemResponse] = []
+        # To avoid N+1 ES queries, build a batch request
+        batch_requests = []
         for row in rows:
+            channel = row[0]
+            filter_rules_raw = channel.filter_rules or []
+            main_rules = []
+            for fr in filter_rules_raw:
+                if isinstance(fr, dict):
+                    channel_type = fr.get("channel_type", "main")
+                    rules = fr.get("rules", [])
+                    name = fr.get("name")
+                else:
+                    channel_type = getattr(fr, "channel_type", "main")
+                    rules = getattr(fr, "rules", [])
+                    name = getattr(fr, "name", None)
+
+                rules_dicts = []
+                for r in rules:
+                    if isinstance(r, dict):
+                        rules_dicts.append(r)
+                    elif hasattr(r, "model_dump"):
+                        rules_dicts.append(r.model_dump(exclude_unset=True))
+                    elif hasattr(r, "__dict__"):
+                        rules_dicts.append(r.__dict__)
+                    else:
+                        rules_dicts.append(r)
+
+                if not (channel_type == "sub" and name):
+                    main_rules.extend(rules_dicts)
+
+            batch_requests.append({
+                "source_ids": channel.source_list or [],
+                "filter_rules": main_rules if main_rules else None,
+                "include_article_ids": None
+            })
+
+        article_counts = await self.article_es_service.count_articles_batch(batch_requests)
+
+        result_list: List[ChannelSquareItemResponse] = []
+        for i, row in enumerate(rows):
             channel = row[0]  # Channel object
             user_subscription_status = row[1]  # None / True / False
             subscriber_count = row[2]  # int
+            article_count = article_counts[i] if i < len(article_counts) else 0
 
             # Determine subscription status enum
             if user_subscription_status is None:
@@ -490,6 +529,7 @@ class ChannelService:
                 update_time=channel.update_time,
                 subscription_status=status,
                 subscriber_count=subscriber_count,
+                article_count=article_count,
             ))
 
         return ChannelSquarePageResponse(data=result_list, total=total)
