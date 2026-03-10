@@ -250,3 +250,24 @@ async def search_channel_articles(
     except Exception as e:
         logger.error(f"Failed to search channel articles: {e}")
         return resp_500(message="Failed to search channel articles")
+
+
+@router.get("/articles/detail/{article_id}")
+async def get_article_detail(
+        article_id: str,
+        login_user: UserPayload = Depends(UserPayload.get_login_user),
+        channel_service: 'ChannelService' = Depends(get_channel_service)
+):
+    """根据文章ID获取文章详情，并记录已读状态。"""
+    try:
+        result = await channel_service.get_article_detail(
+            article_id=article_id,
+            login_user=login_user,
+        )
+        return resp_200(data=result.model_dump())
+    except ValueError as e:
+        logger.warning(f"Get article detail failed: {e}")
+        return resp_500(message=str(e))
+    except Exception as e:
+        logger.error(f"Failed to get article detail: {e}")
+        return resp_500(message="Failed to get article detail")

@@ -4,6 +4,8 @@ from bisheng.channel.domain.models.channel import Channel, ChannelVisibilityEnum
 from bisheng.channel.domain.models.channel_info_source import ChannelInfoSource
 from bisheng.channel.domain.repositories.interfaces.channel_info_source_repository import ChannelInfoSourceRepository
 from bisheng.channel.domain.repositories.interfaces.channel_repository import ChannelRepository
+from bisheng.channel.domain.repositories.interfaces.article_read_repository import ArticleReadRepository
+from bisheng.channel.domain.models.article_read_record import ArticleReadRecord
 from bisheng.channel.domain.schemas.channel_manager_schema import (
     CreateChannelRequest,
     MyChannelQueryRequest,
@@ -37,11 +39,13 @@ class ChannelService:
     def __init__(self, channel_repository: 'ChannelRepository',
                  space_channel_member_repository: 'SpaceChannelMemberRepository',
                  channel_info_source_repository: 'ChannelInfoSourceRepository',
-                 article_es_service: 'ArticleEsService' = None):
+                 article_es_service: 'ArticleEsService' = None,
+                 article_read_repository: 'ArticleReadRepository' = None):
         self.channel_repository = channel_repository
         self.space_channel_member_repository = space_channel_member_repository
         self.channel_info_source_repository = channel_info_source_repository
         self.article_es_service = article_es_service or ArticleEsService()
+        self.article_read_repository = article_read_repository
 
     async def create_channel(self, channel_data: CreateChannelRequest, login_user: UserPayload):
         """Create a new channel based on the provided data and the logged-in user."""
@@ -551,4 +555,31 @@ class ChannelService:
             page=page,
             page_size=page_size,
         )
+
+    async def get_article_detail(self, article_id: str, login_user: UserPayload):
+        """
+        Get article details by ID and record reading status.
+        """
+        # 1. Fetch article from ES
+        article = await self.article_es_service.get_article(article_id)
+        if not article:
+            raise ValueError("文章不存在")
+
+        # 2. Check read record
+        if self.article_read_repository:
+            read_record = await self.article_read_repository.find_by_user_and_article(
+                user_id=login_user.user_id,
+                article_id=article_id
+            )
+
+            # 3. Add read record if not exists
+            if not read_record:
+                new_record = ArticleReadRecord(
+                    article_id=article_id,
+                    user_id=login_user.user_id,
+                    source_id=article.source_id,
+                )
+                await self.article_read_repository.save(new_record)
+
+        return article
 
