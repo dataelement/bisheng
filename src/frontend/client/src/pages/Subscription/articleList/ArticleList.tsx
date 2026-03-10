@@ -1,15 +1,16 @@
+import { useQuery } from "@tanstack/react-query";
 import {
     Info,
     SquareArrowOutUpLeftIcon
 } from "lucide-react";
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
     Article,
     Channel,
     getArticlesApi,
-    type ArticleSearchResultItem,
-    type ManagerSource,
-    listManagerSourcesApi
+    getChannelDetailApi,
+    listManagerSourcesApi,
+    type ArticleSearchResultItem
 } from "~/api/channels";
 import { NotificationSeverity } from "~/common";
 import { InfiniteScroll } from "~/components/InfiniteScroll";
@@ -28,20 +29,34 @@ interface ArticleListProps {
     selectedArticleId?: string;
 }
 
-/** 将后端 ArticleSearchResultItem 映射为前端 Article */
+/** Strip HTML tags from a string, extracting body content first */
+function stripHtmlTags(html: string): string {
+    if (!html) return "";
+    // Extract content within <body> tags if present
+    const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+    const bodyContent = bodyMatch ? bodyMatch[1] : html;
+    return bodyContent
+        .replace(/<[^>]*>/g, "")       // Strip HTML tags
+        .replace(/&[a-zA-Z]+;/g, " ")  // Strip named entities (&nbsp; &amp; etc.)
+        .replace(/&#\d+;/g, " ")       // Strip numeric entities (&#160; etc.)
+        .replace(/\s+/g, " ")          // Collapse whitespace
+        .trim();
+}
+
+/** Map backend ArticleSearchResultItem to frontend Article */
 function mapToArticle(item: ArticleSearchResultItem, channelId: string): Article {
     return {
         id: item.doc_id,
         title: item.title,
         url: item.source_url || "",
-        content: item.content || "",
+        content: stripHtmlTags(item.content || ""),
         content_html: item.content_html || "",
         coverImage: item.cover_image || undefined,
-        sourceName: "",            // 后续从 source 信息补充
-        sourceAvatar: undefined,
+        sourceName: item.source_info?.source_name || "",
+        sourceAvatar: item.source_info?.source_icon || undefined,
         sourceId: item.source_id,
         channelId,
-        isRead: false,
+        isRead: item.is_read ?? false,
         publishedAt: item.publish_time || item.create_time || "",
         createdAt: item.create_time || "",
         highlight: item.highlight,
@@ -104,6 +119,7 @@ export function ArticleList({ channel, selectedArticleId, onArticleSelect }: Art
                 subChannelName: selectedSubChannelName,
                 keyword: searchQuery || undefined,
                 sourceIds: selectedSources.length > 0 ? selectedSources : undefined,
+                onlyUnread: onlyUnread || undefined,
                 page,
                 pageSize: PAGE_SIZE,
             });
@@ -125,19 +141,8 @@ export function ArticleList({ channel, selectedArticleId, onArticleSelect }: Art
         } finally {
             setLoading(false);
         }
-    // Note: sourceOptions is NOT a dependency here to avoid re-fetching when sources load
-    }, [channel?.id, selectedSubChannelName, searchQuery, selectedSources]);
-
-    // 信源加载完成后，补充已有文章的 sourceName（不触发重新请求）
-    useEffect(() => {
-        if (sourceOptions.length > 0 && articles.length > 0) {
-            const sourceMap = new Map(sourceOptions.map(s => [s.id, s.label]));
-            setArticles(prev => prev.map(a => {
-                const name = sourceMap.get(a.sourceId);
-                return name ? { ...a, sourceName: name } : a;
-            }));
-        }
-    }, [sourceOptions]);
+        // Note: sourceOptions is NOT a dependency here to avoid re-fetching when sources load
+    }, [channel?.id, selectedSubChannelName, searchQuery, selectedSources, onlyUnread]);
 
     // 统一的频道切换 + 筛选加载 effect
     // 用 ref 检测频道是否切换，切换时重置状态再加载
@@ -184,6 +189,18 @@ export function ArticleList({ channel, selectedArticleId, onArticleSelect }: Art
         setSelectedSubChannelName(subChannelName === "all" ? undefined : subChannelName);
     };
 
+    // Fetch channel detail for the tooltip
+    const { data: channelDetail } = useQuery({
+        queryKey: ["channelDetail", channel.id],
+        queryFn: () => getChannelDetailApi(channel.id),
+        staleTime: 60_000, // Cache for 1 minute
+    });
+
+    // Extract sub-channels from channel detail's filter_rules
+    const subChannels = (channelDetail?.filter_rules || [])
+        .filter(fr => fr.channel_type === 'sub' && fr.name)
+        .map((fr, idx) => ({ id: `sub-${idx}`, name: fr.name! }));
+
     return (
         <div className="flex-1 px-4 h-full flex flex-col max-w-[1000px] mx-auto">
             {/* header */}
@@ -199,16 +216,16 @@ export function ArticleList({ channel, selectedArticleId, onArticleSelect }: Art
                             <TooltipContent noArrow className="bg-white shadow-md px-3 py-2 max-w-md">
                                 <div className="space-y-1.5 text-gray-800 text-sm">
                                     <div><span className="text-gray-400">频道描述：</span>
-                                        <p>{channel.description || "-"}</p>
+                                        <p>{channelDetail?.description || channel.description || "-"}</p>
                                     </div>
                                     <div><span className="text-gray-400">创建人：</span>
-                                        <p>{channel.creator}</p>
+                                        <p>{channelDetail?.creator_name || channel.creator || "-"}</p>
                                     </div>
                                     <div><span className="text-gray-400">订阅人数：</span>
-                                        <p>{channel.subscriberCount}</p>
+                                        <p>{channelDetail?.subscriber_count ?? channel.subscriberCount ?? 0}</p>
                                     </div>
                                     <div><span className="text-gray-400">内容数量：</span>
-                                        <p>{channel.articleCount}</p>
+                                        <p>{channelDetail?.article_count ?? channel.articleCount ?? 0}</p>
                                     </div>
                                 </div>
                             </TooltipContent>
@@ -244,16 +261,16 @@ export function ArticleList({ channel, selectedArticleId, onArticleSelect }: Art
                         >
                             全部
                         </button>
-                        {channel.subChannels.map(subChannel => (
+                        {subChannels.map(sub => (
                             <button
-                                key={subChannel.id}
-                                onClick={() => handleSubChannelChange(subChannel.name)}
-                                className={`px-4 py-[5px] rounded-md border text-sm transition-colors whitespace-nowrap ${selectedSubChannelName === subChannel.name
+                                key={sub.id}
+                                onClick={() => handleSubChannelChange(sub.name)}
+                                className={`px-4 py-[5px] rounded-md border text-sm transition-colors whitespace-nowrap ${selectedSubChannelName === sub.name
                                     ? "bg-primary/20 text-primary border-primary"
                                     : "text-gray-800 hover:bg-gray-50 border-transparent"
                                     }`}
                             >
-                                {subChannel.name}
+                                {sub.name}
                             </button>
                         ))}
                     </div>

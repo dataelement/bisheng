@@ -3,11 +3,12 @@
  * Handles: AI assistant toggle, split-pane drag, and injects AI button into FilePreview via slot.
  * This is the route-level component; FilePreview itself is a reusable, decoupled component.
  */
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { Button } from "~/components";
 import { AiChatIcon } from "~/components/icons";
 import { AiAssistantPanel } from "~/pages/Subscription/AiChat/AiAssistantPanel";
+import { useResizablePanel } from "~/pages/Subscription/hooks/useResizablePanel";
 import FilePreview from "./index";
 
 const AI_SPLIT_STORAGE_KEY = "file-preview-ai-split-width";
@@ -35,11 +36,14 @@ export default function FilePreviewPage() {
     // --- AI Assistant state ---
     const [showAiAssistant, setShowAiAssistant] = useState(false);
     const splitContainerRef = useRef<HTMLDivElement>(null);
-    const [aiSplitWidth, setAiSplitWidth] = useState<number>(() => {
-        const saved = localStorage.getItem(AI_SPLIT_STORAGE_KEY);
-        return saved ? parseInt(saved, 10) : 0;
+
+    const { leftWidth, setLeftWidth, isResizing, startResizing } = useResizablePanel({
+        storageKey: AI_SPLIT_STORAGE_KEY,
+        defaultWidth: 0,
+        minLeftWidth: AI_MIN_LEFT,
+        minRightWidth: AI_MIN_RIGHT,
+        containerRef: splitContainerRef,
     });
-    const [isResizing, setIsResizing] = useState(false);
 
     // Toggle AI assistant
     const handleToggleAiAssistant = useCallback(() => {
@@ -47,55 +51,13 @@ export default function FilePreviewPage() {
             if (!prev && splitContainerRef.current) {
                 const w = splitContainerRef.current.getBoundingClientRect().width;
                 if (w < AI_MIN_LEFT + AI_MIN_RIGHT) return false;
-                if (!aiSplitWidth || aiSplitWidth <= 0) {
-                    setAiSplitWidth(Math.floor(w * 0.6));
+                if (!leftWidth || leftWidth <= 0) {
+                    setLeftWidth(Math.floor(w * 0.6));
                 }
             }
             return !prev;
         });
-    }, [aiSplitWidth]);
-
-    // Resize handlers
-    const startResize = useCallback((e: React.MouseEvent) => {
-        e.preventDefault();
-        setIsResizing(true);
-        // Prevent text selection during drag
-        document.body.style.userSelect = "none";
-        document.body.style.cursor = "col-resize";
-    }, []);
-
-    const stopResize = useCallback(() => {
-        setIsResizing(false);
-        document.body.style.userSelect = "";
-        document.body.style.cursor = "";
-        if (aiSplitWidth > 0) {
-            localStorage.setItem(AI_SPLIT_STORAGE_KEY, aiSplitWidth.toString());
-        }
-    }, [aiSplitWidth]);
-
-    const resize = useCallback((e: MouseEvent) => {
-        if (!isResizing || !splitContainerRef.current) return;
-        e.preventDefault();
-        const rect = splitContainerRef.current.getBoundingClientRect();
-        const newLeft = e.clientX - rect.left;
-        if (newLeft >= AI_MIN_LEFT && (rect.width - newLeft) >= AI_MIN_RIGHT) {
-            setAiSplitWidth(newLeft);
-        }
-    }, [isResizing]);
-
-    useEffect(() => {
-        if (isResizing) {
-            const blockSelect = (e: Event) => e.preventDefault();
-            document.addEventListener("selectstart", blockSelect);
-            window.addEventListener("mousemove", resize);
-            window.addEventListener("mouseup", stopResize);
-            return () => {
-                document.removeEventListener("selectstart", blockSelect);
-                window.removeEventListener("mousemove", resize);
-                window.removeEventListener("mouseup", stopResize);
-            };
-        }
-    }, [isResizing, resize, stopResize]);
+    }, [leftWidth, setLeftWidth]);
 
     // AI assistant button injected into FilePreview's TopBar slot
     const aiButton = (
@@ -118,7 +80,7 @@ export default function FilePreviewPage() {
 
             {/* Left: FilePreview (pure component) */}
             <div
-                style={{ width: showAiAssistant ? `${aiSplitWidth}px` : "100%" }}
+                style={{ width: showAiAssistant ? `${leftWidth}px` : "100%" }}
                 className="h-full flex-shrink-0 overflow-hidden"
             >
                 <FilePreview
@@ -132,7 +94,7 @@ export default function FilePreviewPage() {
             {/* Splitter */}
             {showAiAssistant && (
                 <div
-                    onMouseDown={startResize}
+                    onMouseDown={startResizing}
                     className="group relative w-[1px] cursor-col-resize bg-[#e5e6eb] transition-all hover:w-1 hover:bg-primary active:w-1 active:bg-primary z-20 shrink-0"
                 >
                     <div className="absolute inset-y-0 -left-1.5 -right-1.5 z-10" />
@@ -152,4 +114,3 @@ export default function FilePreviewPage() {
         </div>
     );
 }
-

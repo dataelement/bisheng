@@ -15,7 +15,8 @@ interface UseResizablePanelOptions {
 
 /**
  * Shared hook for draggable split-panel resize logic.
- * Used by ChannelLayout (article list / detail) and FullScreenArticle (article / AI panel).
+ * Handles mouse-tracking at the document level so the divider follows
+ * the cursor even when dragging quickly or over iframes.
  */
 export function useResizablePanel({
     storageKey,
@@ -30,46 +31,56 @@ export function useResizablePanel({
     });
     const [isResizing, setIsResizing] = useState(false);
 
-    // Start drag
+    // Start drag — lock cursor & disable text selection globally
     const startResizing = useCallback((e: React.MouseEvent) => {
         e.preventDefault();
         setIsResizing(true);
+        document.body.style.userSelect = "none";
+        document.body.style.cursor = "col-resize";
     }, []);
 
-    // Stop drag
+    // Stop drag — restore cursor & persist width
     const stopResizing = useCallback(() => {
         setIsResizing(false);
-        localStorage.setItem(storageKey, leftWidth.toString());
-    }, [storageKey, leftWidth]);
+        document.body.style.userSelect = "";
+        document.body.style.cursor = "";
+        setLeftWidth((w) => {
+            localStorage.setItem(storageKey, w.toString());
+            return w;
+        });
+    }, [storageKey]);
 
-    // Dragging
+    // Handle drag movement
     const resize = useCallback(
         (e: MouseEvent) => {
-            if (!isResizing || !containerRef.current) return;
+            if (!containerRef.current) return;
+            e.preventDefault();
 
-            const containerRect = containerRef.current.getBoundingClientRect();
-            const newLeftWidth = e.clientX - containerRect.left;
+            const rect = containerRef.current.getBoundingClientRect();
+            const newLeftWidth = e.clientX - rect.left;
 
-            // Restrict minimum width
             if (
                 newLeftWidth >= minLeftWidth &&
-                containerRect.width - newLeftWidth >= minRightWidth
+                rect.width - newLeftWidth >= minRightWidth
             ) {
                 setLeftWidth(newLeftWidth);
             }
         },
-        [isResizing, containerRef, minLeftWidth, minRightWidth]
+        [containerRef, minLeftWidth, minRightWidth]
     );
 
+    // Attach / detach listeners whenever isResizing changes
     useEffect(() => {
-        if (isResizing) {
-            window.addEventListener("mousemove", resize);
-            window.addEventListener("mouseup", stopResizing);
-        } else {
-            window.removeEventListener("mousemove", resize);
-            window.removeEventListener("mouseup", stopResizing);
-        }
+        if (!isResizing) return;
+
+        // Block text selection events during drag
+        const blockSelect = (e: Event) => e.preventDefault();
+        document.addEventListener("selectstart", blockSelect);
+        window.addEventListener("mousemove", resize);
+        window.addEventListener("mouseup", stopResizing);
+
         return () => {
+            document.removeEventListener("selectstart", blockSelect);
             window.removeEventListener("mousemove", resize);
             window.removeEventListener("mouseup", stopResizing);
         };
