@@ -287,7 +287,7 @@ def wrapper_bisheng_llm_info(key_prefix: str):
     def decorator(func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            unique_id = args[0]
+            unique_id = args[1]
             cache_flag = kwargs.get('cache', False)
             cache_key = f"{key_prefix}:{unique_id}"
             if not cache_flag:
@@ -312,7 +312,7 @@ def wrapper_bisheng_llm_info_async(key_prefix: str):
     def decorator(func):
         @functools.wraps(func)
         async def wrapper(*args, **kwargs):
-            unique_id = args[0]
+            unique_id = args[1]
             cache_flag = kwargs.get('cache', False)
             cache_key = f"{key_prefix}:{unique_id}"
             if not cache_flag:

@@ -299,7 +299,7 @@ class WorkStationService(BaseService):
 
             return formatted_results, finally_docs
         except Exception as e:
-            logger.error(f"queryChunksFromDB error: {e}")
+            logger.exception(f"queryChunksFromDB error: {e}")
             return [], None
 
     @classmethod
