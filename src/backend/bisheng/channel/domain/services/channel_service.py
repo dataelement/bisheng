@@ -505,6 +505,21 @@ class ChannelService:
 
         article_counts = await self.article_es_service.count_articles_batch(batch_requests)
 
+        # Collect top 5 source IDs from all channels for the square
+        all_needed_source_ids = set()
+        channel_to_top_sources = {}
+        for row in rows:
+            channel = row[0]
+            top_5_sources = (channel.source_list or [])[:5]
+            channel_to_top_sources[channel.id] = top_5_sources
+            all_needed_source_ids.update(top_5_sources)
+            
+        # Batch fetch all needed sources
+        source_map = {}
+        if all_needed_source_ids:
+            sources = await self.channel_info_source_repository.find_by_ids(list(all_needed_source_ids))
+            source_map = {s.id: s for s in sources}
+
         result_list: List[ChannelSquareItemResponse] = []
         for i, row in enumerate(rows):
             channel = row[0]  # Channel object
@@ -520,6 +535,20 @@ class ChannelService:
             else:
                 status = SubscriptionStatusEnum.PENDING
 
+            # Prepare source infos
+            top_source_ids = channel_to_top_sources.get(channel.id, [])
+            source_infos = []
+            for sid in top_source_ids:
+                if sid in source_map:
+                    s = source_map[sid]
+                    source_infos.append({
+                        "id": s.id,
+                        "source_name": s.source_name,
+                        "source_icon": s.source_icon,
+                        "source_type": s.source_type,
+                        "description": s.description
+                    })
+
             result_list.append(ChannelSquareItemResponse(
                 id=channel.id,
                 name=channel.name,
@@ -531,6 +560,7 @@ class ChannelService:
                 subscription_status=status,
                 subscriber_count=subscriber_count,
                 article_count=article_count,
+                source_infos=source_infos,
             ))
 
         return ChannelSquarePageResponse(data=result_list, total=total)

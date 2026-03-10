@@ -127,6 +127,15 @@ class SubscriptionStatusEnum(str, Enum):
     NOT_SUBSCRIBED = 'not_subscribed'
 
 
+class ChannelInfoSourceResponse(BaseModel):
+    """Channel Info Source Item Response"""
+    id: str = Field(..., description='Channel Information Source ID')
+    source_name: str = Field(..., description='Information Source Name')
+    source_icon: Optional[str] = Field(None, description='Information Source Icon URL')
+    source_type: str = Field(..., description='Information Source Type')
+    description: Optional[str] = Field(None, description='Information Source Description')
+
+
 class ChannelSquareItemResponse(BaseModel):
     """Channel Square List Item Response"""
     id: str = Field(..., description='Channel ID')
@@ -140,6 +149,7 @@ class ChannelSquareItemResponse(BaseModel):
                                                          description='Current user subscription status')
     subscriber_count: int = Field(default=0, description='Number of subscribers')
     article_count: int = Field(default=0, description='Number of articles matching the main channel filters')
+    source_infos: List[ChannelInfoSourceResponse] = Field(default_factory=list, description='Top 5 data sources for the channel')
 
 
 class ChannelSquarePageResponse(BaseModel):
