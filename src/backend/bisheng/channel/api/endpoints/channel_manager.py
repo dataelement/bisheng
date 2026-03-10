@@ -274,6 +274,25 @@ async def get_article_detail(
         return resp_500(message="Failed to get article detail")
 
 
+@router.get("/{channel_id}")
+async def get_channel_detail(
+        channel_id: str,
+        login_user: UserPayload = Depends(UserPayload.get_login_user),
+        channel_service: 'ChannelService' = Depends(get_channel_service)
+):
+    """获取频道详情，包括频道基本信息、创建人、订阅人数、文章数量等"""
+    try:
+        result = await channel_service.get_channel_detail(channel_id, login_user)
+        return resp_200(data=result.model_dump())
+    except ValueError as e:
+        logger.warning(f"Get channel detail failed: {e}")
+        return resp_500(message=str(e))
+    except Exception as e:
+        logger.error(f"Failed to get channel detail: {e}")
+        return resp_500(message="Failed to get channel detail")
+
+
+
 @router.put("/{channel_id}")
 async def update_channel_info(
         channel_id: str,

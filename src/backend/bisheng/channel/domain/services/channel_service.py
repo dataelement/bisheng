@@ -13,6 +13,7 @@ from bisheng.channel.domain.schemas.channel_manager_schema import (
     MyChannelQueryRequest,
     SetPinRequest,
     ChannelItemResponse,
+    ChannelDetailResponse,
     ChannelMemberResponse,
     ChannelMemberPageResponse,
     UpdateMemberRoleRequest,
@@ -614,6 +615,86 @@ class ChannelService:
 
         await self.channel_repository.update(channel)
         return channel
+
+    async def get_channel_detail(self, channel_id: str, login_user: UserPayload) -> ChannelDetailResponse:
+        """
+        Get channel detailed information including creator, subscriber count, and article count.
+        """
+        # 1. Verify channel existence
+        channels = await self.channel_repository.find_channels_by_ids([channel_id])
+        if not channels:
+            raise ChannelNotFoundError()
+        channel = channels[0]
+
+        # 2. Verify current user permission
+        current_membership = await self.space_channel_member_repository.find_membership(
+            business_id=channel_id,
+            business_type=BusinessTypeEnum.CHANNEL,
+            user_id=login_user.user_id
+        )
+        if not current_membership or not current_membership.status:
+            # If private, only members can view unless special requirement
+            if channel.visibility == ChannelVisibilityEnum.PRIVATE:
+                raise ChannelAccessDeniedError("You do not have permission to view this channel")
+
+        # 3. Get Creator Name
+        creators = await self.space_channel_member_repository.find_members_by_role(
+            channel_id=channel_id,
+            role=UserRoleEnum.CREATOR
+        )
+        creator_name = "Unknown"
+        if creators:
+            creator_user_id = creators[0].user_id
+            users = await UserDao.aget_user_by_ids([creator_user_id])
+            if users:
+                creator_name = users[0].user_name
+
+        # 4. Get Subscriber Count
+        subscriber_count = await self.space_channel_member_repository.count_channel_members(channel_id=channel_id)
+
+        # 5. Get Article Count
+        filter_rules_raw: List[Dict[str, Any]] = channel.filter_rules or []
+        main_rules: List[Dict[str, Any]] = []
+        for fr in filter_rules_raw:
+            if isinstance(fr, dict):
+                channel_type = fr.get("channel_type", "main")
+                rules = fr.get("rules", [])
+            else:
+                channel_type = getattr(fr, "channel_type", "main")
+                rules = getattr(fr, "rules", [])
+                
+            rules_dicts = []
+            for r in rules:
+                if isinstance(r, dict):
+                    rules_dicts.append(r)
+                elif hasattr(r, "model_dump"):
+                    rules_dicts.append(r.model_dump(exclude_unset=True))
+                elif hasattr(r, "__dict__"):
+                    rules_dicts.append(r.__dict__)
+                else:
+                    rules_dicts.append(r)
+
+            if channel_type == "main" or not channel_type: # Fallback or main
+                main_rules.extend(rules_dicts)
+
+        article_count = await self.article_es_service.count_articles(
+            source_ids=channel.source_list,
+            filter_rules=main_rules if main_rules else None
+        )
+
+        return ChannelDetailResponse(
+            id=channel.id,
+            name=channel.name,
+            description=channel.description,
+            source_list=channel.source_list or [],
+            visibility=channel.visibility,
+            is_released=channel.is_released,
+            latest_article_update_time=channel.latest_article_update_time,
+            create_time=channel.create_time,
+            creator_name=creator_name,
+            subscriber_count=subscriber_count,
+            article_count=article_count
+        )
 
     async def dismiss_channel(self, channel_id: str, login_user: UserPayload):
         """

@@ -75,6 +75,22 @@ class ChannelItemResponse(BaseModel):
     unread_count: int = Field(default=0, description='Number of unread articles in this channel')
 
 
+class ChannelDetailResponse(BaseModel):
+    """Channel Detail Response"""
+    id: str = Field(..., description='Channel ID')
+    name: str = Field(..., description='Channel Name')
+    description: Optional[str] = Field(None, description='Channel Description/Brief')
+    source_list: List[str] = Field(default_factory=list, description='Data Source List')
+    visibility: ChannelVisibilityEnum = Field(..., description='Channel Visibility')
+    is_released: bool = Field(default=False, description='Whether the channel is released')
+    latest_article_update_time: Optional[datetime] = Field(None, description='Channel Latest Article Update Time')
+    create_time: Optional[datetime] = Field(None, description='Channel Creation Time')
+    creator_name: str = Field(..., description='Channel Creator Name')
+    subscriber_count: int = Field(default=0, description='Number of subscribers')
+    article_count: int = Field(default=0, description='Total number of articles in the main channel')
+
+
+
 class ChannelMemberResponse(BaseModel):
     """Channel Member Response"""
     user_id: int = Field(..., description='User ID')
