@@ -4,7 +4,8 @@ from typing import Optional, Any, Coroutine
 import httpx
 from aiohttp import ClientTimeout
 
-from bisheng.common.errcode.channel import BishengInformationUnAuthorizedError, BishengInformationServiceError
+from bisheng.common.errcode.channel import BishengInformationUnAuthorizedError, BishengInformationServiceError, \
+    InformationSourceParseError, InformationSourceAuthError, InformationSourcePageError
 from bisheng.core.external.bisheng_information_client.response_schema import InformationSourceResponse, \
     CrawlWebsiteResponse, InformationArticlesResponse
 from bisheng.core.external.http_client.client import AsyncHttpClient
@@ -208,8 +209,21 @@ class BishengInformationClient(object):
         response = await self.http_client.post(endpoint, body=data, headers=headers, timeout=self.timeout)
 
         if response.status_code != 200:
-            raise Exception(
-                f"Failed to crawl website: {response.status_code} - {response.error}")
+            raise BishengInformationServiceError()
+
+        code = response.body.get("code", -1)
+        if code == 401:
+            raise BishengInformationUnAuthorizedError()
+
+        elif code == 10000:
+            raise InformationSourceParseError()
+        elif code == 10001:
+            raise InformationSourceAuthError()
+        elif code == 10002:
+            raise InformationSourcePageError()
+        else:
+            raise BishengInformationServiceError(
+                msg=f"Failed to list information sources: {response.status_code} - {response.error}")
 
         result = response.body.get("data", {})
 
