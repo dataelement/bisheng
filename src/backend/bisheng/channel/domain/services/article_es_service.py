@@ -16,7 +16,7 @@ from bisheng.channel.domain.es.article_index import (
 from bisheng.channel.domain.schemas.article_schema import (
     ArticleDocument,
     ArticleSearchResultItem,
-    ArticleSearchPageResponse,
+    ArticleSearchPageResponse, ArticleDetailResponse,
 )
 from bisheng.core.search.elasticsearch.manager import get_es_connection, get_es_connection_sync
 
@@ -130,7 +130,7 @@ class ArticleEsService:
     #  Read
     # ──────────────────────────────────────────
 
-    async def get_article(self, doc_id: str) -> Optional[ArticleSearchResultItem]:
+    async def get_article(self, doc_id: str) -> Optional[ArticleDetailResponse]:
         """
         根据文档 ID 获取文章。
 
@@ -144,7 +144,7 @@ class ArticleEsService:
         try:
             result = await client.get(index=ARTICLE_INDEX_NAME, id=doc_id)
             source = result["_source"]
-            return ArticleSearchResultItem(doc_id=result["_id"], **source)
+            return ArticleDetailResponse(doc_id=result["_id"], **source)
         except Exception:
             logger.debug(f"Article not found: {doc_id}")
             return None

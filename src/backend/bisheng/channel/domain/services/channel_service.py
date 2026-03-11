@@ -641,6 +641,8 @@ class ChannelService:
         if current_membership.user_role != UserRoleEnum.CREATOR:
             raise ChannelPermissionDeniedError(msg="Only the creator can update the channel information")
 
+        bisheng_information_client = await get_bisheng_information_client()
+
         # 3. Update channel information
         if req.name is not None:
             channel.name = req.name
@@ -660,7 +662,6 @@ class ChannelService:
             to_add_sources = list(new_sources - old_sources)
             to_remove_sources = list(old_sources - new_sources)
 
-            bisheng_information_client = await get_bisheng_information_client()
             if to_add_sources:
                 await bisheng_information_client.subscribe_information_source(to_add_sources)
             if to_remove_sources:
@@ -669,6 +670,35 @@ class ChannelService:
             channel.source_list = req.source_list
 
         channel = await self.channel_repository.update(channel)
+
+        if channel.source_list:
+
+            # Sync information sources to local database
+            existing_sources = await self.channel_info_source_repository.find_by_ids(channel.source_list)
+            existing_source_ids = {source.id for source in existing_sources}
+
+            missing_source_ids = [sid for sid in channel.source_list if sid not in existing_source_ids]
+
+            if missing_source_ids:
+                missing_information_sources = await bisheng_information_client.get_information_source_by_ids(
+                    missing_source_ids)
+
+                new_channel_info_sources = []
+                for info_source in missing_information_sources:
+                    new_source = ChannelInfoSource(
+                        id=info_source.id,
+                        source_name=info_source.name,
+                        source_icon=info_source.icon,
+                        source_type=info_source.business_type,
+                        description=info_source.description
+                    )
+                    new_channel_info_sources.append(new_source)
+
+                if new_channel_info_sources:
+                    await self.channel_info_source_repository.batch_add(new_channel_info_sources)
+                    for one in new_channel_info_sources:
+                        # Sync articles for the new information source one hour later
+                        sync_information_article.apply_async(args=(one.id,), countdown=3600)
 
         return channel
 

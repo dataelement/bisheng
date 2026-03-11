@@ -39,6 +39,11 @@ class ArticleSearchResultItem(BaseModel):
     is_read: Optional[bool] = Field(False, description='是否已读')
 
 
+class ArticleDetailResponse(ArticleSearchResultItem):
+    """文章详情响应"""
+    content_html: str = Field(default='', description='文章HTML内容')
+
+
 class ArticleSearchPageResponse(BaseModel):
     """文章搜索分页响应"""
     data: List[ArticleSearchResultItem] = Field(default_factory=list, description='搜索结果列表')
