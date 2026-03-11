@@ -12,7 +12,8 @@ from pydantic import field_validator
 from bisheng.api.services.base import BaseService
 from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.v1.schema.chat_schema import UseKnowledgeBaseParam
-from bisheng.api.v1.schemas import KnowledgeFileOne, KnowledgeFileProcess, WorkstationConfig
+from bisheng.api.v1.schemas import KnowledgeFileOne, KnowledgeFileProcess, WorkstationConfig, LinsightConfig, \
+    SubscriptionConfig, KnowledgeSpaceConfig
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.server import EmbeddingModelStatusError
 from bisheng.common.models.config import Config, ConfigDao, ConfigKeyEnum
@@ -82,13 +83,6 @@ class WorkStationService(BaseService):
             if ret.sidebarIcon and ret.sidebarIcon.relative_path:
                 ret.sidebarIcon.image = cls.get_logo_share_link(ret.sidebarIcon.relative_path)
 
-            # Compatible with olderwebsearchConfigure
-            if ret.webSearch and not ret.webSearch.params:
-                ret.webSearch.tool = 'bing'
-                ret.webSearch.params = {'api_key': ret.webSearch.bingKey, 'base_url': ret.webSearch.bingUrl}
-            if ret.linsightConfig:
-                # Determine if the tool was deleted, Synchronization tool latest information name and description, etc.
-                ret.linsightConfig.tools = cls.sync_tool_info(ret.linsightConfig.tools)
             return ret
         return None
 
@@ -103,6 +97,71 @@ class WorkStationService(BaseService):
         """ Get the default configuration of the workbench asynchronously """
         config = await ConfigDao.aget_config(ConfigKeyEnum.WORKSTATION)
         return cls.parse_config(config)
+
+    @classmethod
+    async def get_daily_chat_config(cls) -> WorkstationConfig | None:
+        """ Get the default configuration of the workbench for daily chat """
+        config = await ConfigDao.aget_config(ConfigKeyEnum.WORKSTATION)
+        return cls.parse_config(config)
+
+    @classmethod
+    async def update_daily_chat_config(cls, data: WorkstationConfig) -> WorkstationConfig:
+        """ Update the default configuration of the workbench for daily chat """
+        await ConfigDao.insert_or_update_config(ConfigKeyEnum.WORKSTATION.value,
+                                                value=json.dumps(data.model_dump(mode='json'), ensure_ascii=True))
+        return data
+
+    @classmethod
+    async def get_linsight_config(cls) -> Optional[LinsightConfig]:
+        """ Get Linsight configuration """
+        config = await ConfigDao.aget_config(ConfigKeyEnum.WORKSTATION_LINSIGHT)
+        if not config:
+            return None
+        ret = json.loads(config.value)
+        ret = LinsightConfig(**ret)
+        ret.tools = cls.sync_tool_info(ret.tools)
+        return ret
+
+    @classmethod
+    async def update_linsight_config(cls, data: LinsightConfig) -> LinsightConfig:
+        """ Update Linsight configuration """
+        await ConfigDao.insert_or_update_config(ConfigKeyEnum.WORKSTATION_LINSIGHT.value,
+                                                value=json.dumps(data.model_dump(mode='json'), ensure_ascii=True))
+        return data
+
+    @classmethod
+    async def get_subscription_config(cls) -> Optional[SubscriptionConfig]:
+        """ Get subscription configuration """
+        config = await ConfigDao.aget_config(ConfigKeyEnum.WORKSTATION_SUBSCRIPTION)
+        if not config:
+            return None
+        ret = json.loads(config.value)
+        ret = SubscriptionConfig(**ret)
+        return ret
+
+    @classmethod
+    async def update_subscription_config(cls, data: SubscriptionConfig) -> SubscriptionConfig:
+        """ Update subscription configuration """
+        await ConfigDao.insert_or_update_config(ConfigKeyEnum.WORKSTATION_SUBSCRIPTION.value,
+                                                value=json.dumps(data.model_dump(mode='json'), ensure_ascii=True))
+        return data
+
+    @classmethod
+    async def get_knowledge_space_config(cls) -> Optional[KnowledgeSpaceConfig]:
+        """ Get knowledge space configuration """
+        config = await ConfigDao.aget_config(ConfigKeyEnum.WORKSTATION_KNOWLEDGE_SPACE)
+        if not config:
+            return None
+        ret = json.loads(config.value)
+        ret = KnowledgeSpaceConfig(**ret)
+        return ret
+
+    @classmethod
+    async def update_knowledge_space_config(cls, data: KnowledgeSpaceConfig) -> KnowledgeSpaceConfig:
+        """ Update knowledge space configuration """
+        await ConfigDao.insert_or_update_config(ConfigKeyEnum.WORKSTATION_KNOWLEDGE_SPACE.value,
+                                                value=json.dumps(data.model_dump(mode='json'), ensure_ascii=True))
+        return data
 
     @classmethod
     def uploadPersonalKnowledge(
@@ -240,7 +299,7 @@ class WorkStationService(BaseService):
 
             return formatted_results, finally_docs
         except Exception as e:
-            logger.error(f"queryChunksFromDB error: {e}")
+            logger.exception(f"queryChunksFromDB error: {e}")
             return [], None
 
     @classmethod

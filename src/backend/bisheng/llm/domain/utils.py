@@ -13,7 +13,7 @@ from bisheng.common.schemas.telemetry.event_data_schema import ModelInvokeEventD
 from bisheng.common.services import telemetry_service
 from bisheng.core.cache.redis_manager import get_redis_client, get_redis_client_sync
 from bisheng.core.logger import trace_id_var
-from bisheng.llm.domain.const import LLMModelStatus
+from bisheng.llm.domain.const import LLMModelStatus, LLM_CACHE
 
 
 async def bisheng_model_limit_check(self: 'BishengBase'):
@@ -277,3 +277,53 @@ def wrapper_bisheng_model_generator_async(func):
             await self.update_model_status(status, remark)
 
     return wrapper
+
+
+def wrapper_bisheng_llm_info(key_prefix: str):
+    """
+    LLM Information Cache Decorator
+    """
+
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            unique_id = args[1]
+            cache_flag = kwargs.get('cache', False)
+            cache_key = f"{key_prefix}:{unique_id}"
+            if not cache_flag:
+                return func(*args, **kwargs)
+            cache_info = LLM_CACHE.get(cache_key)
+            if cache_info:
+                return cache_info
+            cache_info = func(*args, **kwargs)
+            LLM_CACHE.setdefault(cache_key, cache_info)
+            return cache_info
+
+        return wrapper
+
+    return decorator
+
+
+def wrapper_bisheng_llm_info_async(key_prefix: str):
+    """
+    LLM Information Cache Decorator for Async Functions
+    """
+
+    def decorator(func):
+        @functools.wraps(func)
+        async def wrapper(*args, **kwargs):
+            unique_id = args[1]
+            cache_flag = kwargs.get('cache', False)
+            cache_key = f"{key_prefix}:{unique_id}"
+            if not cache_flag:
+                return await func(*args, **kwargs)
+            cache_info = LLM_CACHE.get(cache_key)
+            if cache_info:
+                return cache_info
+            cache_info = await func(*args, **kwargs)
+            LLM_CACHE.setdefault(cache_key, cache_info)
+            return cache_info
+
+        return wrapper
+
+    return decorator

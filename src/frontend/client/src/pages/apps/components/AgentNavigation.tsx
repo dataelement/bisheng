@@ -14,7 +14,7 @@ interface Category {
 }
 
 interface AgentNavigationProps {
-    onCategoryChange: (categoryId: string) => void
+    onCategoryChange: (categoryId: number) => void
     onRefresh: () => void
 }
 
@@ -23,13 +23,12 @@ export function AgentNavigation({ onCategoryChange, onRefresh }: AgentNavigation
     const localize = useLocalize();
 
     const [isLabelModalOpen, setIsLabelModalOpen] = useState(false)
-    const [activeCategory, setActiveCategory] = useState<string>("favorites")
+    const [activeCategory, setActiveCategory] = useState<number>(-1)
 
     const [categories, setCategories] = useState<Category[]>([])
 
     const fetchCategoryTags = async () => {
         const tags = await getHomeLabelApi()
-        // tags.data.unshift({ id: "favorites", name: "常用", selected: true })
         setCategories(tags.data.map(tag => ({
             label: tag.name,
             value: tag.id,
@@ -56,13 +55,13 @@ export function AgentNavigation({ onCategoryChange, onRefresh }: AgentNavigation
     return (
         <nav className="flex items-center gap-2 flex-wrap">
             <Button
-                variant={activeCategory === 'favorites' ? "default" : "outline"}
+                variant={activeCategory === -1 ? "default" : "outline"}
                 onClick={() => {
-                    onCategoryChange('favorites')
-                    setActiveCategory('favorites')
+                    onCategoryChange(-1)
+                    setActiveCategory(-1)
                 }}
                 className="text-xs h-8 font-normal"
-            >{localize('com_app_common')}</Button>
+            >精选</Button>
             {categories.map((category) => (
                 <Button
                     key={category.value}

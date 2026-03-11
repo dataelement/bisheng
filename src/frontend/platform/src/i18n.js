@@ -38,7 +38,9 @@ i18n.use(Backend)
                 linsight: config.linsightAgentName?.en,
                 linsightZh: config.linsightAgentName?.zh,
                 linsightFull: config.linsightFullName?.en,
-                linsightFullZh: config.linsightFullName?.zh
+                linsightFullZh: config.linsightFullName?.zh,
+                dailyFullName: config.dailyFullName?.en,
+                dailyFullNameZh: config.dailyFullName?.zh,
             }
         }
     });

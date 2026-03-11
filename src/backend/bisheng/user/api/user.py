@@ -346,27 +346,22 @@ async def update_role(*,
                       role_id: int,
                       role: RoleUpdate,
                       login_user: LoginUser = Depends(LoginUser.get_login_user)):
-    db_role = RoleDao.get_role_by_id(role_id)
+    db_role = await RoleDao.aget_role_by_id(role_id)
     if not db_role:
-        raise HTTPException(status_code=404, detail='This character does not exist')
+        raise NotFoundError()
 
-    if not login_user.check_group_admin(db_role.group_id):
-        return UnAuthorizedError.return_resp()
+    if not await login_user.async_check_group_admin(db_role.group_id):
+        return UnAuthorizedError()
 
-    try:
-        if role.role_name:
-            db_role.role_name = role.role_name
-        if role.remark:
-            db_role.remark = role.remark
-        with get_sync_db_session() as session:
-            session.add(db_role)
-            session.commit()
-            session.refresh(db_role)
-        update_role_hook(request, login_user, db_role)
-        return resp_200(db_role)
-    except Exception:
-        logger.exception(f'update_role')
-        raise HTTPException(status_code=500, detail='Update failed, server side exception')
+    if role.role_name:
+        db_role.role_name = role.role_name
+    if role.remark:
+        db_role.remark = role.remark
+    if role.knowledge_space_file_limit:
+        db_role.knowledge_space_file_limit = role.knowledge_space_file_limit
+    await RoleDao.update_role(db_role)
+    update_role_hook(request, login_user, db_role)
+    return resp_200(db_role)
 
 
 def update_role_hook(request: Request, login_user: LoginUser, db_role: Role) -> bool:
@@ -418,12 +413,8 @@ async def delete_role(*,
     if db_role.id == AdminRole or db_role.id == DefaultRole:
         raise HTTPException(status_code=500, detail='Built-in roles cannot be deleted')
 
-    # DeleteroleRelated data
-    try:
-        RoleDao.delete_role(role_id)
-    except Exception as e:
-        logger.exception(e)
-        raise HTTPException(status_code=500, detail='Failed to delete role')
+    # Delete role Related data
+    RoleDao.delete_role(role_id)
     AuditLogService.delete_role(login_user, get_request_ip(request), db_role)
     return resp_200()
 

@@ -1,4 +1,4 @@
-import asyncio
+import json
 import json
 import os
 from typing import Dict, List, Optional
@@ -18,7 +18,7 @@ from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.errcode.http_error import ServerError
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
-from bisheng.core.cache.utils import file_download, save_download_file, async_file_download
+from bisheng.core.cache.utils import save_download_file, async_file_download
 from bisheng.core.logger import trace_id_var
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.interface.embeddings.custom import FakeEmbedding
@@ -108,7 +108,7 @@ async def upload_file(
         if not file_name:
             return resp_500(message='file name must be not empty')
         # Cache Local
-        file_path = await sync_func_to_async(save_download_file)(save_download_file, file.file, 'bisheng', file_name)
+        file_path = await sync_func_to_async(save_download_file)(file.file, 'bisheng', file_name)
     else:
         file_path, file_name = await async_file_download(file_url)
 

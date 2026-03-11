@@ -142,28 +142,28 @@ export const PassInput = React.forwardRef<HTMLInputElement, InputProps & {
         const newValue = e.target.value;
         const selectionStart = e.target.selectionStart;
         const selectionEnd = e.target.selectionEnd;
-    if (
-        newValue.length !== displayValue.length &&
-        selectionStart === selectionEnd &&
-        Math.abs(newValue.length - displayValue.length) > 1
+        if (
+            newValue.length !== displayValue.length &&
+            selectionStart === selectionEnd &&
+            Math.abs(newValue.length - displayValue.length) > 1
         ) {
-        setRealValue(newValue);
-        setDisplayValue('•'.repeat(newValue.length));
-        setShowClear(newValue.length > 0);
+            setRealValue(newValue);
+            setDisplayValue('•'.repeat(newValue.length));
+            setShowClear(newValue.length > 0);
 
-        if (onChange) {
-            const syntheticEvent = {
-            ...e,
-            target: {
-                ...e.target,
-                value: newValue,
-                name: name || ''
+            if (onChange) {
+                const syntheticEvent = {
+                    ...e,
+                    target: {
+                        ...e.target,
+                        value: newValue,
+                        name: name || ''
+                    }
+                };
+                onChange(syntheticEvent as React.ChangeEvent<HTMLInputElement>);
             }
-            };
-            onChange(syntheticEvent as React.ChangeEvent<HTMLInputElement>);
+            return;
         }
-        return;
-    }
 
         // 处理全选删除的情况
         if (selectionStart === 0 && selectionEnd === displayValue.length && newValue === '') {
@@ -506,4 +506,134 @@ const InputList = React.forwardRef<HTMLDivElement, InputProps & {
     }
 )
 
-export { Input, InputList, PasswordInput, SearchInput, Textarea }
+/**
+ * 非负整数输入框：不可为负数、不可为小数、不能为空；
+ * 失焦时若为空则恢复为 defaultValue。
+ */
+const NonNegativeInput = React.forwardRef<HTMLInputElement, InputProps & {
+    label?: string;
+    tooltip?: string;
+    required?: boolean;
+    error?: string;
+    min?: number;
+    max?: number;
+    /** 失焦为空时恢复为该默认值，建议必传 */
+    defaultValue?: number;
+    inputClassName?: string;
+    onValueChange?: (value: number) => void;
+}>(({
+    className,
+    inputClassName,
+    label,
+    tooltip,
+    required,
+    error,
+    min = 0,
+    max,
+    defaultValue = 0,
+    value,
+    onValueChange,
+    onChange,
+    id,
+    name,
+    placeholder,
+    disabled,
+    ...props
+}, ref) => {
+    const defaultStr = defaultValue.toString();
+    const [internalValue, setInternalValue] = React.useState<string>(() => {
+        if (value !== undefined && value !== null) return String(value);
+        return defaultStr;
+    });
+
+    const [internalError, setInternalError] = React.useState('');
+
+    React.useEffect(() => {
+        if (value !== undefined && value !== null) {
+            setInternalValue(String(value));
+        }
+    }, [value]);
+
+    const validate = React.useCallback((str: string) => {
+        if (str === '') return '不能为空';
+        if (!/^\d+$/.test(str)) return '请输入非负整数';
+        const num = parseInt(str, 10);
+        if (num < 0) return '不能为负数';
+        if (min !== undefined && num < min) return `不能小于${min}`;
+        if (max !== undefined && num > max) return `不能大于${max}`;
+        return '';
+    }, [min, max]);
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const raw = e.target.value;
+        if (raw === '') {
+            setInternalValue('');
+            // setInternalError('不能为空');
+            onChange?.(e);
+            return;
+        }
+        if (!/^\d*$/.test(raw)) return;
+        if (raw.length > 1 && raw.startsWith('0')) return;
+        const err = validate(raw);
+        setInternalError(err);
+
+        if (err) {
+            setInternalError(err);
+            return;
+        }
+        setInternalValue(raw);
+        if (!err) {
+            const num = parseInt(raw, 10);
+            onValueChange?.(num);
+        }
+        onChange?.(e);
+    };
+
+    const handleBlur = () => {
+        const trimmed = internalValue.trim();
+        if (trimmed === '' || trimmed === '.') {
+            setInternalValue(defaultStr);
+            setInternalError('');
+            onValueChange?.(defaultValue);
+        } else {
+            setInternalError(validate(trimmed));
+        }
+    };
+
+    const displayError = error || internalError;
+
+    return (
+        <div className={className}>
+            {label && (
+                <label htmlFor={id} className="bisheng-label flex items-center gap-1 mb-2">
+                    {label}
+                    {tooltip && <QuestionTooltip content={tooltip} />}
+                    {required && <span className="bisheng-tip">*</span>}
+                </label>
+            )}
+            <input
+                ref={ref}
+                type="text"
+                inputMode="numeric"
+                value={internalValue}
+                onChange={handleChange}
+                onBlur={handleBlur}
+                placeholder={placeholder}
+                disabled={disabled}
+                id={id}
+                name={name}
+                className={cname(
+                    "flex h-7 w-full rounded-md border border-input bg-search-input px-2 py-1 text-sm text-[#111] dark:text-gray-50 shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
+                    inputClassName
+                )}
+                {...props}
+            />
+            {displayError && (
+                <p className="text-xs text-red-500 mt-1">{displayError}</p>
+            )}
+        </div>
+    );
+});
+
+NonNegativeInput.displayName = 'NonNegativeInput';
+export { Input, InputList, PasswordInput, SearchInput, NonNegativeInput, Textarea }

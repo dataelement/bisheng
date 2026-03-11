@@ -4,7 +4,7 @@ from typing import Any, Dict, Generic, List, Optional, TypeVar, Union
 
 from langchain.docstore.document import Document
 from orjson import orjson
-from pydantic import BaseModel, Field, model_validator, field_validator
+from pydantic import BaseModel, Field, model_validator, field_validator, ConfigDict
 
 from bisheng.database.models.assistant import AssistantBase
 from bisheng.database.models.flow import FlowCreate, FlowRead
@@ -374,24 +374,27 @@ class WSModel(BaseModel):
 class WSPrompt(BaseModel):
     enabled: bool
     prompt: Optional[str] = None
-    model: Optional[str] = None
-    tool: Optional[str] = None  # Enumeration of tools
-    params: Optional[dict] = None  # Tools Input Parameters
-    bingKey: Optional[str] = None
-    bingUrl: Optional[str] = None
 
 
+# linsight Configuration
 class LinsightConfig(BaseModel):
     """
     Ideas Management Configuration
     """
+    model_config = ConfigDict(validate_by_alias=True, validate_by_name=True)
+
     linsight_entry: bool = Field(default=True, description='Whether to open the Ideas entrance')
     input_placeholder: str = Field(..., description='Input Box Prompt')
-    tools: Optional[List[Dict]] = Field(None, description='List of optional tools for Ideas')
+    tools: Optional[List[Dict]] = Field(default=None, description='List of optional tools for Ideas')
+    tab_display_name: Optional[str] = Field(default='Linsight', description='Tab Display Name')
 
 
+# Daily Chat Configuration
 class WorkstationConfig(BaseModel):
-    maxTokens: Optional[int] = Field(default=1500, description='MaxtokenQuantity')
+    model_config = ConfigDict(validate_by_alias=True, validate_by_name=True)
+
+    tabDisplayName: Optional[str] = Field(default='', alias='tabDisplayName', description='Tab Display Name')
+    maxTokens: Optional[int] = Field(default=15000, description='Max chunk size for knowledge rag or web search')
     sidebarIcon: Optional[Icon] = None
     assistantIcon: Optional[Icon] = None
     sidebarSlogan: Optional[str] = Field(default='', description='Sidebarslogan')
@@ -399,7 +402,6 @@ class WorkstationConfig(BaseModel):
     functionDescription: Optional[str] = Field(default='')
     inputPlaceholder: Optional[str] = ''
     models: Optional[Union[List[WSModel], str]] = None
-    voiceInput: Optional[WSPrompt] = None
     webSearch: Optional[WSPrompt] = None
     knowledgeBase: Optional[WSPrompt] = None
     fileUpload: Optional[WSPrompt] = None
@@ -410,7 +412,19 @@ class WorkstationConfig(BaseModel):
     applicationCenterDescription: Optional[str] = Field(default='', max_length=1000,
                                                         pattern=r'^[\u4e00-\u9fff\w\s\.,;:!@#$%^&*()\-_=+\[\]{}|\\\'"<>/?`~·！￥（）【】、《》，。；：“”‘’？]+$',
                                                         description='App Center Description')
-    linsightConfig: Optional[LinsightConfig] = Field(default=None, description='Inspiration Configuration')
+
+
+class SubscriptionConfig(BaseModel):
+    system_prompt: Optional[str] = Field(default='', description='System Prompt')
+    user_prompt: Optional[str] = Field(default='', description='User Prompt')
+    max_chunk_size: Optional[int] = Field(default=15000, description='Max chunk size for file chunks')
+    feedback_tips: Optional[str] = Field(default='', description='Feedback Tips')
+
+
+class KnowledgeSpaceConfig(BaseModel):
+    system_prompt: Optional[str] = Field(default='', description='System Prompt')
+    user_prompt: Optional[str] = Field(default='', description='User Prompt')
+    max_chunk_size: Optional[int] = Field(default=15000, description='Max chunk size for file chunks')
 
 
 class ExcelRule(BaseModel):

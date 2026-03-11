@@ -8,7 +8,7 @@ from bisheng.common.models.config import ConfigKeyEnum, Config
 from bisheng.common.repositories.implementations.config_repository_impl import ConfigRepositoryImpl
 from bisheng.core.cache.redis_manager import get_redis_client_sync
 from bisheng.core.config.settings import Settings, PasswordConf, SystemLoginMethod, \
-    WorkflowConf, LinsightConf, KnowledgeConf
+    WorkflowConf, LinsightConf, KnowledgeConf, IntelligenceCenterConf
 from bisheng.core.database import get_sync_db_session, get_async_db_session
 
 config_file = os.getenv('config', 'config.yaml')
@@ -64,9 +64,12 @@ class ConfigService(Settings):
 
     @staticmethod
     def env_var_constructor(loader, node):
-        value = loader.construct_scalar(node)  # PyYAML loaderFixed method for constructing a variable value from the current node
-        var_name = value.strip('${} ')  # Subtract variable values (e.g.${PATH}) Special characters and spaces before and after
-        env_val = os.getenv(var_name)  # Try to get the variable name in the environment variable (e.g.USER) corresponding to the value, if it is not obtained, it is empty
+        value = loader.construct_scalar(
+            node)  # PyYAML loaderFixed method for constructing a variable value from the current node
+        var_name = value.strip(
+            '${} ')  # Subtract variable values (e.g.${PATH}) Special characters and spaces before and after
+        env_val = os.getenv(
+            var_name)  # Try to get the variable name in the environment variable (e.g.USER) corresponding to the value, if it is not obtained, it is empty
         if env_val is None:
             raise ValueError(f'Environment variable {var_name} not found')
         return env_val
@@ -221,6 +224,31 @@ class ConfigService(Settings):
         for k, v in linsight_conf.items():
             setattr(conf, k, v)
         return conf
+
+    async def aget_linsight_conf(self) -> LinsightConf:
+        # Get Ideas-related configuration items
+        all_config = await self.aget_all_config()
+        conf = LinsightConf(debug=self.linsight_conf.debug)
+        linsight_conf = all_config.get('linsight', {})
+        for k, v in linsight_conf.items():
+            setattr(conf, k, v)
+        return conf
+
+    async def aget_intelligence_center_conf(self) -> IntelligenceCenterConf:
+        # Get Intelligence Center-related configuration items
+        all_config = await self.aget_all_config()
+        intelligence_center_conf = all_config.get('information_conf', {})
+        if intelligence_center_conf:
+            self.intelligence_center_conf = IntelligenceCenterConf.model_validate(intelligence_center_conf)
+        return self.intelligence_center_conf
+
+    def get_intelligence_center_conf(self) -> IntelligenceCenterConf:
+        # Get Intelligence Center-related configuration items
+        all_config = self.get_all_config()
+        intelligence_center_conf = all_config.get('information_conf', {})
+        if intelligence_center_conf:
+            self.intelligence_center_conf = IntelligenceCenterConf.model_validate(intelligence_center_conf)
+        return self.intelligence_center_conf
 
     def get_from_db(self, key: str):
         # Get all of them firstkey

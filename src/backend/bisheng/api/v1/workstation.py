@@ -3,8 +3,7 @@ import base64
 import json
 import time
 from datetime import datetime
-from pathlib import Path
-from typing import Optional, Union, List, Type, Tuple
+from typing import Optional, Union, List
 from urllib.parse import unquote
 from uuid import uuid4
 
@@ -12,6 +11,7 @@ import aiofiles
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, Request, UploadFile
 from fastapi.responses import StreamingResponse
 from langchain_core.documents import Document
+from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
 from loguru import logger
 from sse_starlette import EventSourceResponse
@@ -23,7 +23,7 @@ from bisheng.api.services.workflow import WorkFlowService
 from bisheng.api.services.workstation import (WorkstationConversation,
                                               WorkstationMessage, WorkStationService)
 from bisheng.api.v1.schema.chat_schema import APIChatCompletion, SSEResponse, delta
-from bisheng.api.v1.schemas import FrequentlyUsedChat
+from bisheng.api.v1.schemas import FrequentlyUsedChat, LinsightConfig, SubscriptionConfig, KnowledgeSpaceConfig
 from bisheng.api.v1.schemas import WorkstationConfig, resp_200, ExcelRule, UnifiedResponseModel
 from bisheng.chat.utils import SourceType, process_source_document
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
@@ -44,7 +44,6 @@ from bisheng.database.models.flow import FlowType
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.llm.domain import LLMService
-from bisheng.llm.domain.llm import BishengLLM
 from bisheng.share_link.api.dependencies import header_share_token_parser
 from bisheng.share_link.domain.models.share_link import ShareLink
 from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
@@ -139,32 +138,96 @@ async def final_message(conversation: MessageSession, title: str, requestMessage
 
 
 @router.get('/config', summary='Get workbench configuration', response_model=UnifiedResponseModel)
-def get_config(
+async def get_config(
         request: Request,
         login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """ Get model configurations related to reviews """
-    ret = WorkStationService.get_config()
+    ret = await WorkStationService.get_daily_chat_config()
+    linsight_config = await WorkStationService.get_linsight_config()
 
-    etl_for_lm_url = bisheng_settings.get_knowledge().etl4lm.url
+    etl_for_lm_url = (await bisheng_settings.async_get_knowledge()).etl4lm.url
     ret = ret.model_dump() if ret else {}
+    ret['linsightConfig'] = linsight_config.model_dump() if linsight_config else {}
 
     ret['enable_etl4lm'] = bool(etl_for_lm_url)
-    linsight_invitation_code = bisheng_settings.get_all_config().get('linsight_invitation_code', None)
+    linsight_invitation_code = (await bisheng_settings.aget_all_config()).get('linsight_invitation_code', None)
     ret['linsight_invitation_code'] = linsight_invitation_code if linsight_invitation_code else False
     ret['linsight_cache_dir'] = "./"
-    ret['waiting_list_url'] = bisheng_settings.get_linsight_conf().waiting_list_url
+    ret['waiting_list_url'] = (await bisheng_settings.aget_linsight_conf()).waiting_list_url
 
     return resp_200(data=ret)
 
 
-@router.post('/config', summary='Update workbench configuration', response_model=UnifiedResponseModel)
-def update_config(
+@router.get('/config/daily', summary='Get daily workbench configuration', response_model=UnifiedResponseModel)
+async def get_daily_config(request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user)):
+    """ Get model configurations related to reviews """
+    ret = await WorkStationService.get_daily_chat_config()
+    return resp_200(data=ret)
+
+
+@router.post('/config/daily', summary='Update daily workbench configuration', response_model=UnifiedResponseModel)
+async def update_daily_config(
         request: Request,
         login_user: UserPayload = Depends(UserPayload.get_admin_user),
-        data: WorkstationConfig = Body(..., description='Default Model Configuration'),
+        data: WorkstationConfig = Body(..., description='Daily Chat Model Configuration'),
 ):
     """ Update model configurations related to reviews """
-    ret = WorkStationService.update_config(request, login_user, data)
+    ret = await WorkStationService.update_daily_chat_config(data)
+    return resp_200(data=ret)
+
+
+@router.get('/config/linsight', summary='Get linsight configuration', response_model=UnifiedResponseModel)
+async def get_linsight_config(request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user)):
+    """ Get model configurations related to reviews """
+    ret = await WorkStationService.get_linsight_config()
+    return resp_200(data=ret)
+
+
+@router.post('/config/linsight', summary='Update linsight configuration', response_model=UnifiedResponseModel)
+async def update_linsight_config(
+        request: Request,
+        login_user: UserPayload = Depends(UserPayload.get_admin_user),
+        data: LinsightConfig = Body(..., description='Linsight Configuration'),
+):
+    """ Update model configurations related to reviews """
+    ret = await WorkStationService.update_linsight_config(data)
+    return resp_200(data=ret)
+
+
+@router.get('/config/subscription', summary='Get subscription configuration', response_model=UnifiedResponseModel)
+async def get_subscription_config(request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user)):
+    """ Get model configurations related to reviews """
+    ret = await WorkStationService.get_subscription_config()
+    return resp_200(data=ret)
+
+
+@router.post('/config/subscription', summary='Update subscription configuration', response_model=UnifiedResponseModel)
+async def update_subscription_config(
+        request: Request,
+        login_user: UserPayload = Depends(UserPayload.get_admin_user),
+        data: SubscriptionConfig = Body(..., description='subscription Configuration'),
+):
+    """ Update model configurations related to reviews """
+    ret = await WorkStationService.update_subscription_config(data)
+    return resp_200(data=ret)
+
+
+@router.get('/config/knowledge_space', summary='Get knowledge_space configuration', response_model=UnifiedResponseModel)
+async def get_knowledge_space_config(request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user)):
+    """ Get model configurations related to reviews """
+    ret = await WorkStationService.get_knowledge_space_config()
+    return resp_200(data=ret)
+
+
+@router.post('/config/knowledge_space', summary='Update knowledge_space configuration',
+             response_model=UnifiedResponseModel)
+async def update_knowledge_space_config(
+        request: Request,
+        login_user: UserPayload = Depends(UserPayload.get_admin_user),
+        data: KnowledgeSpaceConfig = Body(..., description='knowledge_space Configuration'),
+):
+    """ Update model configurations related to reviews """
+    ret = await WorkStationService.update_knowledge_space_config(data)
     return resp_200(data=ret)
 
 
@@ -282,7 +345,7 @@ async def get_chat_history(conversationId: str,
         return resp_200([])
 
 
-async def genTitle(human: str, assistant: str, llm: BishengLLM, conversationId: str, login_user: UserPayload,
+async def genTitle(human: str, assistant: str, llm: BaseChatModel, conversationId: str, login_user: UserPayload,
                    request: Request):
     """
     Generate Title
@@ -587,6 +650,8 @@ async def chat_completions(
                 content.append({'type': 'image_url', 'image_url': {
                     'url': img_base64
                 }})
+            if not image_bases64:
+                content = prompt
 
             inputs = [*history_messages, HumanMessage(content=content)]
             if wsConfig.systemPrompt:
@@ -638,7 +703,7 @@ async def chat_completions(
     try:
         return StreamingResponse(event_stream(), media_type='text/event-stream')
     finally:
-        await _log_telemetry_events(login_user.user_id, conversation_id_for_telemetry, start_time)
+        await _log_telemetry_events(str(login_user.user_id), conversation_id_for_telemetry, start_time)
 
 
 @router.get('/app/frequently_used')

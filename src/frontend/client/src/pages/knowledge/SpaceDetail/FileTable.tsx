@@ -1,0 +1,671 @@
+import {
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "@/components/ui/table";
+import {
+    Download,
+    Edit,
+    FileImageIcon,
+    FileUserIcon,
+    FolderIcon,
+    MoreVertical,
+    PencilLineIcon,
+    RefreshCw,
+    SortDescIcon,
+    Tag, Trash2
+} from "lucide-react";
+import {
+    Checkbox,
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger
+} from "~/components";
+import { cn } from "~/utils";
+import FileIcon from "./FileIcon";
+import TagGroup from "./TagGroup";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import { useToastContext } from "~/Providers";
+
+// ============================================================
+// 列定义：key、最小宽度、初始宽度
+// ============================================================
+const COLUMN_CONFIG = {
+    checkbox: { minWidth: 48, initialWidth: 48 },
+    name: { minWidth: 140, initialWidth: 280 },
+    size: { minWidth: 80, initialWidth: 120 },
+    tags: { minWidth: 140, initialWidth: 200 },
+    updateTime: { minWidth: 140, initialWidth: 180 },
+    status: { minWidth: 80, initialWidth: 120 },
+    actions: { minWidth: 80, initialWidth: 80 },
+} as const;
+
+type ColumnKey = keyof typeof COLUMN_CONFIG;
+
+// 不参与拖拽调整的列
+const NON_RESIZABLE_COLUMNS: ColumnKey[] = ["checkbox", "actions"];
+// 左侧固定列
+const STICKY_COLUMNS: ColumnKey[] = ["checkbox", "name"];
+
+// ============================================================
+// Hook: useResizableColumns — 列宽状态 + 拖拽逻辑
+// ============================================================
+function useResizableColumns() {
+    const [columnWidths, setColumnWidths] = useState<Record<ColumnKey, number>>(() => {
+        const widths = {} as Record<ColumnKey, number>;
+        for (const [key, config] of Object.entries(COLUMN_CONFIG)) {
+            widths[key as ColumnKey] = config.initialWidth;
+        }
+        return widths;
+    });
+
+    const dragging = useRef<{ key: ColumnKey; startX: number; startWidth: number } | null>(null);
+
+    const onResizeStart = useCallback((columnKey: ColumnKey, e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        dragging.current = {
+            key: columnKey,
+            startX: e.clientX,
+            startWidth: columnWidths[columnKey],
+        };
+
+        // 拖拽时全局禁止选中、设置 cursor
+        document.body.style.cursor = "col-resize";
+        document.body.style.userSelect = "none";
+
+        const onMouseMove = (ev: MouseEvent) => {
+            if (!dragging.current) return;
+            const delta = ev.clientX - dragging.current.startX;
+            const minW = COLUMN_CONFIG[dragging.current.key].minWidth;
+            const newWidth = Math.max(minW, dragging.current.startWidth + delta);
+            setColumnWidths(prev => ({ ...prev, [dragging.current!.key]: newWidth }));
+        };
+
+        const onMouseUp = () => {
+            dragging.current = null;
+            document.body.style.cursor = "";
+            document.body.style.userSelect = "";
+            document.removeEventListener("mousemove", onMouseMove);
+            document.removeEventListener("mouseup", onMouseUp);
+        };
+
+        document.addEventListener("mousemove", onMouseMove);
+        document.addEventListener("mouseup", onMouseUp);
+    }, [columnWidths]);
+
+    const totalWidth = useMemo(
+        () => Object.values(columnWidths).reduce((sum, w) => sum + w, 0),
+        [columnWidths]
+    );
+
+    return { columnWidths, onResizeStart, totalWidth };
+}
+
+// ============================================================
+// Hook: useScrollShadow — 监听滚动容器，控制左右阴影
+// ============================================================
+function useScrollShadow(scrollRef: React.RefObject<HTMLDivElement | null>) {
+    const [showLeftShadow, setShowLeftShadow] = useState(false);
+    const [showRightShadow, setShowRightShadow] = useState(false);
+
+    const update = useCallback(() => {
+        const el = scrollRef.current;
+        if (!el) return;
+        setShowLeftShadow(el.scrollLeft > 0);
+        setShowRightShadow(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
+    }, [scrollRef]);
+
+    useEffect(() => {
+        const el = scrollRef.current;
+        if (!el) return;
+
+        update();
+        el.addEventListener("scroll", update, { passive: true });
+
+        // 监听容器尺寸变化
+        const ro = new ResizeObserver(update);
+        ro.observe(el);
+
+        return () => {
+            el.removeEventListener("scroll", update);
+            ro.disconnect();
+        };
+    }, [scrollRef, update]);
+
+    return { showLeftShadow, showRightShadow };
+}
+
+// ============================================================
+// 辅助组件：状态标签渲染
+// ============================================================
+const StatusBadge = ({ status }) => {
+    const config = {
+        SUCCESS: { label: "成功", color: "text-[#00b42a]", bg: "bg-[#e8ffea]", dot: "bg-[#00b42a]" },
+        PROCESSING: { label: "处理中", color: "text-[#165dff]", bg: "bg-[#e8f3ff]", dot: "bg-[#165dff]" },
+        FAILED: { label: "失败", color: "text-[#f53f3f]", bg: "bg-[#fff2f0]", dot: "bg-[#f53f3f]" },
+    };
+    const item = config[status] || config.PROCESSING;
+    return (
+        <div className={cn("inline-flex items-center gap-1.5 px-2 py-0.5 rounded-sm text-xs font-medium", item.bg, item.color)}>
+            <span className={cn("size-1.5 rounded-full", item.dot)} />
+            {item.label}
+        </div>
+    );
+};
+
+// ============================================================
+// 拖拽手柄
+// ============================================================
+function ResizeHandle({ columnKey, onResizeStart }: { columnKey: ColumnKey; onResizeStart: (key: ColumnKey, e: React.MouseEvent) => void }) {
+    return (
+        <div
+            className="absolute right-0 top-0 bottom-0 w-[6px] cursor-col-resize z-10 group/handle flex items-center justify-center"
+            onMouseDown={(e) => onResizeStart(columnKey, e)}
+        >
+            {/* 悬停时显示蓝色高亮线 */}
+            <div className="w-[2px] h-full bg-transparent group-hover/handle:bg-[#165dff] transition-colors" />
+        </div>
+    );
+}
+
+// ============================================================
+// 左侧固定列阴影 — 绝对定位渐变，不受相邻 td 遮挡
+// ============================================================
+function StickyColumnShadow({ show }: { show: boolean }) {
+    if (!show) return null;
+    return (
+        <div
+            aria-hidden
+            className="pointer-events-none absolute top-0 right-[-12px] h-full w-[12px] z-10"
+            style={{
+                background: "linear-gradient(to right, rgba(0,0,0,0.08), transparent)",
+            }}
+        />
+    );
+}
+
+// ============================================================
+const SortableHeader = ({
+    children,
+    sortKey,
+    currentSort,
+    onSort,
+    width,
+    columnKey,
+    onResizeStart,
+    stickyLeft,
+    showShadow,
+}: {
+    children: React.ReactNode;
+    sortKey: string;
+    currentSort: { key: string; direction: string };
+    onSort: (key: string) => void;
+    width: number;
+    columnKey: ColumnKey;
+    onResizeStart: (key: ColumnKey, e: React.MouseEvent) => void;
+    stickyLeft?: number;
+    showShadow?: boolean;
+}) => {
+    const isActive = currentSort?.key === sortKey;
+    const direction = isActive ? currentSort.direction : "asc";
+    const isSticky = stickyLeft !== undefined;
+    const isResizable = !NON_RESIZABLE_COLUMNS.includes(columnKey);
+
+    return (
+        <TableHead
+            className={cn(
+                "group relative p-0 pr-3 my-2 cursor-pointer select-none overflow-visible",
+                "hover:bg-[#f2f3f5] transition-colors",
+                isSticky && "sticky z-20 bg-[#f7f8fa]"
+            )}
+            style={{
+                width,
+                minWidth: width,
+                maxWidth: width,
+                ...(isSticky ? { left: stickyLeft } : {}),
+            }}
+            onClick={() => onSort(sortKey)}
+        >
+            <div className="flex items-center gap-1.5 border-l pl-3">
+                <span className={cn("text-sm font-normal", isActive ? "text-[#1d2129]" : "text-[#4e5969]")}>
+                    {children}
+                </span>
+                <SortDescIcon className={`size-4 group-hover:opacity-100 opacity-0 transition-opacity ${isActive ? "opacity-100 text-primary" : ""} ${direction === "asc" ? "rotate-180" : ""}`} />
+            </div>
+            {isResizable && <ResizeHandle columnKey={columnKey} onResizeStart={onResizeStart} />}
+            {/* 固定列右侧阴影 */}
+            <StickyColumnShadow show={!!showShadow} />
+        </TableHead>
+    );
+};
+
+// ============================================================
+// 表头组件
+// ============================================================
+function FileTableHeader({
+    columnWidths,
+    onResizeStart,
+    showLeftShadow,
+}: {
+    columnWidths: Record<ColumnKey, number>;
+    onResizeStart: (key: ColumnKey, e: React.MouseEvent) => void;
+    showLeftShadow: boolean;
+}) {
+    const [sort, setSort] = useState({ key: "UPDATE_TIME", direction: "asc" });
+
+    const handleSort = (key) => {
+        setSort(prev => ({
+            key,
+            direction: prev.key === key && prev.direction === "asc" ? "desc" : "asc"
+        }));
+    };
+
+    return (
+        <TableHeader className="bg-[#f7f8fa] border-b border-[#e5e6eb]">
+            <TableRow className="hover:bg-transparent border-none">
+                {/* 复选框列 — 左侧固定 */}
+                <TableHead
+                    className="text-center p-0 sticky left-0 z-20 bg-[#f7f8fa]"
+                    style={{ width: columnWidths.checkbox, minWidth: columnWidths.checkbox, maxWidth: columnWidths.checkbox }}
+                >
+                    <Checkbox className="border-gray-400 checked:border-primary" />
+                </TableHead>
+
+                {/* 文件名 — 左侧固定 */}
+                <SortableHeader
+                    sortKey="NAME"
+                    currentSort={sort}
+                    onSort={handleSort}
+                    width={columnWidths.name}
+                    columnKey="name"
+                    onResizeStart={onResizeStart}
+                    stickyLeft={columnWidths.checkbox}
+                    showShadow={showLeftShadow}
+                >
+                    文件名
+                </SortableHeader>
+
+                {/* 文件大小 */}
+                <SortableHeader
+                    sortKey="SIZE"
+                    currentSort={sort}
+                    onSort={handleSort}
+                    width={columnWidths.size}
+                    columnKey="size"
+                    onResizeStart={onResizeStart}
+                >
+                    文件大小
+                </SortableHeader>
+
+                {/* 标签 — 不排序 */}
+                <TableHead
+                    className="text-[#4e5969] font-normal p-0 pr-3 relative"
+                    style={{ width: columnWidths.tags, minWidth: columnWidths.tags, maxWidth: columnWidths.tags }}
+                >
+                    <div className="flex items-center gap-1.5 border-l pl-3">
+                        标签
+                    </div>
+                    <ResizeHandle columnKey="tags" onResizeStart={onResizeStart} />
+                </TableHead>
+
+                {/* 更新时间 */}
+                <SortableHeader
+                    sortKey="UPDATE_TIME"
+                    currentSort={sort}
+                    onSort={handleSort}
+                    width={columnWidths.updateTime}
+                    columnKey="updateTime"
+                    onResizeStart={onResizeStart}
+                >
+                    更新时间
+                </SortableHeader>
+
+                {/* 状态 */}
+                <SortableHeader
+                    sortKey="STATUS"
+                    currentSort={sort}
+                    onSort={handleSort}
+                    width={columnWidths.status}
+                    columnKey="status"
+                    onResizeStart={onResizeStart}
+                >
+                    状态
+                </SortableHeader>
+
+                {/* 操作 */}
+                <TableHead
+                    className="text-[#4e5969] font-normal p-0"
+                    style={{ width: columnWidths.actions, minWidth: columnWidths.actions, maxWidth: columnWidths.actions }}
+                >
+                    <div className="flex items-center gap-1.5 border-l pl-3">
+                        操作
+                    </div>
+                </TableHead>
+            </TableRow>
+        </TableHeader>
+    );
+}
+
+// ============================================================
+// 主表格组件
+// ============================================================
+export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, onDownload, onEditTags, onRename, onDelete, onRetry, onValidateName, onCancelCreate }) {
+    const { columnWidths, onResizeStart, totalWidth } = useResizableColumns();
+    const scrollRef = useRef<HTMLDivElement>(null);
+    const { showLeftShadow, showRightShadow } = useScrollShadow(scrollRef);
+
+    return (
+        <div className="border-t border-[#e5e6eb] relative overflow-hidden">
+            {/* 滚动容器 */}
+            <div
+                ref={scrollRef}
+                className="overflow-x-auto overflow-y-visible"
+            >
+                <table
+                    className="w-full caption-bottom text-sm border-collapse"
+                    style={{ tableLayout: "fixed", width: totalWidth, minWidth: "100%" }}
+                >
+                    <FileTableHeader
+                        columnWidths={columnWidths}
+                        onResizeStart={onResizeStart}
+                        showLeftShadow={showLeftShadow}
+                    />
+                    <TableBody>
+                        {files.map((file) => (
+                            <FileRow
+                                key={file.id}
+                                file={file}
+                                isAdmin={isAdmin}
+                                isSelected={selectedFiles.has(file.id)}
+                                onSelect={(val) => handleSelectFile(file.id, val)}
+                                onDownload={() => onDownload(file.id)}
+                                onEditTags={() => onEditTags(file.id)}
+                                onRename={(newName) => onRename(file.id, newName)}
+                                onDelete={() => onDelete(file.id)}
+                                onRetry={() => onRetry?.(file.id)}
+                                onValidateName={(newName) => onValidateName?.(newName, file.type === 'FOLDER', file.id, !!file.isCreating)}
+                                onCancelCreate={onCancelCreate}
+                                columnWidths={columnWidths}
+                                showLeftShadow={showLeftShadow}
+                            />
+                        ))}
+                    </TableBody>
+                </table>
+            </div>
+
+            {/* 右侧溢出阴影 */}
+            {showRightShadow && (
+                <div
+                    className="absolute top-0 right-0 bottom-0 w-4 pointer-events-none z-30"
+                    style={{
+                        background: "linear-gradient(to left, rgba(0,0,0,0.06), transparent)",
+                    }}
+                />
+            )}
+        </div>
+    );
+}
+
+// ============================================================
+// 行组件
+// ============================================================
+function FileRow({
+    file,
+    isSelected,
+    onSelect,
+    isAdmin,
+    onDownload,
+    onEditTags,
+    onRename,
+    onDelete,
+    onRetry,
+    onValidateName,
+    onCancelCreate,
+    columnWidths,
+    showLeftShadow,
+}: {
+    file: any;
+    isSelected: boolean;
+    onSelect: (val: boolean) => void;
+    isAdmin: boolean;
+    onDownload: () => void;
+    onEditTags: () => void;
+    onRename: (newName: string) => void;
+    onDelete: () => void;
+    onRetry: () => void;
+    onValidateName?: (newName: string) => string | null;
+    onCancelCreate?: () => void;
+    columnWidths: Record<ColumnKey, number>;
+    showLeftShadow: boolean;
+}) {
+    const isFolder = file.type === 'FOLDER';
+    const isCreating = !!file.isCreating;
+    const rowBg = isSelected ? "bg-primary/10" : "bg-white";
+
+    const [isRenaming, setIsRenaming] = useState(isCreating);
+    const [renameValue, setRenameValue] = useState(file.name);
+    const inputRef = useRef<HTMLInputElement>(null);
+    const { showToast } = useToastContext();
+
+    useEffect(() => {
+        if (isRenaming && inputRef.current) {
+            inputRef.current.focus();
+            const dotIndex = file.name.lastIndexOf('.');
+            if (dotIndex > 0 && !isFolder) {
+                inputRef.current.setSelectionRange(0, dotIndex);
+            } else {
+                inputRef.current.select();
+            }
+        }
+    }, [isRenaming, isFolder, file.name]);
+
+    const handleRenameSubmit = () => {
+        const trimmed = renameValue.trim();
+
+        if (isCreating && !trimmed) {
+            showToast({ message: "文件夹名称不能为空", status: "error", severity: "error" } as any);
+            inputRef.current?.focus();
+            return;
+        }
+
+        if (!isCreating && !trimmed) {
+            setRenameValue(file.name);
+            setIsRenaming(false);
+            return;
+        }
+
+        if (trimmed === file.name && !isCreating) {
+            setIsRenaming(false);
+            return;
+        }
+
+        if (onValidateName) {
+            const err = onValidateName(trimmed);
+            if (err) {
+                showToast({ message: err, status: "error", severity: "error" } as any);
+                inputRef.current?.focus();
+                return;
+            }
+        }
+
+        onRename(trimmed);
+        setIsRenaming(false);
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter') {
+            handleRenameSubmit();
+        } else if (e.key === 'Escape') {
+            if (isCreating) {
+                onCancelCreate?.();
+            } else {
+                setRenameValue(file.name);
+                setIsRenaming(false);
+            }
+        }
+    };
+
+    return (
+        <TableRow className={cn(
+            "group border-b-[#e5e6eb] transition-colors",
+            isSelected ? "bg-primary/10 hover:bg-primary/10" : "hover:bg-[#f7f8fa]"
+        )}>
+            {/* 复选框 — 左侧固定 */}
+            <TableCell
+                className={cn("text-center py-3 px-0 sticky left-0 z-10", rowBg)}
+                style={{ width: columnWidths.checkbox, minWidth: columnWidths.checkbox, maxWidth: columnWidths.checkbox }}
+            >
+                <div className="flex items-center justify-center">
+                    <Checkbox
+                        checked={isSelected}
+                        onCheckedChange={onSelect}
+                        className={`size-4 border-gray-400 ${isSelected ? "border-primary" : ""}`}
+                    />
+                </div>
+            </TableCell>
+
+            {/* 文件名 — 左侧固定 */}
+            <TableCell
+                className={cn("py-3 sticky z-10 overflow-visible", rowBg)}
+                style={{
+                    width: columnWidths.name,
+                    minWidth: columnWidths.name,
+                    maxWidth: columnWidths.name,
+                    left: columnWidths.checkbox,
+                }}
+            >
+                <div className="flex items-center gap-2 min-w-0 text-gray-300 ">
+                    <div className="bg-white rounded-sm size-5 flex items-center justify-center flex-shrink-0">
+                        {isFolder && <FolderIcon className="size-4" />}
+                        {file.thumbnail ? <FileImageIcon className="size-4" /> : <FileUserIcon className="size-4" />}
+                    </div>
+                    {isRenaming ? (
+                        <input
+                            ref={inputRef}
+                            type="text"
+                            value={renameValue}
+                            onChange={(e) => setRenameValue(e.target.value)}
+                            onBlur={handleRenameSubmit}
+                            onKeyDown={handleKeyDown}
+                            onClick={(e) => e.stopPropagation()}
+                            className="flex-1 h-7 px-2 text-sm border border-[#165dff] rounded outline-none shadow-[0_0_0_2px_rgba(22,93,255,0.2)] bg-white font-normal text-[#1d2129]"
+                        />
+                    ) : (
+                        <span
+                            className="text-sm text-[#1d2129] truncate cursor-pointer hover:text-[#165dff] flex-1"
+                            onClick={(e) => {
+                                if (file.type === 'FOLDER') return;
+                                e.stopPropagation();
+                                const url = `${__APP_ENV__.BASE_URL}/knowledge/file/${file.id}?name=${encodeURIComponent(file.name)}&type=${encodeURIComponent(file.type)}`;
+                                window.open(url, '_blank');
+                            }}
+                        >
+                            {file.name}
+                        </span>
+                    )}
+                </div>
+                {/* 固定列右侧阴影 */}
+                <StickyColumnShadow show={showLeftShadow} />
+            </TableCell>
+
+            {/* 大小 */}
+            <TableCell
+                className="text-[#86909c] text-sm py-3"
+                style={{ width: columnWidths.size, minWidth: columnWidths.size, maxWidth: columnWidths.size }}
+            >
+                <span className="truncate block">
+                    {isFolder ? "--" : (file.size ? (file.size / 1024 / 1024).toFixed(2) + "MB" : "0MB")}
+                </span>
+            </TableCell>
+
+            {/* 标签 */}
+            <TableCell
+                className="py-3 group/tags"
+                style={{ width: columnWidths.tags, minWidth: columnWidths.tags, maxWidth: columnWidths.tags }}
+            >
+                <div className="flex items-center gap-1.5 overflow-hidden w-full h-full">
+                    <TagGroup
+                        tags={file.tags}
+                        actionButton={
+                            isAdmin ? (
+                                <div
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        onEditTags();
+                                    }}
+                                    className="hidden group-hover/tags:flex items-center justify-center text-[#165dff] hover:text-[#165dff]/80 transition-colors cursor-pointer"
+                                >
+                                    <PencilLineIcon className="size-3.5" />
+                                </div>
+                            ) : undefined
+                        }
+                    />
+                </div>
+            </TableCell>
+
+            {/* 时间 */}
+            <TableCell
+                className="text-[#86909c] text-sm whitespace-nowrap py-3"
+                style={{ width: columnWidths.updateTime, minWidth: columnWidths.updateTime, maxWidth: columnWidths.updateTime }}
+            >
+                <span className="truncate block">{file.updatedAt}</span>
+            </TableCell>
+
+            {/* 状态 */}
+            <TableCell
+                className="py-3"
+                style={{ width: columnWidths.status, minWidth: columnWidths.status, maxWidth: columnWidths.status }}
+            >
+                {isFolder ? <span className="text-[#86909c] text-sm">7/11</span> : <StatusBadge status={file.status} />}
+            </TableCell>
+
+            {/* 操作 */}
+            <TableCell
+                className="text-right pr-4 py-3"
+                style={{ width: columnWidths.actions, minWidth: columnWidths.actions, maxWidth: columnWidths.actions }}
+            >
+                <div className="invisible group-hover:visible flex justify-end">
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <button className="size-7 flex items-center justify-center hover:bg-[#e5e6eb] rounded-md text-[#4e5969] transition-colors">
+                                <MoreVertical className="size-4" />
+                            </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-32">
+                            <DropdownMenuItem onClick={onDownload}>
+                                <Download className="size-4 mr-2" />下载
+                            </DropdownMenuItem>
+                            {isAdmin && (
+                                <>
+                                    <DropdownMenuItem onClick={onEditTags}>
+                                        <Tag className="size-4 mr-2" />编辑标签
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => {
+                                        setRenameValue(file.name);
+                                        setIsRenaming(true);
+                                    }}>
+                                        <Edit className="size-4 mr-2" />重命名
+                                    </DropdownMenuItem>
+                                    {file.status === 'FAILED' && (
+                                        <DropdownMenuItem onClick={onRetry}>
+                                            <RefreshCw className="size-4 mr-2" />重试
+                                        </DropdownMenuItem>
+                                    )}
+                                    <DropdownMenuItem onClick={onDelete} className="text-[#f53f3f] focus:text-[#f53f3f] focus:bg-[#fff2f0]">
+                                        <Trash2 className="size-4 mr-2" />删除
+                                    </DropdownMenuItem>
+                                </>
+                            )}
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                </div>
+            </TableCell>
+        </TableRow>
+    );
+}

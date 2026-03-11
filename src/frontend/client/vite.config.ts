@@ -30,7 +30,7 @@ export default defineConfig(({ command }) => ({
       //   changeOrigin: true,
       // },
       '^(/workspace)?/bisheng': {
-        target: "http://192.168.106.120:3002",
+        target: "http://192.168.106.120:3003",
         changeOrigin: true,
         secure: false,
         rewrite: (path) => {
@@ -38,7 +38,7 @@ export default defineConfig(({ command }) => ({
         },
       },
       '/workspace/api': {
-        target: 'http://192.168.106.120:3002',
+        target: 'http://192.168.106.120:3003',
         changeOrigin: true,
         secure: false,
         ws: true,
@@ -52,7 +52,7 @@ export default defineConfig(({ command }) => ({
         },
       },
       '/workspace/tmp-dir': {
-        target: 'http://192.168.106.120:3002',
+        target: 'http://192.168.106.120:3003',
         changeOrigin: true,
         secure: false,
         rewrite: (path) => {
@@ -270,6 +270,18 @@ export default defineConfig(({ command }) => ({
             if (normalizedId.includes('@headlessui')) {
               return 'headlessui';
             }
+            // xlsx-populate: Excel file handling
+            if (normalizedId.includes('xlsx-populate')) {
+              return 'xlsx-populate';
+            }
+            // mammoth: DOCX rendering
+            if (normalizedId.includes('mammoth')) {
+              return 'docx-viewer';
+            }
+            // pako: zlib compression
+            if (normalizedId.includes('pako') || normalizedId.includes('node_modules/zlib')) {
+              return 'compression';
+            }
 
             // Everything else falls into a generic vendor chunk.
             return 'vendor';
@@ -306,6 +318,7 @@ export default defineConfig(({ command }) => ({
   resolve: {
     alias: {
       '~': path.join(__dirname, 'src/'),
+      '@': path.join(__dirname, 'src/'),
       $fonts: path.resolve(__dirname, 'public/fonts'),
     },
   },

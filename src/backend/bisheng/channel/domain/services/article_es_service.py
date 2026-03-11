@@ -1,0 +1,500 @@
+"""
+文章 ES CRUD Service
+
+封装对 ES 文章索引的所有操作：索引、批量索引、获取、更新、删除、搜索。
+所有方法均为 async，使用 get_es_connection 获取 AsyncElasticsearch 客户端。
+"""
+import logging
+from typing import List, Optional, Dict, Any
+
+from elasticsearch import AsyncElasticsearch, helpers as es_helpers
+
+from bisheng.channel.domain.es.article_index import (
+    ARTICLE_INDEX_NAME,
+    ensure_article_index_exists, ensure_article_index_exists_sync,
+)
+from bisheng.channel.domain.schemas.article_schema import (
+    ArticleDocument,
+    ArticleSearchResultItem,
+    ArticleSearchPageResponse, ArticleDetailResponse,
+)
+from bisheng.core.search.elasticsearch.manager import get_es_connection, get_es_connection_sync
+
+logger = logging.getLogger(__name__)
+
+
+class ArticleEsService:
+    """文章 ES Service，封装对 channel_articles 索引的所有操作"""
+
+    def __init__(self):
+        self._es_client: Optional[AsyncElasticsearch] = None
+
+    async def _get_client(self) -> AsyncElasticsearch:
+        """获取 ES 客户端，懒加载"""
+        if self._es_client is None:
+            self._es_client = await get_es_connection()
+        return self._es_client
+
+    async def ensure_index(self) -> None:
+        """确保文章索引存在"""
+        client = await self._get_client()
+        await ensure_article_index_exists(client)
+
+    @staticmethod
+    def ensure_index_sync() -> None:
+        """确保文章索引存在（同步方法）"""
+        client = get_es_connection_sync()
+        ensure_article_index_exists_sync(client)
+
+    # ──────────────────────────────────────────
+    #  Create
+    # ──────────────────────────────────────────
+
+    async def index_article(self, article: ArticleDocument, doc_id: Optional[str] = None) -> str:
+        """
+        索引单篇文章。
+
+        Args:
+            article: 文章文档
+            doc_id: 可选的文档 ID，不传则由 ES 自动生成
+
+        Returns:
+            文档 ID
+        """
+        client = await self._get_client()
+        body = article.model_dump(mode='json')
+
+        kwargs: Dict[str, Any] = {
+            "index": ARTICLE_INDEX_NAME,
+            "body": body,
+        }
+        if doc_id:
+            kwargs["id"] = doc_id
+
+        result = await client.index(**kwargs)
+        return result["_id"]
+
+    async def bulk_index_articles(self, articles: List[ArticleDocument],
+                                  doc_ids: Optional[List[str]] = None) -> int:
+        """
+        批量索引文章。
+
+        Args:
+            articles: 文章列表
+            doc_ids: 可选的文档 ID 列表，长度需与 articles 一致
+
+        Returns:
+            成功索引的文档数
+        """
+        if not articles:
+            return 0
+
+        client = await self._get_client()
+        actions = []
+        for i, article in enumerate(articles):
+            action = {
+                "_index": ARTICLE_INDEX_NAME,
+                "_source": article.model_dump(mode='json'),
+            }
+            if doc_ids and i < len(doc_ids) and doc_ids[i]:
+                action["_id"] = doc_ids[i]
+            actions.append(action)
+
+        success, errors = await es_helpers.async_bulk(client, actions, raise_on_error=False)
+        if errors:
+            logger.warning(f"Bulk index completed with {len(errors)} errors: {errors[:3]}")
+        return success
+
+    @staticmethod
+    def bulk_index_articles_sync(articles: List[ArticleDocument],
+                                 doc_ids: Optional[List[str]] = None) -> int:
+        """同步版本：批量索引文章。"""
+        if not articles:
+            return 0
+        client = get_es_connection_sync()
+        actions = []
+        for i, article in enumerate(articles):
+            action = {
+                "_index": ARTICLE_INDEX_NAME,
+                "_source": article.model_dump(mode='json'),
+            }
+            if doc_ids and i < len(doc_ids) and doc_ids[i]:
+                action["_id"] = doc_ids[i]
+            actions.append(action)
+        success, errors = es_helpers.bulk(client, actions, raise_on_error=False)
+        if errors:
+            logger.warning(f"Bulk index completed with {len(errors)} errors: {errors[:3]}")
+        return success
+
+    # ──────────────────────────────────────────
+    #  Read
+    # ──────────────────────────────────────────
+
+    async def get_article(self, doc_id: str) -> Optional[ArticleDetailResponse]:
+        """
+        根据文档 ID 获取文章。
+
+        Args:
+            doc_id: ES 文档 ID
+
+        Returns:
+            文章搜索结果项，若不存在则返回 None
+        """
+        client = await self._get_client()
+        try:
+            result = await client.get(index=ARTICLE_INDEX_NAME, id=doc_id)
+            source = result["_source"]
+            return ArticleDetailResponse(doc_id=result["_id"], **source)
+        except Exception:
+            logger.debug(f"Article not found: {doc_id}")
+            return None
+
+    # ──────────────────────────────────────────
+    #  Update
+    # ──────────────────────────────────────────
+
+    async def update_article(self, doc_id: str, updates: Dict[str, Any]) -> bool:
+        """
+        部分更新文章字段。
+
+        Args:
+            doc_id: ES 文档 ID
+            updates: 需要更新的字段字典
+
+        Returns:
+            是否成功
+        """
+        client = await self._get_client()
+        try:
+            await client.update(
+                index=ARTICLE_INDEX_NAME,
+                id=doc_id,
+                body={"doc": updates},
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Failed to update article {doc_id}: {e}")
+            return False
+
+    # ──────────────────────────────────────────
+    #  Delete
+    # ──────────────────────────────────────────
+
+    async def delete_article(self, doc_id: str) -> bool:
+        """
+        删除文章。
+
+        Args:
+            doc_id: ES 文档 ID
+
+        Returns:
+            是否成功
+        """
+        client = await self._get_client()
+        try:
+            await client.delete(index=ARTICLE_INDEX_NAME, id=doc_id)
+            return True
+        except Exception as e:
+            logger.error(f"Failed to delete article {doc_id}: {e}")
+            return False
+
+    # ──────────────────────────────────────────
+    #  Search & Count
+    # ──────────────────────────────────────────
+
+    def _build_count_query(
+            self,
+            source_ids: Optional[List[str]] = None,
+            filter_rules: Optional[List[Dict[str, Any]]] = None,
+            include_article_ids: Optional[List[str]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """构建 count 查询语句，如果确定结果为 0，则返回 None"""
+        must_clauses = []
+        must_not_clauses = []
+        filter_clauses = []
+
+        if source_ids is not None:
+            if not source_ids:
+                return None
+            filter_clauses.append({"terms": {"source_id": source_ids}})
+
+        if include_article_ids is not None:
+            if not include_article_ids:
+                return None
+            filter_clauses.append({"terms": {"_id": include_article_ids}})
+
+        if filter_rules:
+            for rule in filter_rules:
+                rule_type = rule.get("rule_type")
+                keywords = rule.get("keywords", [])
+                relation = rule.get("relation", "or")
+
+                if not keywords:
+                    continue
+
+                keyword_queries = []
+                for kw in keywords:
+                    keyword_queries.append({
+                        "multi_match": {
+                            "query": kw,
+                            "fields": ["title", "content"],
+                            "type": "best_fields",
+                        }
+                    })
+
+                if relation == "and":
+                    combined = {"bool": {"must": keyword_queries}}
+                else:
+                    combined = {"bool": {"should": keyword_queries, "minimum_should_match": 1}}
+
+                if rule_type == "include":
+                    must_clauses.append(combined)
+                elif rule_type == "exclude":
+                    must_not_clauses.append(combined)
+
+        bool_query: Dict[str, Any] = {}
+        if must_clauses:
+            bool_query["must"] = must_clauses
+        if must_not_clauses:
+            bool_query["must_not"] = must_not_clauses
+        if filter_clauses:
+            bool_query["filter"] = filter_clauses
+
+        if bool_query:
+            return {"bool": bool_query}
+        else:
+            return {"match_all": {}}
+
+    async def count_articles(
+            self,
+            source_ids: Optional[List[str]] = None,
+            filter_rules: Optional[List[Dict[str, Any]]] = None,
+            include_article_ids: Optional[List[str]] = None,
+    ) -> int:
+        """
+        统计文章数量，支持信源过滤、过滤规则和文章 ID 列表包含。
+        """
+        query = self._build_count_query(source_ids, filter_rules, include_article_ids)
+        if query is None:
+            return 0
+
+        client = await self._get_client()
+        response = await client.count(index=ARTICLE_INDEX_NAME, query=query)
+        return response["count"]
+
+    async def count_articles_batch(
+            self,
+            requests: List[Dict[str, Any]]
+    ) -> List[int]:
+        """
+        批量统计文章数量。
+        requests 是一个字典列表，每个字典包含 count_articles 的参数：
+        - source_ids
+        - filter_rules
+        - include_article_ids
+        """
+        if not requests:
+            return []
+
+        client = await self._get_client()
+        body = []
+        zero_indices = set()
+        
+        for i, req in enumerate(requests):
+            query = self._build_count_query(
+                source_ids=req.get("source_ids"),
+                filter_rules=req.get("filter_rules"),
+                include_article_ids=req.get("include_article_ids")
+            )
+            if query is None:
+                zero_indices.add(i)
+                # msearch requires valid query even if we know it's zero to maintain order easily
+                body.append({"index": ARTICLE_INDEX_NAME})
+                body.append({"query": {"match_none": {}}, "size": 0})
+            else:
+                body.append({"index": ARTICLE_INDEX_NAME})
+                body.append({"query": query, "size": 0})
+
+        response = await client.msearch(body=body)
+        
+        counts = []
+        for i, r in enumerate(response["responses"]):
+            if i in zero_indices:
+                counts.append(0)
+            else:
+                total = r["hits"]["total"]
+                counts.append(total["value"] if isinstance(total, dict) else total)
+        return counts
+
+    async def search_articles(
+            self,
+            source_ids: Optional[List[str]] = None,
+            keyword: Optional[str] = None,
+            filter_rules: Optional[List[Dict[str, Any]]] = None,
+            page: int = 1,
+            page_size: int = 20,
+            exclude_article_ids: Optional[List[str]] = None,
+    ) -> ArticleSearchPageResponse:
+        """
+        检索文章，支持信源过滤、关键词搜索、过滤规则、高亮和分页。
+
+        Args:
+            source_ids: 信源 ID 列表过滤
+            keyword: 搜索关键词（匹配标题、正文、信源ID）
+            filter_rules: 频道过滤规则列表
+                          每条规则格式: {"rule_type": "include"/"exclude",
+                                        "keywords": [...], "relation": "and"/"or"}
+            page: 页码（从 1 开始）
+            page_size: 每页数量
+            exclude_article_ids: 排除的文章 ID 列表
+
+        Returns:
+            ArticleSearchPageResponse
+        """
+        client = await self._get_client()
+
+        # 构建 bool 查询
+        must_clauses = []
+        must_not_clauses = []
+        filter_clauses = []
+
+        # 1. 信源 ID 过滤
+        if source_ids:
+            filter_clauses.append({
+                "terms": {"source_id": source_ids}
+            })
+
+        # 1.5 排除指定文章 ID
+        if exclude_article_ids:
+            must_not_clauses.append({
+                "terms": {"_id": exclude_article_ids}
+            })
+
+        # 2. 关键词搜索（标题 + 正文 + 信源ID）
+        if keyword:
+            must_clauses.append({
+                "multi_match": {
+                    "query": keyword,
+                    "fields": ["title^3", "content", "source_id"],
+                    "type": "best_fields",
+                }
+            })
+
+        # 3. 频道过滤规则
+        if filter_rules:
+            for rule in filter_rules:
+                rule_type = rule.get("rule_type")
+                keywords = rule.get("keywords", [])
+                relation = rule.get("relation", "or")
+
+                if not keywords:
+                    continue
+
+                # 构建关键词匹配子查询
+                keyword_queries = []
+                for kw in keywords:
+                    keyword_queries.append({
+                        "multi_match": {
+                            "query": kw,
+                            "fields": ["title", "content"],
+                            "type": "best_fields",
+                        }
+                    })
+
+                if relation == "and":
+                    combined = {"bool": {"must": keyword_queries}}
+                else:
+                    combined = {"bool": {"should": keyword_queries, "minimum_should_match": 1}}
+
+                if rule_type == "include":
+                    must_clauses.append(combined)
+                elif rule_type == "exclude":
+                    must_not_clauses.append(combined)
+
+        # 组装完整查询
+        bool_query: Dict[str, Any] = {}
+        if must_clauses:
+            bool_query["must"] = must_clauses
+        if must_not_clauses:
+            bool_query["must_not"] = must_not_clauses
+        if filter_clauses:
+            bool_query["filter"] = filter_clauses
+
+        if bool_query:
+            query = {"bool": bool_query}
+        else:
+            query = {"match_all": {}}
+
+        # 高亮配置
+        highlight_config = {}
+        if keyword:
+            highlight_config = {
+                "pre_tags": ["<em>"],
+                "post_tags": ["</em>"],
+                "fields": {
+                    "title": {"number_of_fragments": 0},
+                    "content": {"fragment_size": 200, "number_of_fragments": 3},
+                },
+            }
+
+        # 构建请求体
+        from_offset = (page - 1) * page_size
+        body: Dict[str, Any] = {
+            "query": query,
+            "sort": [{"update_time": {"order": "desc"}}],
+            "from": from_offset,
+            "size": page_size,
+            "_source": {
+                "excludes": ["content_html"]  # 默认不返回 content_html 字段，减少网络传输和解析开销
+             }
+        }
+        if highlight_config:
+            body["highlight"] = highlight_config
+
+        # 执行搜索
+        response = await client.search(index=ARTICLE_INDEX_NAME, body=body)
+
+        # 解析结果
+        total = response["hits"]["total"]
+        if isinstance(total, dict):
+            total_count = total["value"]
+        else:
+            total_count = total
+
+        items = []
+        for hit in response["hits"]["hits"]:
+            source = hit["_source"]
+            highlight = hit.get("highlight")
+
+            item = ArticleSearchResultItem(
+                doc_id=hit["_id"],
+                score=hit.get("_score"),
+                highlight=highlight,
+                **source,
+            )
+            items.append(item)
+
+        return ArticleSearchPageResponse(
+            data=items,
+            total=total_count,
+            page=page,
+            page_size=page_size,
+        )
+
+    @staticmethod
+    def get_source_latest_article_time_sync(source_id: str) -> Optional[str]:
+        """获取信源最新文章的更新时间（同步方法）"""
+        client = get_es_connection_sync()
+        body = {
+            "size": 1,
+            "query": {
+                "term": {"source_id": source_id}
+            },
+            "sort": [{"create_time": {"order": "desc"}}],
+            "_source": ["create_time"],
+        }
+        response = client.search(index=ARTICLE_INDEX_NAME, body=body)
+        hits = response["hits"]["hits"]
+        if hits:
+            return hits[0]["_source"]["create_time"]
+        return None

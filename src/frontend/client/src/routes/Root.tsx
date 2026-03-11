@@ -43,7 +43,7 @@ export default function Root() {
             <AgentsMapContext.Provider value={agentsMap}>
               {/* 页面头部黑色banner */}
               <Banner onHeightChange={setBannerHeight} />
-              <div className="flex" style={{ height: `calc(100dvh - ${bannerHeight}px)` }}>
+              <div className="flex h-full">
                 <div className="relative z-0 flex h-full w-full overflow-hidden">
                   {/* 会话列表 */}
                   <Nav navVisible={navVisible} setNavVisible={setNavVisible} />

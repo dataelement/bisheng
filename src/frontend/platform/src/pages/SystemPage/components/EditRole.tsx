@@ -1,7 +1,7 @@
 import { useCallback, useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../../components/bs-ui/button";
-import { Input, SearchInput } from "../../../components/bs-ui/input";
+import { Input, NonNegativeInput, SearchInput } from "../../../components/bs-ui/input";
 import AutoPagination from "../../../components/bs-ui/pagination/autoPagination";
 import { Switch } from "../../../components/bs-ui/switch";
 import {
@@ -41,6 +41,12 @@ interface SearchPanneProps {
   isPermissionTable?: boolean;
   role_id?: any;
   showTab?: boolean;
+  placeholderKey?: string;
+  allowCreateBoard?: boolean;
+  onAllowCreateBoardChange?: (checked: boolean) => void;
+  spacePermissions?: { workspace: boolean; admin: boolean };
+  /** 为 true 时隐藏表头「查看权限」（仅管理后台菜单在两开关都开启时不显示） */
+  hideViewPermissionLabel?: boolean;
 }
 
 const enum MenuType {
@@ -53,6 +59,11 @@ const enum MenuType {
   FRONTEND = 'frontend',
   BACKEND = 'backend',
   CREATE_DASHBOARD = 'create_dashboard',
+
+
+
+  SUBSCRIPTION = 'subscription',  // 订阅
+  KNOWLEDGE_SPACE = 'knowledge_space',  // 知识空间
 }
 
 
@@ -63,7 +74,10 @@ const MENU_LIST = [
   { id: MenuType.MODEL, name: 'menu.models', user_name: '-' },
   { id: MenuType.EVALUATION, name: 'menu.evaluation', user_name: '-' },
 ];
-
+const WORKBENCH_MENU_LIST = [
+  { id: MenuType.SUBSCRIPTION, name: 'menu.workbench1', user_name: '-' },
+  { id: MenuType.KNOWLEDGE_SPACE, name: 'menu.workbench2', user_name: '-' },
+];
 const SearchPanne = ({
   groupId,
   title,
@@ -81,6 +95,7 @@ const SearchPanne = ({
   placeholderKey,
   allowCreateBoard,
   onAllowCreateBoardChange,
+  hideViewPermissionLabel,
 }: SearchPanneProps) => {
   const { t } = useTranslation();
   const { appConfig } = useContext(locationContext)
@@ -92,6 +107,12 @@ const SearchPanne = ({
         return Promise.resolve({
           data: MENU_LIST,
           total: MENU_LIST.length
+        });
+      }
+      if (type === 'workbenchMenu') {
+        return Promise.resolve({
+          data: WORKBENCH_MENU_LIST,
+          total: WORKBENCH_MENU_LIST.length
         });
       }
 
@@ -122,17 +143,19 @@ const SearchPanne = ({
 
   const renderPermissionTable = () => {
     if (!isPermissionTable) return children?.(data) || null;
-    const isMenuOrBoard = type === 'menu' || type === 'board';
+    const isMenuOrBoard = type === 'menu' || type === 'board' || type === 'workbenchMenu';
+    const isMenuType = type === 'menu' || type === 'workbenchMenu';
+    const showViewPermissionLabel = isMenuOrBoard && !hideViewPermissionLabel;
     return (
       <Table>
         <TableHeader>
           <TableRow>
             <TableHead>{t(nameKey)}</TableHead>
-            {type !== 'menu' && <TableHead>{t('system.creator')}</TableHead>}
+            {!isMenuType && <TableHead>{t('system.creator')}</TableHead>}
             <TableHead className="text-center w-[175px]">
-              {!isMenuOrBoard ? t('system.usePermission') : t('system.viewPermission')}
+              {showViewPermissionLabel ? (!isMenuOrBoard ? t('system.usePermission') : t('system.viewPermission')) : null}
             </TableHead>
-            {isPermissionTable && type !== 'menu' && appConfig.isPro && (
+            {isPermissionTable && !isMenuType && appConfig.isPro && (
               <TableHead className="text-right w-[75px]">{t('system.managePermission')}</TableHead>
             )}
           </TableRow>
@@ -141,14 +164,14 @@ const SearchPanne = ({
           {data.map((el: any) => (
             <TableRow key={el.id}>
               <TableCell className="font-medium">{t(el.name)}</TableCell>
-              {type !== 'menu' && <TableCell>{el.user_name}</TableCell>}
+              {!isMenuType && <TableCell>{el.user_name}</TableCell>}
               <TableCell className="text-center">
                 <Switch
                   checked={useChecked(el.id)}
                   onCheckedChange={(bln) => onUseChange(el.id, bln)}
                 />
               </TableCell>
-              {type !== 'menu' && appConfig.isPro && (
+              {!isMenuType && appConfig.isPro && (
                 <TableCell className="text-center">
                   <Switch
                     checked={manageChecked(el.id)}
@@ -184,7 +207,7 @@ const SearchPanne = ({
       )}
 
 
-      {type !== 'menu' && <SearchInput
+      {(type !== 'menu' && type !== 'workbenchMenu') && <SearchInput
         onChange={(e) => search(e.target.value)}
         placeholder={placeholderKey ? t(placeholderKey) : ''}
         className="mt-0"
@@ -197,7 +220,7 @@ const SearchPanne = ({
         </div>
         : renderPermissionTable()}
     </div>
-    {type !== 'menu' && <AutoPagination className="m-0 mt-4 w-auto justify-end" page={page} pageSize={pageSize} total={total} onChange={setPage} />}
+    {(type !== 'menu' && type !== 'workbenchMenu') && <AutoPagination className="m-0 mt-4 w-auto justify-end" page={page} pageSize={pageSize} total={total} onChange={setPage} />}
   </>
 };
 
@@ -257,6 +280,7 @@ const usePermissionSwitchLogic = (form, setForm) => {
       switchDataChange(id, 'useTools', checked);
     },
     switchMenu: (id, checked) => switchDataChange(id, 'useMenu', checked),
+    switchWorkbenchMenu: (id, checked) => switchDataChange(id, 'useWorkbenchMenu', checked),
     switchBoardManage: (id, checked) => switchManage(id, 'manageBoards', 'useBoards', checked),
     switchUseBoard: (id, checked) => {
       const numId = Number(id);
@@ -266,9 +290,11 @@ const usePermissionSwitchLogic = (form, setForm) => {
   };
 };
 
+const WORKBENCH_MENU_IDS = [MenuType.SUBSCRIPTION, MenuType.KNOWLEDGE_SPACE];
+
 const initPermissionData = (resData) => {
   const initData = {
-    useSkills: [], useLibs: [], useAssistant: [], useFlows: [], useTools: [], useMenu: [],
+    useSkills: [], useLibs: [], useAssistant: [], useFlows: [], useTools: [], useMenu: [], useWorkbenchMenu: [],
     manageLibs: [], manageAssistants: [], manageSkills: [], manageFlows: [], manageTools: [],
     useBoards: [], manageBoards: []
   };
@@ -291,13 +317,19 @@ const initPermissionData = (resData) => {
         initData.manageBoards.push(Number(item.third_id));
         break;
 
-      case 99: initData.useMenu.push(String(item.third_id)); break;
+      case 99:
+        if (WORKBENCH_MENU_IDS.includes(item.third_id)) {
+          initData.useWorkbenchMenu.push(String(item.third_id));
+        } else {
+          initData.useMenu.push(String(item.third_id));
+        }
+        break;
     }
   });
   return initData;
 };
 
-const getSearchPanneConfig = (type, form, switches, t, groupId, roleId, handleAllowCreateBoardChange) => {
+const getSearchPanneConfig = (type, form, switches, t, groupId, roleId, handleAllowCreateBoardChange, spacePermissions?: { workspace: boolean; admin: boolean }) => {
   const placeholderMap = {
     assistant: 'system.searchAssistant',
     skill: 'system.searchSkill',
@@ -325,7 +357,16 @@ const getSearchPanneConfig = (type, form, switches, t, groupId, roleId, handleAl
       placeholderKey: placeholderMap.board,
       allowCreateBoard: form.allowCreateBoard,
       onAllowCreateBoardChange: handleAllowCreateBoardChange,
-    }
+    },
+    workbenchMenu: {
+      title: t('system.workbenchMenuAuthorization'),
+      nameKey: 'system.workbenchMenu',
+      useChecked: (id) => form.useWorkbenchMenu?.includes(String(id)) ?? false,
+      manageChecked: () => false,
+      onUseChange: switches.switchWorkbenchMenu,
+      onManageChange: () => { },
+      menuList: WORKBENCH_MENU_LIST,
+    },
   };
 
   const config = configMap[type];
@@ -345,10 +386,11 @@ const getSearchPanneConfig = (type, form, switches, t, groupId, roleId, handleAl
     placeholderKey: config.placeholderKey,
     allowCreateBoard: config.allowCreateBoard,
     onAllowCreateBoardChange: config.onAllowCreateBoardChange,
+    hideViewPermissionLabel: type === 'menu' ? spacePermissions?.workspace : undefined,
   };
 };
 
-export default function EditRole({ id, name, groupId, onChange, onBeforeChange }) {
+export default function EditRole({ id, name, groupId, knowledgeSpaceFileLimit, onChange, onBeforeChange }) {
   const { setErrorData, setSuccessData } = useContext(alertContext);
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<'menu' | 'assistant' | 'skill' | 'flow' | 'knowledge' | 'tool' | 'board'>('menu');
@@ -356,8 +398,10 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
   const [form, setForm] = useState({
     name,
     useSkills: [], useLibs: [], useAssistant: [], useFlows: [], useTools: [], useMenu: [MenuType.BUILD, MenuType.KNOWLEDGE],
+    useWorkbenchMenu: [],
     manageLibs: [], manageAssistants: [], manageSkills: [], manageFlows: [], manageTools: [], useBoards: [], manageBoards: [],
     allowCreateBoard: false,
+    knowledgeSpaceFileLimit,
   });
 
   const [spacePermissions, setSpacePermissions] = useState({
@@ -418,13 +462,11 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
   const roleId = id === -1 ? 0 : id;
 
   const getPermissionTabs = useCallback(() => {
-    const tabs = ['assistant', 'flow', 'skill', 'knowledge', 'tool'];
+    const tabs = ['menu', 'assistant', 'flow', 'skill', 'knowledge', 'tool'];
 
     if (spacePermissions.admin) {
-      tabs.unshift('menu');
       const hasBoardMenuPermission = form.useMenu.includes(MenuType.BOARD);
-      const canShowBoardTab = hasBoardMenuPermission;
-      if (canShowBoardTab) {
+      if (hasBoardMenuPermission) {
         tabs.push('board');
       }
     }
@@ -433,7 +475,7 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
   }, [spacePermissions.admin, form.allowCreateBoard, form.useMenu]);
 
   const renderPermissionPanne = (type) => {
-    const config = getSearchPanneConfig(type, form, switches, t, groupId, roleId, handleAllowCreateBoardChange);
+    const config = getSearchPanneConfig(type, form, switches, t, groupId, roleId, handleAllowCreateBoardChange, spacePermissions);
     return <SearchPanne key={type} {...config} />;
   };
   const syncSpaceToMenu = (next: { workspace: boolean; admin: boolean }) => {
@@ -474,7 +516,7 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
 
     setSpacePermissions(next);
     syncSpaceToMenu(next);
-    if (key === 'admin' && !checked && (activeTab === 'menu' || activeTab === 'board')) {
+    if (key === 'admin' && !checked && (activeTab === 'board')) {
       setActiveTab('assistant');
     }
   };
@@ -506,10 +548,11 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
       const res = await captureAndAlertRequestErrorHoc(createRole(groupId, form.name));
       roleIdLocal = res.id;
     } else {
-      await captureAndAlertRequestErrorHoc(updateRoleNameApi(roleIdLocal, form.name));
+      await captureAndAlertRequestErrorHoc(updateRoleNameApi(roleIdLocal, form.name, form.knowledgeSpaceFileLimit));
     }
 
     const menuPermissionsToSave = Array.from(menuSet);
+    const allMenuPermissions = [...menuPermissionsToSave, ...(form.useWorkbenchMenu || [])];
 
     await Promise.all([
       updateRolePermissionsApi({ role_id: roleIdLocal, access_id: form.useSkills as any, type: 2 as any }),
@@ -522,7 +565,7 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
       updateRolePermissionsApi({ role_id: roleIdLocal, access_id: sanitizeIds(form.manageSkills) as any, type: 4 as any }),
       updateRolePermissionsApi({ role_id: roleIdLocal, access_id: sanitizeIds(form.manageFlows) as any, type: 10 as any }),
       updateRolePermissionsApi({ role_id: roleIdLocal, access_id: sanitizeIds(form.manageTools) as any, type: 8 as any }),
-      updateRolePermissionsApi({ role_id: roleIdLocal, access_id: sanitizeIds(menuPermissionsToSave) as any, type: 99 as any }),
+      updateRolePermissionsApi({ role_id: roleIdLocal, access_id: sanitizeIds(allMenuPermissions) as any, type: 99 as any }),
       updateRolePermissionsApi({ role_id: roleIdLocal, access_id: sanitizeIds(form.useBoards) as any, type: 11 as any }),
       updateRolePermissionsApi({ role_id: roleIdLocal, access_id: sanitizeIds(form.manageBoards) as any, type: 12 as any }),
 
@@ -601,13 +644,39 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
         </div>
       </div>
 
+      {/* 知识空间 */}
+      <div className="mt-10">
+        <div className="items-center relative">
+          <p className="text-xl font-bold">{t('system.knowledgeSpaceFileUploadLimit')}</p>
+          <p className="text-sm text-[#8F959E]">
+            {t('system.knowledgeSpaceFileLimitDesc')}
+          </p>
+        </div>
 
+        <div className="w-full flex mt-4">
+          {t('system.maxTotalUpload')}
+          <div className="text-red-500 mx-1">*</div>
+          <NonNegativeInput
+            className="w-12 -mt-0.5 mr-1"
+            defaultValue={40}
+            value={form.knowledgeSpaceFileLimit}
+            onValueChange={(val) => {
+              setForm(prev => ({
+                ...prev,
+                knowledgeSpaceFileLimit: val
+              }))
+            }}
+            placeholder=""
+          />
+          GB
+        </div>
+      </div>
       {/* 权限 Tabs */}
       <div className="flex gap-6 border-b mt-10">
         {getPermissionTabs().map(tab => (
           <button
             key={tab}
-            onClick={() => setActiveTab(tab)}
+            onClick={() => setActiveTab(tab as typeof activeTab)}
             className={`pb-2 text-sm ${activeTab === tab ? 'border-b-2 border-primary font-semibold' : 'text-muted-foreground'}`}
           >
             {t(`system.${tab}Authorization`)}
@@ -616,7 +685,24 @@ export default function EditRole({ id, name, groupId, onChange, onBeforeChange }
       </div>
 
       {/* 当前 Tab 内容 */}
-      <div className="">{renderPermissionPanne(activeTab)}</div>
+      <div className="-mt-4">
+        {activeTab === 'menu' ? (
+          <>
+            {spacePermissions.workspace && (
+              <div className="">
+                {renderPermissionPanne('workbenchMenu')}
+              </div>
+            )}
+            {spacePermissions.admin && (
+              <div className="-mt-8">
+                {renderPermissionPanne('menu')}
+              </div>
+            )}
+          </>
+        ) : (
+          renderPermissionPanne(activeTab)
+        )}
+      </div>
 
       {/* 保存/取消按钮 */}
       <div className="flex justify-center items-center absolute bottom-0 w-[600px] h-[8vh] gap-4 mt-[100px] bg-background-login z-10">

@@ -1,4 +1,5 @@
 # register tasks
+from bisheng.worker.information.article import sync_information_article
 from bisheng.worker.knowledge.file_worker import file_copy_celery, parse_knowledge_file_celery, \
     retry_knowledge_file_celery
 from bisheng.worker.knowledge.rebuild_knowledge_worker import rebuild_knowledge_celery

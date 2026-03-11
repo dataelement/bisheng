@@ -9,3 +9,9 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+declare const __APP_ENV__: {
+  BASE_URL: string;
+  BISHENG_HOST?: string;
+  [key: string]: any;
+};

@@ -1,317 +1,235 @@
-"use client"
+import { ChevronDown, Loader2, MessageSquare, Pin, Search, Share2, X, LayoutGrid, ArrowRight } from "lucide-react"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { Link } from "react-router-dom"
+import { getFrequently } from "~/api/apps"
+import { Button } from "~/components/ui"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "~/components/ui/Tooltip2"
+import { cn } from "~/utils"
 
-import { useQueryClient } from '@tanstack/react-query'
-import { Search, X } from "lucide-react"
-import { useRef, useState } from "react"
-import { useNavigate } from "react-router"
-import { addToFrequentlyUsed, getChatOnlineApi, removeFromFrequentlyUsed } from "~/api/apps"
-import { Input } from "~/components/ui"
-import { useDebounce } from '~/components/ui/MultiSelect'
-import { useGetBsConfig } from '~/data-provider'
-import { ConversationData, QueryKeys } from "~/data-provider/data-provider/src"
-import useToast from '~/hooks/useToast'
-import { useLocalize } from '~/hooks'
-import store from "~/store"
-import { addConversation, generateUUID } from "~/utils"
-import { AgentGrid } from "./components/AgentGrid"
-import { AgentNavigation } from "./components/AgentNavigation"
-import { SearchOverlay } from "./components/SearchOverlay"
-import { atom } from 'recoil'
+const EmptyState = () => (
+    <div className="flex flex-col items-center justify-center py-20 flex-1">
+        <div className="mb-6 opacity-80">
+            <svg width="120" height="120" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path
+                    d="M60 15L98.9711 37.5V82.5L60 105L21.0289 82.5V37.5L60 15Z"
+                    stroke="#3B82F6"
+                    strokeWidth="2"
+                    strokeDasharray="4 4"
+                />
+                <circle cx="60" cy="60" r="22" stroke="#3B82F6" strokeWidth="2" />
+                <circle cx="60" cy="60" r="6" stroke="#3B82F6" strokeWidth="2" strokeDasharray="2 2" />
+            </svg>
+        </div>
+        <div className="text-sm text-gray-500 flex items-center gap-1">
+            暂无使用过的应用，可以前往应用广场
+            <Link
+                to="/apps/explore"
+                className="text-blue-500 hover:text-blue-600 flex items-center font-medium transition-colors"
+            >
+                探索更多应用
+                <ArrowRight size={14} className="ml-0.5" />
+            </Link>
+        </div>
+    </div>
+)
 
-export default function AgentCenter() {
+const SearchEmptyState = ({ query }: { query: string }) => (
+    <div className="flex flex-col items-center justify-center py-20 flex-1">
+        <div className="mb-6 opacity-80">
+            <Search size={80} className="text-gray-300" />
+        </div>
+        <p className="text-sm text-gray-500">
+            找不到和“
+            <span className="font-semibold text-gray-700 max-w-[200px] inline-block truncate align-bottom">
+                {query}
+            </span>
+            ”相关的应用
+        </p>
+    </div>
+)
+// --- 组件：智能体卡片 ---
+const AgentCard = ({
+    agent,
+    isPinned,
+    onTogglePin,
+    onStartChat,
+    onShare
+}: {
+    agent: any,
+    isPinned: boolean,
+    onTogglePin: (agent: any) => void,
+    onStartChat: (agent: any) => void,
+    onShare: (agent: any) => void
+}) => (
+    <div className="group relative flex flex-col justify-between rounded-xl border hover:border-blue-400 bg-white p-4 shadow-sm transition-all hover:shadow-md h-[190px]">
+        <div className="flex justify-between items-start">
+            <div className="flex gap-3 min-w-0">
+                <div className="h-12 w-12 flex-shrink-0 rounded-lg bg-purple-100 flex items-center justify-center overflow-hidden">
+                    {agent.logo ? (
+                        <img src={agent.logo} alt={agent.name} className="h-full w-full object-cover" />
+                    ) : (
+                        <div className="text-purple-500 italic font-bold text-xl">✨</div>
+                    )}
+                </div>
+                <h3 className="text-base font-bold text-gray-800 truncate mt-1">{agent.name}</h3>
+            </div>
+            <TooltipProvider delayDuration={200}>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <button
+                            onClick={(e) => { e.stopPropagation(); onTogglePin(agent); }}
+                            className={cn(
+                                "p-1.5 rounded-md transition-colors",
+                                isPinned ? "text-blue-600 bg-blue-50" : "text-gray-300 hover:text-gray-500 bg-gray-50/50"
+                            )}
+                        >
+                            <Pin size={16} fill={isPinned ? "currentColor" : "none"} />
+                        </button>
+                    </TooltipTrigger>
+                    <TooltipContent>{isPinned ? "取消置顶" : "将应用置顶"}</TooltipContent>
+                </Tooltip>
+            </TooltipProvider>
+        </div>
+        <p className="mt-3 text-sm text-gray-400 line-clamp-2 leading-relaxed">
+            {agent.description || "暂无描述内容..."}
+        </p>
+        <div className="mt-4 flex gap-2">
+            <Button variant="outline" className="flex-1 h-9 rounded-lg border-gray-200 text-gray-600 text-sm font-normal" onClick={() => onShare(agent)}>
+                分享应用
+            </Button>
+            <Button className="flex-1 h-9 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-normal" onClick={() => onStartChat(agent)}>
+                开始对话
+            </Button>
+        </div>
+    </div>
+)
+
+export default function AppCenter({
+    favorites,
+    onAddToFavorites,
+    onRemoveFromFavorites,
+    refreshTrigger,
+    onCardClick
+}: any) {
+    const [loading, setLoading] = useState(false)
+    const [allAgents, setAllAgents] = useState<any[]>([])
+    const [pinnedIds, setPinnedIds] = useState<string[]>(favorites || [])
+    const [isSearchOpen, setIsSearchOpen] = useState(false)
     const [searchQuery, setSearchQuery] = useState("")
-    const [favorites, setFavorites] = useState<string[]>([])
-    const [isSearching, setIsSearching] = useState(false)
-    const [searchResults, setSearchResults] = useState([])
-    const [searchLoading, setSearchLoading] = useState(false)
-    const scrollContainerRef = useRef<HTMLDivElement>(null)
-    const sectionRefs = useRef<Record<string, HTMLElement | null>>({})
-    const [refreshTrigger, setRefreshTrigger] = useState(0);
-    const refreshAgentData = () => {
-        setRefreshTrigger(prev => prev + 1);
-    }
+    const inputRef = useRef<HTMLInputElement>(null)
 
-    const { showToast } = useToast()
-    const localize = useLocalize()
-    const categoryIdRef = useRef<string>("")
+    const sortedAndFilteredAgents = useMemo(() => {
+        const filtered = searchQuery
+            ? allAgents.filter(agent =>
+                agent.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                (agent.description || '').toLowerCase().includes(searchQuery.toLowerCase())
+            )
+            : allAgents;
 
-    const handleCategoryChange = (categoryId: string) => {
-        console.log("点击的标签ID:", categoryId, "当前搜索状态:", isSearching);
-
-        // 1. 清除搜索状态（如果有）
-        const wasSearching = !!searchQuery;
-        if (wasSearching) {
-            setSearchQuery("");
-            setIsSearching(false);
-        }
-        categoryIdRef.current = categoryId;
-
-        // 2. 定义核心滚动逻辑
-        const performScroll = () => {
-            if (categoryId === "favorites") {
-                // 常用标签：直接滚动到顶部（无需依赖sectionRefs）
-                scrollContainerRef.current?.scrollTo({
-                    top: 0,
-                    behavior: "smooth"
-                });
-                return;
-            }
-
-            // 其他标签：通过sectionRefs查找DOM并滚动
-            const targetSection = sectionRefs.current[categoryId];
-            if (targetSection && scrollContainerRef.current) {
-                const containerRect = scrollContainerRef.current.getBoundingClientRect();
-                const sectionRect = targetSection.getBoundingClientRect();
-                const relativeTop = sectionRect.top - containerRect.top + scrollContainerRef.current.scrollTop;
-
-                scrollContainerRef.current.scrollTo({
-                    top: relativeTop - 20,
-                    behavior: "smooth"
-                });
-            } else {
-                console.log("未找到目标分区，但已尝试滚动");
-            }
-        };
-
-        // 3. 分场景处理
-        if (!wasSearching) {
-            // 场景1：非搜索状态（AgentGrid已渲染）→ 立即滚动
-            performScroll();
-        } else {
-            // 场景2：从搜索状态切换（AgentGrid需要重新渲染）→ 监听DOM变化后滚动
-            const container = scrollContainerRef.current;
-            if (!container) return;
-
-            // 停止之前的监听（避免重复）
-            let observer: MutationObserver | null = null;
-
-            observer = new MutationObserver((mutations, obs) => {
-                // 检查目标分区是否已挂载
-                const targetExists = categoryId === "favorites"
-                    ? true  // 常用标签无需检查DOM
-                    : !!sectionRefs.current[categoryId];
-
-                if (targetExists) {
-                    performScroll(); // 执行滚动
-                    obs.disconnect(); // 完成后断开
-                    observer = null;
-                }
-            });
-
-            // 监听滚动容器的DOM变化（AgentGrid渲染会改变子元素）
-            observer.observe(container, {
-                childList: true,    // 监听子元素增减
-                subtree: true       // 监听所有后代
-            });
-
-            // 安全超时：5秒后强制停止监听（防内存泄漏）
-            setTimeout(() => {
-                if (observer) {
-                    observer.disconnect();
-                    // 超时后仍尝试一次滚动（极端情况保底）
-                    performScroll();
-                }
-            }, 2000);
-        }
-    };
-
-    // 修改handleSearchChange函数，实现多页数据加载
-    const handleSearchChange = async (query: string) => {
-        if (query.trim()) {
-            setIsSearching(true);
-            setSearchLoading(true);
-            let allResults: any[] = []; // 存储所有页的结果
-            let currentPage = 1;
-            const pageSize = 80; // 每页条数（和接口保持一致）
-
-            try {
-                // 循环加载所有页数据
-                while (true) {
-                    // 调用接口，禁用默认限制（或按实际需要调整）
-                    const result = await getChatOnlineApi(
-                        currentPage,
-                        query,
-                        -1,
-                        pageSize // 禁用默认限制，或根据接口逻辑调整
-                    );
-
-                    const pageData = result.data || [];
-                    allResults = [...allResults, ...pageData];
-
-                    // 终止条件：当前页数据不足一页，说明已加载完所有数据
-                    if (pageData.length < pageSize) {
-                        break;
-                    }
-
-                    currentPage++; // 加载下一页
-                }
-
-                // 处理可能的id字段映射（确保id存在）
-                const formattedResults = allResults.map(item => ({
-                    ...item,
-                    id: item.id || item.agentId || item.flowId // 兼容不同字段名
-                }));
-
-                setSearchResults(formattedResults);
-            } catch (error) {
-                console.error("搜索失败:", error);
-                setSearchResults([]);
-            } finally {
-                setSearchLoading(false);
-            }
-        } else {
-            setIsSearching(false);
-            setSearchResults([]);
-        }
-    };
-
-    const handleSearch = useDebounce(handleSearchChange, 360, false)
-
-    const handleSearchClear = () => {
-        setSearchQuery("")
-        setIsSearching(false)
-        setSearchResults([])
-    }
-
-    const addToFavorites = async (type: string, id: string) => {
-        let mappedType: string;
-        if (type === '1') {
-            mappedType = 'flow';
-        } else if (type === '5') {
-            mappedType = 'assistant';
-        } else {
-            mappedType = 'workflow';
-        }
-
-        const res = await addToFrequentlyUsed(mappedType, id);
-        console.log(res);
-        // 成功时更新收藏列表
-        setFavorites(res.data);
-        return res;
-
-    }
-
-
-    const removeFromFavorites = async (userId: string, type: string, id: string) => {
-        let mappedType: string;
-        if (type === '1') {
-            mappedType = 'flow';
-        } else if (type === '5') {
-            mappedType = 'assistant';
-        } else {
-            mappedType = 'workflow';
-        }
-        const res = await removeFromFrequentlyUsed(userId, mappedType, id);
-    }
-
-    const clearAllConversations = store.useClearConvoState();
-    const { setConversation } = store.useCreateConversationAtom(0);
-    const queryClient = useQueryClient();
-
-    const navigate = useNavigate();
-    const handleCardClick = (agent) => {
-        console.log('agent :>> ', agent);
-
-        const _chatId = generateUUID(32)
-        const flowId = agent.id
-        const flowType = agent.flow_type || agent.type
-        // 新建会话
-        queryClient.setQueryData<ConversationData>([QueryKeys.allConversations], (convoData) => {
-            if (!convoData) {
-                return convoData;
-            }
-            setConversation((prevState: any) => {
-                return {
-                    ...prevState,
-                    conversationId: _chatId
-                }
-            })
-            return addConversation(convoData, {
-                conversationId: _chatId,
-                createdAt: "",
-                endpoint: null,
-                endpointType: null,
-                model: "",
-                flowId,
-                flowType: flowType,
-                title: agent.name,
-                tools: [],
-                updatedAt: ""
-            });
+        return [...filtered].sort((a, b) => {
+            const bPinned = pinnedIds.includes(b.id);
+            const aPinned = pinnedIds.includes(a.id);
+            return (bPinned ? 1 : 0) - (aPinned ? 1 : 0);
         });
-        navigate(`/chat/${_chatId}/${flowId}/${flowType}`);
-    }
+    }, [allAgents, pinnedIds, searchQuery]);
 
-    const { data: bsConfig } = useGetBsConfig()
+    useEffect(() => {
+        const fetchAgents = async () => {
+            setLoading(true)
+            try {
+                const res = await getFrequently(1, 24)
+                setAllAgents(res.data || [])
+            } finally {
+                setLoading(false)
+            }
+        }
+        fetchAgents()
+    }, [refreshTrigger])
+
+    const handleTogglePin = (agent: any) => {
+        const isPinned = pinnedIds.includes(agent.id)
+        if (isPinned) {
+            setPinnedIds(prev => prev.filter(id => id !== agent.id))
+            onRemoveFromFavorites?.(agent.user_id, agent.flow_type, agent.id)
+        } else {
+            setPinnedIds(prev => [...prev, agent.id])
+            onAddToFavorites?.(agent.flow_type, agent.id)
+        }
+    }
 
     return (
-        <div className="min-h-screen bg-background">
-            {/* Fixed Header */}
-            <div className="sticky top-0 z-40 bg-background">
-                <div className="container mx-auto px-6 py-6">
-                    <div className="mt-2">
-                        <h1 className="text-blue-600 text-[32px] truncate max-w-[600px] font-medium mb-2">{bsConfig?.applicationCenterWelcomeMessage || localize('com_app_center_welcome')}</h1>
-                        <p className="text-muted-foreground text-base truncate max-w-[600px]">{bsConfig?.applicationCenterDescription || localize('com_app_center_description')}</p>
+        <div className="p-8 max-w-7xl mx-auto min-h-screen flex flex-col">
+            {/* 顶部页眉 - 无论是否有数据都显示 */}
+            <header className="flex justify-between items-end mb-8">
+                <div className="space-y-1">
+                    <h1 className="text-2xl font-bold text-blue-600">应用中心</h1>
+                    <div className="flex items-center gap-3">
+                        <span className="text-sm text-gray-400">最近使用过的应用都在这里~</span>
+                        <Link to="/apps/explore" className="flex items-center gap-1.5 text-sm text-gray-500 cursor-pointer hover:text-blue-500 transition-colors">
+                            <LayoutGrid size={14} className="text-blue-400" />
+                            <span>探索更多应用</span>
+                        </Link>
                     </div>
-                    <div className="mt-12 flex items-start justify-between">
-                        <AgentNavigation onCategoryChange={handleCategoryChange} onRefresh={refreshAgentData} />
-                        <div className="relative w-80 min-w-48">
-                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-blue-500 w-4 h-4" />
-                            <Input
-                                type="text"
-                                placeholder={localize('com_agent_search_placeholder')}
+                </div>
+
+                <div className={cn(
+                    "flex items-center bg-gray-50 border border-gray-100 rounded-lg px-3 py-1.5 transition-all",
+                    isSearchOpen || searchQuery ? "w-64" : "w-10 h-10 justify-center cursor-pointer"
+                )} onClick={() => !isSearchOpen && setIsSearchOpen(true)}>
+                    <Search size={18} className="text-gray-400 flex-shrink-0" />
+                    {(isSearchOpen || searchQuery) && (
+                        <>
+                            <input
+                                ref={inputRef}
+                                autoFocus
                                 value={searchQuery}
-                                onChange={(e) => {
-                                    setSearchQuery(e.target.value)
-                                    handleSearch(e.target.value)
+                                onChange={e => setSearchQuery(e.target.value)}
+                                className="ml-2 w-full bg-transparent outline-none text-sm"
+                                placeholder="搜索应用..."
+                                onBlur={() => {
+                                    if (!searchQuery) {
+                                        setIsSearchOpen(false)
+                                    }
                                 }}
-                                className="pl-10 pr-10 h-10 rounded-full"
                             />
                             {searchQuery && (
                                 <button
-                                    onClick={handleSearchClear}
-                                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setSearchQuery('');
+                                        inputRef.current?.focus();
+                                    }}
+                                    className="text-gray-400 hover:text-gray-600"
                                 >
-                                    <X className="w-4 h-4" />
+                                    <X size={16} />
                                 </button>
                             )}
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            {/* Scrollable Content */}
-            <div className="relative" style={{ height: "calc(100vh - 200px)" }}>
-                <div ref={scrollContainerRef} className="container mx-auto px-6 py-6 pb-96 h-full overflow-y-auto scrollbar-hide">
-
-                    <AgentGrid
-                        favorites={favorites}
-                        onAddToFavorites={addToFavorites}
-                        onRemoveFromFavorites={removeFromFavorites}
-                        sectionRefs={sectionRefs}
-                        refreshTrigger={refreshTrigger}
-                        onCardClick={handleCardClick}
-                    />
-                    {isSearching && (
-                        <SearchOverlay
-                            query={searchQuery}
-                            results={searchResults}
-                            loading={searchLoading}
-                            favorites={favorites}
-                            onAddToFavorites={addToFavorites}
-                            onRemoveFromFavorites={removeFromFavorites}
-                            onClose={handleSearchClear}
-                            onCardClick={handleCardClick}
-                        />
+                        </>
                     )}
                 </div>
-            </div>
+            </header>
+
+            {/* 内容区域 */}
+            {loading ? (
+                <div className="flex flex-1 items-center justify-center">
+                    <Loader2 className="animate-spin text-blue-500" />
+                </div>
+            ) : sortedAndFilteredAgents.length === 0 ? (
+                searchQuery ? <SearchEmptyState query={searchQuery} /> : <EmptyState />
+            ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                    {sortedAndFilteredAgents.map(agent => (
+                        <AgentCard
+                            key={agent.id}
+                            agent={agent}
+                            isPinned={pinnedIds.includes(agent.id)}
+                            onTogglePin={handleTogglePin}
+                            onStartChat={onCardClick}
+                            onShare={() => { }}
+                        />
+                    ))}
+                </div>
+            )}
         </div>
     )
 }
-
-/* 添加常用应用 */
-export const addCommonlyAppState = atom<Record<string, { id: string, type: number }>>({
-    key: "addCommonlyAppState",
-    default: null,
-})

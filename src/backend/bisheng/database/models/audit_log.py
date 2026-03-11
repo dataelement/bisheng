@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import List, Optional
 
-from sqlmodel import Field, select, Column, DateTime, text, Text, func, or_, JSON, and_
+from sqlmodel import Field, select, Column, DateTime, text, Text, func, or_, JSON
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session, get_async_db_session
@@ -16,6 +16,8 @@ class SystemId(Enum):
     KNOWLEDGE = "knowledge"  # The knowledge base upon
     SYSTEM = "system"  # System
     DASHBOARD = "dashboard"  # KANBAN
+    SUBSCRIPTION = "subscription"  # Subscription Management
+    KNOWLEDGE_SPACE = "knowledge_space"  # Knowledge Space
 
 
 # Action Behavior Enumeration
@@ -52,6 +54,12 @@ class EventType(Enum):
     UPDATE_DASHBOARD = "update_dashboard"
     DELETE_DASHBOARD = "delete_dashboard"
 
+    CREATE_CHANNEL = "create_channel"  # Create Subscription Channel
+    DELETE_CHANNEL = "delete_channel"
+
+    CREATE_KNOWLEDGE_SPACE = "create_knowledge_space"  # Create Knowledge Space
+    DELETE_KNOWLEDGE_SPACE = "delete_knowledge_space"  # Delete Knowledge Space
+
 
 # Action object type enumeration
 class ObjectType(Enum):
@@ -67,6 +75,8 @@ class ObjectType(Enum):
     ROLE_CONF = "role_conf"  # Configuration of user roles
     TOOL = "tool"
     DASHBOARD = "dashboard"  # KANBAN
+    CHANNEL = "channel"  # Subscription Channel
+    KNOWLEDGE_SPACE = "knowledge_space"  # Knowledge Space
 
 
 class AuditLogBase(SQLModelSerializable):
