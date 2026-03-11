@@ -146,29 +146,29 @@ class CeleryConf(BaseModel):
         if 'telemetry_mid_user_increment' not in self.beat_schedule:
             self.beat_schedule['telemetry_mid_user_increment'] = {
                 'task': 'bisheng.worker.telemetry.mid_table.sync_mid_user_increment',
-                'schedule': crontab('*/30 0 * * *'),  # 00:30 exec every day
+                'schedule': crontab.from_string('30 0 * * *'),  # 00:30 exec every day
             }
         if 'telemetry_mid_knowledge_increment' not in self.beat_schedule:
             self.beat_schedule['telemetry_mid_knowledge_increment'] = {
                 'task': 'bisheng.worker.telemetry.mid_table.sync_mid_knowledge_increment',
-                'schedule': crontab('*/30 0 * * *'),  # 00:30 exec every day
+                'schedule': crontab.from_string('30 0 * * *'),  # 00:30 exec every day
             }
         if 'telemetry_sync_mid_app_increment' not in self.beat_schedule:
             self.beat_schedule['telemetry_sync_mid_app_increment'] = {
                 'task': 'bisheng.worker.telemetry.mid_table.sync_mid_app_increment',
-                'schedule': crontab('*/30 0 * * *'),  # 00:30 exec every day
+                'schedule': crontab.from_string('30 0 * * *'),  # 00:30 exec every day
             }
         if 'telemetry_sync_mid_user_interact_dtl' not in self.beat_schedule:
             self.beat_schedule['telemetry_sync_mid_user_interact_dtl'] = {
                 'task': 'bisheng.worker.telemetry.mid_table.sync_mid_user_interact_dtl',
-                'schedule': crontab('*/30 0 * * *'),  # 00:30 exec every day
+                'schedule': crontab.from_string('30 0 * * *'),  # 00:30 exec every day
             }
         if 'sync_information_article' not in self.beat_schedule:
             self.beat_schedule['sync_information_article'] = {
                 'task': 'bisheng.worker.information.article.sync_information_article',
-                'schedule': crontab('*/30 5 * * *'),  # 05:30 exec every day
+                'schedule': crontab.from_string('30 5 * * *'),  # 05:30 exec every day
             }
-        
+
         # convert str to crontab
         for key, task_info in self.beat_schedule.items():
             if isinstance(task_info['schedule'], str):
