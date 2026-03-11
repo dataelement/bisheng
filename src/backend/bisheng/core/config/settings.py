@@ -284,7 +284,7 @@ class Settings(BaseModel):
 
     license_str: Optional[str] = None  # license Contents
 
-    intelligence_center_conf: IntelligenceCenterConf = IntelligenceCenterConf()
+    information_conf: IntelligenceCenterConf = IntelligenceCenterConf()
 
     @field_validator('database_url')
     @classmethod

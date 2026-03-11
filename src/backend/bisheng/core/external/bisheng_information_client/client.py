@@ -95,10 +95,12 @@ class BishengInformationClient(object):
 
         params = {
             "keyword": query,
-            "business_type": business_type.value if business_type else None,
             "page": page,
             "page_size": page_size
         }
+
+        if business_type:
+            params["business_type"] = business_type.value
 
         response = await self.http_client.get(endpoint, headers=headers, params=params, timeout=self.timeout)
 
