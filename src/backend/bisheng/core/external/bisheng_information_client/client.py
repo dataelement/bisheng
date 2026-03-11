@@ -58,7 +58,13 @@ class BishengInformationClient(object):
         if code == 401:
             raise BishengInformationUnAuthorizedError()
 
-        elif code != 200:
+        elif code == 10000:
+            raise InformationSourceParseError()
+        elif code == 10001:
+            raise InformationSourceAuthError()
+        elif code == 10002:
+            raise InformationSourcePageError()
+        else:
             raise BishengInformationServiceError(
                 msg=f"Failed to list information sources: {response.status_code} - {response.error}")
 
@@ -80,7 +86,13 @@ class BishengInformationClient(object):
         if code == 401:
             raise BishengInformationUnAuthorizedError()
 
-        elif code != 200:
+        elif code == 10000:
+            raise InformationSourceParseError()
+        elif code == 10001:
+            raise InformationSourceAuthError()
+        elif code == 10002:
+            raise InformationSourcePageError()
+        else:
             raise BishengInformationServiceError(
                 msg=f"Failed to list information sources: {response.status_code} - {response.error}")
 

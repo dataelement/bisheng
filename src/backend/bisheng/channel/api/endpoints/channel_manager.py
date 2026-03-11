@@ -86,16 +86,10 @@ async def add_website_information_source(
         login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     """Endpoint to add a new information source by URL."""
-    try:
-        client = await get_bisheng_information_client()
-        result = await client.add_website_information_source(req_param.url)
-        return resp_200(data=result.model_dump())
-    except InformationSourceAddError as e:
-        logger.error(f"Failed to add information source: {e}")
-        return resp_500(message=str(e))
-    except Exception as e:
-        logger.error(f"Unexpected error adding information source: {e}")
-        return resp_500(message="Failed to add information source")
+    client = await get_bisheng_information_client()
+    result = await client.add_website_information_source(req_param.url)
+    return resp_200(data=result.model_dump())
+
 
 
 @router.post("/add_wechat_source")
@@ -104,16 +98,10 @@ async def add_wechat_information_source(
         login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     """Endpoint to add a new WeChat information source by URL."""
-    try:
-        client = await get_bisheng_information_client()
-        result = await client.add_wechat_information_source(req_param.url)
-        return resp_200(data=result.model_dump())
-    except InformationSourceAddError as e:
-        logger.error(f"Failed to add WeChat information source: {e}")
-        return resp_500(message=str(e))
-    except Exception as e:
-        logger.error(f"Unexpected error adding WeChat information source: {e}")
-        return resp_500(message="Failed to add WeChat information source")
+    client = await get_bisheng_information_client()
+    result = await client.add_wechat_information_source(req_param.url)
+    return resp_200(data=result.model_dump())
+
 
 
 @router.post("/crawl")
@@ -122,13 +110,10 @@ async def crawl_website(
         login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     """Endpoint to temporarily crawl a website and return its metadata."""
-    try:
-        client = await get_bisheng_information_client()
-        result = await client.crawl_website(req_param.url)
-        return resp_200(data=result.model_dump())
-    except Exception as e:
-        logger.error(f"Failed to crawl website: {e}")
-        return resp_500(message="Failed to crawl website")
+
+    client = await get_bisheng_information_client()
+    result = await client.crawl_website(req_param.url)
+    return resp_200(data=result.model_dump())
 
 
 @router.get("/my_channels")
