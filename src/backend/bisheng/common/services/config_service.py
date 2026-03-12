@@ -237,18 +237,18 @@ class ConfigService(Settings):
     async def aget_intelligence_center_conf(self) -> IntelligenceCenterConf:
         # Get Intelligence Center-related configuration items
         all_config = await self.aget_all_config()
-        intelligence_center_conf = all_config.get('information_conf', {})
-        if intelligence_center_conf:
-            self.intelligence_center_conf = IntelligenceCenterConf.model_validate(intelligence_center_conf)
-        return self.intelligence_center_conf
+        information_conf = all_config.get('information_conf', {})
+        if information_conf:
+            self.information_conf = IntelligenceCenterConf.model_validate(information_conf)
+        return self.information_conf
 
     def get_intelligence_center_conf(self) -> IntelligenceCenterConf:
         # Get Intelligence Center-related configuration items
         all_config = self.get_all_config()
-        intelligence_center_conf = all_config.get('information_conf', {})
-        if intelligence_center_conf:
-            self.intelligence_center_conf = IntelligenceCenterConf.model_validate(intelligence_center_conf)
-        return self.intelligence_center_conf
+        information_conf = all_config.get('information_conf', {})
+        if information_conf:
+            self.information_conf = IntelligenceCenterConf.model_validate(information_conf)
+        return self.information_conf
 
     def get_from_db(self, key: str):
         # Get all of them firstkey

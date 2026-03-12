@@ -3,6 +3,7 @@ import { type InformationSource, type SourceType } from "~/api/channels";
 import {
     ChannelBusinessType,
     listManagerSourcesApi,
+    searchManagerSourcesApi,
     type ManagerSource,
     addWechatSourceApi
 } from "~/api/channels";
@@ -71,6 +72,7 @@ export function useSourceManager(
     // Load source list from API
     useEffect(() => {
         if (!expanded) return;
+        if (searchKeyword.trim()) return; 
         const load = async (business_type: ChannelBusinessType) => {
             setLoadingSources(true);
             try {
@@ -93,7 +95,39 @@ export function useSourceManager(
         const currentType: ChannelBusinessType =
             activeTab === "official_account" ? "wechat" : "website";
         load(currentType);
-    }, [expanded, activeTab]);
+    }, [expanded, activeTab, searchKeyword]);
+
+    useEffect(() => {
+        if (!expanded) return;
+        const kw = searchKeyword.trim();
+        if (!kw) return;
+
+        const load = async () => {
+            setLoadingSources(true);
+            try {
+                const res = await searchManagerSourcesApi({
+                    keyword: kw,
+                });
+                const mapped: InformationSource[] = (res.sources || []).map((s: ManagerSource) => ({
+                    id: s.id,
+                    name: s.name,
+                    avatar: s.icon,
+                    url: s.original_url,
+                    type: s.business_type === "wechat" ? "official_account" : "website"
+                }));
+                const wechat = mapped.filter((s) => s.type === "official_account");
+                const website = mapped.filter((s) => s.type === "website");
+                setWechatSources(wechat);
+                setWebsiteSources(website);
+            } catch {
+                // 出错时保持现有列表
+            } finally {
+                setLoadingSources(false);
+            }
+        };
+
+        load();
+    }, [expanded, searchKeyword]);
 
     // Auto-detect and process WeChat article URLs
     useEffect(() => {
@@ -113,7 +147,8 @@ export function useSourceManager(
                     const raw: any = (res as any)?.data ?? res ?? {};
                     const created: InformationSource = {
                         id: String(raw.id ?? raw.source_id ?? `wx-${Date.now()}`),
-                        name: String(raw.name ?? raw.title ?? localize("wechat_source_name") ?? "公众号内容源"),
+                        // 后端返回 name/title，否则退回为固定文案“公众号内容源”
+                        name: String(raw.name ?? raw.title ?? "公众号内容源"),
                         avatar: raw.avatar,
                         url: raw.url ?? target,
                         type: "official_account"
@@ -136,7 +171,7 @@ export function useSourceManager(
                             ...prev,
                             {
                                 id: `wx-${Date.now()}`,
-                                name: localize("wechat_source_name") || "公众号内容源",
+                                name: "公众号内容源",
                                 type: "official_account",
                                 url: target
                             }

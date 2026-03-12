@@ -5,40 +5,62 @@ class BishengInformationUnAuthorizedError(BaseErrorCode):
     Code: int = 13001
     Msg: str = 'Unauthorized access to Bisheng Information Service'
 
+
 class BishengInformationServiceError(BaseErrorCode):
     Code: int = 13002
     Msg: str = 'Error occurred while accessing Bisheng Information Service'
 
 
+# Parsing failed, please try again or submit a manual request
+class InformationSourceParseError(BaseErrorCode):
+    Code: int = 13003
+    Msg: str = 'Parsing failed, please try again or submit a manual requirement'
+
+
+# This website cannot be crawled due to permission settings. Please enter a valid "Column List Page" URL (e.g., News, Policies and Regulations list pages).
+class InformationSourceAuthError(BaseErrorCode):
+    Code: int = 13004
+    Msg: str = 'Access denied by website permissions. Please provide a valid "Column List Page" URL (e.g., News or Policy list pages)'
+
+
+# Detected as a single article or non-list page. Please enter a valid "Column List Page" URL (e.g., News, Policies and Regulations list pages).
+class InformationSourcePageError(BaseErrorCode):
+    Code: int = 13005
+    Msg: str = 'Single article or non-list page detected. Please provide a valid "Column List Page" URL (e.g., News or Policy list pages)'
+
+
 # Channel Management error codes, module code: 130
 class ChannelNotFoundError(BaseErrorCode):
     Code: int = 13010
-    Msg: str = '频道不存在'
+    Msg: str = 'Channel not found'
 
-# 私密频道访问权限错误
+
+# Private channel access permission error
 class ChannelAccessDeniedError(BaseErrorCode):
     Code: int = 13011
-    Msg: str = '无权访问私密频道'
+    Msg: str = 'Access denied to private channel'
 
-# 频道以订阅或以提交申请
+
+# Channel already subscribed or application submitted
 class ChannelAlreadySubscribedError(BaseErrorCode):
     Code: int = 13012
-    Msg: str = '已订阅该频道或已提交申请'
+    Msg: str = 'Already subscribed to this channel or application is pending'
 
-# 没有权限操作频道
+
+# No permission to operate channel
 class ChannelPermissionDeniedError(BaseErrorCode):
     Code: int = 13013
-    Msg: str = '没有权限操作该频道'
+    Msg: str = 'Permission denied for this channel operation'
 
 
 # Channel module error codes, module code: 130
 # Article not found
 class ArticleNotFoundError(BaseErrorCode):
     Code: int = 13040
-    Msg: str = '文章不存在'
+    Msg: str = 'Article not found'
 
 
 # Channel chat conversation not found
 class ChannelChatConversationNotFoundError(BaseErrorCode):
     Code: int = 13041
-    Msg: str = '对话会话不存在'
+    Msg: str = 'Chat conversation not found'

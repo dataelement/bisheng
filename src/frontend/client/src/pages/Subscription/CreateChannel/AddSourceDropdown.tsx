@@ -1,4 +1,5 @@
 import { FileText, Plus, Search, Trash2, X } from "lucide-react";
+import { useState, useEffect } from "react";
 import { Button } from "~/components/ui/Button";
 import { Checkbox } from "~/components/ui/Checkbox";
 import { Input } from "~/components/ui/Input";
@@ -27,6 +28,14 @@ export function AddSourceDropdown({
 }: AddSourceDropdownProps) {
     const localize = useLocalize();
     const mgr = useSourceManager(sources, onSourcesChange, expanded, onExpandChange);
+    const [inputValue, setInputValue] = useState("");
+
+    // 同步输入框展示值与已提交的搜索关键字（清空时）
+    useEffect(() => {
+        if (!mgr.searchKeyword) {
+            setInputValue("");
+        }
+    }, [mgr.searchKeyword]);
 
     const displayList = mgr.filteredSources;
     return (
@@ -111,16 +120,24 @@ export function AddSourceDropdown({
                         <div className="relative flex-1 rounded-lg m-1">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#86909C]" />
                             <Input
-                                value={mgr.searchKeyword}
-                                onChange={(e) => mgr.setSearchKeyword(e.target.value)}
+                                value={inputValue}
+                                onChange={(e) => setInputValue(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                        mgr.setSearchKeyword(inputValue.trim());
+                                    }
+                                }}
                                 placeholder={localize("enter_official_account")}
                                 className="pl-9 pr-9 h-10 text-[14px] border-none bg-white w-full  rounded-none"
                                 autoFocus
                             />
-                            {mgr.searchKeyword && (
+                            {inputValue && (
                                 <button
                                     type="button"
-                                    onClick={mgr.handleClearSearch}
+                                    onClick={() => {
+                                        setInputValue("");
+                                        mgr.handleClearSearch();
+                                    }}
                                     className="absolute right-3 top-1/2 -translate-y-1/2 text-[#86909C] hover:text-[#4E5969]"
                                 >
                                     <X className="size-4" />
@@ -269,18 +286,19 @@ export function AddSourceDropdown({
                                                         }
                                                     >
                                                         {truncateName(source.name, MAX_NAME_DISPLAY)}
-                                                        {mgr.isSearchMode && <span
-                                                            className={cn(
-                                                                "text-[12px] px-2 py-0.5 rounded flex-shrink-0",
-                                                                source.type === "official_account"
-                                                                    ? "bg-[#E8F3FF] text-[#165DFF]"
-                                                                    : "bg-[#FFF7E8] text-[#F7BA2E]"
-                                                            )}
-                                                        >
-                                                            {source.type === "official_account" ? "公众号" : "网站"}
-                                                        </span>}
+                                                        {mgr.isSearchMode && (
+                                                            <span
+                                                                className={cn(
+                                                                    "ml-2 text-[12px] px-2 py-0.5 rounded flex-shrink-0",
+                                                                    source.type === "official_account"
+                                                                        ? "bg-[#E8F3FF] text-[#165DFF]"
+                                                                        : "bg-[#FFF7E8] text-[#F7BA2E]"
+                                                                )}
+                                                            >
+                                                                {source.type === "official_account" ? "公众号" : "网站"}
+                                                            </span>
+                                                        )}
                                                     </span>
-
                                                     <div
                                                         className="flex-shrink-0"
                                                         onClick={(e) => e.stopPropagation()}

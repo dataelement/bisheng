@@ -20,8 +20,8 @@ export function useCreateChannelForm() {
     const [sources, setSources] = useState<InformationSource[]>([]);
     const [channelName, setChannelName] = useState("");
     const [channelDesc, setChannelDesc] = useState("");
-    const [visibility, setVisibility] = useState<VisibilityType>("public");
-    const [publishToSquare, setPublishToSquare] = useState<PublishToSquare>("no");
+    const [visibility, setVisibility] = useState<VisibilityType>("review");
+    const [publishToSquare, setPublishToSquare] = useState<PublishToSquare>("yes");
     const [contentFilter, setContentFilter] = useState(false);
     const [contentFilterCollapsed, setContentFilterCollapsed] = useState(false);
     const [filterGroups, setFilterGroups] = useState<FilterGroup[]>([]);
