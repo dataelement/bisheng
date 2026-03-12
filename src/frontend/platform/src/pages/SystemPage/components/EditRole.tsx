@@ -25,6 +25,7 @@ import { useTable } from "../../../util/hook";
 import { LoadingIcon } from "@/components/bs-icons/loading";
 import { locationContext } from "@/contexts/locationContext";
 import { message } from "@/components/bs-ui/toast/use-toast";
+import { multiply } from "lodash-es";
 
 interface SearchPanneProps {
   groupId: any;
@@ -145,7 +146,7 @@ const SearchPanne = ({
     if (!isPermissionTable) return children?.(data) || null;
     const isMenuOrBoard = type === 'menu' || type === 'board' || type === 'workbenchMenu';
     const isMenuType = type === 'menu' || type === 'workbenchMenu';
-    const showViewPermissionLabel = isMenuOrBoard && !hideViewPermissionLabel;
+    const showViewPermissionLabel = !hideViewPermissionLabel;
     return (
       <Table>
         <TableHeader>
@@ -155,7 +156,7 @@ const SearchPanne = ({
             <TableHead className="text-center w-[175px]">
               {showViewPermissionLabel ? (!isMenuOrBoard ? t('system.usePermission') : t('system.viewPermission')) : null}
             </TableHead>
-            {isPermissionTable && !isMenuType && appConfig.isPro && (
+            {!isMenuType && (appConfig.isPro && type === 'board') && (
               <TableHead className="text-right w-[75px]">{t('system.managePermission')}</TableHead>
             )}
           </TableRow>
@@ -165,13 +166,13 @@ const SearchPanne = ({
             <TableRow key={el.id}>
               <TableCell className="font-medium">{t(el.name)}</TableCell>
               {!isMenuType && <TableCell>{el.user_name}</TableCell>}
-              <TableCell className="text-center">
+              {<TableCell className="text-center">
                 <Switch
                   checked={useChecked(el.id)}
                   onCheckedChange={(bln) => onUseChange(el.id, bln)}
                 />
-              </TableCell>
-              {!isMenuType && appConfig.isPro && (
+              </TableCell>}
+              {!isMenuType && (appConfig.isPro && type === 'board') && (
                 <TableCell className="text-center">
                   <Switch
                     checked={manageChecked(el.id)}

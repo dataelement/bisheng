@@ -24,6 +24,7 @@ import { ArticleCard } from "./ArticleList/ArticleCard";
 import { mapToArticle } from "./ArticleList/ArticleList";
 
 const PREVIEW_PAGE_SIZE = 10;
+const MAX_SUBSCRIPTIONS = 20;
 
 interface ChannelPreviewDrawerProps {
     channelId: string | undefined;

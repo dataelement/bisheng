@@ -113,6 +113,7 @@ export function ArticleDetail({ article, loading = false, screenFull = false, ai
         iframeRef.current?.contentWindow?.postMessage({ type: 'DO_SCROLL_TOP' }, '*');
     };
 
+
     const hasKnowledge = true
     return (
         <div className={`flex px-4 py-5 flex-col h-full  ${screenFull ? '' : 'border-l border-gray-100'}`}>

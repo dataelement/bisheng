@@ -2,6 +2,9 @@ import { BookOpen, SquareArrowOutUpLeftIcon } from "lucide-react"; // 更换了�
 import { useState } from "react";
 import { Article } from "~/api/channels";
 import { useArticleShare } from "../hooks/useArticleShare";
+import { useToastContext } from "~/Providers";
+import { NotificationSeverity } from "~/common";
+import { copyText } from "~/utils";
 
 interface ArticleCardProps {
     article: Article;
@@ -13,6 +16,7 @@ interface ArticleCardProps {
 export function ArticleCard({ article, onSelect, isSelected, searchQuery }: ArticleCardProps) {
     const [hovered, setHovered] = useState(false);
     const { handleShare } = useArticleShare();
+    const { showToast } = useToastContext();
 
     // 格式化时间逻辑保持不变
     const formatTime = (dateString: string) => {
@@ -108,6 +112,20 @@ export function ArticleCard({ article, onSelect, isSelected, searchQuery }: Arti
                             onClick={(e) => {
                                 e.stopPropagation();
                                 handleShare(article);
+                                const shareText = `我正在阅读【${article.title}】${article.url}。`;
+                                copyText(shareText)
+                                    .then(() => {
+                                        showToast({
+                                            message: "分享链接已复制到粘贴板",
+                                            severity: NotificationSeverity.SUCCESS
+                                        });
+                                    })
+                                    .catch(() => {
+                                        showToast({
+                                            message: "复制失败，请重试",
+                                            severity: NotificationSeverity.ERROR
+                                        });
+                                    });
                             }}
                             className=" rounded-full bg-gray-50 flex items-center justify-center size-8 text-gray-800 hover:bg-gray-100 transition-colors cursor-pointer"
                             title="分享"

@@ -30,16 +30,39 @@ export function CrawlPreviewDialog({
     const [status, setStatus] = useState<CrawlStatus>("loading");
     const [adding, setAdding] = useState(false);
     const [previewData, setPreviewData] = useState<{ name: string; articles?: { title: string; url: string }[] } | null>(null);
+    const [errorCode, setErrorCode] = useState<number | null>(null);
     const localize = useLocalize();
 
     useEffect(() => {
         if (!open || !url) return;
         setStatus("loading");
         setPreviewData(null);
+        setErrorCode(null);
         (async () => {
             try {
                 const res = await crawlTempSourceApi({ url });
                 const root: any = res as any;
+
+                const code = root?.status_code ?? root?.code;
+                if (code && code !== 200) {
+                    // 13005：检测为单篇文章或非列表页
+                    if (code === 13005) {
+                        setStatus("singlePageWarning");
+                        setErrorCode(code);
+                        return;
+                    }
+                    // 13004：权限问题，无法爬取
+                    if (code === 13004) {
+                        setStatus("error");
+                        setErrorCode(code);
+                        return;
+                    }
+                    // 13003 及其它：解析失败
+                    setStatus("error");
+                    setErrorCode(code);
+                    return;
+                }
+
                 const raw: any = root.data ?? root ?? {};
 
                 // 是否判断为单篇文章/非列表页，由后端字段或回退到 URL 规则
@@ -193,33 +216,28 @@ export function CrawlPreviewDialog({
                         </div>
                     )}
 
-                    {status === "error" && (
-                        <div className="py-8 text-center text-[14px] text-[#86909C]">
-                            {localize("crawl_permission_denied") ||
-                                '该网站因权限设置无法爬取，请输入符合条件的目标网站的"栏目列表页"网址'}
-                        </div>
-                    )}
-                    {status === "singlePageWarning" && (
-                        <div className="rounded border border-[#E5E6EB] bg-[#F7F8FA] min-h-[270px] px-6 py-8 flex flex-col justify-between">
-                            <div className="flex-1 flex flex-col items-center justify-center text-center">
-                                <img
-                                    src={`${__APP_ENV__.BASE_URL}/assets/channel/book.svg`}
-                                    alt=""
-                                    className="w-[100px] h-[100px] mb-5"
-                                />
-                                <p className="text-[14px] text-[#4E5969] leading-6">
-                                    {localize("detected_as")}
-                                    <span className="font-medium text-[#1D2129]">
-                                        {localize("article_or_page")}
-                                    </span>
-                                    ，{localize("column_list")}
-                                    <br />
-                                    （如：新闻动态、政策法规等列表页面）
-                                </p>
+                    {(status === "error" || status === "singlePageWarning") && (
+                        <>
+                            <div className="rounded border border-[#E5E6EB]  min-h-[270px] px-6 py-8 flex flex-col justify-between">
+                                <div className="flex-1 flex flex-col items-center justify-center text-center">
+                                    <img
+                                        src={`${__APP_ENV__.BASE_URL}/assets/channel/book.svg`}
+                                        alt=""
+                                        className="w-[100px] h-[100px] mb-5"
+                                    />
+                                    <p className="text-[14px] text-[#4E5969] leading-6">
+                                        {status === "singlePageWarning"
+                                            ? <>检测为 <span className="font-medium text-[#1D2129]">单篇文章或非列表页</span>，请输入目标网站的“栏目列表页”网址（如：新闻动态、政策法规等列表页面）</>
+                                            : errorCode === 13004
+                                                ? '该网站因权限设置无法爬取，请输入符合条件的目标网站的“栏目列表页”网址（如：新闻动态、政策法规等列表页面）'
+                                                : '解析失败，请重试或提交人工爬取需求'}
+                                    </p>
+                                </div>
+
                             </div>
-                            <div className="mt-6 flex items-center justify-between">
+                            <div className=" flex items-center justify-between">
                                 <span className="text-[12px] text-[#86909C]">
-                                    {localize("submit_manual_crawl") || "不满意爬取内容？提交人工爬取需求"}
+                                    不满意爬取内容？提交人工爬取需求
                                 </span>
                                 <Button
                                     variant="secondary"
@@ -229,11 +247,12 @@ export function CrawlPreviewDialog({
                                     {localize("cancel")}
                                 </Button>
                             </div>
-                        </div>
+                        </>
                     )}
                 </div>
 
-                {status !== "singlePageWarning" && (
+                {/* 底部操作：仅成功时展示“添加到信源”，其它状态只有上方的提示和取消按钮 */}
+                {status === "success" && (
                     <div className="flex justify-end gap-3 pt-4 border-t border-[#E5E6EB]">
                         <Button
                             variant="secondary"

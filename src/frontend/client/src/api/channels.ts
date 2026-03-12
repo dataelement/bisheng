@@ -404,6 +404,28 @@ export async function listManagerSourcesApi(params: {
 }
 
 /**
+ * GET /api/v1/channel/manager/search_sources
+ * 信息源检索（支持 keyword + 可选 business_type）
+ */
+export async function searchManagerSourcesApi(params: {
+    keyword: string;
+    business_type?: ChannelBusinessType;  // wechat / website，不传则检索全部
+    page?: number;
+    page_size?: number;
+}): Promise<{
+    sources: ManagerSource[];
+    total: number;
+}> {
+    const res: any = await request.get(`/api/v1/channel/manager/search_sources`, { params });
+    const root = res?.data ?? res;
+    const payload = root?.data ?? root;
+    return {
+        sources: payload?.sources ?? [],
+        total: payload?.total ?? 0
+    };
+}
+
+/**
  * POST /api/v1/channel/manager/add_website_source
  * 添加网站信息源
  */

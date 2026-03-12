@@ -301,37 +301,39 @@ export function CreateChannelDrawer({
                                 </RadioGroup.Root>
                             </div>
 
-                            {/* 是否发布到广场 */}
-                            <div className="space-y-3">
-                                <Label className="text-[14px] text-[#1D2129]">
-                                    <span className="text-[#F53F3F]">*</span>
-                                    {localize("is_publish_plaza")}
-                                </Label>
-                                <RadioGroup.Root
-                                    value={form.publishToSquare}
-                                    onValueChange={(v) => form.setPublishToSquare(v as any)}
-                                    className="flex gap-6"
-                                >
-                                    <label className="flex items-center gap-2 cursor-pointer">
-                                        <RadioGroup.Item
-                                            value="yes"
-                                            className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-[#E5E6EB] bg-white data-[state=checked]:bg-[#165DFF] data-[state=checked]:border-[#165DFF]"
-                                        >
-                                            <RadioGroup.Indicator className="h-1.5 w-1.5 rounded-full bg-white" />
-                                        </RadioGroup.Item>
-                                        <span className="text-[14px] text-[#1D2129]">是</span>
-                                    </label>
-                                    <label className="flex items-center gap-2 cursor-pointer">
-                                        <RadioGroup.Item
-                                            value="no"
-                                            className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-[#E5E6EB] bg-white data-[state=checked]:bg-[#165DFF] data-[state=checked]:border-[#165DFF]"
-                                        >
-                                            <RadioGroup.Indicator className="h-1.5 w-1.5 rounded-full bg-white" />
-                                        </RadioGroup.Item>
-                                        <span className="text-[14px] text-[#1D2129]">否</span>
-                                    </label>
-                                </RadioGroup.Root>
-                            </div>
+                            {/* 是否发布到广场（仅在非私有时展示） */}
+                            {form.visibility !== "private" && (
+                                <div className="space-y-3">
+                                    <Label className="text-[14px] text-[#1D2129]">
+                                        <span className="text-[#F53F3F]">*</span>
+                                        {localize("is_publish_plaza")}
+                                    </Label>
+                                    <RadioGroup.Root
+                                        value={form.publishToSquare}
+                                        onValueChange={(v) => form.setPublishToSquare(v as any)}
+                                        className="flex gap-6"
+                                    >
+                                        <label className="flex items-center gap-2 cursor-pointer">
+                                            <RadioGroup.Item
+                                                value="yes"
+                                                className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-[#E5E6EB] bg-white data-[state=checked]:bg-[#165DFF] data-[state=checked]:border-[#165DFF]"
+                                            >
+                                                <RadioGroup.Indicator className="h-1.5 w-1.5 rounded-full bg-white" />
+                                            </RadioGroup.Item>
+                                            <span className="text-[14px] text-[#1D2129]">是</span>
+                                        </label>
+                                        <label className="flex items-center gap-2 cursor-pointer">
+                                            <RadioGroup.Item
+                                                value="no"
+                                                className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-[#E5E6EB] bg-white data-[state=checked]:bg-[#165DFF] data-[state=checked]:border-[#165DFF]"
+                                            >
+                                                <RadioGroup.Indicator className="h-1.5 w-1.5 rounded-full bg-white" />
+                                            </RadioGroup.Item>
+                                            <span className="text-[14px] text-[#1D2129]">否</span>
+                                        </label>
+                                    </RadioGroup.Root>
+                                </div>
+                            )}
 
                             {/* 频道内容筛选 */}
                             <div className="space-y-3">
