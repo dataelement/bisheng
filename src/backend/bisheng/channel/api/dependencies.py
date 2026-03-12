@@ -14,6 +14,7 @@ from bisheng.channel.domain.repositories.interfaces.article_read_repository impo
 from bisheng.common.repositories.implementations.space_channel_member_repository_impl import \
     SpaceChannelMemberRepositoryImpl
 from bisheng.common.repositories.interfaces.space_channel_member_repository import SpaceChannelMemberRepository
+from bisheng.message.api.dependencies import get_message_service as _get_message_service
 
 
 async def get_channel_repository(
@@ -58,6 +59,7 @@ async def get_channel_service(
     channel_info_source_repository = await get_channel_info_source_repository(session)
     article_es_service = get_article_es_service()
     article_read_repository = await get_article_read_repository(session)
+    message_service = await _get_message_service(session)
 
     return ChannelService(
         channel_repository=channel_repository,
@@ -65,5 +67,6 @@ async def get_channel_service(
         channel_info_source_repository=channel_info_source_repository,
         article_es_service=article_es_service,
         article_read_repository=article_read_repository,
+        message_service=message_service,
     )
 

@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from typing import List, Optional, Dict, Any
 
 from bisheng.channel.domain.models.article_read_record import ArticleReadRecord
@@ -36,6 +37,8 @@ from bisheng.core.external.bisheng_information_client.bisheng_information_manage
 from bisheng.user.domain.models.user import UserDao
 from bisheng.worker.information.article import sync_information_article
 
+logger = logging.getLogger(__name__)
+
 MAX_ADMIN_COUNT = 5
 
 
@@ -44,12 +47,14 @@ class ChannelService:
                  space_channel_member_repository: 'SpaceChannelMemberRepository',
                  channel_info_source_repository: 'ChannelInfoSourceRepository',
                  article_es_service: 'ArticleEsService' = None,
-                 article_read_repository: 'ArticleReadRepository' = None):
+                 article_read_repository: 'ArticleReadRepository' = None,
+                 message_service: Optional[Any] = None):
         self.channel_repository = channel_repository
         self.space_channel_member_repository = space_channel_member_repository
         self.channel_info_source_repository = channel_info_source_repository
         self.article_es_service = article_es_service or ArticleEsService()
         self.article_read_repository = article_read_repository
+        self.message_service = message_service
 
     async def create_channel(self, channel_data: CreateChannelRequest, login_user: UserPayload):
         """Create a new channel based on the provided data and the logged-in user."""
@@ -617,7 +622,58 @@ class ChannelService:
             status=status
         )
 
+        # 6. Send approval notification for review channels
+        if channel.visibility == ChannelVisibilityEnum.REVIEW and self.message_service:
+            try:
+                await self._send_subscribe_approval_notification(channel, login_user)
+            except Exception as e:
+                # Do not block subscription flow if notification fails
+                logger.error(
+                    "Failed to send subscribe approval notification: channel_id=%s, user=%s, error=%s",
+                    channel.id, login_user.user_id, e,
+                )
+
         return return_status
+
+    async def _send_subscribe_approval_notification(
+        self,
+        channel: Channel,
+        login_user: UserPayload,
+    ) -> None:
+        """
+        Send approval notification to channel creator and admins when a user
+        subscribes to a review-required channel.
+        """
+        # 1. Get channel creator and admins
+        creators = await self.space_channel_member_repository.find_members_by_role(
+            channel_id=channel.id,
+            role=UserRoleEnum.CREATOR,
+        )
+        admins = await self.space_channel_member_repository.find_members_by_role(
+            channel_id=channel.id,
+            role=UserRoleEnum.ADMIN,
+        )
+
+        receiver_user_ids = list({m.user_id for m in creators + admins})
+        if not receiver_user_ids:
+            logger.warning(
+                "No creator or admin found for channel %s, skipping approval notification",
+                channel.id,
+            )
+            return
+
+        # 2. Get applicant user name
+        users = await UserDao.aget_user_by_ids([login_user.user_id])
+        applicant_name = users[0].user_name if users else f"User {login_user.user_id}"
+
+        # 3. Send the approval message
+        await self.message_service.send_channel_subscribe_approval(
+            applicant_user_id=login_user.user_id,
+            applicant_user_name=applicant_name,
+            channel_id=channel.id,
+            channel_name=channel.name,
+            receiver_user_ids=receiver_user_ids,
+        )
 
     async def update_channel(self, channel_id: str, req: UpdateChannelRequest, login_user: UserPayload):
         """
