@@ -251,16 +251,52 @@ class MessageService:
         return await self.message_repository.delete(message_id)
 
     @staticmethod
-    def build_channel_subscribe_approval_content(
+    def build_generic_notify_content(
+        text: str,
+    ) -> List[Dict[str, Any]]:
+        """
+        Build generic notification content.
+        """
+        return [
+            {
+                "type": "text",
+                "content": text,
+            }
+        ]
+
+    async def send_generic_notify(
+        self,
+        sender: int,
+        text: str,
+        receiver_user_ids: List[int],
+    ) -> InboxMessage:
+        """
+        Send a generic notification message to specific receivers.
+        """
+        content = self.build_generic_notify_content(text)
+
+        message = await self.send_message(
+            content=content,
+            sender=sender,
+            message_type=MessageTypeEnum.NOTIFY,
+            receiver=receiver_user_ids,
+            status=MessageStatusEnum.APPROVED,  # Notify messages don't need approval
+        )
+        return message
+
+    @staticmethod
+    def build_generic_approval_content(
         applicant_user_id: int,
         applicant_user_name: str,
-        channel_id: str,
-        channel_name: str,
+        action_code: str,
+        business_type: str,
+        business_id: str,
+        business_name: str,
+        button_action_code: str,
         approval_message_id: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         """
-        Build the message content structure for a channel subscription approval request.
-        Follows the approval message content format defined in the PRD.
+        Build the generic message content structure for a business approval request.
         """
         content = [
             {
@@ -270,44 +306,49 @@ class MessageService:
             },
             {
                 "type": "system_text",
-                "content": "request_channel",
+                "content": action_code,
             },
             {
                 "type": "business_url",
-                "content": f"--{channel_name}",
+                "content": f"--{business_name}",
                 "metadata": {
-                    "business_type": "channel_id",
-                    "data": {"channel_id": channel_id},
+                    "business_type": business_type,
+                    "data": {business_type: business_id},
                 },
             },
             {
                 "type": "agree_reject_button",
                 "content": "",
                 "metadata": {
-                    "business_type": "request_channel",
+                    "business_type": button_action_code,
                     "data": {"approval_id": str(approval_message_id or "")},
                 },
             },
         ]
         return content
 
-    async def send_channel_subscribe_approval(
+    async def send_generic_approval(
         self,
         applicant_user_id: int,
         applicant_user_name: str,
-        channel_id: str,
-        channel_name: str,
+        action_code: str,
+        business_type: str,
+        business_id: str,
+        business_name: str,
+        button_action_code: str,
         receiver_user_ids: List[int],
     ) -> InboxMessage:
         """
-        Send a channel subscription approval notification to channel creator and admins.
+        Send a generic approval notification to specific receivers.
         """
-        # Build initial content without approval_id (will be set after message creation)
-        content = self.build_channel_subscribe_approval_content(
+        content = self.build_generic_approval_content(
             applicant_user_id=applicant_user_id,
             applicant_user_name=applicant_user_name,
-            channel_id=channel_id,
-            channel_name=channel_name,
+            action_code=action_code,
+            business_type=business_type,
+            business_id=business_id,
+            business_name=business_name,
+            button_action_code=button_action_code,
         )
 
         # Create the message
@@ -335,3 +376,4 @@ class MessageService:
         message.content = updated_content
 
         return message
+

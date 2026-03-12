@@ -667,11 +667,14 @@ class ChannelService:
         applicant_name = users[0].user_name if users else f"User {login_user.user_id}"
 
         # 3. Send the approval message
-        await self.message_service.send_channel_subscribe_approval(
+        await self.message_service.send_generic_approval(
             applicant_user_id=login_user.user_id,
             applicant_user_name=applicant_name,
-            channel_id=channel.id,
-            channel_name=channel.name,
+            action_code="request_channel",
+            business_type="channel_id",
+            business_id=channel.id,
+            business_name=channel.name,
+            button_action_code="request_channel",
             receiver_user_ids=receiver_user_ids,
         )
 
