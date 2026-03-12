@@ -1190,7 +1190,7 @@
   "no_data_available": "データがありません",
   "total_channels": "チャンネル情報源の総数",
   "confirm_crawled_content": "クロール内容の確認",
-  "parsed_articles": "解析された最新記事",
+  "parsed_articles": "このサイトの記事リスト",
   "article_or_page": "単一記事またはリストページ以外",
   "detected_as": "検出結果",
   "column_list": "対象ウェブサイトの「リストページ」URLを入力してください",

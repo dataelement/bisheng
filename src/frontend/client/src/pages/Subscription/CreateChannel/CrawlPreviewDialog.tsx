@@ -6,10 +6,19 @@ import {
     DialogHeader,
     DialogTitle,
 } from "~/components/ui/Dialog";
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "~/components/ui/AlertDialog";
 import { Button } from "~/components/ui/Button";
 import { Input } from "~/components/ui/Input";
 import { useLocalize } from "~/hooks";
-import { addWebsiteSourceApi, crawlTempSourceApi } from "~/api/channels";
+import { addWebsiteSourceApi, crawlTempSourceApi, getFeedbackTips } from "~/api/channels";
 import type { InformationSource } from "~/api/channels";
 
 interface CrawlPreviewDialogProps {
@@ -17,6 +26,7 @@ interface CrawlPreviewDialogProps {
     onOpenChange: (open: boolean) => void;
     url: string;
     onAddSource: (source: InformationSource) => void;
+    onCancel?: () => void;
 }
 
 type CrawlStatus = "loading" | "success" | "error" | "singlePageWarning";
@@ -25,12 +35,15 @@ export function CrawlPreviewDialog({
     open,
     onOpenChange,
     url,
-    onAddSource
+    onAddSource,
+    onCancel
 }: CrawlPreviewDialogProps) {
     const [status, setStatus] = useState<CrawlStatus>("loading");
     const [adding, setAdding] = useState(false);
-    const [previewData, setPreviewData] = useState<{ name: string; articles?: { title: string; url: string }[] } | null>(null);
+    const [previewData, setPreviewData] = useState<{ name: string; icon?: string; articles?: { title: string; url: string }[] } | null>(null);
     const [errorCode, setErrorCode] = useState<number | null>(null);
+    const [feedbackTips, setFeedbackTips] = useState<string>("请将您的网站爬取需求发送至邮箱：XXXX@XX");
+    const [feedbackDialogOpen, setFeedbackDialogOpen] = useState(false);
     const localize = useLocalize();
 
     useEffect(() => {
@@ -87,13 +100,16 @@ export function CrawlPreviewDialog({
                 }
 
                 const articles: { title: string; url: string }[] =
-                    (raw.article_links as any[] | undefined)?.map((item) => ({
-                        title: String(item.title ?? ""),
-                        url: String(item.url ?? url)
-                    })) ?? [];
+                    ((raw.article_links as any[] | undefined) ?? [])
+                        .slice(0, 20)
+                        .map((item) => ({
+                            title: String(item.title ?? ""),
+                            url: String(item.url ?? url)
+                        }));
 
                 setPreviewData({
                     name: name || url,
+                    icon: raw.icon,
                     articles
                 });
                 setStatus("success");
@@ -102,6 +118,27 @@ export function CrawlPreviewDialog({
             }
         })();
     }, [open, url]);
+
+    // 加载订阅配置中的 feedback_tips
+    useEffect(() => {
+        if (!open) return;
+        (async () => {
+            try {
+                const resp = await getFeedbackTips();
+                const data = resp?.data ?? resp ?? {};
+                const tips = data.feedback_tips ?? data.feedbackTips;
+                if (typeof tips === "string" && tips.trim()) {
+                    setFeedbackTips(tips);
+                }
+            } catch {
+            }
+        })();
+    }, [open]);
+
+    const handleCancel = () => {
+        onCancel?.();
+        onOpenChange(false);
+    };
 
     const handleAddSource = () => {
         (async () => {
@@ -176,8 +213,12 @@ export function CrawlPreviewDialog({
                     {status === "success" && previewData && (
                         <div className="space-y-4">
                             <div className="flex items-center gap-3 p-3 rounded-lg bg-[#F7F8FA]">
-                                <div className="w-10 h-10 rounded-full bg-[#E5E6EB] flex items-center justify-center text-[14px] text-[#86909C]">
-                                    {previewData.name[0]}
+                                <div className="w-10 h-10 rounded-full bg-[#E5E6EB] flex items-center justify-center text-[14px] text-[#86909C] overflow-hidden">
+                                    {previewData.icon ? (
+                                        <img src={previewData.icon} alt="" className="w-full h-full object-cover" />
+                                    ) : (
+                                        previewData.name[0]
+                                    )}
                                 </div>
                                 <div>
                                     <p className="text-[14px] font-medium text-[#1D2129]">
@@ -195,7 +236,7 @@ export function CrawlPreviewDialog({
                             </div>
                             {previewData.articles && previewData.articles.length > 0 && (
                                 <div>
-                                    <p className="text-[12px] text-[#86909C] mb-2">
+                                    <p className="text-[12px] mb-2">
                                         {localize("parsed_articles")}
                                     </p>
                                     <div className="max-h-[200px] overflow-y-auto space-y-2">
@@ -236,12 +277,16 @@ export function CrawlPreviewDialog({
 
                             </div>
                             <div className=" flex items-center justify-between">
-                                <span className="text-[12px] text-[#86909C]">
+                                <button
+                                    type="button"
+                                    className="text-[12px] text-[#165DFF] underline underline-offset-2"
+                                    onClick={() => setFeedbackDialogOpen(true)}
+                                >
                                     不满意爬取内容？提交人工爬取需求
-                                </span>
+                                </button>
                                 <Button
                                     variant="secondary"
-                                    onClick={() => onOpenChange(false)}
+                                    onClick={handleCancel}
                                     className="h-8 px-4 border border-[#E5E6EB] bg-white text-[#4E5969]"
                                 >
                                     {localize("cancel")}
@@ -251,27 +296,58 @@ export function CrawlPreviewDialog({
                     )}
                 </div>
 
-                {/* 底部操作：仅成功时展示“添加到信源”，其它状态只有上方的提示和取消按钮 */}
-                {status === "success" && (
-                    <div className="flex justify-end gap-3 pt-4 border-t border-[#E5E6EB]">
-                        <Button
-                            variant="secondary"
-                            onClick={() => onOpenChange(false)}
-                            className="bg-[#F2F3F5] hover:bg-[#E5E6EB] border-none text-[#4E5969]"
-                        >
-                            {localize("cancel")}
-                        </Button>
-                        <Button
-                            onClick={handleAddSource}
-                            disabled={status !== "success" || adding}
-                            className="bg-[#165DFF] hover:bg-[#4080FF] text-white disabled:opacity-50 flex items-center gap-2"
-                        >
-                            {adding && <Loader2 className="size-4 animate-spin" />}
-                            {localize("add_source")}
-                        </Button>
+                {/* 底部操作：爬取中也展示两按钮，添加到信源置灰 */}
+                {(status === "loading" || status === "success") && (
+                    <div className="flex items-center justify-between gap-3 pt-4 border-t border-[#E5E6EB]">
+                        {status === "success" ? (
+                            <button
+                                type="button"
+                                className="text-[12px] text-[#165DFF] underline underline-offset-2"
+                                onClick={() => setFeedbackDialogOpen(true)}
+                            >
+                                不满意爬取内容？提交人工爬取需求
+                            </button>
+                        ) : (
+                            <span />
+                        )}
+                        <div className="flex">
+                            <Button
+                                variant="secondary"
+                                onClick={handleCancel}
+                                className="bg-[#F2F3F5]  hover:bg-[#E5E6EB] border-none text-[#4E5969]"
+                            >
+                                {localize("cancel")}
+                            </Button>
+                            <Button
+                                onClick={handleAddSource}
+                                disabled={status !== "success" || adding}
+                                className="bg-[#165DFF] ml-2 hover:bg-[#4080FF] text-white disabled:opacity-50 flex items-center gap-2"
+                            >
+                                {adding && <Loader2 className="size-4 animate-spin" />}
+                                {localize("add_source")}
+                            </Button>
+                        </div>
+
                     </div>
                 )}
             </DialogContent>
+
+            {/* 人工爬取需求提示弹窗 */}
+            <AlertDialog open={feedbackDialogOpen} onOpenChange={setFeedbackDialogOpen}>
+                <AlertDialogContent className="sm:max-w-[480px]">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>提交人工爬取需求</AlertDialogTitle>
+                        <AlertDialogDescription className="whitespace-pre-line text-[14px] leading-6 text-[#4E5969]">
+                            {feedbackTips}
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogAction className="bg-[#165DFF] hover:bg-[#4080FF]">
+                            好的
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </Dialog>
     );
 }

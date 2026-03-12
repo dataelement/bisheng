@@ -62,7 +62,7 @@ interface CreateChannelDrawerProps {
     onOpenChange: (open: boolean) => void;
     onConfirm?: (data: CreateChannelFormData) => Promise<{ channelId: string }>;
     createdChannelCount?: number;
-    onViewChannel?: () => void;
+    onViewChannel?: (channelId: string) => void;
     onManageMembers?: (channelId: string) => void;
     mode?: "create" | "edit";
     editingChannel?: Channel | null;
@@ -161,13 +161,16 @@ export function CreateChannelDrawer({
                     {form.showSuccess && !isEditMode ? (
                         <CreateChannelSuccessContent
                             onViewChannel={() => {
-                                onViewChannel?.();
+                                if (form.createdChannelId) {
+                                    onViewChannel?.(form.createdChannelId);
+                                }
                                 form.resetForm();
-                                onOpenChange(false);
                             }}
                             onManageMembers={() => {
                                 if (form.createdChannelId) {
                                     onManageMembers?.(form.createdChannelId);
+                                    onViewChannel?.(form.createdChannelId);
+
                                 }
                                 form.resetForm();
                                 onOpenChange(false);
@@ -186,6 +189,7 @@ export function CreateChannelDrawer({
                                     onSourcesChange={form.setSources}
                                     expanded={form.showAddSourcePanel}
                                     onExpandChange={form.setShowAddSourcePanel}
+                                    resetToken={form.sourceSearchResetToken}
                                     onRequestCrawl={(url) => {
                                         form.setCrawlUrl(url);
                                         form.setCrawlDialogOpen(true);
@@ -498,23 +502,17 @@ export function CreateChannelDrawer({
                                         subChannels: form.subChannels
                                     };
 
-                                    if (!isEditMode) {
-                                        const validationError = validateCreateChannelForm(data, localize);
-                                        if (validationError) {
-                                            showToast({
-                                                message: validationError,
-                                                severity: NotificationSeverity.WARNING
-                                            });
-                                            return;
-                                        }
-                                    } else {
-                                        if (!data.channelName) {
-                                            showToast({
-                                                message: "频道名称不能为空",
-                                                severity: NotificationSeverity.WARNING
-                                            });
-                                            return;
-                                        }
+                                    // 创建和编辑统一走同一套校验逻辑：
+                                    // 1) 至少 1 个信息源
+                                    // 2) 频道名称不能为空
+                                    // 3) 主频道 / 子频道筛选条件中的关键词不能为空
+                                    const validationError = validateCreateChannelForm(data, localize);
+                                    if (validationError) {
+                                        showToast({
+                                            message: validationError,
+                                            severity: NotificationSeverity.WARNING
+                                        });
+                                        return;
                                     }
 
                                     if (!onConfirm) return;
@@ -558,10 +556,18 @@ export function CreateChannelDrawer({
                 open={form.crawlDialogOpen}
                 onOpenChange={form.setCrawlDialogOpen}
                 url={form.crawlUrl}
+                onCancel={() => {
+                    // 失败/取消后回到「添加信息源」面板，并清空输入框
+                    form.setShowAddSourcePanel(true);
+                    form.setSourceSearchResetToken((t) => t + 1);
+                }}
                 onAddSource={(source) => {
                     form.setSources((prev) => [...prev, source]);
                     form.setCrawlDialogOpen(false);
-                    form.setShowAddSourcePanel(false);
+                    // 添加成功后回到「添加信息源」面板，并展示选中状态
+                    form.setShowAddSourcePanel(true);
+                    // 同时清空搜索输入框状态
+                    form.setSourceSearchResetToken((t) => t + 1);
                 }}
             />
         </>

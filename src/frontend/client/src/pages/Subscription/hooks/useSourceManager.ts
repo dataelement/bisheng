@@ -13,7 +13,13 @@ const MAX_SOURCES = 50;
 
 function looksLikeUrl(s: string): boolean {
     const t = s.trim();
-    return /^https?:\/\//i.test(t) || /^[a-z0-9-]+\.(com|cn|org|net|gov)(\/[^\s]*)?$/i.test(t);
+    // 支持：
+    // - 带协议的完整 URL：https://example.com/xxx
+    // - 不带协议的域名/路径：home.cofco.com 或 home.cofco.com/path
+    return (
+        /^https?:\/\//i.test(t) ||
+        /^([a-z0-9-]+\.)+[a-z]{2,}(\/[^\s]*)?$/i.test(t)
+    );
 }
 
 function looksLikeWechatArticleUrl(s: string): boolean {

@@ -1,4 +1,4 @@
-import { FileText, Plus, Search, Trash2, X } from "lucide-react";
+import { FileText, Minus, Plus, Search, X } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Button } from "~/components/ui/Button";
 import { Checkbox } from "~/components/ui/Checkbox";
@@ -7,6 +7,7 @@ import { truncateName, type InformationSource } from "~/api/channels";
 import { cn } from "~/utils";
 import { useLocalize } from "~/hooks";
 import { useSourceManager } from "../hooks/useSourceManager";
+import { useConfirm } from "~/Providers";
 
 const MAX_SOURCES = 50;
 const MAX_NAME_DISPLAY = 20;
@@ -17,6 +18,7 @@ interface AddSourceDropdownProps {
     expanded: boolean;
     onExpandChange: (v: boolean) => void;
     onRequestCrawl: (url: string) => void;
+    resetToken?: number;
 }
 
 export function AddSourceDropdown({
@@ -24,10 +26,12 @@ export function AddSourceDropdown({
     onSourcesChange,
     expanded,
     onExpandChange,
-    onRequestCrawl
+    onRequestCrawl,
+    resetToken
 }: AddSourceDropdownProps) {
     const localize = useLocalize();
     const mgr = useSourceManager(sources, onSourcesChange, expanded, onExpandChange);
+    const confirm = useConfirm();
     const [inputValue, setInputValue] = useState("");
 
     // 同步输入框展示值与已提交的搜索关键字（清空时）
@@ -36,6 +40,13 @@ export function AddSourceDropdown({
             setInputValue("");
         }
     }, [mgr.searchKeyword]);
+
+    // 外部触发重置：清空输入框 + 清空已提交搜索关键字
+    useEffect(() => {
+        if (resetToken === undefined) return;
+        setInputValue("");
+        mgr.handleClearSearch();
+    }, [resetToken]);
 
     const displayList = mgr.filteredSources;
     return (
@@ -92,9 +103,12 @@ export function AddSourceDropdown({
                                             e.stopPropagation();
                                             onSourcesChange(sources.filter((x) => x.id !== s.id));
                                         }}
-                                        className="p-1 text-[#86909C] hover:text-[#F53F3F] rounded"
+                                        className="p-1 rounded"
+                                        aria-label="移除信息源"
                                     >
-                                        <Trash2 className="size-4" />
+                                        <span className="inline-flex items-center justify-center w-3 h-3 border-[1px] border-[#F53F3F]">
+                                            <Minus className="size-3 text-[#F53F3F]" />
+                                        </span>
                                     </button>
                                 </div>
                             ))}
@@ -271,21 +285,23 @@ export function AddSourceDropdown({
                                                             </div>
                                                         )}
                                                     </div>
-                                                    <span
-                                                        className={cn(
-                                                            "flex-1 text-[14px] text-[#1D2129] truncate",
-                                                            source.type === "website" && source.url && "hover:underline cursor-pointer"
-                                                        )}
-                                                        onClick={
-                                                            source.type === "website" && source.url
-                                                                ? (e) => {
-                                                                    e.stopPropagation();
-                                                                    window.open(source.url, "_blank");
-                                                                }
-                                                                : undefined
-                                                        }
-                                                    >
-                                                        {truncateName(source.name, MAX_NAME_DISPLAY)}
+                                                    <span className="flex-1 text-[14px] text-[#1D2129] truncate">
+                                                        <span
+                                                            className={cn(
+                                                                "truncate inline-block max-w-full align-middle",
+                                                                source.type === "website" && source.url && "hover:underline cursor-pointer"
+                                                            )}
+                                                            onClick={
+                                                                source.type === "website" && source.url
+                                                                    ? (e) => {
+                                                                        e.stopPropagation();
+                                                                        window.open(source.url, "_blank");
+                                                                    }
+                                                                    : undefined
+                                                            }
+                                                        >
+                                                            {truncateName(source.name, MAX_NAME_DISPLAY)}
+                                                        </span>
                                                         {mgr.isSearchMode && (
                                                             <span
                                                                 className={cn(
@@ -326,12 +342,25 @@ export function AddSourceDropdown({
                                 <Button
                                     variant="secondary"
                                     size="sm"
-                                    onClick={mgr.handleCancel}
+                                    onClick={async () => {
+                                        const confirmed = await confirm({
+                                            description: "当前编辑尚未保存，确认关闭吗？",
+                                            cancelText: "继续编辑",
+                                            confirmText: "确认关闭"
+                                        });
+                                        if (!confirmed) return;
+                                        mgr.handleCancel();
+                                    }}
                                     className="bg-white border border-[#E5E6EB]"
                                 >
                                     {localize("cancel")}
                                 </Button>
-                                <Button size="sm" onClick={mgr.handleConfirm} className="bg-[#165DFF]">
+                                <Button
+                                    size="sm"
+                                    onClick={mgr.handleConfirm}
+                                    disabled={mgr.pendingSources.length === 0}
+                                    className="bg-[#165DFF] disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
                                     {localize("confirm_add") || "确认添加"}
                                 </Button>
                             </div>
