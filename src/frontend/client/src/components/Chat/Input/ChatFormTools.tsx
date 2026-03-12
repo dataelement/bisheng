@@ -98,12 +98,12 @@ export const LinsiTools = ({ tools, setTools }) => {
         icon: <KeyRound size="16" />,
         checked: true,
       },
-      {
-        id: "knowledge",
-        name: localize("com_tools_personal_knowledge"),
-        icon: <Pencil size="16" />,
-        checked: true,
-      },
+      // {
+      //   id: "knowledge",
+      //   name: localize("com_tools_personal_knowledge"),
+      //   icon: <Pencil size="16" />,
+      //   checked: true,
+      // },
     ];
     if (bsConfig) {
       const tools = bsConfig.linsightConfig?.tools || [];

@@ -1,7 +1,11 @@
+---
+trigger: always_on
+---
+
 # Bisheng Frontend Development Guide
 
 ## Tech Stack
-Vite + React 18 + TypeScript + TailwindCSS 3 + Radix UI（shadcn/ui） + Recoil + react-router-dom v6 + lucide-react + axios (wrapped in `src/api/request.ts`)
+Vite + React 18 + TypeScript + TailwindCSS 3 + Radix UI（shadcn/ui） + Recoil + react-query + react-router-dom v6 + lucide-react + axios (wrapped in `src/api/request.ts`)
 
 ## Mandatory Rules
 - **TypeScript only**: All new files must use `.ts` / `.tsx`.

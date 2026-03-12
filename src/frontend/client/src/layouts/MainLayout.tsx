@@ -1,5 +1,9 @@
 import Cookies from 'js-cookie';
-import { BookOpen, Globe, Home, Monitor, Wifi } from 'lucide-react';
+import BookOpenIcon from '~/components/ui/icon/BookOpen';
+import GlobeIcon from '~/components/ui/icon/Globe';
+import HomeIcon from '~/components/ui/icon/Home';
+import LinkIcon from '~/components/ui/icon/Link';
+import MonitorIcon from '~/components/ui/icon/Monitor';
 import React, { useCallback, useMemo } from 'react';
 import KeepAlive from 'react-activation';
 import { matchPath, NavLink, useLocation, useOutlet } from 'react-router-dom';
@@ -43,22 +47,22 @@ function Sidebar() {
   const links = useMemo(() => [
     {
       to: '/c/new',
-      icon: <Home />,
+      icon: <HomeIcon />,
       isActive: /^\/(c|linsight)(\/|$)/.test(pathname)
     },
     {
       to: '/apps',
-      icon: <Globe />,
+      icon: <GlobeIcon />,
       isActive: matchPath('/app/:id/:fid/:type', pathname) !== null || pathname.startsWith('/apps')
     },
     {
       to: '/channel',
-      icon: <Wifi />,
+      icon: <LinkIcon />,
       isActive: pathname.startsWith('/channel')
     },
     {
       to: '/knowledge',
-      icon: <BookOpen />,
+      icon: <BookOpenIcon />,
       isActive: pathname.startsWith('/knowledge')
     },
   ], [pathname]);
@@ -95,7 +99,7 @@ function Sidebar() {
         {user?.plugins?.includes('backend') && (
           <a href={__APP_ENV__.BISHENG_HOST} target='_blank' rel="noreferrer">
             <div title={localize('com_nav_admin_panel')} className="p-3 rounded-lg hover:bg-[#e6edfc] transition-colors">
-              <Monitor className="size-5 text-[#818181]" />
+              <MonitorIcon className="size-5 text-[#818181]" />
             </div>
           </a>
         )}

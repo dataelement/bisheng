@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { Search } from 'lucide-react';
+import { Search, PanelLeftClose, Plus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useRecoilValue } from 'recoil';
 import { icons } from '~/components/Chat/Menus/Endpoints/Icons';
@@ -96,18 +96,19 @@ export default function NewChat({
   };
 
   return (
-    <div className="sticky left-0 right-0 top-0 z-50 bg-[#F9FBFF]">
-      <div className="pb-0.5 last:pb-0" style={{ transform: 'none' }}>
-        <div className="mb-3 flex justify-between gap-3 px-3 py-2">
-          <div className="cursor-pointer rounded-md p-1 hover:bg-slate-100">
-            {/* <CloseToggleIcon className="size-5" /> */}
+    <div className="sticky left-0 right-0 top-0 z-50 bg-white">
+      <div className="" style={{ transform: 'none' }}>
+        <div className="mb-4 flex items-center justify-between">
+          <p className="font-medium text-[#212121] text-[14px]">首页</p>
+          <div className="cursor-pointer rounded-md p-1 hover:bg-slate-100" onClick={toggleNav}>
+            <PanelLeftClose className="size-5 text-gray-500" />
           </div>
         </div>
         <div className='flex gap-1 w-full'>
           {/* 新建btn */}
           <Button
             variant="outline"
-            className="shadow-sm h-10 rounded-xl px-3 flex-shrink-0"
+            className="w-full flex items-center justify-center gap-[8px] border border-[#e3e3e3] rounded-[6px] px-[12px] py-[6px] h-auto shadow-none text-[#212121] font-normal"
             aria-label={localize('com_ui_new_chat')}
             onClick={() => {
               document.getElementById("create-convo-btn")?.click();
@@ -117,8 +118,8 @@ export default function NewChat({
               }, 300);
             }}
           >
-            <img className='size-[18px] grayscale' src={__APP_ENV__.BASE_URL + '/assets/chat2.png'} alt="" />
-            <span className="text-sm font-normal whitespace-nowrap ml-0.5">{localize('com_nav_start_new_chat')}</span>
+            <Plus className='size-[20px] text-[#212121]' />
+            <span className="text-[14px] leading-[20px] whitespace-nowrap">{localize('com_nav_start_new_chat')}</span>
           </Button>
         </div>
       </div>

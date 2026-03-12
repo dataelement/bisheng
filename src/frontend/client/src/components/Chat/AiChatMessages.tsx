@@ -233,17 +233,14 @@ export default function AiChatMessages({
             </div>
             {/* Scroll to bottom button */}
             {showScrollBtn && (
-                <div className="w-full max-w-[768px] mx-auto relative">
+                <div className="absolute -bottom-4 w-full h-0 flex justify-center z-10">
                     <button
                         type="button"
                         onClick={scrollToBottom}
-                        className={cn(
-                            "absolute bottom-1.5 right-3 z-10",
-                            "w-8 h-8 rounded-full bg-white shadow-md border border-gray-200",
-                            "flex items-center justify-center hover:bg-gray-50 transition-colors"
-                        )}
+                        className="flex items-center h-8 justify-center gap-2 rounded-[6px] border border-[#EBECF0] bg-white/80 backdrop-blur-[4px] px-2.5 text-sm leading-5 text-neutral-800 hover:bg-white/90 transition-colors"
                     >
-                        <ArrowDownIcon size={16} className="text-gray-500" />
+                        <ArrowDownIcon size={16} />
+                        <span className="text-sm">回到底部</span>
                     </button>
                 </div>
             )}

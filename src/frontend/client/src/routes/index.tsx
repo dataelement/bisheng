@@ -9,6 +9,7 @@ import AppChat from '@/pages/appChat';
 import AgentCenter from '@/pages/apps';
 import ExplorePlaza from '@/pages/apps/explore';
 import Share from '@/pages/share';
+import ShareAppRedirect from './ShareAppRedirect';
 import { createBrowserRouter, Navigate, Outlet, useParams } from 'react-router-dom';
 import ChatRoute from './ChatRoute';
 import LoginLayout from './Layouts/Login';
@@ -86,6 +87,7 @@ export const router = createBrowserRouter([
           { path: 'channel', element: <Subscription /> },
           { path: 'channel/share/:channelId', element: <Subscription /> },
           { path: 'knowledge', element: <Knowledge /> },
+          { path: 'share/app_:applicationId', element: <ShareAppRedirect /> },
           { path: 'share/:token/:vid?', element: <Share /> },
         ],
       },

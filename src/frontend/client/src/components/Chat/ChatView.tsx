@@ -195,7 +195,6 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                   isStreaming={isStreaming}
                   modelOptions={bsConfig?.models}
                   modelValue={chatModel.id}
-                  hasMessages={hasMessages}
                   onModelChange={(val) => {
                     const model = bsConfig?.models?.find((m) => m.id === val);
                     setChatModel({
@@ -205,15 +204,6 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                   }}
                   onSend={handleSend}
                   onStop={stopGenerating}
-                  onNewChat={() => {
-                    setSelectedOrgKbs([]);
-                    setSearchType('');
-                    clearConversation();
-                    // Navigate to /c/new to show Landing
-                    navigate('/c/new');
-                    // Trigger sidebar to sync
-                    document.getElementById('create-convo-btn')?.click();
-                  }}
                   value={inputText}
                   onChange={setInputText}
                   bsConfig={bsConfig}
