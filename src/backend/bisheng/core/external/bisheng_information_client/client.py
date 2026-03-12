@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Optional, Any, Coroutine
+from typing import Optional
 
 import httpx
 from aiohttp import ClientTimeout
@@ -64,9 +64,9 @@ class BishengInformationClient(object):
             raise InformationSourceAuthError()
         elif code == 10002:
             raise InformationSourcePageError()
-        else:
+        elif code != 200:
             raise BishengInformationServiceError(
-                msg=f"Failed to list information sources: {response.status_code} - {response.error}")
+                msg=f"Failed to list information sources: {response.body}")
 
         information_source_data = InformationSourceResponse.model_validate(response.body.get("data"))
 
@@ -92,9 +92,9 @@ class BishengInformationClient(object):
             raise InformationSourceAuthError()
         elif code == 10002:
             raise InformationSourcePageError()
-        else:
+        elif code != 200:
             raise BishengInformationServiceError(
-                msg=f"Failed to list information sources: {response.status_code} - {response.error}")
+                msg=f"Failed to list information sources: {response.body}")
 
         information_source_data = InformationSourceResponse.model_validate(response.body.get("data"))
 
@@ -126,7 +126,7 @@ class BishengInformationClient(object):
 
         elif code != 200:
             raise BishengInformationServiceError(
-                msg=f"Failed to list information sources: {response.status_code} - {response.error}")
+                msg=f"Failed to list information sources: {response.body}")
 
         information_sources_data = response.body.get("data", [])
         total = response.body.get("totalCount", 0)
@@ -149,7 +149,7 @@ class BishengInformationClient(object):
 
         elif code != 200:
             raise BishengInformationServiceError(
-                msg=f"Failed to list information sources: {response.status_code} - {response.error}")
+                msg=f"Failed to list information sources: {response.body}")
 
         information_sources_data = response.body.get("data", [])
         return [InformationSourceResponse.model_validate(item) for item in information_sources_data]
@@ -176,7 +176,7 @@ class BishengInformationClient(object):
             raise BishengInformationUnAuthorizedError()
         elif code != 200:
             raise BishengInformationServiceError(
-                msg=f"Failed to list information sources: {response.status_code} - {response.error}")
+                msg=f"Failed to list information sources: {response.body}")
 
         information_sources_data = response.body.get("data", [])
         total = response.body.get("totalCount", 0)
@@ -233,9 +233,9 @@ class BishengInformationClient(object):
             raise InformationSourceAuthError()
         elif code == 10002:
             raise InformationSourcePageError()
-        else:
+        elif code != 200:
             raise BishengInformationServiceError(
-                msg=f"Failed to list information sources: {response.status_code} - {response.error}")
+                msg=f"Failed to list information sources: {response.body}")
 
         result = response.body.get("data", {})
 
