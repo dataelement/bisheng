@@ -827,7 +827,7 @@ class ChannelService:
             filter_rules=main_rules if main_rules else None
         )
 
-        # 信息源列表补全
+        # Complete info source list
         source_infos = []
         if channel.source_list:
             sources = await self.channel_info_source_repository.find_by_ids(channel.source_list)
@@ -938,45 +938,45 @@ class ChannelService:
             only_unread: bool = False,
     ) -> ArticleSearchPageResponse:
         """
-        根据频道分页检索文章。
+        Paginated search for articles in a channel.
 
-        1. 根据 channel_id 查询频道，获取 source_list 和 filter_rules
-        2. 判断是否指定子频道，应用对应过滤规则
-        3. 构建 ES 查询：信源过滤 + 过滤规则 + 关键词检索 + 高亮 + 排序 + 分页
+        1. Query channel by channel_id to get source_list and filter_rules
+        2. Determine if a sub-channel is specified, apply corresponding filter rules
+        3. Build ES query: info source filter + filter rules + keyword search + highlight + sort + pagination
 
         Args:
-            channel_id: 频道 ID
-            keyword: 搜索关键词（标题、正文、发布者）
-            source_ids: 前端指定的信源 ID 列表（必须是频道 source_list 的子集）
-            sub_channel_name: 子频道名称，若指定则使用对应子频道的过滤规则
-            page: 页码
-            page_size: 每页数量
-            login_user: 当前登录用户
+            channel_id: Channel ID
+            keyword: Search keyword (title, content, publisher)
+            source_ids: Info source ID list specified by frontend (must be a subset of channel source_list)
+            sub_channel_name: Sub-channel name, if specified use the corresponding sub-channel's filter rules
+            page: Page number
+            page_size: Page size
+            login_user: Current logged-in user
 
         Returns:
             ArticleSearchPageResponse
         """
-        # 1. 查询频道信息
+        # 1. Query channel info
         channels = await self.channel_repository.find_channels_by_ids([channel_id])
         if not channels:
-            raise ValueError("频道不存在")
+            raise ValueError("Channel not found")
         channel = channels[0]
 
-        # 2. 确定信源列表
+        # 2. Determine info source list
         channel_source_ids = channel.source_list or []
         if source_ids:
-            # 前端传入的信源必须是频道信源的子集
+            # Info sources from frontend must be a subset of channel info sources
             effective_source_ids = [sid for sid in source_ids if sid in channel_source_ids]
             if not effective_source_ids:
-                # 传入的信源均不在频道中，返回空结果
+                # None of the provided info sources are in the channel, return empty result
                 return ArticleSearchPageResponse(data=[], total=0, page=page, page_size=page_size)
         else:
             effective_source_ids = channel_source_ids
 
-        # 3. 解析过滤规则
+        # 3. Parse filter rules
         filter_rules_raw: List[Dict[str, Any]] = channel.filter_rules or []
 
-        # 解析过滤规则，区分主频道和子频道
+        # Parse filter rules, distinguish between main channel and sub-channels
         main_rules: List[Dict[str, Any]] = []
         sub_channel_rules: Dict[str, List[Dict[str, Any]]] = {}
 
@@ -990,13 +990,13 @@ class ChannelService:
             else:
                 main_rules.extend(rules)
 
-        # 确定使用哪组规则
+        # Determine which set of rules to use
         if sub_channel_name and sub_channel_name in sub_channel_rules:
             effective_rules = sub_channel_rules[sub_channel_name]
         else:
             effective_rules = main_rules
 
-        # 4. 获取已读文章 ID 列表
+        # 4. Get read article ID list
         read_article_ids = []
         if login_user and self.article_read_repository:
             read_article_ids = await self.article_read_repository.find_article_ids_by_user_and_sources(
@@ -1004,7 +1004,7 @@ class ChannelService:
                 source_ids=effective_source_ids
             )
 
-        # 5. 调用 ArticleEsService 进行搜索
+        # 5. Call ArticleEsService to search
         exclude_article_ids = read_article_ids if only_unread else None
         article_search_response = await self.article_es_service.search_articles(
             source_ids=effective_source_ids,
@@ -1017,7 +1017,7 @@ class ChannelService:
 
         source_ids_in_result = [item.source_id for item in article_search_response.data]
 
-        # 批量查询信源信息
+        # Batch query info source info
         source_info_map = {}
         if source_ids_in_result:
             sources = await self.channel_info_source_repository.find_by_ids(source_ids_in_result)
@@ -1034,7 +1034,7 @@ class ChannelService:
         for item in article_search_response.data:
             if item.source_id in source_info_map:
                 item.source_info = source_info_map[item.source_id]
-            # 设置是否已读状态
+            # Set read status
             item.is_read = item.doc_id in read_ids_set
 
         return article_search_response
@@ -1046,7 +1046,7 @@ class ChannelService:
         # 1. Fetch article from ES
         article = await self.article_es_service.get_article(article_id)
         if not article:
-            raise ValueError("文章不存在")
+            raise ValueError("Article not found")
 
         # 2. Check read record
         if self.article_read_repository:

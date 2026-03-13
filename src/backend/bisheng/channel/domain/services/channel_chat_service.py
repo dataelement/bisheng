@@ -1,10 +1,10 @@
 """
-频道文章AI助手对话 Service
+Channel Article AI Assistant Chat Service
 
-封装频道文章AI助手对话的业务逻辑，包括：
-- 获取文章内容
-- 构建对话上下文
-- 管理对话会话和消息记录
+Encapsulates business logic for channel article AI assistant chat, including:
+- Fetching article content
+- Building conversation context
+- Managing conversation sessions and message records
 """
 import json
 from typing import Optional, Any
@@ -26,33 +26,33 @@ from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.llm.domain import LLMService
 
 
-# 文章上下文提示模版
+# Article context prompt template
 ARTICLE_CONTEXT_PROMPT = (
-    "你是一个专业的AI助手，请基于以下文章内容来回答用户的问题。\n\n"
-    "## 文章标题\n{title}\n\n"
-    "## 文章内容\n{content}\n\n"
+    "You are a professional AI assistant, please answer user's questions based on the following article content.\n\n"
+    "## Article Title\n{title}\n\n"
+    "## Article Content\n{content}\n\n"
     "---\n"
-    "请根据上述文章内容回答以下问题：\n{question}"
+    "Please answer the following question based on the article content above:\n{question}"
 )
 
 
 class ChannelChatService:
-    """频道文章AI助手对话 Service"""
+    """Channel Article AI Assistant Chat Service"""
 
     @classmethod
     async def get_article_content(cls, article_es_service: ArticleEsService, doc_id: str):
         """
-        通过 ArticleEsService 获取文章内容
+        Fetch article content via ArticleEsService
 
         Args:
-            article_es_service: ES文章服务实例
-            doc_id: ES文章文档ID
+            article_es_service: ES article service instance
+            doc_id: ES article document ID
 
         Returns:
-            ArticleSearchResultItem 文章信息
+            ArticleSearchResultItem article information
 
         Raises:
-            ArticleNotFoundError: 文章不存在
+            ArticleNotFoundError: Article not found
         """
         article = await article_es_service.get_article(doc_id)
         if not article:
@@ -62,15 +62,15 @@ class ChannelChatService:
     @classmethod
     def build_article_context_prompt(cls, title: str, content: str, question: str) -> str:
         """
-        构建文章上下文提示
+        Build article context prompt
 
         Args:
-            title: 文章标题
-            content: 文章纯文本内容
-            question: 用户问题
+            title: Article title
+            content: Article plain text content
+            question: User question
 
         Returns:
-            str: 完整的提示文本
+            str: Complete prompt text
         """
         return ARTICLE_CONTEXT_PROMPT.format(
             title=title,
@@ -83,12 +83,12 @@ class ChannelChatService:
                               login_user: UserPayload,
                               article_title: str):
         """
-        初始化对话会话，参考 workstation._initialize_chat
+        Initialize chat session, reference workstation._initialize_chat
 
         Args:
-            data: 对话请求数据
-            login_user: 登录用户信息
-            article_title: 文章标题（用于会话名称）
+            data: Chat request data
+            login_user: Logged-in user information
+            article_title: Article title (used for session name)
 
         Returns:
             tuple: (conversation, message, bishengllm, is_new_conversation)
@@ -103,7 +103,7 @@ class ChannelChatService:
                 MessageSession(
                     chat_id=conversationId,
                     flow_id=data.article_doc_id,
-                    flow_name=f'文章助手: {article_title[:50]}',
+                    flow_name=f'Article Assistant: {article_title[:50]}',
                     flow_type=FlowType.CHANNEL_ARTICLE.value,
                     user_id=login_user.user_id,
                 ))
@@ -112,7 +112,7 @@ class ChannelChatService:
         if conversation is None:
             raise ChannelChatConversationNotFoundError()
 
-        # 创建用户消息记录
+        # Create user message record
         message = await ChatMessageDao.ainsert_one(
             ChatMessage(
                 user_id=login_user.user_id,
@@ -127,7 +127,7 @@ class ChannelChatService:
                 source=0,
             ))
 
-        # 获取 LLM 实例
+        # Get LLM instance
         bishengllm = await LLMService.get_bisheng_llm(
             model_id=data.model,
             app_id=ApplicationTypeEnum.DAILY_CHAT.value,
@@ -140,14 +140,14 @@ class ChannelChatService:
     @classmethod
     async def get_chat_history(cls, chat_id: str, size: int = 8):
         """
-        获取对话历史，构建 LangChain 消息列表
+        Get chat history and build LangChain message list
 
         Args:
-            chat_id: 会话ID
-            size: 获取的历史消息数量
+            chat_id: Session ID
+            size: Number of history messages to fetch
 
         Returns:
-            list: LangChain 消息列表
+            list: LangChain message list
         """
         chat_history = []
         messages = await ChatMessageDao.aget_messages_by_chat_id(chat_id, ['question', 'answer'], size)
@@ -164,43 +164,43 @@ class ChannelChatService:
     @classmethod
     async def get_chat_messages(cls, conversation_id: str, login_user: UserPayload):
         """
-        查询对话历史消息列表
+        Query chat history message list
 
         Args:
-            conversation_id: 会话ID
-            login_user: 登录用户信息
+            conversation_id: Session ID
+            login_user: Logged-in user information
 
         Returns:
-            list: WorkstationMessage 列表
+            list: WorkstationMessage list
         """
         messages = await ChatMessageDao.aget_messages_by_chat_id(chat_id=conversation_id, limit=1000)
         if messages:
             if login_user.user_id != messages[0].user_id:
-                return None  # 无权限
+                return None  # No permission
             return [await WorkstationMessage.from_chat_message(message) for message in messages]
         return []
 
     @classmethod
     async def clear_chat(cls, conversation_id: str, login_user: UserPayload) -> bool:
         """
-        清空对话内容
+        Clear chat content
 
         Args:
-            conversation_id: 会话ID
-            login_user: 登录用户信息
+            conversation_id: Session ID
+            login_user: Logged-in user information
 
         Returns:
-            bool: 是否清空成功
+            bool: Whether the clear operation succeeded
         """
-        # 验证会话存在且属于当前用户
+        # Verify session exists and belongs to current user
         conversation = await MessageSessionDao.async_get_one(conversation_id)
         if not conversation:
             raise ChannelChatConversationNotFoundError()
         if conversation.user_id != login_user.user_id:
             return False
 
-        # 删除对话消息
+        # Delete chat messages
         ChatMessageDao.delete_by_user_chat_id(login_user.user_id, conversation_id)
-        # 标记会话为已删除
+        # Mark session as deleted
         await MessageSessionDao.delete_session(conversation_id)
         return True

@@ -1,8 +1,8 @@
 """
-文章 ES 索引定义与管理
+Article ES Index Definition and Management
 
-定义 channel_articles 索引的 mappings 和 settings，
-提供索引创建/确认方法。
+Defines the mappings and settings for the channel_articles index,
+provides index creation/validation methods.
 """
 import logging
 
@@ -12,10 +12,10 @@ from bisheng.core.search.elasticsearch.manager import get_es_connection
 
 logger = logging.getLogger(__name__)
 
-# 索引名称
+# Index name
 ARTICLE_INDEX_NAME = "channel_articles"
 
-# ES Mappings 定义
+# ES Mappings definition
 ARTICLE_MAPPINGS = {
     "source_type": {
         "type": "integer",
@@ -57,7 +57,7 @@ ARTICLE_MAPPINGS = {
     },
 }
 
-# ES Settings（IK 分词器配置，fallback 到 standard）
+# ES Settings (IK analyzer configuration, fallback to standard)
 ARTICLE_SETTINGS = {
     "number_of_shards": 1,
     "number_of_replicas": 0,
@@ -66,10 +66,10 @@ ARTICLE_SETTINGS = {
 
 async def ensure_article_index_exists(es_client: AsyncElasticsearch = None) -> None:
     """
-    确保文章索引存在，若不存在则创建。
+    Ensure article index exists, create if it doesn't exist.
 
     Args:
-        es_client: 可选的 ES 客户端，若不传则自动获取
+        es_client: Optional ES client, automatically obtained if not provided
     """
     if es_client is None:
         es_client = await get_es_connection()
@@ -96,10 +96,10 @@ async def ensure_article_index_exists(es_client: AsyncElasticsearch = None) -> N
 
 def ensure_article_index_exists_sync(es_client: Elasticsearch = None) -> None:
     """
-    同步版本：确保文章索引存在，若不存在则创建。
+    Synchronous version: Ensure article index exists, create if it doesn't exist.
 
     Args:
-        es_client: 可选的 ES 客户端，若不传则自动获取
+        es_client: Optional ES client, automatically obtained if not provided
     """
     if es_client is None:
         from bisheng.core.search.elasticsearch.manager import get_es_connection_sync

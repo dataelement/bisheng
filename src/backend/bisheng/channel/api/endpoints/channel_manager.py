@@ -118,8 +118,8 @@ async def crawl_website(
 
 @router.get("/my_channels")
 async def get_my_channels(
-        query_type: QueryTypeEnum = Query(..., description='查询类型：created(我创建的) / followed(我关注的)'),
-        sort_by: SortByEnum = Query(SortByEnum.LATEST_UPDATE, description='排序方式，默认最近更新'),
+        query_type: QueryTypeEnum = Query(..., description='Query type: created / followed'),
+        sort_by: SortByEnum = Query(SortByEnum.LATEST_UPDATE, description='Sort by, default latest update'),
         login_user: UserPayload = Depends(UserPayload.get_login_user),
         channel_service: 'ChannelService' = Depends(get_channel_service)
 ):
@@ -131,13 +131,13 @@ async def get_my_channels(
 
 @router.get("/square")
 async def get_channel_square(
-        keyword: Optional[str] = Query(None, description='模糊搜索关键词（频道名称/简介）'),
-        page: int = Query(1, ge=1, description='页码，默认1'),
-        page_size: int = Query(20, ge=1, le=100, description='每页数量，默认20'),
+        keyword: Optional[str] = Query(None, description='Fuzzy search keyword (channel name/description)'),
+        page: int = Query(1, ge=1, description='Page number, default 1'),
+        page_size: int = Query(20, ge=1, le=100, description='Page size, default 20'),
         login_user: UserPayload = Depends(UserPayload.get_login_user),
         channel_service: 'ChannelService' = Depends(get_channel_service)
 ):
-    """频道广场查询：分页查询所有已发布频道，支持模糊搜索，展示订阅状态和订阅人数。"""
+    """Channel square query: Paginated query of all released channels, supports fuzzy search, displays subscription status and subscriber count."""
     try:
         result = await channel_service.get_channel_square(
             keyword=keyword,
@@ -157,7 +157,7 @@ async def subscribe_channel(
         login_user: UserPayload = Depends(UserPayload.get_login_user),
         channel_service: 'ChannelService' = Depends(get_channel_service)
 ):
-    """订阅频道申请接口：根据频道类型（公开、私密、需要审批）处理订阅申请。"""
+    """Subscribe channel request API: Handles subscription requests based on channel type (public, private, approval required)."""
     status = await channel_service.subscribe_channel(req_param, login_user)
     return resp_200(data=status.value)
 
@@ -168,21 +168,21 @@ async def set_channel_pin(
         login_user: UserPayload = Depends(UserPayload.get_login_user),
         channel_service: 'ChannelService' = Depends(get_channel_service)
 ):
-    """设置频道置顶状态。"""
+    """Set channel pin status."""
     await channel_service.set_channel_pin(req_param, login_user)
     return resp_200(data=True)
 
 
 @router.get("/members")
 async def list_channel_members(
-        channel_id: str = Query(..., description='频道 ID'),
-        page: int = Query(1, ge=1, description='页码，默认1'),
-        page_size: int = Query(20, ge=1, le=100, description='每页数量，默认20'),
-        keyword: str = Query(None, description='用户名模糊搜索关键词'),
+        channel_id: str = Query(..., description='Channel ID'),
+        page: int = Query(1, ge=1, description='Page number, default 1'),
+        page_size: int = Query(20, ge=1, le=100, description='Page size, default 20'),
+        keyword: str = Query(None, description='Username fuzzy search keyword'),
         login_user: UserPayload = Depends(UserPayload.get_login_user),
         channel_service: 'ChannelService' = Depends(get_channel_service)
 ):
-    """分页查询频道成员列表，支持按用户名模糊搜索。"""
+    """Paginated query of channel member list, supports fuzzy search by username."""
     try:
         result = await channel_service.list_channel_members(
             channel_id=channel_id,
@@ -206,7 +206,7 @@ async def update_member_role(
         login_user: UserPayload = Depends(UserPayload.get_login_user),
         channel_service: 'ChannelService' = Depends(get_channel_service)
 ):
-    """设置成员角色（管理员/普通成员）。"""
+    """Set member role (admin/member)."""
 
     await channel_service.update_member_role(req_param, login_user)
     return resp_200(data=True)
@@ -218,7 +218,7 @@ async def remove_member(
         login_user: UserPayload = Depends(UserPayload.get_login_user),
         channel_service: 'ChannelService' = Depends(get_channel_service)
 ):
-    """移除频道成员。"""
+    """Remove channel member."""
 
     await channel_service.remove_member(req_param, login_user)
     return resp_200(data=True)
@@ -226,19 +226,19 @@ async def remove_member(
 
 @router.get("/articles")
 async def search_channel_articles(
-        channel_id: str = Query(..., description='频道 ID'),
-        keyword: Optional[str] = Query(None, description='搜索关键词（标题、正文、发布者）'),
-        source_ids: Optional[str] = Query(None, description='指定信源ID列表，逗号分隔'),
-        sub_channel_name: Optional[str] = Query(None, description='子频道名称'),
-        page: int = Query(1, ge=1, description='页码，默认1'),
-        page_size: int = Query(20, ge=1, le=100, description='每页数量，默认20'),
-        only_unread: Optional[bool] = Query(False, description='仅看未读'),
+        channel_id: str = Query(..., description='Channel ID'),
+        keyword: Optional[str] = Query(None, description='Search keyword (title, content, publisher)'),
+        source_ids: Optional[str] = Query(None, description='Specified source ID list, comma separated'),
+        sub_channel_name: Optional[str] = Query(None, description='Sub-channel name'),
+        page: int = Query(1, ge=1, description='Page number, default 1'),
+        page_size: int = Query(20, ge=1, le=100, description='Page size, default 20'),
+        only_unread: Optional[bool] = Query(False, description='Show unread only'),
         login_user: UserPayload = Depends(UserPayload.get_login_user),
         channel_service: 'ChannelService' = Depends(get_channel_service)
 ):
-    """根据频道分页检索文章，支持关键词搜索、信源过滤、子频道过滤，结果高亮显示。"""
+    """Paginated search of articles by channel, supports keyword search, source filtering, sub-channel filtering, results with highlighting."""
     try:
-        # 解析逗号分隔的信源ID列表
+        # Parse comma-separated source ID list
         parsed_source_ids = None
         if source_ids:
             parsed_source_ids = [s.strip() for s in source_ids.split(',') if s.strip()]
@@ -268,7 +268,7 @@ async def get_article_detail(
         login_user: UserPayload = Depends(UserPayload.get_login_user),
         channel_service: 'ChannelService' = Depends(get_channel_service)
 ):
-    """根据文章ID获取文章详情，并记录已读状态。"""
+    """Get article details by article ID and record read status."""
     try:
         result = await channel_service.get_article_detail(
             article_id=article_id,
@@ -289,7 +289,7 @@ async def get_channel_detail(
         login_user: UserPayload = Depends(UserPayload.get_login_user),
         channel_service: 'ChannelService' = Depends(get_channel_service)
 ):
-    """获取频道详情，包括频道基本信息、创建人、订阅人数、文章数量等"""
+    """Get channel details, including basic channel information, creator, subscriber count, article count, etc."""
     try:
         result = await channel_service.get_channel_detail(channel_id, login_user)
         return resp_200(data=result.model_dump())
@@ -308,7 +308,7 @@ async def update_channel_info(
         login_user: UserPayload = Depends(UserPayload.get_login_user),
         channel_service: 'ChannelService' = Depends(get_channel_service)
 ):
-    """更新频道信息接口"""
+    """Update channel information API"""
     try:
         result = await channel_service.update_channel(channel_id, req_param, login_user)
         return resp_200(data=result.model_dump())
@@ -326,7 +326,7 @@ async def dismiss_channel(
         login_user: UserPayload = Depends(UserPayload.get_login_user),
         channel_service: 'ChannelService' = Depends(get_channel_service)
 ):
-    """解散频道接口"""
+    """Dismiss channel API"""
     try:
         await channel_service.dismiss_channel(channel_id, login_user)
         return resp_200(data=True)
@@ -344,7 +344,7 @@ async def unsubscribe_channel(
         login_user: UserPayload = Depends(UserPayload.get_login_user),
         channel_service: 'ChannelService' = Depends(get_channel_service)
 ):
-    """取消订阅频道接口"""
+    """Unsubscribe channel API"""
     try:
         await channel_service.unsubscribe_channel(channel_id, login_user)
         return resp_200(data=True)
