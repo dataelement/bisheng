@@ -103,6 +103,7 @@ class ChannelDetailResponse(BaseModel):
     creator_name: str = Field(..., description='Channel Creator Name')
     subscriber_count: int = Field(default=0, description='Number of subscribers')
     article_count: int = Field(default=0, description='Total number of articles in the main channel')
+    subscription_status: SubscriptionStatusEnum = Field(..., description='Current user subscription status')
 
 
 class ChannelMemberResponse(BaseModel):

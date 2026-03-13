@@ -1231,5 +1231,9 @@
   "detect_wechat_link": "检测到是公众号链接，正在添加中...",
   "maximum_channel_name": "最多输入 10 个字符",
   "maximum_channel_description": "最多输入 100 个字符",
-  "need_one_source": "至少需要添加一个信息源"
+  "need_one_source": "至少需添加 1 个信息源",
+  "total_members": "总成员数",
+  "apply_sent": "已发送订阅申请，审批通过即可订阅。",
+  "exceeded_admin_limit": "已超出管理员上限",
+  "search_user_placeholder": "请输入用户名进行搜索"
 }

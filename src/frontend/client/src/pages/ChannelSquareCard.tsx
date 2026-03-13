@@ -15,6 +15,7 @@ interface ChannelSquareCardProps {
   status: "join" | "joined" | "pending" | "private";
   isHighlighted?: boolean;
   onAction?: () => void;
+  onPreview?: () => void;
 }
 
 export function ChannelSquareCard({
@@ -26,7 +27,8 @@ export function ChannelSquareCard({
   subscriberCount,
   status,
   isHighlighted = false,
-  onAction
+  onAction,
+  onPreview
 }: ChannelSquareCardProps) {
   const localize = useLocalize();
   const getButtonConfig = () => {
@@ -51,6 +53,7 @@ export function ChannelSquareCard({
         "flex-1 min-w-0 py-2 transition-all cursor-pointer border-[#E5E6EB] hover:border-[#BDD0FF] hover:shadow-sm bg-white",
         isHighlighted && "border-[#7EA6FF] shadow-[0px_4px_12px_0px_rgba(22,93,255,0.12)]"
       )}
+      onClick={onPreview}
     >
       <CardContent className="">
         {/* 标题和按钮 */}

@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { X, Eye, EyeOff, Check } from "lucide-react";
+import { useRef, useState } from "react";
+import { X, Eye, EyeOff, Check, Camera } from "lucide-react";
 import { Avatar, AvatarImage } from "~/components/ui/avatar";
 import { Button } from "~/components/ui/Button";
 import { Input } from "~/components/ui/Input";
@@ -28,6 +28,8 @@ export function AccountInfoDialog({
 }: AccountInfoDialogProps) {
     const [isEditing, setIsEditing] = useState(false);
     const { showToast } = useToastContext();
+    const [currentAvatarUrl, setCurrentAvatarUrl] = useState(avatarUrl);
+    const fileInputRef = useRef<HTMLInputElement | null>(null);
 
     // 密码输入状态
     const [oldPassword, setOldPassword] = useState("");
@@ -158,6 +160,48 @@ export function AccountInfoDialog({
         }
     };
 
+    const handleAvatarClick = () => {
+        fileInputRef.current?.click();
+    };
+
+    const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+        if (!allowedTypes.includes(file.type)) {
+            showToast({
+                message: "仅支持上传图片文件",
+                severity: NotificationSeverity.WARNING
+            });
+            e.target.value = "";
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = () => {
+            if (typeof reader.result === "string") {
+                setCurrentAvatarUrl(reader.result);
+                showToast({
+                    message: "头像更新成功",
+                    severity: NotificationSeverity.SUCCESS
+                });
+            } else {
+                showToast({
+                    message: "头像上传失败，请重试",
+                    severity: NotificationSeverity.ERROR
+                });
+            }
+        };
+        reader.onerror = () => {
+            showToast({
+                message: "头像上传失败，请重试",
+                severity: NotificationSeverity.ERROR
+            });
+        };
+        reader.readAsDataURL(file);
+    };
+
     return (
         <Dialog open={open} onOpenChange={handleOpenChange}>
             <DialogContent className="w-[480px] p-0 rounded-2xl shadow-[0_8px_24px_rgba(0,0,0,0.12)]" close={false}>
@@ -173,14 +217,32 @@ export function AccountInfoDialog({
                 </div>
 
                 {/* 内容区域 */}
-                <div className="px-6 py-5 space-y-5">
+                <div className="px-6 py-5 space-y-5 -mt-10">
+                    {/* 隐藏的头像上传 input */}
+                    <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/gif"
+                        className="hidden"
+                        onChange={handleAvatarChange}
+                    />
                     {/* 基本信息 */}
                     <div>
                         <h3 className="text-[14px] font-medium text-[#1d2129] mb-3">基本信息</h3>
                         <div className="flex items-center gap-3 p-3 bg-[#f7f8fa] rounded-lg">
-                            <Avatar className="size-10">
-                                <AvatarImage src={avatarUrl} alt={username} />
-                            </Avatar>
+                            <button
+                                type="button"
+                                onClick={handleAvatarClick}
+                                className="relative group rounded-full"
+                            >
+                                <Avatar className="size-10">
+                                    <AvatarImage src={currentAvatarUrl} alt={username} />
+                                </Avatar>
+                                <div className="absolute inset-0 rounded-full bg-[rgba(0,0,0,0.45)] opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-[12px] transition-opacity">
+                                    <Camera className="size-4 mr-1" />
+                                    <span>更换头像</span>
+                                </div>
+                            </button>
                             <div className="flex items-center text-[14px]">
                                 <span className="text-[#1d2129] font-medium">{username}</span>
                                 <span className="text-[#86909c] ml-1">(用户名)</span>
@@ -252,20 +314,16 @@ export function AccountInfoDialog({
 
                                     {/* 密码强度提示 */}
                                     <div className="mt-2 space-y-1">
-                                        <div className={`flex items-center gap-1.5 text-[12px] transition-colors ${
-                                            passwordStrength.minLength ? 'text-[#00b42a]' : 'text-[#86909c]'
-                                        }`}>
-                                            <Check className={`size-3 ${
-                                                passwordStrength.minLength ? 'opacity-100' : 'opacity-30'
-                                            }`} />
+                                        <div className={`flex items-center gap-1.5 text-[12px] transition-colors ${passwordStrength.minLength ? 'text-[#00b42a]' : 'text-[#86909c]'
+                                            }`}>
+                                            <Check className={`size-3 ${passwordStrength.minLength ? 'opacity-100' : 'opacity-30'
+                                                }`} />
                                             <span>至少 8 个字符</span>
                                         </div>
-                                        <div className={`flex items-center gap-1.5 text-[12px] transition-colors ${
-                                            passwordStrength.hasAllRequired ? 'text-[#00b42a]' : 'text-[#86909c]'
-                                        }`}>
-                                            <Check className={`size-3 ${
-                                                passwordStrength.hasAllRequired ? 'opacity-100' : 'opacity-30'
-                                            }`} />
+                                        <div className={`flex items-center gap-1.5 text-[12px] transition-colors ${passwordStrength.hasAllRequired ? 'text-[#00b42a]' : 'text-[#86909c]'
+                                            }`}>
+                                            <Check className={`size-3 ${passwordStrength.hasAllRequired ? 'opacity-100' : 'opacity-30'
+                                                }`} />
                                             <span>包含大小写字母、数字和字符</span>
                                         </div>
                                     </div>
@@ -304,11 +362,10 @@ export function AccountInfoDialog({
                                     <Button
                                         onClick={handleSubmit}
                                         disabled={isSubmitDisabled()}
-                                        className={`h-8 px-4 text-[14px] ${
-                                            isSubmitDisabled()
-                                                ? 'bg-[#e5e6eb] text-[#c9cdd4] cursor-not-allowed hover:bg-[#e5e6eb]'
-                                                : 'bg-[#165dff] text-white hover:bg-[#4080ff]'
-                                        }`}
+                                        className={`h-8 px-4 text-[14px] ${isSubmitDisabled()
+                                            ? 'bg-[#e5e6eb] text-[#c9cdd4] cursor-not-allowed hover:bg-[#e5e6eb]'
+                                            : 'bg-[#165dff] text-white hover:bg-[#4080ff]'
+                                            }`}
                                     >
                                         确认修改
                                     </Button>

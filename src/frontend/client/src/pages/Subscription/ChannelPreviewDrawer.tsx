@@ -92,7 +92,16 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onNavigate
 
         setSubscribing(true);
         try {
-            await subscribeManagerChannelApi({ channel_id: channelId });
+            const res: any = await subscribeManagerChannelApi({ channel_id: channelId });
+            const root = res?.data ?? res;
+            const statusCode = root?.status_code ?? root?.code;
+            if (statusCode && statusCode !== 200) {
+                const msg =
+                    root?.status_message ||
+                    root?.message ||
+                    "订阅失败，请重试";
+                throw new Error(msg);
+            }
 
             if (channelDetail?.visibility === "review") {
                 setSubscribeStatus("pending");
@@ -102,7 +111,10 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onNavigate
                 showToast({ message: "订阅成功", severity: NotificationSeverity.SUCCESS });
             }
         } catch (e: any) {
-            const msg = e?.response?.data?.status_message || e?.message || "订阅失败，请重试";
+            const msg =
+                e?.response?.data?.status_message ||
+                e?.message ||
+                "订阅失败，请重试";
             showToast({ message: msg, severity: NotificationSeverity.ERROR });
         } finally {
             setSubscribing(false);
@@ -126,14 +138,6 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onNavigate
     const btnConfig = getButtonConfig(channelDetail);
     // Hide articles when channel requires review and user hasn't subscribed yet
     const hideArticles = channelDetail?.visibility === "review" && subscribeStatus !== "subscribed";
-
-    // Redirect creator to channel detail page instead of showing preview
-    useEffect(() => {
-        if (channelDetail && open && user?.name && channelDetail.creator_name === user.name) {
-            onOpenChange(false);
-            onNavigateToChannel?.(channelId!);
-        }
-    }, [channelDetail, open, user?.name]);
 
     // Handle error — channel not found or inaccessible (must be in useEffect to avoid side-effects during render)
     useEffect(() => {

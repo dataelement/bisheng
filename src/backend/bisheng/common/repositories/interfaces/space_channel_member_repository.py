@@ -49,3 +49,8 @@ class SpaceChannelMemberRepository(BaseRepository[SpaceChannelMember, int], ABC)
         """Find all members of a channel with a specific role (e.g., all admins or all regular members)."""
         pass
 
+    @abstractmethod
+    async def remove_non_creator_members(self, channel_id: str) -> None:
+        """Remove all members of a channel except the creator (hard delete)."""
+        pass
+

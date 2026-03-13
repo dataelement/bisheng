@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Search, Lightbulb, FileText, TrendingUp, Globe, ArrowLeft } from "lucide-react";
 import { Input } from "~/components/ui/Input";
 import { Button } from "~/components/ui/Button";
@@ -30,6 +30,7 @@ interface ChannelSquareProps {
   searchPlaceholder?: string;
   emptyText?: string;
   joinToastPrefix?: string;
+  onPreviewChannel?: (id: string) => void;
 }
 
 export default function ChannelSquare({
@@ -38,10 +39,10 @@ export default function ChannelSquare({
   subtitle,
   searchPlaceholder,
   emptyText,
-  joinToastPrefix
+  joinToastPrefix,
+  onPreviewChannel,
 }: ChannelSquareProps) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [visibleCount, setVisibleCount] = useState(12);
   const [loadingMore, setLoadingMore] = useState(false);
   const [page, setPage] = useState(1);
   const [hasMorePage, setHasMorePage] = useState(true);
@@ -71,7 +72,18 @@ export default function ChannelSquare({
         setAllChannels((prev) =>
           prev.map((c) => (c.id === channelId ? { ...c, status: nextStatus } : c))
         );
-        await subscribeManagerChannelApi({ channel_id: channelId });
+
+        const res: any = await subscribeManagerChannelApi({ channel_id: channelId });
+        const root = res?.data ?? res;
+        const statusCode = root?.status_code ?? root?.code;
+        if (statusCode && statusCode !== 200) {
+          const msg =
+            root?.status_message ||
+            root?.message ||
+            localize("channel_subscribe_failed") ||
+            "订阅频道失败，请稍后重试";
+          throw new Error(msg);
+        }
         if (target.visibility === "public") {
           showToast({
             message: localize("subscribe_success") || "订阅成功",
@@ -83,13 +95,16 @@ export default function ChannelSquare({
             severity: NotificationSeverity.SUCCESS
           });
         }
-      } catch {
+      } catch (e: any) {
         // 失败时回滚状态
         setAllChannels((prev) =>
           prev.map((c) => (c.id === channelId ? { ...c, status: target.status } : c))
         );
         showToast({
-          message: localize("channel_subscribe_failed") || "订阅频道失败，请稍后重试",
+          message:
+            e?.message ||
+            localize("channel_subscribe_failed") ||
+            "订阅频道失败，请稍后重试",
           severity: NotificationSeverity.ERROR
         });
       } finally {
@@ -111,9 +126,8 @@ export default function ChannelSquare({
     setSearchQuery(next);
   };
 
-  // 根据搜索词加载频道广场数据
-  useEffect(() => {
-    const load = async (nextPage: number) => {
+  const load = useCallback(
+    async (nextPage: number) => {
       try {
         const res = await getChannelSquareApi({
           keyword: searchQuery.trim() || undefined,
@@ -123,7 +137,10 @@ export default function ChannelSquare({
         const root: any = res;
         const payload = root.data ?? root;
         const list: any[] = (payload?.data || payload?.list || []) as any[];
-        const mapped: SquareChannel[] = list.map((item: any, index: number) => {
+        const mapped: SquareChannel[] = list
+          .map((item: any) => {
+            const rawId = item.id ?? item.channel_id;
+            if (!rawId) return null;
           const sourceInfos: any[] = Array.isArray(item.source_infos) ? item.source_infos : [];
           const avatars = sourceInfos
             .map((s) => s.source_icon)
@@ -131,7 +148,7 @@ export default function ChannelSquare({
             .slice(0, 3);
 
           return {
-            id: String(item.id ?? item.channel_id ?? index),
+            id: String(rawId),
             title: String(item.name ?? item.title ?? ""),
             description: String(item.description ?? item.desc ?? "") || "暂无简介",
             creator: String(item.creator ?? item.creator_name ?? ""),
@@ -144,8 +161,9 @@ export default function ChannelSquare({
                 ? "joined"
                 : (item.status as SquareStatus)) || "join",
             isHighlighted: Boolean(item.isHighlighted ?? item.highlight)
-          };
-        });
+          } as SquareChannel;
+        })
+        .filter((c): c is SquareChannel => c !== null);
 
         setAllChannels(prev =>
           nextPage === 1 ? mapped : [...prev, ...mapped]
@@ -155,10 +173,14 @@ export default function ChannelSquare({
       } catch {
         // 出错时不打断现有列表
       }
-    };
+    },
+    [searchQuery]
+  );
 
+  // 根据搜索词加载频道广场数据
+  useEffect(() => {
     load(1);
-  }, [searchQuery]);
+  }, [searchQuery, load]);
 
   const filteredChannels = searchQuery
     ? allChannels.filter(
@@ -168,30 +190,24 @@ export default function ChannelSquare({
     )
     : allChannels;
 
-  const visibleChannels = filteredChannels.slice(0, visibleCount);
-  const hasMore = visibleCount < filteredChannels.length;
-
-  useEffect(() => {
-    setVisibleCount(12);
-  }, [searchQuery, allChannels.length]);
+  const visibleChannels = filteredChannels;
 
   useEffect(() => {
     const node = scrollRef.current;
     if (!node) return;
     const onScroll = () => {
-      if (loadingMore || !hasMore) return;
+      if (loadingMore || !hasMorePage) return;
       const threshold = 60;
       if (node.scrollTop + node.clientHeight >= node.scrollHeight - threshold) {
         setLoadingMore(true);
-        setTimeout(() => {
-          setVisibleCount((prev) => Math.min(prev + 9, filteredChannels.length));
+        load(page + 1).finally(() => {
           setLoadingMore(false);
-        }, 280);
+        });
       }
     };
     node.addEventListener("scroll", onScroll);
     return () => node.removeEventListener("scroll", onScroll);
-  }, [filteredChannels.length, hasMore, loadingMore]);
+  }, [hasMorePage, loadingMore, load, page]);
 
   // 将频道分成每行3个
   const channelRows: typeof visibleChannels[] = [];
@@ -284,6 +300,7 @@ export default function ChannelSquare({
                       subscriberCount={channel.subscriberCount}
                       status={channel.status}
                       isHighlighted={channel.isHighlighted}
+                      onPreview={() => onPreviewChannel?.(channel.id)}
                       onAction={() => handleJoinChannel(channel.id, channel.title)}
                     />
                   ))}
@@ -298,7 +315,11 @@ export default function ChannelSquare({
                 </div>
               ))}
               <div className="h-10 flex items-center justify-center text-[12px] text-[#C9CDD4]">
-                {loadingMore ? "加载中..." : !hasMore ? "没有更多内容了" : ""}
+                {loadingMore
+                  ? "加载中..."
+                  : !hasMorePage
+                    ? "没有更多内容了"
+                    : ""}
               </div>
             </div>
           )}

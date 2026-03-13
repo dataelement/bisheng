@@ -37,6 +37,8 @@ import { useLocalize } from "~/hooks";
 
 const PAGE_SIZE = 10;
 const MAX_ADMINS = 5;
+const MAX_NAME_LEN = 15;
+const MAX_GROUP_LEN = 30;
 
 function getRoleLabel(role: ChannelMember["role"], localize: (key: string) => string) {
     if (role === "creator") return localize("creator") || "创建者";
@@ -53,6 +55,12 @@ function roleWeight(role: ChannelMember["role"]) {
 function getInitials(name: string) {
     const trimmed = (name || "").trim();
     return (trimmed[0] || "?").toUpperCase();
+}
+
+function truncateText(text: string, maxLen: number) {
+    if (!text) return "";
+    if (text.length <= maxLen) return text;
+    return `${text.slice(0, maxLen)}...`;
 }
 
 export function ChannelMemberDialog({
@@ -282,10 +290,13 @@ export function ChannelMemberDialog({
                                             title={m.user_name}
                                             className="w-[220px] text-[13px] text-[#1D2129] truncate"
                                         >
-                                            {m.user_name}
+                                            {truncateText(m.user_name, MAX_NAME_LEN)}
                                         </div>
-                                        <div className="flex-1 min-w-0 text-[12px] text-[#86909C] truncate">
-                                            {(m.groups || []).join("、")}
+                                        <div
+                                            className="flex-1 min-w-0 text-[12px] text-[#86909C] truncate"
+                                            title={(m.groups || []).join("、")}
+                                        >
+                                            {truncateText((m.groups || []).join("、"), MAX_GROUP_LEN)}
                                         </div>
                                         <div className="w-[130px] flex justify-end">
                                             {getRoleActionMenu(m)}

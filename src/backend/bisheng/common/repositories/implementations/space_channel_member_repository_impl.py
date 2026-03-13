@@ -112,3 +112,17 @@ class SpaceChannelMemberRepositoryImpl(BaseRepositoryImpl[SpaceChannelMember, in
         )
         result = await self.session.exec(query)
         return list(result.all())
+
+    async def remove_non_creator_members(self, channel_id: str) -> None:
+        """Remove all members from a channel except the creator (hard delete)."""
+        from sqlmodel import delete
+        query = (
+            delete(SpaceChannelMember)
+            .where(
+                SpaceChannelMember.business_id == channel_id,
+                SpaceChannelMember.business_type == BusinessTypeEnum.CHANNEL,
+                SpaceChannelMember.user_role != UserRoleEnum.CREATOR
+            )
+        )
+        await self.session.exec(query)
+        await self.session.commit()

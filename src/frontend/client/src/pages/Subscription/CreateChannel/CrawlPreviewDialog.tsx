@@ -1,5 +1,5 @@
 import { FileText, Loader2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
     Dialog,
     DialogContent,
@@ -45,12 +45,14 @@ export function CrawlPreviewDialog({
     const [feedbackTips, setFeedbackTips] = useState<string>("请将您的网站爬取需求发送至邮箱：XXXX@XX");
     const [feedbackDialogOpen, setFeedbackDialogOpen] = useState(false);
     const localize = useLocalize();
+    const requestIdRef = useRef(0);
 
     useEffect(() => {
         if (!open || !url) return;
         setStatus("loading");
         setPreviewData(null);
         setErrorCode(null);
+        const currentId = ++requestIdRef.current;
         (async () => {
             try {
                 const res = await crawlTempSourceApi({ url });
@@ -58,6 +60,7 @@ export function CrawlPreviewDialog({
 
                 const code = root?.status_code ?? root?.code;
                 if (code && code !== 200) {
+                    if (requestIdRef.current !== currentId) return;
                     // 13005：检测为单篇文章或非列表页
                     if (code === 13005) {
                         setStatus("singlePageWarning");
@@ -86,6 +89,7 @@ export function CrawlPreviewDialog({
                         /(article|detail|content|zhengce|policy|post)/.test(lowerUrl));
 
                 if (likelySinglePage) {
+                    if (requestIdRef.current !== currentId) return;
                     setStatus("singlePageWarning");
                     return;
                 }
@@ -107,6 +111,7 @@ export function CrawlPreviewDialog({
                             url: String(item.url ?? url)
                         }));
 
+                if (requestIdRef.current !== currentId) return;
                 setPreviewData({
                     name: name || url,
                     icon: raw.icon,
@@ -114,6 +119,7 @@ export function CrawlPreviewDialog({
                 });
                 setStatus("success");
             } catch {
+                if (requestIdRef.current !== currentId) return;
                 setStatus("error");
             }
         })();
@@ -136,6 +142,8 @@ export function CrawlPreviewDialog({
     }, [open]);
 
     const handleCancel = () => {
+        // 标记当前请求为失效，后续响应不再更新 UI
+        requestIdRef.current++;
         onCancel?.();
         onOpenChange(false);
     };
@@ -268,7 +276,7 @@ export function CrawlPreviewDialog({
                                     />
                                     <p className="text-[14px] text-[#4E5969] leading-6">
                                         {status === "singlePageWarning"
-                                            ? <>检测为 <span className="font-medium text-[#1D2129]">单篇文章或非列表页</span>，请输入目标网站的“栏目列表页”网址（如：新闻动态、政策法规等列表页面）</>
+                                            ? <>检测为 <span className="font-medium text-[#1D2129]">单篇文章或非列表页</span>，请输入符合条件的目标网站“栏目列表页”网址（如：新闻动态、政策法规等列表页面）</>
                                             : errorCode === 13004
                                                 ? '该网站因权限设置无法爬取，请输入符合条件的目标网站的“栏目列表页”网址（如：新闻动态、政策法规等列表页面）'
                                                 : '解析失败，请重试或提交人工爬取需求'}

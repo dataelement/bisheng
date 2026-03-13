@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { FileStatus, FileType, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceRole, VisibilityType } from "~/api/knowledge";
 import { NotificationSeverity } from "~/common";
 import { KnowledgeSpaceMemberDialog } from "~/components/KnowledgeSpaceMemberDialog";
@@ -9,6 +10,7 @@ import { CreateKnowledgeSpaceDrawer, type CreateKnowledgeSpaceFormData } from ".
 import { KnowledgeSpaceSidebar } from "./sidebar/KnowledgeSpaceSidebar";
 import { KnowledgeSpaceContent } from "./SpaceDetail";
 import { KnowledgeAiPanel } from "./SpaceDetail/AiChat/KnowledgeAiPanel";
+import { KnowledgeSpacePreviewDrawer } from "./KnowledgeSpacePreviewDrawer";
 
 function getFileType(name: string): FileType {
     const ext = name.split('.').pop()?.toLowerCase();
@@ -59,6 +61,9 @@ export default function Knowledge() {
     const [isResizingSplit, setIsResizingSplit] = useState(false);
     const splitContainerRef = useRef<HTMLDivElement>(null);
     const { showToast } = useToastContext();
+    const navigate = useNavigate();
+    const { spaceId: previewSpaceId } = useParams<{ spaceId?: string }>();
+    const [previewDrawerOpen, setPreviewDrawerOpen] = useState(false);
 
     // 加载知识空间列表
     const loadSpaces = () => {
@@ -101,6 +106,13 @@ export default function Knowledge() {
     useEffect(() => {
         loadSpaces();
     }, []);
+
+    // 打开分享预览抽屉
+    useEffect(() => {
+        if (previewSpaceId) {
+            setPreviewDrawerOpen(true);
+        }
+    }, [previewSpaceId]);
 
     // 空间切换时重新加载文件
     useEffect(() => {
@@ -461,6 +473,22 @@ export default function Knowledge() {
     const locationKey = currentFolderId || activeSpace?.id || "";
     const contextLabel = currentFolderId ? "文件夹" : "知识空间";
 
+    // 探索知识广场视图：全屏占位，行为与频道广场一致
+    if (showKnowledgeSquare) {
+        return (
+            <div className="relative h-full flex">
+                <ChannelSquare
+                    onBack={() => setShowKnowledgeSquare(false)}
+                    title="探索知识广场"
+                    subtitle="您可以在这里探索更多的知识空间"
+                    searchPlaceholder="输入知识空间名称或描述进行搜索"
+                    emptyText="未找到匹配知识空间"
+                    joinToastPrefix="已申请加入知识空间："
+                />
+            </div>
+        );
+    }
+
     return (
         <div className="relative h-full flex">
             {/* Drag and Drop Overlay */}
@@ -481,16 +509,7 @@ export default function Knowledge() {
                     </div>
                 </div>
             )}
-            {showKnowledgeSquare && (
-                <ChannelSquare
-                    onBack={() => setShowKnowledgeSquare(false)}
-                    title="探索知识广场"
-                    subtitle="您可以在这里探索更多的知识空间"
-                    searchPlaceholder="输入知识空间名称或描述进行搜索"
-                    emptyText="未找到匹配知识空间"
-                    joinToastPrefix="已申请加入知识空间："
-                />
-            )}
+
             <KnowledgeSpaceSidebar
                 createdSpaces={createdSpaces}
                 joinedSpaces={joinedSpaces}
@@ -501,6 +520,7 @@ export default function Knowledge() {
                 onDeleteSpace={handleDeleteSpace}
                 onLeaveSpace={handleLeaveSpace}
                 onPinSpace={handlePinSpace}
+                onKnowledgeSquare={handleKnowledgeSquare}
             />
 
             {activeSpace && (
@@ -584,6 +604,17 @@ export default function Knowledge() {
                 open={memberDialogOpen}
                 onOpenChange={setMemberDialogOpen}
                 space={memberDialogSpace}
+            />
+
+            <KnowledgeSpacePreviewDrawer
+                spaceId={previewSpaceId}
+                open={previewDrawerOpen}
+                onOpenChange={(open) => {
+                    setPreviewDrawerOpen(open);
+                    if (!open) {
+                        navigate("/knowledge", { replace: true });
+                    }
+                }}
             />
         </div>
     );

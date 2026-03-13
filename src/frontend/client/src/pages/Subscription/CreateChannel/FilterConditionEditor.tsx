@@ -322,9 +322,9 @@ export function FilterConditionEditor({
                                         </button>
                                     </div>
 
-                                    {/* 关键词输入：使用单行 input，高度 32px */}
+                                    {/* 关键词输入：单行起步，超出一行时自动向下扩展 */}
                                     <div className="flex-1 min-w-[200px] mt-1 max-w-[620px]">
-                                        <input
+                                        <TextareaAutosize
                                             value={cond.keywords}
                                             onChange={(e) =>
                                                 handleKeywordsChange(
@@ -333,8 +333,10 @@ export function FilterConditionEditor({
                                                     e.target.value
                                                 )
                                             }
+                                            minRows={1}
+                                            maxRows={4}
                                             placeholder='请输入关键词, 以分号";"分隔'
-                                            className="w-full h-8 px-3 text-[14px] rounded-lg border border-[#E5E6EB] focus:outline-none focus:ring-2 focus:ring-[#165DFF]/30 focus:border-[#165DFF]"
+                                            className="w-full px-3 py-1.5 text-[14px] rounded-lg border border-[#E5E6EB] focus:outline-none focus:ring-2 focus:ring-[#165DFF]/30 focus:border-[#165DFF] resize-none leading-[22px]"
                                         />
                                     </div>
 
@@ -351,20 +353,21 @@ export function FilterConditionEditor({
                                                 <Plus className="size-3.5 text-[#165DFF]" />
                                             </button>
                                         )}
-                                        <button
-                                            type="button"
-                                            onClick={() =>
-                                                removeConditionInGroup(
-                                                    groupIndex,
-                                                    condIndex
-                                                )
-                                            }
-                                            className="p-[1px] rounded border border-[#E5E6EB] text-[#86909C] hover:text-[#F53F3F] transition-colors"
-                                            title="删除该条条件"
-                                        >
-                                            <Minus className="size-3.5" />
-                                        </button>
-
+                                        {total > 1 && (
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    removeConditionInGroup(
+                                                        groupIndex,
+                                                        condIndex
+                                                    )
+                                                }
+                                                className="p-[1px] rounded border border-[#E5E6EB] text-[#86909C] hover:text-[#F53F3F] transition-colors"
+                                                title="删除该条条件"
+                                            >
+                                                <Minus className="size-3.5" />
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
                             ))}
