@@ -749,7 +749,10 @@ class ChannelService:
         if req.filter_rules is not None:
             channel.filter_rules = [f.model_dump() for f in req.filter_rules]
         if req.visibility is not None:
-            channel.visibility = ChannelVisibilityEnum(req.visibility)
+            new_visibility = ChannelVisibilityEnum(req.visibility)
+            if channel.visibility != new_visibility and new_visibility == ChannelVisibilityEnum.PRIVATE:
+                await self.space_channel_member_repository.remove_non_creator_members(channel_id)
+            channel.visibility = new_visibility
         if req.source_list is not None:
 
             # Calculate the difference between old and new source lists to minimize calls to bisheng_information_client
