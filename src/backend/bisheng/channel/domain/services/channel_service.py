@@ -29,8 +29,15 @@ from bisheng.channel.domain.schemas.channel_manager_schema import (
 )
 from bisheng.channel.domain.services.article_es_service import ArticleEsService
 from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.common.errcode.channel import ChannelNotFoundError, ChannelAccessDeniedError, \
-    ChannelAlreadySubscribedError, ChannelPermissionDeniedError
+from bisheng.common.errcode.channel import (
+    ChannelNotFoundError,
+    ChannelAccessDeniedError,
+    ChannelAlreadySubscribedError,
+    ChannelPermissionDeniedError,
+    ChannelCreateLimitExceededError,
+    ChannelAdminLimitExceededError,
+    ChannelSubscribeLimitExceededError,
+)
 from bisheng.common.models.space_channel_member import BusinessTypeEnum, UserRoleEnum
 from bisheng.common.repositories.interfaces.space_channel_member_repository import SpaceChannelMemberRepository
 from bisheng.core.external.bisheng_information_client.bisheng_information_manager import get_bisheng_information_client
@@ -39,7 +46,12 @@ from bisheng.worker.information.article import sync_information_article
 
 logger = logging.getLogger(__name__)
 
+# Maximum number of channels a user can create
+MAX_USER_CHANNEL_COUNT = 10
+# Maximum number of administrators per channel
 MAX_ADMIN_COUNT = 5
+# Maximum number of channels a user can subscribe to (excluding self-created channels)
+MAX_USER_SUBSCRIBE_COUNT = 20
 
 
 class ChannelService:
@@ -58,6 +70,15 @@ class ChannelService:
 
     async def create_channel(self, channel_data: CreateChannelRequest, login_user: UserPayload):
         """Create a new channel based on the provided data and the logged-in user."""
+        # Check if the user has reached the maximum limit for creating channels
+        existing_channels = await self.space_channel_member_repository.find_channel_memberships(
+            user_id=login_user.user_id,
+            roles=[UserRoleEnum.CREATOR],
+            status=True
+        )
+        if len(existing_channels) >= MAX_USER_CHANNEL_COUNT:
+            raise ChannelCreateLimitExceededError()
+
         channel_model = Channel(
             name=channel_data.name,
             source_list=channel_data.source_list,
@@ -399,8 +420,7 @@ class ChannelService:
                 role=UserRoleEnum.ADMIN
             )
             if len(current_admins) >= MAX_ADMIN_COUNT:
-                raise ValueError(
-                    f"The number of administrators has reached the maximum limit (up to {MAX_ADMIN_COUNT})")
+                raise ChannelAdminLimitExceededError()
 
         # 6. Update role
         target_membership.user_role = UserRoleEnum(req.role)
@@ -599,11 +619,28 @@ class ChannelService:
         if existing_membership:
             raise ChannelAlreadySubscribedError()
 
-        # 3. Check channel visibility
+        # 3. Check if the user has reached the maximum limit for subscribing channels
+        # Count subscribed channels (MEMBER and ADMIN roles, including pending status)
+        subscribed_channels = await self.space_channel_member_repository.find_channel_memberships(
+            user_id=login_user.user_id,
+            roles=[UserRoleEnum.MEMBER, UserRoleEnum.ADMIN],
+            status=True
+        )
+        # Also count pending subscriptions (status=False for REVIEW channels)
+        pending_subscriptions = await self.space_channel_member_repository.find_channel_memberships(
+            user_id=login_user.user_id,
+            roles=[UserRoleEnum.MEMBER, UserRoleEnum.ADMIN],
+            status=False
+        )
+        total_subscriptions = len(subscribed_channels) + len(pending_subscriptions)
+        if total_subscriptions >= MAX_USER_SUBSCRIBE_COUNT:
+            raise ChannelSubscribeLimitExceededError()
+
+        # 4. Check channel visibility
         if channel.visibility == ChannelVisibilityEnum.PRIVATE:
             raise ChannelAccessDeniedError()
 
-        # 4. Determine subscription status based on channel visibility
+        # 5. Determine subscription status based on channel visibility
         if channel.visibility == ChannelVisibilityEnum.PUBLIC:
             status = True
             return_status = SubscriptionStatusEnum.SUBSCRIBED
@@ -613,7 +650,7 @@ class ChannelService:
         else:
             raise ValueError(f"Unsupported channel visibility: {channel.visibility}")
 
-        # 5. Add membership record
+        # 6. Add membership record
         await self.space_channel_member_repository.add_member(
             business_id=req.channel_id,
             business_type=BusinessTypeEnum.CHANNEL,

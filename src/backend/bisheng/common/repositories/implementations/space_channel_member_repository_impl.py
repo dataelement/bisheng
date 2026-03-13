@@ -7,6 +7,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from bisheng.common.models.space_channel_member import SpaceChannelMember, BusinessTypeEnum, UserRoleEnum
 from bisheng.common.repositories.implementations.base_repository_impl import BaseRepositoryImpl
 from bisheng.common.repositories.interfaces.space_channel_member_repository import SpaceChannelMemberRepository
+from bisheng.user.domain.models.user import User
 
 
 class SpaceChannelMemberRepositoryImpl(BaseRepositoryImpl[SpaceChannelMember, int], SpaceChannelMemberRepository):
@@ -61,14 +62,16 @@ class SpaceChannelMemberRepositoryImpl(BaseRepositoryImpl[SpaceChannelMember, in
 
     async def find_channel_members_paginated(self, channel_id: str, user_ids: Optional[List[int]] = None,
                                              page: int = 1, page_size: int = 20) -> List[SpaceChannelMember]:
-        """Get a paginated list of channel members, optionally filtered by user IDs. The results are ordered by role (CREATOR > ADMIN > MEMBER) and then by creation time."""
+        """获取频道成员分页列表，按角色和用户名排序：创建者最顶部、管理员其次按用户名排序、普通成员按用户名排序"""
         role_order = case(
             (SpaceChannelMember.user_role == UserRoleEnum.CREATOR, 0),
             (SpaceChannelMember.user_role == UserRoleEnum.ADMIN, 1),
             else_=2
         )
 
-        query = select(SpaceChannelMember).where(
+        query = select(SpaceChannelMember).join(
+            User, SpaceChannelMember.user_id == User.user_id
+        ).where(
             SpaceChannelMember.business_id == channel_id,
             SpaceChannelMember.business_type == BusinessTypeEnum.CHANNEL,
             SpaceChannelMember.status == True
@@ -77,7 +80,8 @@ class SpaceChannelMemberRepositoryImpl(BaseRepositoryImpl[SpaceChannelMember, in
         if user_ids is not None:
             query = query.where(col(SpaceChannelMember.user_id).in_(user_ids))
 
-        query = query.order_by(role_order, SpaceChannelMember.create_time.asc())
+        # 排序：先按角色(创建者>管理员>普通成员)，再按用户名首字母排序
+        query = query.order_by(role_order, User.user_name.asc())
         query = query.offset((page - 1) * page_size).limit(page_size)
 
         result = await self.session.exec(query)
