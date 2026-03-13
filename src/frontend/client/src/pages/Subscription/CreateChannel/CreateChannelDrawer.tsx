@@ -1,6 +1,6 @@
 import { ChevronDown, ChevronRight, PlusSquare } from "lucide-react";
 import * as RadioGroup from "@radix-ui/react-radio-group";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useConfirm, useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
 import {
@@ -83,6 +83,7 @@ export function CreateChannelDrawer({
     const form = useCreateChannelForm();
     const isEditMode = mode === "edit" && !!editingChannel;
     const confirm = useConfirm();
+    const [isComposingName, setIsComposingName] = useState(false);
 
     useEffect(() => {
         if (open && editingChannel) {
@@ -208,6 +209,25 @@ export function CreateChannelDrawer({
                                         value={form.channelName}
                                         onChange={(e) => {
                                             const v = e.target.value;
+                                            // 中文输入法组合输入阶段不做长度校验，避免提前触发提示
+                                            if (isComposingName) {
+                                                form.setChannelName(v);
+                                                return;
+                                            }
+                                            if (v.length > MAX_CHANNEL_NAME) {
+                                                showToast({
+                                                    message: localize("maximum_channel_name") || "最多输入 10 个字符",
+                                                    severity: NotificationSeverity.WARNING
+                                                });
+                                                form.setChannelName(v.slice(0, MAX_CHANNEL_NAME));
+                                            } else {
+                                                form.setChannelName(v);
+                                            }
+                                        }}
+                                        onCompositionStart={() => setIsComposingName(true)}
+                                        onCompositionEnd={(e) => {
+                                            setIsComposingName(false);
+                                            const v = e.currentTarget.value || "";
                                             if (v.length > MAX_CHANNEL_NAME) {
                                                 showToast({
                                                     message: localize("maximum_channel_name") || "最多输入 10 个字符",
@@ -311,6 +331,9 @@ export function CreateChannelDrawer({
                                     <Label className="text-[14px] text-[#1D2129]">
                                         <span className="text-[#F53F3F]">*</span>
                                         {localize("is_publish_plaza")}
+                                        <span className="ml-2 text-[12px] text-[#86909C]">
+                                            发布后该频道会展示在广场，他人可以搜索或查看
+                                        </span>
                                     </Label>
                                     <RadioGroup.Root
                                         value={form.publishToSquare}

@@ -1,4 +1,4 @@
-import { FileText, Minus, Plus, Search, X } from "lucide-react";
+import { FileText, Minus, Plus, Search, X, XCircle } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Button } from "~/components/ui/Button";
 import { Checkbox } from "~/components/ui/Checkbox";
@@ -8,6 +8,15 @@ import { cn } from "~/utils";
 import { useLocalize } from "~/hooks";
 import { useSourceManager } from "../hooks/useSourceManager";
 import { useConfirm } from "~/Providers";
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle
+} from "~/components/ui/AlertDialog";
 
 const MAX_SOURCES = 50;
 const MAX_NAME_DISPLAY = 20;
@@ -368,6 +377,51 @@ export function AddSourceDropdown({
                     )}
                 </div>
             )}
+
+            {/* 公众号添加失败弹窗 */}
+            <AlertDialog
+                open={mgr.wechatAddError}
+                onOpenChange={(open) => {
+                    if (!open) {
+                        mgr.setWechatAddError(false);
+                    }
+                }}
+            >
+                <AlertDialogContent className="max-w-[420px] rounded-2xl p-0 border-none shadow-[0_8px_24px_rgba(15,23,42,0.18)]">
+                    <div className="">
+                        <div className="flex items-start justify-between">
+                            <div className="flex items-center">
+                                <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-[#FEECEC] ml-4 mr-3">
+                                    <XCircle className="size-4 text-[#F53F3F]" />
+                                </span>
+                                <AlertDialogHeader className="text-left mt-6">
+                                    <AlertDialogTitle className="text-[16px] font-semibold text-[#1D2129]">
+                                        频道添加失败
+                                    </AlertDialogTitle>
+                                    <AlertDialogDescription className="mt-2 text-[14px] text-[#4E5969]">
+                                        再次添加试试吧～
+                                    </AlertDialogDescription>
+                                </AlertDialogHeader>
+                            </div>
+                            <button
+                                type="button"
+                                className="mt-1 text-[#C9CDD4] hover:text-[#4E5969]"
+                                onClick={() => mgr.setWechatAddError(false)}
+                            >
+                                <X className="size-4" />
+                            </button>
+                        </div>
+                    </div>
+                    <div className="px-6 pb-4 flex justify-end">
+                        <AlertDialogAction
+                            onClick={() => mgr.setWechatAddError(false)}
+                            className="h-8 px-6 rounded-md border border-[#E5E6EB] bg-white text-[14px] text-[#4E5969] hover:bg-[#F7F8FA]"
+                        >
+                            取消
+                        </AlertDialogAction>
+                    </div>
+                </AlertDialogContent>
+            </AlertDialog>
 
         </div>
     );

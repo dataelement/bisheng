@@ -14,7 +14,7 @@
         "workbenchVoiceModel": "工作台及知识空间语音模型",
         "knowledgeSpaceQAModel": "订阅 / 知识空间问答生成模型",
         "aiQASceneDescription": "用于订阅与知识空间场景的AI 问答场景",
-        "sessionTitleGenerationModel": "会话标题生成模型",
+        "sessionTitleGenerationModel": "应用会话标题生成模型",
         "asrModel": "语音转文字（ASR）模型",
         "asrModelTooltip": "用于工作台语音转文字场景",
         "ttsModel": "文字转语音（TTS）模型",

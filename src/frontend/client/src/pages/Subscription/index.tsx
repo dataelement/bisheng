@@ -126,7 +126,12 @@ export default function Subscription() {
     return (
         <div className="relative h-full flex">
             {showChannelSquare ? (
-                <ChannelSquare onBack={() => setShowChannelSquare(false)} />
+                <ChannelSquare
+                    onBack={() => setShowChannelSquare(false)}
+                    onPreviewChannel={(id) => {
+                        navigate(`/channel/share/${id}`);
+                    }}
+                />
             ) : (
                 <>
                     {/* left sidebar */}

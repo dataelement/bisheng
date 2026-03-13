@@ -124,12 +124,21 @@ export function KnowledgeSpaceHeader({
     };
 
     const handleShare = () => {
-        const shareText = `欢迎加入知识空间【${space.name}】`;
-        copyText(shareText).then(() => {
-            showToast({ message: '分享链接已复制到粘贴板', status: 'success' });
-        }).catch(() => {
-            showToast({ message: '复制失败，请重试', status: 'error' });
-        });
+        try {
+            const base = window.location.origin + (__APP_ENV__.BASE_URL || "");
+            const normalizedBase = base.endsWith("/") ? base.slice(0, -1) : base;
+            const shareLink = `${normalizedBase}/knowledge/share/${space.id}`;
+            const shareText = `欢迎加入知识空间【${space.name}】 ，点击链接：${shareLink} 一键订阅。`;
+            copyText(shareText)
+                .then(() => {
+                    showToast({ message: "分享链接已复制到粘贴板", status: "success" });
+                })
+                .catch(() => {
+                    showToast({ message: "复制失败，请重试", status: "error" });
+                });
+        } catch {
+            showToast({ message: "复制失败，请重试", status: "error" });
+        }
     };
 
     return (

@@ -87,6 +87,7 @@ export const router = createBrowserRouter([
           { path: 'channel', element: <Subscription /> },
           { path: 'channel/share/:channelId', element: <Subscription /> },
           { path: 'knowledge', element: <Knowledge /> },
+          { path: 'knowledge/share/:spaceId', element: <Knowledge /> },
           { path: 'share/app_:applicationId', element: <ShareAppRedirect /> },
           { path: 'share/:token/:vid?', element: <Share /> },
         ],
