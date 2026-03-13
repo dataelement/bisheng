@@ -139,14 +139,6 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onNavigate
     // Hide articles when channel requires review and user hasn't subscribed yet
     const hideArticles = channelDetail?.visibility === "review" && subscribeStatus !== "subscribed";
 
-    // Redirect creator to channel detail page instead of showing preview
-    useEffect(() => {
-        if (channelDetail && open && user?.name && channelDetail.creator_name === user.name) {
-            onOpenChange(false);
-            onNavigateToChannel?.(channelId!);
-        }
-    }, [channelDetail, open, user?.name]);
-
     // Handle error — channel not found or inaccessible (must be in useEffect to avoid side-effects during render)
     useEffect(() => {
         if (isDetailError && open) {

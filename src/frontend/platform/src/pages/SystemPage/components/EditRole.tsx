@@ -655,18 +655,30 @@ export default function EditRole({ id, name, groupId, knowledgeSpaceFileLimit, o
           </p>
         </div>
 
-        <div className="w-full flex mt-4">
+        <div className="w-full flex mt-4 items-center">
           {t('system.maxTotalUpload')}
           <div className="text-red-500 mx-1">*</div>
           <NonNegativeInput
-            className="w-12 -mt-0.5 mr-1"
+            className="w-16 mr-1"
             defaultValue={40}
-            value={form.knowledgeSpaceFileLimit}
+            value={typeof form.knowledgeSpaceFileLimit === 'number' ? form.knowledgeSpaceFileLimit : 40}
+            min={0}
+            max={9999}
             onValueChange={(val) => {
+              if (val == null || Number.isNaN(val)) {
+                return;
+              }
+              const next = val < 0 ? 0 : val;
               setForm(prev => ({
                 ...prev,
-                knowledgeSpaceFileLimit: val
+                knowledgeSpaceFileLimit: next
               }))
+            }}
+            onBlur={(e) => {
+              const raw = Number(e.target.value);
+              if (!raw || Number.isNaN(raw)) {
+                setForm(prev => ({ ...prev, knowledgeSpaceFileLimit: 40 }));
+              }
             }}
             placeholder=""
           />

@@ -137,7 +137,10 @@ export default function ChannelSquare({
         const root: any = res;
         const payload = root.data ?? root;
         const list: any[] = (payload?.data || payload?.list || []) as any[];
-        const mapped: SquareChannel[] = list.map((item: any, index: number) => {
+        const mapped: SquareChannel[] = list
+          .map((item: any) => {
+            const rawId = item.id ?? item.channel_id;
+            if (!rawId) return null;
           const sourceInfos: any[] = Array.isArray(item.source_infos) ? item.source_infos : [];
           const avatars = sourceInfos
             .map((s) => s.source_icon)
@@ -145,7 +148,7 @@ export default function ChannelSquare({
             .slice(0, 3);
 
           return {
-            id: String(item.id ?? item.channel_id ?? index),
+            id: String(rawId),
             title: String(item.name ?? item.title ?? ""),
             description: String(item.description ?? item.desc ?? "") || "暂无简介",
             creator: String(item.creator ?? item.creator_name ?? ""),
@@ -158,8 +161,9 @@ export default function ChannelSquare({
                 ? "joined"
                 : (item.status as SquareStatus)) || "join",
             isHighlighted: Boolean(item.isHighlighted ?? item.highlight)
-          };
-        });
+          } as SquareChannel;
+        })
+        .filter((c): c is SquareChannel => c !== null);
 
         setAllChannels(prev =>
           nextPage === 1 ? mapped : [...prev, ...mapped]
