@@ -1270,7 +1270,7 @@
   "no_data_available": "No data available",
   "total_channels": "Total Channel Sources",
   "confirm_crawled_content": "Confirm Crawled Content",
-  "parsed_articles": "Latest Parsed Articles",
+  "parsed_articles": "Article list of this site",
   "article_or_page": "Single article or non-list page",
   "detected_as": "Detected as",
   "column_list": "Please enter the URL of the target website's 'column list page'",

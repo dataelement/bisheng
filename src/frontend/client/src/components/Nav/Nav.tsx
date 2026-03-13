@@ -55,7 +55,7 @@ const Nav = ({
       }
       setNavWidth('320px');
     } else {
-      setNavWidth('260px');
+      setNavWidth('240px');
     }
   }, [isSmallScreen]);
 
@@ -116,7 +116,7 @@ const Nav = ({
       <div
         data-testid="nav"
         className={
-          'nav active max-w-[320px] flex-shrink-0 overflow-x-hidden md:max-w-[260px] bg-[#F9FBFF]'
+          'nav active max-w-[240px] flex-shrink-0 overflow-x-hidden md:max-w-[240px] bg-white border-r border-[#ececec]'
         }
         style={{
           width: navVisible ? navWidth : '0px',
@@ -124,7 +124,7 @@ const Nav = ({
           transition: 'width 0.2s, visibility 0.2s',
         }}
       >
-        <div className="h-full w-[320px] md:w-[260px]">
+        <div className="h-full w-[240px] md:w-[240px]">
           <div className="flex h-full min-h-0 flex-col">
             <div
               className={cn(
@@ -140,7 +140,7 @@ const Nav = ({
                 <nav
                   id="chat-history-nav"
                   aria-label={localize('com_ui_chat_history')}
-                  className="flex h-full w-full flex-col px-3 pb-3.5"
+                  className="flex h-full w-full flex-col px-3 py-5"
                 >
                   {/* 新建 */}
                   <NewChat

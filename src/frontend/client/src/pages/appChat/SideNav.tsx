@@ -1,47 +1,91 @@
-import { ChevronLeft, Share2, Plus, MessageSquare, ArrowLeftRight } from 'lucide-react';
+import { ChevronLeft, MessageSquare, MoreHorizontal } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { useRecoilValue } from 'recoil';
+import { currentChatState } from '~/pages/appChat/store/atoms';
+import { useAppSidebar } from '~/pages/appChat/hooks/useAppSidebar';
+import AppAvator from '~/components/Avator';
+import { AppSwitcherDropdown } from '~/pages/appChat/components/AppSwitcherDropdown';
+import { cn } from '~/utils';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '~/components/ui/Tooltip2';
 
 export function SideNav() {
-    // 模拟数据
-    const conversations = [
-        { id: '1', title: '新对话', active: true },
-    ];
+    const navigate = useNavigate();
+    
+    // 获取当前对话的应用数据
+    const chatState = useRecoilValue(currentChatState);
+    const flowData = chatState?.flow;
+    
+    // 从 sidebar hook 中获取会话列表及操作方法
+    const {
+        groups,
+        activeConversationId,
+        switchConversation,
+        createNewChat,
+        shareApp,
+    } = useAppSidebar();
 
     return (
-        <div className="w-[280px] h-full bg-[#f9fbff] border-r border-gray-100 flex flex-col overflow-hidden">
+        <div className="w-full h-full bg-white border-r border-[#ececec] flex flex-col overflow-hidden text-[#212121]">
             {/* 顶部返回区域 */}
-            <div className="flex items-center gap-3 p-4">
-                <button className="p-2 bg-white border border-gray-200 rounded-xl shadow-sm hover:bg-gray-50 transition-colors">
-                    <ChevronLeft size={18} className="text-gray-600" />
+            <div className="flex items-center gap-[8px] px-[12px] py-[20px] shrink-0">
+                <button 
+                    onClick={() => navigate('/apps')}
+                    className="flex shrink-0 items-center justify-center size-[32px] rounded-[8px] bg-[rgba(255,255,255,0.5)] border border-[#ebecf0] backdrop-blur-[4px] hover:bg-gray-50 transition-colors"
+                >
+                    <ChevronLeft size={16} className="text-[#212121]" />
                 </button>
-                <span className="text-lg font-medium text-gray-800">应用对话</span>
+                <span className="text-[14px] font-medium leading-[22px]">应用对话</span>
             </div>
 
-            {/* 智能体卡片区域 */}
-            <div className="px-4 mb-6">
-                <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm">
-                    <div className="flex items-start justify-between mb-4">
-                        <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center text-white">
-                                {/* 模拟图标 */}
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>
-                            </div>
-                            <div className="overflow-hidden">
-                                <h3 className="font-bold text-gray-900 truncate flex items-center gap-1">
-                                    🚀文旅IP生成
+            {/* 应用卡片区域 */}
+            <div className="px-[12px] mb-[16px] shrink-0">
+                <div 
+                    className="border-[#ebecf0] border-[0.5px] rounded-[6px] p-[8px] flex flex-col gap-[12px]"
+                    style={{ backgroundImage: "linear-gradient(128.789deg, rgb(249, 251, 254) 0%, rgb(255, 255, 255) 50%, rgb(249, 251, 254) 100%)" }}
+                >
+                    <div className="flex items-center gap-[8px]">
+                        <AppAvator 
+                            className="size-[32px] min-w-[32px] rounded-[4px]" 
+                            url={flowData?.logo} 
+                            id={flowData?.id as any} 
+                            flowType={String(flowData?.flow_type || 5)} 
+                        />
+                        <div className="flex-1 flex flex-col min-w-0 justify-center">
+                            <div className="flex items-center justify-between">
+                                <h3 className="text-[14px] font-medium leading-[22px] truncate">
+                                    {flowData?.name || '未知应用'}
                                 </h3>
-                                <p className="text-xs text-gray-400 truncate">自动生成文旅 IP 角色设定...</p>
+                                {/* 切换应用下拉 */}
+                                <div className="shrink-0 size-[16px] flex items-center justify-center ml-1">
+                                    <AppSwitcherDropdown />
+                                </div>
                             </div>
+                            <TooltipProvider delayDuration={300}>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <p className="text-[12px] text-[#a9aeb8] leading-[19.5px] truncate cursor-default">
+                                            {flowData?.description || '暂无描述信息'}
+                                        </p>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="bottom" align="start" className="max-w-[200px]">
+                                        {flowData?.description || '暂无描述信息'}
+                                    </TooltipContent>
+                                </Tooltip>
+                            </TooltipProvider>
                         </div>
-                        <ArrowLeftRight size={14} className="text-gray-300 mt-1" />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2">
-                        <button className="flex items-center justify-center gap-1 py-2 px-1 text-sm border border-gray-100 rounded-lg hover:bg-gray-50 text-gray-600 transition-colors">
-                            <Share2 size={14} />
+                    <div className="flex items-center justify-center gap-[4px]">
+                        <button 
+                            onClick={shareApp}
+                            className="flex-1 min-w-0 h-[28px] flex items-center justify-center bg-white border border-[#ececec] rounded-[6px] text-[14px] leading-[22px] hover:bg-gray-50 transition-colors"
+                        >
                             分享应用
                         </button>
-                        <button className="flex items-center justify-center gap-1 py-2 px-1 text-sm border border-gray-100 rounded-lg hover:bg-gray-50 text-gray-600 transition-colors">
-                            <Plus size={14} />
+                        <button 
+                            onClick={createNewChat}
+                            className="flex-1 min-w-0 h-[28px] flex items-center justify-center bg-white border border-[#ececec] rounded-[6px] text-[14px] leading-[22px] hover:bg-gray-50 transition-colors"
+                        >
                             开启新对话
                         </button>
                     </div>
@@ -49,20 +93,50 @@ export function SideNav() {
             </div>
 
             {/* 会话列表区域 */}
-            <div className="flex-1 px-3 overflow-y-auto">
-                <div className="px-2 mb-2 text-xs font-medium text-gray-400">今天</div>
-                {conversations.map((item) => (
-                    <div
-                        key={item.id}
-                        className={`
-              group flex items-center gap-3 px-3 py-3 rounded-xl cursor-pointer transition-all
-              ${item.active ? 'bg-[#eef4ff] text-blue-600' : 'hover:bg-gray-100 text-gray-700'}
-            `}
-                    >
-                        <MessageSquare size={18} className={item.active ? 'text-blue-500' : 'text-gray-400'} />
-                        <span className="text-[14px] font-medium">{item.title}</span>
-                    </div>
-                ))}
+            <div className="flex-1 px-[12px] overflow-y-auto pb-[20px] flex flex-col gap-[16px]">
+                {groups.length === 0 ? (
+                    <div className="text-center text-gray-400 text-sm py-10">暂无对话记录</div>
+                ) : (
+                    groups.map((group, groupIdx) => (
+                        <div key={groupIdx} className="flex flex-col gap-[4px]">
+                            {/* 时间标签 */}
+                            <div className="px-[12px] py-[4px]">
+                                <span className="opacity-60 text-[12px] leading-normal">{group.label}</span>
+                            </div>
+                            {/* 列表内容 */}
+                            <div className="flex flex-col gap-[4px]">
+                                {group.conversations.map((conv) => {
+                                    const isActive = conv.id === activeConversationId;
+                                    return (
+                                        <div
+                                            key={conv.id}
+                                            onClick={() => switchConversation(conv)}
+                                            className={cn(
+                                                "group flex items-center gap-[8px] px-[12px] py-[6px] rounded-[8px] cursor-pointer transition-colors relative",
+                                                isActive ? "bg-[#f7f7f7]" : "hover:bg-[#f7f7f7]"
+                                            )}
+                                        >
+                                            <div className="shrink-0 size-[24px] flex items-center justify-center text-gray-400">
+                                                <MessageSquare size={16} />
+                                            </div>
+                                            <div className="flex-1 min-w-0 flex flex-col justify-center">
+                                                <p className="text-[14px] leading-[20px] truncate">{conv.title}</p>
+                                            </div>
+                                            
+                                            {/* TODO: 删除对话、重命名等操作，可以放置在这里 */}
+                                            {/* <div className={cn(
+                                                "absolute right-2 shrink-0 p-1 opacity-0 transition-opacity",
+                                                isActive ? "opacity-100" : "group-hover:opacity-100"
+                                            )}>
+                                                <MoreHorizontal size={14} className="text-gray-500 hover:text-gray-800" />
+                                            </div> */}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    ))
+                )}
             </div>
         </div>
     );

@@ -126,7 +126,12 @@ export default function Subscription() {
     return (
         <div className="relative h-full flex">
             {showChannelSquare ? (
-                <ChannelSquare onBack={() => setShowChannelSquare(false)} />
+                <ChannelSquare
+                    onBack={() => setShowChannelSquare(false)}
+                    onPreviewChannel={(id) => {
+                        navigate(`/channel/share/${id}`);
+                    }}
+                />
             ) : (
                 <>
                     {/* left sidebar */}
@@ -193,8 +198,19 @@ export default function Subscription() {
                 createdChannelCount={createdChannelCount}
                 mode={editingChannel ? "edit" : "create"}
                 editingChannel={editingChannel}
-                onViewChannel={() => {
-                    // 预留：后续可跳转到新建频道
+                onViewChannel={(channelId) => {
+                    // 关闭创建抽屉
+                    setShowCreateChannelDrawer(false);
+                    // 尝试从已创建频道列表中找到新频道并设为当前激活
+                    const createdList =
+                        queryClient.getQueryData<Channel[]>(["channels", "created", SortType.RECENT_UPDATE]) || [];
+                    const subscribedList =
+                        queryClient.getQueryData<Channel[]>(["channels", "subscribed", SortType.RECENT_UPDATE]) || [];
+                    const all = [...createdList, ...subscribedList];
+                    const target = all.find((c) => c.id === channelId);
+                    if (target) {
+                        setActiveChannel(target);
+                    }
                 }}
                 onManageMembers={(channelId) => {
                     setChannelMemberChannel({

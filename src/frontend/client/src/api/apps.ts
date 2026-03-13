@@ -386,3 +386,38 @@ export const getChatOnlineApi = async (page, keyword, tag_id, disableLimit = 8) 
 
     return await request.get(`/api/v1/chat/online`, { params })
 }
+
+/**
+ * Pin/unpin an app.
+ * Temporary: reuses frequently_used endpoints until dedicated pin API is ready.
+ */
+export async function pinAppApi(flowType: number, appId: string, pinned: boolean) {
+    if (pinned) {
+        return await addToFrequentlyUsed(flowType, appId)
+    } else {
+        // removeFromFrequentlyUsed requires user_id — pass empty; backend resolves from session
+        return await removeFromFrequentlyUsed('', flowType, appId)
+    }
+}
+
+/**
+ * Get conversation list for a specific app.
+ * API pending — stubbed to match /api/v1/chat/list format.
+ */
+export async function getAppConversationsApi(flowId: string) {
+    return await request.get('/api/v1/chat/list', {
+        params: { flow_id: flowId, page: 1, limit: 100 }
+    })
+}
+
+/**
+ * Get all accessible apps for the current user (app switcher).
+ * Reuses chat/online — backend returns sorted by last_chat_time desc.
+ */
+export async function getAllAccessibleAppsApi(params: {
+    keyword?: string;
+    page?: number;
+    limit?: number;
+}) {
+    return await request.get('/api/v1/chat/online', { params })
+}

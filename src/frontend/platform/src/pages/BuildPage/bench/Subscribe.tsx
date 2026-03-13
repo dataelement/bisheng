@@ -312,7 +312,7 @@ const useChatConfig = (refs: UseChatConfigProps) => {
 
         const sys = (formData.systemPrompt || '').trim();
         if (!sys) {
-            newErrors.systemPrompt = t('chatConfig.errors.required');
+            newErrors.systemPrompt = '不可为空';
             isValid = false;
         } else if (sys.length > 30000) {
             newErrors.systemPrompt = t('chatConfig.errors.maxCharacters', { count: 30000 });
@@ -321,7 +321,7 @@ const useChatConfig = (refs: UseChatConfigProps) => {
 
         const user = (formData.userPrompt || '').trim();
         if (!user) {
-            newErrors.userPrompt = t('chatConfig.errors.required');
+            newErrors.userPrompt = '不可为空';
             isValid = false;
         } else if (user.length > 30000) {
             newErrors.userPrompt = t('chatConfig.errors.maxCharacters', { count: 30000 });
@@ -340,8 +340,24 @@ const useChatConfig = (refs: UseChatConfigProps) => {
 
     const handleSave = async () => {
         if (!validateForm()) {
-            // 主要针对反馈提示文案为空的场景，给出明确的 toast
+            // 主要针对提示词为空的场景，给出明确的 toast
+            const sys = (formData.systemPrompt || '').trim();
+            const user = (formData.userPrompt || '').trim();
             const feedback = (formData.feedbackTips || '').trim();
+            if (!sys) {
+                toast({
+                    variant: 'error',
+                    description: '系统提示词不可为空',
+                });
+                return false;
+            }
+            if (!user) {
+                toast({
+                    variant: 'error',
+                    description: '用户提示词不可为空',
+                });
+                return false;
+            }
             if (!feedback) {
                 toast({
                     variant: 'error',

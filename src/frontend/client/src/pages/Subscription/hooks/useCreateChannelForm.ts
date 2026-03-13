@@ -38,13 +38,14 @@ export function useCreateChannelForm() {
     const [submitting, setSubmitting] = useState(false);
     const [createdChannelId, setCreatedChannelId] = useState<string | null>(null);
     const [lastAddedSubChannelId, setLastAddedSubChannelId] = useState<string | null>(null);
+    const [sourceSearchResetToken, setSourceSearchResetToken] = useState(0);
 
     const resetForm = useCallback(() => {
         setSources([]);
         setChannelName("");
         setChannelDesc("");
-        setVisibility("public");
-        setPublishToSquare("no");
+        setVisibility("review");
+        setPublishToSquare("yes");
         setContentFilter(false);
         setFilterGroups([]);
         setTopFilterRelation("and");
@@ -58,6 +59,7 @@ export function useCreateChannelForm() {
         setShowSuccess(false);
         setSubmitting(false);
         setCreatedChannelId(null);
+        setSourceSearchResetToken((t) => t + 1);
     }, []);
 
     const initFromChannel = useCallback((channel: Channel) => {
@@ -263,6 +265,7 @@ export function useCreateChannelForm() {
         submitting, setSubmitting,
         createdChannelId, setCreatedChannelId,
         lastAddedSubChannelId, setLastAddedSubChannelId,
+        sourceSearchResetToken, setSourceSearchResetToken,
 
         // Handlers
         resetForm,

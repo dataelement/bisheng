@@ -1191,7 +1191,7 @@
   "no_data_available": "暂无数据",
   "total_channels": "频道信息源总数",
   "confirm_crawled_content": "爬取内容确认",
-  "parsed_articles": "解析到的最新文章",
+  "parsed_articles": "该网站的文章列表:",
   "article_or_page": "单篇文章或非列表页",
   "detected_as": "检测为",
   "column_list": "请输入目标网站的“栏目列表页”网址",
@@ -1208,7 +1208,7 @@
   "filter_criteria": "筛选条件",
   "create_sub_channel": "创建子频道",
   "subscribe_same_filters": "订阅相同信息源但可以添加不同筛选条件",
-  "add_sub_channel": "添加子频道",
+  "add_sub_channel": "增加子频道",
   "cannot_empty_channel_name": "频道名称不能为空",
   "cannot_subchannel_name": "子频道名称不能为空",
   "cannot_filter_criteria": "子频道的筛选条件不可为空",
@@ -1230,5 +1230,10 @@
   "subscribe_success": "订阅成功",
   "detect_wechat_link": "检测到是公众号链接，正在添加中...",
   "maximum_channel_name": "最多输入 10 个字符",
-  "maximum_channel_description": "最多输入 100 个字符"
+  "maximum_channel_description": "最多输入 100 个字符",
+  "need_one_source": "至少需添加 1 个信息源",
+  "total_members": "总成员数",
+  "apply_sent": "已发送订阅申请，审批通过即可订阅。",
+  "exceeded_admin_limit": "已超出管理员上限",
+  "search_user_placeholder": "请输入用户名进行搜索"
 }

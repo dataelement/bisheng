@@ -64,3 +64,21 @@ class ArticleNotFoundError(BaseErrorCode):
 class ChannelChatConversationNotFoundError(BaseErrorCode):
     Code: int = 13041
     Msg: str = 'Chat conversation not found'
+
+
+# User has reached the maximum limit for creating channels
+class ChannelCreateLimitExceededError(BaseErrorCode):
+    Code: int = 13050
+    Msg: str = 'Maximum limit for creating channels reached (up to 10 channels)'
+
+
+# Channel has reached the maximum limit for administrators
+class ChannelAdminLimitExceededError(BaseErrorCode):
+    Code: int = 13051
+    Msg: str = 'Maximum limit for administrators reached (up to 5 admins)'
+
+
+# User has reached the maximum limit for subscribing channels
+class ChannelSubscribeLimitExceededError(BaseErrorCode):
+    Code: int = 13052
+    Msg: str = 'Maximum limit for subscribing channels reached (up to 20 channels)'

@@ -229,7 +229,7 @@ export function useModel(type = 'llm') {
         embeddings = [],
         asrModel = [],
         ttsModel = [],
-        rerank=[]
+        rerank = []
     } = data ?? {};
     return {
         llmOptions,

@@ -221,9 +221,9 @@ export function FilterConditionEditor({
                         <RefreshCcw className="absolute size-3.5 opacity-0 group-hover/btn:opacity-100 transition-opacity pointer-events-none" />
                     </button>
                     {/* 竖线延伸至最下方加号，底横线指向加号 */}
-                    <div className="absolute left-9 top-6 bottom-4 w-px border-l border-dashed border-[#C9CDD4]" />
+                    <div className="absolute left-9 top-6 bottom-2 w-px border-l border-dashed border-[#C9CDD4]" />
                     <div className="absolute left-9 top-6 w-3 h-px border-t border-dashed border-[#C9CDD4]" />
-                    <div className="absolute left-9 bottom-4 w-4 h-px border-t border-dashed border-[#C9CDD4]" />
+                    <div className="absolute left-9 bottom-2 w-4 h-px border-t border-dashed border-[#C9CDD4]" />
                 </>
             )}
 
@@ -263,15 +263,15 @@ export function FilterConditionEditor({
                                 {/* 顶部小横线包住第一条条件 */}
                                 <div className="absolute left-9 top-4 w-3 h-px border-t border-dashed border-[#C9CDD4]" />
                                 {/* 底部小横线指向底部的 + 号（与 + 位于同一行上方） */}
-                                <div className="absolute left-9 bottom-4 w-3 h-px border-t border-dashed border-[#C9CDD4]" />
+                                <div className="absolute left-9 bottom-3 w-3 h-px border-t border-dashed border-[#C9CDD4]" />
                                 {!atTotalLimit && (
                                     <button
                                         type="button"
                                         onClick={() => addConditionInGroup(groupIndex)}
-                                        className="absolute left-14 bottom-1 flex items-center justify-center w-5 h-5 rounded border border-[#E5E6EB] text-[#86909C] bg-white hover:border-[#165DFF] hover:text-[#165DFF] transition-colors"
+                                        className="absolute left-14 bottom-1 flex items-center justify-center w-4 h-4 rounded border border-[#165DFF] text-[#86909C] bg-white hover:border-[#165DFF] hover:text-[#165DFF] transition-colors"
                                         title="在当前关系下新增一条条件"
                                     >
-                                        <Plus className="size-4" />
+                                        <Plus className="size-3.5 text-[#165DFF]" />
                                     </button>
                                 )}
                             </>
@@ -322,9 +322,9 @@ export function FilterConditionEditor({
                                         </button>
                                     </div>
 
-                                    {/* 关键词输入：使用单行 input，高度 32px */}
+                                    {/* 关键词输入：单行起步，超出一行时自动向下扩展 */}
                                     <div className="flex-1 min-w-[200px] mt-1 max-w-[620px]">
-                                        <input
+                                        <TextareaAutosize
                                             value={cond.keywords}
                                             onChange={(e) =>
                                                 handleKeywordsChange(
@@ -333,38 +333,41 @@ export function FilterConditionEditor({
                                                     e.target.value
                                                 )
                                             }
+                                            minRows={1}
+                                            maxRows={4}
                                             placeholder='请输入关键词, 以分号";"分隔'
-                                            className="w-full h-8 px-3 text-[14px] rounded-lg border border-[#E5E6EB] focus:outline-none focus:ring-2 focus:ring-[#165DFF]/30 focus:border-[#165DFF]"
+                                            className="w-full px-3 py-1.5 text-[14px] rounded-lg border border-[#E5E6EB] focus:outline-none focus:ring-2 focus:ring-[#165DFF]/30 focus:border-[#165DFF] resize-none leading-[22px]"
                                         />
                                     </div>
 
                                     {/* 第一层 & 第二层：所有条目都可以删；仅当全局只剩 1 条时不展示 - */}
-                                    <div className="flex items-center gap-1 mt-1 flex-shrink-0">
+                                    <div className="flex items-center gap-1 mt-2.5 flex-shrink-0">
                                         {/* 第一层：group 仅 1 条时，这一条既是第一层，也有 + */}
                                         {group.conditions.length === 1 && !atTotalLimit && (
                                             <button
                                                 type="button"
                                                 onClick={() => addConditionInGroup(groupIndex)}
-                                                className="p-1.5 rounded border border-[#E5E6EB] text-[#86909C] hover:border-[#165DFF] hover:text-[#165DFF] transition-colors"
+                                                className="p-[0.5px] rounded border border-[#165DFF] text-[#86909C] hover:border-[#165DFF] hover:text-[#165DFF] transition-colors"
                                                 title="在当前关系下新增一条条件"
                                             >
-                                                <Plus className="size-4" />
+                                                <Plus className="size-3.5 text-[#165DFF]" />
                                             </button>
                                         )}
-                                        <button
-                                            type="button"
-                                            onClick={() =>
-                                                removeConditionInGroup(
-                                                    groupIndex,
-                                                    condIndex
-                                                )
-                                            }
-                                            className="p-1.5 rounded border border-[#E5E6EB] text-[#86909C] hover:text-[#F53F3F] transition-colors"
-                                            title="删除该条条件"
-                                        >
-                                            <Minus className="size-4" />
-                                        </button>
-
+                                        {total > 1 && (
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    removeConditionInGroup(
+                                                        groupIndex,
+                                                        condIndex
+                                                    )
+                                                }
+                                                className="p-[1px] rounded border border-[#E5E6EB] text-[#86909C] hover:text-[#F53F3F] transition-colors"
+                                                title="删除该条条件"
+                                            >
+                                                <Minus className="size-3.5" />
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
                             ))}
@@ -379,10 +382,10 @@ export function FilterConditionEditor({
                     <button
                         type="button"
                         onClick={addRootCondition}
-                        className="flex items-center justify-center p-1.5 rounded border border-[#E5E6EB] text-[#86909C] hover:border-[#165DFF] hover:text-[#165DFF] transition-colors w-6 h-6"
+                        className="flex items-center justify-center w-4 h-4 rounded-[4px] border border-[#165DFF] text-[#165DFF]  hover:text-white transition-colors"
                         title="新增条件"
                     >
-                        <Plus className="size-4" />
+                        <Plus className="size-3.5 text-[#165DFF]" />
                     </button>
                 </div>
             )}

@@ -425,6 +425,9 @@ export async function searchManagerSourcesApi(params: {
     };
 }
 
+export async function getFeedbackTips(): Promise<any> {
+    return await request.get(`/api/v1/workstation/config/subscription`);
+}
 /**
  * POST /api/v1/channel/manager/add_website_source
  * 添加网站信息源

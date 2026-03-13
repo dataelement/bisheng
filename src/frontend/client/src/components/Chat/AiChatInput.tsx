@@ -15,6 +15,7 @@ import { File_Accept } from "~/common";
 import { ChatToolDown } from "~/components/Chat/Input/ChatFormTools";
 import { ChatKnowledge } from "~/components/Chat/Input/ChatKnowledge";
 import DragDropOverlay from "~/components/Chat/Input/Files/DragDropOverlay";
+import { ArrowDown } from "lucide-react";
 import { SendIcon } from "~/components/svg";
 import { Button, TextareaAutosize } from "~/components/ui";
 import SpeechToTextComponent from "~/components/Voice/SpeechToText";
@@ -23,6 +24,8 @@ import InputFiles from "~/pages/appChat/components/InputFiles";
 import { useFileDropAndPaste } from "~/pages/appChat/useFileDropAndPaste";
 import { cn, removeFocusRings } from "~/utils";
 import AiModelSelect from "./AiModelSelect";
+import BooksIcon from "../ui/icon/Books";
+import BookOpen from "../ui/icon/BookOpen";
 
 export interface AiChatInputFeatures {
     modelSelect?: boolean;
@@ -45,7 +48,7 @@ interface AiChatInputProps {
     /** files: uploaded file list [{path, name}], null means still uploading */
     onSend: (text: string, files?: any[] | null) => void;
     onStop: () => void;
-    onNewChat: () => void;
+    onScrollToBottom: () => void;
     /** Optional controlled value — for filling in preset questions */
     value?: string;
     onChange?: (val: string) => void;
@@ -74,7 +77,7 @@ const AiChatInput = memo(
         onModelChange,
         onSend,
         onStop,
-        onNewChat,
+        onScrollToBottom,
         value: externalValue,
         onChange: onExternalChange,
         bsConfig,
@@ -175,19 +178,15 @@ const AiChatInput = memo(
                 {/* Drag-drop overlay */}
                 {isDragging && <DragDropOverlay />}
 
-                {/* New Chat button — above input */}
+                {/* Scroll to bottom button — above input */}
                 {hasMessages && <div className="absolute -top-10 w-full">
                     <div className="flex justify-center">
                         <Button
                             className="flex items-center h-8 justify-center gap-2 rounded-2xl bg-blue-100 px-4 py-1 font-medium text-blue-main hover:bg-blue-200"
-                            onClick={onNewChat}
+                            onClick={onScrollToBottom}
                         >
-                            <img
-                                className="size-5"
-                                src={__APP_ENV__.BASE_URL + "/assets/chat.png"}
-                                alt=""
-                            />
-                            <span className="text-sm">开启新对话</span>
+                            <ArrowDown className="size-4" />
+                            <span className="text-sm">回到底部</span>
                         </Button>
                     </div>
                 </div>}
@@ -215,6 +214,56 @@ const AiChatInput = memo(
                             }}
                         />;
                     })()}
+
+                    {/* Selected knowledge base / space tags */}
+                    {selectedOrgKbs && selectedOrgKbs.length > 0 && !isLingsi && (
+                        <div className="mx-2 mt-2 max-h-[100px] overflow-y-auto">
+                            <div className="flex flex-wrap gap-2">
+                                {selectedOrgKbs.map((kb) => (
+                                    <div
+                                        key={kb.id}
+                                        className="group relative flex items-center gap-1
+                                            px-2 py-1 pr-6
+                                            rounded-full bg-white border border-slate-200
+                                            text-xs text-slate-700
+                                            max-w-[200px]
+                                            hover:bg-slate-50 transition-all duration-200"
+                                    >
+                                        {kb.type === 'space' ? (
+                                            <BookOpen
+                                                className="size-[14px] text-slate-500 shrink-0"
+                                            />
+                                        ) : (
+                                            <BooksIcon
+                                                className="size-[14px] text-slate-500 shrink-0"
+                                            />
+                                        )}
+
+                                        <span className="truncate flex-1 min-w-0 transition-all duration-200 group-hover:text-[11px]">
+                                            {kb.name}
+                                        </span>
+
+                                        {onSelectedOrgKbsChange && (
+                                            <button
+                                                onClick={() => {
+                                                    onSelectedOrgKbsChange(
+                                                        selectedOrgKbs.filter((i) => i.id !== kb.id)
+                                                    );
+                                                }}
+                                                className="absolute right-1 top-1/2 -translate-y-1/2
+                                                    opacity-0 group-hover:opacity-100
+                                                    w-4 h-4 flex items-center justify-center
+                                                    rounded-full hover:bg-slate-200
+                                                    text-slate-400 transition-opacity duration-200"
+                                            >
+                                                ✕
+                                            </button>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
                     {/* Textarea */}
                     <TextareaAutosize
@@ -327,7 +376,8 @@ const AiChatInput = memo(
                                             }
                                         }}
                                     />
-                                )}
+                                )
+                            }
 
                             {/* Tools (web search etc.) — disabled when kb or files active */}
                             {tools && onSearchTypeChange && (

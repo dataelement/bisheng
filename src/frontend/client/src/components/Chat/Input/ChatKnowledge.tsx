@@ -1,5 +1,4 @@
 import {
-  BookOpen,
   BookOpenText,
   Check,
   ChevronRight,
@@ -17,6 +16,8 @@ import {
   DropdownMenuTrigger,
   Input
 } from "~/components/ui";
+import BookOpen from "~/components/ui/icon/BookOpen";
+import BooksIcon from "~/components/ui/icon/Books";
 import { useGetOrgToolList } from "~/data-provider";
 import { BsConfig } from "~/data-provider/data-provider/src";
 import { useLocalize } from "~/hooks";
@@ -74,9 +75,9 @@ const KnowledgeListPanel = ({
   };
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-1">
       {/* 搜索框 */}
-      <div className="relative px-1">
+      <div className="relative">
         <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
         <Input
           className="h-8 text-xs bg-slate-50 border-none pl-8 focus-visible:ring-1 focus-visible:ring-blue-500/20"
@@ -102,7 +103,7 @@ const KnowledgeListPanel = ({
                 e.preventDefault();
                 onToggle(item);
               }}
-              className="flex items-center gap-2.5 px-2.5 py-2 cursor-pointer rounded-lg hover:bg-slate-50 focus:bg-slate-50 outline-none"
+              className="flex items-center gap-2.5 px-0.5 py-2 cursor-pointer rounded-lg hover:bg-slate-50 focus:bg-slate-50 outline-none"
             >
               <div
                 className={cn(
@@ -263,6 +264,7 @@ export const ChatKnowledge = ({
           </DropdownMenuSubTrigger>
 
           <DropdownMenuSubContent className="w-[280px] p-3 rounded-2xl shadow-2xl ml-2 border-slate-100 bg-white">
+            <p className="text-sm leading-5 py-1.5 mb-1 font-medium">知识空间</p>
             <KnowledgeListPanel
               placeholder="搜索知识空间名称"
               keyword={spaceKeyword}
@@ -283,7 +285,7 @@ export const ChatKnowledge = ({
           <DropdownMenuSubTrigger className="flex items-center justify-between rounded-xl hover:bg-slate-50 focus:bg-slate-50 outline-none cursor-pointer mt-0.5">
             <div className="flex items-center gap-3">
               <div className="relative">
-                <img src={`${__APP_ENV__.BASE_URL}/assets/books.svg`} className="size-[18px] opacity-70" alt="" />
+                <BooksIcon className="size-[18px] opacity-70" />
                 {selectedOrgKbs.length > 0 && (
                   <span className="absolute -top-1 -right-1 size-2.5 bg-blue-500 rounded-full border-2 border-white" />
                 )}
@@ -293,6 +295,7 @@ export const ChatKnowledge = ({
           </DropdownMenuSubTrigger>
 
           <DropdownMenuSubContent className="w-[280px] p-3 rounded-2xl shadow-2xl ml-2 border-slate-100 bg-white">
+            <p className="text-sm leading-5 py-1.5 mb-1 font-medium">组织知识库</p>
             <KnowledgeListPanel
               placeholder="搜索知识库名称"
               keyword={orgKeyword}

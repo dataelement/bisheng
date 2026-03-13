@@ -128,7 +128,6 @@ export function AiAssistantPanel({
                 }}
                 onSend={handleSend}
                 onStop={stopGenerating}
-                onNewChat={clearConversation}
                 value={inputText}
                 onChange={setInputText}
                 bsConfig={bsConfig}

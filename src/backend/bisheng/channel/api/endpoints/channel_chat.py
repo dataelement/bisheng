@@ -1,10 +1,10 @@
 """
-频道文章AI助手对话 API 端点
+Channel Article AI Assistant Chat API Endpoints
 
-提供以下功能：
-- POST /chat/completions: SSE流式对话
-- GET /chat/messages/{conversationId}: 查询对话历史
-- DELETE /chat/messages/{conversationId}: 清空对话内容
+Provides the following functionalities:
+- POST /chat/completions: SSE streaming chat
+- GET /chat/messages/{conversationId}: Query chat history
+- DELETE /chat/messages/{conversationId}: Clear chat content
 """
 import json
 import logging
@@ -121,23 +121,23 @@ async def final_message(conversation: MessageSession, title: str, requestMessage
     return f'event: message\ndata: {msg}\n\n'
 
 
-@router.post('/completions', summary='频道文章AI助手对话')
+@router.post('/completions', summary='Channel Article AI Assistant Chat')
 async def chat_completions(
         data: ChannelArticleChatRequest,
         login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     """
-    频道文章AI助手对话接口，SSE流式返回。
-    根据文章ID获取文章内容作为对话上下文，与LLM进行多轮对话。
+    Channel Article AI Assistant Chat API, returns SSE stream.
+    Fetches article content by article ID as conversation context, conducts multi-turn conversation with LLM.
     """
     try:
-        # 1. 获取文章内容
+        # 1. Fetch article content
         article_es_service = ArticleEsService()
         article = await ChannelChatService.get_article_content(article_es_service, data.article_doc_id)
         article_title = article.title
         article_content = article.content
 
-        # 2. 初始化会话
+        # 2. Initialize session
         conversation, message, bishengllm, is_new_conv = await ChannelChatService.initialize_chat(
             data, login_user, article_title
         )
@@ -162,29 +162,29 @@ async def chat_completions(
         model_name = data.model
 
         try:
-            # 构建文章上下文提示
+            # Build article context prompt
             prompt = ChannelChatService.build_article_context_prompt(
                 title=article_title,
                 content=article_content,
                 question=data.text
             )
 
-            # 保存 prompt 到消息的 extra 字段
+            # Save prompt to message's extra field
             extra = json.loads(message.extra) if message.extra else {}
             extra['prompt'] = prompt
             message.extra = json.dumps(extra, ensure_ascii=False)
             await ChatMessageDao.ainsert_one(message)
 
-            # 获取对话历史（排除最新一条）
+            # Get chat history (excluding the latest one)
             history_messages = (await ChannelChatService.get_chat_history(conversationId, 8))[:-1]
 
-            # 构建 LLM 输入
+            # Build LLM input
             system_prompt = (
-                f"你是一个专业的AI助手，正在帮助用户分析和讨论一篇文章。"
-                f"以下是文章信息：\n\n"
-                f"## 文章标题\n{article_title}\n\n"
-                f"## 文章内容\n{article_content}\n\n"
-                f"请基于这篇文章的内容来回答用户的问题。当前时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+                f"You are a professional AI assistant helping users analyze and discuss an article. "
+                f"Here is the article information:\n\n"
+                f"## Article Title\n{article_title}\n\n"
+                f"## Article Content\n{article_content}\n\n"
+                f"Please answer the user's question based on this article content. Current time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
             )
 
             inputs = [SystemMessage(content=system_prompt), *history_messages, HumanMessage(content=data.text)]
@@ -193,7 +193,7 @@ async def chat_completions(
             yield step_message(stepId, runId, index, f'msg_{uuid4().hex}')
             index += 1
 
-            # 流式调用 LLM
+            # Streaming call to LLM
             async for chunk in bishengllm.astream(inputs):
                 content = chunk.content
                 reasoning_content = chunk.additional_kwargs.get('reasoning_content', '')
@@ -209,7 +209,7 @@ async def chat_completions(
                                       data=delta(id=stepId, delta={
                                           'content': [{'type': 'think', 'think': reasoning_content}]})).toString()
 
-            # 拼接思考过程到最终结果
+            # Append reasoning process to final result
             if reasoning_res:
                 final_res = ':::thinking\n' + reasoning_res + '\n:::' + final_res
 
@@ -224,7 +224,7 @@ async def chat_completions(
             final_res = json.dumps(server_error.to_dict())
             yield server_error.to_sse_event_instance_str()
 
-        # 发送最终消息
+        # Send final message
         yield await final_message(conversation, conversation.flow_name, message, final_res,
                                   error, model_name)
 
@@ -235,24 +235,24 @@ async def chat_completions(
         return EventSourceResponse(iter([ServerError(exception=e).to_sse_event_instance()]))
 
 
-@router.get('/messages/{conversationId}', summary='查询频道文章AI助手对话历史')
+@router.get('/messages/{conversationId}', summary='Query Channel Article AI Assistant Chat History')
 async def get_chat_history(
         conversationId: str,
         login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
-    """查询频道文章AI助手对话历史内容"""
+    """Query Channel Article AI Assistant Chat History Content"""
     messages = await ChannelChatService.get_chat_messages(conversationId, login_user)
     if messages is None:
         return UnAuthorizedError.return_resp()
     return resp_200(data=messages)
 
 
-@router.delete('/messages/{conversationId}', summary='清空频道文章AI助手对话内容')
+@router.delete('/messages/{conversationId}', summary='Clear Channel Article AI Assistant Chat Content')
 async def clear_chat(
         conversationId: str,
         login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
-    """清空频道文章AI助手对话内容"""
+    """Clear Channel Article AI Assistant Chat Content"""
     try:
         result = await ChannelChatService.clear_chat(conversationId, login_user)
         if not result:

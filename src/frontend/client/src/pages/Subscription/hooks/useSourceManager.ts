@@ -13,7 +13,13 @@ const MAX_SOURCES = 50;
 
 function looksLikeUrl(s: string): boolean {
     const t = s.trim();
-    return /^https?:\/\//i.test(t) || /^[a-z0-9-]+\.(com|cn|org|net|gov)(\/[^\s]*)?$/i.test(t);
+    // 支持：
+    // - 带协议的完整 URL：https://example.com/xxx
+    // - 不带协议的域名/路径：home.cofco.com 或 home.cofco.com/path
+    return (
+        /^https?:\/\//i.test(t) ||
+        /^([a-z0-9-]+\.)+[a-z]{2,}(\/[^\s]*)?$/i.test(t)
+    );
 }
 
 function looksLikeWechatArticleUrl(s: string): boolean {
@@ -36,6 +42,7 @@ export function useSourceManager(
     const [loadingSources, setLoadingSources] = useState(false);
     const prevExpanded = useRef(false);
     const processingWechatRef = useRef("");
+    const [wechatAddError, setWechatAddError] = useState(false);
     const localize = useLocalize();
 
     // Sync pending sources when panel opens
@@ -61,6 +68,24 @@ export function useSourceManager(
     const selectedIds = new Set(workingSources.map((s) => s.id));
     const canSelectMore = workingSources.length < MAX_SOURCES;
     const isAtLimit = workingSources.length >= MAX_SOURCES;
+
+    // 当外部 sources 在面板展开期间新增时（例如通过爬取新网址信源），
+    // 自动将新增的信源合并进 pendingSources，并保持选中态。
+    useEffect(() => {
+        if (!expanded) return;
+        if (!sources || sources.length === 0) return;
+        setPendingSources((prev) => {
+            const map = new Map(prev.map((s) => [s.id, s]));
+            let changed = false;
+            for (const s of sources) {
+                if (!map.has(s.id)) {
+                    map.set(s.id, s);
+                    changed = true;
+                }
+            }
+            return changed ? Array.from(map.values()) : prev;
+        });
+    }, [expanded, sources]);
 
     const viewMode: ViewMode = useMemo(() => {
         if (!searchKeyword.trim()) return "list";
@@ -144,7 +169,13 @@ export function useSourceManager(
             (async () => {
                 try {
                     const res = await addWechatSourceApi({ url: target });
-                    const raw: any = (res as any)?.data ?? res ?? {};
+                    const root: any = res as any;
+                    const statusCode = root?.status_code ?? root?.code;
+                    if (statusCode && statusCode !== 200) {
+                        setWechatAddError(true);
+                        return;
+                    }
+                    const raw: any = root?.data ?? root ?? {};
                     const created: InformationSource = {
                         id: String(raw.id ?? raw.source_id ?? `wx-${Date.now()}`),
                         // 后端返回 name/title，否则退回为固定文案“公众号内容源”
@@ -163,20 +194,7 @@ export function useSourceManager(
                         return [...prev, created];
                     });
                 } catch {
-                    // Fallback to local add on failure
-                    setPendingSources((prev) => {
-                        if (prev.length >= MAX_SOURCES) return prev;
-                        if (prev.some((s) => s.url === target)) return prev;
-                        return [
-                            ...prev,
-                            {
-                                id: `wx-${Date.now()}`,
-                                name: "公众号内容源",
-                                type: "official_account",
-                                url: target
-                            }
-                        ];
-                    });
+                    setWechatAddError(true);
                 } finally {
                     setSearchKeyword("");
                     processingWechatRef.current = "";
@@ -226,5 +244,7 @@ export function useSourceManager(
         handleClearSearch,
         handleConfirm,
         handleCancel,
+        wechatAddError,
+        setWechatAddError,
     };
 }

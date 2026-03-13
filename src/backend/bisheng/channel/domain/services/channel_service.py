@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from typing import List, Optional, Dict, Any
 
 from bisheng.channel.domain.models.article_read_record import ArticleReadRecord
@@ -28,15 +29,29 @@ from bisheng.channel.domain.schemas.channel_manager_schema import (
 )
 from bisheng.channel.domain.services.article_es_service import ArticleEsService
 from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.common.errcode.channel import ChannelNotFoundError, ChannelAccessDeniedError, \
-    ChannelAlreadySubscribedError, ChannelPermissionDeniedError
+from bisheng.common.errcode.channel import (
+    ChannelNotFoundError,
+    ChannelAccessDeniedError,
+    ChannelAlreadySubscribedError,
+    ChannelPermissionDeniedError,
+    ChannelCreateLimitExceededError,
+    ChannelAdminLimitExceededError,
+    ChannelSubscribeLimitExceededError,
+)
 from bisheng.common.models.space_channel_member import BusinessTypeEnum, UserRoleEnum
 from bisheng.common.repositories.interfaces.space_channel_member_repository import SpaceChannelMemberRepository
 from bisheng.core.external.bisheng_information_client.bisheng_information_manager import get_bisheng_information_client
 from bisheng.user.domain.models.user import UserDao
 from bisheng.worker.information.article import sync_information_article
 
+logger = logging.getLogger(__name__)
+
+# Maximum number of channels a user can create
+MAX_USER_CHANNEL_COUNT = 10
+# Maximum number of administrators per channel
 MAX_ADMIN_COUNT = 5
+# Maximum number of channels a user can subscribe to (excluding self-created channels)
+MAX_USER_SUBSCRIBE_COUNT = 20
 
 
 class ChannelService:
@@ -44,15 +59,26 @@ class ChannelService:
                  space_channel_member_repository: 'SpaceChannelMemberRepository',
                  channel_info_source_repository: 'ChannelInfoSourceRepository',
                  article_es_service: 'ArticleEsService' = None,
-                 article_read_repository: 'ArticleReadRepository' = None):
+                 article_read_repository: 'ArticleReadRepository' = None,
+                 message_service: Optional[Any] = None):
         self.channel_repository = channel_repository
         self.space_channel_member_repository = space_channel_member_repository
         self.channel_info_source_repository = channel_info_source_repository
         self.article_es_service = article_es_service or ArticleEsService()
         self.article_read_repository = article_read_repository
+        self.message_service = message_service
 
     async def create_channel(self, channel_data: CreateChannelRequest, login_user: UserPayload):
         """Create a new channel based on the provided data and the logged-in user."""
+        # Check if the user has reached the maximum limit for creating channels
+        existing_channels = await self.space_channel_member_repository.find_channel_memberships(
+            user_id=login_user.user_id,
+            roles=[UserRoleEnum.CREATOR],
+            status=True
+        )
+        if len(existing_channels) >= MAX_USER_CHANNEL_COUNT:
+            raise ChannelCreateLimitExceededError()
+
         channel_model = Channel(
             name=channel_data.name,
             source_list=channel_data.source_list,
@@ -394,8 +420,7 @@ class ChannelService:
                 role=UserRoleEnum.ADMIN
             )
             if len(current_admins) >= MAX_ADMIN_COUNT:
-                raise ValueError(
-                    f"The number of administrators has reached the maximum limit (up to {MAX_ADMIN_COUNT})")
+                raise ChannelAdminLimitExceededError()
 
         # 6. Update role
         target_membership.user_role = UserRoleEnum(req.role)
@@ -594,11 +619,28 @@ class ChannelService:
         if existing_membership:
             raise ChannelAlreadySubscribedError()
 
-        # 3. Check channel visibility
+        # 3. Check if the user has reached the maximum limit for subscribing channels
+        # Count subscribed channels (MEMBER and ADMIN roles, including pending status)
+        subscribed_channels = await self.space_channel_member_repository.find_channel_memberships(
+            user_id=login_user.user_id,
+            roles=[UserRoleEnum.MEMBER, UserRoleEnum.ADMIN],
+            status=True
+        )
+        # Also count pending subscriptions (status=False for REVIEW channels)
+        pending_subscriptions = await self.space_channel_member_repository.find_channel_memberships(
+            user_id=login_user.user_id,
+            roles=[UserRoleEnum.MEMBER, UserRoleEnum.ADMIN],
+            status=False
+        )
+        total_subscriptions = len(subscribed_channels) + len(pending_subscriptions)
+        if total_subscriptions >= MAX_USER_SUBSCRIBE_COUNT:
+            raise ChannelSubscribeLimitExceededError()
+
+        # 4. Check channel visibility
         if channel.visibility == ChannelVisibilityEnum.PRIVATE:
             raise ChannelAccessDeniedError()
 
-        # 4. Determine subscription status based on channel visibility
+        # 5. Determine subscription status based on channel visibility
         if channel.visibility == ChannelVisibilityEnum.PUBLIC:
             status = True
             return_status = SubscriptionStatusEnum.SUBSCRIBED
@@ -608,7 +650,7 @@ class ChannelService:
         else:
             raise ValueError(f"Unsupported channel visibility: {channel.visibility}")
 
-        # 5. Add membership record
+        # 6. Add membership record
         await self.space_channel_member_repository.add_member(
             business_id=req.channel_id,
             business_type=BusinessTypeEnum.CHANNEL,
@@ -617,7 +659,61 @@ class ChannelService:
             status=status
         )
 
+        # 6. Send approval notification for review channels
+        if channel.visibility == ChannelVisibilityEnum.REVIEW and self.message_service:
+            try:
+                await self._send_subscribe_approval_notification(channel, login_user)
+            except Exception as e:
+                # Do not block subscription flow if notification fails
+                logger.error(
+                    "Failed to send subscribe approval notification: channel_id=%s, user=%s, error=%s",
+                    channel.id, login_user.user_id, e,
+                )
+
         return return_status
+
+    async def _send_subscribe_approval_notification(
+        self,
+        channel: Channel,
+        login_user: UserPayload,
+    ) -> None:
+        """
+        Send approval notification to channel creator and admins when a user
+        subscribes to a review-required channel.
+        """
+        # 1. Get channel creator and admins
+        creators = await self.space_channel_member_repository.find_members_by_role(
+            channel_id=channel.id,
+            role=UserRoleEnum.CREATOR,
+        )
+        admins = await self.space_channel_member_repository.find_members_by_role(
+            channel_id=channel.id,
+            role=UserRoleEnum.ADMIN,
+        )
+
+        receiver_user_ids = list({m.user_id for m in creators + admins})
+        if not receiver_user_ids:
+            logger.warning(
+                "No creator or admin found for channel %s, skipping approval notification",
+                channel.id,
+            )
+            return
+
+        # 2. Get applicant user name
+        users = await UserDao.aget_user_by_ids([login_user.user_id])
+        applicant_name = users[0].user_name if users else f"User {login_user.user_id}"
+
+        # 3. Send the approval message
+        await self.message_service.send_generic_approval(
+            applicant_user_id=login_user.user_id,
+            applicant_user_name=applicant_name,
+            action_code="request_channel",
+            business_type="channel_id",
+            business_id=channel.id,
+            business_name=channel.name,
+            button_action_code="request_channel",
+            receiver_user_ids=receiver_user_ids,
+        )
 
     async def update_channel(self, channel_id: str, req: UpdateChannelRequest, login_user: UserPayload):
         """
@@ -653,7 +749,10 @@ class ChannelService:
         if req.filter_rules is not None:
             channel.filter_rules = [f.model_dump() for f in req.filter_rules]
         if req.visibility is not None:
-            channel.visibility = ChannelVisibilityEnum(req.visibility)
+            new_visibility = ChannelVisibilityEnum(req.visibility)
+            if channel.visibility != new_visibility and new_visibility == ChannelVisibilityEnum.PRIVATE:
+                await self.space_channel_member_repository.remove_non_creator_members(channel_id)
+            channel.visibility = new_visibility
         if req.source_list is not None:
 
             # Calculate the difference between old and new source lists to minimize calls to bisheng_information_client
@@ -768,7 +867,7 @@ class ChannelService:
             filter_rules=main_rules if main_rules else None
         )
 
-        # 信息源列表补全
+        # Complete info source list
         source_infos = []
         if channel.source_list:
             sources = await self.channel_info_source_repository.find_by_ids(channel.source_list)
@@ -879,45 +978,45 @@ class ChannelService:
             only_unread: bool = False,
     ) -> ArticleSearchPageResponse:
         """
-        根据频道分页检索文章。
+        Paginated search for articles in a channel.
 
-        1. 根据 channel_id 查询频道，获取 source_list 和 filter_rules
-        2. 判断是否指定子频道，应用对应过滤规则
-        3. 构建 ES 查询：信源过滤 + 过滤规则 + 关键词检索 + 高亮 + 排序 + 分页
+        1. Query channel by channel_id to get source_list and filter_rules
+        2. Determine if a sub-channel is specified, apply corresponding filter rules
+        3. Build ES query: info source filter + filter rules + keyword search + highlight + sort + pagination
 
         Args:
-            channel_id: 频道 ID
-            keyword: 搜索关键词（标题、正文、发布者）
-            source_ids: 前端指定的信源 ID 列表（必须是频道 source_list 的子集）
-            sub_channel_name: 子频道名称，若指定则使用对应子频道的过滤规则
-            page: 页码
-            page_size: 每页数量
-            login_user: 当前登录用户
+            channel_id: Channel ID
+            keyword: Search keyword (title, content, publisher)
+            source_ids: Info source ID list specified by frontend (must be a subset of channel source_list)
+            sub_channel_name: Sub-channel name, if specified use the corresponding sub-channel's filter rules
+            page: Page number
+            page_size: Page size
+            login_user: Current logged-in user
 
         Returns:
             ArticleSearchPageResponse
         """
-        # 1. 查询频道信息
+        # 1. Query channel info
         channels = await self.channel_repository.find_channels_by_ids([channel_id])
         if not channels:
-            raise ValueError("频道不存在")
+            raise ValueError("Channel not found")
         channel = channels[0]
 
-        # 2. 确定信源列表
+        # 2. Determine info source list
         channel_source_ids = channel.source_list or []
         if source_ids:
-            # 前端传入的信源必须是频道信源的子集
+            # Info sources from frontend must be a subset of channel info sources
             effective_source_ids = [sid for sid in source_ids if sid in channel_source_ids]
             if not effective_source_ids:
-                # 传入的信源均不在频道中，返回空结果
+                # None of the provided info sources are in the channel, return empty result
                 return ArticleSearchPageResponse(data=[], total=0, page=page, page_size=page_size)
         else:
             effective_source_ids = channel_source_ids
 
-        # 3. 解析过滤规则
+        # 3. Parse filter rules
         filter_rules_raw: List[Dict[str, Any]] = channel.filter_rules or []
 
-        # 解析过滤规则，区分主频道和子频道
+        # Parse filter rules, distinguish between main channel and sub-channels
         main_rules: List[Dict[str, Any]] = []
         sub_channel_rules: Dict[str, List[Dict[str, Any]]] = {}
 
@@ -931,13 +1030,13 @@ class ChannelService:
             else:
                 main_rules.extend(rules)
 
-        # 确定使用哪组规则
+        # Determine which set of rules to use
         if sub_channel_name and sub_channel_name in sub_channel_rules:
             effective_rules = sub_channel_rules[sub_channel_name]
         else:
             effective_rules = main_rules
 
-        # 4. 获取已读文章 ID 列表
+        # 4. Get read article ID list
         read_article_ids = []
         if login_user and self.article_read_repository:
             read_article_ids = await self.article_read_repository.find_article_ids_by_user_and_sources(
@@ -945,7 +1044,7 @@ class ChannelService:
                 source_ids=effective_source_ids
             )
 
-        # 5. 调用 ArticleEsService 进行搜索
+        # 5. Call ArticleEsService to search
         exclude_article_ids = read_article_ids if only_unread else None
         article_search_response = await self.article_es_service.search_articles(
             source_ids=effective_source_ids,
@@ -958,7 +1057,7 @@ class ChannelService:
 
         source_ids_in_result = [item.source_id for item in article_search_response.data]
 
-        # 批量查询信源信息
+        # Batch query info source info
         source_info_map = {}
         if source_ids_in_result:
             sources = await self.channel_info_source_repository.find_by_ids(source_ids_in_result)
@@ -975,7 +1074,7 @@ class ChannelService:
         for item in article_search_response.data:
             if item.source_id in source_info_map:
                 item.source_info = source_info_map[item.source_id]
-            # 设置是否已读状态
+            # Set read status
             item.is_read = item.doc_id in read_ids_set
 
         return article_search_response
@@ -987,7 +1086,7 @@ class ChannelService:
         # 1. Fetch article from ES
         article = await self.article_es_service.get_article(article_id)
         if not article:
-            raise ValueError("文章不存在")
+            raise ValueError("Article not found")
 
         # 2. Check read record
         if self.article_read_repository:

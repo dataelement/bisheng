@@ -29,39 +29,31 @@ const Conversations = ({
   return (
     <div className="text-token-text-primary flex flex-col gap-2 pb-2 text-sm">
       <div>
-        <span>
-          {groupedConversations.map(([groupName, convos]) => (
-            <div key={groupName}>
-              <div
-                className="text-text-secondary"
-                style={{
-                  fontSize: '0.7rem',
-                  marginTop: '20px',
-                  marginBottom: '5px',
-                  paddingLeft: '10px',
-                }}
-              >
-                {/* time */}
-                {localize(groupName as TranslationKeys) || groupName}
-              </div>
-              {convos.map((convo, i) => (
-                <Convo
-                  key={`${groupName}-${convo.conversationId}-${i}`}
-                  isLatestConvo={convo.conversationId === firstTodayConvoId}
-                  conversation={convo}
-                  retainView={moveToTop}
-                  toggleNav={toggleNav}
-                />
-              ))}
-              <div
-                style={{
-                  marginTop: '5px',
-                  marginBottom: '5px',
-                }}
-              />
+        {groupedConversations.map(([groupName, convos]) => (
+          <div key={groupName}>
+            <div
+              className="text-black opacity-60 px-[12px] pt-4 text-[12px] mb-1"
+            >
+              {/* time */}
+              {localize(groupName as TranslationKeys) || groupName}
             </div>
-          ))}
-        </span>
+            {convos.map((convo, i) => (
+              <Convo
+                key={`${groupName}-${convo.conversationId}-${i}`}
+                isLatestConvo={convo.conversationId === firstTodayConvoId}
+                conversation={convo}
+                retainView={moveToTop}
+                toggleNav={toggleNav}
+              />
+            ))}
+            <div
+              style={{
+                marginTop: '5px',
+                marginBottom: '5px',
+              }}
+            />
+          </div>
+        ))}
       </div>
     </div>
   );
