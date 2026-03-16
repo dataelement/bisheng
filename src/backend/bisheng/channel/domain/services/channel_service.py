@@ -609,17 +609,8 @@ class ChannelService:
             raise ChannelNotFoundError()
         channel = channels[0]
 
-        # 2. Check if the user is already subscribed or has a pending request
-        existing_membership = await self.space_channel_member_repository.find_membership(
-            business_id=req.channel_id,
-            business_type=BusinessTypeEnum.CHANNEL,
-            user_id=login_user.user_id
-        )
 
-        if existing_membership:
-            raise ChannelAlreadySubscribedError()
-
-        # 3. Check if the user has reached the maximum limit for subscribing channels
+        # 2. Check if the user has reached the maximum limit for subscribing channels
         # Count subscribed channels (MEMBER and ADMIN roles, including pending status)
         subscribed_channels = await self.space_channel_member_repository.find_channel_memberships(
             user_id=login_user.user_id,
@@ -636,11 +627,11 @@ class ChannelService:
         if total_subscriptions >= MAX_USER_SUBSCRIBE_COUNT:
             raise ChannelSubscribeLimitExceededError()
 
-        # 4. Check channel visibility
+        # 3. Check channel visibility
         if channel.visibility == ChannelVisibilityEnum.PRIVATE:
             raise ChannelAccessDeniedError()
 
-        # 5. Determine subscription status based on channel visibility
+        # 4. Determine subscription status based on channel visibility
         if channel.visibility == ChannelVisibilityEnum.PUBLIC:
             status = True
             return_status = SubscriptionStatusEnum.SUBSCRIBED
@@ -650,14 +641,25 @@ class ChannelService:
         else:
             raise ValueError(f"Unsupported channel visibility: {channel.visibility}")
 
-        # 6. Add membership record
-        await self.space_channel_member_repository.add_member(
+
+        existing_membership = await self.space_channel_member_repository.find_membership(
             business_id=req.channel_id,
             business_type=BusinessTypeEnum.CHANNEL,
-            user_id=login_user.user_id,
-            role=UserRoleEnum.MEMBER,
-            status=status
+            user_id=login_user.user_id
         )
+        # 5. Add membership record
+        if existing_membership:
+            existing_membership.status = status
+            await self.space_channel_member_repository.update(existing_membership)
+
+        else:
+            await self.space_channel_member_repository.add_member(
+                business_id=req.channel_id,
+                business_type=BusinessTypeEnum.CHANNEL,
+                user_id=login_user.user_id,
+                role=UserRoleEnum.MEMBER,
+                status=status
+            )
 
         # 6. Send approval notification for review channels
         if channel.visibility == ChannelVisibilityEnum.REVIEW and self.message_service:
