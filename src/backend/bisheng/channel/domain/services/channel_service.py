@@ -430,7 +430,7 @@ class ChannelService:
 
     async def remove_member(self, req: RemoveMemberRequest, login_user: UserPayload) -> bool:
         """
-        Remove a member (soft delete).
+        Remove a member (hard delete).
         Permissions:
         - Creators can remove anyone (except themselves)
         - Admins can remove regular members
@@ -470,9 +470,8 @@ class ChannelService:
             if target_membership.user_role == UserRoleEnum.ADMIN:
                 raise ValueError("Admins do not have permission to remove other admins")
 
-        # 6. Soft delete: set status to False
-        target_membership.status = False
-        await self.space_channel_member_repository.update(target_membership)
+        # 6. Hard delete: remove from database
+        await self.space_channel_member_repository.delete(target_membership.id)
 
         return True
 

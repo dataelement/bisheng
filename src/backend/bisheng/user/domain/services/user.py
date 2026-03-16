@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import List
 
 import rsa
-from fastapi import Request, Depends
+from fastapi import Request, Depends, UploadFile, HTTPException
 
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.v1.schemas import CreateUserReq
@@ -17,13 +17,23 @@ from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
 from bisheng.core.cache.redis_manager import get_redis_client_sync, get_redis_client
 from bisheng.core.logger import trace_id_var
+from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.user.domain.models.user import User, UserDao, UserLogin, UserRead, UserCreate
-from bisheng.utils import md5_hash, get_request_ip
+from bisheng.utils import md5_hash, get_request_ip, generate_uuid
 from bisheng.utils.constants import RSA_KEY
 from .auth import LoginUser, AuthJwt
 from .captcha import verify_captcha
 from ..const import USER_PASSWORD_ERROR, USER_CURRENT_SESSION
+
+# Allowed avatar file types and their MIME types
+ALLOWED_AVATAR_TYPES = {
+    'image/jpeg': '.jpg',
+    'image/png': '.png',
+    'image/webp': '.webp',
+    'image/gif': '.gif',
+}
+MAX_AVATAR_SIZE = 10 * 1024 * 1024  # 10MB
 
 
 class UserService:
@@ -184,3 +194,53 @@ class UserService:
     async def get_user_by_id(cls, user_id: int) -> User | None:
         """ Get user by username """
         return await UserDao.aget_user(user_id)
+
+    @classmethod
+    async def update_avatar(cls, user_id: int, file: UploadFile) -> str:
+        """
+        Update user avatar
+        :param user_id: User ID
+        :param file: Uploaded avatar file
+        :return: Avatar URL
+        """
+        # Validate file type
+        if file.content_type not in ALLOWED_AVATAR_TYPES:
+            raise HTTPException(
+                status_code=400,
+                detail=f'Invalid file type. Allowed types: jpg, png, webp, gif'
+            )
+
+        # Read file content to check size
+        content = await file.read()
+        if len(content) > MAX_AVATAR_SIZE:
+            raise HTTPException(
+                status_code=400,
+                detail=f'File size exceeds limit. Maximum size: 2MB'
+            )
+
+        # Generate object name for MinIO
+        file_ext = ALLOWED_AVATAR_TYPES[file.content_type]
+        object_name = f'avatar/{user_id}/{generate_uuid()}{file_ext}'
+
+        # Upload to MinIO
+        minio_client = await get_minio_storage()
+        await minio_client.put_object(
+            object_name=object_name,
+            file=content,
+            content_type=file.content_type,
+        )
+
+        # Get share link
+        avatar_url = await minio_client.get_share_link(
+            object_name=object_name,
+            clear_host=True,
+            expire_days=365  # Long expiration for avatar
+        )
+
+        # Update user avatar in database
+        user = await UserDao.aget_user(user_id)
+        if user:
+            user.avatar = avatar_url
+            await UserDao.aupdate_user(user)
+
+        return avatar_url
