@@ -365,6 +365,7 @@ class ChannelService:
             result_list.append(ChannelMemberResponse(
                 user_id=member.user_id,
                 user_name=user_name,
+                user_avatar=user.avatar if user else None,
                 user_role=member.user_role.value,
                 user_groups=user_groups,
             ))

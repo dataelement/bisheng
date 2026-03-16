@@ -463,36 +463,107 @@ def comment_resp(*, data: ChatInput):
 @router.get('/chat/list')
 def get_session_list(page: Optional[int] = Query(default=1, ge=1, le=1000),
                      limit: Optional[int] = Query(default=10, ge=1, le=100),
-                     flow_type: Optional[List[int]] = Query(default=None, description='Abilities Category'),
                      login_user: UserPayload = Depends(UserPayload.get_login_user)):
-    res = MessageSessionDao.filter_session(user_ids=[login_user.user_id],
-                                           flow_type=flow_type,
-                                           page=page,
-                                           limit=limit,
-                                           include_delete=False)
-    chat_ids = []
-    flow_ids = []
-    for one in res:
-        chat_ids.append(one.chat_id)
-        flow_ids.append(one.flow_id)
-    flow_list = FlowDao.get_flow_by_ids(flow_ids)
-    assistant_list = AssistantDao.get_assistants_by_ids(flow_ids)
-    logo_map = {one.id: BaseService.get_logo_share_link(one.logo) for one in flow_list}
-    logo_map.update({one.id: BaseService.get_logo_share_link(one.logo) for one in assistant_list})
-    latest_messages = ChatMessageDao.get_latest_message_by_chat_ids(chat_ids,
-                                                                    exclude_category=WorkflowEventType.UserInput.value)
+    """
+    Get session list grouped by time dimension.
+    Only shows daily chat (WORKSTATION) and linsight sessions, sorted by update_time descending.
+    Groups: today, yesterday, last 7 days, last 30 days, years
+    """
+    from datetime import date, timedelta
+    from collections import OrderedDict
+    from bisheng.api.v1.schemas import ChatListGroup
+
+    # Define allowed flow types: WORKSTATION(15) and LINSIGHT(20)
+    allowed_flow_types = [FlowType.WORKSTATION.value, FlowType.LINSIGHT.value]
+
+    # Query sessions with allowed flow types, sorted by update_time descending
+    res = MessageSessionDao.filter_session(
+        user_ids=[login_user.user_id],
+        flow_type=allowed_flow_types,
+        page=page,
+        limit=limit,
+        include_delete=False,
+        order_by_update_time=True
+    )
+
+    if not res:
+        return resp_200([])
+
+    # Get related data
+    chat_ids = [one.chat_id for one in res]
+
+    latest_messages = ChatMessageDao.get_latest_message_by_chat_ids(
+        chat_ids,
+        exclude_category=WorkflowEventType.UserInput.value
+    )
     latest_messages = {one.chat_id: one for one in latest_messages}
-    return resp_200([
+
+    # Build ChatList objects
+    # For WORKSTATION and LINSIGHT, logo is stored in flow_logo field
+    chat_sessions = [
         ChatList(
             chat_id=one.chat_id,
             flow_id=one.flow_id,
             flow_name=one.flow_name,
             flow_type=one.flow_type,
-            logo=logo_map.get(one.flow_id, ''),
+            logo=BaseService.get_logo_share_link(one.flow_logo) if one.flow_logo else '',
             latest_message=latest_messages.get(one.chat_id, None),
             create_time=one.create_time,
-            update_time=one.update_time) for one in res
-    ])
+            update_time=one.update_time
+        ) for one in res
+    ]
+
+    # Group by time dimension
+    today = date.today()
+    yesterday = today - timedelta(days=1)
+    last_7_days_start = today - timedelta(days=7)
+    last_30_days_start = today - timedelta(days=30)
+
+    # Define group structure with order
+    groups = OrderedDict()
+    groups['today'] = ChatListGroup(group_name='今天', group_key='today', sessions=[])
+    groups['yesterday'] = ChatListGroup(group_name='昨天', group_key='yesterday', sessions=[])
+    groups['last_7_days'] = ChatListGroup(group_name='七天内', group_key='last_7_days', sessions=[])
+    groups['last_30_days'] = ChatListGroup(group_name='30天内', group_key='last_30_days', sessions=[])
+
+    # Track years dynamically
+    year_groups = OrderedDict()
+
+    for session in chat_sessions:
+        session_date = session.update_time.date() if session.update_time else session.create_time.date()
+
+        if session_date == today:
+            groups['today'].sessions.append(session)
+        elif session_date == yesterday:
+            groups['yesterday'].sessions.append(session)
+        elif session_date >= last_7_days_start:
+            groups['last_7_days'].sessions.append(session)
+        elif session_date >= last_30_days_start:
+            groups['last_30_days'].sessions.append(session)
+        else:
+            # Group by year
+            year = session_date.year
+            year_key = f'year_{year}'
+            if year_key not in year_groups:
+                year_groups[year_key] = ChatListGroup(
+                    group_name=str(year),
+                    group_key=year_key,
+                    sessions=[]
+                )
+            year_groups[year_key].sessions.append(session)
+
+    # Build final result: ordered groups + year groups (descending by year)
+    result = []
+    for group in groups.values():
+        if group.sessions:
+            result.append(group)
+
+    # Add year groups in descending order
+    for year_key in sorted(year_groups.keys(), key=lambda x: int(x.split('_')[1]), reverse=True):
+        if year_groups[year_key].sessions:
+            result.append(year_groups[year_key])
+
+    return resp_200(result)
 
 
 # Access to all live skills and assistants

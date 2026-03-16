@@ -125,6 +125,14 @@ class ChatList(BaseModel):
     logo: Optional[str] = None
 
 
+class ChatListGroup(BaseModel):
+    """Chat list grouped by time dimension."""
+
+    group_name: str = Field(description='Group display name, e.g. "今天", "昨天", "2025"')
+    group_key: str = Field(description='Group identifier, e.g. "today", "yesterday", "year_2025"')
+    sessions: List[ChatList] = Field(default_factory=list, description='List of chat sessions in this group')
+
+
 class FlowGptsOnlineList(BaseModel):
     id: str = Field('Uniqueness quantificationID')
     name: str = None

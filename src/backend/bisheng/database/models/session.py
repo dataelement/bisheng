@@ -144,7 +144,8 @@ class MessageSessionDao(MessageSessionBase):
                        exclude_chats: List[str] = None,
                        page: int = 0,
                        limit: int = 0,
-                       flow_type: List[int] = None) -> List[MessageSession]:
+                       flow_type: List[int] = None,
+                       order_by_update_time: bool = False) -> List[MessageSession]:
         statement = select(MessageSession)
         statement = cls.generate_filter_session_statement(statement,
                                                           chat_ids,
@@ -159,7 +160,11 @@ class MessageSessionDao(MessageSessionBase):
                                                           flow_type=flow_type)
         if page and limit:
             statement = statement.offset((page - 1) * limit).limit(limit)
-        statement = statement.order_by(MessageSession.create_time.desc())
+        # Order by update_time or create_time
+        if order_by_update_time:
+            statement = statement.order_by(MessageSession.update_time.desc())
+        else:
+            statement = statement.order_by(MessageSession.create_time.desc())
         with get_sync_db_session() as session:
             return session.exec(statement).all()
 
