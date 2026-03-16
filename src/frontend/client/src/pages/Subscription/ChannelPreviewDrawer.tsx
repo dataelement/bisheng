@@ -93,7 +93,7 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onNavigate
         setSubscribing(true);
         try {
             const res: any = await subscribeManagerChannelApi({ channel_id: channelId });
-            const root = res?.data ?? res;
+            const root = res;
             const statusCode = root?.status_code ?? root?.code;
             if (statusCode && statusCode !== 200) {
                 const msg =

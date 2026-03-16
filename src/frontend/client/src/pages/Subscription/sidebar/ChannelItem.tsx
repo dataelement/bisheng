@@ -172,7 +172,7 @@ export default function ChannelItem({
                                 const ok = await confirm({
                                     title: "提示",
                                     description: type === "created" ? "其他已订阅成员处的该频道也将被删除，确认操作吗？" : "确定取消对该频道及其子频道的订阅吗？",
-                                    confirmText: type === "created" ? "解散" : "确定",
+                                    confirmText: "确定",
                                     cancelText: "取消"
                                 })
 

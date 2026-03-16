@@ -157,10 +157,10 @@ export function ChannelMemberDialog({
         try {
             await updateChannelMemberRoleApi({ channel_id: channelId, user_id: m.user_id, role: "admin" });
             await fetchMembers(page);
-            showToast({
-                message: localize("update_role_success") || "角色已更新",
-                severity: NotificationSeverity.SUCCESS
-            });
+            // showToast({
+            //     message: localize("update_role_success") || "角色已更新",
+            //     severity: NotificationSeverity.SUCCESS
+            // });
         } catch {
             showToast({
                 message: localize("update_role_failed") || "角色更新失败，请稍后重试",
@@ -176,10 +176,10 @@ export function ChannelMemberDialog({
         try {
             await updateChannelMemberRoleApi({ channel_id: channelId, user_id: m.user_id, role: "member" });
             await fetchMembers(page);
-            showToast({
-                message: localize("update_role_success") || "角色已更新",
-                severity: NotificationSeverity.SUCCESS
-            });
+            // showToast({
+            //     message: localize("update_role_success") || "角色已更新",
+            //     severity: NotificationSeverity.SUCCESS
+            // });
         } catch {
             showToast({
                 message: localize("update_role_failed") || "角色更新失败，请稍后重试",
@@ -215,7 +215,7 @@ export function ChannelMemberDialog({
             return <span className="text-[14px] text-[#4E5969]">{getRoleLabel(m.role, localize)}</span>;
         }
 
-        // 创建者视角：可以提升/降级 + 移除
+        // 创建者视角：可以在「管理员 / 订阅用户」之间切换 + 移除
         return (
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -224,17 +224,25 @@ export function ChannelMemberDialog({
                         <ChevronDown className="size-3.5" />
                     </button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-32">
-                    {canCreatorManage && m.role === "member" && (
-                        <DropdownMenuItem onClick={() => handlePromoteAdmin(m)}>
-                            {localize("admin") || "管理员"}
-                        </DropdownMenuItem>
-                    )}
-                    {canCreatorManage && m.role === "admin" && (
-                        <DropdownMenuItem onClick={() => handleDemoteToMember(m)}>
-                            {localize("member") || "订阅用户"}
-                        </DropdownMenuItem>
-                    )}
+                <DropdownMenuContent align="end" className="w-10">
+                    <DropdownMenuItem
+                        onClick={() => {
+                            // 点击当前就是管理员时不做任何操作
+                            if (!canCreatorManage || m.role === "admin" || m.role === "creator") return;
+                            handlePromoteAdmin(m);
+                        }}
+                    >
+                        {localize("admin") || "管理员"}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                        onClick={() => {
+                            // 点击当前就是订阅用户时不做任何操作
+                            if (!canCreatorManage || m.role === "member") return;
+                            handleDemoteToMember(m);
+                        }}
+                    >
+                        {localize("member") || "订阅用户"}
+                    </DropdownMenuItem>
                     {(canCreatorManage || (canAdminManage && m.role === "member")) && (
                         <DropdownMenuItem onClick={() => setRemoveTarget(m)}>
                             {localize("remove")}
@@ -360,9 +368,6 @@ export function ChannelMemberDialog({
                         <AlertDialogTitle className="text-[16px]">
                             {localize("remove_member")}
                         </AlertDialogTitle>
-                        <AlertDialogDescription>
-                            {localize("remove_member_confirm") || "确认将该成员移出频道吗？"}
-                        </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                         <AlertDialogCancel onClick={() => setRemoveTarget(null)}>

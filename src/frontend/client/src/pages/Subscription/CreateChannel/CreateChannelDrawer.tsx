@@ -84,6 +84,7 @@ export function CreateChannelDrawer({
     const isEditMode = mode === "edit" && !!editingChannel;
     const confirm = useConfirm();
     const [isComposingName, setIsComposingName] = useState(false);
+    const [isComposingDesc, setIsComposingDesc] = useState(false);
 
     useEffect(() => {
         if (open && editingChannel) {
@@ -257,6 +258,25 @@ export function CreateChannelDrawer({
                                         value={form.channelDesc}
                                         onChange={(e) => {
                                             const v = e.target.value;
+                                            // 中文输入法组合输入阶段不做长度校验，避免提前触发提示
+                                            if (isComposingDesc) {
+                                                form.setChannelDesc(v);
+                                                return;
+                                            }
+                                            if (v.length > MAX_CHANNEL_DESC) {
+                                                showToast({
+                                                    message: localize("maximum_channel_description") || "最多输入 100 个字符",
+                                                    severity: NotificationSeverity.WARNING
+                                                });
+                                                form.setChannelDesc(v.slice(0, MAX_CHANNEL_DESC));
+                                            } else {
+                                                form.setChannelDesc(v);
+                                            }
+                                        }}
+                                        onCompositionStart={() => setIsComposingDesc(true)}
+                                        onCompositionEnd={(e) => {
+                                            setIsComposingDesc(false);
+                                            const v = e.currentTarget.value || "";
                                             if (v.length > MAX_CHANNEL_DESC) {
                                                 showToast({
                                                     message: localize("maximum_channel_description") || "最多输入 100 个字符",

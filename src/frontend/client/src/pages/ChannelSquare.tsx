@@ -74,7 +74,7 @@ export default function ChannelSquare({
         );
 
         const res: any = await subscribeManagerChannelApi({ channel_id: channelId });
-        const root = res?.data ?? res;
+        const root = res;
         const statusCode = root?.status_code ?? root?.code;
         if (statusCode && statusCode !== 200) {
           const msg =
@@ -141,29 +141,29 @@ export default function ChannelSquare({
           .map((item: any) => {
             const rawId = item.id ?? item.channel_id;
             if (!rawId) return null;
-          const sourceInfos: any[] = Array.isArray(item.source_infos) ? item.source_infos : [];
-          const avatars = sourceInfos
-            .map((s) => s.source_icon)
-            .filter(Boolean)
-            .slice(0, 3);
+            const sourceInfos: any[] = Array.isArray(item.source_infos) ? item.source_infos : [];
+            const avatars = sourceInfos
+              .map((s) => s.source_icon)
+              .filter(Boolean)
+              .slice(0, 3);
 
-          return {
-            id: String(rawId),
-            title: String(item.name ?? item.title ?? ""),
-            description: String(item.description ?? item.desc ?? "") || "暂无简介",
-            creator: String(item.creator ?? item.creator_name ?? ""),
-            creatorAvatars: avatars,
-            articleCount: Number(item.article_count ?? item.articleCount ?? 0),
-            subscriberCount: Number(item.subscriber_count ?? item.subscriberCount ?? 0),
-            visibility: item.visibility as "public" | "private" | "review" | undefined,
-            status:
-              (item.subscription_status === "subscribed"
-                ? "joined"
-                : (item.status as SquareStatus)) || "join",
-            isHighlighted: Boolean(item.isHighlighted ?? item.highlight)
-          } as SquareChannel;
-        })
-        .filter((c): c is SquareChannel => c !== null);
+            return {
+              id: String(rawId),
+              title: String(item.name ?? item.title ?? ""),
+              description: String(item.description ?? item.desc ?? "") || "暂无简介",
+              creator: String(item.creator ?? item.creator_name ?? ""),
+              creatorAvatars: avatars,
+              articleCount: Number(item.article_count ?? item.articleCount ?? 0),
+              subscriberCount: Number(item.subscriber_count ?? item.subscriberCount ?? 0),
+              visibility: item.visibility as "public" | "private" | "review" | undefined,
+              status:
+                (item.subscription_status === "subscribed"
+                  ? "joined"
+                  : (item.status as SquareStatus)) || "join",
+              isHighlighted: Boolean(item.isHighlighted ?? item.highlight)
+            } as SquareChannel;
+          })
+          .filter((c): c is SquareChannel => c !== null);
 
         setAllChannels(prev =>
           nextPage === 1 ? mapped : [...prev, ...mapped]
@@ -299,6 +299,7 @@ export default function ChannelSquare({
                       articleCount={channel.articleCount}
                       subscriberCount={channel.subscriberCount}
                       status={channel.status}
+                      visibility={channel.visibility}
                       isHighlighted={channel.isHighlighted}
                       onPreview={() => onPreviewChannel?.(channel.id)}
                       onAction={() => handleJoinChannel(channel.id, channel.title)}

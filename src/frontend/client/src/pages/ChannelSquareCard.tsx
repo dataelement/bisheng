@@ -13,6 +13,7 @@ interface ChannelSquareCardProps {
   articleCount: number;
   subscriberCount: number;
   status: "join" | "joined" | "pending" | "private";
+  visibility?: "public" | "private" | "review";
   isHighlighted?: boolean;
   onAction?: () => void;
   onPreview?: () => void;
@@ -26,6 +27,7 @@ export function ChannelSquareCard({
   articleCount,
   subscriberCount,
   status,
+  visibility,
   isHighlighted = false,
   onAction,
   onPreview
@@ -45,7 +47,8 @@ export function ChannelSquareCard({
   };
 
   const buttonConfig = getButtonConfig();
-  const isPrivate = status === "private";
+  const isPrivateOrReview =
+    visibility === "private" || visibility === "review" || status === "private";
 
   return (
     <Card
@@ -59,10 +62,10 @@ export function ChannelSquareCard({
         {/* 标题和按钮 */}
         <div className="flex items-center justify-between mt-1 mb-3">
           <div className="flex items-center gap-2 flex-1 min-w-0">
-            <h3 className="font-medium text-[15px] text-[#1D2129] truncate">
+            <h3 className="font-bold text-[15px] text-[#1D2129] truncate">
               {title}
             </h3>
-            {isPrivate && (
+            {isPrivateOrReview && (
               <Lock className="size-3.5 text-[#818181] flex-shrink-0" />
             )}
           </div>
@@ -86,8 +89,11 @@ export function ChannelSquareCard({
           </Button>
         </div>
 
-        {/* 描述 */}
-        <p className="text-[12px] text-[#86909C] line-clamp-2 leading-[18px] truncate  mb-3">
+        {/* 描述：两行截断，hover 显示完整 tooltip */}
+        <p
+          className="text-[12px] text-[#86909C] line-clamp-2 leading-[18px] truncate mb-3"
+          title={description}
+        >
           {description}
         </p>
 

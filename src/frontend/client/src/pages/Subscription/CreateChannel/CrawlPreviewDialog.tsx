@@ -161,7 +161,7 @@ export function CrawlPreviewDialog({
                         name: String(raw.name ?? raw.title ?? previewData?.name ?? url),
                         type: "website",
                         url: raw.url ?? url,
-                        avatar: raw.avatar
+                        avatar: raw.icon ?? raw.avatar ?? previewData?.icon
                     };
                 } catch {
                     // 如果后端报错，就退回到本地添加，避免用户操作“失效”
