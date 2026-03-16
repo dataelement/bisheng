@@ -7,6 +7,13 @@ from pydantic import BaseModel, Field
 from bisheng.channel.domain.models.channel import ChannelVisibilityEnum, ChannelFilterRules
 
 
+class SubscriptionStatusEnum(str, Enum):
+    """Subscription Status Enum"""
+    SUBSCRIBED = 'subscribed'
+    PENDING = 'pending'
+    NOT_SUBSCRIBED = 'not_subscribed'
+
+
 class SubscribeChannelRequest(BaseModel):
     """Subscribe Channel Request"""
     channel_id: str = Field(..., description='Channel ID')
@@ -103,6 +110,7 @@ class ChannelDetailResponse(BaseModel):
     creator_name: str = Field(..., description='Channel Creator Name')
     subscriber_count: int = Field(default=0, description='Number of subscribers')
     article_count: int = Field(default=0, description='Total number of articles in the main channel')
+    subscription_status: SubscriptionStatusEnum = Field(..., description='Current user subscription status')
 
 
 class ChannelMemberResponse(BaseModel):
@@ -132,13 +140,6 @@ class RemoveMemberRequest(BaseModel):
     """Remove Channel Member Request"""
     channel_id: str = Field(..., description='Channel ID')
     user_id: int = Field(..., description='Target User ID to Remove')
-
-
-class SubscriptionStatusEnum(str, Enum):
-    """Subscription Status Enum"""
-    SUBSCRIBED = 'subscribed'
-    PENDING = 'pending'
-    NOT_SUBSCRIBED = 'not_subscribed'
 
 
 class ChannelSquareItemResponse(BaseModel):

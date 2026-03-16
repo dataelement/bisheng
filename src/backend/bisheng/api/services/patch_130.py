@@ -3,13 +3,13 @@ import os
 from langchain_core.documents import Document
 
 from bisheng.api.services.md_from_docx import handler as docx_handler
-from bisheng.api.services.md_from_excel import handler as excel_handler
 from bisheng.api.services.md_from_html import handler as html_handler
 from bisheng.api.services.md_from_pdf import handler as pdf_handler
 from bisheng.api.services.md_from_pptx import handler as pptx_handler
 from bisheng.api.services.md_post_processing import post_processing
 from bisheng.core.cache.utils import CACHE_DIR
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
+from bisheng.knowledge.rag.pipeline.loader.md_from_excel import handler as excel_handler
 
 
 def combine_multiple_md_files_to_raw_texts(

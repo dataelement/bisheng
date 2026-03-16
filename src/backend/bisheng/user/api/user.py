@@ -7,7 +7,7 @@ from typing import Annotated, Dict, List, Optional
 
 import rsa
 from captcha.image import ImageCaptcha
-from fastapi import APIRouter, Depends, HTTPException, Query, Body, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Body, Request, UploadFile, File
 from fastapi.security import OAuth2PasswordBearer
 from loguru import logger
 from sqlmodel import select
@@ -694,6 +694,19 @@ async def create_user(*,
     logger.info(f'create_user username={admin_user.user_name}, username={req.user_name}')
     data = UserService.create_user(request, admin_user, req)
     return resp_200(data=data)
+
+
+@router.post('/user/avatar', status_code=200)
+async def upload_avatar(*,
+                        file: UploadFile = File(..., description="Avatar image file (jpg/png/webp/gif, max 2MB)"),
+                        login_user: LoginUser = Depends(LoginUser.get_login_user)):
+    """
+    Upload user avatar
+    Supported formats: jpg, png, webp, gif
+    Maximum file size: 10 MB
+    """
+    avatar_url = await UserService.update_avatar(login_user.user_id, file)
+    return resp_200(data={'avatar': avatar_url})
 
 
 def md5_hash(string):
