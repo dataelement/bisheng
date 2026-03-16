@@ -534,6 +534,11 @@ class FrequentlyUsedChat(BaseModel):
     type_detail: str = Field(..., description='User-associatedtype_id')
 
 
+class UsedAppPin(BaseModel):
+    """Schema for pinning/unpinning used apps"""
+    flow_id: str = Field(..., description='Application ID to pin/unpin')
+
+
 class UpdateKnowledgeReq(BaseModel):
     """Update Knowledge Base Model Request"""
     model_id: int = Field(..., description='embeddingModelsID')

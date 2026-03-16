@@ -290,3 +290,42 @@ class MessageSessionDao(MessageSessionBase):
         with get_sync_db_session() as session:
             session.exec(statement)
             session.commit()
+
+    @classmethod
+    async def get_user_used_apps(cls, user_id: int, flow_types: List[int] = None) -> List[tuple]:
+        """
+        Query the list of apps used by the user.
+        Deduplicate by flow_id, keeping the record with the latest update_time.
+
+        Args:
+            user_id: User ID
+            flow_types: List of flow types to filter (e.g., [FlowType.ASSISTANT.value, FlowType.WORKFLOW.value])
+
+        Returns:
+            List of tuples: [(flow_id, last_used_time, flow_type), ...]
+        """
+        # Subquery: get the max update_time for each flow_id
+        subquery = select(
+            MessageSession.flow_id,
+            func.max(MessageSession.update_time).label('last_used_time'),
+            MessageSession.flow_type
+        ).where(
+            MessageSession.user_id == user_id,
+            MessageSession.is_delete == False  # noqa
+        )
+
+        if flow_types:
+            subquery = subquery.where(MessageSession.flow_type.in_(flow_types))
+
+        subquery = subquery.group_by(MessageSession.flow_id, MessageSession.flow_type).subquery()
+
+        # Main query: order by last_used_time desc
+        statement = select(
+            subquery.c.flow_id,
+            subquery.c.last_used_time,
+            subquery.c.flow_type
+        ).order_by(subquery.c.last_used_time.desc())
+
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return result.all()
