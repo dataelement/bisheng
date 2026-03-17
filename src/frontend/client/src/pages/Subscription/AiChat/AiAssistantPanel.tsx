@@ -55,8 +55,7 @@ export function AiAssistantPanel({
 
     const presetQuestions = [
         "总结文章要点",
-        "文章的主要结论是什么",
-        "介绍文章作者",
+        "文章的主要结论是什么"
     ];
 
     const handleSend = (text: string, files?: any[] | null) => {

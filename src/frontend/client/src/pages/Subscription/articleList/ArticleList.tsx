@@ -3,13 +3,12 @@ import {
     Info,
     SquareArrowOutUpLeftIcon
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     Article,
     Channel,
     getArticlesApi,
     getChannelDetailApi,
-    listManagerSourcesApi,
     type ArticleSearchResultItem
 } from "~/api/channels";
 import { NotificationSeverity } from "~/common";
@@ -78,35 +77,22 @@ export function ArticleList({ channel, selectedArticleId, onArticleSelect }: Art
     const searchQuery = useDebounce(searchKey, 500);
     const { showToast } = useToastContext();
 
-    // 信源选项（从频道 source_list 关联的信源信息中获取）
-    const [sourceOptions, setSourceOptions] = useState<{ id: string; label: string }[]>([]);
 
-    // 加载信源选项
-    useEffect(() => {
-        if (!channel?.source_list?.length) {
-            setSourceOptions([]);
-            return;
-        }
-        // 从已有接口拉取信源信息，匹配频道的 source_list
-        const loadSources = async () => {
-            try {
-                // 尝试拉取 wechat 和 website 两种类型的信源
-                const [wechat, website] = await Promise.all([
-                    listManagerSourcesApi({ business_type: "wechat", page: 1, page_size: 100 }).catch(() => ({ sources: [], total: 0 })),
-                    listManagerSourcesApi({ business_type: "website", page: 1, page_size: 100 }).catch(() => ({ sources: [], total: 0 })),
-                ]);
-                const allSources = [...wechat.sources, ...website.sources];
-                const channelSourceSet = new Set(channel.source_list);
-                const filtered = allSources
-                    .filter(s => channelSourceSet.has(s.id) || channelSourceSet.has(s.source_id || ""))
-                    .map(s => ({ id: s.id || s.source_id || "", label: s.name }));
-                setSourceOptions(filtered);
-            } catch {
-                setSourceOptions([]);
-            }
-        };
-        loadSources();
-    }, [channel?.id, channel?.source_list]);
+    // Fetch channel detail for the tooltip; isLoading drives the page-level loading state
+    const { data: channelDetail, isLoading: isChannelDetailLoading } = useQuery({
+        queryKey: ["channelDetail", channel.id],
+        queryFn: () => getChannelDetailApi(channel.id),
+        staleTime: 60_000, // Cache for 1 minute
+    });
+
+    // Derive source options directly from channelDetail.source_infos (refreshes after channel edit)
+    const sourceOptions = useMemo(() => {
+        const infos = channelDetail?.source_infos;
+        if (!infos?.length) return [];
+        return infos
+            .filter(s => s.id)
+            .map(s => ({ id: s.id, label: s.source_name || s.name || '' }));
+    }, [channelDetail?.source_infos]);
 
     const PAGE_SIZE = 20;
 
@@ -171,13 +157,19 @@ export function ArticleList({ channel, selectedArticleId, onArticleSelect }: Art
         loadArticles(1);
     }, [channel?.id, searchQuery, selectedSources, onlyUnread, selectedSubChannelName]);
 
+    // Optimistically mark the article as read in local state when selected.
+    // The backend already marks it read when the detail API is called.
+    const handleArticleClick = useCallback((article: Article | null) => {
+        if (article && !article.isRead) {
+            setArticles(prev =>
+                prev.map(a => a.id === article.id ? { ...a, isRead: true } : a)
+            );
+        }
+        onArticleSelect(article);
+    }, [onArticleSelect]);
+
     const handleSourcesChange = (newValue: string[]) => {
         setSelectedSources(newValue);
-    };
-
-    const handleSearch = (value: string) => {
-        if (value.length > 40) return;
-        setSearchQuery(value);
     };
 
     const handleToggleUnread = () => {
@@ -190,17 +182,24 @@ export function ArticleList({ channel, selectedArticleId, onArticleSelect }: Art
         setSelectedSubChannelName(subChannelName === "all" ? undefined : subChannelName);
     };
 
-    // Fetch channel detail for the tooltip; isLoading drives the page-level loading state
-    const { data: channelDetail, isLoading: isChannelDetailLoading } = useQuery({
-        queryKey: ["channelDetail", channel.id],
-        queryFn: () => getChannelDetailApi(channel.id),
-        staleTime: 60_000, // Cache for 1 minute
-    });
 
     // Extract sub-channels from channel detail's filter_rules
     const subChannels = (channelDetail?.filter_rules || [])
         .filter(fr => fr.channel_type === 'sub' && fr.name)
-        .map((fr, idx) => ({ id: `sub-${idx}`, name: fr.name! }));
+        .map((fr, idx) => ({ id: `sub-${idx}`, name: fr.name! }))
+        .sort((a, b) => {
+            // Sort by first character priority: letters > digits > Chinese/other
+            const getPriority = (name: string) => {
+                const ch = name.charAt(0);
+                if (/[a-zA-Z]/.test(ch)) return 0;
+                if (/\d/.test(ch)) return 1;
+                return 2;
+            };
+            const pa = getPriority(a.name);
+            const pb = getPriority(b.name);
+            if (pa !== pb) return pa - pb;
+            return a.name.localeCompare(b.name, 'zh-CN');
+        });
 
     console.log('channelDetail :>> ', channelDetail);
     return (
@@ -283,7 +282,7 @@ export function ArticleList({ channel, selectedArticleId, onArticleSelect }: Art
                         <SearchInput
                             key={channel.id}
                             value={searchKey}
-                            onChange={handleSearch}
+                            onChange={setSearchQuery}
                             placeholder="搜索你感兴趣的文章"
                         />
 
@@ -329,7 +328,7 @@ export function ArticleList({ channel, selectedArticleId, onArticleSelect }: Art
                             <ArticleCard
                                 key={article.id}
                                 article={article}
-                                onSelect={onArticleSelect}
+                                onSelect={handleArticleClick}
                                 isSelected={selectedArticleId === article.id}
                                 searchQuery={searchQuery}
                             />

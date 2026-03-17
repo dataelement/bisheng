@@ -8,7 +8,7 @@ import { useResizablePanel } from "../hooks/useResizablePanel";
 const MIN_LEFT_WIDTH = 480;
 const MIN_RIGHT_WIDTH = 360;
 
-export default function FullScreenArticle({ article, onExit, showAiAssistant, setShowAiAssistant }) {
+export default function FullScreenArticle({ article, onExit, showAiAssistant, setShowAiAssistant, onCloseAiAssistant }) {
     const containerRef = useRef<HTMLDivElement>(null);
 
     const { leftWidth, setLeftWidth, startResizing } = useResizablePanel({
@@ -67,7 +67,7 @@ export default function FullScreenArticle({ article, onExit, showAiAssistant, se
                     screenFull
                     aiAssistantOpen={showAiAssistant}
                     onFullScreen={onExit}
-                    onExitAiAssistant={() => setShowAiAssistant(false)}
+                    onExitAiAssistant={onCloseAiAssistant}
                     article={article}
                 />
             </div>
@@ -85,7 +85,7 @@ export default function FullScreenArticle({ article, onExit, showAiAssistant, se
             <div className="flex-1 h-full min-w-[360px] bg-white">
                 <AiAssistantPanel
                     features={{ tools: false, modelSelect: false, knowledgeBase: false, fileUpload: false }}
-                    onClose={() => setShowAiAssistant(false)} />
+                    onClose={onCloseAiAssistant} />
             </div>
         </div >
     );

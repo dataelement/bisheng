@@ -120,7 +120,7 @@ export function ArticleDetail({ article, loading = false, screenFull = false, ai
             {/* Top Toolbar */}
             <div className="border-b border-black pb-4">
                 <div className="flex items-start justify-between">
-                    <h2 className="font-semibold leading-relaxed flex-1 font-[serif]">
+                    <h2 className={`font-semibold leading-relaxed flex-1 font-[serif] ${aiAssistantOpen ? 'pl-10' : ''}`}>
                         {article.title}
                     </h2>
                 </div>
@@ -151,14 +151,10 @@ export function ArticleDetail({ article, loading = false, screenFull = false, ai
                             加入知识空间
                         </button>}
 
-                        {(!screenFull || (screenFull && aiAssistantOpen)) && <button
+                        {!(screenFull || aiAssistantOpen) && <button
                             className="flex items-center gap-1 text-xs transition-colors text-gray-900"
                             onClick={() => {
-                                if (screenFull && aiAssistantOpen && onExitAiAssistant) {
-                                    onExitAiAssistant();
-                                } else {
-                                    onFullScreen?.();
-                                }
+                                onFullScreen?.();
                             }}
                         >
                             <FullScreenIcon className="size-3.5" />
@@ -177,7 +173,7 @@ export function ArticleDetail({ article, loading = false, screenFull = false, ai
                                 onClick={() => onAiAssistant?.()}
                             >
                                 <AiChatIcon className="size-3.5 text-primary" />
-                                AI 问答
+                                AI 助手
                             </button>}
                         </div>
                     </div>

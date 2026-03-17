@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
     Article,
@@ -31,10 +31,13 @@ export default function Subscription() {
     const { channelId: previewChannelId } = useParams<{ channelId?: string }>();
     const navigate = useNavigate();
     const [activeChannel, setActiveChannel] = useState<Channel | null>(null);
+    const [channelRefreshToken, setChannelRefreshToken] = useState(0);
     const [showChannelSquare, setShowChannelSquare] = useState(false);
     const [showCreateChannelDrawer, setShowCreateChannelDrawer] = useState(false);
     const [fullScreenArticle, setFullScreenArticle] = useState<Article | null>(null);
     const [showAiAssistant, setShowAiAssistant] = useState(false);
+    // Track whether fullscreen was entered via AI assistant button (not fullscreen button)
+    const enteredFullscreenViaAiRef = useRef(false);
     const [previewDrawerOpen, setPreviewDrawerOpen] = useState(false);
     const [memberDialogOpen, setMemberDialogOpen] = useState(false);
     const [memberDialogSpace, setMemberDialogSpace] = useState<KnowledgeSpace | null>(null);
@@ -89,6 +92,10 @@ export default function Subscription() {
         if (editingChannel) {
             await updateChannelApi(editingChannel.id, payload);
             await queryClient.invalidateQueries({ queryKey: ["channels"] });
+            // Refresh channel detail cache so ArticleList & tooltip pick up new settings
+            await queryClient.invalidateQueries({ queryKey: ["channelDetail", editingChannel.id] });
+            // Bump refresh token so ChannelLayout remounts and reloads articles
+            setChannelRefreshToken(t => t + 1);
             return { channelId: editingChannel.id };
         }
 
@@ -163,8 +170,10 @@ export default function Subscription() {
 
                     {activeChannel ? (
                         <ChannelLayout
+                            key={`${activeChannel.id}-${channelRefreshToken}`}
                             channel={activeChannel}
                             onFullScreen={(article, ai) => {
+                                enteredFullscreenViaAiRef.current = !!ai;
                                 setFullScreenArticle(article);
                                 setShowAiAssistant(ai || false);
                             }}
@@ -251,10 +260,22 @@ export default function Subscription() {
                         onExit={() => {
                             setFullScreenArticle(null);
                             setShowAiAssistant(false);
+                            enteredFullscreenViaAiRef.current = false;
                         }}
                         article={fullScreenArticle}
                         showAiAssistant={showAiAssistant}
                         setShowAiAssistant={setShowAiAssistant}
+                        onCloseAiAssistant={() => {
+                            if (enteredFullscreenViaAiRef.current) {
+                                // Entered fullscreen via AI button → exit fullscreen entirely
+                                setFullScreenArticle(null);
+                                setShowAiAssistant(false);
+                                enteredFullscreenViaAiRef.current = false;
+                            } else {
+                                // Entered fullscreen first, then opened AI → just close AI panel
+                                setShowAiAssistant(false);
+                            }
+                        }}
                     />
                 </div>
             )}
