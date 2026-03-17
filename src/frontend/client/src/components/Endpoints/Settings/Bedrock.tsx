@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
-import { getSettingsKeys } from '~/data-provider/data-provider/src';
-import type { SettingDefinition } from '~/data-provider/data-provider/src';
+import { getSettingsKeys } from '~/types/chat';
+import type { SettingDefinition } from '~/types/chat';
 import type { TModelSelectProps } from '~/common';
 import { componentMapping } from '~/components/SidePanel/Parameters/components';
 import { presetSettings } from '~/components/SidePanel/Parameters/settings';

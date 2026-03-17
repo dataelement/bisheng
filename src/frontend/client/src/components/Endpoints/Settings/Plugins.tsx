@@ -1,8 +1,8 @@
 import { useMemo } from 'react';
 import { useRecoilValue } from 'recoil';
 import TextareaAutosize from 'react-textarea-autosize';
-import { useAvailablePluginsQuery } from '~/data-provider/data-provider/src/react-query';
-import type { TPlugin } from '~/data-provider/data-provider/src';
+import { useAvailablePluginsQuery } from '~/hooks/queries';
+import type { TPlugin } from '~/types/chat';
 import type { TModelSelectProps, OnInputNumberChange } from '~/common';
 import {
   Input,

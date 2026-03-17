@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { checkSopQueueStatus, getCaseDetail, getLinsightSessionVersionList, getLinsightTaskList } from '~/api/linsight';
-import { useGetLinsightToolList, useGetOrgToolList, useGetPersonalToolList } from '~/data-provider';
+import { useGetLinsightToolList, useGetOrgToolList, useGetPersonalToolList } from '~/hooks/queries/data-provider';
 import { useGenerateSop, useLinsightManager } from '~/hooks/useLinsightManager';
 import { formatTime } from '~/utils';
 import { LoadingIcon } from '../ui/icon/Loading';

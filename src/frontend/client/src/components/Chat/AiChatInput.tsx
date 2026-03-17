@@ -19,7 +19,7 @@ import { ArrowDown } from "lucide-react";
 import { SendIcon } from "~/components/svg";
 import { Button, TextareaAutosize } from "~/components/ui";
 import SpeechToTextComponent from "~/components/Voice/SpeechToText";
-import { useGetWorkbenchModelsQuery } from "~/data-provider";
+import { useGetWorkbenchModelsQuery } from "~/hooks/queries/data-provider";
 import InputFiles from "~/pages/appChat/components/InputFiles";
 import { useFileDropAndPaste } from "~/pages/appChat/useFileDropAndPaste";
 import { cn, removeFocusRings } from "~/utils";

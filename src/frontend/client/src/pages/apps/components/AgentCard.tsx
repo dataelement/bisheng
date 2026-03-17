@@ -3,6 +3,7 @@ import type { AppItem } from '~/@types/app';
 import AppAvator from '~/components/Avator';
 import { cn } from '~/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '~/components/ui/Tooltip2';
+import { Button } from '~/components';
 
 interface AgentCardProps {
   agent: AppItem;
@@ -31,7 +32,7 @@ export function AgentCard({
       {/* Header Info */}
       <div className="flex items-start justify-between w-full relative z-10 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
-          <AppAvator className="size-[20px] min-w-[20px] shrink-0 rounded-[4px]" url={agent.logo} id={agent.id as any} flowType={String(agent.flow_type)} />
+          <AppAvator className="size-[32px] min-w-[20px] shrink-0 rounded-[4px]" url={agent.logo} id={agent.id as any} flowType={String(agent.flow_type)} />
           <p className="font-['PingFang_SC'] font-medium leading-[22px] text-[#212121] text-[14px] truncate">
             {agent.name}
           </p>
@@ -87,25 +88,26 @@ export function AgentCard({
       </div>
 
       {/* Action Buttons (Visible only on hover) */}
-      <div className="hidden group-hover:flex gap-1 items-center justify-center w-full mt-auto h-[26px]">
-        <button
+      <div className="hidden group-hover:flex gap-1 items-center justify-center w-full mt-auto h-[28px]">
+        <Button
           onClick={(e) => {
             e.stopPropagation();
             onShare(agent);
           }}
-          className="flex-1 bg-white border border-[#ececec] text-[#212121] flex justify-center items-center h-full rounded-[6px] text-[14px] font-['PingFang_SC'] hover:bg-gray-50 transition-colors"
+          variant="outline"
+          className="flex-1 flex justify-center items-center h-full rounded-[6px] text-[14px] "
         >
           分享应用
-        </button>
-        <button
+        </Button>
+        <Button
           onClick={(e) => {
             e.stopPropagation();
             onStartChat(agent);
           }}
-          className="flex-1 bg-[#335cff] text-white flex justify-center items-center h-full rounded-[6px] text-[14px] font-['PingFang_SC'] hover:bg-blue-600 transition-colors"
+          className="flex-1 flex justify-center items-center h-full rounded-[6px] text-[14px]"
         >
           开始对话
-        </button>
+        </Button>
       </div>
     </div>
   );

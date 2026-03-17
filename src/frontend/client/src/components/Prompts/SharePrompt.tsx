@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo } from 'react';
 import { Share2Icon } from 'lucide-react';
 import { useForm, Controller } from 'react-hook-form';
-import { Permissions } from '~/data-provider/data-provider/src';
+import { Permissions } from '~/types/chat';
 import type {
   TPromptGroup,
   TStartupConfig,
   TUpdatePromptGroupPayload,
-} from '~/data-provider/data-provider/src';
+} from '~/types/chat';
 import {
   Button,
   Switch,
@@ -16,7 +16,7 @@ import {
   OGDialogContent,
   OGDialogTrigger,
 } from '~/components/ui';
-import { useUpdatePromptGroup, useGetStartupConfig } from '~/data-provider';
+import { useUpdatePromptGroup, useGetStartupConfig } from '~/hooks/queries/data-provider';
 import { useToastContext } from '~/Providers';
 import { useLocalize } from '~/hooks';
 

@@ -3,7 +3,7 @@ import { ExternalLink } from 'lucide-react';
 import { useMemo, useEffect, useState } from 'react';
 import { ShieldEllipsis } from 'lucide-react';
 import { useForm, Controller } from 'react-hook-form';
-import { Permissions, SystemRoles, roleDefaults, PermissionTypes } from '~/data-provider/data-provider/src';
+import { Permissions, SystemRoles, roleDefaults, PermissionTypes } from '~/types/chat';
 import type { Control, UseFormSetValue, UseFormGetValues } from 'react-hook-form';
 import {
   OGDialog,
@@ -14,7 +14,7 @@ import {
   Switch,
   DropdownPopup,
 } from '~/components/ui';
-import { useUpdatePromptPermissionsMutation } from '~/data-provider';
+import { useUpdatePromptPermissionsMutation } from '~/hooks/queries/data-provider';
 import OGDialogTemplate from '~/components/ui/OGDialogTemplate';
 import { useLocalize, useAuthContext } from '~/hooks';
 import { useToastContext } from '~/Providers';

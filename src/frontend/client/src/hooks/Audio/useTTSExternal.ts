@@ -1,8 +1,8 @@
 // client/src/hooks/Audio/useTTSExternal.ts
 import { useRef, useEffect, useState } from 'react';
 import { useRecoilState, useRecoilValue } from 'recoil';
-import { parseTextParts } from '~/data-provider/data-provider/src';
-import type { TMessageContentParts } from '~/data-provider/data-provider/src';
+import { parseTextParts } from '~/types/chat';
+import type { TMessageContentParts } from '~/types/chat';
 import useTextToSpeechExternal from '~/hooks/Input/useTextToSpeechExternal';
 import usePauseGlobalAudio from '~/hooks/Audio/usePauseGlobalAudio';
 import useAudioRef from '~/hooks/Audio/useAudioRef';

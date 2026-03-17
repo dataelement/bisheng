@@ -1,12 +1,12 @@
-import { useGetModelsQuery } from '~/data-provider/data-provider/src/react-query';
+import { useGetModelsQuery } from '~/hooks/queries';
 import type {
   TEndpointsConfig,
   TModelsConfig,
   TConversation,
   TPreset,
-} from '~/data-provider/data-provider/src';
+} from '~/types/chat';
 import { getDefaultEndpoint, buildDefaultConvo } from '~/utils';
-import { useGetEndpointsQuery } from '~/data-provider';
+import { useGetEndpointsQuery } from '~/hooks/queries/data-provider';
 
 type TDefaultConvo = { conversation: Partial<TConversation>; preset?: Partial<TPreset> | null };
 

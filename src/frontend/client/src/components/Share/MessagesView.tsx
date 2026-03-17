@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { TMessage } from '~/data-provider/data-provider/src';
+import type { TMessage } from '~/types/chat';
 import MultiMessage from './MultiMessage';
 
 export default function MessagesView({

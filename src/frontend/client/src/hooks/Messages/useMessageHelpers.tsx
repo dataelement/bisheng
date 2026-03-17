@@ -1,6 +1,6 @@
 import throttle from 'lodash/throttle';
 import { useEffect, useRef, useCallback, useMemo } from 'react';
-import { Constants, isAssistantsEndpoint, isAgentsEndpoint } from '~/data-provider/data-provider/src';
+import { Constants, isAssistantsEndpoint, isAgentsEndpoint } from '~/types/chat';
 import type { TMessageProps } from '~/common';
 import { useChatContext, useAssistantsMapContext, useAgentsMapContext } from '~/Providers';
 import useCopyToClipboard from './useCopyToClipboard';

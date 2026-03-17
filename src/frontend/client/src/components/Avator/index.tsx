@@ -12,7 +12,7 @@ const gradients = [
     'bg-blue-700'
 ]
 
-export default function AppAvator({ id = 1, flowType = '', url = '', className = '' }) {
+export default function AppAvator({ id = 1, flowType = '', url = '', className = '', iconClassName = 'w-4 h-4' }) {
 
     const color = useMemo(() => {
         const str = id + ''
@@ -28,15 +28,15 @@ export default function AppAvator({ id = 1, flowType = '', url = '', className =
 
     const flowConfig: Record<number, { icon: React.ReactNode, bgColor: string }> = {
         1: {
-            icon: <SkillIcon style={{ color: '#722ED1' }} className="w-4 h-4" />,
+            icon: <SkillIcon style={{ color: '#722ED1' }} className={iconClassName} />,
             bgColor: '#F5E8FF'
         },
         5: {
-            icon: <AssistantIcon style={{ color: '#FF7D00' }} className="w-4 h-4" />,
+            icon: <AssistantIcon style={{ color: '#FF7D00' }} className={iconClassName} />,
             bgColor: '#FFF7E8'
         },
         10: {
-            icon: <WorkflowIcon className="w-4 h-4 text-primary" />,
+            icon: <WorkflowIcon className={cn(iconClassName, "text-primary")} />,
             bgColor: '#E8F3FF'
         }
     }

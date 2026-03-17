@@ -1,6 +1,6 @@
 import { Suspense } from 'react';
 import { useRecoilValue } from 'recoil';
-import type { TMessage, TMessageContentParts } from '~/data-provider/data-provider/src';
+import type { TMessage, TMessageContentParts } from '~/types/chat';
 import { UnfinishedMessage } from './MessageContent';
 import { DelayedRender } from '~/components/ui';
 import MarkdownLite from './MarkdownLite';

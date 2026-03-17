@@ -1,4 +1,4 @@
-import { FileSources } from '~/data-provider/data-provider/src';
+import { FileSources } from '~/types/chat';
 import ImagePreview from './ImagePreview';
 import RemoveFile from './RemoveFile';
 

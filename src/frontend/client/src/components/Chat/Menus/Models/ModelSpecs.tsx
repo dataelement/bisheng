@@ -1,7 +1,7 @@
 import type { FC } from 'react';
 import { Close } from '@radix-ui/react-popover';
-import { AuthType } from '~/data-provider/data-provider/src';
-import type { TModelSpec, TEndpointsConfig } from '~/data-provider/data-provider/src';
+import { AuthType } from '~/types/chat';
+import type { TModelSpec, TEndpointsConfig } from '~/types/chat';
 import MenuSeparator from '~/components/Chat/Menus/UI/MenuSeparator';
 import ModelSpec from './ModelSpec';
 

@@ -2,7 +2,7 @@ import debounce from 'lodash/debounce';
 import { Search, X } from 'lucide-react';
 import { useSetRecoilState } from 'recoil';
 import { useLocation } from 'react-router-dom';
-import { QueryKeys } from '~/data-provider/data-provider/src';
+import { QueryKeys } from '~/types/chat';
 import { useQueryClient } from '@tanstack/react-query';
 import { forwardRef, useState, useCallback, useMemo, Ref } from 'react';
 import { useLocalize, useNewConvo } from '~/hooks';

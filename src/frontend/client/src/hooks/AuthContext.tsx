@@ -9,8 +9,8 @@ import {
 } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useRecoilState } from 'recoil';
-import { setTokenHeader, SystemRoles } from '~/data-provider/data-provider/src';
-import type * as t from '~/data-provider/data-provider/src';
+import { setTokenHeader, SystemRoles } from '~/types/chat';
+import type * as t from '~/types/chat';
 import {
   useGetBsConfig,
   useGetRole,
@@ -18,7 +18,7 @@ import {
   useLoginUserMutation,
   useLogoutUserMutation,
   useRefreshTokenMutation,
-} from '~/data-provider';
+} from '~/hooks/queries/data-provider';
 import { TAuthConfig, TUserContext, TAuthContext, TResError } from '~/common';
 import useTimeout from './useTimeout';
 import store from '~/store';

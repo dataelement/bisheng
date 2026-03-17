@@ -5,6 +5,7 @@ import { getShareParamsApi } from "~/api";
 import ChatView from "~/components/Chat/ChatView";
 import Sop from "~/components/Sop";
 import AppChat from "./appChat";
+import { generateUUID } from "~/utils";
 
 const Apptypes = {
     'skill': 1,
@@ -19,6 +20,19 @@ export default function Share() {
     const navigate = useNavigate()
 
     useEffect(() => {
+        // Handle app share links: token format is "app_{applicationId}_{flowType}"
+        if (shareToken?.startsWith('app_')) {
+            const slug = shareToken.substring(4); // Remove "app_" prefix
+            const lastUnderscore = slug.lastIndexOf('_');
+            if (lastUnderscore !== -1) {
+                const applicationId = slug.substring(0, lastUnderscore);
+                const flowType = slug.substring(lastUnderscore + 1);
+                const chatId = generateUUID(32);
+                navigate(`/app/${chatId}/${applicationId}/${flowType}`, { replace: true });
+                return;
+            }
+        }
+
         getShareParamsApi(shareToken).then(res => {
             if (res.status_code === 404) {
                 console.log('404 page')

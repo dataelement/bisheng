@@ -117,6 +117,7 @@ class ChannelMemberResponse(BaseModel):
     """Channel Member Response"""
     user_id: int = Field(..., description='User ID')
     user_name: str = Field(..., description='User Name')
+    user_avatar: Optional[str] = Field(None, description='User Avatar URL')
     user_role: str = Field(..., description='User Role in Channel: creator / admin / member')
     user_groups: List[dict] = Field(default_factory=list,
                                     description='User Groups the member belongs to, each group is represented as a dict with group details')

@@ -2,7 +2,7 @@ import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState }
 import { useRecoilValue } from 'recoil';
 import Vditor from "vditor";
 import "vditor/dist/index.css";
-import { useGetBsConfig, useGetLinsightToolList, useGetOrgToolList, useGetPersonalToolList } from '~/data-provider';
+import { useGetBsConfig, useGetLinsightToolList, useGetOrgToolList, useGetPersonalToolList } from '~/hooks/queries/data-provider';
 import { useLocalize } from '~/hooks';
 import store from '~/store';
 import { LinsightInfo } from "~/store/linsight";

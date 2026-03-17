@@ -4,7 +4,7 @@ from sqlalchemy import case, func, or_
 from sqlmodel import select, col
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from bisheng.channel.domain.models.channel import Channel
+from bisheng.channel.domain.models.channel import Channel, ChannelVisibilityEnum
 from bisheng.channel.domain.repositories.interfaces.channel_repository import ChannelRepository
 from bisheng.common.models.space_channel_member import SpaceChannelMember, BusinessTypeEnum
 from bisheng.common.repositories.implementations.base_repository_impl import BaseRepositoryImpl
@@ -64,7 +64,10 @@ class ChannelRepositoryImpl(BaseRepositoryImpl[Channel, str], ChannelRepository)
                 subscriber_subq,
                 subscriber_subq.c.business_id == Channel.id
             )
-            .where(Channel.is_released == True)
+            .where(
+                Channel.is_released == True,
+                Channel.visibility != ChannelVisibilityEnum.PRIVATE
+            )
         )
 
         # Apply keyword filter (fuzzy search on name and description)
@@ -100,7 +103,10 @@ class ChannelRepositoryImpl(BaseRepositoryImpl[Channel, str], ChannelRepository)
         query = (
             select(func.count())
             .select_from(Channel)
-            .where(Channel.is_released == True)
+            .where(
+                Channel.is_released == True,
+                Channel.visibility != ChannelVisibilityEnum.PRIVATE
+            )
         )
 
         if keyword:

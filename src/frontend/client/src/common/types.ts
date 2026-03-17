@@ -1,9 +1,9 @@
 import { RefObject } from 'react';
-import { FileSources } from '~/data-provider/data-provider/src';
+import { FileSources } from '~/types/chat';
 import type * as InputNumberPrimitive from 'rc-input-number';
 import type { ColumnDef } from '@tanstack/react-table';
 import type { SetterOrUpdater } from 'recoil';
-import type * as t from '~/data-provider/data-provider/src';
+import type * as t from '~/types/chat';
 import type { UseMutationResult } from '@tanstack/react-query';
 import type { LucideIcon } from 'lucide-react';
 import type { TranslationKeys } from '~/hooks';

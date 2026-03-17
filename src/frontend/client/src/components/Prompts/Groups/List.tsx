@@ -1,10 +1,10 @@
 import { Plus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { PermissionTypes, Permissions } from '~/data-provider/data-provider/src';
-import type { TPromptGroup, TStartupConfig } from '~/data-provider/data-provider/src';
+import { PermissionTypes, Permissions } from '~/types/chat';
+import type { TPromptGroup, TStartupConfig } from '~/types/chat';
 import DashGroupItem from '~/components/Prompts/Groups/DashGroupItem';
 import ChatGroupItem from '~/components/Prompts/Groups/ChatGroupItem';
-import { useGetStartupConfig } from '~/data-provider';
+import { useGetStartupConfig } from '~/hooks/queries/data-provider';
 import { useLocalize, useHasAccess } from '~/hooks';
 import { Button, Skeleton } from '~/components/ui';
 

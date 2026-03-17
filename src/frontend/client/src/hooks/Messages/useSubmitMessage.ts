@@ -3,7 +3,7 @@ import { useRecoilState, useRecoilValue, useSetRecoilState } from 'recoil';
 import { v4 } from 'uuid';
 import { useAddedChatContext, useChatContext, useChatFormContext } from '~/Providers';
 import { sameSopLabelState } from '~/components/Chat/Input/SameSopSpan';
-import { Constants } from '~/data-provider/data-provider/src';
+import { Constants } from '~/types/chat';
 import { useAuthContext } from '~/hooks/AuthContext';
 import store from '~/store';
 import { replaceSpecialVars } from '~/utils';

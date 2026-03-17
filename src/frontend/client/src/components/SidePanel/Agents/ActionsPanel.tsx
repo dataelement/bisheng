@@ -4,13 +4,13 @@ import {
   AuthTypeEnum,
   AuthorizationTypeEnum,
   TokenExchangeMethodEnum,
-} from '~/data-provider/data-provider/src';
+} from '~/types/chat';
 import { ChevronLeft } from 'lucide-react';
 import type { AgentPanelProps, ActionAuthForm } from '~/common';
 import ActionsAuth from '~/components/SidePanel/Builder/ActionsAuth';
 import { OGDialog, OGDialogTrigger, Label } from '~/components/ui';
 import OGDialogTemplate from '~/components/ui/OGDialogTemplate';
-import { useDeleteAgentAction } from '~/data-provider';
+import { useDeleteAgentAction } from '~/hooks/queries/data-provider';
 import useLocalize from '~/hooks/useLocalize';
 import { useToastContext } from '~/Providers';
 import { TrashIcon } from '~/components/svg';

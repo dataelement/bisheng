@@ -1,5 +1,5 @@
 import type { Row } from '@tanstack/react-table';
-import type { TFile } from '~/data-provider/data-provider/src';
+import type { TFile } from '~/types/chat';
 import ImagePreview from '~/components/Chat/Input/Files/ImagePreview';
 import FilePreview from '~/components/Chat/Input/Files/FilePreview';
 import { getFileType } from '~/utils';

@@ -11,7 +11,7 @@ import {
   filteredAppsSelector,
   recentAppsState,
 } from '~/pages/apps/store/appCenterAtoms';
-import { generateUUID } from '~/utils';
+import { copyText, generateUUID } from '~/utils';
 
 /**
  * Hook for the App Center home page.
@@ -54,13 +54,18 @@ export function useAppCenter() {
     [fetchApps, showToast],
   );
 
-  /** Navigate to the most recent conversation for an app */
+  /** Navigate to the most recent conversation for an app.
+   *  When no conversation exists, create a new one and toast the user.
+   */
   const continueChat = useCallback(
     (app: AppItem) => {
       if (app.last_chat_id) {
         navigate(`/app/${app.last_chat_id}/${app.id}/${app.flow_type}`);
       } else {
+        // No history — create new conversation and notify
         showToast?.({ message: '历史会话已删除', severity: NotificationSeverity.ERROR });
+        const chatId = generateUUID(32);
+        navigate(`/app/${chatId}/${app.id}/${app.flow_type}`, { state: { emptyHistory: true } });
       }
     },
     [navigate, showToast],
@@ -78,9 +83,9 @@ export function useAppCenter() {
   /** Copy share link to clipboard */
   const shareApp = useCallback(
     async (app: AppItem) => {
-      const url = getAppShareUrl(app.id);
+      const url = getAppShareUrl(app.id, app.flow_type);
       try {
-        await navigator.clipboard.writeText(url);
+        await copyText(url);
         showToast?.({ message: '已将应用链接复制到剪贴板', severity: NotificationSeverity.SUCCESS });
       } catch {
         showToast?.({ message: '复制失败，请手动复制', severity: NotificationSeverity.ERROR });

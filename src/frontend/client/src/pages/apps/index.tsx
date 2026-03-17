@@ -27,7 +27,7 @@ export default function AppCenter() {
     return (
         <div className="bg-white min-h-screen flex flex-col items-center px-[12px] py-[20px] relative w-full">
             {/* 顶部页眉 */}
-            <header className="flex items-center justify-between max-w-[1000px] w-full shrink-0 relative">
+            <header className="flex items-center justify-between leading-8 max-w-[1000px] w-full shrink-0 relative">
                 <h1 className="font-['PingFang_SC'] font-semibold leading-[32px] text-[#335cff] text-[24px]">
                     应用中心
                 </h1>
@@ -61,7 +61,7 @@ export default function AppCenter() {
                         <AppEmptyState query={searchQuery} />
                     </div>
                 ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-[12px] w-full relative">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-3 gap-y-3.5 w-full relative">
                         {apps.map((agent) => (
                             <AgentCard
                                 key={agent.id}

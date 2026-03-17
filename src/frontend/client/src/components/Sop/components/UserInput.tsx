@@ -8,7 +8,7 @@ import { AttachmentIcon } from "~/components/svg";
 import SendIcon from "~/components/svg/SendIcon";
 import { Button, Textarea } from "~/components/ui";
 import { FileIcon } from "~/components/ui/icon/File/FileIcon";
-import { useGetBsConfig, useUploadFileMutation } from "~/data-provider";
+import { useGetBsConfig, useUploadFileMutation } from "~/hooks/queries/data-provider";
 import { useLocalize } from "~/hooks";
 import { bishengConfState } from "~/pages/appChat/store/atoms";
 import { useToastContext } from "~/Providers";

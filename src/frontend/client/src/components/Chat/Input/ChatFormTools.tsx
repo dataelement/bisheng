@@ -9,11 +9,11 @@ import { useEffect, useMemo } from "react";
 import { useRecoilValue } from "recoil";
 import { Switch } from "~/components/ui";
 import { Select, SelectContent, SelectTrigger } from "~/components/ui/Select";
-import { useGetBsConfig } from "~/data-provider";
+import { useGetBsConfig } from "~/hooks/queries/data-provider";
 import { useLocalize } from "~/hooks";
 import store from "~/store";
 
-import { BsConfig } from "~/data-provider/data-provider/src";
+import { BsConfig } from "~/types/chat";
 import { cn } from "~/utils";
 
 // 工具

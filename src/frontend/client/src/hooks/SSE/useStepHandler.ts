@@ -1,12 +1,12 @@
 import { useCallback, useRef } from 'react';
-import { StepTypes, ContentTypes, ToolCallTypes, getNonEmptyValue } from '~/data-provider/data-provider/src';
+import { StepTypes, ContentTypes, ToolCallTypes, getNonEmptyValue } from '~/types/chat';
 import type {
   Agents,
   TMessage,
   PartMetadata,
   EventSubmission,
   TMessageContentParts,
-} from '~/data-provider/data-provider/src';
+} from '~/types/chat';
 import type { SetterOrUpdater } from 'recoil';
 import type { AnnounceOptions } from '~/common';
 import { MESSAGE_UPDATE_INTERVAL } from '~/common';

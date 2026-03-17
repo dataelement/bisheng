@@ -1,5 +1,5 @@
-import type { TFile } from '~/data-provider/data-provider/src';
-import { useGetFiles } from '~/data-provider';
+import type { TFile } from '~/types/chat';
+import { useGetFiles } from '~/hooks/queries/data-provider';
 import { columns } from './PanelColumns';
 import DataTable from './PanelTable';
 

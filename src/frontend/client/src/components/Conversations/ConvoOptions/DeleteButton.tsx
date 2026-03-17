@@ -1,9 +1,9 @@
 import React, { useCallback } from 'react';
-import { QueryKeys } from '~/data-provider/data-provider/src';
+import { QueryKeys } from '~/types/chat';
 import { useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate } from 'react-router-dom';
-import type { TMessage } from '~/data-provider/data-provider/src';
-import { useDeleteConversationMutation } from '~/data-provider';
+import type { TMessage } from '~/types/chat';
+import { useDeleteConversationMutation } from '~/hooks/queries/data-provider';
 import OGDialogTemplate from '~/components/ui/OGDialogTemplate';
 import { useLocalize, useNewConvo } from '~/hooks';
 import { OGDialog, Label } from '~/components';

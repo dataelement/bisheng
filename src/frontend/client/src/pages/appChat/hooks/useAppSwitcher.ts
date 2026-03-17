@@ -16,6 +16,7 @@ export function useAppSwitcher() {
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
+  console.log('allApps :>> ', allApps);
 
   /** Fetch all accessible apps (backend returns sorted by last_chat_time desc) */
   const fetchApps = useCallback(async () => {
@@ -33,10 +34,10 @@ export function useAppSwitcher() {
 
   // Fetch on first open
   useEffect(() => {
-    if (open && allApps.length === 0) {
+    if (allApps.length === 0) {
       fetchApps();
     }
-  }, [open, allApps.length, fetchApps]);
+  }, [allApps.length, fetchApps]);
 
   /** Filtered apps by search query (name only) */
   const filteredApps = useMemo(() => {

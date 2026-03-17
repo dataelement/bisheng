@@ -1,10 +1,10 @@
-import { InfiniteCollections, QueryKeys } from '~/data-provider/data-provider/src';
+import { InfiniteCollections, QueryKeys } from '~/types/chat';
 import type { InfiniteData, QueryClient } from '@tanstack/react-query';
 import type {
   PromptGroupListResponse,
   PromptGroupListData,
   TPromptGroup,
-} from '~/data-provider/data-provider/src';
+} from '~/types/chat';
 import {
   addData,
   deleteData,

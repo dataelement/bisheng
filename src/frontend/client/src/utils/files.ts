@@ -4,14 +4,14 @@ import CodePaths from '~/components/svg/Files/CodePaths';
 import FilePaths from '~/components/svg/Files/FilePaths';
 import SheetPaths from '~/components/svg/Files/SheetPaths';
 import TextPaths from '~/components/svg/Files/TextPaths';
-import type { EndpointFileConfig, TFile } from '~/data-provider/data-provider/src';
+import type { EndpointFileConfig, TFile } from '~/types/chat';
 import {
   codeTypeMapping,
   fileConfig as defaultFileConfig,
   excelMimeTypes,
   megabyte,
   QueryKeys,
-} from '~/data-provider/data-provider/src';
+} from '~/types/chat';
 
 export const partialTypes = ['text/x-'];
 

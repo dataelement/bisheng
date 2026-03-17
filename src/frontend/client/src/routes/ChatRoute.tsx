@@ -7,8 +7,8 @@ import {
   useGetEndpointsQuery,
   useGetStartupConfig,
   useHealthCheck,
-} from '~/data-provider';
-import { useGetModelsQuery } from '~/data-provider/data-provider/src/react-query';
+} from '~/hooks/queries/data-provider';
+import { useGetModelsQuery } from '~/hooks/queries';
 import { useAppStartup, useLocalize } from '~/hooks';
 import useAuthRedirect from './useAuthRedirect';
 

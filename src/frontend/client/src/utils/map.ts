@@ -1,4 +1,4 @@
-import type * as t from '~/data-provider/data-provider/src';
+import type * as t from '~/types/chat';
 import type { TPluginMap } from '~/common';
 
 /** Maps Attachments by `toolCallId` for quick lookup */

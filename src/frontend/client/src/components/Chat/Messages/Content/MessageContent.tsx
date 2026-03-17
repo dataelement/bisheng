@@ -1,4 +1,4 @@
-import type { TMessage } from '~/data-provider/data-provider/src';
+import type { TMessage } from '~/types/chat';
 import { memo, Suspense, useMemo } from 'react';
 import { useRecoilValue } from 'recoil';
 import type { TDisplayProps, TMessageContentProps } from '~/common';

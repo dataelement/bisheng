@@ -9,7 +9,7 @@ import {
 } from 'recoil';
 import { SSE } from 'sse.js';
 import { SopStatus } from '~/components/Sop/SOPEditor';
-import { ConversationData, QueryKeys } from '~/data-provider/data-provider/src';
+import { ConversationData, QueryKeys } from '~/types/chat';
 import { useToastContext } from '~/Providers';
 import store from '~/store';
 import { activeSessionIdState, LinsightInfo, linsightMapState, submissionState, SubmissionState } from '~/store/linsight';

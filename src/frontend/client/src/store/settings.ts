@@ -1,5 +1,5 @@
 import { atom } from 'recoil';
-import { SettingsViews, LocalStorageKeys } from '~/data-provider/data-provider/src';
+import { SettingsViews, LocalStorageKeys } from '~/types/chat';
 import { atomWithLocalStorage } from '~/store/utils';
 import type { TOptionSettings } from '~/common';
 

@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from datetime import timedelta, datetime
 from typing import List, Optional, Dict, Any
 
 from bisheng.channel.domain.models.article_read_record import ArticleReadRecord
@@ -129,7 +130,8 @@ class ChannelService:
                     await self.channel_info_source_repository.batch_add(new_channel_info_sources)
                     for one in new_channel_info_sources:
                         # Sync articles for the new information source one hour later
-                        sync_information_article.apply_async(args=(one.id,), countdown=3600)
+                        exec_time = datetime.now() + timedelta(hours=1)
+                        sync_information_article.apply_async(args=(one.id,), eta=exec_time)
 
         return channel_model
 
@@ -365,6 +367,7 @@ class ChannelService:
             result_list.append(ChannelMemberResponse(
                 user_id=member.user_id,
                 user_name=user_name,
+                user_avatar=user.avatar if user else None,
                 user_role=member.user_role.value,
                 user_groups=user_groups,
             ))
@@ -674,9 +677,9 @@ class ChannelService:
         return return_status
 
     async def _send_subscribe_approval_notification(
-        self,
-        channel: Channel,
-        login_user: UserPayload,
+            self,
+            channel: Channel,
+            login_user: UserPayload,
     ) -> None:
         """
         Send approval notification to channel creator and admins when a user

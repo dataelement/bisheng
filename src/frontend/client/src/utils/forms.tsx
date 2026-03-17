@@ -4,8 +4,8 @@ import {
   EModelEndpoint,
   FileSources,
   EToolResources,
-} from '~/data-provider/data-provider/src';
-import type { Agent, TFile } from '~/data-provider/data-provider/src';
+} from '~/types/chat';
+import type { Agent, TFile } from '~/types/chat';
 import type { DropdownValueSetter, TAgentOption, ExtendedFile } from '~/common';
 
 /**

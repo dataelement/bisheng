@@ -8,13 +8,13 @@ import {
   startOfYear,
   isWithinInterval,
 } from 'date-fns';
-import { EModelEndpoint, LocalStorageKeys } from '~/data-provider/data-provider/src';
+import { EModelEndpoint, LocalStorageKeys } from '~/types/chat';
 import type {
   TConversation,
   ConversationData,
   GroupedConversations,
   ConversationListResponse,
-} from '~/data-provider/data-provider/src';
+} from '~/types/chat';
 
 import { addData, deleteData, updateData, findPage } from './collection';
 import { InfiniteData } from '@tanstack/react-query';

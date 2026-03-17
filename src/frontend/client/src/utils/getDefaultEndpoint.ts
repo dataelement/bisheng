@@ -3,7 +3,7 @@ import type {
   TConversation,
   EModelEndpoint,
   TEndpointsConfig,
-} from '~/data-provider/data-provider/src';
+} from '~/types/chat';
 import { getLocalStorageItems } from './localStorage';
 import { mapEndpoints } from './endpoints';
 

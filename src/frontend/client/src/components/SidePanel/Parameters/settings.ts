@@ -6,8 +6,8 @@ import {
   ReasoningEffort,
   BedrockProviders,
   anthropicSettings,
-} from '~/data-provider/data-provider/src';
-import type { SettingsConfiguration, SettingDefinition } from '~/data-provider/data-provider/src';
+} from '~/types/chat';
+import type { SettingsConfiguration, SettingDefinition } from '~/types/chat';
 
 // Base definitions
 const baseDefinitions: Record<string, SettingDefinition> = {

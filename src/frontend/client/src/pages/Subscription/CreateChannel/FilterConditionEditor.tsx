@@ -353,7 +353,7 @@ export function FilterConditionEditor({
                                                 <Plus className="size-3.5 text-[#165DFF]" />
                                             </button>
                                         )}
-                                        {total > 1 && (
+                                        {(
                                             <button
                                                 type="button"
                                                 onClick={() =>

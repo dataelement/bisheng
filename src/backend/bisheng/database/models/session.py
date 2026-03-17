@@ -144,7 +144,8 @@ class MessageSessionDao(MessageSessionBase):
                        exclude_chats: List[str] = None,
                        page: int = 0,
                        limit: int = 0,
-                       flow_type: List[int] = None) -> List[MessageSession]:
+                       flow_type: List[int] = None,
+                       order_by_update_time: bool = False) -> List[MessageSession]:
         statement = select(MessageSession)
         statement = cls.generate_filter_session_statement(statement,
                                                           chat_ids,
@@ -159,7 +160,11 @@ class MessageSessionDao(MessageSessionBase):
                                                           flow_type=flow_type)
         if page and limit:
             statement = statement.offset((page - 1) * limit).limit(limit)
-        statement = statement.order_by(MessageSession.create_time.desc())
+        # Order by update_time or create_time
+        if order_by_update_time:
+            statement = statement.order_by(MessageSession.update_time.desc())
+        else:
+            statement = statement.order_by(MessageSession.create_time.desc())
         with get_sync_db_session() as session:
             return session.exec(statement).all()
 
@@ -285,3 +290,42 @@ class MessageSessionDao(MessageSessionBase):
         with get_sync_db_session() as session:
             session.exec(statement)
             session.commit()
+
+    @classmethod
+    async def get_user_used_apps(cls, user_id: int, flow_types: List[int] = None) -> List[tuple]:
+        """
+        Query the list of apps used by the user.
+        Deduplicate by flow_id, keeping the record with the latest update_time.
+
+        Args:
+            user_id: User ID
+            flow_types: List of flow types to filter (e.g., [FlowType.ASSISTANT.value, FlowType.WORKFLOW.value])
+
+        Returns:
+            List of tuples: [(flow_id, last_used_time, flow_type), ...]
+        """
+        # Subquery: get the max update_time for each flow_id
+        subquery = select(
+            MessageSession.flow_id,
+            func.max(MessageSession.update_time).label('last_used_time'),
+            MessageSession.flow_type
+        ).where(
+            MessageSession.user_id == user_id,
+            MessageSession.is_delete == False  # noqa
+        )
+
+        if flow_types:
+            subquery = subquery.where(MessageSession.flow_type.in_(flow_types))
+
+        subquery = subquery.group_by(MessageSession.flow_id, MessageSession.flow_type).subquery()
+
+        # Main query: order by last_used_time desc
+        statement = select(
+            subquery.c.flow_id,
+            subquery.c.last_used_time,
+            subquery.c.flow_type
+        ).order_by(subquery.c.last_used_time.desc())
+
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return result.all()

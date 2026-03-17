@@ -1,8 +1,8 @@
 import { useForm } from 'react-hook-form';
-import { ContentTypes } from '~/data-provider/data-provider/src';
+import { ContentTypes } from '~/types/chat';
 import { useRecoilState, useRecoilValue } from 'recoil';
 import { useRef, useEffect, useCallback, useMemo } from 'react';
-import { useUpdateMessageContentMutation } from '~/data-provider/data-provider/src/react-query';
+import { useUpdateMessageContentMutation } from '~/hooks/queries';
 import type { TEditProps } from '~/common';
 import Container from '~/components/Chat/Messages/Content/Container';
 import { useChatContext, useAddedChatContext } from '~/Providers';

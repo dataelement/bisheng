@@ -1,7 +1,7 @@
 import { ArrowUpDown, Database, Download, TrashIcon } from 'lucide-react';
-import { FileSources, FileContext, dataService } from '~/data-provider/data-provider/src';
+import { FileSources, FileContext, dataService } from '~/types/chat';
 import type { ColumnDef } from '@tanstack/react-table';
-import type { TFile } from '~/data-provider/data-provider/src';
+import type { TFile } from '~/types/chat';
 import { Button, Checkbox, OpenAIMinimalIcon, AzureMinimalIcon } from '~/components';
 import ImagePreview from '~/components/Chat/Input/Files/ImagePreview';
 import FilePreview from '~/components/Chat/Input/Files/FilePreview';

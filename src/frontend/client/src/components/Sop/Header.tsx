@@ -2,7 +2,7 @@ import { FileText, MessageCircleMoreIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '~/components/ui/Select';
-import { useConversationsInfiniteQuery } from '~/data-provider';
+import { useConversationsInfiniteQuery } from '~/hooks/queries/data-provider';
 import { useLocalize } from '~/hooks';
 import { useLinsightManager } from '~/hooks/useLinsightManager';
 import { getFileExtension } from '~/utils';

@@ -1,7 +1,7 @@
 import { isAfter } from 'date-fns';
 import React, { useMemo } from 'react';
-import { imageExtRegex } from '~/data-provider/data-provider/src';
-import type { TFile, TAttachment, TAttachmentMetadata } from '~/data-provider/data-provider/src';
+import { imageExtRegex } from '~/types/chat';
+import type { TFile, TAttachment, TAttachmentMetadata } from '~/types/chat';
 import Image from '~/components/Chat/Messages/Content/Image';
 import { useLocalize } from '~/hooks';
 import LogLink from './LogLink';

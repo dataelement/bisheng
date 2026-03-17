@@ -1,4 +1,4 @@
-import { Capabilities } from '~/data-provider/data-provider/src';
+import { Capabilities } from '~/types/chat';
 import { useFormContext, Controller } from 'react-hook-form';
 import type { AssistantForm } from '~/common';
 import {

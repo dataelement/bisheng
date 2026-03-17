@@ -1,4 +1,4 @@
-import type { TFile } from '~/data-provider/data-provider/src';
+import type { TFile } from '~/types/chat';
 import React from 'react';
 import FileListItem from './FileListItem';
 import FileListItem2 from './FileListItem2';

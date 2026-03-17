@@ -1,8 +1,8 @@
 // client/src/hooks/Audio/useTTSEdge.ts
 import { useRef, useEffect, useState } from 'react';
 import { useRecoilState, useRecoilValue } from 'recoil';
-import { parseTextParts } from '~/data-provider/data-provider/src';
-import type { TMessageContentParts } from '~/data-provider/data-provider/src';
+import { parseTextParts } from '~/types/chat';
+import type { TMessageContentParts } from '~/types/chat';
 import usePauseGlobalAudio from '~/hooks/Audio/usePauseGlobalAudio';
 import useTextToSpeechEdge from '~/hooks/Input/useTextToSpeechEdge';
 import useAudioRef from '~/hooks/Audio/useAudioRef';

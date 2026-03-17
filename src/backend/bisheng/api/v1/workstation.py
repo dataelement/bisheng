@@ -24,14 +24,14 @@ from bisheng.api.services.workstation import (WorkstationConversation,
                                               WorkstationMessage, WorkStationService)
 from bisheng.api.v1.schema.chat_schema import APIChatCompletion, SSEResponse, delta
 from bisheng.api.v1.schemas import FrequentlyUsedChat, LinsightConfig, SubscriptionConfig, KnowledgeSpaceConfig
-from bisheng.api.v1.schemas import WorkstationConfig, resp_200, ExcelRule, UnifiedResponseModel
+from bisheng.api.v1.schemas import WorkstationConfig, resp_200, ExcelRule, UnifiedResponseModel, UsedAppPin
 from bisheng.chat.utils import SourceType, process_source_document
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import ServerError, UnAuthorizedError
 from bisheng.common.errcode.workstation import WebSearchToolNotFoundError, ConversationNotFoundError, \
-    AgentAlreadyExistsError
+    AgentAlreadyExistsError, UsedAppNotFoundError, UsedAppNotOnlineError
 from bisheng.common.schemas.telemetry.event_data_schema import NewMessageSessionEventData, ApplicationAliveEventData, \
     ApplicationProcessEventData
 from bisheng.common.services import telemetry_service
@@ -40,9 +40,11 @@ from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.cache.utils import save_download_file, save_uploaded_file, async_file_download
 from bisheng.core.logger import trace_id_var
 from bisheng.core.prompts.manager import get_prompt_manager
-from bisheng.database.models.flow import FlowType
+from bisheng.database.models.flow import FlowType, FlowDao, FlowStatus
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
+from bisheng.database.models.user_link import UserLinkDao
+from bisheng.database.models.role_access import AccessType
 from bisheng.llm.domain import LLMService
 from bisheng.share_link.api.dependencies import header_share_token_parser
 from bisheng.share_link.domain.models.share_link import ShareLink
@@ -743,3 +745,146 @@ def get_uncategorized_chat(login_user: UserPayload = Depends(UserPayload.get_log
                            limit: Optional[int] = 8):
     data, _ = WorkFlowService.get_uncategorized_flows(login_user, page, limit)
     return resp_200(data=data)
+
+
+# Constants for used app pin type
+USED_APP_PIN_TYPE = 'used_app_pin'
+
+
+@router.get('/app/used')
+async def get_used_apps(
+        login_user: UserPayload = Depends(UserPayload.get_login_user),
+        page: int = 1,
+        limit: int = 20
+):
+    """
+    Get the list of apps (workflows and assistants) used by the current user.
+    Sorted by: 1) Pinned apps first, 2) Most recently used time descending.
+    """
+    # Step 1: Get user's used apps from message_session
+    flow_types = [FlowType.ASSISTANT.value, FlowType.WORKFLOW.value]
+    used_apps = await MessageSessionDao.get_user_used_apps(
+        user_id=login_user.user_id,
+        flow_types=flow_types
+    )
+
+    if not used_apps:
+        return resp_200(data={'list': [], 'total': 0})
+
+    # Build flow_id list and last_used_time map
+    flow_ids = [app[0] for app in used_apps]
+    last_used_time_map = {app[0]: app[1] for app in used_apps}
+
+    # Step 2: Get pinned apps
+    pinned_links = UserLinkDao.get_user_link(login_user.user_id, [USED_APP_PIN_TYPE])
+    pinned_flow_ids = {link.type_detail for link in pinned_links}
+
+    # Step 3: Get app details with permission check
+    if login_user.is_admin():
+        apps, _ = await FlowDao.aget_all_apps(
+            id_list=flow_ids,
+            status=FlowStatus.ONLINE.value,
+            page=0,
+            limit=0
+        )
+    else:
+        # Get user's accessible resource ids
+        access_types = [AccessType.FLOW, AccessType.WORKFLOW, AccessType.ASSISTANT_READ]
+        id_extra = login_user.get_user_access_resource_ids(access_types)
+        apps, _ = await FlowDao.aget_all_apps(
+            id_list=flow_ids,
+            status=FlowStatus.ONLINE.value,
+            user_id=login_user.user_id,
+            id_extra=id_extra,
+            page=0,
+            limit=0
+        )
+
+    # Step 4: Sort apps - pinned first, then by last_used_time descending
+    def sort_key(app):
+        app_id = app['id']
+        is_pinned = app_id in pinned_flow_ids
+        used_time = last_used_time_map.get(app_id, datetime.min)
+        # Sort: (not is_pinned, -used_time) -> pinned apps first, then by time desc
+        return (not is_pinned, -used_time.timestamp() if used_time else 0)
+
+    apps.sort(key=sort_key)
+
+    # Step 5: Add extra fields (is_pinned, last_used_time, etc.)
+    result = []
+    for app in apps:
+        app_id = app['id']
+        app['is_pinned'] = app_id in pinned_flow_ids
+        app['last_used_time'] = last_used_time_map.get(app_id)
+        app['logo'] = WorkFlowService.get_logo_share_link(app.get('logo'))
+        result.append(app)
+
+    # Step 6: Pagination
+    total = len(result)
+    start_index = (page - 1) * limit
+    end_index = start_index + limit
+    result = result[start_index:end_index]
+
+    return resp_200(data={'list': result, 'total': total})
+
+
+@router.post('/app/used/pin')
+async def pin_used_app(
+        login_user: UserPayload = Depends(UserPayload.get_login_user),
+        data: UsedAppPin = Body(..., description='App to pin')
+):
+    """
+    Pin an app to the top of the used apps list.
+    """
+    flow_id = data.flow_id
+
+    # Verify the app exists and user has access
+    app_info = await FlowDao.aget_flow_by_id(flow_id)
+    if not app_info:
+        raise UsedAppNotFoundError(flow_id=flow_id)
+
+    # Check if app is online
+    if app_info.status != FlowStatus.ONLINE.value:
+        raise UsedAppNotOnlineError(flow_id=flow_id)
+
+    # Check permission
+    flow_type = app_info.flow_type
+    if flow_type == FlowType.ASSISTANT.value:
+        access_type = AccessType.ASSISTANT_READ
+    elif flow_type == FlowType.WORKFLOW.value:
+        access_type = AccessType.WORKFLOW
+    else:
+        access_type = AccessType.FLOW
+
+    if not await login_user.async_access_check(app_info.user_id, flow_id, access_type):
+        return UnAuthorizedError.return_resp()
+
+    # Add to pinned list
+    user_link, is_new = UserLinkDao.add_user_link(
+        user_id=login_user.user_id,
+        type=USED_APP_PIN_TYPE,
+        type_detail=flow_id
+    )
+
+    if is_new:
+        return resp_200(message='Pinned successfully')
+    else:
+        return resp_200(message='Already pinned')
+
+
+@router.delete('/app/used/pin')
+async def unpin_used_app(
+        login_user: UserPayload = Depends(UserPayload.get_login_user),
+        flow_id: str = Body(..., description='App to unpin', embed=True)
+):
+    """
+    Unpin an app from the used apps list.
+    """
+
+    UserLinkDao.delete_user_link(
+        user_id=login_user.user_id,
+        type=USED_APP_PIN_TYPE,
+        type_detail=flow_id
+    )
+
+    return resp_200(message='Unpinned successfully')

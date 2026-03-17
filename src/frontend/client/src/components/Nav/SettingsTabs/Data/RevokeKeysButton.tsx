@@ -1,7 +1,7 @@
 import {
   useRevokeAllUserKeysMutation,
   useRevokeUserKeyMutation,
-} from '~/data-provider/data-provider/src/react-query';
+} from '~/hooks/queries';
 import React, { useState } from 'react';
 import { Button, Label, OGDialog, OGDialogTrigger, Spinner } from '~/components';
 import OGDialogTemplate from '~/components/ui/OGDialogTemplate';

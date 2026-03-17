@@ -1,4 +1,4 @@
-import { AgentCapabilities } from '~/data-provider/data-provider/src';
+import { AgentCapabilities } from '~/types/chat';
 import { useFormContext, Controller } from 'react-hook-form';
 import type { AgentForm } from '~/common';
 import {

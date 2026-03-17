@@ -1,56 +1,90 @@
 import { Search, X } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { cn } from '~/utils';
 
 interface AppSearchBarProps {
-  value: string;
-  onChange: (value: string) => void;
+  query: string;
+  onSearch: (value: string) => void;
+  /** Debounce delay in ms, default 300 */
+  debounceMs?: number;
 }
 
 /**
- * Expandable search bar for the app center.
- * Collapses to an icon when empty, expands to full input on click.
+ * Expandable search bar with built-in debounce.
+ * Collapses to an icon when empty + blurred, stays expanded when has content.
  */
-export function AppSearchBar({ value, onChange }: AppSearchBarProps) {
+export function AppSearchBar({ query, onSearch, debounceMs = 300 }: AppSearchBarProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [localValue, setLocalValue] = useState(query);
   const inputRef = useRef<HTMLInputElement>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout>>();
 
-  const expanded = isOpen || !!value;
+  // Keep local value in sync with external query changes
+  useEffect(() => {
+    setLocalValue(query);
+  }, [query]);
+
+  // Debounced search callback
+  const debouncedSearch = useCallback(
+    (val: string) => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => {
+        onSearch(val);
+      }, debounceMs);
+    },
+    [onSearch, debounceMs],
+  );
+
+  // Cleanup timer on unmount
+  useEffect(() => () => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+  }, []);
+
+  const handleChange = (val: string) => {
+    setLocalValue(val);
+    debouncedSearch(val);
+  };
+
+  const handleClear = () => {
+    setLocalValue('');
+    onSearch(''); // Clear immediately, no debounce
+    inputRef.current?.focus();
+  };
+
+  const expanded = isOpen || !!localValue;
 
   return (
     <div
       className={cn(
-        'flex items-center bg-gray-50 border border-gray-100 rounded-lg px-3 py-1.5 transition-all',
-        expanded ? 'w-64' : 'w-10 h-10 justify-center cursor-pointer',
+        'flex items-center border border-gray-100 rounded-lg px-3 py-[5px] transition-all duration-200',
+        expanded ? 'w-64' : 'w-8 h-8 justify-center cursor-pointer',
       )}
       onClick={() => {
         if (!expanded) {
           setIsOpen(true);
-          // Focus after the transition
           setTimeout(() => inputRef.current?.focus(), 50);
         }
       }}
     >
-      <Search size={18} className="text-gray-400 flex-shrink-0" />
+      <Search size={14} className="text-gray-400 flex-shrink-0" />
       {expanded && (
         <>
           <input
             ref={inputRef}
             autoFocus
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
+            value={localValue}
+            onChange={(e) => handleChange(e.target.value)}
             className="ml-2 w-full bg-transparent outline-none text-sm"
             placeholder="搜索应用..."
             onBlur={() => {
-              if (!value) setIsOpen(false);
+              if (!localValue) setIsOpen(false);
             }}
           />
-          {value && (
+          {localValue && (
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                onChange('');
-                inputRef.current?.focus();
+                handleClear();
               }}
               className="text-gray-400 hover:text-gray-600"
             >

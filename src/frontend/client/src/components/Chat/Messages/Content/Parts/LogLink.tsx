@@ -1,5 +1,5 @@
 import React from 'react';
-import { useCodeOutputDownload } from '~/data-provider';
+import { useCodeOutputDownload } from '~/hooks/queries/data-provider';
 import { useToastContext } from '~/Providers';
 
 interface LogLinkProps {

@@ -5,20 +5,20 @@ import {
   validateAndParseOpenAPISpec,
   openapiToFunction,
   AuthTypeEnum,
-} from '~/data-provider/data-provider/src';
+} from '~/types/chat';
 import type {
   Action,
   FunctionTool,
   ActionMetadata,
   ValidationResult,
   AssistantsEndpoint,
-} from '~/data-provider/data-provider/src';
+} from '~/types/chat';
 import type { ActionAuthForm, ActionWithNullableMetadata } from '~/common';
 import type { Spec } from './ActionsTable';
 import ActionCallback from '~/components/SidePanel/Builder/ActionCallback';
 import { useAssistantsMapContext, useToastContext } from '~/Providers';
 import { ActionsTable, columns } from './ActionsTable';
-import { useUpdateAction } from '~/data-provider';
+import { useUpdateAction } from '~/hooks/queries/data-provider';
 import useLocalize from '~/hooks/useLocalize';
 import { Spinner } from '~/components/svg';
 

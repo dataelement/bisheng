@@ -23,12 +23,18 @@ export async function updateHomeLabelApi(tag_ids) {
 }
 
 /**
- * 技能 工作流详情
+ * Fetch skill / workflow detail.
+ * Set skip403Redirect to let the caller handle 403 instead of the global interceptor.
  */
-export async function getFlowApi(flowId: string, version: string = 'v1', shareToken?: string): Promise<any> {
+export async function getFlowApi(
+    flowId: string,
+    version: string = 'v1',
+    shareToken?: string,
+    skip403Redirect?: boolean,
+): Promise<any> {
     const headers = shareToken ? { 'share-token': shareToken } : {}
 
-    return await request.get(`/api/${version}/flows/${flowId}`, { headers })
+    return await request.get(`/api/${version}/flows/${flowId}`, { headers, skip403Redirect } as any)
 }
 
 /**
@@ -41,13 +47,21 @@ export async function getDeleteFlowApi(chatId: string): Promise<any> {
     })
 }
 
-// 获取助手详情
-export const getAssistantDetailApi = async (id: string, shareToken?: string): Promise<any> => {
+/**
+ * Fetch assistant detail.
+ * Set skip403Redirect to let the caller handle 403 instead of the global interceptor.
+ */
+export const getAssistantDetailApi = async (
+    id: string,
+    shareToken?: string,
+    skip403Redirect?: boolean,
+): Promise<any> => {
     const headers = shareToken ? { 'share-token': shareToken } : {}
 
     return await request.get(`/api/v1/assistant/info/${id}`, {
-        headers
-    })
+        headers,
+        skip403Redirect,
+    } as any)
 };
 
 export const baseMsgItem = {
@@ -349,11 +363,12 @@ export async function removeFromFrequentlyUsed(user_id, type, type_detail) {
     const url = `/api/v1/workstation/app/frequently_used?user_id=${user_id}&user_link_type=${type}&type_detail=${type_detail}`;
     return await request.delete(url);
 }
-export async function getUncategorized(page: number = 1, pageSize: number = 8) {
+export async function getUncategorized(page: number = 1, pageSize: number = 8, keyword?: string) {
     return await request.get('/api/v1/workstation/app/uncategorized', {
         params: {
             page,
-            limit: pageSize
+            limit: pageSize,
+            keyword
         }
     })
 }

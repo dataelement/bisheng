@@ -1,6 +1,6 @@
 import { TranslationKeys, useLocalize } from '~/hooks';
 import { BlinkAnimation } from './BlinkAnimation';
-import { TStartupConfig } from '~/data-provider/data-provider/src';
+import { TStartupConfig } from '~/types/chat';
 import SocialLoginRender from './SocialLoginRender';
 import { ThemeSelector } from '~/components/ui';
 import { Banner } from '../Banners';

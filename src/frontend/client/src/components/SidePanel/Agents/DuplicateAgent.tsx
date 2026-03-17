@@ -1,5 +1,5 @@
 import { CopyIcon } from 'lucide-react';
-import { useDuplicateAgentMutation } from '~/data-provider';
+import { useDuplicateAgentMutation } from '~/hooks/queries/data-provider';
 import { cn, removeFocusOutlines } from '~/utils';
 import { useToastContext } from '~/Providers';
 import { useLocalize } from '~/hooks';

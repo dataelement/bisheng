@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
-import { useGetBsConfig } from '~/data-provider';
-import { Constants } from '~/data-provider/data-provider/src';
+import { useGetBsConfig } from '~/hooks/queries/data-provider';
+import { Constants } from '~/types/chat';
 import { useLocalize } from '~/hooks';
 import { useInterruptAudio } from '../Voice/textToSpeechStore';
 import ConvoStarter from './ConvoStarter';

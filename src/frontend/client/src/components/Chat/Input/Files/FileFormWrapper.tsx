@@ -1,12 +1,12 @@
 import { memo, useEffect, useState } from "react";
 import { useRecoilValue } from "recoil";
 import { useChatContext } from "~/Providers";
-import { useGetFileConfig } from "~/data-provider";
+import { useGetFileConfig } from "~/hooks/queries/data-provider";
 import {
   EndpointFileConfig,
   fileConfig as defaultFileConfig,
   mergeFileConfig
-} from "~/data-provider/data-provider/src";
+} from "~/types/chat";
 import { useFileHandling } from "~/hooks";
 import useLocalize from "~/hooks/useLocalize";
 import store from "~/store";

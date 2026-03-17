@@ -6,11 +6,11 @@ import type {
   TConversation,
   TMessage,
   TSubmission
-} from '~/data-provider/data-provider/src';
+} from '~/types/chat';
 import {
   Constants,
   EModelEndpoint
-} from '~/data-provider/data-provider/src';
+} from '~/types/chat';
 import useSetFilesToDelete from '~/hooks/Files/useSetFilesToDelete';
 import store from '~/store';
 import { logger } from '~/utils';

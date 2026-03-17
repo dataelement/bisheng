@@ -2,7 +2,7 @@ import {
   TConversationTagRequest,
   TConversationTagResponse,
   TConversationTagsResponse,
-} from '~/data-provider/data-provider/src';
+} from '~/types/chat';
 
 export const updateConversationTag = (
   queryCache: TConversationTagsResponse,

@@ -3,7 +3,7 @@ import { Check, FileText, GanttChartIcon, Globe, LogOut } from 'lucide-react';
 import { memo, useCallback, useState } from 'react';
 import { useRecoilState } from 'recoil';
 import { GearIcon, UserIcon } from '~/components/svg';
-import { useGetStartupConfig, useGetUserBalance } from '~/data-provider';
+import { useGetStartupConfig, useGetUserBalance } from '~/hooks/queries/data-provider';
 import { useLocalize } from '~/hooks';
 import { useAuthContext } from '~/hooks/AuthContext';
 import useAvatar from '~/hooks/Messages/useAvatar';

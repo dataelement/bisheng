@@ -1,5 +1,5 @@
 import { useLocalize } from '~/hooks';
-import { TStartupConfig } from '~/data-provider/data-provider/src';
+import { TStartupConfig } from '~/types/chat';
 
 function Footer({ startupConfig }: { startupConfig: TStartupConfig | null | undefined }) {
   const localize = useLocalize();

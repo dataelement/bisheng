@@ -18,8 +18,8 @@ import {
 } from "~/components/ui";
 import BookOpen from "~/components/ui/icon/BookOpen";
 import BooksIcon from "~/components/ui/icon/Books";
-import { useGetOrgToolList } from "~/data-provider";
-import { BsConfig } from "~/data-provider/data-provider/src";
+import { useGetOrgToolList } from "~/hooks/queries/data-provider";
+import { BsConfig } from "~/types/chat";
 import { useLocalize } from "~/hooks";
 import { useToastContext } from "~/Providers";
 import { cn } from "~/utils";

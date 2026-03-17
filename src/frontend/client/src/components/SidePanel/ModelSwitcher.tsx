@@ -1,5 +1,5 @@
 import { useMemo, useRef, useCallback } from 'react';
-import { useGetModelsQuery } from '~/data-provider/data-provider/src/react-query';
+import { useGetModelsQuery } from '~/hooks/queries';
 import type { SwitcherProps } from '~/common';
 import ControlCombobox from '~/components/ui/ControlCombobox';
 import MinimalIcon from '~/components/Endpoints/MinimalIcon';

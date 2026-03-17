@@ -1,8 +1,8 @@
 import { useMemo } from 'react';
-import { EModelEndpoint } from '~/data-provider/data-provider/src';
-import type { AssistantListResponse, AssistantsEndpoint } from '~/data-provider/data-provider/src';
+import { EModelEndpoint } from '~/types/chat';
+import type { AssistantListResponse, AssistantsEndpoint } from '~/types/chat';
 import type { AssistantListItem } from '~/common';
-import { useListAssistantsQuery } from '~/data-provider';
+import { useListAssistantsQuery } from '~/hooks/queries/data-provider';
 
 const selectAssistantsResponse = (res: AssistantListResponse): AssistantListItem[] =>
   res.data.map(({ id, name, metadata, model }) => ({

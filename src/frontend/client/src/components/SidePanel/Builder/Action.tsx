@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { Action } from '~/data-provider/data-provider/src';
+import type { Action } from '~/types/chat';
 import GearIcon from '~/components/svg/GearIcon';
 import { cn } from '~/utils';
 

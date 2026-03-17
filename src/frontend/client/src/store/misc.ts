@@ -1,5 +1,5 @@
 import { atom } from 'recoil';
-import { TAttachment } from '~/data-provider/data-provider/src';
+import { TAttachment } from '~/types/chat';
 import { atomWithLocalStorage } from './utils';
 
 const hideBannerHint = atomWithLocalStorage('hideBannerHint', [] as string[]);
