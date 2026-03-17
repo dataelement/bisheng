@@ -38,22 +38,31 @@ class ParseType(Enum):
     UN_ETL4LM = 'un_etl4lm'  # Nonetl4lmService parsing, nobboxContent, only source files andmdDoc.
 
 
+class FileSource(Enum):
+    UPLOAD = 'upload'  # user upload
+    CHANNEL = 'channel'  # sync from channel
+
+
 class KnowledgeFileBase(SQLModelSerializable):
     user_id: Optional[int] = Field(default=None, index=True)
     user_name: Optional[str] = Field(default=None, index=True)
     knowledge_id: int = Field(index=True)
+    thumbnails: Optional[str] = Field(default=None, description='File thumbnails in Stored object name')
     file_name: str = Field(max_length=200, index=True)
+    file_type: int = Field(default=1, description='File type. 0: dir; 1: file')
+    file_source: Optional[str] = Field(default=FileSource.UPLOAD.value, description='File source')
+    level: Optional[int] = Field(default=0)
+    file_level_path: Optional[str] = Field(default=None, index=True)
+    abstract: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
     file_size: Optional[int] = Field(default=None, index=False, description='File size inbytes')
     md5: Optional[str] = Field(default=None, index=False)
-    parse_type: Optional[str] = Field(default=ParseType.LOCAL.value,
-                                      index=False,
+    parse_type: Optional[str] = Field(default=ParseType.LOCAL.value, index=False,
                                       description='Files parsed in what mode')
     split_rule: Optional[str] = Field(default=None, sa_column=Column(Text), description='Files parsed in what mode')
+    preview_file_object_name: Optional[str] = Field(default=None, index=True, description='Preview File Object name')
     bbox_object_name: Optional[str] = Field(default='', description='bboxFiles inminioStored object name')
-    status: Optional[int] = Field(default=KnowledgeFileStatus.WAITING.value,
-                                  index=False,
-                                  description='1: Parsing;2: Resolved successfully;3: Parse Failure')
-    object_name: Optional[str] = Field(default=None, index=False, description='Files inminioStored object name')
+    status: Optional[int] = Field(default=KnowledgeFileStatus.WAITING.value)
+    object_name: Optional[str] = Field(default=None, index=False, description='Files in Stored object name')
     user_metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, sa_column=Column(JSON, nullable=True),
                                                     description='User-defined metadata')
     remark: Optional[str] = Field(default='', sa_column=Column(String(length=4096)))
@@ -70,7 +79,8 @@ class QAKnowledgeBase(SQLModelSerializable):
     knowledge_id: int = Field(index=True)
     questions: List[str] = Field(index=False)
     answers: str = Field(index=False)
-    source: Optional[int] = Field(default=0, index=False, description='0: Unknown 1: Manual2: Audit, 3: api, 4: Batch import')
+    source: Optional[int] = Field(default=0, index=False,
+                                  description='0: Unknown 1: Manual2: Audit, 3: api, 4: Batch import')
     status: Optional[int] = Field(default=1, index=False,
                                   description='1: Activate0: Close, the user manually closes;2: Sedang diproses3Failed to insert')
     extra_meta: Optional[str] = Field(default=None, index=False)

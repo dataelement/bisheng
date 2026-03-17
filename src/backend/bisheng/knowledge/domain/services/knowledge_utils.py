@@ -116,20 +116,23 @@ class KnowledgeUtils:
         return f"original/{file_id}.{file_ext}"
 
     @classmethod
-    def get_knowledge_bbox_file_object_name(cls, file_id: int) -> str:
+    def get_knowledge_bbox_file_object_name(cls, file_id: int | str) -> str:
         """Get the corresponding knowledge base filebboxFiles inminioStorage Path for"""
         return f"partitions/{file_id}.json"
 
     @classmethod
     def get_knowledge_preview_file_object_name(
-            cls, file_id: int, file_name: str
+            cls, file_id: int | str, file_name: str = None, file_ext: str = None
     ) -> Optional[str]:
         """Get the preview file corresponding to the knowledge base file atminioStorage Path for This path is stored in the officialbucketand within"""
-        file_ext = file_name.split(".")[-1]
+        if file_name:
+            file_ext = file_name.split(".")[-1]
         if file_ext == "doc":
             return f"preview/{file_id}.docx"
         elif file_ext in ["ppt", "pptx"]:
             return f"preview/{file_id}.pdf"
+        elif file_ext == "docx":
+            return f"preview/{file_id}.docx"
         # No preview required for other file types
         return None
 

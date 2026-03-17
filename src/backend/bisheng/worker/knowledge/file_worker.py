@@ -317,17 +317,8 @@ def _parse_knowledge_file(file_id: int, preview_cache_key: str = None, callback_
     logger.debug("parse_knowledge_file_celery_start", file_id)
     process_file_task(db_knowledge,
                       db_files=[db_file],
-                      separator=file_rule.separator,
-                      separator_rule=file_rule.separator_rule,
-                      chunk_size=file_rule.chunk_size,
-                      chunk_overlap=file_rule.chunk_overlap,
                       callback_url=callback_url,
-                      extra_metadata=db_file.user_metadata,
-                      preview_cache_keys=[preview_cache_key],
-                      retain_images=file_rule.retain_images,
-                      enable_formula=file_rule.enable_formula,
-                      force_ocr=file_rule.force_ocr,
-                      filter_page_header_footer=file_rule.filter_page_header_footer)
+                      preview_cache_keys=[preview_cache_key])
     logger.debug("parse_knowledge_file_celery_over", file_id)
     return db_file, db_knowledge
 
@@ -358,7 +349,7 @@ def retry_knowledge_file_celery(file_id: int, preview_cache_key: str = None, cal
             delete_vector_files([db_file[0].id], knowledge)
 
 
-@bisheng_celery.task()
+@bisheng_celery.task(acks_late=True)
 def delete_knowledge_file_celery(file_ids: List[int], knowledge_id: int, clear_minio: bool = True):
     """ Asynchronous deletion of knowledge files and their vectors """
     trace_id_var.set(f'delete_knowledge_file_{file_ids}')

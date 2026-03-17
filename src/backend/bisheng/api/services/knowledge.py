@@ -2,7 +2,7 @@ import json
 import math
 import os
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 from urllib.parse import urlparse
 
 from fastapi import BackgroundTasks, Request
@@ -575,15 +575,10 @@ class KnowledgeService(KnowledgeUtils):
 
         if process_files:
             process_file_task(
-                knowledge,
-                process_files,
-                req_data.separator,
-                req_data.separator_rule,
-                req_data.chunk_size,
-                req_data.chunk_overlap,
-                req_data.callback_url,
-                req_data.extra,
-                preview_cache_keys,
+                knowledge=knowledge,
+                db_files=process_files,
+                preview_cache_keys=preview_cache_keys,
+                callback_url=req_data.callback_url,
             )
 
             process_files = KnowledgeFileDao.select_list([f.id for f in process_files])
@@ -1182,17 +1177,22 @@ class KnowledgeService(KnowledgeUtils):
         return True
 
     @classmethod
-    def get_file_share_url(cls, file_id: int) -> (str, str):
+    def get_file_share_url(cls, file_id: int) -> Tuple[str, str]:
         """ Get the original download address of the file And Corresponding preview file download address """
         file = KnowledgeFileDao.get_file_by_ids([file_id])
         if not file:
             raise NotFoundError()
         file = file[0]
         minio_client = get_minio_storage_sync()
+        if file.preview_file_object_name:
+            original_url = cls.get_file_share_url_with_empty(file.object_name)
+            preview_url = cls.get_file_share_url_with_empty(file.preview_file_object_name)
         # 130File parsing prior to version
-        if file.parse_type in [ParseType.LOCAL.value, ParseType.UNS.value]:
+        elif file.parse_type in [ParseType.LOCAL.value, ParseType.UNS.value]:
             original_url = minio_client.get_share_link_sync(cls.get_knowledge_file_object_name(file.id, file.file_name))
-            preview_url = minio_client.get_share_link_sync(str(file.id))
+            preview_url = ""
+            if minio_client.object_exists_sync(object_name=str(file.id)):
+                preview_url = minio_client.get_share_link_sync(str(file.id))
         else:
             original_url = cls.get_file_share_url_with_empty(file.object_name)
             preview_url = ""
@@ -1209,6 +1209,7 @@ class KnowledgeService(KnowledgeUtils):
         :param object_name: Files inminioObject name in
         :return: File sharing link
         """
+
         minio_client = get_minio_storage_sync()
         if minio_client.object_exists_sync(minio_client.bucket, object_name):
             return minio_client.get_share_link_sync(object_name)

@@ -1,14 +1,15 @@
-import requests
-from bs4 import BeautifulSoup, Comment
-from markdownify import markdownify as md
+import base64
 import os
 import re
-import base64
-from urllib.parse import urljoin, urlparse
-from uuid import uuid4
-from loguru import logger
 import shutil
 from pathlib import Path
+from urllib.parse import urljoin, urlparse
+from uuid import uuid4
+
+import requests
+from bs4 import BeautifulSoup, Comment
+from loguru import logger
+from markdownify import markdownify as md
 
 # Configure logger
 
@@ -17,9 +18,9 @@ USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTM
 
 class HTML2MarkdownConverter:
     def __init__(
-        self,
-        output_dir="output",
-        media_download_timeout=60,
+            self,
+            output_dir="output",
+            media_download_timeout=60,
     ):
         self.output_dir = output_dir
         self.MEDIA_DOWNLOAD_TIMEOUT = media_download_timeout
@@ -112,12 +113,12 @@ class HTML2MarkdownConverter:
         return str(soup)
 
     def _download_media_file(
-        self,
-        media_url,
-        base_url_for_relative,
-        media_absolute_save_dir,
-        markdown_relative_media_folder,
-        media_type_prefixes=("image/", "video/", "audio/"),
+            self,
+            media_url,
+            base_url_for_relative,
+            media_absolute_save_dir,
+            markdown_relative_media_folder,
+            media_type_prefixes=("image/", "video/", "audio/"),
     ):
         if not media_absolute_save_dir:
             logger.error(
@@ -129,9 +130,9 @@ class HTML2MarkdownConverter:
             parsed_media_url = urlparse(media_url)
             if media_url.startswith("data:"):
                 if not any(
-                    prefix in media_url
-                    for prefix in media_type_prefixes
-                    if prefix == "image/"
+                        prefix in media_url
+                        for prefix in media_type_prefixes
+                        if prefix == "image/"
                 ):
                     return None, media_url
                 try:
@@ -183,40 +184,40 @@ class HTML2MarkdownConverter:
             if "." in filename_from_url_for_ext:
                 candidate_ext = filename_from_url_for_ext.split(".")[-1].lower()
                 if (
-                    len(candidate_ext) <= 5
-                    and candidate_ext.isalnum()
-                    and candidate_ext
-                    in [
-                        "jpg",
-                        "jpeg",
-                        "png",
-                        "gif",
-                        "svg",
-                        "webp",
-                        "bmp",
-                        "tiff",
-                        "mp4",
-                        "webm",
-                        "ogg",
-                        "mov",
-                        "avi",
-                        "mkv",
-                        "mp3",
-                        "wav",
-                        "aac",
-                    ]
+                        len(candidate_ext) <= 5
+                        and candidate_ext.isalnum()
+                        and candidate_ext
+                        in [
+                    "jpg",
+                    "jpeg",
+                    "png",
+                    "gif",
+                    "svg",
+                    "webp",
+                    "bmp",
+                    "tiff",
+                    "mp4",
+                    "webm",
+                    "ogg",
+                    "mov",
+                    "avi",
+                    "mkv",
+                    "mp3",
+                    "wav",
+                    "aac",
+                ]
                 ):
                     ext = candidate_ext
 
             if parsed_actual_url.scheme == "file":
                 local_file_path_str = parsed_actual_url.path
                 if (
-                    os.name == "nt"
+                        os.name == "nt"
                 ):  # Windows: remove leading '/' if path starts like /C:/...
                     if (
-                        len(local_file_path_str) > 2
-                        and local_file_path_str[0] == "/"
-                        and local_file_path_str[2] == ":"
+                            len(local_file_path_str) > 2
+                            and local_file_path_str[0] == "/"
+                            and local_file_path_str[2] == ":"
                     ):
                         local_file_path_str = local_file_path_str[1:]
 
@@ -225,7 +226,7 @@ class HTML2MarkdownConverter:
                 if local_file_to_copy.exists() and local_file_to_copy.is_file():
                     if not ext:
                         ext = (
-                            local_file_to_copy.suffix[1:].lower() or "dat"
+                                local_file_to_copy.suffix[1:].lower() or "dat"
                         )  # Get ext from local file if not from URL
                     unique_filename = f"media_{uuid4().hex}.{ext}"
                     absolute_filepath_dest = os.path.join(
@@ -259,8 +260,8 @@ class HTML2MarkdownConverter:
                 content_type = response.headers.get("Content-Type", "").lower()
                 if not ext:  # Try to get extension from Content-Type if not from URL
                     if any(
-                        content_type.startswith(prefix)
-                        for prefix in media_type_prefixes
+                            content_type.startswith(prefix)
+                            for prefix in media_type_prefixes
                     ):
                         type_part = content_type.split(";")[0]
                         candidate_ext_ct = type_part.split("/")[-1]
@@ -333,7 +334,7 @@ class HTML2MarkdownConverter:
         return None, original_media_url_for_error_logger
 
     def _process_images_in_html(
-        self, html_content, base_url_for_relative, markdown_relative_image_folder
+            self, html_content, base_url_for_relative, markdown_relative_image_folder
     ):
         logger.debug(
             f"Starting image processing. MD relative image folder: {markdown_relative_image_folder}"
@@ -368,7 +369,7 @@ class HTML2MarkdownConverter:
                     try:
                         with open(absolute_filepath, "wb") as f:
                             f.write(media_data)
-                        img_tag["src"] = markdown_path
+                        img_tag["src"] = absolute_filepath
                         if not alt_text:
                             alt_text = f"Embedded image {unique_filename}"
                         img_tag["alt"] = alt_text
@@ -397,11 +398,11 @@ class HTML2MarkdownConverter:
         return str(soup)
 
     def _process_videos_in_html(
-        self,
-        html_content,
-        base_url_for_relative,
-        markdown_relative_video_folder,
-        markdown_relative_image_folder_for_poster,
+            self,
+            html_content,
+            base_url_for_relative,
+            markdown_relative_video_folder,
+            markdown_relative_image_folder_for_poster,
     ):
         logger.debug(
             f"Starting video processing. MD video folder: {markdown_relative_video_folder}, MD poster folder: {markdown_relative_image_folder_for_poster}"
@@ -414,13 +415,14 @@ class HTML2MarkdownConverter:
                 if original_poster_src:
                     logger.info(f"Processing poster for video: {original_poster_src}")
                     if (
-                        self.current_image_absolute_path
+                            self.current_image_absolute_path
                     ):  # Ensure image path is set for saving posters
                         poster_md_path, _ = self._download_media_file(
                             original_poster_src,
                             base_url_for_relative,
                             self.current_image_absolute_path,  # Save posters in the image asset directory
-                            markdown_relative_image_folder_for_poster,  # Use the image folder's relative path for MD link
+                            markdown_relative_image_folder_for_poster,
+                            # Use the image folder's relative path for MD link
                             media_type_prefixes=("image/",),
                         )
                         if poster_md_path:
@@ -444,8 +446,8 @@ class HTML2MarkdownConverter:
                         if original_src.startswith("cid:"):
                             cid = original_src[4:]
                             if (
-                                hasattr(self, "mhtml_resources")
-                                and cid in self.mhtml_resources
+                                    hasattr(self, "mhtml_resources")
+                                    and cid in self.mhtml_resources
                             ):
                                 media_data, resource_filename_ext = (
                                     self.mhtml_resources[cid]
@@ -456,8 +458,8 @@ class HTML2MarkdownConverter:
                                         -1
                                     ].lower()
                                     if (
-                                        len(candidate_ext) <= 5
-                                        and candidate_ext.isalnum()
+                                            len(candidate_ext) <= 5
+                                            and candidate_ext.isalnum()
                                     ):
                                         ext_from_mhtml = candidate_ext
                                 unique_filename = (
@@ -498,8 +500,8 @@ class HTML2MarkdownConverter:
                     if original_video_src_attr.startswith("cid:"):
                         cid = original_video_src_attr[4:]
                         if (
-                            hasattr(self, "mhtml_resources")
-                            and cid in self.mhtml_resources
+                                hasattr(self, "mhtml_resources")
+                                and cid in self.mhtml_resources
                         ):
                             media_data, resource_filename_ext = self.mhtml_resources[
                                 cid
@@ -521,7 +523,7 @@ class HTML2MarkdownConverter:
                             try:
                                 with open(absolute_filepath, "wb") as f:
                                     f.write(media_data)
-                                video_tag["src"] = markdown_path
+                                video_tag["src"] = absolute_filepath
                                 processed_source_successfully = True
                             except IOError as e:
                                 if "src" in video_tag.attrs:
@@ -590,11 +592,11 @@ class HTML2MarkdownConverter:
         )  # Store absolute path of source HTML
         try:
             with open(
-                self.source_html_filepath, "r", encoding="utf-8", errors="replace"
+                    self.source_html_filepath, "r", encoding="utf-8", errors="replace"
             ) as f:
                 html_content = f.read()
             self.base_url = (
-                Path(self.source_html_filepath).parent.as_uri() + "/"
+                    Path(self.source_html_filepath).parent.as_uri() + "/"
             )  # file:///path/to/containing_directory/
         except FileNotFoundError:
             logger.error(f"HTML file not found: {source}")
@@ -630,12 +632,12 @@ class HTML2MarkdownConverter:
 
         logger.info("Processing and downloading images...")
         html_after_images = self._process_images_in_html(
-            cleaned_html, self.base_url, md_img_rel_folder
+            cleaned_html, self.base_url, self.current_image_absolute_path
         )
         logger.info("Processing and downloading videos...")
-        # Pass md_img_rel_folder for posters
+        # Pass self.current_image_absolute_path for posters
         html_after_videos = self._process_videos_in_html(
-            html_after_images, self.base_url, md_vid_rel_folder, md_img_rel_folder
+            html_after_images, self.base_url, self.current_video_absolute_path, self.current_image_absolute_path
         )
 
         logger.info("Converting HTML to Markdown...")

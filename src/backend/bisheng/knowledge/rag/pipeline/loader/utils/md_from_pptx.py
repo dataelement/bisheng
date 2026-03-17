@@ -1,12 +1,15 @@
-from bisheng.pptx2md import convert, ConversionConfig
+import os
+import re
 from pathlib import Path
 from uuid import uuid4
 
+from bisheng.pptx2md import convert, ConversionConfig
+
 
 def parser_pptx2md(
-    pptx_file: str,
-    md_file: str,
-    image_dir: str = None,
+        pptx_file: str,
+        md_file: str,
+        image_dir: str = None,
 ):
     """
     Convert a PowerPoint file to Markdown format.
@@ -27,17 +30,30 @@ def parser_pptx2md(
 
 
 def handler(
-    cache_dir,
-    file_name,
+        cache_dir,
+        file_path,
 ):
     doc_id = str(uuid4())
     md_file_name = f"{cache_dir}/{doc_id}.md"
     image_dir = f"{cache_dir}/{doc_id}"
     parser_pptx2md(
-        pptx_file=file_name,
+        pptx_file=file_path,
         md_file=md_file_name,
         image_dir=image_dir,
     )
+
+    if os.path.exists(md_file_name):
+        with open(md_file_name, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        # pptx2md generates paths relative to the common path of md_file and image_dir,
+        # which evaluates to `doc_id/img_name.ext`. Here we replace them with `image_dir/`.
+        content = re.sub(rf'\]\({doc_id}/', f']({image_dir}/', content)
+        content = re.sub(rf'src="{doc_id}/', f'src="{image_dir}/', content)
+
+        with open(md_file_name, 'w', encoding='utf-8') as f:
+            f.write(content)
+
     # Image,Can be used asynchronously
     # GantimdPicture path in file
     return md_file_name, image_dir, doc_id

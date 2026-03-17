@@ -5,7 +5,7 @@ from uuid import uuid4
 import pypandoc
 from loguru import logger
 
-from bisheng.api.services.libreoffice_converter import convert_doc_to_docx
+from bisheng.knowledge.rag.pipeline.loader.utils.libreoffice_converter import convert_doc_to_docx
 
 try:
     # Try checking pandoc version, try to download if it fails
