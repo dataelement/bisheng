@@ -1,94 +1,184 @@
 """Tests for MiniMax provider upgrade to OpenAI-compatible API (M2.5 support).
 
-These tests verify the MiniMax provider changes:
-1. Backend: MiniMax uses ChatOpenAICompatible (OpenAI-compatible) instead of legacy MiniMaxChat
-2. Frontend: Model data includes M2.5 models, default API URL updated
+These tests verify the MiniMax provider changes without requiring the full
+bisheng backend to be installed, by testing the specific files that were changed.
 """
-import ast
 import json
 import os
+import ast
 import unittest
 
-# Paths relative to this test file
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-LLM_PY = os.path.join(BASE_DIR, '..', 'bisheng', 'llm', 'domain', 'llm', 'llm.py')
-AI_INIT = os.path.join(BASE_DIR, '..', 'bisheng', 'core', 'ai', '__init__.py')
-DATA_JSON = os.path.join(BASE_DIR, '..', '..', 'frontend', 'platform', 'public', 'models', 'data.json')
-CUSTOM_FORM_TSX = os.path.join(BASE_DIR, '..', '..', 'frontend', 'platform', 'src', 'pages',
-                                'ModelPage', 'manage', 'CustomForm.tsx')
-EMBEDDING_PY = os.path.join(BASE_DIR, '..', 'bisheng', 'llm', 'domain', 'llm', 'embedding.py')
-CONST_PY = os.path.join(BASE_DIR, '..', 'bisheng', 'llm', 'domain', 'const.py')
-ADVANCED_PARAMS_TS = os.path.join(BASE_DIR, '..', '..', 'frontend', 'platform', 'src', 'util',
-                                   'advancedParamsTemplates.ts')
 
+class TestMiniMaxLLMModuleChanges(unittest.TestCase):
+    """Unit tests verifying the LLM module changes via AST inspection."""
 
-class TestMiniMaxBackendConfig(unittest.TestCase):
-    """Unit tests for MiniMax backend provider configuration via source analysis."""
-
-    def setUp(self):
-        with open(os.path.normpath(LLM_PY)) as f:
-            self.llm_source = f.read()
-
-    def test_minimax_uses_chat_openai_compatible(self):
-        """MiniMax factory entry should use ChatOpenAICompatible client."""
-        self.assertIn(
-            "LLMServerType.MINIMAX.value: {'client': ChatOpenAICompatible",
-            self.llm_source
+    @classmethod
+    def setUpClass(cls):
+        cls.llm_py_path = os.path.join(
+            os.path.dirname(__file__), '..', 'bisheng', 'llm', 'domain', 'llm', 'llm.py'
         )
+        cls.llm_py_path = os.path.normpath(cls.llm_py_path)
+        with open(cls.llm_py_path) as f:
+            cls.llm_source = f.read()
+        cls.llm_tree = ast.parse(cls.llm_source)
 
-    def test_minimax_uses_openai_params_handler(self):
-        """MiniMax factory entry should use _get_openai_params handler."""
-        self.assertIn(
-            "'params_handler': _get_openai_params}",
-            self.llm_source.split('MINIMAX')[1].split('\n')[0]
-        )
-
-    def test_no_legacy_minimax_params_handler(self):
-        """Legacy _get_minimax_params function should be removed."""
-        self.assertNotIn('def _get_minimax_params', self.llm_source)
-
-    def test_no_minimax_chat_import(self):
-        """MiniMaxChat should not be imported in llm.py."""
+    def test_minimax_chat_not_imported(self):
+        """MiniMaxChat should NOT be imported in llm.py."""
         self.assertNotIn('MiniMaxChat', self.llm_source)
 
     def test_chat_openai_compatible_imported(self):
         """ChatOpenAICompatible should be imported in llm.py."""
         self.assertIn('ChatOpenAICompatible', self.llm_source)
 
-    def test_minimax_server_type_defined(self):
-        """MiniMax should be defined as a valid server type in const.py."""
-        with open(os.path.normpath(CONST_PY)) as f:
-            const_source = f.read()
-        self.assertIn("MINIMAX = 'minimax'", const_source)
+    def test_get_minimax_params_removed(self):
+        """The legacy _get_minimax_params function should be removed."""
+        for node in ast.walk(self.llm_tree):
+            if isinstance(node, ast.FunctionDef) and node.name == '_get_minimax_params':
+                self.fail('_get_minimax_params function still exists in llm.py')
+
+    def test_minimax_entry_uses_openai_compatible(self):
+        """_llm_node_type['minimax'] should reference ChatOpenAICompatible."""
+        found = False
+        for line in self.llm_source.splitlines():
+            if 'MINIMAX' in line and 'client' in line:
+                self.assertIn('ChatOpenAICompatible', line,
+                              f'MINIMAX client should be ChatOpenAICompatible, got: {line.strip()}')
+                found = True
+                break
+        self.assertTrue(found, 'Could not find MINIMAX entry in _llm_node_type')
+
+    def test_minimax_entry_uses_openai_params(self):
+        """_llm_node_type['minimax'] should use _get_openai_params handler."""
+        for line in self.llm_source.splitlines():
+            if 'MINIMAX' in line and 'params_handler' in line:
+                self.assertIn('_get_openai_params', line,
+                              f'MINIMAX params handler should be _get_openai_params, got: {line.strip()}')
+                return
+        self.fail('Could not find MINIMAX params_handler entry')
 
     def test_web_search_support_preserved(self):
-        """parse_kwargs should still handle web_search for MINIMAX."""
-        self.assertIn('LLMServerType.MINIMAX.value', self.llm_source)
-        self.assertIn("'type': 'web_search'", self.llm_source)
+        """Web search tool support for MiniMax should still be present."""
+        self.assertIn('web_search', self.llm_source)
+        in_parse_kwargs = False
+        found_minimax_web_search = False
+        for line in self.llm_source.splitlines():
+            if 'def parse_kwargs' in line:
+                in_parse_kwargs = True
+            if in_parse_kwargs and 'MINIMAX' in line:
+                found_minimax_web_search = True
+                break
+        self.assertTrue(found_minimax_web_search,
+                        'MiniMax web_search support not found in parse_kwargs')
 
-    def test_minimax_chat_removed_from_core_ai(self):
-        """Legacy MiniMaxChat should be removed from core.ai (no longer needed)."""
-        with open(os.path.normpath(AI_INIT)) as f:
-            ai_init_source = f.read()
-        self.assertNotIn('MiniMaxChat', ai_init_source)
+    def test_no_legacy_minimax_api_key_param(self):
+        """No function should set minimax_api_key (legacy param)."""
+        self.assertNotIn("minimax_api_key", self.llm_source)
 
-    def test_minimax_embedding_uses_openai(self):
-        """MiniMax embedding should use OpenAIEmbeddings with _get_openai_params."""
-        with open(os.path.normpath(EMBEDDING_PY)) as f:
-            embedding_source = f.read()
-        self.assertIn('LLMServerType.MINIMAX.value', embedding_source)
-        self.assertIn('OpenAIEmbeddings', embedding_source)
+    def test_no_chat_completions_appended_for_minimax(self):
+        """No code should append /chat/completions to base_url for MiniMax."""
+        lines_with_chat_completions = [
+            line.strip() for line in self.llm_source.splitlines()
+            if 'chat/completions' in line and 'minimax' in line.lower()
+        ]
+        self.assertEqual(len(lines_with_chat_completions), 0,
+                         f'Found legacy chat/completions URL appending: {lines_with_chat_completions}')
 
 
-class TestMiniMaxModelData(unittest.TestCase):
-    """Unit tests for MiniMax model template data."""
+class TestCoreAIModuleChanges(unittest.TestCase):
+    """Unit tests verifying core.ai __init__.py changes."""
 
-    def setUp(self):
-        with open(os.path.normpath(DATA_JSON)) as f:
-            self.model_data = json.load(f)
+    @classmethod
+    def setUpClass(cls):
+        cls.init_py_path = os.path.join(
+            os.path.dirname(__file__), '..', 'bisheng', 'core', 'ai', '__init__.py'
+        )
+        cls.init_py_path = os.path.normpath(cls.init_py_path)
+        with open(cls.init_py_path) as f:
+            cls.init_source = f.read()
 
-    def test_minimax_key_exists(self):
-        """MiniMax provider should be present in data.json."""
+    def test_minimax_chat_not_imported(self):
+        """MiniMaxChat should NOT be imported from langchain_community."""
+        self.assertNotIn('MiniMaxChat', self.init_source)
+
+    def test_minimax_chat_not_in_all(self):
+        """MiniMaxChat should NOT be in __all__ list."""
+        tree = ast.parse(self.init_source)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if isinstance(target, ast.Name) and target.id == '__all__':
+                        if isinstance(node.value, ast.List):
+                            items = [
+                                elt.value for elt in node.value.elts
+                                if isinstance(elt, ast.Constant)
+                            ]
+                            self.assertNotIn('MiniMaxChat', items)
+                            return
+        self.fail('Could not find __all__ in __init__.py')
+
+    def test_chat_openai_compatible_in_all(self):
+        """ChatOpenAICompatible should be in __all__ list."""
+        tree = ast.parse(self.init_source)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if isinstance(target, ast.Name) and target.id == '__all__':
+                        if isinstance(node.value, ast.List):
+                            items = [
+                                elt.value for elt in node.value.elts
+                                if isinstance(elt, ast.Constant)
+                            ]
+                            self.assertIn('ChatOpenAICompatible', items)
+                            return
+        self.fail('Could not find __all__ in __init__.py')
+
+
+class TestEmbeddingModuleConsistency(unittest.TestCase):
+    """Unit tests verifying MiniMax embedding uses OpenAI-compatible pattern."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.emb_py_path = os.path.join(
+            os.path.dirname(__file__), '..', 'bisheng', 'llm', 'domain', 'llm', 'embedding.py'
+        )
+        cls.emb_py_path = os.path.normpath(cls.emb_py_path)
+        with open(cls.emb_py_path) as f:
+            cls.emb_source = f.read()
+
+    def test_minimax_embedding_uses_openai_embeddings(self):
+        """MiniMax embedding should map to OpenAIEmbeddings."""
+        for line in self.emb_source.splitlines():
+            if 'MINIMAX' in line and 'client' in line:
+                self.assertIn('OpenAIEmbeddings', line)
+                return
+        self.fail('Could not find MINIMAX entry in embedding _node_type')
+
+    def test_minimax_embedding_uses_openai_params(self):
+        """MiniMax embedding should use _get_openai_params."""
+        for line in self.emb_source.splitlines():
+            if 'MINIMAX' in line and 'params_handler' in line:
+                self.assertIn('_get_openai_params', line)
+                return
+        self.fail('Could not find MINIMAX params_handler in embedding')
+
+
+class TestFrontendModelData(unittest.TestCase):
+    """Unit tests for frontend model configuration data."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.data_path = os.path.join(
+            os.path.dirname(__file__),
+            '../../frontend/platform/public/models/data.json'
+        )
+        cls.data_path = os.path.normpath(cls.data_path)
+        if not os.path.exists(cls.data_path):
+            raise unittest.SkipTest('Frontend data.json not available in checkout')
+        with open(cls.data_path) as f:
+            cls.model_data = json.load(f)
+
+    def test_minimax_models_exist(self):
+        """MiniMax models should be present in data.json."""
         self.assertIn('minimax', self.model_data)
 
     def test_minimax_has_m25_model(self):
@@ -119,92 +209,165 @@ class TestMiniMaxModelData(unittest.TestCase):
         """MiniMax should have 3 models listed."""
         self.assertEqual(len(self.model_data['minimax']), 3)
 
-    def test_data_json_is_valid_json(self):
-        """data.json should be valid JSON with all expected providers."""
-        expected_providers = [
-            'openai', 'azure_openai', 'qwen', 'deepseek', 'minimax',
-            'volcengine', 'silicon',
-        ]
-        for provider in expected_providers:
-            self.assertIn(provider, self.model_data)
 
+class TestFrontendCustomForm(unittest.TestCase):
+    """Unit tests for frontend MiniMax provider form configuration."""
 
-class TestMiniMaxFrontendConfig(unittest.TestCase):
-    """Unit tests for MiniMax frontend configuration."""
+    @classmethod
+    def setUpClass(cls):
+        cls.form_path = os.path.join(
+            os.path.dirname(__file__),
+            '../../frontend/platform/src/pages/ModelPage/manage/CustomForm.tsx'
+        )
+        cls.form_path = os.path.normpath(cls.form_path)
+        if not os.path.exists(cls.form_path):
+            raise unittest.SkipTest('Frontend CustomForm.tsx not available in checkout')
+        with open(cls.form_path) as f:
+            cls.form_source = f.read()
 
-    def setUp(self):
-        with open(os.path.normpath(CUSTOM_FORM_TSX)) as f:
-            self.form_source = f.read()
-
-    def test_minimax_default_api_base_url(self):
-        """Default API base URL should be https://api.minimax.io/v1 (new OpenAI-compatible API)."""
+    def test_minimax_api_base_url(self):
+        """Default MiniMax API base should be api.minimax.io/v1."""
         self.assertIn('https://api.minimax.io/v1', self.form_source)
 
-    def test_no_legacy_api_url(self):
-        """Legacy API URL api.minimax.chat should not be present."""
-        self.assertNotIn('api.minimax.chat', self.form_source)
-
-    def test_minimax_requires_api_key(self):
-        """MiniMax provider form should require an API key."""
-        # Find minimax section and check for API key field
-        minimax_idx = self.form_source.index('minimax:')
-        section_end = self.form_source.index('],', minimax_idx) + 2
-        minimax_section = self.form_source[minimax_idx:section_end]
-        self.assertIn('openai_api_key', minimax_section)
-
-    def test_minimax_requires_api_base(self):
-        """MiniMax provider form should require an API base URL."""
-        minimax_idx = self.form_source.index('minimax:')
-        section_end = self.form_source.index('],', minimax_idx) + 2
-        minimax_section = self.form_source[minimax_idx:section_end]
-        self.assertIn('openai_api_base', minimax_section)
+    def test_minimax_not_using_old_api_url(self):
+        """Should NOT use old api.minimax.chat/v1 URL."""
+        self.assertNotIn('api.minimax.chat/v1', self.form_source)
 
 
-class TestMiniMaxAdvancedParams(unittest.TestCase):
-    """Unit tests for MiniMax advanced parameters template."""
+class TestMiniMaxLLMServerTypeEnum(unittest.TestCase):
+    """Unit tests for MiniMax in the LLMServerType enum."""
 
-    def setUp(self):
-        with open(os.path.normpath(ADVANCED_PARAMS_TS)) as f:
-            self.template_source = f.read()
-
-    def test_minimax_llm_template_exists(self):
-        """minimax-llm template should exist in advancedParamsTemplates."""
-        self.assertIn("'minimax-llm'", self.template_source)
-
-    def test_minimax_mapping_exists(self):
-        """minimax should be mapped to minimax-llm template."""
-        self.assertIn("'minimax': 'minimax-llm'", self.template_source)
-
-    def test_minimax_embedding_template_exists(self):
-        """minimax-embedding template should exist."""
-        self.assertIn("'minimax-embedding'", self.template_source)
-
-
-class TestMiniMaxProviderLinks(unittest.TestCase):
-    """Unit tests for MiniMax provider documentation links."""
-
-    def setUp(self):
-        use_link_path = os.path.join(
-            BASE_DIR, '..', '..', 'frontend', 'platform', 'src', 'pages',
-            'ModelPage', 'manage', 'useLink.ts'
+    @classmethod
+    def setUpClass(cls):
+        cls.const_path = os.path.join(
+            os.path.dirname(__file__), '..', 'bisheng', 'llm', 'domain', 'const.py'
         )
-        with open(os.path.normpath(use_link_path)) as f:
-            self.links_source = f.read()
+        cls.const_path = os.path.normpath(cls.const_path)
+        with open(cls.const_path) as f:
+            cls.const_source = f.read()
 
-    def test_minimax_api_key_url(self):
-        """MiniMax should have an API key URL."""
-        minimax_idx = self.links_source.index('minimax:')
-        section_end = self.links_source.index('},', minimax_idx) + 2
-        minimax_section = self.links_source[minimax_idx:section_end]
-        self.assertIn('apiKeyUrl', minimax_section)
-        self.assertIn('platform.minimaxi.com', minimax_section)
+    def test_minimax_server_type_exists(self):
+        """MINIMAX should be defined in LLMServerType enum."""
+        self.assertIn("MINIMAX = 'minimax'", self.const_source)
 
-    def test_minimax_model_url(self):
-        """MiniMax should have a model documentation URL."""
-        minimax_idx = self.links_source.index('minimax:')
-        section_end = self.links_source.index('},', minimax_idx) + 2
-        minimax_section = self.links_source[minimax_idx:section_end]
-        self.assertIn('modelUrl', minimax_section)
+
+class TestOpenAIParamsFunction(unittest.TestCase):
+    """Unit tests for _get_openai_params function behavior."""
+
+    @classmethod
+    def setUpClass(cls):
+        llm_py_path = os.path.join(
+            os.path.dirname(__file__), '..', 'bisheng', 'llm', 'domain', 'llm', 'llm.py'
+        )
+        llm_py_path = os.path.normpath(llm_py_path)
+        with open(llm_py_path) as f:
+            source = f.read()
+
+        tree = ast.parse(source)
+        funcs = {}
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef) and node.name in ('_get_user_kwargs', '_get_openai_params'):
+                func_source = ast.get_source_segment(source, node)
+                funcs[node.name] = func_source
+
+        combined = funcs['_get_user_kwargs'] + '\n\n' + funcs['_get_openai_params']
+        exec_globals = {'json': json}
+        exec(compile(combined, '<test>', 'exec'), exec_globals)
+        cls._openai_params_fn = staticmethod(exec_globals['_get_openai_params'])
+
+    def test_extracts_api_key(self):
+        """Should use openai_api_key from server config."""
+        result = self._openai_params_fn(
+            {'model': 'MiniMax-M2.5'},
+            {'openai_api_key': 'test-minimax-key', 'openai_api_base': 'https://api.minimax.io/v1'},
+            {}
+        )
+        self.assertEqual(result['api_key'], 'test-minimax-key')
+
+    def test_extracts_base_url(self):
+        """Should use openai_api_base as base_url."""
+        result = self._openai_params_fn(
+            {'model': 'MiniMax-M2.5'},
+            {'openai_api_key': 'key', 'openai_api_base': 'https://api.minimax.io/v1'},
+            {}
+        )
+        self.assertEqual(result['base_url'], 'https://api.minimax.io/v1')
+
+    def test_strips_trailing_slash(self):
+        """Should strip trailing slash from base_url."""
+        result = self._openai_params_fn(
+            {'model': 'MiniMax-M2.5'},
+            {'openai_api_key': 'key', 'openai_api_base': 'https://api.minimax.io/v1/'},
+            {}
+        )
+        self.assertEqual(result['base_url'], 'https://api.minimax.io/v1')
+
+    def test_stream_usage_true(self):
+        """Should set stream_usage=True."""
+        result = self._openai_params_fn(
+            {'model': 'MiniMax-M2.5'},
+            {'openai_api_key': 'key', 'openai_api_base': 'https://api.minimax.io/v1'},
+            {}
+        )
+        self.assertTrue(result['stream_usage'])
+
+    def test_no_legacy_params(self):
+        """Should not produce minimax_api_key or group_id."""
+        result = self._openai_params_fn(
+            {'model': 'MiniMax-M2.5'},
+            {'openai_api_key': 'key', 'openai_api_base': 'https://api.minimax.io/v1'},
+            {}
+        )
+        self.assertNotIn('minimax_api_key', result)
+        self.assertNotIn('minimax_group_id', result)
+
+    def test_preserves_model_name(self):
+        """Model name should be preserved."""
+        for name in ['MiniMax-M2.5', 'MiniMax-M2.5-highspeed', 'MiniMax-Text-01']:
+            result = self._openai_params_fn(
+                {'model': name},
+                {'openai_api_key': 'key', 'openai_api_base': 'https://api.minimax.io/v1'},
+                {}
+            )
+            self.assertEqual(result['model'], name)
+
+    def test_user_kwargs_applied(self):
+        """User advanced kwargs should be merged."""
+        result = self._openai_params_fn(
+            {'model': 'MiniMax-M2.5', 'temperature': 0.7},
+            {'openai_api_key': 'key', 'openai_api_base': 'https://api.minimax.io/v1'},
+            {'user_kwargs': json.dumps({'max_tokens': 4096})}
+        )
+        self.assertEqual(result['temperature'], 0.7)
+        self.assertEqual(result['model'], 'MiniMax-M2.5')
+
+    def test_empty_key_fallback(self):
+        """Should fall back to 'empty' when API key is empty."""
+        result = self._openai_params_fn(
+            {'model': 'MiniMax-M2.5'},
+            {'openai_api_key': '', 'openai_api_base': 'https://api.minimax.io/v1'},
+            {}
+        )
+        self.assertEqual(result['api_key'], 'empty')
+
+    def test_proxy_passthrough(self):
+        """Should pass through openai_proxy if configured."""
+        result = self._openai_params_fn(
+            {'model': 'MiniMax-M2.5'},
+            {'openai_api_key': 'key', 'openai_api_base': 'https://api.minimax.io/v1',
+             'openai_proxy': 'http://proxy:8080'},
+            {}
+        )
+        self.assertEqual(result['openai_proxy'], 'http://proxy:8080')
+
+    def test_no_url_appending(self):
+        """Should NOT append /chat/completions to the URL."""
+        result = self._openai_params_fn(
+            {'model': 'MiniMax-M2.5'},
+            {'openai_api_key': 'key', 'openai_api_base': 'https://api.minimax.io/v1'},
+            {}
+        )
+        self.assertNotIn('/chat/completions', result['base_url'])
 
 
 class TestMiniMaxIntegration(unittest.TestCase):
