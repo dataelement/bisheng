@@ -1,5 +1,5 @@
 import { useCallback, useRef } from 'react';
-import { useGetModelsQuery } from '~/data-provider/data-provider/src/react-query';
+import { useGetModelsQuery } from '~/hooks/queries';
 import { useNavigate } from 'react-router-dom';
 import {
   Constants,
@@ -8,7 +8,7 @@ import {
   isParamEndpoint,
   LocalStorageKeys,
   isAssistantsEndpoint,
-} from '~/data-provider/data-provider/src';
+} from '~/types/chat';
 import { useRecoilState, useRecoilValue, useSetRecoilState, useRecoilCallback } from 'recoil';
 import type {
   TPreset,
@@ -16,7 +16,7 @@ import type {
   TModelsConfig,
   TConversation,
   TEndpointsConfig,
-} from '~/data-provider/data-provider/src';
+} from '~/types/chat';
 import type { AssistantListItem } from '~/common';
 import {
   getEndpointField,
@@ -26,7 +26,7 @@ import {
   getModelSpecIconURL,
   updateLastSelectedModel,
 } from '~/utils';
-import { useDeleteFilesMutation, useGetEndpointsQuery, useGetStartupConfig } from '~/data-provider';
+import { useDeleteFilesMutation, useGetEndpointsQuery, useGetStartupConfig } from '~/hooks/queries/data-provider';
 import useAssistantListMap from './Assistants/useAssistantListMap';
 import { usePauseGlobalAudio } from './Audio';
 import { mainTextareaId } from '~/common';

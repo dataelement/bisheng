@@ -3,7 +3,7 @@ import { ArrowLeft, Loader2 } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { getChatOnlineApi, getUncategorized } from "~/api/apps"
-import { ConversationData, QueryKeys } from "~/data-provider/data-provider/src"
+import { ConversationData, QueryKeys } from "~/types/chat"
 import store from "~/store"
 import { addConversation, cn, copyText, generateUUID } from "~/utils"
 import { getAppShareUrl } from './appUtils'

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Copy, CopyCheck } from 'lucide-react';
-import { useGetSharedLinkQuery } from '~/data-provider/data-provider/src/react-query';
+import { useGetSharedLinkQuery } from '~/hooks/queries';
 import OGDialogTemplate from '~/components/ui/OGDialogTemplate';
 import { useLocalize, useCopyToClipboard } from '~/hooks';
 import { Button, Spinner, OGDialog } from '~/components';

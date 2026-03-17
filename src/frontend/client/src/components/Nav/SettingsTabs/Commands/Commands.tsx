@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { PermissionTypes, Permissions } from '~/data-provider/data-provider/src';
+import { PermissionTypes, Permissions } from '~/types/chat';
 import HoverCardSettings from '~/components/Nav/SettingsTabs/HoverCardSettings';
 import { useLocalize, useHasAccess } from '~/hooks';
 import SlashCommandSwitch from './SlashCommandSwitch';

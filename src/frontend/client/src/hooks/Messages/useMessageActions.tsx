@@ -1,6 +1,6 @@
 import { useRecoilValue } from 'recoil';
 import { useCallback, useMemo } from 'react';
-import { isAssistantsEndpoint, isAgentsEndpoint } from '~/data-provider/data-provider/src';
+import { isAssistantsEndpoint, isAgentsEndpoint } from '~/types/chat';
 import type { TMessageProps } from '~/common';
 import {
   useChatContext,

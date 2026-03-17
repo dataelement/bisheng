@@ -15,7 +15,7 @@ import Markdown from "~/components/Chat/Messages/Content/Markdown";
 import SearchWebUrls from "~/components/Chat/Messages/Content/SearchWebUrls";
 import { Avatar, AvatarImage, AvatarName } from "~/components/ui/avatar";
 import { TextToSpeechButton } from "~/components/Voice/TextToSpeechButton";
-import { useGetBsConfig } from "~/data-provider";
+import { useGetBsConfig } from "~/hooks/queries/data-provider";
 import { useAuthContext } from "~/hooks";
 import MessageSource from "~/pages/appChat/components/MessageSource";
 import ResouceModal from "~/pages/appChat/components/ResouceModal";

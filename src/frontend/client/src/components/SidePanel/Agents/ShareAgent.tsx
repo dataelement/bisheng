@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo } from 'react';
 import { Share2Icon } from 'lucide-react';
 import { useForm, Controller } from 'react-hook-form';
-import { Permissions } from '~/data-provider/data-provider/src';
-import type { TStartupConfig, AgentUpdateParams } from '~/data-provider/data-provider/src';
+import { Permissions } from '~/types/chat';
+import type { TStartupConfig, AgentUpdateParams } from '~/types/chat';
 import {
   Button,
   Switch,
@@ -12,7 +12,7 @@ import {
   OGDialogContent,
   OGDialogTrigger,
 } from '~/components/ui';
-import { useUpdateAgentMutation, useGetStartupConfig } from '~/data-provider';
+import { useUpdateAgentMutation, useGetStartupConfig } from '~/hooks/queries/data-provider';
 import { cn, removeFocusOutlines } from '~/utils';
 import { useToastContext } from '~/Providers';
 import { useLocalize } from '~/hooks';

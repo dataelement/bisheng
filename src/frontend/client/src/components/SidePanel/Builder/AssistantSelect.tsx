@@ -8,7 +8,7 @@ import {
   LocalStorageKeys,
   isImageVisionTool,
   defaultAssistantFormValues,
-} from '~/data-provider/data-provider/src';
+} from '~/types/chat';
 import type { UseFormReset } from 'react-hook-form';
 import type { UseMutationResult } from '@tanstack/react-query';
 import type {
@@ -17,7 +17,7 @@ import type {
   AssistantDocument,
   AssistantsEndpoint,
   AssistantCreateParams,
-} from '~/data-provider/data-provider/src';
+} from '~/types/chat';
 import type {
   Actions,
   ExtendedFile,
@@ -26,7 +26,7 @@ import type {
   LastSelectedModels,
 } from '~/common';
 import SelectDropDown from '~/components/ui/SelectDropDown';
-import { useListAssistantsQuery } from '~/data-provider';
+import { useListAssistantsQuery } from '~/hooks/queries/data-provider';
 import { useLocalize, useLocalStorage } from '~/hooks';
 import { cn, createDropdownSetter } from '~/utils';
 import { useFileMapContext } from '~/Providers';

@@ -1,6 +1,6 @@
 import type { ExtendedFile } from '~/common';
 import { FileIcon, getFileTypebyFileName } from '~/components/ui/icon/File/FileIcon';
-import type { TFile } from '~/data-provider/data-provider/src';
+import type { TFile } from '~/types/chat';
 import { useProgress } from '~/hooks';
 
 const FilePreview = ({

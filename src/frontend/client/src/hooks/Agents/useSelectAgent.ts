@@ -1,10 +1,10 @@
 import { useCallback, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { EModelEndpoint, isAgentsEndpoint, Constants, QueryKeys } from '~/data-provider/data-provider/src';
-import type { TConversation, TPreset, Agent } from '~/data-provider/data-provider/src';
+import { EModelEndpoint, isAgentsEndpoint, Constants, QueryKeys } from '~/types/chat';
+import type { TConversation, TPreset, Agent } from '~/types/chat';
 import useDefaultConvo from '~/hooks/Conversations/useDefaultConvo';
 import { useAgentsMapContext } from '~/Providers/AgentsMapContext';
-import { useGetAgentByIdQuery } from '~/data-provider';
+import { useGetAgentByIdQuery } from '~/hooks/queries/data-provider';
 import { useChatContext } from '~/Providers/ChatContext';
 
 export default function useSelectAgent() {

@@ -10,7 +10,7 @@ import {
   OGDialogHeader,
   OGDialogTitle,
 } from '~/components';
-import { useDeleteUserMutation } from '~/data-provider';
+import { useDeleteUserMutation } from '~/hooks/queries/data-provider';
 import { useAuthContext } from '~/hooks/AuthContext';
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';

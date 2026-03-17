@@ -1,19 +1,19 @@
 import { useRecoilValue } from 'recoil';
 import { useCallback, useRef, useEffect } from 'react';
-import { useGetModelsQuery } from '~/data-provider/data-provider/src/react-query';
-import { LocalStorageKeys, isAssistantsEndpoint } from '~/data-provider/data-provider/src';
+import { useGetModelsQuery } from '~/hooks/queries';
+import { LocalStorageKeys, isAssistantsEndpoint } from '~/types/chat';
 import type {
   TPreset,
   TModelsConfig,
   TConversation,
   TEndpointsConfig,
   EModelEndpoint,
-} from '~/data-provider/data-provider/src';
+} from '~/types/chat';
 import type { SetterOrUpdater } from 'recoil';
 import type { AssistantListItem } from '~/common';
 import { getEndpointField, buildDefaultConvo, getDefaultEndpoint } from '~/utils';
 import useAssistantListMap from '~/hooks/Assistants/useAssistantListMap';
-import { useGetEndpointsQuery } from '~/data-provider';
+import { useGetEndpointsQuery } from '~/hooks/queries/data-provider';
 import { mainTextareaId } from '~/common';
 import store from '~/store';
 

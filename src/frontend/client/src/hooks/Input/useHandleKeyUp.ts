@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from 'react';
 import { useSetRecoilState, useRecoilValue } from 'recoil';
-import { PermissionTypes, Permissions } from '~/data-provider/data-provider/src';
+import { PermissionTypes, Permissions } from '~/types/chat';
 import type { SetterOrUpdater } from 'recoil';
 import useHasAccess from '~/hooks/Roles/useHasAccess';
 import store from '~/store';

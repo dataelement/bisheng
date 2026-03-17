@@ -6,7 +6,7 @@ import {
   QueryKeys,
   defaultOrderQuery,
   mergeFileConfig,
-} from '~/data-provider/data-provider/src';
+} from '~/types/chat';
 import type { UseMutationResult } from '@tanstack/react-query';
 import type {
   Metadata,
@@ -14,8 +14,8 @@ import type {
   AssistantsEndpoint,
   AssistantCreateParams,
   AssistantListResponse,
-} from '~/data-provider/data-provider/src';
-import { useUploadAssistantAvatarMutation, useGetFileConfig } from '~/data-provider';
+} from '~/types/chat';
+import { useUploadAssistantAvatarMutation, useGetFileConfig } from '~/hooks/queries/data-provider';
 import { useToastContext, useAssistantsMapContext } from '~/Providers';
 import { AssistantAvatar, NoImage, AvatarMenu } from './Images';
 // import { Spinner } from '~/components/svg';

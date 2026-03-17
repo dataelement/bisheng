@@ -1,6 +1,6 @@
-import { Tools } from '~/data-provider/data-provider/src';
+import { Tools } from '~/types/chat';
 import type { ExtendedFile } from '~/common';
-import { useVerifyAgentToolAuth } from '~/data-provider';
+import { useVerifyAgentToolAuth } from '~/hooks/queries/data-provider';
 import { useLocalize } from '~/hooks';
 import Action from './Action';
 import Files from './Files';

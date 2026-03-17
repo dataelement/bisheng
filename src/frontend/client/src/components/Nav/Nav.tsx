@@ -1,10 +1,10 @@
-import type { ConversationListResponse } from '~/data-provider/data-provider/src';
-import { PermissionTypes, Permissions } from '~/data-provider/data-provider/src';
+import type { ConversationListResponse } from '~/types/chat';
+import { PermissionTypes, Permissions } from '~/types/chat';
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchContext } from '~/Providers';
 import { Conversations } from '~/components/Conversations';
 import { Spinner } from '~/components/svg';
-import { useConversationsInfiniteQuery } from '~/data-provider';
+import { useConversationsInfiniteQuery } from '~/hooks/queries/data-provider';
 import {
   useAuthContext,
   useHasAccess,

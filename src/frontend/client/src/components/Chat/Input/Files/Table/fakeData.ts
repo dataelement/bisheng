@@ -1,5 +1,5 @@
-import { FileSources } from '~/data-provider/data-provider/src';
-import type { TFile } from '~/data-provider/data-provider/src';
+import { FileSources } from '~/types/chat';
+import type { TFile } from '~/types/chat';
 
 export const files: TFile[] = [
   {

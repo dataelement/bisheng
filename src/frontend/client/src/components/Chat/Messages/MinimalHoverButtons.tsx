@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { TMessage } from '~/data-provider/data-provider/src';
+import type { TMessage } from '~/types/chat';
 import { useLocalize, useCopyToClipboard } from '~/hooks';
 import { Clipboard, CheckMark } from '~/components/svg';
 

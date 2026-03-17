@@ -1,7 +1,7 @@
 import debounce from 'lodash/debounce';
-import { FileSources, EToolResources, removeNullishValues } from '~/data-provider/data-provider/src';
+import { FileSources, EToolResources, removeNullishValues } from '~/types/chat';
 import { useCallback, useState, useEffect } from 'react';
-import type * as t from '~/data-provider/data-provider/src';
+import type * as t from '~/types/chat';
 import type { UseMutateAsyncFunction } from '@tanstack/react-query';
 import type { ExtendedFile, GenericSetter } from '~/common';
 import useSetFilesToDelete from './useSetFilesToDelete';

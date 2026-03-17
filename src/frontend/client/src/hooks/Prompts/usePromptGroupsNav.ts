@@ -1,10 +1,10 @@
 import { useRecoilState, useRecoilValue } from 'recoil';
 import { useMemo, useRef, useEffect, useCallback } from 'react';
-import { usePromptGroupsInfiniteQuery } from '~/data-provider';
+import { usePromptGroupsInfiniteQuery } from '~/hooks/queries/data-provider';
 import debounce from 'lodash/debounce';
 import store from '~/store';
 import { useQueryClient } from '@tanstack/react-query';
-import { QueryKeys } from '~/data-provider/data-provider/src';
+import { QueryKeys } from '~/types/chat';
 
 export default function usePromptGroupsNav() {
   const queryClient = useQueryClient();

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Trigger } from '@radix-ui/react-popover';
-import type { TModelSpec, TEndpointsConfig } from '~/data-provider/data-provider/src';
+import type { TModelSpec, TEndpointsConfig } from '~/types/chat';
 import { useLocalize } from '~/hooks';
 import SpecIcon from './SpecIcon';
 import { cn } from '~/utils';

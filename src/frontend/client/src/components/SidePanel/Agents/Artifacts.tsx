@@ -1,5 +1,5 @@
 import { useFormContext } from 'react-hook-form';
-import { ArtifactModes, AgentCapabilities } from '~/data-provider/data-provider/src';
+import { ArtifactModes, AgentCapabilities } from '~/types/chat';
 import type { AgentForm } from '~/common';
 import {
   Switch,

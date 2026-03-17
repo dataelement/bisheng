@@ -1,4 +1,4 @@
-import { TFile, TMessage } from '~/data-provider/data-provider/src';
+import { TFile, TMessage } from '~/types/chat';
 
 type ParentMessage = TMessage & { children: TMessage[]; depth: number };
 export default function buildTree({

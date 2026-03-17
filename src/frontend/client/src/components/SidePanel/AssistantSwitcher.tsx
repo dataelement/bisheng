@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from 'react';
-import { isAssistantsEndpoint, LocalStorageKeys } from '~/data-provider/data-provider/src';
-import type { AssistantsEndpoint } from '~/data-provider/data-provider/src';
+import { isAssistantsEndpoint, LocalStorageKeys } from '~/types/chat';
+import type { AssistantsEndpoint } from '~/types/chat';
 import type { SwitcherProps, AssistantListItem } from '~/common';
 import { useSetIndexOptions, useSelectAssistant, useLocalize, useAssistantListMap } from '~/hooks';
 import { useChatContext, useAssistantsMapContext } from '~/Providers';

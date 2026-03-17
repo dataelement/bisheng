@@ -1,7 +1,7 @@
 import { useRecoilState } from 'recoil';
 import { useEffect, useCallback } from 'react';
-import { isAssistantsEndpoint } from '~/data-provider/data-provider/src';
-import type { TMessage } from '~/data-provider/data-provider/src';
+import { isAssistantsEndpoint } from '~/types/chat';
+import type { TMessage } from '~/types/chat';
 import type { TMessageProps } from '~/common';
 // eslint-disable-next-line import/no-cycle
 import MessageContent from '~/components/Messages/MessageContent';

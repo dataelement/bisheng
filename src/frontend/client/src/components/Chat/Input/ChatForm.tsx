@@ -17,14 +17,14 @@ import {
   useGetFileConfig,
   useGetUserLinsightCountQuery,
   useGetWorkbenchModelsQuery,
-} from "~/data-provider";
+} from "~/hooks/queries/data-provider";
 import {
   BsConfig,
   fileConfig as defaultFileConfig,
   isAssistantsEndpoint,
   mergeFileConfig,
   supportsFiles,
-} from "~/data-provider/data-provider/src";
+} from "~/types/chat";
 import {
   useAutoSave,
   useHandleKeyUp,

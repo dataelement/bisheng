@@ -2,8 +2,8 @@ import React, { useState, useRef, useCallback } from 'react';
 import { useSetRecoilState } from 'recoil';
 import AvatarEditor from 'react-avatar-editor';
 import { FileImage, RotateCw, Upload } from 'lucide-react';
-import { fileConfig as defaultFileConfig, mergeFileConfig } from '~/data-provider/data-provider/src';
-import type { TUser } from '~/data-provider/data-provider/src';
+import { fileConfig as defaultFileConfig, mergeFileConfig } from '~/types/chat';
+import type { TUser } from '~/types/chat';
 import {
   Slider,
   Button,
@@ -14,7 +14,7 @@ import {
   OGDialogTitle,
   OGDialogTrigger,
 } from '~/components';
-import { useUploadAvatarMutation, useGetFileConfig } from '~/data-provider';
+import { useUploadAvatarMutation, useGetFileConfig } from '~/hooks/queries/data-provider';
 import { useToastContext } from '~/Providers';
 import { cn, formatBytes } from '~/utils';
 import { useLocalize } from '~/hooks';

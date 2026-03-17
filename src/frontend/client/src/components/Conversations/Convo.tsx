@@ -9,9 +9,9 @@ import { NotificationSeverity } from "~/common";
 import {
   useGetEndpointsQuery,
   useUpdateConversationMutation,
-} from "~/data-provider";
-import type { TConversation } from "~/data-provider/data-provider/src";
-import { Constants } from "~/data-provider/data-provider/src";
+} from "~/hooks/queries/data-provider";
+import type { TConversation } from "~/types/chat";
+import { Constants } from "~/types/chat";
 import { useLocalize, useMediaQuery, useNavigateToConvo } from "~/hooks";
 import { useToastContext } from "~/Providers";
 import store from "~/store";

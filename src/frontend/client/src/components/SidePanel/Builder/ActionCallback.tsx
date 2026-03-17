@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Copy, CopyCheck } from 'lucide-react';
 import { useFormContext } from 'react-hook-form';
-import { AuthTypeEnum } from '~/data-provider/data-provider/src';
+import { AuthTypeEnum } from '~/types/chat';
 import { useLocalize, useCopyToClipboard } from '~/hooks';
 import { useToastContext } from '~/Providers';
 import { Button } from '~/components/ui';

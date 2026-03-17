@@ -1,9 +1,9 @@
 import React, { useMemo, memo } from 'react';
-import type { Assistant, Agent } from '~/data-provider/data-provider/src';
+import type { Assistant, Agent } from '~/types/chat';
 import type { TMessageIcon } from '~/common';
 import { getEndpointField, getIconEndpoint, logger } from '~/utils';
 import ConvoIconURL from '~/components/Endpoints/ConvoIconURL';
-import { useGetEndpointsQuery } from '~/data-provider';
+import { useGetEndpointsQuery } from '~/hooks/queries/data-provider';
 import Icon from '~/components/Endpoints/Icon';
 
 const MessageIcon = memo(

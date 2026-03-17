@@ -8,8 +8,8 @@ import {
   isAgentsEndpoint,
   tQueryParamsSchema,
   isAssistantsEndpoint,
-} from '~/data-provider/data-provider/src';
-import type { TPreset, TEndpointsConfig } from '~/data-provider/data-provider/src';
+} from '~/types/chat';
+import type { TPreset, TEndpointsConfig } from '~/types/chat';
 import type { ZodAny } from 'zod';
 import { getConvoSwitchLogic, removeUnavailableTools } from '~/utils';
 import useDefaultConvo from '~/hooks/Conversations/useDefaultConvo';

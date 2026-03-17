@@ -1,6 +1,6 @@
 import copy from 'copy-to-clipboard';
 import { InfoIcon } from 'lucide-react';
-import { Tools } from '~/data-provider/data-provider/src';
+import { Tools } from '~/types/chat';
 import React, { useRef, useState, useMemo, useEffect } from 'react';
 import type { CodeBarProps } from '~/common';
 import LogContent from '~/components/Chat/Messages/Content/Parts/LogContent';

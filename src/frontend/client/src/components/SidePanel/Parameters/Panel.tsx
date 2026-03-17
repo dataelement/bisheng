@@ -1,10 +1,10 @@
 import { RotateCcw } from 'lucide-react';
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
-import { excludedKeys, getSettingsKeys, tConvoUpdateSchema } from '~/data-provider/data-provider/src';
-import type { TPreset } from '~/data-provider/data-provider/src';
+import { excludedKeys, getSettingsKeys, tConvoUpdateSchema } from '~/types/chat';
+import type { TPreset } from '~/types/chat';
 import { SaveAsPresetDialog } from '~/components/Endpoints';
 import { useSetIndexOptions, useLocalize } from '~/hooks';
-import { useGetEndpointsQuery } from '~/data-provider';
+import { useGetEndpointsQuery } from '~/hooks/queries/data-provider';
 import { getEndpointField, logger } from '~/utils';
 import { componentMapping } from './components';
 import { useChatContext } from '~/Providers';

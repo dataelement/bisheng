@@ -1,10 +1,10 @@
-import { isAssistantsEndpoint } from '~/data-provider/data-provider/src';
+import { isAssistantsEndpoint } from '~/types/chat';
 import type {
   TConversation,
   TEndpointsConfig,
   TPreset,
   TAssistantsMap,
-} from '~/data-provider/data-provider/src';
+} from '~/types/chat';
 import ConvoIconURL from '~/components/Endpoints/ConvoIconURL';
 import MinimalIcon from '~/components/Endpoints/MinimalIcon';
 import { getEndpointField, getIconEndpoint } from '~/utils';

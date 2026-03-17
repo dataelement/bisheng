@@ -1,6 +1,6 @@
 import { Save } from 'lucide-react';
 import { useForm } from 'react-hook-form';
-import { TPlugin, TPluginAuthConfig, TPluginAction } from '~/data-provider/data-provider/src';
+import { TPlugin, TPluginAuthConfig, TPluginAction } from '~/types/chat';
 import { HoverCard, HoverCardTrigger } from '~/components/ui';
 import PluginTooltip from './PluginTooltip';
 import { useLocalize } from '~/hooks';

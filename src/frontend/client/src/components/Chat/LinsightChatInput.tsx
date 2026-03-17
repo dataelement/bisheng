@@ -19,7 +19,7 @@ import DragDropOverlay from "~/components/Chat/Input/Files/DragDropOverlay";
 import { SendIcon } from "~/components/svg";
 import { Button, TextareaAutosize } from "~/components/ui";
 import SpeechToTextComponent from "~/components/Voice/SpeechToText";
-import { useGetUserLinsightCountQuery, useGetWorkbenchModelsQuery } from "~/data-provider";
+import { useGetUserLinsightCountQuery, useGetWorkbenchModelsQuery } from "~/hooks/queries/data-provider";
 import { useLocalize } from "~/hooks";
 import { useLinsightSessionManager } from "~/hooks/useLinsightManager";
 import InputFiles from "~/pages/appChat/components/InputFiles";

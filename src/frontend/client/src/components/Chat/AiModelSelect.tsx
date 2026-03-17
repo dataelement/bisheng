@@ -6,7 +6,7 @@ import {
     SelectItem,
     SelectTrigger,
 } from "~/components/ui/Select";
-import type { BsConfig } from "~/data-provider/data-provider/src";
+import type { BsConfig } from "~/types/chat";
 
 interface AiModelSelectProps {
     options?: BsConfig["models"];

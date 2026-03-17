@@ -1,13 +1,13 @@
 // hooks/Plugins/usePluginInstall.ts
 import { useCallback } from 'react';
-import { useUpdateUserPluginsMutation } from '~/data-provider/data-provider/src/react-query';
+import { useUpdateUserPluginsMutation } from '~/hooks/queries';
 import type {
   TError,
   TUser,
   TUpdateUserPlugins,
   TPlugin,
   TPluginAction,
-} from '~/data-provider/data-provider/src';
+} from '~/types/chat';
 import { useSetRecoilState } from 'recoil';
 import store from '~/store';
 

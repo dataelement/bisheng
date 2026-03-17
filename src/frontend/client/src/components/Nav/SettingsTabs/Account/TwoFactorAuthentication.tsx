@@ -2,7 +2,7 @@ import React, { useCallback, useState } from 'react';
 import { useSetRecoilState } from 'recoil';
 import { SmartphoneIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import type { TUser, TVerify2FARequest } from '~/data-provider/data-provider/src';
+import type { TUser, TVerify2FARequest } from '~/types/chat';
 import { OGDialog, OGDialogContent, OGDialogHeader, OGDialogTitle, Progress } from '~/components';
 import { SetupPhase, QRPhase, VerifyPhase, BackupPhase, DisablePhase } from './TwoFactorPhases';
 import { DisableTwoFactorToggle } from './DisableTwoFactorToggle';
@@ -14,7 +14,7 @@ import {
   useDisableTwoFactorMutation,
   useEnableTwoFactorMutation,
   useVerifyTwoFactorMutation,
-} from '~/data-provider';
+} from '~/hooks/queries/data-provider';
 
 export type Phase = 'setup' | 'qr' | 'verify' | 'backup' | 'disable';
 

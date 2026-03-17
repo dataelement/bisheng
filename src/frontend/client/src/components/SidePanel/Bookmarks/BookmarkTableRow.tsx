@@ -1,8 +1,8 @@
 import React, { useRef } from 'react';
 import { useDrag, useDrop } from 'react-dnd';
-import type { TConversationTag } from '~/data-provider/data-provider/src';
+import type { TConversationTag } from '~/types/chat';
 import { DeleteBookmarkButton, EditBookmarkButton } from '~/components/Bookmarks';
-import { useConversationTagMutation } from '~/data-provider';
+import { useConversationTagMutation } from '~/hooks/queries/data-provider';
 import { TableRow, TableCell } from '~/components/ui';
 import { NotificationSeverity } from '~/common';
 import { useToastContext } from '~/Providers';

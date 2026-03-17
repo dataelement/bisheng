@@ -1,8 +1,8 @@
 import React, { useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import TagManager from 'react-gtm-module';
-import { Constants } from '~/data-provider/data-provider/src';
-import { useGetStartupConfig } from '~/data-provider';
+import { Constants } from '~/types/chat';
+import { useGetStartupConfig } from '~/hooks/queries/data-provider';
 import { useLocalize } from '~/hooks';
 
 export default function Footer({ className }: { className?: string }) {

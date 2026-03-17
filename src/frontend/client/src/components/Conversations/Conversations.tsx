@@ -1,6 +1,6 @@
 import { useMemo, memo } from 'react';
 import { parseISO, isToday } from 'date-fns';
-import { TConversation } from '~/data-provider/data-provider/src';
+import { TConversation } from '~/types/chat';
 import { useLocalize, TranslationKeys } from '~/hooks';
 import { groupConversationsByDate } from '~/utils';
 import Convo from './Convo';

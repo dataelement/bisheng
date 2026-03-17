@@ -1,5 +1,5 @@
-import { AgentCapabilities, ArtifactModes } from '~/data-provider/data-provider/src';
-import type { Agent, AgentProvider, AgentModelParameters } from '~/data-provider/data-provider/src';
+import { AgentCapabilities, ArtifactModes } from '~/types/chat';
+import type { Agent, AgentProvider, AgentModelParameters } from '~/types/chat';
 import type { OptionWithIcon, ExtendedFile } from './types';
 
 export type TAgentOption = OptionWithIcon &

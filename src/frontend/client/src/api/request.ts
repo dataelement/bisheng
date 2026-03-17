@@ -1,6 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import axios, { AxiosError, AxiosRequestConfig } from 'axios';
 import i18next from "i18next";
+import { setTokenHeader } from '~/api/chat/headers-helpers';
+import * as endpoints from '~/api/chat/api-endpoints';
+import type * as t from '~/types/chat/types';
 
 // 报错的时候是否弹窗
 type ErrorOptions = {
@@ -77,13 +80,13 @@ async function _patch(url: string, data?: any, options?: AxiosRequestConfig) {
 let isRefreshing = false;
 let failedQueue: { resolve: (value?: any) => void; reject: (reason?: any) => void }[] = [];
 
-// const refreshToken = (retry?: boolean): Promise<t.TRefreshTokenResponse | undefined> =>
-//   _post(endpoints.refreshToken(retry));
+const refreshToken = (retry?: boolean): Promise<t.TRefreshTokenResponse | undefined> =>
+  _post(endpoints.refreshToken(retry));
 
-// const dispatchTokenUpdatedEvent = (token: string) => {
-//   setTokenHeader(token);
-//   window.dispatchEvent(new CustomEvent('tokenUpdated', { detail: token }));
-// };
+const dispatchTokenUpdatedEvent = (token: string) => {
+  setTokenHeader(token);
+  window.dispatchEvent(new CustomEvent('tokenUpdated', { detail: token }));
+};
 
 const processQueue = (error: AxiosError | null, token: string | null = null) => {
   failedQueue.forEach((prom) => {
@@ -197,4 +200,6 @@ export default {
   delete: _delete,
   deleteWithOptions: _deleteWithOptions,
   patch: _patch,
+  refreshToken,
+  dispatchTokenUpdatedEvent,
 };

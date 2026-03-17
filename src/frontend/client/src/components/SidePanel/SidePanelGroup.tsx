@@ -1,10 +1,10 @@
 import { useState, useRef, useCallback, useEffect, useMemo, memo } from 'react';
 import throttle from 'lodash/throttle';
 import { useRecoilValue } from 'recoil';
-import { getConfigDefaults } from '~/data-provider/data-provider/src';
+import { getConfigDefaults } from '~/types/chat';
 import type { ImperativePanelHandle } from 'react-resizable-panels';
 import { ResizableHandleAlt, ResizablePanel, ResizablePanelGroup } from '~/components/ui/Resizable';
-import { useGetStartupConfig } from '~/data-provider';
+import { useGetStartupConfig } from '~/hooks/queries/data-provider';
 import { normalizeLayout } from '~/utils';
 import { useMediaQuery } from '~/hooks';
 import SidePanel from './SidePanel';

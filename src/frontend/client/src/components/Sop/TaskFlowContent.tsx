@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useToastContext } from '~/Providers';
-import { getLinsightFileDownloadApi } from '~/data-provider/data-provider/src/data-service';
+import { getLinsightFileDownloadApi } from '~/api/chat/data-service';
 import { useLocalize } from '~/hooks';
 import { formatStrTime, playDing } from '~/utils';
 import Markdown from '../Chat/Messages/Content/Markdown';

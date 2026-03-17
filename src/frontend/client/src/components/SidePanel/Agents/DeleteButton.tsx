@@ -1,11 +1,11 @@
-import type { Agent, AgentCreateParams } from '~/data-provider/data-provider/src';
+import type { Agent, AgentCreateParams } from '~/types/chat';
 import type { UseMutationResult } from '@tanstack/react-query';
 import { OGDialog, OGDialogTrigger, Label } from '~/components/ui';
 import { useChatContext, useToastContext } from '~/Providers';
 import OGDialogTemplate from '~/components/ui/OGDialogTemplate';
 import { useLocalize, useSetIndexOptions } from '~/hooks';
 import { cn, removeFocusOutlines, logger } from '~/utils';
-import { useDeleteAgentMutation } from '~/data-provider';
+import { useDeleteAgentMutation } from '~/hooks/queries/data-provider';
 import { TrashIcon } from '~/components/svg';
 
 export default function DeleteButton({

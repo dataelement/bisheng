@@ -1,13 +1,13 @@
 import { useRecoilValue } from 'recoil';
 import { useMemo, useCallback, useRef } from 'react';
 import { Content, Portal, Root } from '@radix-ui/react-popover';
-import { EModelEndpoint, isAssistantsEndpoint } from '~/data-provider/data-provider/src';
-import type { TModelSpec, TConversation, TEndpointsConfig } from '~/data-provider/data-provider/src';
+import { EModelEndpoint, isAssistantsEndpoint } from '~/types/chat';
+import type { TModelSpec, TConversation, TEndpointsConfig } from '~/types/chat';
 import type { KeyboardEvent } from 'react';
 import { useChatContext, useAssistantsMapContext } from '~/Providers';
 import { useDefaultConvo, useNewConvo, useLocalize } from '~/hooks';
 import { getConvoSwitchLogic, getModelSpecIconURL } from '~/utils';
-import { useGetEndpointsQuery } from '~/data-provider';
+import { useGetEndpointsQuery } from '~/hooks/queries/data-provider';
 import MenuButton from './MenuButton';
 import ModelSpecs from './ModelSpecs';
 import store from '~/store';

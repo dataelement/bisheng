@@ -8,7 +8,7 @@ import React, { useCallback, useMemo } from 'react';
 import KeepAlive from 'react-activation';
 import { matchPath, NavLink, useLocation, useOutlet } from 'react-router-dom';
 import { useRecoilState } from 'recoil';
-import { useGetBsConfig } from '~/data-provider';
+import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import { useAuthContext, useLocalize } from '~/hooks';
 import store from '~/store';
 import { cn } from '~/utils';

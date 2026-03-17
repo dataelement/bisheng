@@ -1,5 +1,5 @@
-import { ContentTypes, Constants } from '~/data-provider/data-provider/src';
-import type { TMessage, TMessageContentParts } from '~/data-provider/data-provider/src';
+import { ContentTypes, Constants } from '~/types/chat';
+import type { TMessage, TMessageContentParts } from '~/types/chat';
 
 export const getLengthAndLastTenChars = (str?: string): string => {
   if (typeof str !== 'string' || str.length === 0) {

@@ -10,10 +10,10 @@ import {
   isAssistantsEndpoint,
   defaultAssistantsVersion,
   fileConfig as defaultFileConfig,
-} from '~/data-provider/data-provider/src';
-import type { TEndpointsConfig, TError } from '~/data-provider/data-provider/src';
+} from '~/types/chat';
+import type { TEndpointsConfig, TError } from '~/types/chat';
 import type { ExtendedFile, FileSetter } from '~/common';
-import { useUploadFileMutation, useGetFileConfig } from '~/data-provider';
+import { useUploadFileMutation, useGetFileConfig } from '~/hooks/queries/data-provider';
 import useLocalize, { TranslationKeys } from '~/hooks/useLocalize';
 import { useDelayedUploadToast } from './useDelayedUploadToast';
 import { useToastContext } from '~/Providers/ToastContext';

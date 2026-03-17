@@ -6,7 +6,7 @@ import { getFeaturedCases } from '~/api/linsight';
 import AiChatInput from '~/components/Chat/AiChatInput';
 import AiChatMessages from '~/components/Chat/AiChatMessages';
 import { Spinner } from '~/components/svg';
-import { useGetBsConfig } from '~/data-provider';
+import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import useAiChat from '~/hooks/useAiChat';
 import useLocalize from '~/hooks/useLocalize';
 import store from '~/store';

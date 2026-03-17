@@ -1,5 +1,5 @@
-import type { TPreset, TPlugin } from '~/data-provider/data-provider/src';
-import { EModelEndpoint } from '~/data-provider/data-provider/src';
+import type { TPreset, TPlugin } from '~/types/chat';
+import { EModelEndpoint } from '~/types/chat';
 
 type TEndpoints = Array<string | EModelEndpoint>;
 

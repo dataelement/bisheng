@@ -17,7 +17,7 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from "~/components/ui/Tooltip2";
-import { useGetBsConfig } from "~/data-provider";
+import { useGetBsConfig } from "~/hooks/queries/data-provider";
 import store from "~/store";
 import AiChatMessages from "~/components/Chat/AiChatMessages";
 import useAiChat from "~/hooks/useAiChat";

@@ -1,8 +1,8 @@
-import type { Assistant, AssistantCreateParams, AssistantsEndpoint } from '~/data-provider/data-provider/src';
+import type { Assistant, AssistantCreateParams, AssistantsEndpoint } from '~/types/chat';
 import type { UseMutationResult } from '@tanstack/react-query';
 import { Dialog, DialogTrigger, Label } from '~/components/ui';
 import { useChatContext, useToastContext } from '~/Providers';
-import { useDeleteAssistantMutation } from '~/data-provider';
+import { useDeleteAssistantMutation } from '~/hooks/queries/data-provider';
 import DialogTemplate from '~/components/ui/DialogTemplate';
 import { useLocalize, useSetIndexOptions } from '~/hooks';
 import { cn, removeFocusOutlines } from '~/utils/';

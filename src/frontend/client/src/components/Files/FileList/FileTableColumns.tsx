@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/rules-of-hooks */
-import { FileSources, FileContext } from '~/data-provider/data-provider/src';
+import { FileSources, FileContext } from '~/types/chat';
 import type { ColumnDef } from '@tanstack/react-table';
-import type { TFile } from '~/data-provider/data-provider/src';
+import type { TFile } from '~/types/chat';
 import { CrossIcon, DotsIcon } from '~/components/svg';
 import { Button, Checkbox } from '~/components/ui';
 import { formatDate, getFileType } from '~/utils';

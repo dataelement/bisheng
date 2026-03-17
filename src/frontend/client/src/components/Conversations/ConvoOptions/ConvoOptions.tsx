@@ -3,7 +3,7 @@ import * as Menu from '@ariakit/react/menu';
 import { Ellipsis, Share2, Copy, Archive, Pen, Trash } from 'lucide-react';
 import type { MouseEvent } from 'react';
 import type * as t from '~/common';
-import { useDuplicateConversationMutation, useGetStartupConfig } from '~/data-provider';
+import { useDuplicateConversationMutation, useGetStartupConfig } from '~/hooks/queries/data-provider';
 import { useLocalize, useArchiveHandler, useNavigateToConvo } from '~/hooks';
 import { useToastContext, useChatContext } from '~/Providers';
 import { DropdownPopup } from '~/components/ui';

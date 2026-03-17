@@ -1,20 +1,20 @@
 import { useMemo } from 'react';
-import { useGetModelsQuery } from '~/data-provider/data-provider/src/react-query';
+import { useGetModelsQuery } from '~/hooks/queries';
 import {
   alternateName,
   EModelEndpoint,
   isAgentsEndpoint,
   getConfigDefaults,
   isAssistantsEndpoint,
-} from '~/data-provider/data-provider/src';
-import type { TAssistantsMap, TEndpointsConfig } from '~/data-provider/data-provider/src';
+} from '~/types/chat';
+import type { TAssistantsMap, TEndpointsConfig } from '~/types/chat';
 import type { MentionOption } from '~/common';
 import {
   useGetPresetsQuery,
   useGetEndpointsQuery,
   useListAgentsQuery,
   useGetStartupConfig,
-} from '~/data-provider';
+} from '~/hooks/queries/data-provider';
 import useAssistantListMap from '~/hooks/Assistants/useAssistantListMap';
 import { mapEndpoints, getPresetTitle } from '~/utils';
 import { EndpointIcon } from '~/components/Endpoints';

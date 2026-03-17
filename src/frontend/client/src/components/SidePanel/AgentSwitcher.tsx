@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from 'react';
-import { EModelEndpoint, isAgentsEndpoint, LocalStorageKeys } from '~/data-provider/data-provider/src';
-import type { Agent } from '~/data-provider/data-provider/src';
+import { EModelEndpoint, isAgentsEndpoint, LocalStorageKeys } from '~/types/chat';
+import type { Agent } from '~/types/chat';
 import type { SwitcherProps, OptionWithIcon } from '~/common';
 import { useSetIndexOptions, useSelectAgent, useLocalize } from '~/hooks';
 import { useChatContext, useAgentsMapContext } from '~/Providers';
