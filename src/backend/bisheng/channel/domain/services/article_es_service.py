@@ -235,10 +235,12 @@ class ArticleEsService:
                 keyword_queries = []
                 for kw in keywords:
                     keyword_queries.append({
-                        "multi_match": {
-                            "query": kw,
-                            "fields": ["title", "content"],
-                            "type": "best_fields",
+                        "bool": {
+                            "should": [
+                                {"match_phrase": {"title": {"query": kw}}},
+                                {"match_phrase": {"content": {"query": kw}}},
+                            ],
+                            "minimum_should_match": 1,
                         }
                     })
 
@@ -373,10 +375,13 @@ class ArticleEsService:
         # 2. Keyword search (title + content + source ID)
         if keyword:
             must_clauses.append({
-                "multi_match": {
-                    "query": keyword,
-                    "fields": ["title^3", "content", "source_id"],
-                    "type": "best_fields",
+                "bool": {
+                    "should": [
+                        {"match_phrase": {"title": {"query": keyword, "boost": 3}}},
+                        {"match_phrase": {"content": {"query": keyword}}},
+                        {"match_phrase": {"source_id": {"query": keyword}}},
+                    ],
+                    "minimum_should_match": 1,
                 }
             })
 
@@ -394,10 +399,12 @@ class ArticleEsService:
                 keyword_queries = []
                 for kw in keywords:
                     keyword_queries.append({
-                        "multi_match": {
-                            "query": kw,
-                            "fields": ["title", "content"],
-                            "type": "best_fields",
+                        "bool": {
+                            "should": [
+                                {"match_phrase": {"title": {"query": kw}}},
+                                {"match_phrase": {"content": {"query": kw}}},
+                            ],
+                            "minimum_should_match": 1,
                         }
                     })
 
@@ -441,7 +448,7 @@ class ArticleEsService:
         from_offset = (page - 1) * page_size
         body: Dict[str, Any] = {
             "query": query,
-            "sort": [{"update_time": {"order": "desc"}}],
+            "sort": [{"publish_time": {"order": "desc"}}],
             "from": from_offset,
             "size": page_size,
             "_source": {

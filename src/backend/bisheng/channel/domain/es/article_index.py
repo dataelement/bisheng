@@ -25,12 +25,16 @@ ARTICLE_MAPPINGS = {
     },
     "title": {
         "type": "text",
+        "analyzer": "single_char_analyzer",
+        "search_analyzer": "single_char_analyzer",
         "fields": {
-            "keyword": {"type": "keyword", "ignore_above": 256}
+            "keyword": {"type": "keyword", "ignore_above": 512}
         }
     },
     "content": {
         "type": "text",
+        "analyzer": "single_char_analyzer",
+        "search_analyzer": "single_char_analyzer",
     },
     "content_html": {
         "type": "text",
@@ -61,6 +65,28 @@ ARTICLE_MAPPINGS = {
 ARTICLE_SETTINGS = {
     "number_of_shards": 1,
     "number_of_replicas": 0,
+    "analysis": {
+        "tokenizer": {
+            "single_char_tokenizer": {
+                "type": "ngram",
+                "min_gram": 2,
+                "max_gram": 3,
+                "token_chars": [
+                    "letter",
+                    "digit",
+                    "punctuation",
+                    "symbol",
+                    "whitespace"
+                ],
+            }
+        },
+        "analyzer": {
+            "single_char_analyzer": {
+                "type": "custom",
+                "tokenizer": "single_char_tokenizer",
+            }
+        },
+    },
 }
 
 
