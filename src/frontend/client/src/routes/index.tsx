@@ -21,6 +21,7 @@ import Root from './Root';
 import RouteErrorBoundary from './RouteErrorBoundary';
 // import ShareRoute from './ShareRoute';
 import Page404 from '~/pages/Page404';
+import PrototypePage from '~/pages/prototype';
 
 const AuthLayout = () => (
   <AuthContextProvider>
@@ -103,6 +104,10 @@ export const router = createBrowserRouter([
           {
             path: 'linsight/case/:sopId',
             element: <Sop />,
+          },
+          {
+            path: 'prototype',
+            element: <PrototypePage />,
           },
           {
             path: 'apps',

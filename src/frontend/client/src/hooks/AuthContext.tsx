@@ -151,6 +151,15 @@ const AuthContextProvider = ({
     if (userQuery.data) {
       setUser(userQuery.data);
     } else if (userQuery.isError) {
+      // Dev mode: mock user to bypass auth
+      if (import.meta.env.DEV && !isAuthenticated) {
+        setUserContext({
+          token: 'dev-mock-token',
+          isAuthenticated: true,
+          user: { id: 'dev', username: 'dev', email: 'dev@test.com', name: 'Dev User', role: 'admin', avatar: '', provider: 'local', plugins: [], createdAt: '', updatedAt: '' } as any,
+        });
+        return;
+      }
       doSetError((userQuery.error as Error).message);
       // navigate(`/${__APP_ENV__.BISHENG_HOST}`, { replace: true });
     }
