@@ -5,6 +5,8 @@ import i18next from "i18next";
 // 报错的时候是否弹窗
 type ErrorOptions = {
   showError?: boolean;
+  /** When true, the interceptor will NOT auto-redirect on 403. The caller handles it. */
+  skip403Redirect?: boolean;
 };
 
 const customAxios = axios.create({
@@ -97,9 +99,11 @@ const processQueue = (error: AxiosError | null, token: string | null = null) => 
 customAxios.interceptors.response.use(
   (response) => {
     if (response.data.status_code === 403) {
-      // console.log('response :>> ', response);
-      localStorage.setItem('ERROR_REQUEST_PATH', response.config.url || '')
-      location.href = `${__APP_ENV__.BASE_URL}/c/new?error=11403`;
+      // Allow business code to handle 403 when skip403Redirect is set
+      if (!response.config.skip403Redirect) {
+        localStorage.setItem('ERROR_REQUEST_PATH', response.config.url || '')
+        location.href = `${__APP_ENV__.BASE_URL}/c/new?error=11403`;
+      }
       return response
     }
 

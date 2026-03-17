@@ -60,11 +60,12 @@ export function groupConversationsByTime(
 
 /**
  * Build a shareable app URL (no backend call needed).
+ * Format: /share/app_{appId}_{flowType}
  */
-export function getAppShareUrl(appId: string): string {
+export function getAppShareUrl(appId: string, flowType: number | string): string {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- global env constant
   const baseUrl = (window as any).__APP_ENV__?.BASE_URL ?? '';
-  return `${window.location.origin}${baseUrl}/share/app_${appId}`;
+  return `${window.location.origin}${baseUrl}/share/app_${appId}_${flowType}`;
 }
 
 // ---- helpers ----

@@ -1,6 +1,6 @@
 "use client"
 
-import { SettingsIcon } from "lucide-react"
+import { BoltIcon } from "lucide-react"
 import { useEffect, useState } from "react"
 import { useAuthContext, useLocalize } from "~/hooks"
 import MarkLabel from "./MarkLabel"
@@ -61,7 +61,7 @@ export function AgentNavigation({ onCategoryChange, onRefresh }: AgentNavigation
                     setActiveCategory(id);
                 }}
                 className={cn(
-                    "flex items-center justify-center px-[16px] py-[5px] relative rounded-[6px] shrink-0 cursor-pointer transition-all",
+                    "flex items-center justify-center px-[16px] py-1 relative rounded-[6px] shrink-0 cursor-pointer transition-all",
                     isActive
                         ? "backdrop-blur-[4px] bg-[rgba(51,92,255,0.2)] border border-[#335cff] border-solid"
                         : "hover:bg-gray-100 border border-transparent"
@@ -82,14 +82,14 @@ export function AgentNavigation({ onCategoryChange, onRefresh }: AgentNavigation
             {renderTab(-1, "精选")}
             {categories.map((category) => renderTab(category.value, category.label))}
             {renderTab('uncategorized', localize('com_app_uncategorized') || '未分类')}
-            
+
             {/* edit label  */}
             {user?.role === 'admin' && (
                 <button
                     onClick={() => setIsLabelModalOpen(true)}
                     className="flex items-center justify-center p-[6px] relative rounded-[6px] shrink-0 hover:bg-gray-100 transition-colors ml-1"
                 >
-                    <SettingsIcon size={16} className="text-[#666]" />
+                    <BoltIcon size={16} className="text-[#666]" />
                 </button>
             )}
 

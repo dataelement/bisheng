@@ -92,8 +92,11 @@ const processQueue = (error: AxiosError | null, token: string | null = null) => 
 customAxios.interceptors.response.use(
   (response) => {
     if (response.data.status_code === 403) {
-      localStorage.setItem('ERROR_REQUEST_PATH', response.config.url || '')
-      location.href = `${__APP_ENV__.BASE_URL}/c/new?error=11403`;
+      // Allow business code to handle 403 when skip403Redirect is set
+      if (!response.config.skip403Redirect) {
+        localStorage.setItem('ERROR_REQUEST_PATH', response.config.url || '')
+        location.href = `${__APP_ENV__.BASE_URL}/c/new?error=11403`;
+      }
     }
     return response;
   },

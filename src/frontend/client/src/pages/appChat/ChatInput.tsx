@@ -47,7 +47,7 @@ export default function ChatInput({ readOnly, v }) {
     }, [inputDisabled]);
 
     return (
-        <div className="absolute z-10 bottom-0 w-full pt-1 bg-[#fff] dark:bg-[#1B1B1B]">
+        <div className="absolute z-10 px-4 bottom-0 w-full pt-1 bg-[#fff] dark:bg-[#1B1B1B]">
             {/* drag upload overlay */}
             {isDragging && <DragDropOverlay />}
 

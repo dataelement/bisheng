@@ -5,6 +5,7 @@ import { NotificationSeverity } from '~/common';
 import type { AppConversation, ConversationGroup } from '~/@types/app';
 import { getAppConversationsApi } from '~/api/apps';
 import { groupConversationsByTime, getAppShareUrl } from '~/pages/apps/appUtils';
+import { copyText } from '~/utils';
 import { useToastContext } from '~/Providers';
 import {
   appConversationsState,
@@ -78,14 +79,14 @@ export function useAppSidebar() {
   /** Share the current app */
   const shareApp = useCallback(async () => {
     if (!flowId) return;
-    const url = getAppShareUrl(flowId);
+    const url = getAppShareUrl(flowId, flowType || '');
     try {
-      await navigator.clipboard.writeText(url);
+      await copyText(url);
       showToast?.({ message: '已将应用链接复制到剪贴板', severity: NotificationSeverity.SUCCESS });
     } catch {
       showToast?.({ message: '复制失败', severity: NotificationSeverity.ERROR });
     }
-  }, [flowId, showToast]);
+  }, [flowId, flowType, showToast]);
 
   // Auto-fetch on mount or flowId change
   useEffect(() => {

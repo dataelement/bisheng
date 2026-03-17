@@ -1,29 +1,42 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { Loader2 } from "lucide-react"
+import { ArrowLeft, Loader2 } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { getChatOnlineApi, getUncategorized } from "~/api/apps"
 import { ConversationData, QueryKeys } from "~/data-provider/data-provider/src"
 import store from "~/store"
-import { addConversation, cn, generateUUID } from "~/utils"
+import { addConversation, cn, copyText, generateUUID } from "~/utils"
+import { getAppShareUrl } from './appUtils'
 import AppAvator from '~/components/Avator'
 import { AgentNavigation } from './components/AgentNavigation'
 import { AppSearchBar } from './components/AppSearchBar'
 import { useToastContext } from "~/Providers";
+import { Button } from "~/components/ui/Button";
+
+import { Diamond, Play, Sparkle, Cone, Circle, Cuboid } from "lucide-react"
 
 // --- 组件：装饰背景元素 (保持一定视觉效果) ---
 const DecorativeShapes = () => (
     <div className="absolute inset-0 pointer-events-none overflow-hidden flex justify-center">
-        <div className="relative w-[1368px] h-full">
-            <div className="absolute left-[869px] top-[28px] w-[17px] h-[17px] border-2 border-blue-200 rounded-full" />
-            <div className="absolute flex items-center justify-center left-[471px] top-[72px] rotate-[128deg]">
-                <div className="w-[18px] h-[18px] border-2 border-[#d0ddff] rounded-sm" />
+        {/* 取消固定 1368px 宽度，让其直接在全宽容器中基于百分比/相对位置布局 */}
+        <div className="relative w-full max-w-[1400px] h-full">
+            <div className="absolute left-[65%] top-[25px] rotate-12 text-blue-200">
+                <Circle size={20} className="opacity-80" />
             </div>
-            <div className="absolute flex items-center justify-center left-[445px] top-[25px] rotate-[-30deg]">
-                <div className="border-2 border-[#d0ddff] w-[16px] h-[16px]" />
+            <div className="absolute left-[35%] top-[70px] text-[#d0ddff]">
+                <Cuboid size={24} className="opacity-80" />
             </div>
-            <div className="absolute left-[944px] top-[45px] rotate-[26deg]">
-                <div className="w-[20px] h-[10px] border-t-2 border-l-2 border-[#d0ddff]" />
+            <div className="absolute left-[32%] top-[20px] rotate-[-20deg] text-[#d0ddff]">
+                <Diamond size={20} className="fill-[#d0ddff] opacity-80" />
+            </div>
+            <div className="absolute left-[70%] top-[60px] rotate-[20deg] text-[#335cff]">
+                <Sparkle size={18} className="fill-[#335cff] opacity-40" />
+            </div>
+            <div className="absolute left-[26%] top-[40px] rotate-[-15deg] text-blue-300">
+                <Play size={18} className="opacity-60" />
+            </div>
+            <div className="absolute left-[75%] top-[30px] rotate-[10deg] text-[#d0ddff]">
+                <Cone size={22} className="opacity-80" />
             </div>
         </div>
     </div>
@@ -41,7 +54,12 @@ const ExploreCard = ({ agent, onClick, onShare }: { agent: any, onClick: (agent:
             )}
         >
             {/* 左侧图标 */}
-            <AppAvator url={agent.logo} id={agent.id as any} flowType={String(agent.flow_type || agent.type)} className="size-[48px] min-w-[48px] shrink-0 rounded-[4px]" />
+            <AppAvator
+                url={agent.logo} id={agent.id as any}
+                flowType={String(agent.flow_type || agent.type)}
+                className="size-[48px] min-w-[48px] min-h-[48px] shrink-0 rounded-[4px]"
+                iconClassName="w-6 h-6"
+            />
 
             {/* 右侧内容 */}
             <div className="flex flex-[1_0_0] flex-col h-full items-start min-w-px relative">
@@ -50,7 +68,7 @@ const ExploreCard = ({ agent, onClick, onShare }: { agent: any, onClick: (agent:
                 </p>
 
                 {/* 描述区域：平时显示，hover时隐藏 */}
-                <p className="flex-[1_0_0] font-['PingFang_SC'] leading-[19.5px] text-[12px] text-[#a9aeb8] w-full line-clamp-2 break-words group-hover:hidden whitespace-normal mt-[2px]">
+                <p className="flex-[1_0_0] font-['PingFang_SC'] leading-5 text-[12px] text-[#a9aeb8] w-full line-clamp-2 break-words group-hover:hidden whitespace-normal mt-[2px]">
                     {agent.description || agent.desc || "暂无描述内容..."}
                 </p>
 
@@ -98,7 +116,7 @@ export default function ExplorePlaza() {
         setLoading(true);
         try {
             const result = categoryId === 'uncategorized'
-                ? await getUncategorized(currentPage, pageSize)
+                ? await getUncategorized(currentPage, pageSize, query)
                 : await getChatOnlineApi(currentPage, query, categoryId === -1 ? undefined : (categoryId as number), pageSize);
 
             const pageData = (result as any).data || [];
@@ -176,21 +194,33 @@ export default function ExplorePlaza() {
         navigate(`/chat/${_chatId}/${flowId}/${flowType}`);
     }
 
-    const handleShare = (agent: any) => {
-        const shareUrl = `${__APP_ENV__.BASE_URL}/share/app_${agent.id}`;
-        navigator.clipboard.writeText(shareUrl).then(() => {
+    const handleShare = async (agent: any) => {
+        const shareUrl = getAppShareUrl(agent.id, agent.flow_type || agent.type);
+        try {
+            await copyText(shareUrl);
             showToast?.({ message: '应用链接已复制到剪贴板', severity: 'success' });
-        }).catch(() => {
+        } catch {
             showToast?.({ message: '复制应用链接失败', severity: 'error' });
-        });
+        }
     }
 
     return (
         <div className="h-screen bg-white pb-20 overflow-auto flex flex-col items-center">
-            {/* 顶部标题栏 & 过滤栏 (按 Figma 布局) */}
+            {/* 顶部标题栏 */}
             <div className="w-full bg-[#fafcff] flex flex-col items-center justify-center py-[32px] overflow-hidden relative shrink-0">
+                {/* 返回按钮：固定在头部左上 */}
+                <div className="absolute left-4 top-4 z-[20]">
+                    <Button
+                        variant="ghost"
+                        onClick={() => navigate('/apps')}
+                        className="h-7 w-7 p-0 rounded-md border border-[#E5E6EB] bg-white text-[#4E5969] hover:bg-[#F7F8FA] hover:text-[#335cff]"
+                    >
+                        <ArrowLeft className="size-3.5" />
+                    </Button>
+                </div>
+
                 <DecorativeShapes />
-                <div className="flex flex-col items-center gap-[4px] max-w-[1000px] text-center z-10 w-full mb-[32px] px-6">
+                <div className="flex flex-col items-center gap-[4px] max-w-[1000px] text-center z-10 w-full px-6">
                     <h1 className="font-['PingFang_SC'] font-semibold leading-[32px] text-[#335cff] text-[24px]">
                         探索BISHENG的智能体
                     </h1>
@@ -198,14 +228,16 @@ export default function ExplorePlaza() {
                         您可以在这里选择需要的智能体来进行生产与工作~
                     </p>
                 </div>
-                <div className="w-full max-w-[1000px] flex items-center justify-between z-10 px-6 xl:px-0">
-                    <AgentNavigation onCategoryChange={setActiveTabId} onRefresh={() => setRefreshTrigger(prev => prev + 1)} />
-                    <AppSearchBar query={searchQuery} onSearch={setSearchQuery} />
-                </div>
+            </div>
+
+            {/* 过滤栏 */}
+            <div className="w-full max-w-[1000px] flex items-center justify-between z-10 px-6 xl:px-0 py-6">
+                <AgentNavigation onCategoryChange={setActiveTabId} onRefresh={() => setRefreshTrigger(prev => prev + 1)} />
+                <AppSearchBar query={searchQuery} onSearch={setSearchQuery} />
             </div>
 
             {/* 智能体网格 */}
-            <main className="w-full max-w-[1000px] px-6 xl:px-0 mt-[14px]">
+            <main className="w-full max-w-[1000px] px-6 xl:px-0">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-[12px]">
                     {agents.map((agent, idx) => (
                         <ExploreCard key={`${agent.id}-${idx}`} agent={agent} onClick={handleCardClick} onShare={handleShare} />

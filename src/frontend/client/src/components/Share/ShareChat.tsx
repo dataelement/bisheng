@@ -1,4 +1,4 @@
-import { Share2Icon } from "lucide-react";
+import { ExternalLinkIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useToastContext } from "~/Providers";
 import { getShareLinkApi } from "~/api";
@@ -49,9 +49,8 @@ export default function ShareChat({ type, chatId, flowId, versionId }: ShareDial
     }, [isOpen])
 
     return <div>
-        <Button variant="outline" className="h-7 px-3 text-xs" onClick={() => setIsOpen(true)}>
-            <Share2Icon size={16} />
-            {localize('com_ui_share')}
+        <Button variant="ghost" className="h-[28px] w-[28px] p-0 text-[#212121] hover:bg-gray-100" onClick={() => setIsOpen(true)}>
+            <ExternalLinkIcon size={16} />
         </Button>
 
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
