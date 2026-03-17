@@ -80,10 +80,21 @@
         "model_type": "llm"
     }],
     "minimax": [{
-        "name": "model 1",
-        "model_name": "MiniMax-Text-01",
-        "model_type": "llm"
-    }],
+            "name": "model 1",
+            "model_name": "MiniMax-M2.5",
+            "model_type": "llm"
+        },
+        {
+            "name": "model 2",
+            "model_name": "MiniMax-M2.5-highspeed",
+            "model_type": "llm"
+        },
+        {
+            "name": "model 3",
+            "model_name": "MiniMax-Text-01",
+            "model_type": "llm"
+        }
+    ],
     "volcengine": [{
             "name": "model 1",
             "model_name": "deepseek-v3",
