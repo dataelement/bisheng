@@ -28,13 +28,17 @@ ARTICLE_MAPPINGS = {
         "analyzer": "single_char_analyzer",
         "search_analyzer": "single_char_analyzer",
         "fields": {
-            "keyword": {"type": "keyword", "ignore_above": 512}
+            "keyword": {"type": "keyword", "ignore_above": 256}
         }
     },
     "content": {
         "type": "text",
         "analyzer": "single_char_analyzer",
-        "search_analyzer": "single_char_analyzer",
+        "search_analyzer": "single_char_analyzer"
+    },
+    "content_preview": {
+        "type": "keyword",
+        "ignore_above": 256,
     },
     "content_html": {
         "type": "text",

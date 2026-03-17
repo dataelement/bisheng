@@ -26,6 +26,8 @@ logger = logging.getLogger(__name__)
 class ArticleEsService:
     """Article ES Service, encapsulates all operations on channel_articles index"""
 
+    CONTENT_PREVIEW_MAX_LENGTH = 256
+
     def __init__(self):
         self._es_client: Optional[AsyncElasticsearch] = None
 
@@ -46,6 +48,20 @@ class ArticleEsService:
         client = get_es_connection_sync()
         ensure_article_index_exists_sync(client)
 
+    @classmethod
+    def _build_content_preview(cls, content: Optional[str]) -> str:
+        """Build a truncated content preview for search list responses."""
+        if not content:
+            return ""
+        return content[:cls.CONTENT_PREVIEW_MAX_LENGTH]
+
+    @classmethod
+    def _build_article_body(cls, article: ArticleDocument) -> Dict[str, Any]:
+        """Serialize article and ensure preview field is populated."""
+        body = article.model_dump(mode='json')
+        body["content_preview"] = cls._build_content_preview(body.get("content"))
+        return body
+
     # ──────────────────────────────────────────
     #  Create
     # ──────────────────────────────────────────
@@ -62,7 +78,7 @@ class ArticleEsService:
             Document ID
         """
         client = await self._get_client()
-        body = article.model_dump(mode='json')
+        body = self._build_article_body(article)
 
         kwargs: Dict[str, Any] = {
             "index": ARTICLE_INDEX_NAME,
@@ -94,7 +110,7 @@ class ArticleEsService:
         for i, article in enumerate(articles):
             action = {
                 "_index": ARTICLE_INDEX_NAME,
-                "_source": article.model_dump(mode='json'),
+                "_source": self._build_article_body(article),
             }
             if doc_ids and i < len(doc_ids) and doc_ids[i]:
                 action["_id"] = doc_ids[i]
@@ -116,7 +132,7 @@ class ArticleEsService:
         for i, article in enumerate(articles):
             action = {
                 "_index": ARTICLE_INDEX_NAME,
-                "_source": article.model_dump(mode='json'),
+                "_source": ArticleEsService._build_article_body(article),
             }
             if doc_ids and i < len(doc_ids) and doc_ids[i]:
                 action["_id"] = doc_ids[i]
@@ -166,6 +182,9 @@ class ArticleEsService:
         """
         client = await self._get_client()
         try:
+            updates = dict(updates)
+            if "content" in updates:
+                updates["content_preview"] = self._build_content_preview(updates.get("content"))
             await client.update(
                 index=ARTICLE_INDEX_NAME,
                 id=doc_id,
@@ -451,9 +470,17 @@ class ArticleEsService:
             "sort": [{"publish_time": {"order": "desc"}}],
             "from": from_offset,
             "size": page_size,
-            "_source": {
-                "excludes": ["content_html"]  # Exclude content_html field by default to reduce network transfer and parsing overhead
-             }
+            "_source": [
+                "source_type",
+                "source_id",
+                "title",
+                "content_preview",
+                "cover_image",
+                "publish_time",
+                "source_url",
+                "create_time",
+                "update_time",
+            ],
         }
         if highlight_config:
             body["highlight"] = highlight_config
@@ -470,8 +497,9 @@ class ArticleEsService:
 
         items = []
         for hit in response["hits"]["hits"]:
-            source = hit["_source"]
+            source = dict(hit["_source"])
             highlight = hit.get("highlight")
+            source["content"] = source.pop("content_preview", "")
 
             item = ArticleSearchResultItem(
                 doc_id=hit["_id"],

@@ -13,6 +13,7 @@ class ArticleDocument(BaseModel):
     source_id: str = Field(..., description='Source unique identifier')
     title: str = Field(..., description='Article title')
     content: str = Field(default='', description='Plain text content')
+    content_preview: str = Field(default='', description='Truncated plain text content for search list')
     content_html: str = Field(default='', description='Article HTML content')
     cover_image: Optional[str] = Field(None, description='Article cover image URL')
     publish_time: Optional[datetime] = Field(None, description='Publish time')
