@@ -191,7 +191,7 @@ export function CrawlPreviewDialog({
             <DialogContent className="w-[600px] max-w-[600px] flex flex-col bg-white text-[14px]">
                 <DialogHeader>
                     <DialogTitle className="text-[16px] font-medium">
-                        {localize("confirm_crawled_content")}
+                        {localize("com_subscription.confirm_crawled_content")}
                     </DialogTitle>
                 </DialogHeader>
 
@@ -213,7 +213,7 @@ export function CrawlPreviewDialog({
                                 className="w-[100px] h-[100px]"
                             />
                             <p className="text-[14px] text-[#4E5969]">
-                                {localize("crawling_waiting") || localize("com_subscription.crawling_please_wait")}
+                                {localize("com_subscription.crawling_waiting") || localize("com_subscription.crawling_please_wait")}
                             </p>
                         </div>
                     )}
@@ -245,7 +245,7 @@ export function CrawlPreviewDialog({
                             {previewData.articles && previewData.articles.length > 0 && (
                                 <div>
                                     <p className="text-[12px] mb-2">
-                                        {localize("parsed_articles")}
+                                        {localize("com_subscription.parsed_articles")}
                                     </p>
                                     <div className="max-h-[200px] overflow-y-auto space-y-2">
                                         {previewData.articles.map((a, i) => (
@@ -328,7 +328,7 @@ export function CrawlPreviewDialog({
                                 className="bg-[#165DFF] ml-2 hover:bg-[#4080FF] text-white disabled:opacity-50 flex items-center gap-2"
                             >
                                 {adding && <Loader2 className="size-4 animate-spin" />}
-                                {localize("add_source")}
+                                {localize("com_subscription.add_source")}
                             </Button>
                         </div>
 

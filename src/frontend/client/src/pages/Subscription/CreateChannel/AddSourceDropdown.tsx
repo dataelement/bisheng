@@ -148,7 +148,7 @@ export function AddSourceDropdown({
                                         mgr.setSearchKeyword(inputValue.trim());
                                     }
                                 }}
-                                placeholder={localize("enter_official_account")}
+                                placeholder={localize("com_subscription.enter_official_account")}
                                 className="pl-9 pr-9 h-10 text-[14px] border-none bg-white w-full  rounded-none"
                                 autoFocus
                             />
@@ -179,7 +179,7 @@ export function AddSourceDropdown({
                                         : "text-[#86909C] border-transparent"
                                 )}
                             >
-                                {localize("official_account")}
+                                {localize("com_subscription.official_account")}
                             </button>
                             <button
                                 type="button"
@@ -191,7 +191,7 @@ export function AddSourceDropdown({
                                         : "text-[#86909C] border-transparent"
                                 )}
                             >
-                                {localize("website")}
+                                {localize("com_subscription.website")}
                             </button>
                         </div>
                     )}
@@ -211,7 +211,7 @@ export function AddSourceDropdown({
                                     />
                                 </div>
                                 <p className="text-[14px] leading-6 text-[#4E5969]">
-                                    {localize("no_source_collected") ||
+                                    {localize("com_subscription.no_source_collected") ||
                                         localize("com_subscription.source_not_indexed_try_full_url")}
                                 </p>
                             </div>
@@ -222,7 +222,7 @@ export function AddSourceDropdown({
                                     <FileText className="size-8 text-[#165DFF]" strokeWidth={1.6} />
                                 </div>
                                 <p className="text-[14px] text-[#4E5969] mb-5">
-                                    {localize("website_not_indexed") || localize("com_subscription.website_not_in_database_crawl")}
+                                    {localize("com_subscription.website_not_indexed") || localize("com_subscription.website_not_in_database_crawl")}
                                 </p>
                                 <div className="flex gap-3 justify-center">
                                     <Button
@@ -230,7 +230,7 @@ export function AddSourceDropdown({
                                         onClick={mgr.handleClearSearch}
                                         className="h-9 min-w-[74px] border border-[#E5E6EB] bg-white text-[#4E5969]"
                                     >
-                                        {localize("do_not_crawl")}
+                                        {localize("com_subscription.do_not_crawl")}
                                     </Button>
                                     <Button
                                         onClick={() => {
@@ -238,7 +238,7 @@ export function AddSourceDropdown({
                                         }}
                                         className="h-9 min-w-[74px] bg-[#165DFF] hover:bg-[#4080FF]"
                                     >
-                                        {localize("confirm_crawl") || localize("com_subscription.confirm_crawl")}
+                                        {localize("com_subscription.confirm_crawl")}
                                     </Button>
                                 </div>
                             </div>
@@ -253,14 +253,14 @@ export function AddSourceDropdown({
                                     />
                                 </div>
                                 <p className="text-[14px] text-[#4E5969] mb-5">
-                                    {localize("detect_wechat_link") || localize("com_subscription.official_account_link_detected_adding")}
+                                    {localize("com_subscription.detect_wechat_link") || localize("com_subscription.official_account_link_detected_adding")}
                                 </p>
                                 <Button
                                     variant="secondary"
                                     onClick={mgr.handleClearSearch}
                                     className="h-9 min-w-[84px] border border-[#E5E6EB] bg-white text-[#4E5969]"
                                 >
-                                    {localize("do_not_add")}
+                                    {localize("com_subscription.do_not_add")}
                                 </Button>
                             </div>
                         )}
@@ -367,7 +367,7 @@ export function AddSourceDropdown({
                                     disabled={mgr.pendingSources.length === 0}
                                     className="bg-[#165DFF] disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
-                                    {localize("confirm_add") || localize("com_subscription.confirm_add")}
+                                    {localize("com_subscription.confirm_add")}
                                 </Button>
                             </div>
                         </div>

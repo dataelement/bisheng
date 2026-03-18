@@ -133,7 +133,7 @@ export function ChannelSidebar({
                 </div>
                 <div className="flex items-center gap-3">
                     <Button variant="secondary" onClick={onCreateChannel} className="flex-1 h-8 text-[13px] bg-[#F2F3F5] hover:bg-[#E5E6EB] border-none gap-1">
-                        <Plus className="size-4" />创建
+                        <Plus className="size-4" />{localize("com_subscription.create")}
                     </Button>
                     <Button variant="secondary" onClick={onChannelSquare} className="flex-1 h-8 text-[13px] bg-[#F2F3F5] hover:bg-[#E5E6EB] border-none gap-1">
                         <LayoutGridIcon className="size-4" />{localize("com_subscription.go_to_square")}</Button>

@@ -18,10 +18,10 @@ export function validateCreateChannelForm(
     localize: (key: string) => string
 ): string | null {
     if (data.sources.length < 1) {
-        return localize("need_one_source") || localize("com_subscription.at_least_one_source");
+        return localize("com_subscription.need_one_source") || localize("com_subscription.at_least_one_source");
     }
     if (!data.channelName.trim()) {
-        return localize("cannot_empty_channel_name");
+        return localize("com_subscription.cannot_empty_channel_name");
     }
     if (data.contentFilter) {
         const err = validateFilterGroups(data.filterGroups, localize);
@@ -30,10 +30,10 @@ export function validateCreateChannelForm(
     if (data.createSubChannel) {
         for (const sub of data.subChannels) {
             if (!sub.name.trim()) {
-                return localize("cannot_subchannel_name");
+                return localize("com_subscription.cannot_subchannel_name");
             }
             const err = validateFilterGroups(sub.groups, localize);
-            if (err) return localize("cannot_filter_criteria");
+            if (err) return localize("com_subscription.cannot_filter_criteria");
         }
     }
     return null;
