@@ -81,8 +81,6 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onNavigate
         staleTime: 30_000,
     });
 
-    console.log('channelDetail :>> ', channelDetail, articlesData);
-
     const articles = (articlesData?.data || []).map(item => mapToArticle(item, channelId || ""));
     const isLoading = isDetailLoading || isArticlesLoading;
 
@@ -123,21 +121,35 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onNavigate
 
     // Button config based on visibility and subscribe status
     const getButtonConfig = (detail?: ChannelDetailResponse) => {
-        if (subscribeStatus === "subscribed") {
+        if (detail?.subscription_status === "subscribed") {
             return { text: "已订阅", disabled: true, variant: "secondary" as const };
         }
-        if (subscribeStatus === "pending") {
+        if (detail?.subscription_status === "pending") {
             return { text: "申请中", disabled: true, variant: "secondary" as const };
         }
-        if (detail?.visibility === "review") {
-            return { text: "申请订阅", disabled: false, variant: "outline" as const };
+        if (detail?.subscription_status === "review") {
+            return { text: "订阅", disabled: false, variant: "outline" as const };
         }
         return { text: "订阅", disabled: false, variant: "outline" as const };
     };
 
     const btnConfig = getButtonConfig(channelDetail);
-    // Hide articles when channel requires review and user hasn't subscribed yet
-    const hideArticles = channelDetail?.visibility === "review" && subscribeStatus !== "subscribed";
+    const isCreatorView =
+        Boolean(user?.username) && Boolean(channelDetail?.creator_name) && user?.username === channelDetail?.creator_name;
+
+    const effectiveSubscribeStatus: SubscribeStatus = (() => {
+        // 优先使用本地交互态（点击订阅后的即时反馈），否则使用详情接口状态
+        if (subscribeStatus !== "none") return subscribeStatus;
+        if (channelDetail?.subscription_status === "subscribed") return "subscribed";
+        if (channelDetail?.subscription_status === "pending") return "pending";
+        return "none";
+    })();
+
+    // 需审核频道：非创建者且未订阅/未通过时才隐藏文章列表；创建者需可查看文章
+    const hideArticles =
+        channelDetail?.visibility === "review" &&
+        !isCreatorView &&
+        effectiveSubscribeStatus !== "subscribed";
 
     // Handle error — channel not found or inaccessible (must be in useEffect to avoid side-effects during render)
     useEffect(() => {

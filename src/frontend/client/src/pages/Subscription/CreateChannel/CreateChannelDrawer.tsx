@@ -474,11 +474,7 @@ export function CreateChannelDrawer({
                                                     form.handleSubChannelToggleCollapse(sub.id)
                                                 }
                                                 onGroupsChange={(groups) =>
-                                                    form.setSubChannels((prev) =>
-                                                        prev.map((s) =>
-                                                            s.id === sub.id ? { ...s, groups } : s
-                                                        )
-                                                    )
+                                                    form.handleSubChannelGroupsChange(sub.id, groups)
                                                 }
                                                 onTopRelationChange={(topRelation) =>
                                                     form.setSubChannels((prev) =>

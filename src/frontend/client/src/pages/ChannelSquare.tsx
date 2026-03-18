@@ -55,7 +55,7 @@ export default function ChannelSquare({
   const tTitle = title || localize("explore_channel_plaza");
   const tSubtitle = subtitle || localize("explore_more_channel");
   const tSearchPlaceholder = searchPlaceholder || localize("enter_channel_search");
-  const tEmptyText = emptyText || localize("nofound_matching_channel");
+  const tEmptyText = emptyText || "无相关内容，请重新搜索";
   const tJoinPrefix = joinToastPrefix || localize("applied_join_channel");
 
   const handleJoinChannel = (channelId: string, channelTitle: string) => {
@@ -157,10 +157,14 @@ export default function ChannelSquare({
               articleCount: Number(item.article_count ?? item.articleCount ?? 0),
               subscriberCount: Number(item.subscriber_count ?? item.subscriberCount ?? 0),
               visibility: item.visibility as "public" | "private" | "review" | undefined,
-              status:
-                (item.subscription_status === "subscribed"
-                  ? "joined"
-                  : (item.status as SquareStatus)) || "join",
+              status: (() => {
+                const subStatus = String(item.subscription_status ?? "");
+                // 后端约定：not_subscribed=订阅，subscribed=已订阅，pending=申请中
+                if (subStatus === "subscribed") return "joined";
+                if (subStatus === "pending") return "pending";
+                if (subStatus === "not_subscribed") return "join";
+                return (item.status as SquareStatus) || "join";
+              })(),
               isHighlighted: Boolean(item.isHighlighted ?? item.highlight)
             } as SquareChannel;
           })
@@ -283,7 +287,11 @@ export default function ChannelSquare({
 
           {channelRows.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 text-[#86909c]">
-              <Search className="size-12 mb-3 opacity-40" />
+              <img
+                className="size-[120px] mb-3 object-contain opacity-90"
+                src={`${__APP_ENV__.BASE_URL}/assets/channel/empty.png`}
+                alt="empty"
+              />
               <p className="text-[14px] text-[#86909C]">{tEmptyText}</p>
             </div>
           ) : (

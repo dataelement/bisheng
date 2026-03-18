@@ -40,7 +40,7 @@ function nanoid() {
 
 /** 中文分号转英文分号并规范化空白 */
 export function normalizeKeywords(raw: string): string {
-    return raw.replace(/；/g, ";").replace(/\s*;\s*/g, ";").replace(/^;|;$/g, "");
+    return raw.replace(/；/g, ";").replace(/\s*;\s*/g, ";");
 }
 
 export function countTotalConditions(groups: FilterGroup[]): number {

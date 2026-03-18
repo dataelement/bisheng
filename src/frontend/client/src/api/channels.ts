@@ -119,6 +119,7 @@ export interface ChannelDetailResponse {
     create_time?: string;
     creator_name: string;
     subscriber_count: number;
+    subscription_status:string;
     article_count: number;
     filter_rules?: Array<{
         rules: Array<{ rule_type: string; keywords: string[]; relation: string }>;

@@ -146,7 +146,7 @@ export default function ChannelItem({
                                 <span className="text-[14px] text-[#1d2129]">频道设置</span>
                             </DropdownMenuItem>
                         )}
-                        {(type === "created" || channel.role === ChannelRole.ADMIN) && (
+                        {channel.role === ChannelRole.CREATOR && (
                             <DropdownMenuItem
                                 className="py-2 px-0 cursor-pointer focus:bg-[#f2f3f5]"
                                 onClick={() => onManageMembers(channel)}
