@@ -33,7 +33,6 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.channel import (
     ChannelNotFoundError,
     ChannelAccessDeniedError,
-    ChannelAlreadySubscribedError,
     ChannelPermissionDeniedError,
     ChannelCreateLimitExceededError,
     ChannelAdminLimitExceededError,
@@ -611,7 +610,6 @@ class ChannelService:
             raise ChannelNotFoundError()
         channel = channels[0]
 
-
         # 2. Check if the user has reached the maximum limit for subscribing channels
         # Count subscribed channels (MEMBER and ADMIN roles, including pending status)
         subscribed_channels = await self.space_channel_member_repository.find_channel_memberships(
@@ -642,7 +640,6 @@ class ChannelService:
             return_status = SubscriptionStatusEnum.PENDING
         else:
             raise ValueError(f"Unsupported channel visibility: {channel.visibility}")
-
 
         existing_membership = await self.space_channel_member_repository.find_membership(
             business_id=req.channel_id,
@@ -801,7 +798,8 @@ class ChannelService:
                     await self.channel_info_source_repository.batch_add(new_channel_info_sources)
                     for one in new_channel_info_sources:
                         # Sync articles for the new information source one hour later
-                        sync_information_article.apply_async(args=(one.id,), countdown=3600)
+                        exec_time = datetime.now() + timedelta(hours=1)
+                        sync_information_article.apply_async(args=(one.id,), eta=exec_time)
 
         return channel
 
