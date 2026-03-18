@@ -42,7 +42,6 @@ def get_yesterday_date_range(mid_table: BaseMidTable, start_date: str = None, en
 
 def convert_flow_type(flow_type: int) -> ApplicationTypeEnum:
     flow_type_mapping = {
-        FlowType.FLOW.value: ApplicationTypeEnum.SKILL,
         FlowType.ASSISTANT.value: ApplicationTypeEnum.ASSISTANT,
         FlowType.WORKFLOW.value: ApplicationTypeEnum.WORKFLOW,
     }

@@ -12,8 +12,6 @@ class ApplicationTypeEnum(str, Enum):
 
     # Workflow Apps
     WORKFLOW = "workflow"
-    # Skill application
-    SKILL = "skill"
     # Assistant App
     ASSISTANT = "assistant"
     # Inspiration App

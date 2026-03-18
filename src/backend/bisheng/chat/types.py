@@ -3,8 +3,6 @@ from enum import Enum
 
 # clientBusiness Type
 class WorkType(Enum):
-    # Skills Conversation Business
-    FLOW = 'flow'
     # Assistant Conversation Business
     GPTS = 'assistant'
     # workflow in terms of business,

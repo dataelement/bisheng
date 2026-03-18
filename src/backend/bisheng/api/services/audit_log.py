@@ -124,17 +124,6 @@ class AuditLogService:
                       assistant_id, assistant_info.name, ResourceTypeEnum.ASSISTANT)
 
     @classmethod
-    def create_chat_flow(cls, user: UserPayload, ip_address: str, flow_id: str, flow_info=None):
-        """
-        New Skill Session Audit Log
-        """
-        logger.info(f"act=create_chat_flow user={user.user_name} ip={ip_address} flow={flow_id}")
-        if not flow_info:
-            flow_info = FlowDao.get_flow_by_id(flow_id)
-        cls._chat_log(user, ip_address, EventType.CREATE_CHAT, ObjectType.FLOW,
-                      flow_id, flow_info.name, ResourceTypeEnum.FLOW)
-
-    @classmethod
     def create_chat_workflow(cls, user: UserPayload, ip_address: str, flow_id: str, flow_info=None):
         """
         New Workflow Session Audit Log
@@ -146,18 +135,9 @@ class AuditLogService:
                       flow_id, flow_info.name, ResourceTypeEnum.WORK_FLOW)
 
     @classmethod
-    async def delete_chat_flow(cls, user: UserPayload, ip_address: str, flow_info: Flow):
-        """
-        Delete Audit Log for Skill Session
-        """
-        logger.info(f"act=delete_chat_flow user={user.user_name} ip={ip_address} flow={flow_info.id}")
-        await cls._chat_log_async(user, ip_address, EventType.DELETE_CHAT, ObjectType.FLOW,
-                                  flow_info.id, flow_info.name, ResourceTypeEnum.FLOW)
-
-    @classmethod
     async def delete_chat_workflow(cls, user: UserPayload, ip_address: str, flow_info: Flow):
         """
-        Delete Audit Log for Skill Session
+        Delete Audit Log for Workflow Session
         """
         logger.info(f"act=delete_chat_workflow user={user.user_name} ip={ip_address} flow={flow_info.id}")
         await cls._chat_log_async(user, ip_address, EventType.DELETE_CHAT, ObjectType.WORK_FLOW,
@@ -223,48 +203,33 @@ class AuditLogService:
         await AuditLogDao.ainsert_audit_logs([audit_log])
 
     @classmethod
-    def create_build_flow(cls, user: UserPayload, ip_address: str, flow_id: str, flow_type: Optional[int] = None):
+    def create_build_workflow(cls, user: UserPayload, ip_address: str, flow_id: str):
         """
-        New Skill Audit Log
+        New Workflow Audit Log
         """
-        obj_type = ObjectType.FLOW
-        rs_type = ResourceTypeEnum.FLOW
-        if flow_type == FlowType.WORKFLOW.value:
-            obj_type = ObjectType.WORK_FLOW
-            rs_type = ResourceTypeEnum.WORK_FLOW
-        logger.info(f"act=create_build_flow user={user.user_name} ip={ip_address} flow={flow_id}")
+        logger.info(f"act=create_build_workflow user={user.user_name} ip={ip_address} flow={flow_id}")
         flow_info = FlowDao.get_flow_by_id(flow_id)
-        cls._build_log(user, ip_address, EventType.CREATE_BUILD, obj_type,
-                       flow_info.id, flow_info.name, rs_type)
+        cls._build_log(user, ip_address, EventType.CREATE_BUILD, ObjectType.WORK_FLOW,
+                       flow_info.id, flow_info.name, ResourceTypeEnum.WORK_FLOW)
 
     @classmethod
-    async def update_build_flow(cls, user: UserPayload, ip_address: str, flow_id: str, flow_type: Optional[int] = None):
+    async def update_build_workflow(cls, user: UserPayload, ip_address: str, flow_id: str):
         """
-        Update Skill Audit Log
+        Update Workflow Audit Log
         """
-        obj_type = ObjectType.FLOW
-        rs_type = ResourceTypeEnum.FLOW
-        if flow_type == FlowType.WORKFLOW.value:
-            obj_type = ObjectType.WORK_FLOW
-            rs_type = ResourceTypeEnum.WORK_FLOW
-        logger.info(f"act=update_build_flow user={user.user_name} ip={ip_address} flow={flow_id}")
+        logger.info(f"act=update_build_workflow user={user.user_name} ip={ip_address} flow={flow_id}")
         flow_info = await FlowDao.aget_flow_by_id(flow_id)
-        await cls._build_log_async(user, ip_address, EventType.UPDATE_BUILD, obj_type, flow_info.id, flow_info.name,
-                                   rs_type)
+        await cls._build_log_async(user, ip_address, EventType.UPDATE_BUILD, ObjectType.WORK_FLOW, flow_info.id,
+                                   flow_info.name, ResourceTypeEnum.WORK_FLOW)
 
     @classmethod
-    def delete_build_flow(cls, user: UserPayload, ip_address: str, flow_info: Flow, flow_type: Optional[int] = None):
+    def delete_build_workflow(cls, user: UserPayload, ip_address: str, flow_info: Flow):
         """
-        Delete Skill Audit Log
+        Delete Workflow Audit Log
         """
-        obj_type = ObjectType.FLOW
-        rs_type = ResourceTypeEnum.FLOW
-        if flow_type == FlowType.WORKFLOW.value:
-            obj_type = ObjectType.WORK_FLOW
-            rs_type = ResourceTypeEnum.WORK_FLOW
-        logger.info(f"act=delete_build_flow user={user.user_name} ip={ip_address} flow={flow_info.id}")
-        cls._build_log(user, ip_address, EventType.DELETE_BUILD, obj_type,
-                       flow_info.id, flow_info.name, rs_type)
+        logger.info(f"act=delete_build_workflow user={user.user_name} ip={ip_address} flow={flow_info.id}")
+        cls._build_log(user, ip_address, EventType.DELETE_BUILD, ObjectType.WORK_FLOW,
+                       flow_info.id, flow_info.name, ResourceTypeEnum.WORK_FLOW)
 
     @classmethod
     def create_build_assistant(cls, user: UserPayload, ip_address: str, assistant_id: str):
@@ -552,7 +517,7 @@ class AuditLogService:
 
     @classmethod
     async def get_filter_flow_ids(cls, user: UserPayload, flow_ids: List[str], group_ids: List[int]) -> (bool, List):
-        """ Setujuflow_idsAndgroup_idsGet the final SkillidFilters false: Show Back to Empty List"""
+        """Filter workflow, assistant and workstation ids by visible groups."""
         flow_ids = [one for one in flow_ids]
         group_admins = []
         if not user.is_admin():
@@ -575,8 +540,7 @@ class AuditLogService:
         group_flows = []
         if group_admins:
             group_flows = await GroupResourceDao.get_groups_resource(group_admins,
-                                                                     resource_types=[ResourceTypeEnum.FLOW,
-                                                                                     ResourceTypeEnum.WORK_FLOW,
+                                                                     resource_types=[ResourceTypeEnum.WORK_FLOW,
                                                                                      ResourceTypeEnum.ASSISTANT,
                                                                                      ResourceTypeEnum.WORKSTATION])
             # User group under user management has no resources
@@ -642,7 +606,6 @@ class AuditLogService:
 
         # Process type filtering (fixed enumeration)
         conditions.append(col(MessageSession.flow_type).in_([
-            FlowType.FLOW.value,
             FlowType.WORKFLOW.value,
             FlowType.ASSISTANT.value,
             FlowType.WORKSTATION.value
@@ -682,7 +645,7 @@ class AuditLogService:
 
         for session in res:
             target_user_ids.add(session.user_id)
-            if session.flow_type in [FlowType.FLOW.value, FlowType.WORKFLOW.value, FlowType.WORKSTATION.value]:
+            if session.flow_type in [FlowType.WORKFLOW.value, FlowType.WORKSTATION.value]:
                 target_flow_ids.add(session.flow_id)
             elif session.flow_type == FlowType.ASSISTANT.value:
                 target_assistant_ids.add(session.flow_id)
@@ -713,7 +676,7 @@ class AuditLogService:
         for session in res:
             # Determine the current name
             current_name = session.flow_name
-            if session.flow_type in [FlowType.FLOW.value, FlowType.WORKFLOW.value, FlowType.WORKSTATION.value]:
+            if session.flow_type in [FlowType.WORKFLOW.value, FlowType.WORKSTATION.value]:
                 current_name = flow_map.get(session.flow_id, current_name)
             elif session.flow_type == FlowType.ASSISTANT.value:
                 current_name = assistant_map.get(session.flow_id, current_name)

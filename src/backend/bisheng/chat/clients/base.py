@@ -11,7 +11,6 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.core.logger import trace_id_var
 from bisheng.database.models.message import ChatMessage as ChatMessageModel
 from bisheng.database.models.message import ChatMessageDao
-from bisheng.utils import generate_uuid
 from bisheng.utils.threadpool import thread_pool
 
 
