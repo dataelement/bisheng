@@ -100,13 +100,14 @@ export default function ChannelSquare({
         setAllChannels((prev) =>
           prev.map((c) => (c.id === channelId ? { ...c, status: target.status } : c))
         );
-        showToast({
-          message:
-            e?.message ||
-            localize("channel_subscribe_failed") ||
-            "订阅频道失败，请稍后重试",
-          severity: NotificationSeverity.ERROR
-        });
+        // use interceptors toast
+        // showToast({
+        //   message:
+        //     e?.message ||
+        //     localize("channel_subscribe_failed") ||
+        //     "订阅频道失败，请稍后重试",
+        //   severity: NotificationSeverity.ERROR
+        // });
       } finally {
         setJoiningId(null);
       }

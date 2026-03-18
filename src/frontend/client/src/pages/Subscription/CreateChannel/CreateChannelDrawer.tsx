@@ -61,7 +61,6 @@ interface CreateChannelDrawerProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     onConfirm?: (data: CreateChannelFormData) => Promise<{ channelId: string }>;
-    createdChannelCount?: number;
     onViewChannel?: (channelId: string) => void;
     onManageMembers?: (channelId: string) => void;
     mode?: "create" | "edit";
@@ -72,7 +71,6 @@ export function CreateChannelDrawer({
     open,
     onOpenChange,
     onConfirm,
-    createdChannelCount = 0,
     onViewChannel,
     onManageMembers,
     mode = "create",

@@ -1208,6 +1208,7 @@
     "13006": "Document parsing error. Please re-upload\n\n{{error}}",
     "13007": "Input parsing failed: {{error}}",
     "13010": "Workflow offline. Cannot chat",
+    "13052": "You have reached the maximum subscription limit of 20 channels",
     "14001": "Processing… try again later",
     "15000": "Tool name already exists",
     "15001": "Tool APIs cannot be empty",

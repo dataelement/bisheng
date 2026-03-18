@@ -481,7 +481,7 @@ export async function getChannelSquareApi(params?: {
 export async function subscribeManagerChannelApi(body: {
     channel_id: string;
 }): Promise<any> {
-    return await request.post(`/api/v1/channel/manager/subscribe`, body);
+    return await request.post(`/api/v1/channel/manager/subscribe`, body, { showError: true });
 }
 
 // 频道成员

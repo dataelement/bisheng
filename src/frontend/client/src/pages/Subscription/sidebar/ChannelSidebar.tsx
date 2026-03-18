@@ -23,6 +23,8 @@ interface ChannelSidebarProps {
     onChannelSquare: () => void;
     onManageMembers: (channel: Channel) => void;
     onChannelSettings: (channel: Channel) => void;
+    /** Report created channel count back to parent so it doesn't need a duplicate query */
+    onCreatedCountChange?: (count: number) => void;
 }
 
 export function ChannelSidebar({
@@ -31,7 +33,8 @@ export function ChannelSidebar({
     onCreateChannel,
     onChannelSquare,
     onManageMembers,
-    onChannelSettings
+    onChannelSettings,
+    onCreatedCountChange,
 }: ChannelSidebarProps) {
     const [collapsed, setCollapsed] = useState(false);
     const [createdCollapsed, setCreatedCollapsed] = useState(false);
@@ -70,10 +73,19 @@ export function ChannelSidebar({
 
     // Default select first channel
     useEffect(() => {
-        if (!activeChannelId && createdChannels.length > 0) {
-            onChannelSelect(createdChannels[0]);
+        if (!activeChannelId) {
+            if (createdChannels.length > 0) {
+                onChannelSelect(createdChannels[0]);
+            } else if (subscribedChannels.length > 0) {
+                onChannelSelect(subscribedChannels[0]);
+            }
         }
     }, [activeChannelId, createdChannels, onChannelSelect]);
+
+    // Notify parent of created channel count changes
+    useEffect(() => {
+        onCreatedCountChange?.(createdChannels.length);
+    }, [createdChannels.length, onCreatedCountChange]);
 
     const getSortText = (sortType: SortType) => {
         switch (sortType) {

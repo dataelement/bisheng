@@ -91,9 +91,11 @@ export function useChannelActions({
 
         try {
             await deleteChannelApi(channelId);
+            // Refresh all channel queries so createdChannelCount updates correctly
+            queryClient.invalidateQueries({ queryKey: ["channels"] });
             showToast({ message: "频道已解散", severity: NotificationSeverity.WARNING });
         } catch (e) {
-            queryClient.invalidateQueries({ queryKey: ["channels", "created"] });
+            queryClient.invalidateQueries({ queryKey: ["channels"] });
             showToast({ message: "解散失败，请重试", severity: NotificationSeverity.ERROR });
         }
     };

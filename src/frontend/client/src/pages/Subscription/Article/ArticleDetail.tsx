@@ -20,12 +20,13 @@ interface ArticleDetailProps {
     loading?: boolean;
     screenFull?: boolean;
     aiAssistantOpen?: boolean;
+    showFullScreenBtn?: boolean;
     onFullScreen?: () => void;
     onExitAiAssistant?: () => void;
     onAiAssistant?: () => void;
 }
 
-export function ArticleDetail({ article, loading = false, screenFull = false, aiAssistantOpen = false, onFullScreen, onExitAiAssistant, onAiAssistant }: ArticleDetailProps) {
+export function ArticleDetail({ article, loading = false, screenFull = false, showFullScreenBtn = true, aiAssistantOpen = false, onFullScreen, onExitAiAssistant, onAiAssistant }: ArticleDetailProps) {
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
     const [scale, setScale] = useState(1);
     const [showBackTop, setShowBackTop] = useState(false);
@@ -151,10 +152,11 @@ export function ArticleDetail({ article, loading = false, screenFull = false, ai
                             加入知识空间
                         </button>}
 
-                        {!(screenFull || aiAssistantOpen) && <button
+                        {(!screenFull || (showFullScreenBtn && aiAssistantOpen)) && <button
                             className="flex items-center gap-1 text-xs transition-colors text-gray-900"
                             onClick={() => {
-                                onFullScreen?.();
+                                screenFull && showFullScreenBtn ? onExitAiAssistant?.() :
+                                    onFullScreen?.();
                             }}
                         >
                             <FullScreenIcon className="size-3.5" />

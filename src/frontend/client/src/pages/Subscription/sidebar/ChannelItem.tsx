@@ -1,6 +1,5 @@
 import {
     BlendIcon,
-    MinimizeIcon,
     MoreHorizontal,
     Pin,
     PinOff,
@@ -18,6 +17,7 @@ import {
     DropdownMenuTrigger
 } from "~/components/ui/DropdownMenu";
 import { useConfirm, useToastContext } from "~/Providers";
+import ClosedIcon from "~/components/ui/icon/ClosedIcon";
 
 interface ChannelItemProps {
     channel: Channel;
@@ -182,7 +182,7 @@ export default function ChannelItem({
                             }}
                             className="text-[#f53f3f] py-2 px-0 cursor-pointer focus:bg-[#f2f3f5] focus:text-[#f53f3f]"
                         >
-                            <MinimizeIcon className="size-4 mr-2" />
+                            <ClosedIcon className="size-4 mr-2 text-current" />
                             <span className="text-[14px] font-medium">{type === "created" ? "解散频道" : "取消订阅"}</span>
                         </DropdownMenuItem>
                     </DropdownMenuContent>

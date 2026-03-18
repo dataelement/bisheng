@@ -105,10 +105,9 @@ export function ArticleCard({ article, onSelect, isSelected, searchQuery }: Arti
                         <button
                             onClick={(e) => {
                                 e.stopPropagation();
-                                onSelect(article);
                             }}
                             className=" rounded-full bg-gray-50 flex items-center justify-center size-8 text-gray-800 hover:bg-gray-100 transition-colors cursor-pointer"
-                            title="阅读详情"
+                            title="加入知识空间"
                         >
                             <BookPlusIcon className="size-3.5" />
                         </button>
