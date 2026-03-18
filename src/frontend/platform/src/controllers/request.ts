@@ -83,7 +83,10 @@ export function captureAndAlertRequestErrorHoc(apiFunc, iocFunc?) {
         if (error?.code === "ERR_CANCELED") return 'canceled'
 
         console.log('error :>> ', error);
-        iocFunc?.(error)
+        // If iocFunc returns true, it means the caller has handled the error itself (e.g. showing its own toast)
+        const handled = iocFunc?.(error)
+        if (handled) return false
+
         // 弹窗
         toast({
             title: `${i18next.t('prompt')}`,
