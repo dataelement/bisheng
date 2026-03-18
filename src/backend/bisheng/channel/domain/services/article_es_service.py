@@ -451,15 +451,25 @@ class ArticleEsService:
         else:
             query = {"match_all": {}}
 
-        # Highlighting configuration
+        # Highlighting configuration - only highlight user keyword, not filter_rules keywords
         highlight_config = {}
         if keyword:
+            # Use highlight_query to limit highlighting to only the user's keyword
+            highlight_query = {
+                "bool": {
+                    "should": [
+                        {"match_phrase": {"title": {"query": keyword}}},
+                        {"match_phrase": {"content": {"query": keyword}}},
+                    ],
+                    "minimum_should_match": 1,
+                }
+            }
             highlight_config = {
                 "pre_tags": ["<em>"],
                 "post_tags": ["</em>"],
                 "fields": {
-                    "title": {"number_of_fragments": 0},
-                    "content": {"fragment_size": 200, "number_of_fragments": 3},
+                    "title": {"number_of_fragments": 0, "highlight_query": highlight_query},
+                    "content": {"fragment_size": 200, "number_of_fragments": 3, "highlight_query": highlight_query},
                 },
             }
 

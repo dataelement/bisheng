@@ -26,3 +26,8 @@ class ChannelRepository(BaseRepository[Channel, str], ABC):
     async def count_square_channels(self, keyword: Optional[str] = None) -> int:
         """Count total released channels matching the keyword filter."""
         pass
+
+    @abstractmethod
+    async def find_channels_by_source_id(self, source_id: str) -> List[Channel]:
+        """Find channels whose source_list contains the specified source_id."""
+        pass
