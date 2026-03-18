@@ -1,3 +1,4 @@
+import { useLocalize } from "~/hooks";
 import { useQuery } from "@tanstack/react-query";
 import {
     Info,
@@ -65,6 +66,7 @@ export function mapToArticle(item: ArticleSearchResultItem, channelId: string): 
 }
 
 export function ArticleList({ channel, selectedArticleId, onArticleSelect }: ArticleListProps) {
+    const localize = useLocalize();
     const [articles, setArticles] = useState<Article[]>([]);
     const [currentPage, setCurrentPage] = useState(1);
     const [hasMore, setHasMore] = useState(false);
@@ -216,16 +218,16 @@ export function ArticleList({ channel, selectedArticleId, onArticleSelect }: Art
                             </TooltipTrigger>
                             <TooltipContent noArrow className="bg-white shadow-md px-3 py-2 max-w-md">
                                 <div className="space-y-1.5 text-gray-800 text-sm">
-                                    <div><span className="text-gray-400">频道描述：</span>
+                                    <div><span className="text-gray-400">{localize("com_subscription.channel_description_colon")}</span>
                                         <p>{channelDetail?.description || channel.description || "-"}</p>
                                     </div>
-                                    <div><span className="text-gray-400">创建人：</span>
+                                    <div><span className="text-gray-400">{localize("com_subscription.creator_colon")}</span>
                                         <p>{channelDetail?.creator_name || channel.creator || "-"}</p>
                                     </div>
-                                    <div><span className="text-gray-400">订阅人数：</span>
+                                    <div><span className="text-gray-400">{localize("com_subscription.subscribers_colon")}</span>
                                         <p>{channelDetail?.subscriber_count ?? channel.subscriberCount ?? 0}</p>
                                     </div>
-                                    <div><span className="text-gray-400">内容数量：</span>
+                                    <div><span className="text-gray-400">{localize("com_subscription.content_count_colon")}</span>
                                         <p>{channelDetail?.article_count ?? channel.articleCount ?? 0}</p>
                                     </div>
                                 </div>
@@ -236,17 +238,15 @@ export function ArticleList({ channel, selectedArticleId, onArticleSelect }: Art
                     {channelDetail?.visibility !== 'private' && <Button
                         onClick={() => {
                             const shareUrl = `${window.location.origin}${__APP_ENV__.BASE_URL}/channel/share/${channel.id}`;
-                            const shareText = `欢迎加入频道【${channel.name}】 ，点击链接：${shareUrl} 一键订阅。`;
+                            const shareText = localize("com_subscription.welcome_join_channel_share", { name: channel.name, shareUrl });
                             copyText(shareText).then(() => {
-                                showToast({ message: '分享链接已复制到粘贴板', severity: NotificationSeverity.SUCCESS });
+                                showToast({ message: localize("com_subscription.share_link_copied"), severity: NotificationSeverity.SUCCESS });
                             });
                         }}
                         variant="outline"
                         className="h-8 px-4 text-[14px] rounded-md font-normal"
                     >
-                        <SquareArrowOutUpLeftIcon className="size-3.5" />
-                        分享
-                    </Button>}
+                        <SquareArrowOutUpLeftIcon className="size-3.5" />{localize("com_subscription.share")}</Button>}
                 </div>
 
                 {/* 第二行：子频道 Tabs 与 工具栏 (搜索/筛选) */}
@@ -259,9 +259,7 @@ export function ArticleList({ channel, selectedArticleId, onArticleSelect }: Art
                                 ? "bg-primary/20 text-primary border-primary"
                                 : "text-gray-800 hover:bg-gray-50 border-transparent"
                                 }`}
-                        >
-                            全部
-                        </button>
+                        >{localize("com_subscription.all")}</button>
                         {subChannels.map(sub => (
                             <button
                                 key={sub.id}
@@ -283,7 +281,7 @@ export function ArticleList({ channel, selectedArticleId, onArticleSelect }: Art
                             key={channel.id}
                             value={searchKey}
                             onChange={setSearchQuery}
-                            placeholder="搜索你感兴趣的文章"
+                            placeholder={localize("com_subscription.search_articles_of_interest")}
                         />
 
                         {/* 信息源筛选 */}
@@ -300,9 +298,7 @@ export function ArticleList({ channel, selectedArticleId, onArticleSelect }: Art
                                 ? "bg-primary/20 text-primary border-primary"
                                 : "text-gray-800 hover:bg-gray-50"
                                 }`}
-                        >
-                            仅看未读
-                        </button>
+                        >{localize("com_subscription.show_unread_only")}</button>
                     </div>
                 </div>
             </div>
@@ -315,13 +311,13 @@ export function ArticleList({ channel, selectedArticleId, onArticleSelect }: Art
                         <LoadingIcon className="size-16 text-primary" />
                     </div>
                 ) : articles.length === 0 ? (
-                    <div className="flex items-center justify-center h-64 text-[#86909c] text-sm">无结果</div>
+                    <div className="flex items-center justify-center h-64 text-[#86909c] text-sm">{localize("com_subscription.no_results")}</div>
                 ) : (
                     <InfiniteScroll
                         loadMore={() => loadArticles(currentPage + 1)}
                         hasMore={hasMore}
                         isLoading={loading}
-                        emptyText="所有的消息都在这里啦"
+                        emptyText={localize("com_subscription.all_messages_are_here")}
                         className=""
                     >
                         {articles.map(article => (

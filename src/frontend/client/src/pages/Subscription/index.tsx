@@ -1,3 +1,4 @@
+import { useLocalize } from "~/hooks";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
@@ -27,6 +28,7 @@ import { buildCreateChannelPayload } from "./channelUtils";
 const MAX_USER_CHANNELS = 10;
 
 export default function Subscription() {
+    const localize = useLocalize();
     const { channelId: previewChannelId } = useParams<{ channelId?: string }>();
     const navigate = useNavigate();
     const [activeChannel, setActiveChannel] = useState<Channel | null>(null);
@@ -74,7 +76,7 @@ export default function Subscription() {
         setEditingChannel(null);
         if (createdChannelCountRef.current >= MAX_USER_CHANNELS) {
             showToast({
-                message: "您已达到创建频道数量的最大上限",
+                message: localize("com_subscription.channel_limit_reached"),
                 severity: NotificationSeverity.WARNING
             });
             return;
@@ -184,14 +186,10 @@ export default function Subscription() {
                                 src={`${__APP_ENV__.BASE_URL}/assets/channel/empty.png`}
                                 alt="empty"
                             />
-                            <p className="text-[14px] leading-6 text-[#4E5969]">
-                                无相关内容，请
-                                <span
+                            <p className="text-[14px] leading-6 text-[#4E5969]">{localize("com_subscription.no_related_content_please")}<span
                                     className="ml-1.5 cursor-pointer text-[#165DFF] transition-colors hover:text-[#4080FF] active:text-[#0E42D2]"
                                     onClick={handleCreateChannel}
-                                >
-                                    创建频道
-                                </span>
+                                >{localize("com_subscription.create_channel")}</span>
                             </p>
                         </div>
                     )}

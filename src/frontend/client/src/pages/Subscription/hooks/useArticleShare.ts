@@ -1,17 +1,19 @@
+import { useLocalize } from "~/hooks";
 import { useCallback } from "react";
 import { Article } from "~/api/channels";
 import { useToastContext } from "~/Providers";
 import { copyText } from "~/utils";
 
 export function useArticleShare() {
+    const localize = useLocalize();
     const { showToast } = useToastContext();
 
     const handleShare = useCallback((article: Article) => {
-        const shareText = `我正在阅读【${article.title}】${article.url}`;
+        const shareText = localize("com_subscription.reading_article_share_no_dot", { title: article.title, url: article.url });
         copyText(shareText).then(() => {
-            showToast({ message: '分享链接已复制到粘贴板', status: 'success' });
+            showToast({ message: localize("com_subscription.share_link_copied"), status: 'success' });
         }).catch(() => {
-            showToast({ message: '复制失败，请重试', status: 'error' });
+            showToast({ message: localize("com_subscription.copy_failed_retry"), status: 'error' });
         });
     }, [showToast]);
 

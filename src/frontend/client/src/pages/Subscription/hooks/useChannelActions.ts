@@ -1,3 +1,4 @@
+import { useLocalize } from "~/hooks";
 import { useQueryClient } from "@tanstack/react-query";
 import {
     Channel,
@@ -31,6 +32,7 @@ export function useChannelActions({
     subscribedChannels,
     onChannelSelect,
 }: UseChannelActionsOptions) {
+    const localize = useLocalize();
     const { showToast } = useToastContext();
     const queryClient = useQueryClient();
 
@@ -58,11 +60,11 @@ export function useChannelActions({
 
         try {
             await updateChannelApi(channel.id, { name: channel.name, description: channel.description });
-            showToast({ message: "频道已更新", severity: NotificationSeverity.SUCCESS });
+            showToast({ message: localize("com_subscription.channel_updated"), severity: NotificationSeverity.SUCCESS });
         } catch (e) {
             // Rollback on failure
             queryClient.invalidateQueries({ queryKey: ["channels", "created"] });
-            showToast({ message: "更新失败，请重试", severity: NotificationSeverity.ERROR });
+            showToast({ message: localize("com_subscription.update_failed_retry"), severity: NotificationSeverity.ERROR });
         }
     };
 
@@ -93,10 +95,10 @@ export function useChannelActions({
             await deleteChannelApi(channelId);
             // Refresh all channel queries so createdChannelCount updates correctly
             queryClient.invalidateQueries({ queryKey: ["channels"] });
-            showToast({ message: "频道已解散", severity: NotificationSeverity.WARNING });
+            showToast({ message: localize("com_subscription.channel_dissolved"), severity: NotificationSeverity.WARNING });
         } catch (e) {
             queryClient.invalidateQueries({ queryKey: ["channels"] });
-            showToast({ message: "解散失败，请重试", severity: NotificationSeverity.ERROR });
+            showToast({ message: localize("com_subscription.dissolve_failed_retry"), severity: NotificationSeverity.ERROR });
         }
     };
 
@@ -116,10 +118,10 @@ export function useChannelActions({
 
         try {
             await unsubscribeChannelApi(channelId);
-            showToast({ message: "已取消订阅", severity: NotificationSeverity.WARNING });
+            showToast({ message: localize("com_subscription.unsubscribed"), severity: NotificationSeverity.WARNING });
         } catch (e) {
             queryClient.invalidateQueries({ queryKey: ["channels", "subscribed"] });
-            showToast({ message: "取消订阅失败，请重试", severity: NotificationSeverity.ERROR });
+            showToast({ message: localize("com_subscription.unsubscribe_failed_retry"), severity: NotificationSeverity.ERROR });
         }
     };
 
@@ -127,7 +129,7 @@ export function useChannelActions({
     const handlePinChannel = async (channelId: string, pinned: boolean, type: "created" | "subscribed") => {
         const channels = type === "created" ? createdChannels : subscribedChannels;
         if (pinned && channels.filter(c => c.isPinned).length >= 5) {
-            showToast({ message: "已达置顶数量限制", severity: NotificationSeverity.INFO });
+            showToast({ message: localize("com_subscription.pinned_limit_reached"), severity: NotificationSeverity.INFO });
             return;
         }
 
@@ -143,7 +145,7 @@ export function useChannelActions({
         try {
             await pinChannelApi(channelId, pinned);
             queryClient.invalidateQueries({ queryKey: ["channels", type === "created" ? "created" : "subscribed"] });
-            showToast({ message: pinned ? "已置顶" : "已取消置顶", severity: NotificationSeverity.SUCCESS });
+            showToast({ message: pinned ? localize("com_subscription.pinned") : localize("com_subscription.unpinned"), severity: NotificationSeverity.SUCCESS });
         } catch (e) {
             // Rollback
             const rollback = (list: Channel[]) => list.map(c => c.id === channelId ? { ...c, isPinned: !pinned } : c);
@@ -152,7 +154,7 @@ export function useChannelActions({
                 const channel = channels.find(c => c.id === channelId);
                 if (channel) onChannelSelect({ ...channel, isPinned: !pinned });
             }
-            showToast({ message: "操作失败，请重试", severity: NotificationSeverity.ERROR });
+            showToast({ message: localize("com_subscription.operation_failed_retry"), severity: NotificationSeverity.ERROR });
         }
     };
 

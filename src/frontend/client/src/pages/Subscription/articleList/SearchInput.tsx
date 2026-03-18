@@ -1,3 +1,4 @@
+import { useLocalize } from "~/hooks";
 import { Search } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
@@ -11,9 +12,10 @@ interface SearchInputProps {
 export function SearchInput({
     value,
     onChange,
-    placeholder = "搜索",
+    placeholder,
     className
 }: SearchInputProps) {
+    const localize = useLocalize();
     const [isActive, setIsActive] = useState(false);
     const inputRef = useRef<HTMLInputElement>(null);
 
@@ -44,7 +46,7 @@ export function SearchInput({
                 ref={inputRef}
                 className={`w-full h-full bg-transparent pl-9 pr-8 text-[14px] outline-none transition-opacity duration-200 ${isActive ? "opacity-100" : "opacity-0 pointer-events-none"
                     }`}
-                placeholder={placeholder}
+                placeholder={placeholder ?? localize("com_subscription.search")}
                 maxLength={100}
                 value={value}
                 onChange={(e) => onChange(e.target.value)}

@@ -182,7 +182,7 @@ export function useSourceManager(
                     const created: InformationSource = {
                         id: String(raw.id ?? raw.source_id ?? `wx-${Date.now()}`),
                         // 后端返回 name/title，否则退回为固定文案“公众号内容源”
-                        name: String(raw.name ?? raw.title ?? "公众号内容源"),
+                        name: String(raw.name ?? raw.title ?? localize("com_subscription.official_account_content_source")),
                         avatar: raw.avatar,
                         url: raw.url ?? target,
                         type: "official_account"

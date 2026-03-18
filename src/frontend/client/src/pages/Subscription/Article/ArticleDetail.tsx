@@ -1,3 +1,4 @@
+import { useLocalize } from "~/hooks";
 import {
     ArrowUp,
     Copy,
@@ -27,6 +28,7 @@ interface ArticleDetailProps {
 }
 
 export function ArticleDetail({ article, loading = false, screenFull = false, showFullScreenBtn = true, aiAssistantOpen = false, onFullScreen, onExitAiAssistant, onAiAssistant }: ArticleDetailProps) {
+    const localize = useLocalize();
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
     const [scale, setScale] = useState(1);
     const [showBackTop, setShowBackTop] = useState(false);
@@ -132,25 +134,19 @@ export function ArticleDetail({ article, loading = false, screenFull = false, sh
                             onClick={() => window.open(article.url)}
                             className="flex items-center gap-1 text-xs transition-colors text-gray-900"
                         >
-                            <OriginalWebIcon className="size-3.5" />
-                            原网页
-                        </button>
+                            <OriginalWebIcon className="size-3.5" />{localize("com_subscription.original_webpage")}</button>
 
                         <button
                             className="flex items-center gap-1 text-xs transition-colors text-gray-900"
                             onClick={() => handleShare(article)}
                         >
-                            <ShareOutlineIcon className="size-3.5 text-[#94BFFF]" />
-                            分享
-                        </button>
+                            <ShareOutlineIcon className="size-3.5 text-[#94BFFF]" />{localize("com_subscription.share")}</button>
 
                         {hasKnowledge && <button
                             className="flex items-center gap-1 text-xs transition-colors text-gray-900"
                             onClick={() => setShowKnowledgeModal(true)}
                         >
-                            <AddSpaceIcon className="size-3.5" />
-                            加入知识空间
-                        </button>}
+                            <AddSpaceIcon className="size-3.5" />{localize("com_subscription.add_to_knowledge_space")}</button>}
 
                         {(!screenFull || (showFullScreenBtn && aiAssistantOpen)) && <button
                             className="flex items-center gap-1 text-xs transition-colors text-gray-900"
@@ -159,9 +155,7 @@ export function ArticleDetail({ article, loading = false, screenFull = false, sh
                                     onFullScreen?.();
                             }}
                         >
-                            <FullScreenIcon className="size-3.5" />
-                            全屏
-                        </button>}
+                            <FullScreenIcon className="size-3.5" />{localize("com_subscription.fullscreen")}</button>}
 
                         <div className="ml-auto flex gap-3 items-center">
                             {screenFull && <div className="flex items-center text-[12px]">
@@ -174,9 +168,7 @@ export function ArticleDetail({ article, loading = false, screenFull = false, sh
                                 className="flex items-center gap-1 text-xs transition-colors bg-gradient-to-br from-[#335CFF] to-[#7433FF] bg-clip-text text-transparent"
                                 onClick={() => onAiAssistant?.()}
                             >
-                                <AiChatIcon className="size-3.5 text-primary" />
-                                AI 助手
-                            </button>}
+                                <AiChatIcon className="size-3.5 text-primary" />{localize("com_subscription.ai_assistant")}</button>}
                         </div>
                     </div>
                 </div>
@@ -185,9 +177,9 @@ export function ArticleDetail({ article, loading = false, screenFull = false, sh
             {/* Iframe Content Area */}
             <div className="flex-1 bg-white relative">
                 {loading ? (
-                    <div className="flex items-center justify-center h-full text-[#86909c] text-sm">加载中...</div>
+                    <div className="flex items-center justify-center h-full text-[#86909c] text-sm">{localize("com_subscription.loading")}</div>
                 ) : !articleHtml ? (
-                    <div className="flex items-center justify-center h-full text-[#86909c] text-sm">暂无内容</div>
+                    <div className="flex items-center justify-center h-full text-[#86909c] text-sm">{localize("com_subscription.no_content")}</div>
                 ) : (
                     <iframe
                         ref={iframeRef}
@@ -214,18 +206,14 @@ export function ArticleDetail({ article, loading = false, screenFull = false, sh
                     <div className="absolute top-0 w-full flex justify-between p-6 text-white/80">
                         <div className="flex items-center gap-6">
                             <button onClick={() => setScale(s => s + 0.2)} className="hover:text-white flex items-center gap-1">
-                                <ZoomIn className="size-5" /> 放大
-                            </button>
+                                <ZoomIn className="size-5" />{localize("com_subscription.zoom_in")}</button>
                             <button onClick={() => setScale(s => Math.max(0.5, s - 0.2))} className="hover:text-white flex items-center gap-1">
-                                <ZoomOut className="size-5" /> 缩小
-                            </button>
+                                <ZoomOut className="size-5" />{localize("com_subscription.zoom_out")}</button>
                             <div className="w-px h-4 bg-white/20 mx-2" />
                             <button onClick={handleCopy} className="hover:text-white flex items-center gap-1">
-                                <Copy className="size-5" /> 复制
-                            </button>
+                                <Copy className="size-5" />{localize("com_subscription.copy")}</button>
                             <button onClick={handleDownload} className="hover:text-white flex items-center gap-1">
-                                <Download className="size-5" /> 下载
-                            </button>
+                                <Download className="size-5" />{localize("com_subscription.download")}</button>
                         </div>
                         <button onClick={() => setPreviewUrl(null)} className="hover:text-white text-white bg-white/10 p-2 rounded-full">
                             <X className="size-8" />

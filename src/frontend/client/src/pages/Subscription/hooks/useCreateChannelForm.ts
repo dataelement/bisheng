@@ -1,3 +1,4 @@
+import { useLocalize } from "~/hooks";
 import { useState, useCallback } from "react";
 import type { Channel, InformationSource } from "~/api/channels";
 import { listManagerSourcesApi } from "~/api/channels";
@@ -16,6 +17,7 @@ function nanoid() {
 }
 
 export function useCreateChannelForm() {
+    const localize = useLocalize();
     // Form fields
     const [sources, setSources] = useState<InformationSource[]>([]);
     const [channelName, setChannelName] = useState("");
@@ -122,7 +124,7 @@ export function useCreateChannelForm() {
             // 以 name 分组，每个 name 一个子频道
             const groupedByName = new Map<string, typeof subRules>();
             for (const g of subRules) {
-                const key = (g.name as string) || "子频道名称";
+                const key = (g.name as string) || localize("com_subscription.sub_channel_name");
                 if (!groupedByName.has(key)) {
                     groupedByName.set(key, []);
                 }
@@ -197,7 +199,7 @@ export function useCreateChannelForm() {
             ...subChannels,
             {
                 id,
-                name: "子频道名称",
+                name: localize("com_subscription.sub_channel_name"),
                 collapsed: false,
                 groups: [{ id: nanoid(), relation: "and", conditions: [{ id: nanoid(), include: true, keywords: "" }] }],
                 topRelation: "and"

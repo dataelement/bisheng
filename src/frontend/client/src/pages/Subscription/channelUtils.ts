@@ -18,13 +18,13 @@ export function validateCreateChannelForm(
     localize: (key: string) => string
 ): string | null {
     if (data.sources.length < 1) {
-        return localize("need_one_source") || "至少需添加 1 个信息源";
+        return localize("need_one_source") || localize("com_subscription.at_least_one_source");
     }
     if (!data.channelName.trim()) {
         return localize("cannot_empty_channel_name");
     }
     if (data.contentFilter) {
-        const err = validateFilterGroups(data.filterGroups);
+        const err = validateFilterGroups(data.filterGroups, localize);
         if (err) return err;
     }
     if (data.createSubChannel) {
@@ -32,7 +32,7 @@ export function validateCreateChannelForm(
             if (!sub.name.trim()) {
                 return localize("cannot_subchannel_name");
             }
-            const err = validateFilterGroups(sub.groups);
+            const err = validateFilterGroups(sub.groups, localize);
             if (err) return localize("cannot_filter_criteria");
         }
     }
