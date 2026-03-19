@@ -28,6 +28,7 @@ interface KnowledgeSpaceItemProps {
     onDelete: (id: string) => void;
     onLeave: (id: string) => void;
     onPin: (id: string, pinned: boolean) => void;
+    onSettings?: (space: KnowledgeSpace) => void;
 }
 
 export default function KnowledgeSpaceItem({
@@ -38,7 +39,8 @@ export default function KnowledgeSpaceItem({
     onUpdate,
     onDelete,
     onLeave,
-    onPin
+    onPin,
+    onSettings,
 }: KnowledgeSpaceItemProps) {
     const [isEditing, setIsEditing] = useState(false);
     const [menuOpen, setMenuOpen] = useState(false);
@@ -126,6 +128,7 @@ export default function KnowledgeSpaceItem({
                     >
                         {type === "created" && <DropdownMenuItem
                             className="py-2 px-0 cursor-pointer focus:bg-[#f2f3f5]"
+                            onClick={() => onSettings?.(space)}
                         >
                             <Settings className="size-4 mr-2 text-[#4e5969]" />
                             <span className="">空间设置</span>

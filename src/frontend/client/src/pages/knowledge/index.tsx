@@ -1,9 +1,28 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
-import { FileStatus, FileType, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceRole, VisibilityType } from "~/api/knowledge";
+import {
+    FileStatus,
+    FileType,
+    KnowledgeFile,
+    KnowledgeSpace,
+    SortDirection,
+    SortType,
+    VisibilityType,
+    getSpaceChildrenApi,
+    getSpaceInfoApi,
+    createSpaceApi,
+    updateSpaceApi,
+    createFolderApi,
+    renameFolderApi,
+    deleteFolderApi,
+    uploadFileToServerApi,
+    addFilesApi,
+    renameFileApi,
+    deleteFileApi,
+} from "~/api/knowledge";
 import { NotificationSeverity } from "~/common";
 import { KnowledgeSpaceMemberDialog } from "~/components/KnowledgeSpaceMemberDialog";
-import { getMockFiles, getMockKnowledgeSpaces, getMockTags } from "~/mock/knowledge";
 import { useToastContext } from "~/Providers";
 import ChannelSquare from "../ChannelSquare";
 import { CreateKnowledgeSpaceDrawer, type CreateKnowledgeSpaceFormData } from "./CreateKnowledgeSpaceDrawer";
@@ -12,6 +31,7 @@ import { KnowledgeSpaceContent } from "./SpaceDetail";
 import { KnowledgeAiPanel } from "./SpaceDetail/AiChat/KnowledgeAiPanel";
 import { KnowledgeSpacePreviewDrawer } from "./KnowledgeSpacePreviewDrawer";
 
+/** Derive FileType enum from a file extension */
 function getFileType(name: string): FileType {
     const ext = name.split('.').pop()?.toLowerCase();
     switch (ext) {
@@ -31,12 +51,10 @@ function getFileType(name: string): FileType {
 
 export default function Knowledge() {
     const MAX_USER_SPACES = 30;
-    const [createdSpaces, setCreatedSpaces] = useState<KnowledgeSpace[]>([]);
-    const [joinedSpaces, setJoinedSpaces] = useState<KnowledgeSpace[]>([]);
     const [activeSpace, setActiveSpace] = useState<KnowledgeSpace | null>(null);
     const [files, setFiles] = useState<KnowledgeFile[]>([]);
     const [currentPage, setCurrentPage] = useState(1);
-    const [pageSize, setPageSize] = useState(20);
+    const [pageSize] = useState(20);
     const [total, setTotal] = useState(0);
     const [loading, setLoading] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
@@ -46,6 +64,7 @@ export default function Knowledge() {
     const [currentFolderId, setCurrentFolderId] = useState<string | undefined>();
     const [currentPath, setCurrentPath] = useState<Array<{ id?: string; name: string }>>([]);
     const [showCreateDrawer, setShowCreateDrawer] = useState(false);
+    const [editingSpace, setEditingSpace] = useState<KnowledgeSpace | null>(null);
     const [showKnowledgeSquare, setShowKnowledgeSquare] = useState(false);
     const [memberDialogOpen, setMemberDialogOpen] = useState(false);
     const [memberDialogSpace, setMemberDialogSpace] = useState<KnowledgeSpace | null>(null);
@@ -56,77 +75,58 @@ export default function Knowledge() {
     const [showAiAssistant, setShowAiAssistant] = useState(false);
     const [aiSplitWidth, setAiSplitWidth] = useState<number>(() => {
         const saved = localStorage.getItem("knowledge-ai-split-ratio");
-        return saved ? parseInt(saved, 10) : 0; // 0 means "use default on first open"
+        return saved ? parseInt(saved, 10) : 0;
     });
     const [isResizingSplit, setIsResizingSplit] = useState(false);
     const splitContainerRef = useRef<HTMLDivElement>(null);
     const { showToast } = useToastContext();
     const navigate = useNavigate();
+    const queryClient = useQueryClient();
     const { spaceId: previewSpaceId } = useParams<{ spaceId?: string }>();
     const [previewDrawerOpen, setPreviewDrawerOpen] = useState(false);
 
-    // 加载知识空间列表
-    const loadSpaces = () => {
-        const created = getMockKnowledgeSpaces("created");
-        const joined = getMockKnowledgeSpaces("joined");
+    // ─── Load file/folder list ──────────────────────────────────────────
+    const loadFiles = async (page: number = 1) => {
+        if (!activeSpace?.id) return;
 
-        setCreatedSpaces(created);
-        setJoinedSpaces(joined);
-
-        // 默认选中第一个空间
-        if (!activeSpace && created.length > 0) {
-            setActiveSpace(created[0]);
-            setCurrentPath([{ id: '1', name: created[0].name + 1 }]);
+        setLoading(true);
+        try {
+            const res = await getSpaceChildrenApi({
+                space_id: activeSpace.id,
+                parent_id: currentFolderId,
+                page,
+                page_size: pageSize,
+            });
+            setFiles(res.data);
+            setTotal(res.total);
+            setCurrentPage(page);
+        } catch (err) {
+            showToast({ message: "加载文件列表失败", severity: NotificationSeverity.ERROR });
+        } finally {
+            setLoading(false);
         }
     };
 
-    // 加载文件列表
-    const loadFiles = (page: number = 1) => {
-        if (!activeSpace) return;
-
-        setLoading(true);
-        setTimeout(() => {
-            const response = getMockFiles({
-                spaceId: activeSpace.id,
-                parentId: currentFolderId,
-                search: searchQuery,
-                statusFilter: statusFilter.length > 0 ? statusFilter : undefined,
-                page,
-                pageSize: 20
-            });
-
-            setFiles(response.data);
-            setTotal(response.total);
-            setCurrentPage(page);
-            setLoading(false);
-        }, 300);
-    };
-
-    // 初始加载
-    useEffect(() => {
-        loadSpaces();
-    }, []);
-
-    // 打开分享预览抽屉
+    // Open preview drawer when URL has a spaceId param
     useEffect(() => {
         if (previewSpaceId) {
             setPreviewDrawerOpen(true);
         }
     }, [previewSpaceId]);
 
-    // 空间切换时重新加载文件
+    // Reload files whenever active space changes
     useEffect(() => {
         if (activeSpace) {
             setCurrentPage(1);
             setCurrentFolderId(undefined);
-            setCurrentPath([{ id: '1', name: activeSpace.name }, { id: '2', name: '测试' }]);
+            setCurrentPath([{ id: activeSpace.id, name: activeSpace.name }]);
             setSearchQuery("");
             setStatusFilter([]);
             loadFiles(1);
         }
-    }, [activeSpace]);
+    }, [activeSpace?.id]);
 
-    // 筛选条件变化时重新加载
+    // Reload files when folder navigation or filters change
     useEffect(() => {
         if (activeSpace) {
             setCurrentPage(1);
@@ -134,171 +134,172 @@ export default function Knowledge() {
         }
     }, [searchQuery, statusFilter, sortBy, sortDirection, currentFolderId]);
 
-    // 处理空间选择
-    const handleSpaceSelect = (space: KnowledgeSpace) => {
+    // ─── Space actions ──────────────────────────────────────────────────
+    const handleSpaceSelect = async (space: KnowledgeSpace | null) => {
+        if (!space) {
+            setActiveSpace(null);
+            return;
+        }
+        // Set list-level data immediately for fast UI switch
         setActiveSpace(space);
+        // Then fetch full detail from info API
+        try {
+            const detail = await getSpaceInfoApi(space.id);
+            setActiveSpace(prev => prev?.id === space.id ? { ...space, ...detail, id: space.id } : prev);
+        } catch {
+            // Keep list-level data if info fetch fails
+        }
     };
 
-    // 创建空间
     const handleCreateSpace = () => {
-        if (createdSpaces.length >= MAX_USER_SPACES) {
-            showToast({
-                message: "您已达到创建知识空间的上限",
-                severity: NotificationSeverity.WARNING
-            });
-            return;
+        setEditingSpace(null);
+        setShowCreateDrawer(true);
+    };
+
+    // Open space settings drawer — fetch detail first, then open
+    const handleSpaceSettings = async (space: KnowledgeSpace) => {
+        try {
+            const detail = await getSpaceInfoApi(space.id);
+            setEditingSpace({ ...space, ...detail, id: space.id });
+        } catch {
+            // Fallback to list-level data if detail fetch fails
+            setEditingSpace(space);
         }
         setShowCreateDrawer(true);
     };
 
-    const handleConfirmCreateSpace = (form: CreateKnowledgeSpaceFormData) => {
-        const now = new Date().toISOString();
-        const newSpace: KnowledgeSpace = {
-            id: `space-${Date.now()}`,
-            name: form.name,
-            description: form.description,
-            visibility: form.joinPolicy === "private" ? VisibilityType.PRIVATE : VisibilityType.PUBLIC,
-            creator: "当前用户",
-            creatorId: "current-user",
-            memberCount: 1,
-            fileCount: 0,
-            totalFileCount: 0,
-            role: SpaceRole.CREATOR,
-            isPinned: false,
-            createdAt: now,
-            updatedAt: now,
-            tags: []
-        };
-        setCreatedSpaces((prev) => [newSpace, ...prev]);
-        setActiveSpace(newSpace);
-        setCurrentPath([{ name: newSpace.name }]);
-        showToast({
-            message: "知识空间创建成功",
-            severity: NotificationSeverity.SUCCESS
-        });
-    };
+    const handleConfirmCreateSpace = async (form: CreateKnowledgeSpaceFormData) => {
+        try {
+            // Map joinPolicy → auth_type
+            const auth_type = form.joinPolicy === "public" ? VisibilityType.PUBLIC : VisibilityType.PRIVATE;
+            const is_released = form.publishToSquare === "yes";
 
-    // 更新空间
-    const handleUpdateSpace = (space: KnowledgeSpace) => {
-        setCreatedSpaces(prev =>
-            prev.map(s => s.id === space.id ? space : s)
-        );
-        setJoinedSpaces(prev =>
-            prev.map(s => s.id === space.id ? space : s)
-        );
-
-        if (activeSpace?.id === space.id) {
-            setActiveSpace(space);
+            if (editingSpace) {
+                // ── Edit mode ──
+                const updated = await updateSpaceApi(editingSpace.id, {
+                    name: form.name,
+                    description: form.description,
+                    auth_type,
+                    is_released,
+                });
+                if (activeSpace?.id === updated.id) setActiveSpace(updated);
+                queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
+                showToast({ message: "空间已更新", severity: NotificationSeverity.SUCCESS });
+            } else {
+                // ── Create mode ──
+                const newSpace = await createSpaceApi({
+                    name: form.name,
+                    description: form.description,
+                    auth_type,
+                    is_released,
+                });
+                setActiveSpace(newSpace);
+                setCurrentPath([{ id: newSpace.id, name: newSpace.name }]);
+                queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces", "mine"] });
+                showToast({ message: "知识空间创建成功", severity: NotificationSeverity.SUCCESS });
+            }
+        } catch (err) {
+            showToast({
+                message: editingSpace ? "更新空间失败" : "创建知识空间失败",
+                severity: NotificationSeverity.ERROR
+            });
         }
-
-        showToast({
-            message: "空间已更新",
-            severity: NotificationSeverity.SUCCESS
-        });
     };
 
-    // 删除空间
-    const handleDeleteSpace = (spaceId: string) => {
-        setCreatedSpaces(prev => prev.filter(s => s.id !== spaceId));
 
-        if (activeSpace?.id === spaceId) {
-            setActiveSpace(createdSpaces[0] || joinedSpaces[0] || null);
-        }
-
-        showToast({
-            message: "空间已解散",
-            severity: NotificationSeverity.SUCCESS
-        });
-    };
-
-    // 退出空间
-    const handleLeaveSpace = (spaceId: string) => {
-        setJoinedSpaces(prev => prev.filter(s => s.id !== spaceId));
-
-        if (activeSpace?.id === spaceId) {
-            setActiveSpace(createdSpaces[0] || joinedSpaces[0] || null);
-        }
-
-        showToast({
-            message: "已退出空间",
-            severity: NotificationSeverity.SUCCESS
-        });
-    };
-
-    // 置顶空间
-    const handlePinSpace = (spaceId: string, pinned: boolean) => {
-        const updateSpaces = (spaces: KnowledgeSpace[]) =>
-            spaces.map(s =>
-                s.id === spaceId ? { ...s, isPinned: pinned } : s
-            );
-
-        setCreatedSpaces(prev => updateSpaces(prev));
-        setJoinedSpaces(prev => updateSpaces(prev));
-
-        if (activeSpace?.id === spaceId) {
-            setActiveSpace(prev => prev ? { ...prev, isPinned: pinned } : null);
-        }
-
-        showToast({
-            message: pinned ? "已置顶" : "已取消置顶",
-            severity: NotificationSeverity.SUCCESS
-        });
-    };
-
-    // 页码切换
+    // ─── Pagination ─────────────────────────────────────────────────────
     const handlePageChange = (page: number) => {
         loadFiles(page);
     };
 
-    // 文件夹导航
+    // ─── Folder navigation ───────────────────────────────────────────────
     const handleNavigateFolder = (folderId?: string) => {
-        setCurrentFolderId(folderId);
-        // TODO: Update currentPath based on folder navigation
-    };
-
-    // 文件操作
-    const handleUploadFile = (files?: FileList | File[]) => {
-        if (files && files.length > 0) {
-            console.log("Uploading files:", files);
-            const newUploading = Array.from(files).map(file => ({
-                id: `upload_${Date.now()}_${Math.random().toString(36).substring(7)}`,
-                name: file.name,
-                type: getFileType(file.name),
-                size: file.size,
-                status: FileStatus.PROCESSING,
-                tags: [],
-                path: (currentPath.map(p => p.name).join('/') + '/' + file.name),
-                parentId: currentFolderId,
-                spaceId: activeSpace?.id || '',
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
-            }));
-
-            // Add to uploadingFiles
-            setUploadingFiles(prev => [...newUploading, ...prev]);
-
-            showToast({
-                message: `已开始处理 ${files.length} 个文件`,
-                severity: NotificationSeverity.SUCCESS
-            });
+        if (!folderId) {
+            // Navigate back to root
+            setCurrentFolderId(undefined);
+            setCurrentPath(activeSpace ? [{ id: activeSpace.id, name: activeSpace.name }] : []);
             return;
         }
-        showToast({
-            message: "上传文件功能开发中",
-            severity: NotificationSeverity.INFO
+
+        // Navigate into a folder — find the folder in current list to get its name
+        const folder = files.find(f => f.id === folderId);
+        setCurrentFolderId(folderId);
+        setCurrentPath(prev => {
+            // If folder already in path (breadcrumb click), trim back to it
+            const existingIdx = prev.findIndex(p => p.id === folderId);
+            if (existingIdx >= 0) return prev.slice(0, existingIdx + 1);
+            return [...prev, { id: folderId, name: folder?.name || folderId }];
         });
     };
 
-    const handleCreateFolder = () => {
-        if (currentPath.length >= 10) {
-            showToast({
-                message: "已达文件夹层级上限 10 级",
-                severity: NotificationSeverity.WARNING
-            } as any);
+    // ─── File upload (two-step: server upload → register) ────────────────
+    const handleUploadFile = async (files?: FileList | File[]) => {
+        if (!activeSpace || !files || files.length === 0) {
+            showToast({ message: "上传文件功能开发中", severity: NotificationSeverity.INFO });
             return;
         }
 
-        const genRandomStr = () => Math.random().toString(36).substring(2, 8).toUpperCase() + Math.random().toString(36).substring(2, 8).toUpperCase();
+        const fileArray = Array.from(files);
+
+        // Create placeholder uploading entries for UI
+        const placeholders: KnowledgeFile[] = fileArray.map(file => ({
+            id: `upload_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+            name: file.name,
+            type: getFileType(file.name),
+            size: file.size,
+            status: FileStatus.PROCESSING,
+            tags: [],
+            path: file.name,
+            parentId: currentFolderId,
+            spaceId: activeSpace.id,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+        }));
+        setUploadingFiles(prev => [...placeholders, ...prev]);
+
+        showToast({ message: `已开始处理 ${fileArray.length} 个文件`, severity: NotificationSeverity.SUCCESS });
+
+        // Upload each file and collect server paths
+        const uploadedPaths: string[] = [];
+        for (const file of fileArray) {
+            try {
+                const res = await uploadFileToServerApi(activeSpace.id, file);
+                uploadedPaths.push(res.file_path);
+            } catch (err) {
+                showToast({ message: `文件 ${file.name} 上传失败`, severity: NotificationSeverity.ERROR });
+            }
+        }
+
+        // Remove all placeholder entries
+        setUploadingFiles(prev =>
+            prev.filter(f => !placeholders.some(p => p.id === f.id))
+        );
+
+        if (uploadedPaths.length === 0) return;
+
+        // Register uploaded files into the space
+        try {
+            await addFilesApi(activeSpace.id, {
+                file_path: uploadedPaths,
+                parent_id: currentFolderId ? Number(currentFolderId) : null,
+            });
+            // Refresh the file list to reflect new entries
+            loadFiles(currentPage);
+        } catch (err) {
+            showToast({ message: "文件注册到知识空间失败", severity: NotificationSeverity.ERROR });
+        }
+    };
+
+    // ─── Folder CRUD ─────────────────────────────────────────────────────
+    const handleCreateFolder = () => {
+        if (currentPath.length >= 10) {
+            showToast({ message: "已达文件夹层级上限 10 级", severity: NotificationSeverity.WARNING } as any);
+            return;
+        }
+
+        const genRandomStr = () =>
+            Math.random().toString(36).substring(2, 8).toUpperCase() +
+            Math.random().toString(36).substring(2, 8).toUpperCase();
         const randomStr = genRandomStr().substring(0, 12);
 
         const newFolder: KnowledgeFile = {
@@ -306,13 +307,13 @@ export default function Knowledge() {
             name: `未命名文件夹_${randomStr}`,
             type: FileType.FOLDER,
             tags: [],
-            path: currentPath.map(p => p.name).join('/') + '/' + `未命名文件夹_${randomStr}`,
+            path: `未命名文件夹_${randomStr}`,
             parentId: currentFolderId,
             spaceId: activeSpace?.id || '',
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
             status: FileStatus.SUCCESS,
-            isCreating: true
+            isCreating: true,
         } as any;
 
         setCreatingFolder(newFolder);
@@ -322,60 +323,71 @@ export default function Knowledge() {
         setCreatingFolder(null);
     };
 
-    const handleDownloadFile = (fileId: string) => {
-        showToast({
-            message: "开始下载",
-            severity: NotificationSeverity.SUCCESS
-        });
-    };
+    /** Called when the inline-rename input is confirmed (new name submitted) */
+    const handleRenameFile = async (fileId: string, newName: string) => {
+        if (!activeSpace) return;
 
-    const handleRenameFile = (fileId: string, newName: string) => {
+        // ── Confirm in-progress folder creation ──
         if (creatingFolder && fileId === creatingFolder.id) {
-            // Confirm creation
-            showToast({
-                message: `文件夹新建成功`,
-                severity: NotificationSeverity.SUCCESS
-            } as any);
-
-            const newFile: KnowledgeFile = {
-                ...creatingFolder,
-                id: `new_folder_${Date.now()}`,
-                name: newName,
-            };
-            delete (newFile as any).isCreating;
-
-            setFiles(prev => [newFile, ...prev]);
-            setCreatingFolder(null);
+            try {
+                const created = await createFolderApi(activeSpace.id, {
+                    name: newName,
+                    parent_id: currentFolderId || null,
+                });
+                setFiles(prev => [created, ...prev]);
+                setCreatingFolder(null);
+                showToast({ message: "文件夹新建成功", severity: NotificationSeverity.SUCCESS } as any);
+            } catch (err) {
+                showToast({ message: "新建文件夹失败", severity: NotificationSeverity.ERROR });
+            }
             return;
         }
 
-        setFiles(prev => prev.map(f => f.id === fileId ? { ...f, name: newName } : f));
-        showToast({
-            message: "重命名成功",
-            severity: NotificationSeverity.SUCCESS
-        } as any);
+        // ── Rename existing item ──
+        const target = files.find(f => f.id === fileId);
+        if (!target) return;
+
+        try {
+            if (target.type === FileType.FOLDER) {
+                await renameFolderApi(activeSpace.id, fileId, newName);
+            } else {
+                await renameFileApi(activeSpace.id, fileId, newName);
+            }
+            setFiles(prev => prev.map(f => f.id === fileId ? { ...f, name: newName } : f));
+            showToast({ message: "重命名成功", severity: NotificationSeverity.SUCCESS } as any);
+        } catch (err) {
+            showToast({ message: "重命名失败", severity: NotificationSeverity.ERROR });
+        }
     };
 
-    const handleDeleteFile = (fileId: string) => {
-        setFiles(prev => prev.filter(f => f.id !== fileId));
-        showToast({
-            message: "文件已删除",
-            severity: NotificationSeverity.SUCCESS
-        });
+    const handleDeleteFile = async (fileId: string) => {
+        if (!activeSpace) return;
+        const target = files.find(f => f.id === fileId);
+        if (!target) return;
+
+        try {
+            if (target.type === FileType.FOLDER) {
+                await deleteFolderApi(activeSpace.id, fileId);
+            } else {
+                await deleteFileApi(activeSpace.id, fileId);
+            }
+            setFiles(prev => prev.filter(f => f.id !== fileId));
+            showToast({ message: "已删除", severity: NotificationSeverity.SUCCESS });
+        } catch (err) {
+            showToast({ message: "删除失败", severity: NotificationSeverity.ERROR });
+        }
+    };
+
+    const handleDownloadFile = (fileId: string) => {
+        showToast({ message: "开始下载", severity: NotificationSeverity.SUCCESS });
     };
 
     const handleEditTags = (fileId: string) => {
-        showToast({
-            message: "编辑标签功能开发中",
-            severity: NotificationSeverity.INFO
-        });
+        showToast({ message: "编辑标签功能开发中", severity: NotificationSeverity.INFO });
     };
 
     const handleRetryFile = (fileId: string) => {
-        showToast({
-            message: "重试中...",
-            severity: NotificationSeverity.INFO
-        });
+        showToast({ message: "重试中...", severity: NotificationSeverity.INFO });
     };
 
     const handleSort = (newSortBy: SortType, newDirection: SortDirection) => {
@@ -386,12 +398,13 @@ export default function Knowledge() {
     const handleKnowledgeSquare = () => {
         setShowKnowledgeSquare(true);
     };
+
     const handleDragStateChange = (dragging: boolean, error?: string | null) => {
         setIsDragging(dragging);
         setDragError(error || null);
     };
 
-    // --- AI Split-pane logic ---
+    // ─── AI Split-pane logic ─────────────────────────────────────────────
     const AI_MIN_LEFT = 480;
     const AI_MIN_RIGHT = 360;
 
@@ -403,7 +416,6 @@ export default function Knowledge() {
                     showToast({ message: "窗口宽度不足，无法打开 AI 助手", severity: NotificationSeverity.WARNING } as any);
                     return false;
                 }
-                // Set default width if not previously saved
                 if (!aiSplitWidth || aiSplitWidth <= 0) {
                     setAiSplitWidth(Math.floor(containerWidth * 0.6));
                 }
@@ -412,27 +424,20 @@ export default function Knowledge() {
         });
     }, [aiSplitWidth, showToast]);
 
-    // ResizeObserver: auto-close AI panel when container is too narrow
     useEffect(() => {
         if (!showAiAssistant || !splitContainerRef.current) return;
         const el = splitContainerRef.current;
         const ro = new ResizeObserver((entries) => {
             for (const entry of entries) {
                 const w = entry.contentRect.width;
-                if (w < AI_MIN_LEFT + AI_MIN_RIGHT) {
-                    setShowAiAssistant(false);
-                }
-                // Clamp leftWidth if it exceeds available space
-                if (w - aiSplitWidth < AI_MIN_RIGHT) {
-                    setAiSplitWidth(Math.max(AI_MIN_LEFT, w - AI_MIN_RIGHT));
-                }
+                if (w < AI_MIN_LEFT + AI_MIN_RIGHT) setShowAiAssistant(false);
+                if (w - aiSplitWidth < AI_MIN_RIGHT) setAiSplitWidth(Math.max(AI_MIN_LEFT, w - AI_MIN_RIGHT));
             }
         });
         ro.observe(el);
         return () => ro.disconnect();
     }, [showAiAssistant, aiSplitWidth]);
 
-    // Splitter drag handlers
     const startSplitResize = useCallback((e: React.MouseEvent) => {
         e.preventDefault();
         setIsResizingSplit(true);
@@ -440,19 +445,14 @@ export default function Knowledge() {
 
     const stopSplitResize = useCallback(() => {
         setIsResizingSplit(false);
-        if (aiSplitWidth > 0) {
-            localStorage.setItem("knowledge-ai-split-ratio", aiSplitWidth.toString());
-        }
+        if (aiSplitWidth > 0) localStorage.setItem("knowledge-ai-split-ratio", aiSplitWidth.toString());
     }, [aiSplitWidth]);
 
     const resizeSplit = useCallback((e: MouseEvent) => {
         if (!isResizingSplit || !splitContainerRef.current) return;
         const rect = splitContainerRef.current.getBoundingClientRect();
         const newLeft = e.clientX - rect.left;
-        // Clamp
-        if (newLeft >= AI_MIN_LEFT && (rect.width - newLeft) >= AI_MIN_RIGHT) {
-            setAiSplitWidth(newLeft);
-        }
+        if (newLeft >= AI_MIN_LEFT && (rect.width - newLeft) >= AI_MIN_RIGHT) setAiSplitWidth(newLeft);
     }, [isResizingSplit]);
 
     useEffect(() => {
@@ -469,11 +469,10 @@ export default function Knowledge() {
         };
     }, [isResizingSplit, resizeSplit, stopSplitResize]);
 
-    // Compute locationKey and context label
     const locationKey = currentFolderId || activeSpace?.id || "";
     const contextLabel = currentFolderId ? "文件夹" : "知识空间";
 
-    // 探索知识广场视图：全屏占位，行为与频道广场一致
+    // Knowledge square view
     if (showKnowledgeSquare) {
         return (
             <div className="relative h-full flex">
@@ -511,19 +510,14 @@ export default function Knowledge() {
             )}
 
             <KnowledgeSpaceSidebar
-                createdSpaces={createdSpaces}
-                joinedSpaces={joinedSpaces}
                 activeSpaceId={activeSpace?.id}
                 onSpaceSelect={handleSpaceSelect}
                 onCreateSpace={handleCreateSpace}
-                onUpdateSpace={handleUpdateSpace}
-                onDeleteSpace={handleDeleteSpace}
-                onLeaveSpace={handleLeaveSpace}
-                onPinSpace={handlePinSpace}
+                onSpaceSettings={handleSpaceSettings}
                 onKnowledgeSquare={handleKnowledgeSquare}
             />
 
-            {activeSpace && (
+            {activeSpace ? (
                 <div ref={splitContainerRef} className="flex-1 flex h-full overflow-hidden">
                     {/* Left: file list */}
                     <div
@@ -565,7 +559,6 @@ export default function Knowledge() {
                             onMouseDown={startSplitResize}
                             className="group relative w-[1px] cursor-col-resize bg-[#e5e6eb] transition-all hover:w-1 hover:bg-primary active:w-1 active:bg-primary z-20 shrink-0"
                         >
-                            {/* Expand click area */}
                             <div className="absolute inset-y-0 -left-1.5 -right-1.5 z-10" />
                         </div>
                     )}
@@ -578,11 +571,29 @@ export default function Knowledge() {
                                 folderId={currentFolderId}
                                 locationKey={locationKey}
                                 contextLabel={contextLabel}
-                                availableTags={getMockTags()}
+                                availableTags={[]}
                                 onClose={() => setShowAiAssistant(false)}
                             />
                         </div>
                     )}
+                </div>
+            ) : (
+                /* Empty state when no space is selected */
+                <div className="flex flex-1 flex-col items-center justify-center py-10 text-center">
+                    <img
+                        className="size-[120px] mb-4 object-contain opacity-90"
+                        src={`${__APP_ENV__.BASE_URL}/assets/channel/empty.png`}
+                        alt="empty"
+                    />
+                    <p className="text-[14px] leading-6 text-[#4E5969]">
+                        无相关内容，请
+                        <span
+                            className="ml-1.5 cursor-pointer text-[#165DFF] transition-colors hover:text-[#4080FF] active:text-[#0E42D2]"
+                            onClick={handleCreateSpace}
+                        >
+                            创建知识空间
+                        </span>
+                    </p>
                 </div>
             )}
 
@@ -590,9 +601,9 @@ export default function Knowledge() {
                 open={showCreateDrawer}
                 onOpenChange={setShowCreateDrawer}
                 onConfirm={handleConfirmCreateSpace}
-                onViewSpace={() => {
-                    setShowCreateDrawer(false);
-                }}
+                mode={editingSpace ? "edit" : "create"}
+                editingSpace={editingSpace}
+                onViewSpace={() => setShowCreateDrawer(false)}
                 onManageMembers={() => {
                     setShowCreateDrawer(false);
                     setMemberDialogSpace(activeSpace);
@@ -611,9 +622,7 @@ export default function Knowledge() {
                 open={previewDrawerOpen}
                 onOpenChange={(open) => {
                     setPreviewDrawerOpen(open);
-                    if (!open) {
-                        navigate("/knowledge", { replace: true });
-                    }
+                    if (!open) navigate("/knowledge", { replace: true });
                 }}
             />
         </div>
