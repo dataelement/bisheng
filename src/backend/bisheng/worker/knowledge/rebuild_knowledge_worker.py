@@ -2,7 +2,6 @@ from typing import List
 
 from loguru import logger
 
-from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.knowledge_imp import (
     decide_vectorstores
 )
@@ -15,6 +14,7 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFileDao,
     KnowledgeFileStatus
 )
+from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.llm.domain import LLMService
 from bisheng.worker.main import bisheng_celery
 

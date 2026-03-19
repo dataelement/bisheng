@@ -8,7 +8,6 @@ from loguru import logger
 from starlette.responses import FileResponse
 
 from bisheng.api.services import knowledge_imp
-from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.knowledge_imp import (decide_vectorstores, delete_es, delete_vector,
                                                 text_knowledge)
 from bisheng.api.v1.schemas import (ChunkInput, KnowledgeFileOne, KnowledgeFileProcess,
@@ -24,6 +23,7 @@ from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.knowledge.domain.models.knowledge import (KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum,
                                                        KnowledgeUpdate)
 from bisheng.knowledge.domain.models.knowledge_file import (QAKnoweldgeDao, QAKnowledgeUpsert)
+from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.open_endpoints.domain.schemas.filelib import APIAddQAParam, APIAppendQAParam, QueryQAParam
 from bisheng.open_endpoints.domain.utils import get_default_operator, get_default_operator_async
 from bisheng.utils.util import sync_func_to_async

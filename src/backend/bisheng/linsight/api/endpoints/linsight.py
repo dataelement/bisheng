@@ -14,14 +14,7 @@ from starlette.responses import StreamingResponse
 from starlette.websockets import WebSocket
 
 from bisheng.api.services.invite_code.invite_code import InviteCodeService
-from bisheng.api.services.knowledge import KnowledgeService
-from bisheng.linsight.domain.services.message_stream_handle import MessageStreamHandle
-from bisheng.linsight.domain.services.sop_manage import SOPManageService
-from bisheng.linsight.domain.services.workbench_impl import LinsightWorkbenchImpl
 from bisheng.api.v1.schema.base_schema import PageList
-from bisheng.linsight.domain.schemas.inspiration_schema import SOPManagementSchema, SOPManagementUpdateSchema
-from bisheng.linsight.domain.schemas.linsight_schema import LinsightQuestionSubmitSchema, DownloadFilesSchema, \
-    SubmitFileSchema, LinsightToolSchema, ToolChildrenSchema
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
@@ -36,12 +29,19 @@ from bisheng.common.services.config_service import settings
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
+from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum, KnowledgeDao
+from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.linsight.domain.models.linsight_session_version import LinsightSessionVersionDao, SessionVersionStatusEnum, \
     LinsightSessionVersion
 from bisheng.linsight.domain.models.linsight_sop import LinsightSOPDao, LinsightSOPRecord
-from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum, KnowledgeDao
+from bisheng.linsight.domain.schemas.inspiration_schema import SOPManagementSchema, SOPManagementUpdateSchema
+from bisheng.linsight.domain.schemas.linsight_schema import LinsightQuestionSubmitSchema, DownloadFilesSchema, \
+    SubmitFileSchema, LinsightToolSchema, ToolChildrenSchema
+from bisheng.linsight.domain.services.message_stream_handle import MessageStreamHandle
+from bisheng.linsight.domain.services.sop_manage import SOPManageService
 from bisheng.linsight.domain.services.state_message_manager import LinsightStateMessageManager, MessageData, \
     MessageEventType
+from bisheng.linsight.domain.services.workbench_impl import LinsightWorkbenchImpl
 from bisheng.share_link.api.dependencies import header_share_token_parser
 from bisheng.share_link.domain.models.share_link import ShareLink
 from bisheng.utils import util

@@ -19,6 +19,13 @@ class KnowledgeTypeEnum(Enum):
     QA = 1  # QAThe knowledge base upon
     NORMAL = 0  # Docly Knowledge Base
     PRIVATE = 2  # Workbench Personal Knowledge Base
+    SPACE = 3  # Knowledge Space
+
+
+class AuthTypeEnum(str, Enum):
+    PUBLIC = 'public'
+    PRIVATE = 'private'
+    APPROVAL = 'approval'
 
 
 class KnowledgeState(Enum):
@@ -57,6 +64,8 @@ class KnowledgeBase(SQLModelSerializable):
     index_name: Optional[str] = Field(default=None, index=False)
     state: Optional[int] = Field(index=False, default=KnowledgeState.PUBLISHED.value,
                                  description='value from KnowledgeState')
+    icon: Optional[str] = Field(default=None, description='Knowledge Space Icon')
+    auth_type: AuthTypeEnum = Field(default=AuthTypeEnum.PUBLIC, description='Authentication Type')
 
     metadata_fields: Optional[List[Dict]] = Field(default=None, sa_column=Column(JSON, nullable=True),
                                                   description="Metadata Field Configuration for Knowledge Base")
@@ -525,3 +534,127 @@ class KnowledgeDao(KnowledgeBase):
         statement = select(Knowledge).order_by(col(Knowledge.id).asc()).limit(1)
         with get_sync_db_session() as session:
             return session.exec(statement).first()
+
+    # ─── Knowledge Space specific ────────────────────────────────────────────
+
+    @classmethod
+    def count_spaces_by_user(cls, user_id: int) -> int:
+        """ Count how many Knowledge Spaces a user has created """
+        with get_sync_db_session() as session:
+            return session.scalar(
+                select(func.count(Knowledge.id)).where(
+                    Knowledge.user_id == user_id,
+                    Knowledge.type == KnowledgeTypeEnum.SPACE.value
+                )
+            )
+
+    @classmethod
+    async def async_count_spaces_by_user(cls, user_id: int) -> int:
+        """ Async: Count how many Knowledge Spaces a user has created """
+        async with get_async_db_session() as session:
+            return await session.scalar(
+                select(func.count(Knowledge.id)).where(
+                    Knowledge.user_id == user_id,
+                    Knowledge.type == KnowledgeTypeEnum.SPACE.value
+                )
+            )
+
+    @classmethod
+    def get_spaces_by_user(cls, user_id: int, order_by: str = 'update_time') -> List[Knowledge]:
+        """ Get all Knowledge Spaces created by a user """
+        statement = select(Knowledge).where(
+            Knowledge.user_id == user_id,
+            Knowledge.type == KnowledgeTypeEnum.SPACE.value
+        )
+        statement = cls._apply_space_order(statement, order_by)
+        with get_sync_db_session() as session:
+            return session.exec(statement).all()
+
+    @classmethod
+    async def async_get_spaces_by_user(cls, user_id: int, order_by: str = 'update_time') -> List[Knowledge]:
+        """ Async: Get all Knowledge Spaces created by a user """
+        statement = select(Knowledge).where(
+            Knowledge.user_id == user_id,
+            Knowledge.type == KnowledgeTypeEnum.SPACE.value
+        )
+        statement = cls._apply_space_order(statement, order_by)
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return result.all()
+
+    @classmethod
+    def get_spaces_by_ids(cls, space_ids: List[int], order_by: str = 'update_time') -> List[Knowledge]:
+        """ Get Knowledge Spaces by a list of IDs """
+        if not space_ids:
+            return []
+        statement = select(Knowledge).where(
+            Knowledge.id.in_(space_ids),
+            Knowledge.type == KnowledgeTypeEnum.SPACE.value
+        )
+        statement = cls._apply_space_order(statement, order_by)
+        with get_sync_db_session() as session:
+            return session.exec(statement).all()
+
+    @classmethod
+    async def async_get_spaces_by_ids(cls, space_ids: List[int], order_by: str = 'update_time') -> List[Knowledge]:
+        """ Async: Get Knowledge Spaces by a list of IDs """
+        if not space_ids:
+            return []
+        statement = select(Knowledge).where(
+            Knowledge.id.in_(space_ids),
+            Knowledge.type == KnowledgeTypeEnum.SPACE.value
+        )
+        statement = cls._apply_space_order(statement, order_by)
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return result.all()
+
+    @classmethod
+    def get_public_spaces(cls, order_by: str = 'update_time') -> List[Knowledge]:
+        """ Get all PUBLIC and APPROVAL Knowledge Spaces (Knowledge Square) """
+        statement = select(Knowledge).where(
+            Knowledge.type == KnowledgeTypeEnum.SPACE.value,
+            Knowledge.auth_type.in_([AuthTypeEnum.PUBLIC.value, AuthTypeEnum.APPROVAL.value])
+        )
+        statement = cls._apply_space_order(statement, order_by)
+        with get_sync_db_session() as session:
+            return session.exec(statement).all()
+
+    @classmethod
+    async def async_get_public_spaces(cls, order_by: str = 'update_time') -> List[Knowledge]:
+        """ Async: Get all PUBLIC and APPROVAL Knowledge Spaces (Knowledge Square) """
+        statement = select(Knowledge).where(
+            Knowledge.type == KnowledgeTypeEnum.SPACE.value,
+            Knowledge.auth_type.in_([AuthTypeEnum.PUBLIC.value, AuthTypeEnum.APPROVAL.value])
+        )
+        statement = cls._apply_space_order(statement, order_by)
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return result.all()
+
+    @classmethod
+    def update_space(cls, space: Knowledge) -> Knowledge:
+        """ Persist an updated Knowledge Space record """
+        with get_sync_db_session() as session:
+            session.add(space)
+            session.commit()
+            session.refresh(space)
+            return space
+
+    @classmethod
+    async def async_update_space(cls, space: Knowledge) -> Knowledge:
+        """ Async: Persist an updated Knowledge Space record """
+        async with get_async_db_session() as session:
+            session.add(space)
+            await session.commit()
+            await session.refresh(space)
+            return space
+
+    @staticmethod
+    def _apply_space_order(statement, order_by: str):
+        if order_by == 'create_time':
+            return statement.order_by(Knowledge.create_time.desc())
+        elif order_by == 'name':
+            return statement.order_by(Knowledge.name.asc())
+        else:
+            return statement.order_by(Knowledge.update_time.desc())
