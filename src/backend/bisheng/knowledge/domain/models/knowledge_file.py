@@ -165,6 +165,14 @@ class KnowledgeFileDao(KnowledgeFileBase):
                 KnowledgeFile.id)).filter(KnowledgeFile.knowledge_id == knowledge_id).scalar()
 
     @classmethod
+    async def async_count_file_by_knowledge_id(cls, knowledge_id: int):
+        statement = select(func.count()).where(
+            KnowledgeFile.knowledge_id == knowledge_id
+        )
+        async with get_async_db_session() as session:
+            return await session.scalar(statement)
+
+    @classmethod
     def delete_batch(cls, file_ids: List[int]) -> bool:
         with get_sync_db_session() as session:
             session.exec(delete(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids)))

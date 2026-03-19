@@ -2,11 +2,11 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional, List
 
-from sqlalchemy import Column, CHAR, Enum as SQLEnum, DateTime, text, Boolean, delete
-from sqlmodel import Field, select
+from sqlalchemy import Column, CHAR, Enum as SQLEnum, DateTime, text, Boolean, delete, func
+from sqlmodel import Field, select, update, col
 
 from bisheng.common.models.base import SQLModelSerializable
-from bisheng.core.database import get_sync_db_session
+from bisheng.core.database import get_sync_db_session, get_async_db_session
 
 
 class BusinessTypeEnum(str, Enum):
@@ -113,7 +113,7 @@ class SpaceChannelMemberDao:
     @classmethod
     async def async_insert_member(cls, member: SpaceChannelMember) -> SpaceChannelMember:
         """ Async: Insert a new member record """
-        from bisheng.core.database import get_async_db_session
+
         async with get_async_db_session() as session:
             session.add(member)
             await session.commit()
@@ -123,7 +123,7 @@ class SpaceChannelMemberDao:
     @classmethod
     async def async_find_member(cls, space_id: int, user_id: int) -> Optional[SpaceChannelMember]:
         """ Async: Find an existing membership record for a user in a space (regardless of status) """
-        from bisheng.core.database import get_async_db_session
+
         statement = select(SpaceChannelMember).where(
             SpaceChannelMember.business_id == str(space_id),
             SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
@@ -136,7 +136,7 @@ class SpaceChannelMemberDao:
     @classmethod
     async def async_get_active_member_role(cls, space_id: int, user_id: int) -> Optional[UserRoleEnum]:
         """ Async: Return the role of an ACTIVE member, or None if not an active member """
-        from bisheng.core.database import get_async_db_session
+
         statement = select(SpaceChannelMember.user_role).where(
             SpaceChannelMember.business_id == str(space_id),
             SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
@@ -150,7 +150,7 @@ class SpaceChannelMemberDao:
     @classmethod
     async def async_count_user_space_subscriptions(cls, user_id: int) -> int:
         """ Async: Count how many spaces the user has actively subscribed to (non-creator) """
-        from bisheng.core.database import get_async_db_session
+
         from sqlmodel import func
         statement = select(func.count()).where(
             SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
@@ -161,9 +161,21 @@ class SpaceChannelMemberDao:
             return await session.scalar(statement)
 
     @classmethod
+    async def async_count_space_members(cls, space_id: int) -> int:
+        """ Async: Count how many spaces the user has active (non-creator) """
+        statement = select(func.count()).where(
+            SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
+            SpaceChannelMember.business_id == str(space_id),
+            SpaceChannelMember.user_role != UserRoleEnum.CREATOR,
+            SpaceChannelMember.status == True,
+        )
+        async with get_async_db_session() as session:
+            return await session.scalar(statement)
+
+    @classmethod
     async def async_get_members_by_space(cls, space_id: int, order_by: str = 'user_id') -> List[SpaceChannelMember]:
         """ Async: Get all active members of a space """
-        from bisheng.core.database import get_async_db_session
+
         statement = select(SpaceChannelMember).where(
             SpaceChannelMember.business_id == str(space_id),
             SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
@@ -180,7 +192,7 @@ class SpaceChannelMemberDao:
     @classmethod
     async def async_get_user_followed_space_ids(cls, user_id: int) -> List[str]:
         """ Async: Get list of space_ids the user follows (not as creator) """
-        from bisheng.core.database import get_async_db_session
+
         statement = select(SpaceChannelMember.business_id).where(
             SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
             SpaceChannelMember.user_id == user_id,
@@ -197,7 +209,7 @@ class SpaceChannelMemberDao:
         Async: Get all active followed space membership records for a user (non-creator),
         ordered by is_pinned DESC then create_time DESC so pinned spaces appear first.
         """
-        from bisheng.core.database import get_async_db_session
+
         statement = (
             select(SpaceChannelMember)
             .where(
@@ -219,7 +231,7 @@ class SpaceChannelMemberDao:
     async def async_get_followed_members_for_spaces(cls, user_id: int, space_ids: List[str]) -> List[
         SpaceChannelMember]:
         """ Async: Get ACTIVE follow-status members for a batch of space IDs and a given user """
-        from bisheng.core.database import get_async_db_session
+
         if not space_ids:
             return []
         statement = select(SpaceChannelMember).where(
@@ -239,7 +251,7 @@ class SpaceChannelMemberDao:
         Async: Get ALL membership records (active AND pending) for a user across a batch of spaces.
         Used by the Knowledge Square to detect whether a user has already joined or applied.
         """
-        from bisheng.core.database import get_async_db_session
+
         if not space_ids:
             return []
         statement = select(SpaceChannelMember).where(
@@ -254,7 +266,7 @@ class SpaceChannelMemberDao:
     @classmethod
     async def async_delete_non_creator_members(cls, space_id: int):
         """ Async: Remove all non-creator members from a space """
-        from bisheng.core.database import get_async_db_session
+
         async with get_async_db_session() as session:
             await session.exec(
                 delete(SpaceChannelMember).where(
@@ -264,3 +276,27 @@ class SpaceChannelMemberDao:
                 )
             )
             await session.commit()
+
+    @classmethod
+    async def pin_space_id(cls, space_id: int, user_id=int, is_pinned: bool = True) -> bool:
+        statement = update(SpaceChannelMember).where(
+            col(SpaceChannelMember.business_id) == str(space_id),
+            col(SpaceChannelMember.business_type) == BusinessTypeEnum.SPACE,
+            col(SpaceChannelMember.user_id) == user_id,
+            col(SpaceChannelMember.status) == True).values(is_pinned=is_pinned)
+        async with get_async_db_session() as session:
+            await session.execute(statement)
+            await session.commit()
+            return True
+
+    @classmethod
+    async def delete_space_member(cls, space_id: int, user_id) -> bool:
+        statement = delete(SpaceChannelMember).where(
+            col(SpaceChannelMember.business_id) == str(space_id),
+            col(SpaceChannelMember.business_type) == BusinessTypeEnum.SPACE,
+            col(SpaceChannelMember.user_id) == user_id
+        )
+        async with get_async_db_session() as session:
+            await session.execute(statement)
+            await session.commit()
+            return True

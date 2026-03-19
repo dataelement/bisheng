@@ -2,7 +2,7 @@ from typing import Optional, List
 
 from pydantic import BaseModel, Field
 
-from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum
+from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum, KnowledgeBase
 
 
 class KnowledgeSpaceCreateReq(BaseModel):
@@ -10,6 +10,13 @@ class KnowledgeSpaceCreateReq(BaseModel):
     description: Optional[str] = Field(None, description="Knowledge Space Description")
     icon: Optional[str] = Field(None, description="Icon Object Name")
     auth_type: AuthTypeEnum = Field(AuthTypeEnum.PUBLIC, description="Authentication Type")
+    is_released: bool = Field(default=False, description="Knowledge Space Status")
+
+
+class KnowledgeSpaceInfoResp(KnowledgeBase):
+    user_name: str = Field(..., description="Knowledge Space creator name")
+    follower_num: int = Field(1, description="Follower Number")
+    file_num: int = Field(1, description="Total File Number")
 
 
 class KnowledgeSpaceUpdateReq(BaseModel):
@@ -17,6 +24,7 @@ class KnowledgeSpaceUpdateReq(BaseModel):
     description: Optional[str] = Field(None, description="Knowledge Space Description")
     icon: Optional[str] = Field(None, description="Icon Object Name")
     auth_type: Optional[AuthTypeEnum] = Field(None, description="Authentication Type")
+    is_released: bool = Field(default=False, description="Knowledge Space Status")
 
 
 class FolderCreateReq(BaseModel):
