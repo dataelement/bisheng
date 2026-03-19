@@ -42,12 +42,22 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
     const observersRef = useRef<Record<string, IntersectionObserver>>({});
 
     const isVisuallyUnread = (n: MessageItem) => !n.is_read;
+    const isApprovalMessageType = (messageType?: string) =>
+        messageType === "request" || messageType === "approve";
+    const isPendingApprovalStatus = (status?: string) =>
+        !!status && ["pending", "PENDING", "wait_approve", "WAIT_APPROVE"].includes(status);
+    const isApprovedStatus = (status?: string) =>
+        !!status && ["approved", "APPROVED"].includes(status);
+    const isRejectedStatus = (status?: string) =>
+        !!status && ["rejected", "REJECTED"].includes(status);
+    const isDecisionActionCode = (actionCode?: string) =>
+        !!actionCode && /(approve|approved|reject|rejected)/i.test(actionCode);
 
     // 统计未读数量
     const unreadCounts = useMemo(() => {
         const allUnread = notifications.filter(isVisuallyUnread).length;
         const requestUnread = notifications.filter(
-            n => n.message_type === "request" && isVisuallyUnread(n)
+            n => isApprovalMessageType(n.message_type) && isVisuallyUnread(n)
         ).length;
         return { all: allUnread, request: requestUnread };
     }, [notifications]);
@@ -121,10 +131,10 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
         if (activeTab !== "request") return { pending: [], approved: [] };
 
         const pending = filteredNotifications.filter(
-            n => n.message_type === "request" && (n.status === "pending" || n.status === "PENDING")
+            n => isApprovalMessageType(n.message_type) && isPendingApprovalStatus(n.status)
         );
         const approved = filteredNotifications.filter(
-            n => n.message_type === "request" && !(n.status === "pending" || n.status === "PENDING")
+            n => isApprovalMessageType(n.message_type) && !isPendingApprovalStatus(n.status)
         );
 
         return { pending, approved };
@@ -202,9 +212,24 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
             notification.content?.map((c) => c.content).filter(Boolean).join("") ||
             "";
         const showApproval =
-            notification.message_type === "request" &&
-            (notification.status === "pending" || notification.status === "PENDING");
+            isApprovalMessageType(notification.message_type) &&
+            isPendingApprovalStatus(notification.status);
         return { text, userName, targetName: "", showApproval };
+    };
+
+    // Parse target info from business_url content part.
+    const getNotificationTarget = (notification: MessageItem): { targetType: "channel" | "space"; targetId: string } | null => {
+        const part = notification.content?.find((c) => c.type === "business_url");
+        const meta = part?.metadata as any;
+        const businessType = meta?.business_type;
+        const data = meta?.data || {};
+        if (businessType === "channel_id" && data?.channel_id) {
+            return { targetType: "channel", targetId: String(data.channel_id) };
+        }
+        if (businessType === "space_id" && data?.space_id) {
+            return { targetType: "space", targetId: String(data.space_id) };
+        }
+        return null;
     };
 
     // 渲染消息项
@@ -220,7 +245,11 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
         const isHovered = hoveredId === id;
 
         // 已审批的消息显示为浅色
-        const isApproved = approvalStatus && !(approvalStatus === "pending" || approvalStatus === "PENDING");
+        const isApproved = isApprovedStatus(approvalStatus) || isRejectedStatus(approvalStatus);
+        const showDeleteMessage =
+            !showApproval &&
+            !isApprovalMessageType(notification.message_type) &&
+            (isApproved || isDecisionActionCode(notification.action_code));
         const textColor = !isVisuallyUnread(notification) || isApproved ? "text-[#86909c]" : "text-[#1d2129]";
 
         const markOneAsRead = (nid: string) => {
@@ -269,7 +298,7 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                                 window.clearTimeout(autoReadTimersRef.current[id]);
                                 autoReadTimersRef.current[id] = window.setTimeout(() => {
                                     // 再次确认仍未读（期间可能手动已读/全部已读）
-                                    const still = notifications.find(n => n.id === id);
+                                    const still = notifications.find(n => n.id === Number(id));
                                     if (still && still.message_type === "notification" && !still.is_read) {
                                         markOneAsRead(id);
                                     }
@@ -307,10 +336,12 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                             <span
                                 className="font-medium cursor-pointer hover:text-[#165dff]"
                                 onClick={() => {
-                                    if (notification.targetType === "channel") {
-                                        navigate(`/channel/share/${notification.targetId}`);
+                                    const target = getNotificationTarget(notification);
+                                    if (!target) return;
+                                    if (target.targetType === "channel") {
+                                        navigate(`/channel/share/${target.targetId}`);
                                     } else {
-                                        navigate(`/knowledge/share/${notification.targetId}`);
+                                        navigate(`/knowledge/share/${target.targetId}`);
                                     }
                                 }}
                             >
@@ -356,24 +387,25 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                         </div>
                     ) : isApproved ? (
                         <div className="absolute right-6 bottom-4">
-                            <span className={`text-[12px] ${approvalStatus === "approved"
+                            <span className={`text-[12px] ${isApprovedStatus(approvalStatus)
                                 ? "text-[#00b42a]"
                                 : "text-[#f53f3f]"
                                 }`}>
-                                {approvalStatus === "approved" ? "已同意" : "已拒绝"}
+                                {isApprovedStatus(approvalStatus) ? "已同意" : "已拒绝"}
                             </span>
                         </div>
                     ) : null}
                 </div>
 
                 {/* 删除按钮（Hover 显示） */}
-                {isHovered && (
+                {isHovered && showDeleteMessage && (
                     <button
                         onClick={() => handleDelete(id)}
-                        className="absolute right-6 top-4 flex items-center justify-center p-1.5 text-[#4e5969] hover:text-[#f53f3f] bg-white border border-[#e5e6eb] rounded hover:border-[#f53f3f] transition-colors"
-                        title="删除"
+                        className="absolute right-6 top-4 flex items-center gap-1 px-3 py-1 text-[12px] text-[#4e5969] bg-white border border-[#e5e6eb] rounded hover:text-[#f53f3f] hover:border-[#f53f3f] transition-colors"
+                        title="删除消息"
                     >
                         <Trash2 className="size-3" />
+                        删除消息
                     </button>
                 )}
             </div>

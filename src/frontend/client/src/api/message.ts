@@ -14,8 +14,10 @@ export interface MessageItem {
   sender: number;
   sender_name: string;
   message_type: string;
+  action_code?: string;
   status: string;
   is_read: boolean;
+  operator_user_id?: number | null;
   create_time: string;
   update_time: string;
 }
@@ -33,11 +35,17 @@ export async function getMessageListApi(params?: {
   page_size?: number;
 }): Promise<MessageListResponse> {
   const resp: any = await request.get(`/api/v1/message/list`, { params });
+  // 兼容两种返回结构：
+  // 1) axios 风格: { data: { data: [...], total: 9 } }
+  // 2) 直接返回:   { data: [...], total: 9 }
   const root = resp?.data ?? resp ?? {};
-  const payload = root?.data ?? {};
+  const payload = root?.data ?? root ?? {};
+  const list = Array.isArray(payload?.data)
+    ? payload.data
+    : (Array.isArray(payload) ? payload : []);
   return {
-    data: payload?.data ?? [],
-    total: payload?.total ?? 0,
+    data: list,
+    total: payload?.total ?? root?.total ?? list.length ?? 0,
   };
 }
 
