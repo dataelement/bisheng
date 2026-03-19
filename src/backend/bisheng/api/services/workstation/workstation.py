@@ -10,7 +10,6 @@ from openai import BaseModel
 from pydantic import field_validator
 
 from bisheng.api.services.base import BaseService
-from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.v1.schema.chat_schema import UseKnowledgeBaseParam
 from bisheng.api.v1.schemas import KnowledgeFileOne, KnowledgeFileProcess, WorkstationConfig, LinsightConfig, \
     SubscriptionConfig, KnowledgeSpaceConfig
@@ -23,6 +22,7 @@ from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum
+from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.llm.domain.services import LLMService
 from bisheng.tool.domain.langchain.knowledge import KnowledgeRetrieverTool
 from bisheng.tool.domain.models.gpts_tools import GptsToolsDao

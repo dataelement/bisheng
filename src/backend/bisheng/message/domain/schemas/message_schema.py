@@ -58,6 +58,8 @@ class MessageItemResponse(BaseModel):
     sender_name: Optional[str] = Field(default=None, description='Sender display name')
     message_type: str = Field(..., description='Message type: notify or approve')
     status: str = Field(..., description='Message status')
+    action_code: Optional[str] = Field(default=None, description='Approval action code for handler routing')
+    operator_user_id: Optional[int] = Field(default=None, description='User ID who approved/rejected')
     is_read: bool = Field(default=False, description='Whether the message has been read by current user')
     create_time: Optional[datetime] = Field(default=None, description='Creation time')
     update_time: Optional[datetime] = Field(default=None, description='Update time')

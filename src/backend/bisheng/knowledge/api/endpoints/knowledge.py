@@ -1,5 +1,4 @@
 import asyncio
-import gc
 import json
 import urllib.parse
 from datetime import datetime
@@ -13,7 +12,6 @@ from fastapi.encoders import jsonable_encoder
 from loguru import logger
 
 from bisheng.api.services import knowledge_imp
-from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.knowledge_imp import add_qa
 from bisheng.api.v1.schemas import (KnowledgeFileProcess, UpdatePreviewFileChunk, UploadFileResponse,
                                     UpdateKnowledgeReq, KnowledgeFileReProcess)
@@ -37,6 +35,7 @@ from bisheng.knowledge.domain.models.knowledge_file import (KnowledgeFileDao, Kn
                                                             QAKnoweldgeDao, QAKnowledgeUpsert, QAStatus)
 from bisheng.knowledge.domain.schemas.knowledge_schema import AddKnowledgeMetadataFieldsReq, \
     UpdateKnowledgeMetadataFieldsReq, ModifyKnowledgeFileMetaDataReq
+from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.llm.domain import LLMService
 from bisheng.llm.domain.const import LLMModelType
 from bisheng.llm.domain.models import LLMDao

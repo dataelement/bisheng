@@ -9,7 +9,6 @@ from json_repair import json_repair
 from langchain_core.messages import SystemMessage, HumanMessage
 from loguru import logger
 
-from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.knowledge_imp import read_chunk_text
 from bisheng.api.v1.schemas import FileProcessBase
 from bisheng.chat.types import IgnoreException
@@ -17,6 +16,7 @@ from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.errcode.knowledge import KnowledgeFileNotSupportedError
 from bisheng.core.cache.utils import file_download
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
+from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.llm.domain.services import LLMService
 from bisheng.utils import generate_uuid
 from bisheng.workflow.callback.event import GuideQuestionData

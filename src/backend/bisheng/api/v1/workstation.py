@@ -18,7 +18,6 @@ from sse_starlette import EventSourceResponse
 
 from bisheng.api.services import knowledge_imp
 from bisheng.api.services.audit_log import AuditLogService
-from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.workflow import WorkFlowService
 from bisheng.api.services.workstation import (WorkstationConversation,
                                               WorkstationMessage, WorkStationService)
@@ -42,9 +41,10 @@ from bisheng.core.logger import trace_id_var
 from bisheng.core.prompts.manager import get_prompt_manager
 from bisheng.database.models.flow import FlowType, FlowDao, FlowStatus
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
+from bisheng.database.models.role_access import AccessType
 from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.database.models.user_link import UserLinkDao
-from bisheng.database.models.role_access import AccessType
+from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.llm.domain import LLMService
 from bisheng.share_link.api.dependencies import header_share_token_parser
 from bisheng.share_link.domain.models.share_link import ShareLink

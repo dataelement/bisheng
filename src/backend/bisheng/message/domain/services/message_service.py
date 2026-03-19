@@ -1,3 +1,4 @@
+import copy
 import logging
 from typing import List, Optional, Any, Dict
 
@@ -16,6 +17,7 @@ from bisheng.message.domain.schemas.message_schema import (
     ApprovalActionEnum,
     TabTypeEnum,
 )
+from bisheng.message.domain.services.approval_handler import ApprovalHandler
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.user.domain.models.user import UserDao
 
@@ -29,9 +31,17 @@ class MessageService:
         self,
         message_repository: 'InboxMessageRepository',
         message_read_repository: 'InboxMessageReadRepository',
+        approval_handlers: Optional[List[ApprovalHandler]] = None,
     ):
         self.message_repository = message_repository
         self.message_read_repository = message_read_repository
+        self._handler_map: Dict[str, ApprovalHandler] = {}
+
+        for handler in approval_handlers or []:
+            action_code = handler.get_action_code()
+            if action_code in self._handler_map:
+                logger.warning("Duplicate approval handler registered for action_code=%s", action_code)
+            self._handler_map[action_code] = handler
 
     async def send_message(
         self,
@@ -40,6 +50,7 @@ class MessageService:
         message_type: MessageTypeEnum,
         receiver: List[int],
         status: MessageStatusEnum = MessageStatusEnum.WAIT_APPROVE,
+        action_code: Optional[str] = None,
     ) -> InboxMessage:
         """Create and save a new inbox message."""
         message = InboxMessage(
@@ -48,6 +59,7 @@ class MessageService:
             message_type=message_type,
             receiver=receiver,
             status=status,
+            action_code=action_code,
         )
         saved_message = await self.message_repository.save(message)
         logger.info(
@@ -112,6 +124,8 @@ class MessageService:
                 sender_name=sender_map.get(msg.sender),
                 message_type=msg.message_type.value,
                 status=msg.status.value,
+                action_code=msg.action_code,
+                operator_user_id=msg.operator_user_id,
                 is_read=msg.id in read_set,
                 create_time=msg.create_time,
                 update_time=msg.update_time,
@@ -147,17 +161,13 @@ class MessageService:
     async def mark_all_as_read(self, login_user: UserPayload) -> int:
         """Mark all messages as read for the current user."""
         read_message_ids = await self.message_read_repository.get_read_message_ids(login_user.user_id)
+        read_set = set(read_message_ids)
 
-        # Get all message IDs for this user
-        all_messages = await self.message_repository.find_messages_by_receiver(
-            user_id=login_user.user_id,
-            page=1,
-            page_size=10000,  # Large enough to cover all messages
-        )
-        all_msg_ids = [m.id for m in all_messages]
+        # Use dedicated method to get all message IDs without loading full objects
+        all_msg_ids = await self.message_repository.get_all_message_ids_by_receiver(login_user.user_id)
 
         # Filter out already read messages
-        unread_ids = [mid for mid in all_msg_ids if mid not in set(read_message_ids)]
+        unread_ids = [mid for mid in all_msg_ids if mid not in read_set]
         if not unread_ids:
             return 0
 
@@ -171,7 +181,8 @@ class MessageService:
     ) -> InboxMessage:
         """
         Handle approval action (agree/reject) on an approval message.
-        Updates message content to reflect the action result and changes status.
+        Executes handler business logic FIRST, then persists state changes.
+        If handler fails, message status remains unchanged (rollback-safe).
         """
         # 1. Find the message
         message = await self.message_repository.find_by_id(message_id)
@@ -186,25 +197,51 @@ class MessageService:
         if message.status in (MessageStatusEnum.APPROVED, MessageStatusEnum.REJECTED):
             raise MessageAlreadyApprovedError()
 
-        # 4. Update status
+        # 4. Determine new status
         new_status = (
             MessageStatusEnum.APPROVED
             if action == ApprovalActionEnum.AGREE
             else MessageStatusEnum.REJECTED
         )
 
-        # 5. Update content - replace interactive elements with result text
-        updated_content = self._update_content_after_approval(message.content, action)
+        original_content = copy.deepcopy(message.content)
+        action_code = self._extract_action_code(message)
 
-        # 6. Persist changes
-        await self.message_repository.update_message_status(message_id, new_status)
-        updated_message = await self.message_repository.update_message_content(message_id, updated_content)
+        # 5. Execute handler FIRST — if it fails, message status stays unchanged
+        handler = self._handler_map.get(action_code)
+        if handler:
+            handler_message = InboxMessage(
+                id=message.id,
+                content=original_content,
+                sender=message.sender,
+                message_type=message.message_type,
+                receiver=list(message.receiver),
+                status=message.status,
+                action_code=message.action_code,
+                create_time=message.create_time,
+                update_time=message.update_time,
+            )
+            if action == ApprovalActionEnum.AGREE:
+                await handler.on_approved(handler_message, login_user.user_id)
+            else:
+                await handler.on_rejected(handler_message, login_user.user_id)
 
-        # 7. Auto-mark as read after action
+        # 6. Update content — set button result text
+        updated_content = self._update_content_after_approval(original_content, action)
+
+        # 7. Persist all changes atomically (status + content + operator)
+        updated_message = await self.message_repository.update_message_after_approval(
+            message_id=message_id,
+            status=new_status,
+            content=updated_content,
+            operator_user_id=login_user.user_id,
+        )
+
+        # 8. Auto-mark as read after action
         await self.message_read_repository.mark_as_read(message_id, login_user.user_id)
 
         logger.info(
-            "Approval action processed: message_id=%s, action=%s, user=%s",
+            "Approval action processed: message_id=%s, action=%s, operator=%s",
             message_id, action.value, login_user.user_id,
         )
 
@@ -217,8 +254,7 @@ class MessageService:
     ) -> List[Dict[str, Any]]:
         """
         Update message content after approval action.
-        - Replace 'user' type with 'text' type (remove interactivity)
-        - Replace 'business_url' type with 'text' type
+        - Preserve 'user' and 'business_url' types for continued clickability
         - Set agree_reject_button content to the action result
         """
         updated = []
@@ -226,13 +262,7 @@ class MessageService:
             new_item = dict(item)
             item_type = item.get('type', '')
 
-            if item_type == 'user':
-                new_item['type'] = 'text'
-
-            elif item_type == 'business_url':
-                new_item['type'] = 'text'
-
-            elif item_type == 'agree_reject_button':
+            if item_type == 'agree_reject_button':
                 new_item['content'] = action.value
 
             updated.append(new_item)
@@ -253,13 +283,14 @@ class MessageService:
     @staticmethod
     def build_generic_notify_content(
         text: str,
+        content_type: str = "text",
     ) -> List[Dict[str, Any]]:
         """
         Build generic notification content.
         """
         return [
             {
-                "type": "text",
+                "type": content_type,
                 "content": text,
             }
         ]
@@ -269,11 +300,12 @@ class MessageService:
         sender: int,
         text: str,
         receiver_user_ids: List[int],
+        content_type: str = "text",
     ) -> InboxMessage:
         """
         Send a generic notification message to specific receivers.
         """
-        content = self.build_generic_notify_content(text)
+        content = self.build_generic_notify_content(text, content_type=content_type)
 
         message = await self.send_message(
             content=content,
@@ -320,7 +352,7 @@ class MessageService:
                 "type": "agree_reject_button",
                 "content": "",
                 "metadata": {
-                    "business_type": button_action_code,
+                    "action_code": button_action_code,
                     "data": {"approval_id": str(approval_message_id or "")},
                 },
             },
@@ -340,6 +372,7 @@ class MessageService:
     ) -> InboxMessage:
         """
         Send a generic approval notification to specific receivers.
+        Saves the message first, then backfills approval_id in a single update.
         """
         content = self.build_generic_approval_content(
             applicant_user_id=applicant_user_id,
@@ -351,16 +384,17 @@ class MessageService:
             button_action_code=button_action_code,
         )
 
-        # Create the message
+        # Create the message with action_code stored on model for reliable routing
         message = await self.send_message(
             content=content,
             sender=applicant_user_id,
             message_type=MessageTypeEnum.APPROVE,
             receiver=receiver_user_ids,
             status=MessageStatusEnum.WAIT_APPROVE,
+            action_code=button_action_code,
         )
 
-        # Update the approval_id in the content to reference the message itself
+        # Backfill approval_id in content to reference the message itself
         updated_content = []
         for item in content:
             new_item = dict(item)
@@ -372,8 +406,28 @@ class MessageService:
                 new_item['metadata'] = metadata
             updated_content.append(new_item)
 
-        await self.message_repository.update_message_content(message.id, updated_content)
-        message.content = updated_content
+        updated_message = await self.message_repository.update_message_content(message.id, updated_content)
 
-        return message
+        return updated_message
 
+    @staticmethod
+    def _extract_action_code(message: InboxMessage) -> str:
+        """
+        Extract approval action code. Prefers model-level action_code field,
+        falls back to content JSON for backward compatibility with old messages.
+        """
+        # Prefer model field (set by send_generic_approval)
+        if message.action_code:
+            return message.action_code
+
+        # Fallback: extract from content JSON (supports both old key 'business_type' and new key 'action_code')
+        for item in (message.content or []):
+            if item.get('type') != 'agree_reject_button':
+                continue
+
+            metadata = item.get('metadata', {})
+            code = metadata.get('action_code') or metadata.get('business_type')
+            if isinstance(code, str):
+                return code
+
+        return ""

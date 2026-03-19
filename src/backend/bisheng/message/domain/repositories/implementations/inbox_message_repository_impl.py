@@ -124,16 +124,20 @@ class InboxMessageRepositoryImpl(BaseRepositoryImpl[InboxMessage, int], InboxMes
         result = await self.session.exec(query)
         return result.one()
 
-    async def update_message_status(
+    async def update_message_after_approval(
         self,
         message_id: int,
         status: MessageStatusEnum,
+        content: list,
+        operator_user_id: int,
     ) -> Optional[InboxMessage]:
-        """Update message approval status."""
+        """Atomically update message status, content, and operator after approval action."""
         message = await self.find_by_id(message_id)
         if not message:
             return None
         message.status = status
+        message.content = content
+        message.operator_user_id = operator_user_id
         return await self.update(message)
 
     async def update_message_content(
@@ -141,9 +145,19 @@ class InboxMessageRepositoryImpl(BaseRepositoryImpl[InboxMessage, int], InboxMes
         message_id: int,
         content: list,
     ) -> Optional[InboxMessage]:
-        """Update message content (e.g., after approval action changes button state)."""
+        """Update message content (e.g., after approval_id backfill)."""
         message = await self.find_by_id(message_id)
         if not message:
             return None
         message.content = content
         return await self.update(message)
+
+    async def get_all_message_ids_by_receiver(
+        self,
+        user_id: int,
+    ) -> List[int]:
+        """Get all message IDs where the user is a receiver, using JSON_CONTAINS."""
+        query = select(InboxMessage.id)
+        query = self._apply_receiver_filter(query, user_id)
+        result = await self.session.exec(query)
+        return list(result.all())

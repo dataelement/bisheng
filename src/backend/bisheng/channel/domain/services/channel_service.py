@@ -41,6 +41,7 @@ from bisheng.common.errcode.channel import (
 from bisheng.common.models.space_channel_member import BusinessTypeEnum, UserRoleEnum
 from bisheng.common.repositories.interfaces.space_channel_member_repository import SpaceChannelMemberRepository
 from bisheng.core.external.bisheng_information_client.bisheng_information_manager import get_bisheng_information_client
+from bisheng.message.domain.services.message_service import MessageService
 from bisheng.user.domain.models.user import UserDao
 
 logger = logging.getLogger(__name__)
@@ -59,7 +60,7 @@ class ChannelService:
                  channel_info_source_repository: 'ChannelInfoSourceRepository',
                  article_es_service: 'ArticleEsService' = None,
                  article_read_repository: 'ArticleReadRepository' = None,
-                 message_service: Optional[Any] = None):
+                 message_service: Optional[MessageService] = None):
         self.channel_repository = channel_repository
         self.space_channel_member_repository = space_channel_member_repository
         self.channel_info_source_repository = channel_info_source_repository
@@ -1222,11 +1223,9 @@ class ChannelService:
             if latest_article_create_time is None:
                 continue
 
-            current_latest_time = self._normalize_datetime(channel.latest_article_update_time)
-            if current_latest_time is None or latest_article_create_time > current_latest_time:
-                channel.latest_article_update_time = latest_article_create_time
-                await self.channel_repository.update(channel)
-                updated_count += 1
+            channel.latest_article_update_time = latest_article_create_time
+            await self.channel_repository.update(channel)
+            updated_count += 1
 
         return updated_count
 
@@ -1244,9 +1243,10 @@ class ChannelService:
             Number of channels updated
         """
         from bisheng.channel.domain.es.article_index import ARTICLE_INDEX_NAME
+        from bisheng.channel.domain.models.channel import Channel
         from bisheng.core.database import get_sync_db_session
         from bisheng.core.search.elasticsearch.manager import get_es_connection_sync
-        from sqlmodel import select
+        from sqlmodel import update
 
         if not channels:
             return 0
@@ -1255,6 +1255,7 @@ class ChannelService:
         updated_count = 0
 
         with get_sync_db_session() as session:
+            update_channels = []
             for channel in channels:
                 try:
                     # Get latest article create_time
@@ -1287,16 +1288,9 @@ class ChannelService:
                     if latest_article_create_time is None:
                         continue
 
-                    current_latest_time = ChannelService._normalize_datetime(channel.latest_article_update_time)
-                    if current_latest_time is None or latest_article_create_time > current_latest_time:
-                        # Re-fetch channel from this session to avoid detached instance issues
-                        db_channel = session.exec(
-                            select(Channel).where(Channel.id == channel.id)
-                        ).first()
-                        if db_channel:
-                            db_channel.latest_article_update_time = latest_article_create_time
-                            session.add(db_channel)
-                            updated_count += 1
+                    channel.latest_article_update_time = latest_article_create_time
+                    update_channels.append(channel)
+                    updated_count += 1
 
                 except Exception as exc:
                     logger.exception(
@@ -1304,7 +1298,14 @@ class ChannelService:
                     )
                     continue
 
-            if updated_count > 0:
+            if update_channels:
+                # Batch update channels in the database using UPDATE statements
+                for channel in update_channels:
+                    stmt = (
+                        update(Channel)
+                        .where(Channel.id == channel.id)
+                        .values(latest_article_update_time=channel.latest_article_update_time)
+                    )
+                    session.execute(stmt)
                 session.commit()
-
         return updated_count

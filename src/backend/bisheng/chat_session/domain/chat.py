@@ -1,7 +1,6 @@
 from typing import Optional, List
 
 from bisheng.api.v1.schema.chat_schema import ChatMessageHistoryResponse
-from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.database.models.session import MessageSessionDao
 from bisheng.user.domain.models.user import UserDao
@@ -15,10 +14,10 @@ class ChatSessionService:
                                page_size: Optional[int] = 20) -> List[ChatMessageHistoryResponse]:
         """Retrieve chat history for a user."""
         if not chat_id or not flow_id:
-            raise NotFoundError()
+            return []
         session_info = await MessageSessionDao.async_get_one(chat_id=chat_id)
         if not session_info or session_info.flow_id != flow_id:
-            raise NotFoundError()
+            return []
 
         history = await ChatMessageDao.afilter_message_by_chat_id(chat_id=chat_id, flow_id=flow_id,
                                                                   message_id=message_id, page_size=page_size)

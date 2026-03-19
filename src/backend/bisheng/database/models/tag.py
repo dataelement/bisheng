@@ -1,7 +1,8 @@
 from datetime import datetime
+from enum import Enum
 from typing import Optional, List, Dict
 
-from sqlalchemy import Column, DateTime, UniqueConstraint
+from sqlalchemy import Column, DateTime, String, UniqueConstraint
 from sqlmodel import Field, select, delete, and_, func, text
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -9,11 +10,18 @@ from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.group_resource import ResourceTypeEnum
 
 
+class TagBusinessTypeEnum(str, Enum):
+    KNOWLEDGE_SPACE = 'knowledge_space'
+
+
 class TagBase(SQLModelSerializable):
     """
     Tag Form
     """
     name: Optional[str] = Field(default=None, index=True, unique=True, description="Label Name")
+    business_type: Optional[TagBusinessTypeEnum] = Field(default=None, sa_column=Column(String(50)),
+                                                         description="Business Type")
+    business_id: Optional[str] = Field(default=None, sa_column=Column(String(36)), description="Business ID")
     user_id: int = Field(default=0, description='Create UserID')
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')), description="Creation Time")

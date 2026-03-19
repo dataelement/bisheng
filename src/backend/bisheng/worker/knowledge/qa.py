@@ -3,7 +3,6 @@ from typing import List
 from loguru import logger
 from pymilvus import Collection
 
-from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.services.knowledge_imp import QA_save_knowledge, decide_vectorstores
 from bisheng.common.errcode.knowledge import KnowledgeFileFailedError
 from bisheng.core.logger import trace_id_var
@@ -12,6 +11,7 @@ from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeSta
 from bisheng.knowledge.domain.models.knowledge_file import (
     QAKnoweldgeDao, QAKnowledge, QAKnowledgeUpsert, QAStatus,
 )
+from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.llm.domain import LLMService
 from bisheng.worker.main import bisheng_celery
 from bisheng_langchain.vectorstores import Milvus, ElasticKeywordsSearch
