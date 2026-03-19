@@ -789,7 +789,7 @@ async def get_used_apps(
         )
     else:
         # Get user's accessible resource ids
-        access_types = [AccessType.FLOW, AccessType.WORKFLOW, AccessType.ASSISTANT_READ]
+        access_types = [AccessType.WORKFLOW, AccessType.ASSISTANT_READ]
         id_extra = login_user.get_user_access_resource_ids(access_types)
         apps, _ = await FlowDao.aget_all_apps(
             id_list=flow_ids,
@@ -854,7 +854,7 @@ async def pin_used_app(
     elif flow_type == FlowType.WORKFLOW.value:
         access_type = AccessType.WORKFLOW
     else:
-        access_type = AccessType.FLOW
+        raise UsedAppNotFoundError(flow_id=flow_id)
 
     if not await login_user.async_access_check(app_info.user_id, flow_id, access_type):
         return UnAuthorizedError.return_resp()

@@ -12,9 +12,9 @@ from bisheng.knowledge.rag.pipeline.types import PipelineStage, PipelineResult, 
 
 class BasePipeline(ABC):
     def __init__(self,
-                 loader: BaseBishengLoader,
-                 transformers: List[BaseDocumentTransformer],
-                 vector_store: List[VectorStore],
+                 loader: BaseBishengLoader = None,
+                 transformers: List[BaseDocumentTransformer] = None,
+                 vector_store: List[VectorStore] = None,
                  **kwargs):
         self.loader = loader
         self.transformers = transformers
@@ -31,10 +31,10 @@ class BasePipeline(ABC):
         return result
 
     @abstractmethod
-    def run(self, config: PipelineConfig) -> PipelineResult:
+    def run(self, config: PipelineConfig = None) -> PipelineResult:
         pass
 
-    async def arun(self, config: PipelineConfig) -> PipelineResult:
+    async def arun(self, config: PipelineConfig = None) -> PipelineResult:
         return await asyncio.to_thread(self.run, config)
 
 
@@ -61,7 +61,7 @@ class NormalPipeline(BasePipeline):
 
         return self._make_result(stage=PipelineStage.INGEST, docs=docs, start=start)
 
-    async def arun(self, config: PipelineConfig) -> PipelineResult:
+    async def arun(self, config: PipelineConfig = None) -> PipelineResult:
         if config is None:
             config = PipelineConfig()
 

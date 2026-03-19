@@ -42,6 +42,7 @@ export function useSourceManager(
     const [loadingSources, setLoadingSources] = useState(false);
     const prevExpanded = useRef(false);
     const processingWechatRef = useRef("");
+    const wechatRequestTokenRef = useRef(0);
     const [wechatAddError, setWechatAddError] = useState(false);
     const localize = useLocalize();
 
@@ -164,11 +165,13 @@ export function useSourceManager(
         const target = searchKeyword.trim();
         if (!target || processingWechatRef.current === target) return;
         processingWechatRef.current = target;
+        const token = ++wechatRequestTokenRef.current;
 
         const timer = setTimeout(() => {
             (async () => {
                 try {
                     const res = await addWechatSourceApi({ url: target });
+                    if (wechatRequestTokenRef.current !== token) return;
                     const root: any = res as any;
                     const statusCode = root?.status_code ?? root?.code;
                     if (statusCode && statusCode !== 200) {
@@ -179,7 +182,7 @@ export function useSourceManager(
                     const created: InformationSource = {
                         id: String(raw.id ?? raw.source_id ?? `wx-${Date.now()}`),
                         // 后端返回 name/title，否则退回为固定文案“公众号内容源”
-                        name: String(raw.name ?? raw.title ?? "公众号内容源"),
+                        name: String(raw.name ?? raw.title ?? localize("com_subscription.official_account_content_source")),
                         avatar: raw.avatar,
                         url: raw.url ?? target,
                         type: "official_account"
@@ -194,8 +197,10 @@ export function useSourceManager(
                         return [...prev, created];
                     });
                 } catch {
+                    if (wechatRequestTokenRef.current !== token) return;
                     setWechatAddError(true);
                 } finally {
+                    if (wechatRequestTokenRef.current !== token) return;
                     setSearchKeyword("");
                     processingWechatRef.current = "";
                 }
@@ -217,7 +222,12 @@ export function useSourceManager(
         }
     };
 
-    const handleClearSearch = () => setSearchKeyword("");
+    const handleClearSearch = () => {
+        // 用户点击「暂不添加」/清空搜索：让当前公众号添加流程失效，避免异步返回后仍被加入
+        wechatRequestTokenRef.current++;
+        processingWechatRef.current = "";
+        setSearchKeyword("");
+    };
 
     const handleConfirm = () => {
         onSourcesChange([...pendingSources]);

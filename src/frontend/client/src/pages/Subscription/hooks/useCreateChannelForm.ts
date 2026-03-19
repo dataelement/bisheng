@@ -1,3 +1,4 @@
+import { useLocalize } from "~/hooks";
 import { useState, useCallback } from "react";
 import type { Channel, InformationSource } from "~/api/channels";
 import { listManagerSourcesApi } from "~/api/channels";
@@ -16,6 +17,7 @@ function nanoid() {
 }
 
 export function useCreateChannelForm() {
+    const localize = useLocalize();
     // Form fields
     const [sources, setSources] = useState<InformationSource[]>([]);
     const [channelName, setChannelName] = useState("");
@@ -122,7 +124,7 @@ export function useCreateChannelForm() {
             // 以 name 分组，每个 name 一个子频道
             const groupedByName = new Map<string, typeof subRules>();
             for (const g of subRules) {
-                const key = (g.name as string) || "子频道名称";
+                const key = (g.name as string) || localize("com_subscription.sub_channel_name");
                 if (!groupedByName.has(key)) {
                     groupedByName.set(key, []);
                 }
@@ -197,7 +199,7 @@ export function useCreateChannelForm() {
             ...subChannels,
             {
                 id,
-                name: "子频道名称",
+                name: localize("com_subscription.sub_channel_name"),
                 collapsed: false,
                 groups: [{ id: nanoid(), relation: "and", conditions: [{ id: nanoid(), include: true, keywords: "" }] }],
                 topRelation: "and"
@@ -207,9 +209,14 @@ export function useCreateChannelForm() {
     };
 
     const handleRemoveSubChannel = (id: string) => {
-        const next = subChannels.filter((s) => s.id !== id);
-        setSubChannels(next);
-        if (next.length === 0) setCreateSubChannel(false);
+        setSubChannels((prev) => {
+            const next = prev.filter((s) => s.id !== id);
+            if (next.length === 0) {
+                setCreateSubChannel(false);
+                setLastAddedSubChannelId(null);
+            }
+            return next;
+        });
     };
 
     const handleSubChannelNameChange = (id: string, name: string) => {
@@ -223,6 +230,22 @@ export function useCreateChannelForm() {
         setSubChannels((prev) =>
             prev.map((s) => (s.id === id ? { ...s, collapsed: !s.collapsed } : s))
         );
+    };
+
+    const handleSubChannelGroupsChange = (id: string, groups: FilterGroup[]) => {
+        setSubChannels((prev) => {
+            // 子频道筛选条件被删空（例如点到第一个减号把组删没了）时：
+            // 直接移除该子频道；若移除后没有任何子频道，则联动关闭开关
+            if (!groups || groups.length === 0) {
+                const next = prev.filter((s) => s.id !== id);
+                if (next.length === 0) {
+                    setCreateSubChannel(false);
+                    setLastAddedSubChannelId(null);
+                }
+                return next;
+            }
+            return prev.map((s) => (s.id === id ? { ...s, groups } : s));
+        });
     };
 
     // Content filter toggle with auto-init
@@ -275,6 +298,7 @@ export function useCreateChannelForm() {
         handleRemoveSubChannel,
         handleSubChannelNameChange,
         handleSubChannelToggleCollapse,
+        handleSubChannelGroupsChange,
         handleContentFilterToggle,
         handleCreateSubChannelToggle,
     };

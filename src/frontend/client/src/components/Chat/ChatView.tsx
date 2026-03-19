@@ -171,7 +171,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
             {!shareToken && <div className="w-full max-w-[768px] mx-auto">
               {isLingsi ?
                 <LinsightChatInput
-                  disabled={!bsConfig?.models?.length || !!shareToken}
+                  disabled={!!shareToken}
                   isStreaming={isStreaming}
                   isLingsi
                   onSend={handleSend}

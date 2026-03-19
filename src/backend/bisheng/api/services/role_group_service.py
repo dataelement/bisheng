@@ -249,9 +249,7 @@ class RoleGroupService():
     async def get_group_resources(self, group_id: int, resource_type: ResourceTypeEnum, name: str,
                                   page_size: int, page_num: int) -> (List[Any], int):
         """ Get resources under user """
-        if resource_type.value == ResourceTypeEnum.FLOW.value:
-            return await asyncio.to_thread(self.get_group_flow, group_id, name, page_size, page_num)
-        elif resource_type.value == ResourceTypeEnum.KNOWLEDGE.value:
+        if resource_type.value == ResourceTypeEnum.KNOWLEDGE.value:
             return await asyncio.to_thread(self.get_group_knowledge, group_id, name, page_size, page_num)
         elif resource_type.value == ResourceTypeEnum.WORK_FLOW.value:
             return await asyncio.to_thread(self.get_group_flow, group_id, name, page_size, page_num, FlowType.WORKFLOW)
@@ -275,19 +273,14 @@ class RoleGroupService():
         return user_map
 
     def get_group_flow(self, group_id: int, keyword: str, page_size: int, page_num: int,
-                       flow_type: Optional[FlowType] = None) -> (List[Any], int):
+                       flow_type: FlowType = FlowType.WORKFLOW) -> (List[Any], int):
         """ Get a list of knowledge bases under user groups """
-        # Query skills under user groupsIDVertical
-        rs_type = ResourceTypeEnum.FLOW
-        if flow_type == FlowType.WORKFLOW:
-            rs_type = ResourceTypeEnum.WORK_FLOW
-        resource_list = GroupResourceDao.get_group_resource(group_id, rs_type)
+        resource_list = GroupResourceDao.get_group_resource(group_id, ResourceTypeEnum.WORK_FLOW)
         if not resource_list:
             return [], 0
         res = []
         flow_ids = [resource.third_id for resource in resource_list]
-        flow_type_value = flow_type.value if flow_type else FlowType.FLOW.value
-        data, total = FlowDao.filter_flows_by_ids(flow_ids, keyword, page_num, page_size, flow_type_value)
+        data, total = FlowDao.filter_flows_by_ids(flow_ids, keyword, page_num, page_size, flow_type.value)
         db_user_ids = {one.user_id for one in data}
         user_map = self.get_user_map(db_user_ids)
         for one in data:
@@ -385,9 +378,10 @@ class RoleGroupService():
         resource_ids = []
         # Description is a user group administrator, need to filter to get the resources under the corresponding group
         if groups:
-            group_resources = await GroupResourceDao.get_groups_resource(groups, resource_types=[ResourceTypeEnum.FLOW,
-                                                                                           ResourceTypeEnum.ASSISTANT,
-                                                                                           ResourceTypeEnum.WORK_FLOW])
+            group_resources = await GroupResourceDao.get_groups_resource(groups, resource_types=[
+                ResourceTypeEnum.ASSISTANT,
+                ResourceTypeEnum.WORK_FLOW,
+            ])
             if not group_resources:
                 return [], 0
             resource_ids = [one.third_id for one in group_resources]

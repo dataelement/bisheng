@@ -121,30 +121,12 @@ def convert_pdf_to_md(output_dir, pdf_path, doc_id):
 
     except Exception as e:
         logger.exception(f"Error processing pdf: {e}")
-        raise Exception(f"Document parsing failed: {str(e)[-100:]}")  # Capture last100characters to avoid overly long error messages
+        raise Exception(
+            f"Document parsing failed: {str(e)[-100:]}")  # Capture last100characters to avoid overly long error messages
     finally:
         with pymu_lock:
             if doc:
                 doc.close()
-
-
-def is_pdf_damaged(pdf_path: str) -> bool:
-    """
-    Others PDF Whether the file is corrupt.
-
-    Args:
-        pdf_path (str): PDF Path of file
-
-    Returns:
-        bool: If the file is damaged, go back True; otherwise go back to False。
-    """
-    try:
-        doc = fitz.open(pdf_path)
-        doc.close()
-        return False
-    except Exception as e:
-        logger.error(f"PDF file is damaged: {e}")
-        return True
 
 
 def handler(cache_dir, file_or_url: str):

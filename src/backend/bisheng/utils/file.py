@@ -54,14 +54,14 @@ def save_download_file(file_input: Union[bytes, BinaryIO, BaseHTTPResponse, Resp
 
     # create temp folder
     temp_file_path = os.path.join(root_dir, generate_uuid())
-    os.makedirs(os.path.dirname(temp_file_path), exist_ok=True)
 
     # Logic for handling filename length limits,
-    safe_filename = filename
-    if len(filename) > 60:
-        safe_filename = filename[-60:]
+    if len(file_name) > 60:
+        file_name = file_name[-60:]
 
-    temp_file_path = os.path.join(temp_file_path, f"{safe_filename}{file_extension}")
+    temp_file_path = os.path.join(temp_file_path, f"{file_name}{file_extension}")
+
+    os.makedirs(os.path.dirname(temp_file_path), exist_ok=True)
 
     sha256_hash = hashlib.sha256() if calc_sha256 else None
 

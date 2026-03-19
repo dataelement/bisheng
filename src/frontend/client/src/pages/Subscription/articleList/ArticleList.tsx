@@ -1,15 +1,15 @@
+import { useLocalize } from "~/hooks";
 import { useQuery } from "@tanstack/react-query";
 import {
     Info,
     SquareArrowOutUpLeftIcon
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     Article,
     Channel,
     getArticlesApi,
     getChannelDetailApi,
-    listManagerSourcesApi,
     type ArticleSearchResultItem
 } from "~/api/channels";
 import { NotificationSeverity } from "~/common";
@@ -66,6 +66,7 @@ export function mapToArticle(item: ArticleSearchResultItem, channelId: string): 
 }
 
 export function ArticleList({ channel, selectedArticleId, onArticleSelect }: ArticleListProps) {
+    const localize = useLocalize();
     const [articles, setArticles] = useState<Article[]>([]);
     const [currentPage, setCurrentPage] = useState(1);
     const [hasMore, setHasMore] = useState(false);
@@ -78,35 +79,22 @@ export function ArticleList({ channel, selectedArticleId, onArticleSelect }: Art
     const searchQuery = useDebounce(searchKey, 500);
     const { showToast } = useToastContext();
 
-    // 信源选项（从频道 source_list 关联的信源信息中获取）
-    const [sourceOptions, setSourceOptions] = useState<{ id: string; label: string }[]>([]);
 
-    // 加载信源选项
-    useEffect(() => {
-        if (!channel?.source_list?.length) {
-            setSourceOptions([]);
-            return;
-        }
-        // 从已有接口拉取信源信息，匹配频道的 source_list
-        const loadSources = async () => {
-            try {
-                // 尝试拉取 wechat 和 website 两种类型的信源
-                const [wechat, website] = await Promise.all([
-                    listManagerSourcesApi({ business_type: "wechat", page: 1, page_size: 100 }).catch(() => ({ sources: [], total: 0 })),
-                    listManagerSourcesApi({ business_type: "website", page: 1, page_size: 100 }).catch(() => ({ sources: [], total: 0 })),
-                ]);
-                const allSources = [...wechat.sources, ...website.sources];
-                const channelSourceSet = new Set(channel.source_list);
-                const filtered = allSources
-                    .filter(s => channelSourceSet.has(s.id) || channelSourceSet.has(s.source_id || ""))
-                    .map(s => ({ id: s.id || s.source_id || "", label: s.name }));
-                setSourceOptions(filtered);
-            } catch {
-                setSourceOptions([]);
-            }
-        };
-        loadSources();
-    }, [channel?.id, channel?.source_list]);
+    // Fetch channel detail for the tooltip; isLoading drives the page-level loading state
+    const { data: channelDetail, isLoading: isChannelDetailLoading } = useQuery({
+        queryKey: ["channelDetail", channel.id],
+        queryFn: () => getChannelDetailApi(channel.id),
+        staleTime: 60_000, // Cache for 1 minute
+    });
+
+    // Derive source options directly from channelDetail.source_infos (refreshes after channel edit)
+    const sourceOptions = useMemo(() => {
+        const infos = channelDetail?.source_infos;
+        if (!infos?.length) return [];
+        return infos
+            .filter(s => s.id)
+            .map(s => ({ id: s.id, label: s.source_name || s.name || '' }));
+    }, [channelDetail?.source_infos]);
 
     const PAGE_SIZE = 20;
 
@@ -171,13 +159,19 @@ export function ArticleList({ channel, selectedArticleId, onArticleSelect }: Art
         loadArticles(1);
     }, [channel?.id, searchQuery, selectedSources, onlyUnread, selectedSubChannelName]);
 
+    // Optimistically mark the article as read in local state when selected.
+    // The backend already marks it read when the detail API is called.
+    const handleArticleClick = useCallback((article: Article | null) => {
+        if (article && !article.isRead) {
+            setArticles(prev =>
+                prev.map(a => a.id === article.id ? { ...a, isRead: true } : a)
+            );
+        }
+        onArticleSelect(article);
+    }, [onArticleSelect]);
+
     const handleSourcesChange = (newValue: string[]) => {
         setSelectedSources(newValue);
-    };
-
-    const handleSearch = (value: string) => {
-        if (value.length > 40) return;
-        setSearchQuery(value);
     };
 
     const handleToggleUnread = () => {
@@ -190,17 +184,24 @@ export function ArticleList({ channel, selectedArticleId, onArticleSelect }: Art
         setSelectedSubChannelName(subChannelName === "all" ? undefined : subChannelName);
     };
 
-    // Fetch channel detail for the tooltip; isLoading drives the page-level loading state
-    const { data: channelDetail, isLoading: isChannelDetailLoading } = useQuery({
-        queryKey: ["channelDetail", channel.id],
-        queryFn: () => getChannelDetailApi(channel.id),
-        staleTime: 60_000, // Cache for 1 minute
-    });
 
     // Extract sub-channels from channel detail's filter_rules
     const subChannels = (channelDetail?.filter_rules || [])
         .filter(fr => fr.channel_type === 'sub' && fr.name)
-        .map((fr, idx) => ({ id: `sub-${idx}`, name: fr.name! }));
+        .map((fr, idx) => ({ id: `sub-${idx}`, name: fr.name! }))
+        .sort((a, b) => {
+            // Sort by first character priority: letters > digits > Chinese/other
+            const getPriority = (name: string) => {
+                const ch = name.charAt(0);
+                if (/[a-zA-Z]/.test(ch)) return 0;
+                if (/\d/.test(ch)) return 1;
+                return 2;
+            };
+            const pa = getPriority(a.name);
+            const pb = getPriority(b.name);
+            if (pa !== pb) return pa - pb;
+            return a.name.localeCompare(b.name, 'zh-CN');
+        });
 
     console.log('channelDetail :>> ', channelDetail);
     return (
@@ -217,16 +218,16 @@ export function ArticleList({ channel, selectedArticleId, onArticleSelect }: Art
                             </TooltipTrigger>
                             <TooltipContent noArrow className="bg-white shadow-md px-3 py-2 max-w-md">
                                 <div className="space-y-1.5 text-gray-800 text-sm">
-                                    <div><span className="text-gray-400">频道描述：</span>
+                                    <div><span className="text-gray-400">{localize("com_subscription.channel_description_colon")}</span>
                                         <p>{channelDetail?.description || channel.description || "-"}</p>
                                     </div>
-                                    <div><span className="text-gray-400">创建人：</span>
+                                    <div><span className="text-gray-400">{localize("com_subscription.creator_colon")}</span>
                                         <p>{channelDetail?.creator_name || channel.creator || "-"}</p>
                                     </div>
-                                    <div><span className="text-gray-400">订阅人数：</span>
+                                    <div><span className="text-gray-400">{localize("com_subscription.subscribers_colon")}</span>
                                         <p>{channelDetail?.subscriber_count ?? channel.subscriberCount ?? 0}</p>
                                     </div>
-                                    <div><span className="text-gray-400">内容数量：</span>
+                                    <div><span className="text-gray-400">{localize("com_subscription.content_count_colon")}</span>
                                         <p>{channelDetail?.article_count ?? channel.articleCount ?? 0}</p>
                                     </div>
                                 </div>
@@ -237,17 +238,15 @@ export function ArticleList({ channel, selectedArticleId, onArticleSelect }: Art
                     {channelDetail?.visibility !== 'private' && <Button
                         onClick={() => {
                             const shareUrl = `${window.location.origin}${__APP_ENV__.BASE_URL}/channel/share/${channel.id}`;
-                            const shareText = `欢迎加入频道【${channel.name}】 ，点击链接：${shareUrl} 一键订阅。`;
+                            const shareText = localize("com_subscription.welcome_join_channel_share", { name: channel.name, shareUrl });
                             copyText(shareText).then(() => {
-                                showToast({ message: '分享链接已复制到粘贴板', severity: NotificationSeverity.SUCCESS });
+                                showToast({ message: localize("com_subscription.share_link_copied"), severity: NotificationSeverity.SUCCESS });
                             });
                         }}
                         variant="outline"
                         className="h-8 px-4 text-[14px] rounded-md font-normal"
                     >
-                        <SquareArrowOutUpLeftIcon className="size-3.5" />
-                        分享
-                    </Button>}
+                        <SquareArrowOutUpLeftIcon className="size-3.5" />{localize("com_subscription.share")}</Button>}
                 </div>
 
                 {/* 第二行：子频道 Tabs 与 工具栏 (搜索/筛选) */}
@@ -260,9 +259,7 @@ export function ArticleList({ channel, selectedArticleId, onArticleSelect }: Art
                                 ? "bg-primary/20 text-primary border-primary"
                                 : "text-gray-800 hover:bg-gray-50 border-transparent"
                                 }`}
-                        >
-                            全部
-                        </button>
+                        >{localize("com_subscription.all")}</button>
                         {subChannels.map(sub => (
                             <button
                                 key={sub.id}
@@ -283,8 +280,8 @@ export function ArticleList({ channel, selectedArticleId, onArticleSelect }: Art
                         <SearchInput
                             key={channel.id}
                             value={searchKey}
-                            onChange={handleSearch}
-                            placeholder="搜索你感兴趣的文章"
+                            onChange={setSearchQuery}
+                            placeholder={localize("com_subscription.search_articles_of_interest")}
                         />
 
                         {/* 信息源筛选 */}
@@ -301,9 +298,7 @@ export function ArticleList({ channel, selectedArticleId, onArticleSelect }: Art
                                 ? "bg-primary/20 text-primary border-primary"
                                 : "text-gray-800 hover:bg-gray-50"
                                 }`}
-                        >
-                            仅看未读
-                        </button>
+                        >{localize("com_subscription.show_unread_only")}</button>
                     </div>
                 </div>
             </div>
@@ -316,20 +311,20 @@ export function ArticleList({ channel, selectedArticleId, onArticleSelect }: Art
                         <LoadingIcon className="size-16 text-primary" />
                     </div>
                 ) : articles.length === 0 ? (
-                    <div className="flex items-center justify-center h-64 text-[#86909c] text-sm">无结果</div>
+                    <div className="flex items-center justify-center h-64 text-[#86909c] text-sm">{localize("com_subscription.no_results")}</div>
                 ) : (
                     <InfiniteScroll
                         loadMore={() => loadArticles(currentPage + 1)}
                         hasMore={hasMore}
                         isLoading={loading}
-                        emptyText="所有的消息都在这里啦"
+                        emptyText={localize("com_subscription.all_messages_are_here")}
                         className=""
                     >
                         {articles.map(article => (
                             <ArticleCard
                                 key={article.id}
                                 article={article}
-                                onSelect={onArticleSelect}
+                                onSelect={handleArticleClick}
                                 isSelected={selectedArticleId === article.id}
                                 searchQuery={searchQuery}
                             />

@@ -93,7 +93,7 @@ async def init_default_data():
                     session.add_all(db_components)
                     await session.commit()
 
-                # Initialize Preset Skill Template
+                # Initialize preset application templates
                 templates = await session.exec(select(Template).limit(1))
                 templates = templates.all()
                 if not templates:

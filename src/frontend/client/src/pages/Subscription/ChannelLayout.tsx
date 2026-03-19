@@ -19,7 +19,7 @@ export function ChannelLayout({ channel, onFullScreen }: ChannelLayoutProps) {
 
     const { leftWidth, isResizing, startResizing } = useResizablePanel({
         storageKey: "article-split-ratio",
-        defaultWidth: 600,
+        defaultRatio: 0.5,
         minLeftWidth: MIN_LEFT_WIDTH,
         minRightWidth: MIN_RIGHT_WIDTH,
         containerRef,

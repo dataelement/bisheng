@@ -1,3 +1,4 @@
+import { useLocalize } from "~/hooks";
 import { ChevronDown, ChevronRight, Pencil } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { FilterConditionEditor, type FilterGroup, type FilterRelation } from "./FilterConditionEditor";
@@ -37,6 +38,7 @@ export function SubChannelBlock({
     onOverLimit,
     onEmptyName
 }: SubChannelBlockProps) {
+    const localize = useLocalize();
     const [isEditing, setIsEditing] = useState(openInEditMode);
     const [editVal, setEditVal] = useState(data.name);
     const inputRef = useRef<HTMLInputElement>(null);
@@ -90,7 +92,7 @@ export function SubChannelBlock({
                         onBlur={handleSave}
                         onKeyDown={(e) => e.key === "Enter" && handleSave()}
                         className="flex-1 min-w-0 px-2 py-1 text-[14px] border border-[#E5E6EB] rounded focus:outline-none focus:ring-1 focus:ring-[#165DFF]"
-                        placeholder="子频道名称"
+                        placeholder={localize("com_subscription.sub_channel_name")}
                     />
                 ) : (
                     <div
@@ -108,9 +110,7 @@ export function SubChannelBlock({
                     type="button"
                     onClick={onRemove}
                     className="flex items-center gap-1 text-[14px] text-[#86909C] hover:text-[#F53F3F] flex-shrink-0"
-                >
-                    删除
-                </button>
+                >{localize("com_subscription.delete")}</button>
             </div>
             {!data.collapsed && (
                 <div className="p-3 border-t border-[#E5E6EB]">

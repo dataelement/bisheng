@@ -26,7 +26,7 @@ class PipelineResult:
 
 
 class TextBbox(BaseModel):
-    content: str = ""
+    text: str = ""
     type: str = Field(default="text", description="text type")
     part_id: str = ""
     bbox: List[float] = Field(default_factory=list)

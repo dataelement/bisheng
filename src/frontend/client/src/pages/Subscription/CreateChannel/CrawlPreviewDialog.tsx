@@ -38,13 +38,13 @@ export function CrawlPreviewDialog({
     onAddSource,
     onCancel
 }: CrawlPreviewDialogProps) {
+    const localize = useLocalize();
     const [status, setStatus] = useState<CrawlStatus>("loading");
     const [adding, setAdding] = useState(false);
     const [previewData, setPreviewData] = useState<{ name: string; icon?: string; articles?: { title: string; url: string }[] } | null>(null);
     const [errorCode, setErrorCode] = useState<number | null>(null);
-    const [feedbackTips, setFeedbackTips] = useState<string>("请将您的网站爬取需求发送至邮箱：XXXX@XX");
+    const [feedbackTips, setFeedbackTips] = useState<string>(localize("com_subscription.send_crawl_requirement_to_email"));
     const [feedbackDialogOpen, setFeedbackDialogOpen] = useState(false);
-    const localize = useLocalize();
     const requestIdRef = useRef(0);
 
     useEffect(() => {
@@ -191,7 +191,7 @@ export function CrawlPreviewDialog({
             <DialogContent className="w-[600px] max-w-[600px] flex flex-col bg-white text-[14px]">
                 <DialogHeader>
                     <DialogTitle className="text-[16px] font-medium">
-                        {localize("confirm_crawled_content")}
+                        {localize("com_subscription.confirm_crawled_content")}
                     </DialogTitle>
                 </DialogHeader>
 
@@ -213,7 +213,7 @@ export function CrawlPreviewDialog({
                                 className="w-[100px] h-[100px]"
                             />
                             <p className="text-[14px] text-[#4E5969]">
-                                {localize("crawling_waiting") || "爬取中,可能需要1-2分钟,请耐心等待..."}
+                                {localize("com_subscription.crawling_waiting") || localize("com_subscription.crawling_please_wait")}
                             </p>
                         </div>
                     )}
@@ -245,7 +245,7 @@ export function CrawlPreviewDialog({
                             {previewData.articles && previewData.articles.length > 0 && (
                                 <div>
                                     <p className="text-[12px] mb-2">
-                                        {localize("parsed_articles")}
+                                        {localize("com_subscription.parsed_articles")}
                                     </p>
                                     <div className="max-h-[200px] overflow-y-auto space-y-2">
                                         {previewData.articles.map((a, i) => (
@@ -276,10 +276,10 @@ export function CrawlPreviewDialog({
                                     />
                                     <p className="text-[14px] text-[#4E5969] leading-6">
                                         {status === "singlePageWarning"
-                                            ? <>检测为 <span className="font-medium text-[#1D2129]">单篇文章或非列表页</span>，请输入符合条件的目标网站“栏目列表页”网址（如：新闻动态、政策法规等列表页面）</>
+                                            ? <>{localize("com_subscription.detected_as")}<span className="font-medium text-[#1D2129]">{localize("com_subscription.single_article_or_non_list_page")}</span>{localize("com_subscription.please_enter_valid_list_page_url")}</>
                                             : errorCode === 13004
-                                                ? '该网站因权限设置无法爬取，请输入符合条件的目标网站的“栏目列表页”网址（如：新闻动态、政策法规等列表页面）'
-                                                : '解析失败，请重试或提交人工爬取需求'}
+                                                ? localize("com_subscription.crawl_failed_due_to_permissions")
+                                                : localize("com_subscription.parse_failed_retry_or_submit")}
                                     </p>
                                 </div>
 
@@ -289,9 +289,7 @@ export function CrawlPreviewDialog({
                                     type="button"
                                     className="text-[12px] text-[#165DFF] underline underline-offset-2"
                                     onClick={() => setFeedbackDialogOpen(true)}
-                                >
-                                    不满意爬取内容？提交人工爬取需求
-                                </button>
+                                >{localize("com_subscription.unsatisfied_with_crawl_submit_request")}</button>
                                 <Button
                                     variant="secondary"
                                     onClick={handleCancel}
@@ -312,9 +310,7 @@ export function CrawlPreviewDialog({
                                 type="button"
                                 className="text-[12px] text-[#165DFF] underline underline-offset-2"
                                 onClick={() => setFeedbackDialogOpen(true)}
-                            >
-                                不满意爬取内容？提交人工爬取需求
-                            </button>
+                            >{localize("com_subscription.unsatisfied_with_crawl_submit_request")}</button>
                         ) : (
                             <span />
                         )}
@@ -332,7 +328,7 @@ export function CrawlPreviewDialog({
                                 className="bg-[#165DFF] ml-2 hover:bg-[#4080FF] text-white disabled:opacity-50 flex items-center gap-2"
                             >
                                 {adding && <Loader2 className="size-4 animate-spin" />}
-                                {localize("add_source")}
+                                {localize("com_subscription.add_source")}
                             </Button>
                         </div>
 
@@ -344,15 +340,13 @@ export function CrawlPreviewDialog({
             <AlertDialog open={feedbackDialogOpen} onOpenChange={setFeedbackDialogOpen}>
                 <AlertDialogContent className="sm:max-w-[480px]">
                     <AlertDialogHeader>
-                        <AlertDialogTitle>提交人工爬取需求</AlertDialogTitle>
+                        <AlertDialogTitle>{localize("com_subscription.submit_manual_crawl_request")}</AlertDialogTitle>
                         <AlertDialogDescription className="whitespace-pre-line text-[14px] leading-6 text-[#4E5969]">
                             {feedbackTips}
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                        <AlertDialogAction className="bg-[#165DFF] hover:bg-[#4080FF]">
-                            好的
-                        </AlertDialogAction>
+                        <AlertDialogAction className="bg-[#165DFF] hover:bg-[#4080FF]">{localize("com_subscription.ok")}</AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>

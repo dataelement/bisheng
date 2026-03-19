@@ -25,11 +25,6 @@ from sqlalchemy import func, or_
 from sqlmodel import select
 
 from bisheng.api.services.etl4lm_loader import Etl4lmLoader
-from bisheng.api.services.libreoffice_converter import (
-    convert_doc_to_docx,
-    convert_ppt_to_pdf, convert_ppt_to_pptx,
-)
-from bisheng.api.services.md_from_pdf import is_pdf_damaged
 from bisheng.api.services.patch_130 import (
     convert_file_to_md,
     combine_multiple_md_files_to_raw_texts,
@@ -65,6 +60,12 @@ from bisheng.knowledge.domain.models.knowledge_file import (
 )
 from bisheng.knowledge.domain.schemas.knowledge_rag_schema import Metadata
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
+from bisheng.knowledge.domain.utils import is_pdf_damaged
+from bisheng.knowledge.rag.knowledge_file_pipeline import KnowledgeFilePipeline
+from bisheng.knowledge.rag.pipeline.loader.utils.libreoffice_converter import (
+    convert_doc_to_docx,
+    convert_ppt_to_pdf, convert_ppt_to_pptx,
+)
 from bisheng.llm.domain.services import LLMService
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import util
@@ -117,38 +118,16 @@ async def async_images_to_minio(local_image_dir, knowledge_id, doc_id):
 def process_file_task(
         knowledge: Knowledge,
         db_files: List[KnowledgeFile],
-        separator: List[str],
-        separator_rule: List[str],
-        chunk_size: int,
-        chunk_overlap: int,
-        callback_url: str = None,
-        extra_metadata: Dict = None,
         preview_cache_keys: List[str] = None,
-        retain_images: int = 1,
-        enable_formula: int = 1,
-        force_ocr: int = 0,
-        filter_page_header_footer: int = 0,
+        callback_url: str = None,
 ):
     """Working with Knowledge Files Tasks"""
     try:
-        index_name = knowledge.index_name or knowledge.collection_name
         addEmbedding(
-            knowledge.collection_name,
-            index_name,
             knowledge.id,
-            knowledge.model,
-            separator,
-            separator_rule,
-            chunk_size,
-            chunk_overlap,
             db_files,
-            callback_url,
-            extra_metadata,
+            callback=callback_url,
             preview_cache_keys=preview_cache_keys,
-            retain_images=retain_images,
-            enable_formula=enable_formula,
-            force_ocr=force_ocr,
-            filter_page_header_footer=filter_page_header_footer,
         )
     except Exception as e:
         logger.exception("process_file_task error")
@@ -301,22 +280,10 @@ async def async_decide_knowledge_llm(invoke_user_id: int) -> Any:
 
 
 def addEmbedding(
-        collection_name: str,
-        index_name: str,
         knowledge_id: int,
-        model: str,
-        separator: List[str],
-        separator_rule: List[str],
-        chunk_size: int,
-        chunk_overlap: int,
         knowledge_files: List[KnowledgeFile],
         callback: str = None,
-        extra_meta: Dict = None,
         preview_cache_keys: List[str] = None,
-        retain_images: int = 1,
-        enable_formula: int = 1,
-        force_ocr: int = 0,
-        filter_page_header_footer: int = 0,
 ):
     """Adding Files to Vector SumsesCunene"""
 
@@ -327,9 +294,9 @@ def addEmbedding(
     logger.info("start init ES")
     es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge_id=knowledge_id,
                                                                 metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
-    minio_client = get_minio_storage_sync()
     for index, db_file in enumerate(knowledge_files):
         # Try to get chunks of a file from the cache
+        db_file.parse_type = ParseType.UN_ETL4LM.value
         preview_cache_key = None
         if preview_cache_keys:
             preview_cache_key = (
@@ -337,33 +304,24 @@ def addEmbedding(
             )
         status = 'failed'
         try:
+
             logger.info(
                 f"process_file_begin file_id={db_file.id} file_name={db_file.file_name}"
             )
-            add_file_embedding(
-                vector_client,
-                es_client,
-                minio_client,
-                db_file,
-                separator,
-                separator_rule,
-                chunk_size,
-                chunk_overlap,
-                extra_meta=extra_meta,
+            knowledge_file_pipeline = KnowledgeFilePipeline(
+                invoke_user_id=db_file.user_id,
+                db_file=db_file,
                 preview_cache_key=preview_cache_key,
-                # Added parameters
-                retain_images=retain_images,
-                knowledge_id=knowledge_id,
-                enable_formula=enable_formula,
-                force_ocr=force_ocr,
-                filter_page_header_footer=filter_page_header_footer,
+                vector_store=[vector_client, es_client],
             )
+            _ = knowledge_file_pipeline.run()
             db_file.status = KnowledgeFileStatus.SUCCESS.value
             status = 'success'
-        except FileParseException as e:
+        except EtlException as e:
             logger.exception(
                 f"process_file_fail file_id={db_file.id} file_name={db_file.file_name}"
             )
+            db_file.parse_type = ParseType.ETL4LM.value
             db_file.status = KnowledgeFileStatus.FAILED.value
             if str(e).find("etl4lm server timeout") != -1:
                 db_file.remark = KnowledgeEtl4lmTimeoutError(exception=e).to_json_str()

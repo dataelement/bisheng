@@ -16,6 +16,7 @@ import { DashboardStatus, usePublishDashboard } from "../../hook"
 import { Dashboard } from "../../types/dataConfig"
 import { EditorCanvas } from "../editor/EditorCanvas"
 import { ExpandIcon } from "@/components/bs-icons/expand"
+import { LoadingIcon } from "@/components/bs-icons/loading"
 
 interface DashboardDetailProps {
     dashboard: Dashboard | null
@@ -109,6 +110,12 @@ export function DashboardDetail({
 
 
     const { publish } = usePublishDashboard()
+
+    if (isLoading) {
+        return <div className="flex-1 flex justify-center items-center z-10">
+            <LoadingIcon />
+        </div>
+    }
 
     if (!dashboard) {
         return <div className="flex-1 flex items-center justify-center text-muted-foreground">{t('selectADashboard')}</div>

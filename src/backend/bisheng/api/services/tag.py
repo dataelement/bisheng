@@ -79,9 +79,6 @@ class TagService:
         if resource_type == ResourceTypeEnum.ASSISTANT:
             resource_info = AssistantDao.get_one_assistant(resource_id)
             access_type = AccessType.ASSISTANT_WRITE
-        elif resource_type == ResourceTypeEnum.FLOW:
-            resource_info = FlowDao.get_flow_by_id(resource_id)
-            access_type = AccessType.FLOW_WRITE
         elif resource_type == ResourceTypeEnum.WORK_FLOW:
             resource_info = FlowDao.get_flow_by_id(resource_id)
             access_type = AccessType.WORKFLOW_WRITE

@@ -1,5 +1,4 @@
 import json
-import json
 import os
 from typing import Dict, List, Optional
 
@@ -184,8 +183,7 @@ async def post_chunks(request: Request,
                                     separator_rule=separator_rule,
                                     chunk_size=chunk_size,
                                     chunk_overlap=chunk_overlap,
-                                    file_list=[KnowledgeFileOne(file_path=file_path)],
-                                    extra=metadata)
+                                    file_list=[KnowledgeFileOne(file_path=file_path)])
 
     res = await sync_func_to_async(KnowledgeService.sync_process_knowledge_file)(request, login_user, req_data)
     return resp_200(data=res[0])

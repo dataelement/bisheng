@@ -14,6 +14,11 @@ const App = () => {
   const { setError } = useApiErrorBoundary();
 
   const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        refetchOnWindowFocus: false,
+      },
+    },
     queryCache: new QueryCache({
       onError: (error) => {
         if (error?.response?.status === 401) {

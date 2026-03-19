@@ -1,5 +1,6 @@
 import { Bell, Globe, LogOut, ChevronRight, User, Check } from "lucide-react";
 import { useState } from "react";
+import { useRecoilState } from "recoil";
 import { Avatar, AvatarImage, AvatarName } from "~/components/ui/avatar";
 import {
     DropdownMenu,
@@ -9,11 +10,12 @@ import {
     DropdownMenuSub,
     DropdownMenuSubTrigger,
     DropdownMenuSubContent
-} from "~/components/ui/DropdownMenu"; // 确保路径正确
+} from "~/components/ui/DropdownMenu";
 import { AccountInfoDialog } from "~/components/AccountInfoDialog";
 import { NotificationsDialog } from "~/components/NotificationsDialog";
 import { useNotificationCount } from "~/hooks/useNotificationCount";
-import { useAuthContext } from "~/hooks";
+import { useAuthContext, useLocalize } from "~/hooks";
+import store from "~/store";
 
 export function UserPopMenu() {
     const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -24,10 +26,10 @@ export function UserPopMenu() {
     const { user, logout } = useAuthContext();
     const { unreadCount, refreshCount } = useNotificationCount();
 
-    // 模拟语言和翻译函数，实际应从你的 i18n hook 中获取
-    const langcode = 'zh-Hans';
-    const localize = (key: string) => key === 'com_nav_language' ? '语言切换' : '退出登录';
-    const changeLang = (lang: string) => console.log("Change to", lang);
+    // i18n: read current language from Recoil, provide localize + changeLang
+    const localize = useLocalize();
+    const [langcode, setLangcode] = useRecoilState(store.lang);
+    const changeLang = (lang: string) => setLangcode(lang);
     const displayName = user?.username || "admin";
 
     // 保留原有方法
@@ -110,9 +112,9 @@ export function UserPopMenu() {
                                 <span className="flex-1 text-sm">中文</span>
                                 {langcode === 'zh-Hans' && <Check className="ml-2 size-4 text-blue-600" />}
                             </DropdownMenuItem>
-                            <DropdownMenuItem className="py-2.5 px-3 rounded-lg" onClick={() => changeLang('en-US')}>
+                            <DropdownMenuItem className="py-2.5 px-3 rounded-lg" onClick={() => changeLang('en')}>
                                 <span className="flex-1 text-sm">English</span>
-                                {langcode === 'en-US' && <Check className="ml-2 size-4 text-blue-600" />}
+                                {langcode === 'en' && <Check className="ml-2 size-4 text-blue-600" />}
                             </DropdownMenuItem>
                             <DropdownMenuItem className="py-2.5 px-3 rounded-lg" onClick={() => changeLang('ja')}>
                                 <span className="flex-1 text-sm">日本語</span>

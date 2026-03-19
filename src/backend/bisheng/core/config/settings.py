@@ -222,6 +222,7 @@ class Etl4lmConf(BaseModel):
 
 class KnowledgeConf(BaseModel):
     """ Knowledge Configure """
+    loader_provide: str = Field(default="etl4lm", description='Knowledge Config Provide Settings')
     etl4lm: Etl4lmConf
 
 

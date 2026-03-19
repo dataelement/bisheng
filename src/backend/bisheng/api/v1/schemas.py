@@ -7,7 +7,7 @@ from orjson import orjson
 from pydantic import BaseModel, Field, model_validator, field_validator, ConfigDict
 
 from bisheng.database.models.assistant import AssistantBase
-from bisheng.database.models.flow import FlowCreate, FlowRead
+from bisheng.database.models.flow import FlowCreate, FlowRead, FlowType
 from bisheng.database.models.message import ChatMessageRead
 from bisheng.database.models.tag import Tag
 from bisheng.knowledge.domain.models.knowledge import KnowledgeRead
@@ -309,7 +309,8 @@ class FlowVersionCreate(BaseModel):
     description: Optional[str] = Field(default=None, description='Version description')
     data: Optional[Dict] = Field(default=None, description='Skill Version Node Data Data')
     original_version_id: Optional[int] = Field(default=None, description='Version Source VersionID')
-    flow_type: Optional[int] = Field(default=1, description='Type of version')  # 1:common version 10:new Version
+    flow_type: Optional[int] = Field(default=FlowType.WORKFLOW.value,
+                                     description='Type of version')  # 10:new Version
 
 
 class FlowCompareReq(BaseModel):

@@ -1,3 +1,4 @@
+import { useLocalize } from "~/hooks";
 import { BookCopyIcon, ChevronDown, ChevronRight, FolderClosedIcon, FolderIcon, LibraryIcon, Loader2, Plus, Search, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { NotificationSeverity } from "~/common";
@@ -80,7 +81,7 @@ function filterTree(nodes: KnowledgeNode[], keyword: string): KnowledgeNode[] {
         const filteredChildren = filterTree(node.children ?? [], keyword);
         const matches = node.name.toLowerCase().includes(kw);
         if (matches || filteredChildren.length > 0) {
-            acc.push({ ...node, children: filteredChildren });
+           acc.push({ ...node, children: filteredChildren });
         }
         return acc;
     }, []);
@@ -160,6 +161,7 @@ function TreeNode({
     node, nodes, selectedId, expandedIds, editingId,
     onSelect, onToggle, onAddFolder, onSaveEdit, onCancelEdit, searchMode
 }: TreeNodeProps) {
+    const localize = useLocalize();
     const isExpanded = searchMode || expandedIds.has(node.id);
     const isSelected = selectedId === node.id;
     const isEditing = editingId === node.id;
@@ -214,7 +216,7 @@ function TreeNode({
                 {!isEditing && (
                     <button
                         className="shrink-0 opacity-0 group-hover:opacity-100 size-4 flex items-center justify-center rounded hover:bg-[#dce4ff] text-[#86909c] hover:text-primary transition-all"
-                        title="新建子文件夹"
+                        title={localize("com_subscription.new_subfolder")}
                         onClick={e => { e.stopPropagation(); onAddFolder(node.id, node.level); }}
                     >
                         <Plus className="size-4 text-primary" />
@@ -250,6 +252,7 @@ function TreeNode({
 // ─── Main Modal ──────────────────────────────────────────────────────────
 
 export function AddToKnowledgeModal({ open, onOpenChange }: AddToKnowledgeModalProps) {
+    const localize = useLocalize();
     const { showToast } = useToastContext();
     const [tree, setTree] = useState<KnowledgeNode[]>(() => cloneTree(MOCK_SPACES));
     const [search, setSearch] = useState("");
@@ -285,7 +288,7 @@ export function AddToKnowledgeModal({ open, onOpenChange }: AddToKnowledgeModalP
         const newId = `new-folder-${Date.now()}`;
         const newNode: KnowledgeNode = {
             id: newId,
-            name: `未命名文件夹_${code}`,
+            name: localize("com_subscription.unnamed_folder_code", { code }),
             type: "folder",
             level: parentLevel + 1,
             parentId,
@@ -360,7 +363,7 @@ export function AddToKnowledgeModal({ open, onOpenChange }: AddToKnowledgeModalP
             <DialogContent className="w-[600px] max-w-[90vw] p-0 gap-0 overflow-hidden rounded-xl" close={false}>
                 {/* Header */}
                 <DialogHeader className="px-6 pt-3 pb-3">
-                    <DialogTitle className="font-semibold text-gray-800 leading-6">加入知识空间</DialogTitle>
+                    <DialogTitle className="font-semibold text-gray-800 leading-6">{localize("com_subscription.add_to_knowledge_space")}</DialogTitle>
                 </DialogHeader>
 
                 {/* Search */}
@@ -370,7 +373,7 @@ export function AddToKnowledgeModal({ open, onOpenChange }: AddToKnowledgeModalP
                         <Input
                             value={search}
                             onChange={e => setSearch(e.target.value)}
-                            placeholder="输入知识空间名称进行搜索"
+                            placeholder={localize("com_subscription.search_knowledge_space_placeholder")}
                             className="w-full h-8 pl-8 pr-8 text-sm rounded-md border border-gray-100 focus:outline-none"
                         />
                         {search && (
@@ -395,7 +398,7 @@ export function AddToKnowledgeModal({ open, onOpenChange }: AddToKnowledgeModalP
                                     src={`${__APP_ENV__.BASE_URL}/assets/channel/empty.png`}
                                     alt="empty"
                                 />
-                                <p className="text-sm">没有任何可选的知识空间</p>
+                                <p className="text-sm">{localize("com_subscription.no_selectable_knowledge_space")}</p>
                             </div>
                         ) : displayTree.length === 0 ? (
                             <div className="flex flex-col items-center justify-center h-full text-gray-800">
@@ -404,7 +407,7 @@ export function AddToKnowledgeModal({ open, onOpenChange }: AddToKnowledgeModalP
                                     src={`${__APP_ENV__.BASE_URL}/assets/channel/empty.png`}
                                     alt="empty"
                                 />
-                                <p className="text-sm">未找到匹配的知识空间</p>
+                                <p className="text-sm">{localize("com_subscription.no_matching_knowledge_space")}</p>
                             </div>
                         ) : (
                             <div className="py-1">
@@ -436,18 +439,14 @@ export function AddToKnowledgeModal({ open, onOpenChange }: AddToKnowledgeModalP
                         size="sm"
                         onClick={() => handleOpenChange(false)}
                         className="h-8 px-4 text-sm rounded-md"
-                    >
-                        取消
-                    </Button>
+                    >{localize("com_subscription.cancel")}</Button>
                     <Button
                         size="sm"
                         onClick={handleConfirm}
                         disabled={!selectedId || isConfirming}
                         className="h-8 px-4 text-sm rounded-md"
                     >
-                        {isConfirming && <Loader2 className="size-3.5 mr-1.5 animate-spin" />}
-                        加入
-                    </Button>
+                        {isConfirming && <Loader2 className="size-3.5 mr-1.5 animate-spin" />}{localize("com_subscription.add")}</Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>

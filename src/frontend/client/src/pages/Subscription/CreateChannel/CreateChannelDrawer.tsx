@@ -61,7 +61,6 @@ interface CreateChannelDrawerProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     onConfirm?: (data: CreateChannelFormData) => Promise<{ channelId: string }>;
-    createdChannelCount?: number;
     onViewChannel?: (channelId: string) => void;
     onManageMembers?: (channelId: string) => void;
     mode?: "create" | "edit";
@@ -72,7 +71,6 @@ export function CreateChannelDrawer({
     open,
     onOpenChange,
     onConfirm,
-    createdChannelCount = 0,
     onViewChannel,
     onManageMembers,
     mode = "create",
@@ -134,9 +132,9 @@ export function CreateChannelDrawer({
                 return;
             }
             const confirmed = await confirm({
-                description: "当前标签尚未保存，确认关闭吗？",
-                cancelText: "继续编辑",
-                confirmText: "确认关闭"
+                description: localize("com_subscription.unsaved_tab_confirm_close"),
+                cancelText: localize("com_subscription.continue_editing"),
+                confirmText: localize("com_subscription.confirm_close")
             });
             if (!confirmed) return;
             form.resetForm();
@@ -156,7 +154,7 @@ export function CreateChannelDrawer({
                 >
                     <SheetHeader className="ml-6 mr-6 pt-6 pb-4 border-b border-[#E5E6EB]">
                         <SheetTitle className="text-[16px] -ml-4 font-medium text-[#1D2129]">
-                            {isEditMode ? "频道设置" : localize("create_channel")}
+                            {isEditMode ? localize("com_subscription.channel_settings") : localize("com_subscription.create_channel")}
                         </SheetTitle>
                     </SheetHeader>
 
@@ -184,7 +182,7 @@ export function CreateChannelDrawer({
                             <div className="space-y-2">
                                 <Label className="text-[14px] text-[#1D2129]">
                                     <span className="text-[#F53F3F]">*</span>
-                                    {localize("add_information_source")}
+                                    {localize("com_subscription.add_information_source")}
                                 </Label>
                                 <AddSourceDropdown
                                     sources={form.sources}
@@ -203,7 +201,7 @@ export function CreateChannelDrawer({
                             <div className="space-y-2">
                                 <Label className="text-[14px] text-[#1D2129]">
                                     <span className="text-[#F53F3F]">*</span>
-                                    {localize("channel_name")}
+                                    {localize("com_subscription.channel_name")}
                                 </Label>
                                 <div className="relative flex gap-2 items-center">
                                     <Input
@@ -217,7 +215,7 @@ export function CreateChannelDrawer({
                                             }
                                             if (v.length > MAX_CHANNEL_NAME) {
                                                 showToast({
-                                                    message: localize("maximum_channel_name") || "最多输入 10 个字符",
+                                                    message: localize("com_subscription.maximum_channel_name") || localize("com_subscription.max_10_characters"),
                                                     severity: NotificationSeverity.WARNING
                                                 });
                                                 form.setChannelName(v.slice(0, MAX_CHANNEL_NAME));
@@ -231,7 +229,7 @@ export function CreateChannelDrawer({
                                             const v = e.currentTarget.value || "";
                                             if (v.length > MAX_CHANNEL_NAME) {
                                                 showToast({
-                                                    message: localize("maximum_channel_name") || "最多输入 10 个字符",
+                                                    message: localize("com_subscription.maximum_channel_name") || localize("com_subscription.max_10_characters"),
                                                     severity: NotificationSeverity.WARNING
                                                 });
                                                 form.setChannelName(v.slice(0, MAX_CHANNEL_NAME));
@@ -239,7 +237,7 @@ export function CreateChannelDrawer({
                                                 form.setChannelName(v);
                                             }
                                         }}
-                                        placeholder={localize("enter_channel_name")}
+                                        placeholder={localize("com_subscription.enter_channel_name")}
                                         className="flex-1 h-10 text-[14px] border-[#E5E6EB]"
                                     />
                                     <span className="absolute right-4 flex-shrink-0 text-[12px] text-[#86909C]">
@@ -251,7 +249,7 @@ export function CreateChannelDrawer({
                             {/* 频道简介 */}
                             <div className="space-y-2">
                                 <Label className="text-[14px] text-[#1D2129]">
-                                    {localize("channel_description")}
+                                    {localize("com_subscription.channel_description")}
                                 </Label>
                                 <div className="relative">
                                     <Textarea
@@ -265,7 +263,7 @@ export function CreateChannelDrawer({
                                             }
                                             if (v.length > MAX_CHANNEL_DESC) {
                                                 showToast({
-                                                    message: localize("maximum_channel_description") || "最多输入 100 个字符",
+                                                    message: localize("com_subscription.maximum_channel_description") || localize("com_subscription.max_100_characters"),
                                                     severity: NotificationSeverity.WARNING
                                                 });
                                                 form.setChannelDesc(v.slice(0, MAX_CHANNEL_DESC));
@@ -279,7 +277,7 @@ export function CreateChannelDrawer({
                                             const v = e.currentTarget.value || "";
                                             if (v.length > MAX_CHANNEL_DESC) {
                                                 showToast({
-                                                    message: localize("maximum_channel_description") || "最多输入 100 个字符",
+                                                    message: localize("com_subscription.maximum_channel_description") || localize("com_subscription.max_100_characters"),
                                                     severity: NotificationSeverity.WARNING
                                                 });
                                                 form.setChannelDesc(v.slice(0, MAX_CHANNEL_DESC));
@@ -287,7 +285,7 @@ export function CreateChannelDrawer({
                                                 form.setChannelDesc(v);
                                             }
                                         }}
-                                        placeholder={localize("enter_channel_description")}
+                                        placeholder={localize("com_subscription.enter_channel_description")}
                                         className="min-h-[80px] text-[14px] border-[#E5E6EB] pr-14"
                                     />
                                 </div>
@@ -297,7 +295,7 @@ export function CreateChannelDrawer({
                             <div className="space-y-3">
                                 <Label className="text-[14px] text-[#1D2129]">
                                     <span className="text-[#F53F3F]">*</span>
-                                    {localize("premission_settings")}
+                                    {localize("com_subscription.premission_settings")}
                                 </Label>
                                 <RadioGroup.Root
                                     value={form.visibility}
@@ -307,18 +305,18 @@ export function CreateChannelDrawer({
                                     {[
                                         {
                                             value: "private",
-                                            label: localize("private"),
-                                            desc: localize("cannot_subscribe")
+                                            label: localize("com_subscription.private"),
+                                            desc: localize("com_subscription.cannot_subscribe")
                                         },
                                         {
                                             value: "review",
-                                            label: localize("approval_required"),
-                                            desc: localize("require_approval")
+                                            label: localize("com_subscription.approval_required"),
+                                            desc: localize("com_subscription.require_approval")
                                         },
                                         {
                                             value: "public",
-                                            label: localize("publice"),
-                                            desc: localize("anyone_can_subscribe")
+                                            label: localize("com_subscription.publice"),
+                                            desc: localize("com_subscription.anyone_can_subscribe")
                                         }
                                     ].map((opt) => (
                                         <label
@@ -350,10 +348,8 @@ export function CreateChannelDrawer({
                                 <div className="space-y-3">
                                     <Label className="text-[14px] text-[#1D2129]">
                                         <span className="text-[#F53F3F]">*</span>
-                                        {localize("is_publish_plaza")}
-                                        <span className="ml-2 text-[12px] text-[#86909C]">
-                                            发布后该频道会展示在广场，他人可以搜索或查看
-                                        </span>
+                                        {localize("com_subscription.is_publish_plaza")}
+                                        <span className="ml-2 text-[12px] text-[#86909C]">{localize("com_subscription.publish_to_square_description")}</span>
                                     </Label>
                                     <RadioGroup.Root
                                         value={form.publishToSquare}
@@ -367,7 +363,7 @@ export function CreateChannelDrawer({
                                             >
                                                 <RadioGroup.Indicator className="h-1.5 w-1.5 rounded-full bg-white" />
                                             </RadioGroup.Item>
-                                            <span className="text-[14px] text-[#1D2129]">是</span>
+                                            <span className="text-[14px] text-[#1D2129]">{localize("com_subscription.yes")}</span>
                                         </label>
                                         <label className="flex items-center gap-2 cursor-pointer">
                                             <RadioGroup.Item
@@ -376,7 +372,7 @@ export function CreateChannelDrawer({
                                             >
                                                 <RadioGroup.Indicator className="h-1.5 w-1.5 rounded-full bg-white" />
                                             </RadioGroup.Item>
-                                            <span className="text-[14px] text-[#1D2129]">否</span>
+                                            <span className="text-[14px] text-[#1D2129]">{localize("com_subscription.no")}</span>
                                         </label>
                                     </RadioGroup.Root>
                                 </div>
@@ -387,9 +383,9 @@ export function CreateChannelDrawer({
                                 <div className="flex items-start justify-between gap-4">
                                     <div>
                                         <Label className="text-[14px] flex text-[#1D2129]">
-                                            {localize("channel_content_filter")}
+                                            {localize("com_subscription.channel_content_filter")}
                                             <p className="text-[12px] text-[#86909C] ml-2 mt-0.5">
-                                                {localize("only_filter_criteria")}
+                                                {localize("com_subscription.only_filter_criteria")}
                                             </p>
                                         </Label>
                                     </div>
@@ -421,7 +417,7 @@ export function CreateChannelDrawer({
                                                 )}
                                             </button>
                                             <span className="flex-1 text-[14px] text-[#1D2129]">
-                                                {localize("filter_criteria")}
+                                                {localize("com_subscription.filter_criteria")}
                                             </span>
                                         </div>
                                         {!form.contentFilterCollapsed && (
@@ -445,9 +441,9 @@ export function CreateChannelDrawer({
                                 <div className="flex items-start justify-between gap-4">
                                     <div>
                                         <Label className="text-[14px] flex text-[#1D2129]">
-                                            {localize("create_sub_channel")}
+                                            {localize("com_subscription.create_sub_channel")}
                                             <p className="text-[12px] text-[#86909C] ml-2 mt-0.5">
-                                                {localize("subscribe_same_filters")}
+                                                {localize("com_subscription.subscribe_same_filters")}
                                             </p>
                                         </Label>
                                     </div>
@@ -476,11 +472,7 @@ export function CreateChannelDrawer({
                                                     form.handleSubChannelToggleCollapse(sub.id)
                                                 }
                                                 onGroupsChange={(groups) =>
-                                                    form.setSubChannels((prev) =>
-                                                        prev.map((s) =>
-                                                            s.id === sub.id ? { ...s, groups } : s
-                                                        )
-                                                    )
+                                                    form.handleSubChannelGroupsChange(sub.id, groups)
                                                 }
                                                 onTopRelationChange={(topRelation) =>
                                                     form.setSubChannels((prev) =>
@@ -491,13 +483,13 @@ export function CreateChannelDrawer({
                                                 }
                                                 onOverLimit={() =>
                                                     showToast({
-                                                        message: "最多输入 10 个字符",
+                                                        message: localize("com_subscription.max_10_characters"),
                                                         severity: NotificationSeverity.WARNING
                                                     })
                                                 }
                                                 onEmptyName={() =>
                                                     showToast({
-                                                        message: "子频道名称不能为空",
+                                                        message: localize("com_subscription.sub_channel_name_cannot_be_empty"),
                                                         severity: NotificationSeverity.WARNING
                                                     })
                                                 }
@@ -510,7 +502,7 @@ export function CreateChannelDrawer({
                                                 className="flex w-full items-center gap-3 px-4 py-2.5 text-[14px] border border-[#E5E6EB] bg-[#F7F8FA] transition-colors"
                                             >
                                                 <PlusSquare className="size-4 text-[#86909C]" />
-                                                <span>{localize("add_sub_channel")}</span>
+                                                <span>{localize("com_subscription.add_sub_channel")}</span>
                                             </button>
                                         )}
                                     </div>
@@ -567,7 +559,7 @@ export function CreateChannelDrawer({
                                             form.setShowSuccess(true);
                                         } else {
                                             showToast({
-                                                message: "保存成功",
+                                                message: localize("com_subscription.save_success"),
                                                 severity: NotificationSeverity.SUCCESS
                                             });
                                             form.resetForm();
@@ -575,7 +567,7 @@ export function CreateChannelDrawer({
                                         }
                                     } catch {
                                         showToast({
-                                            message: localize("channel_create_failed") || "频道创建失败，请稍后重试",
+                                            message: localize("channel_create_failed") || localize("com_subscription.create_channel_failed_retry"),
                                             severity: NotificationSeverity.ERROR
                                         });
                                     } finally {
@@ -585,10 +577,10 @@ export function CreateChannelDrawer({
                                 className="h-9 px-5 bg-[#165DFF] hover:bg-[#4080FF] text-white border-none text-[14px] disabled:opacity-50"
                             >
                                 {isEditMode
-                                    ? form.submitting ? "保存中..." : "保存"
+                                    ? form.submitting ? localize("com_subscription.saving") : localize("com_subscription.save")
                                     : form.submitting
-                                        ? (localize("creating") || "创建中...")
-                                        : (localize("confirm_creation") || "确认创建")}
+                                        ? (localize("creating") || localize("com_subscription.creating"))
+                                        : (localize("com_subscription.confirm_creation") || localize("com_subscription.confirm_create"))}
                             </Button>
                         </div>
                     )}

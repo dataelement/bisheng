@@ -1,10 +1,13 @@
-import { BookOpen, SquareArrowOutUpLeftIcon } from "lucide-react"; // 更换了更接近设计稿的图标
+import { useLocalize } from "~/hooks";
+import { SquareArrowOutUpLeftIcon } from "lucide-react";
+import BookPlusIcon from "~/components/ui/icon/BookPlus";
 import { useState } from "react";
 import { Article } from "~/api/channels";
 import { useArticleShare } from "../hooks/useArticleShare";
 import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
 import { copyText } from "~/utils";
+import { AddSpaceIcon, ShareOutlineIcon } from "~/components/icons";
 
 interface ArticleCardProps {
     article: Article;
@@ -14,6 +17,7 @@ interface ArticleCardProps {
 }
 
 export function ArticleCard({ article, onSelect, isSelected, searchQuery }: ArticleCardProps) {
+    const localize = useLocalize();
     const [hovered, setHovered] = useState(false);
     const { handleShare } = useArticleShare();
     const { showToast } = useToastContext();
@@ -22,27 +26,25 @@ export function ArticleCard({ article, onSelect, isSelected, searchQuery }: Arti
     const formatTime = (dateString: string) => {
         const date = new Date(dateString);
         const now = new Date();
-        const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
-        const isToday = date.toDateString() === now.toDateString();
+        // Use calendar date difference (strip time) to handle cross-day correctly
+        const todayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const articleDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+        const diffDays = Math.round((todayDate.getTime() - articleDate.getTime()) / (1000 * 60 * 60 * 24));
 
-        if (isToday) return "今日更新";
-        if (diffDays >= 1 && diffDays <= 7) return `${diffDays}天前`;
+        if (diffDays === 0) return localize("com_subscription.updated_today");
+        if (diffDays >= 1 && diffDays <= 7) return localize("com_subscription.days_ago", { diffDays });
         return date.toISOString().split('T')[0];
     };
 
-    // 关键词高亮处理
-    const highlightText = (text: string, query?: string) => {
-        if (!query || !query.trim()) return text;
-        const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const regex = new RegExp(`(${escapedQuery})`, 'gi');
-        return text.split(regex).map((part, index) =>
-            part.toLowerCase() === query.toLowerCase()
-                ? <span key={index} className="bg-[#FFBF00]/20 font-bold">{part}</span>
-                : part
-        );
-    };
+    // Strip HTML tags for plain text display (used for content highlight snippets)
+    const stripTags = (html: string) => html.replace(/<(?!em|\/em)[^>]*>/g, '').replace(/&[a-zA-Z]+;/g, ' ').replace(/&#\d+;/g, ' ').trim();
 
-
+    // Check if backend returned highlight data for this article
+    const hasHighlight = !!searchQuery && !!article.highlight;
+    const highlightTitle = hasHighlight && article.highlight?.title?.[0];
+    const highlightContent = hasHighlight && article.highlight?.content?.length
+        ? stripTags(article.highlight.content.join(''))
+        : null;
 
     return (
         <div
@@ -65,18 +67,22 @@ export function ArticleCard({ article, onSelect, isSelected, searchQuery }: Arti
             {/* 2. 右侧内容区 */}
             <div className="flex-1 min-w-0 flex flex-col justify-between">
                 <div>
-                    {/* 标题 - 加粗，颜色加深 */}
-                    <h3 className={`font-bold line-clamp-1 ${isSelected && 'text-primary'} ${article.isRead ? "text-gray-400" : "text-gray-800"
+                    {/* 标题 - 搜索时使用 highlight HTML，非搜索时纯文本 */}
+                    <h3 className={`font-bold line-clamp-1 [&_em]:not-italic [&_em]:bg-[#FFBF00]/20 [&_em]:font-bold ${isSelected && 'text-primary'} ${article.isRead ? "text-gray-400" : "text-gray-800"
                         }`}>
-                        {highlightText(article.title, searchQuery)}
+                        {highlightTitle
+                            ? <span dangerouslySetInnerHTML={{ __html: highlightTitle }} />
+                            : article.title}
                     </h3>
 
                     {/* 正文预览 - 增加蓝色引号 */}
                     <div className="relative pt-4 pl-3">
-                        <span className="absolute left-0 top-1 text-primary text-3xl font-serif mt-[-2px]">“</span>
-                        <p className={`text-sm line-clamp-1 ${article.isRead ? "text-gray-400" : "text-gray-500"
+                        <span className="absolute left-0 top-1 text-primary text-3xl font-serif mt-[-2px]">"</span>
+                        <p className={`text-sm line-clamp-1 [&_em]:not-italic [&_em]:bg-[#FFBF00]/20 [&_em]:font-bold ${article.isRead ? "text-gray-400" : "text-gray-500"
                             }`}>
-                            {highlightText(article.content, searchQuery)}
+                            {highlightContent
+                                ? <span dangerouslySetInnerHTML={{ __html: highlightContent }} />
+                                : article.content}
                         </p>
                     </div>
                 </div>
@@ -101,36 +107,35 @@ export function ArticleCard({ article, onSelect, isSelected, searchQuery }: Arti
                         <button
                             onClick={(e) => {
                                 e.stopPropagation();
-                                onSelect(article);
                             }}
                             className=" rounded-full bg-gray-50 flex items-center justify-center size-8 text-gray-800 hover:bg-gray-100 transition-colors cursor-pointer"
-                            title="阅读详情"
+                            title={localize("com_subscription.add_to_knowledge_space")}
                         >
-                            <BookOpen className="size-3.5" />
+                            <BookPlusIcon className="size-3.5" />
                         </button>
                         <button
                             onClick={(e) => {
                                 e.stopPropagation();
                                 handleShare(article);
-                                const shareText = `我正在阅读【${article.title}】${article.url}。`;
+                                const shareText = localize("com_subscription.reading_article_share", { title: article.title, url: article.url });
                                 copyText(shareText)
                                     .then(() => {
                                         showToast({
-                                            message: "分享链接已复制到粘贴板",
+                                            message: localize("com_subscription.share_link_copied"),
                                             severity: NotificationSeverity.SUCCESS
                                         });
                                     })
                                     .catch(() => {
                                         showToast({
-                                            message: "复制失败，请重试",
+                                            message: localize("com_subscription.copy_failed_retry"),
                                             severity: NotificationSeverity.ERROR
                                         });
                                     });
                             }}
                             className=" rounded-full bg-gray-50 flex items-center justify-center size-8 text-gray-800 hover:bg-gray-100 transition-colors cursor-pointer"
-                            title="分享"
+                            title={localize("com_subscription.share")}
                         >
-                            <SquareArrowOutUpLeftIcon className="size-3.5" />
+                            <ShareOutlineIcon className="size-3.5" />
                         </button>
                     </div>
                 </div>

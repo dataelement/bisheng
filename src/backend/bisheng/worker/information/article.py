@@ -1,12 +1,16 @@
 from datetime import datetime
 
 from loguru import logger
+from sqlalchemy import func
+from sqlmodel import select
 
+from bisheng.channel.domain.models.channel import Channel
 from bisheng.channel.domain.models.channel_info_source import ChannelInfoSource
 from bisheng.channel.domain.repositories.implementations.channel_info_source_repository_impl import \
     ChannelInfoSourceRepositoryImpl
 from bisheng.channel.domain.schemas.article_schema import ArticleDocument
 from bisheng.channel.domain.services.article_es_service import ArticleEsService
+from bisheng.channel.domain.services.channel_service import ChannelService
 from bisheng.core.database import get_sync_db_session
 from bisheng.core.external.bisheng_information_client.bisheng_information_manager import \
     get_bisheng_information_client_sync
@@ -36,6 +40,33 @@ def sync_information_article(information_id: str = None):
                     logger.exception(f"Failed to sync information article for source {one.id}: {e}")
             page += 1
     logger.debug("Finished syncing information articles for all sources.")
+
+    # Update latest_article_update_time for channels
+    if information_id is None:
+        # Update all channels
+        logger.debug("Updating latest_article_update_time for all channels.")
+        _update_channel_latest_article_update_time()
+    else:
+        # Update only channels that use this information source
+        logger.debug(f"Updating latest_article_update_time for channels using information_id={information_id}.")
+        _update_channels_by_source_id(information_id)
+
+
+def _update_channels_by_source_id(source_id: str):
+    """Update latest_article_update_time for channels that use the specified source_id."""
+    with get_sync_db_session() as session:
+        # Query channels whose source_list contains the source_id
+        channels = session.exec(
+            select(Channel).where(func.json_contains(Channel.source_list, f'"{source_id}"'))
+        ).all()
+
+        if not channels:
+            logger.debug(f"No channels found using source_id={source_id}.")
+            return
+
+        logger.debug(f"Found {len(channels)} channels using source_id={source_id}.")
+        updated_count = ChannelService.update_channels_latest_article_time_sync(list(channels))
+        logger.debug(f"Updated latest_article_update_time for {updated_count} channels.")
 
 
 def _sync_one_information_article(information: ChannelInfoSource, article_service: ArticleEsService):
@@ -77,3 +108,15 @@ def _sync_one_information_article(information: ChannelInfoSource, article_servic
             break
         page += 1
     logger.debug(f"Finished syncing information for {information.id}. article nums: {current}")
+
+
+def _update_channel_latest_article_update_time():
+    """Update latest_article_update_time for all channels."""
+    logger.debug("Starting to update latest_article_update_time for all channels.")
+    with get_sync_db_session() as session:
+        channels = session.exec(select(Channel)).all()
+        updated_count = ChannelService.update_channels_latest_article_time_sync(list(channels))
+        logger.debug(
+            f"Finished updating latest_article_update_time for all channels. "
+            f"updated_channel_count={updated_count}"
+        )

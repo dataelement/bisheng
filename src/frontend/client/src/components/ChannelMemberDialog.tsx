@@ -210,12 +210,39 @@ export function ChannelMemberDialog({
             return <span className="text-[14px] text-[#4E5969]">{getRoleLabel(m.role, localize)}</span>;
         }
 
-        // 管理员视角：不能变更角色，只能移除普通成员
-        if (canAdminManage && m.role === "admin") {
-            return <span className="text-[14px] text-[#4E5969]">{getRoleLabel(m.role, localize)}</span>;
+        // 管理员视角：不展示「管理员」选项；仅允许移除普通成员
+        if (canAdminManage) {
+            if (m.role === "admin") {
+                return <span className="text-[14px] text-[#4E5969]">{getRoleLabel(m.role, localize)}</span>;
+            }
+            return (
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <button className="inline-flex items-center gap-1 text-[14px] text-[#4E5969] hover:text-[#165DFF]">
+                            {getRoleLabel(m.role, localize)}
+                            <ChevronDown className="size-3.5" />
+                        </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-28">
+                        <DropdownMenuItem
+                            className={cn(
+                                "cursor-default",
+                                m.role === "member" && "bg-[#E8F3FF] text-[#165DFF]"
+                            )}
+                            onClick={(e) => e.preventDefault()}
+                        >
+                            {localize("member") || "订阅用户"}
+                        </DropdownMenuItem>
+                        {m.role === "member" && (
+                            <DropdownMenuItem onClick={() => setRemoveTarget(m)}>
+                                {localize("remove")}
+                            </DropdownMenuItem>
+                        )}
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            );
         }
 
-        // 创建者视角：可以在「管理员 / 订阅用户」之间切换 + 移除
         return (
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -224,10 +251,10 @@ export function ChannelMemberDialog({
                         <ChevronDown className="size-3.5" />
                     </button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-10">
+                <DropdownMenuContent align="end" className="w-28">
                     <DropdownMenuItem
+                        className={cn(m.role === "admin" && "bg-[#E8F3FF] text-[#165DFF]")}
                         onClick={() => {
-                            // 点击当前就是管理员时不做任何操作
                             if (!canCreatorManage || m.role === "admin" || m.role === "creator") return;
                             handlePromoteAdmin(m);
                         }}
@@ -235,15 +262,15 @@ export function ChannelMemberDialog({
                         {localize("admin") || "管理员"}
                     </DropdownMenuItem>
                     <DropdownMenuItem
+                        className={cn(m.role === "member" && "bg-[#E8F3FF] text-[#165DFF]")}
                         onClick={() => {
-                            // 点击当前就是订阅用户时不做任何操作
                             if (!canCreatorManage || m.role === "member") return;
                             handleDemoteToMember(m);
                         }}
                     >
                         {localize("member") || "订阅用户"}
                     </DropdownMenuItem>
-                    {(canCreatorManage || (canAdminManage && m.role === "member")) && (
+                    {canCreatorManage && (
                         <DropdownMenuItem onClick={() => setRemoveTarget(m)}>
                             {localize("remove")}
                         </DropdownMenuItem>

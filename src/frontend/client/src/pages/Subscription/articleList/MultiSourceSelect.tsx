@@ -1,3 +1,4 @@
+import { useLocalize } from "~/hooks";
 import * as React from "react";
 import { ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -28,9 +29,10 @@ export function MultiSourceSelect({
     options,
     value = [],
     onChange,
-    placeholder = "全部信息源",
+    placeholder,
     className,
 }: MultiSourceSelectProps) {
+    const localize = useLocalize();
     const [open, setOpen] = React.useState(false);
 
     // 处理单个项的点击
@@ -51,7 +53,7 @@ export function MultiSourceSelect({
     const renderValue = () => {
         // 如果数组为空，回显“全部信息源”
         if (value.length === 0) {
-            return <span className="text-gray-500">{placeholder}</span>;
+            return <span className="text-gray-500">{placeholder ?? localize("com_subscription.all_sources")}</span>;
         }
 
         // 找到第一个选中项的 Label
@@ -100,9 +102,7 @@ export function MultiSourceSelect({
                         <label
                             htmlFor="source-all"
                             className="text-sm leading-[22px] cursor-pointer flex-1"
-                        >
-                            全部信息源
-                        </label>
+                        >{localize("com_subscription.all_sources")}</label>
                     </div>
 
                     <Separator className="my-2" />
