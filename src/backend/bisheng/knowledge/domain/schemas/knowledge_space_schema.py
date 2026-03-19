@@ -14,7 +14,7 @@ class KnowledgeSpaceCreateReq(BaseModel):
 
 
 class KnowledgeSpaceInfoResp(KnowledgeBase):
-    user_name: str = Field(..., description="Knowledge Space creator name")
+    user_name: str = Field(default="", description="Knowledge Space creator name")
     follower_num: int = Field(1, description="Follower Number")
     file_num: int = Field(1, description="Total File Number")
 
