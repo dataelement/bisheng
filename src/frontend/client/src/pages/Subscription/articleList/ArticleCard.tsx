@@ -1,3 +1,4 @@
+import { useLocalize } from "~/hooks";
 import { SquareArrowOutUpLeftIcon } from "lucide-react";
 import BookPlusIcon from "~/components/ui/icon/BookPlus";
 import { useState } from "react";
@@ -16,6 +17,7 @@ interface ArticleCardProps {
 }
 
 export function ArticleCard({ article, onSelect, isSelected, searchQuery }: ArticleCardProps) {
+    const localize = useLocalize();
     const [hovered, setHovered] = useState(false);
     const { handleShare } = useArticleShare();
     const { showToast } = useToastContext();
@@ -29,8 +31,8 @@ export function ArticleCard({ article, onSelect, isSelected, searchQuery }: Arti
         const articleDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
         const diffDays = Math.round((todayDate.getTime() - articleDate.getTime()) / (1000 * 60 * 60 * 24));
 
-        if (diffDays === 0) return "今日更新";
-        if (diffDays >= 1 && diffDays <= 7) return `${diffDays}天前`;
+        if (diffDays === 0) return localize("com_subscription.updated_today");
+        if (diffDays >= 1 && diffDays <= 7) return localize("com_subscription.days_ago", { diffDays });
         return date.toISOString().split('T')[0];
     };
 
@@ -105,10 +107,9 @@ export function ArticleCard({ article, onSelect, isSelected, searchQuery }: Arti
                         <button
                             onClick={(e) => {
                                 e.stopPropagation();
-                                onSelect(article);
                             }}
                             className=" rounded-full bg-gray-50 flex items-center justify-center size-8 text-gray-800 hover:bg-gray-100 transition-colors cursor-pointer"
-                            title="阅读详情"
+                            title={localize("com_subscription.add_to_knowledge_space")}
                         >
                             <BookPlusIcon className="size-3.5" />
                         </button>
@@ -116,23 +117,23 @@ export function ArticleCard({ article, onSelect, isSelected, searchQuery }: Arti
                             onClick={(e) => {
                                 e.stopPropagation();
                                 handleShare(article);
-                                const shareText = `我正在阅读【${article.title}】${article.url}。`;
+                                const shareText = localize("com_subscription.reading_article_share", { title: article.title, url: article.url });
                                 copyText(shareText)
                                     .then(() => {
                                         showToast({
-                                            message: "分享链接已复制到粘贴板",
+                                            message: localize("com_subscription.share_link_copied"),
                                             severity: NotificationSeverity.SUCCESS
                                         });
                                     })
                                     .catch(() => {
                                         showToast({
-                                            message: "复制失败，请重试",
+                                            message: localize("com_subscription.copy_failed_retry"),
                                             severity: NotificationSeverity.ERROR
                                         });
                                     });
                             }}
                             className=" rounded-full bg-gray-50 flex items-center justify-center size-8 text-gray-800 hover:bg-gray-100 transition-colors cursor-pointer"
-                            title="分享"
+                            title={localize("com_subscription.share")}
                         >
                             <ShareOutlineIcon className="size-3.5" />
                         </button>

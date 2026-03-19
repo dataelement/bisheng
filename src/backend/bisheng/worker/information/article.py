@@ -1,21 +1,20 @@
 from datetime import datetime
-from typing import Any, Dict, List, Optional
 
 from loguru import logger
+from sqlalchemy import func
 from sqlmodel import select
 
-from bisheng.channel.domain.es.article_index import ARTICLE_INDEX_NAME
 from bisheng.channel.domain.models.channel import Channel
 from bisheng.channel.domain.models.channel_info_source import ChannelInfoSource
 from bisheng.channel.domain.repositories.implementations.channel_info_source_repository_impl import \
     ChannelInfoSourceRepositoryImpl
 from bisheng.channel.domain.schemas.article_schema import ArticleDocument
 from bisheng.channel.domain.services.article_es_service import ArticleEsService
+from bisheng.channel.domain.services.channel_service import ChannelService
 from bisheng.core.database import get_sync_db_session
 from bisheng.core.external.bisheng_information_client.bisheng_information_manager import \
     get_bisheng_information_client_sync
 from bisheng.core.logger import trace_id_var
-from bisheng.core.search.elasticsearch.manager import get_es_connection_sync
 from bisheng.utils import generate_uuid
 from bisheng.worker.main import bisheng_celery
 
@@ -42,10 +41,32 @@ def sync_information_article(information_id: str = None):
             page += 1
     logger.debug("Finished syncing information articles for all sources.")
 
-    # Update latest_article_update_time for all channels that use this information source
+    # Update latest_article_update_time for channels
     if information_id is None:
+        # Update all channels
         logger.debug("Updating latest_article_update_time for all channels.")
         _update_channel_latest_article_update_time()
+    else:
+        # Update only channels that use this information source
+        logger.debug(f"Updating latest_article_update_time for channels using information_id={information_id}.")
+        _update_channels_by_source_id(information_id)
+
+
+def _update_channels_by_source_id(source_id: str):
+    """Update latest_article_update_time for channels that use the specified source_id."""
+    with get_sync_db_session() as session:
+        # Query channels whose source_list contains the source_id
+        channels = session.exec(
+            select(Channel).where(func.json_contains(Channel.source_list, f'"{source_id}"'))
+        ).all()
+
+        if not channels:
+            logger.debug(f"No channels found using source_id={source_id}.")
+            return
+
+        logger.debug(f"Found {len(channels)} channels using source_id={source_id}.")
+        updated_count = ChannelService.update_channels_latest_article_time_sync(list(channels))
+        logger.debug(f"Updated latest_article_update_time for {updated_count} channels.")
 
 
 def _sync_one_information_article(information: ChannelInfoSource, article_service: ArticleEsService):
@@ -90,91 +111,12 @@ def _sync_one_information_article(information: ChannelInfoSource, article_servic
 
 
 def _update_channel_latest_article_update_time():
+    """Update latest_article_update_time for all channels."""
     logger.debug("Starting to update latest_article_update_time for all channels.")
-    article_service = ArticleEsService()
-    updated_channel_count = 0
-
     with get_sync_db_session() as session:
         channels = session.exec(select(Channel)).all()
-
-        for channel in channels:
-            try:
-                latest_article_create_time = _get_channel_latest_article_create_time(
-                    channel=channel,
-                    article_service=article_service,
-                )
-            except Exception as exc:
-                logger.exception(
-                    f"Failed to query latest article create_time for channel {channel.id}: {exc}"
-                )
-                continue
-
-            if latest_article_create_time is None:
-                continue
-
-            current_latest_time = _normalize_datetime(channel.latest_article_update_time)
-            if current_latest_time is None or latest_article_create_time > current_latest_time:
-                channel.latest_article_update_time = latest_article_create_time
-                session.add(channel)
-                updated_channel_count += 1
-
-        if updated_channel_count > 0:
-            session.commit()
-
-    logger.debug(
-        f"Finished updating latest_article_update_time for all channels. "
-        f"updated_channel_count={updated_channel_count}"
-    )
-
-
-def _get_channel_latest_article_create_time(
-        channel: Channel,
-        article_service: ArticleEsService,
-) -> Optional[datetime]:
-    """Get the latest article create_time for a channel under main filter rules."""
-    query = article_service._build_count_query(
-        source_ids=channel.source_list or [],
-        filter_rules=_extract_main_filter_rules(channel) or None,
-    )
-    if query is None:
-        return None
-
-    client = get_es_connection_sync()
-    body = {
-        "size": 1,
-        "query": query,
-        "sort": [{"create_time": {"order": "desc"}}],
-        "_source": ["create_time"],
-    }
-    response = client.search(index=ARTICLE_INDEX_NAME, body=body)
-    hits = response["hits"]["hits"]
-    if not hits:
-        return None
-
-    latest_create_time = hits[0]["_source"].get("create_time")
-    if not latest_create_time:
-        return None
-
-    return _normalize_datetime(datetime.fromisoformat(latest_create_time))
-
-
-def _extract_main_filter_rules(channel: Channel) -> List[Dict[str, Any]]:
-    """Extract main channel filter rules from channel configuration."""
-    filter_rules_raw = channel.filter_rules or []
-    main_rules: List[Dict[str, Any]] = []
-
-    for filter_rule in filter_rules_raw:
-        channel_type = filter_rule.get("channel_type", "main")
-        if channel_type == "main":
-            main_rules.extend(filter_rule.get("rules", []))
-
-    return main_rules
-
-
-def _normalize_datetime(value: Optional[datetime]) -> Optional[datetime]:
-    """Normalize datetime values before comparison and persistence."""
-    if value is None:
-        return None
-    if value.tzinfo is not None:
-        return value.replace(tzinfo=None)
-    return value
+        updated_count = ChannelService.update_channels_latest_article_time_sync(list(channels))
+        logger.debug(
+            f"Finished updating latest_article_update_time for all channels. "
+            f"updated_channel_count={updated_count}"
+        )

@@ -64,7 +64,6 @@ class EventType(Enum):
 # Action object type enumeration
 class ObjectType(Enum):
     NONE = "none"  # W/O
-    FLOW = "flow"  # Skill
     WORK_FLOW = "work_flow"  # The Workflow
     ASSISTANT = "assistant"  # assistant
     WORKSTATION = "workstation"  # Workstation

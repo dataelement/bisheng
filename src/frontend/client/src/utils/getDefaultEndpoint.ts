@@ -48,7 +48,7 @@ const getEndpointFromLocalStorage = (endpointsConfig: TEndpointsConfig) => {
 
 const getDefinedEndpoint = (endpointsConfig: TEndpointsConfig) => {
   const endpoints = mapEndpoints(endpointsConfig);
-  return endpoints.find((e) => Object.hasOwn(endpointsConfig ?? {}, e));
+  return endpoints.find((e) => Object.prototype.hasOwnProperty.call(endpointsConfig ?? {}, e));
 };
 
 const getDefaultEndpoint = ({

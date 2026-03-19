@@ -49,12 +49,23 @@ export const useGetBsConfig = (
   return useQuery<BsConfig>(
     [QueryKeys.bishengConfig],
     () => dataService.getBishengConfig().then(data => {
-      // 更新favicon
-      const favicon = document.createElement('link');
-      favicon.type = 'image/x-icon';
-      favicon.rel = 'shortcut icon';
-      favicon.href = __APP_ENV__.BASE_URL + data.assistantIcon.image;
-      document.head.appendChild(favicon);
+      // Ensure nested object fields have defaults to prevent runtime errors
+      const defaultIcon = { image: '', enabled: false };
+      if (!data.sidebarIcon) data.sidebarIcon = defaultIcon;
+      if (!data.assistantIcon) data.assistantIcon = defaultIcon;
+      if (!data.webSearch) data.webSearch = { enabled: false, tool: '', bingKey: '', bingUrl: '', prompt: '' };
+      if (!data.voiceInput) data.voiceInput = { enabled: false, model: '' };
+      if (!data.knowledgeBase) data.knowledgeBase = { enabled: false, prompt: '' };
+      if (!data.fileUpload) data.fileUpload = { enabled: false, prompt: '' };
+
+      // Update favicon
+      if (data.assistantIcon.image) {
+        const favicon = document.createElement('link');
+        favicon.type = 'image/x-icon';
+        favicon.rel = 'shortcut icon';
+        favicon.href = __APP_ENV__.BASE_URL + data.assistantIcon.image;
+        document.head.appendChild(favicon);
+      }
       return data;
     }),
     {

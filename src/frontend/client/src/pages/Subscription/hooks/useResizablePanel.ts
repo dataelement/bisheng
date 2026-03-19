@@ -1,13 +1,13 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 
 interface UseResizablePanelOptions {
-    /** localStorage key to persist width */
+    /** localStorage key to persist the split ratio (0–1) */
     storageKey: string;
-    /** Default width if no persisted value */
-    defaultWidth: number;
-    /** Minimum width for the left panel */
+    /** Default ratio for the left panel (0–1), e.g. 0.5 = 50% */
+    defaultRatio: number;
+    /** Minimum width for the left panel (px) */
     minLeftWidth: number;
-    /** Minimum width for the right panel */
+    /** Minimum width for the right panel (px) */
     minRightWidth: number;
     /** Ref to the container element for calculating bounds */
     containerRef: React.RefObject<HTMLDivElement>;
@@ -15,21 +15,45 @@ interface UseResizablePanelOptions {
 
 /**
  * Shared hook for draggable split-panel resize logic.
- * Handles mouse-tracking at the document level so the divider follows
- * the cursor even when dragging quickly or over iframes.
+ * Persists the split position as a **ratio** (0–1) so the layout
+ * stays proportional across different screen sizes.
  */
 export function useResizablePanel({
     storageKey,
-    defaultWidth,
+    defaultRatio,
     minLeftWidth,
     minRightWidth,
     containerRef,
 }: UseResizablePanelOptions) {
-    const [leftWidth, setLeftWidth] = useState<number>(() => {
+    // Store ratio (0–1) internally; derive pixel width on render
+    const [ratio, setRatio] = useState<number>(() => {
         const saved = localStorage.getItem(storageKey);
-        return saved ? parseInt(saved, 10) : defaultWidth;
+        if (saved) {
+            const parsed = parseFloat(saved);
+            if (!isNaN(parsed) && parsed > 0 && parsed < 1) return parsed;
+        }
+        return defaultRatio;
     });
     const [isResizing, setIsResizing] = useState(false);
+
+    // Force a re-render after mount so containerRef.current is available for width calculation
+    const [mounted, setMounted] = useState(false);
+    useEffect(() => { setMounted(true); }, []);
+
+    // Convert ratio to pixel width, clamped by min constraints
+    const getLeftWidth = useCallback((): number => {
+        const containerWidth = containerRef.current?.getBoundingClientRect().width ?? 0;
+        if (containerWidth === 0) return minLeftWidth;
+
+        let px = Math.round(ratio * containerWidth);
+        // Enforce minimum constraints
+        px = Math.max(px, minLeftWidth);
+        px = Math.min(px, containerWidth - minRightWidth);
+        return px;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [ratio, containerRef, minLeftWidth, minRightWidth, mounted]);
+
+    const leftWidth = getLeftWidth();
 
     // Start drag — lock cursor & disable text selection globally
     const startResizing = useCallback((e: React.MouseEvent) => {
@@ -39,18 +63,18 @@ export function useResizablePanel({
         document.body.style.cursor = "col-resize";
     }, []);
 
-    // Stop drag — restore cursor & persist width
+    // Stop drag — restore cursor & persist ratio
     const stopResizing = useCallback(() => {
         setIsResizing(false);
         document.body.style.userSelect = "";
         document.body.style.cursor = "";
-        setLeftWidth((w) => {
-            localStorage.setItem(storageKey, w.toString());
-            return w;
+        setRatio((r) => {
+            localStorage.setItem(storageKey, r.toFixed(4));
+            return r;
         });
     }, [storageKey]);
 
-    // Handle drag movement
+    // Handle drag movement — compute new ratio from mouse position
     const resize = useCallback(
         (e: MouseEvent) => {
             if (!containerRef.current) return;
@@ -63,7 +87,7 @@ export function useResizablePanel({
                 newLeftWidth >= minLeftWidth &&
                 rect.width - newLeftWidth >= minRightWidth
             ) {
-                setLeftWidth(newLeftWidth);
+                setRatio(newLeftWidth / rect.width);
             }
         },
         [containerRef, minLeftWidth, minRightWidth]
@@ -88,7 +112,6 @@ export function useResizablePanel({
 
     return {
         leftWidth,
-        setLeftWidth,
         isResizing,
         startResizing,
     };

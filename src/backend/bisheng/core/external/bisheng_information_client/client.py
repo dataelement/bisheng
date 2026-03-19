@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Optional
+from typing import Callable, Optional, Union
 
 import httpx
 from aiohttp import ClientTimeout
@@ -34,15 +34,23 @@ class InformationSourceSubscribeError(Exception):
 
 class BishengInformationClient(object):
 
-    def __init__(self, http_client: AsyncHttpClient, base_url: str, api_key: str, **kwargs):
+    def __init__(self, http_client: AsyncHttpClient, base_url: str,
+                 api_key: Union[str, Callable[[], str]], **kwargs):
         self.http_client = http_client
         self.base_url = base_url
-        self.api_key = api_key
+        self._api_key = api_key
 
         self.timeout = None
 
         if kwargs.get("timeout"):
             self.timeout = ClientTimeout(total=kwargs["timeout"])
+
+    @property
+    def api_key(self) -> str:
+        """Get the API key, supporting both direct string and callable for dynamic retrieval."""
+        if callable(self._api_key):
+            return self._api_key()
+        return self._api_key
 
     async def add_website_information_source(self, url: str) -> InformationSourceResponse:
         """Add a new information source by URL."""

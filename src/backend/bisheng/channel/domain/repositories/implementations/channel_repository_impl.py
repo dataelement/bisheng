@@ -121,3 +121,11 @@ class ChannelRepositoryImpl(BaseRepositoryImpl[Channel, str], ChannelRepository)
         result = await self.session.exec(query)
         return result.one()
 
+    async def find_channels_by_source_id(self, source_id: str) -> List[Channel]:
+        """Find channels whose source_list contains the specified source_id."""
+        if not source_id:
+            return []
+        # Use json_contains to check if source_list (JSON array) contains the source_id
+        query = select(Channel).where(func.json_contains(Channel.source_list, f'"{source_id}"'))
+        result = await self.session.exec(query)
+        return list(result.all())

@@ -94,7 +94,7 @@ export function EditorHeader({
     })
 
     // Publish mutation
-    const { publish, isPublishing } = usePublishDashboard()
+    const { publish, publishAsync, isPublishing } = usePublishDashboard()
 
     useDashboardAutoSave({
         currentDashboard,
@@ -177,10 +177,41 @@ export function EditorHeader({
 
     // Handle publish
     const handlePublish = async () => {
-        // If has unsaved changes, save first
-        await handleSave()
+        // Trigger config/query component saves via DOM clicks
+        const querySave = document.querySelector('#query_save') as HTMLElement | null
+        const configSave = document.querySelector('#config_save') as HTMLElement | null
+        querySave?.click()
+        configSave?.click()
 
-        publish(dashboard.id, false)
+        // Wait for config sync to propagate to store
+        await new Promise(resolve => setTimeout(resolve, 300))
+
+        // Read the latest state directly from store (not from stale closure)
+        const latestDashboard = useEditorDashboardStore.getState().currentDashboard
+        const latestLayouts = useEditorDashboardStore.getState().layouts
+        const editComp = useComponentEditorStore.getState().editingComponent
+
+        // Save: await completion before proceeding
+        await saveMutation.mutateAsync({
+            id: latestDashboard?.id,
+            dashboard: {
+                ...latestDashboard,
+                components: editComp
+                    ? latestDashboard.components.map(c => c.id === editComp.id ? editComp : c)
+                    : latestDashboard.components,
+                layout_config: { layouts: latestLayouts }
+            },
+        })
+
+        // Publish: await completion before navigating
+        await publishAsync(dashboard.id, false)
+
+        // Clear stale cache so the list page fetches fresh data with published status.
+        // This prevents the save mutation's background refetch from overwriting the
+        // published status with the old "draft" value.
+        queryClient.removeQueries({ queryKey: [DashboardQueryKey, Number(dashboardId)] })
+        queryClient.invalidateQueries({ queryKey: [DashboardsQueryKey] })
+
         navigator(`/dashboard?selected=${dashboardId}`)
     }
 

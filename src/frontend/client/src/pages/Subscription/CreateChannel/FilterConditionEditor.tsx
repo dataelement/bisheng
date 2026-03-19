@@ -1,3 +1,4 @@
+import { useLocalize } from "~/hooks";
 import { Minus, Plus, RefreshCcw } from "lucide-react";
 import TextareaAutosize from "react-textarea-autosize";
 import { useToastContext } from "~/Providers";
@@ -40,17 +41,17 @@ function nanoid() {
 
 /** 中文分号转英文分号并规范化空白 */
 export function normalizeKeywords(raw: string): string {
-    return raw.replace(/；/g, ";").replace(/\s*;\s*/g, ";").replace(/^;|;$/g, "");
+    return raw.replace(/；/g, ";").replace(/\s*;\s*/g, ";");
 }
 
 export function countTotalConditions(groups: FilterGroup[]): number {
     return groups.reduce((s, g) => s + g.conditions.length, 0);
 }
 
-export function validateFilterGroups(groups: FilterGroup[]): string | null {
+export function validateFilterGroups(groups: FilterGroup[], localize: (key: string) => string): string | null {
     for (const g of groups) {
         for (const c of g.conditions) {
-            if (!c.keywords.trim()) return "关键词不能为空";
+            if (!c.keywords.trim()) return localize("com_subscription.keyword_cannot_be_empty");
         }
     }
     return null;
@@ -90,6 +91,7 @@ export function FilterConditionEditor({
     onGroupsChange,
     onTopRelationChange
 }: FilterConditionEditorProps) {
+    const localize = useLocalize();
     const total = countTotalConditions(groups);
     const atTotalLimit = total >= MAX_CONDITIONS_TOTAL;
     const { showToast } = useToastContext();
@@ -170,7 +172,7 @@ export function FilterConditionEditor({
         const normalized = normalizeKeywords(value);
         if (normalized.length > MAX_KEYWORDS_LEN) {
             showToast({
-                message: "最多输入200个字符",
+                message: localize("com_subscription.max_200_characters"),
                 severity: NotificationSeverity.WARNING
             });
             updateConditionInGroup(groupIndex, condIndex, {
@@ -188,7 +190,7 @@ export function FilterConditionEditor({
                     type="button"
                     onClick={addRootCondition}
                     className="flex items-center justify-center p-1.5 rounded border border-[#E5E6EB] text-[#86909C] hover:border-[#165DFF] hover:text-[#165DFF] transition-colors w-8"
-                    title="新增条件"
+                    title={localize("com_subscription.add_condition")}
                 >
                     <Plus className="size-4" />
                 </button>
@@ -213,7 +215,7 @@ export function FilterConditionEditor({
                                 onTopRelationChange(topRelation === "and" ? "or" : "and");
                             }
                         }}
-                        title={topRelation === "and" ? "点击切换为 Or" : "点击切换为 And"}
+                        title={topRelation === "and" ? localize("com_subscription.click_to_switch_to_or") : localize("com_subscription.click_to_switch_to_and")}
                     >
                         <span className="transition-opacity group-hover/btn:opacity-0">
                             {topRelation === "and" ? "And" : "Or"}
@@ -251,7 +253,7 @@ export function FilterConditionEditor({
                                             );
                                         }
                                     }}
-                                    title={group.relation === "and" ? "点击切换为 Or" : "点击切换为 And"}
+                                    title={group.relation === "and" ? localize("com_subscription.click_to_switch_to_or") : localize("com_subscription.click_to_switch_to_and")}
                                 >
                                     <span className="transition-opacity group-hover/btn:opacity-0">
                                         {group.relation === "and" ? "And" : "Or"}
@@ -269,7 +271,7 @@ export function FilterConditionEditor({
                                         type="button"
                                         onClick={() => addConditionInGroup(groupIndex)}
                                         className="absolute left-14 bottom-1 flex items-center justify-center w-4 h-4 rounded border border-[#165DFF] text-[#86909C] bg-white hover:border-[#165DFF] hover:text-[#165DFF] transition-colors"
-                                        title="在当前关系下新增一条条件"
+                                        title={localize("com_subscription.add_condition_under_current_relation")}
                                     >
                                         <Plus className="size-3.5 text-[#165DFF]" />
                                     </button>
@@ -301,9 +303,7 @@ export function FilterConditionEditor({
                                                     ? "bg-[#E8F3FF] text-[#165DFF]"
                                                     : "bg-[#F8F8F8] text-[#4E5969] hover:bg-[#F2F3F5]"
                                             )}
-                                        >
-                                            包含
-                                        </button>
+                                        >{localize("com_subscription.includes")}</button>
                                         <button
                                             type="button"
                                             onClick={() =>
@@ -317,9 +317,7 @@ export function FilterConditionEditor({
                                                     ? "bg-[#E8F3FF] text-[#165DFF]"
                                                     : "bg-[#F8F8F8] text-[#4E5969] hover:bg-[#F2F3F5]"
                                             )}
-                                        >
-                                            不包含
-                                        </button>
+                                        >{localize("com_subscription.excludes")}</button>
                                     </div>
 
                                     {/* 关键词输入：单行起步，超出一行时自动向下扩展 */}
@@ -335,7 +333,7 @@ export function FilterConditionEditor({
                                             }
                                             minRows={1}
                                             maxRows={4}
-                                            placeholder='请输入关键词, 以分号";"分隔'
+                                            placeholder={localize("com_subscription.input_keywords_semicolon_separated")}
                                             className="w-full px-3 py-1.5 text-[14px] rounded-lg border border-[#E5E6EB] focus:outline-none focus:ring-2 focus:ring-[#165DFF]/30 focus:border-[#165DFF] resize-none leading-[22px]"
                                         />
                                     </div>
@@ -348,7 +346,7 @@ export function FilterConditionEditor({
                                                 type="button"
                                                 onClick={() => addConditionInGroup(groupIndex)}
                                                 className="p-[0.5px] rounded border border-[#165DFF] text-[#86909C] hover:border-[#165DFF] hover:text-[#165DFF] transition-colors"
-                                                title="在当前关系下新增一条条件"
+                                                title={localize("com_subscription.add_condition_under_current_relation")}
                                             >
                                                 <Plus className="size-3.5 text-[#165DFF]" />
                                             </button>
@@ -363,7 +361,7 @@ export function FilterConditionEditor({
                                                     )
                                                 }
                                                 className="p-[1px] rounded border border-[#E5E6EB] text-[#86909C] hover:text-[#F53F3F] transition-colors"
-                                                title="删除该条条件"
+                                                title={localize("com_subscription.delete_this_condition")}
                                             >
                                                 <Minus className="size-3.5" />
                                             </button>
@@ -383,7 +381,7 @@ export function FilterConditionEditor({
                         type="button"
                         onClick={addRootCondition}
                         className="flex items-center justify-center w-4 h-4 rounded-[4px] border border-[#165DFF] text-[#165DFF]  hover:text-white transition-colors"
-                        title="新增条件"
+                        title={localize("com_subscription.add_condition")}
                     >
                         <Plus className="size-3.5 text-[#165DFF]" />
                     </button>
@@ -393,10 +391,10 @@ export function FilterConditionEditor({
     );
 }
 
-/** 兼容旧校验：平铺条件 */
-export function validateFilterConditions(conditions: FilterConditionItem[]): string | null {
+/** Legacy validator: flat conditions list */
+export function validateFilterConditions(conditions: FilterConditionItem[], localize: (key: string) => string): string | null {
     for (const c of conditions) {
-        if (!c.keywords.trim()) return "关键词不能为空";
+        if (!c.keywords.trim()) return localize("com_subscription.keyword_cannot_be_empty");
     }
     return null;
 }

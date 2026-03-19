@@ -1,3 +1,4 @@
+import { useLocalize } from "~/hooks";
 /**
  * AI Assistant Panel — complete chat interface.
  */
@@ -35,6 +36,7 @@ export function AiAssistantPanel({
     features,
     noBorder,
 }: AiAssistantPanelProps) {
+    const localize = useLocalize();
     const {
         messages,
         conversationId: activeConvoId,
@@ -54,8 +56,8 @@ export function AiAssistantPanel({
     const [inputText, setInputText] = useState("");
 
     const presetQuestions = [
-        "总结文章要点",
-        "文章的主要结论是什么"
+        localize("com_subscription.summarize_article_points"),
+        localize("com_subscription.main_conclusion")
     ];
 
     const handleSend = (text: string, files?: any[] | null) => {
@@ -67,9 +69,7 @@ export function AiAssistantPanel({
         <div className="flex flex-col h-full bg-white relative">
             {/* Header */}
             <div className={`flex items-center justify-between px-3 py-[15px] shrink-0 ${noBorder ? '' : 'border-b border-gray-100'}`}>
-                <h3 className="text-sm leading-6 font-medium text-gray-900">
-                    AI 助手
-                </h3>
+                <h3 className="text-sm leading-6 font-medium text-gray-900">{localize("com_subscription.ai_assistant")}</h3>
                 <div className="flex items-center gap-3 pr-3">
                     <TooltipProvider>
                         <Tooltip>
@@ -83,7 +83,7 @@ export function AiAssistantPanel({
                                 </Button>
                             </TooltipTrigger>
                             <TooltipContent>
-                                <p>清空对话</p>
+                                <p>{localize("com_subscription.clear_chat")}</p>
                             </TooltipContent>
                         </Tooltip>
                     </TooltipProvider>
@@ -114,7 +114,7 @@ export function AiAssistantPanel({
                 size="mini"
                 features={features}
                 disabled={!bsConfig?.models?.length}
-                placeholder='请输入你的问题...'
+                placeholder={localize("com_subscription.input_question_placeholder")}
                 isStreaming={isStreaming}
                 modelOptions={bsConfig?.models}
                 modelValue={chatModel.id}

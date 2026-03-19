@@ -1,67 +1,20 @@
 import json
-from typing import List, Optional
+from typing import List
 from uuid import UUID
 
-from fastapi import APIRouter, Body, WebSocket, status
+from fastapi import APIRouter, Body
 from fastapi.middleware.wsgi import WSGIMiddleware
-from loguru import logger
 
 a = WSGIMiddleware
 
 from bisheng.api.services.chat_imp import comment_answer
-from bisheng.api.services.utils import set_flow_knowledge_id
 from bisheng.api.v1.schemas import ChatInput, resp_200
-from bisheng.chat.manager import ChatManager
 from bisheng.common.services.config_service import settings
 from bisheng.core.database import get_sync_db_session
-from bisheng.database.models.flow import Flow
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.open_endpoints.domain.schemas.message import SyncMessage
-from bisheng.processing.process import process_tweaks
 
 router = APIRouter(prefix='/chat', tags=['OpenAPI', 'Chat'])
-chat_manager = ChatManager()
-expire = 600  # reids 60s Overdue
-
-
-@router.websocket('/ws/{flow_id}')
-async def union_websocket(flow_id: str,
-                          websocket: WebSocket,
-                          chat_id: Optional[str] = None,
-                          tweak: Optional[str] = None,
-                          knowledge_id: Optional[int] = None):
-    """Websocket endpoint forF  chat."""
-    if chat_id:
-        with get_sync_db_session() as session:
-            db_flow = session.get(Flow, flow_id)
-        if not db_flow:
-            await websocket.accept()
-            message = 'This skill has been deleted'
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=message)
-        if db_flow.status != 2:
-            await websocket.accept()
-            message = 'The current skill is not online and cannot be spoken to directly'
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=message)
-        graph_data = db_flow.data
-
-    try:
-        if tweak:
-            tweak = json.loads(tweak)
-            graph_data = process_tweaks(graph_data, tweak)
-        # vectordatabase update
-        if knowledge_id:
-            set_flow_knowledge_id(graph_data, knowledge_id)
-        await chat_manager.handle_websocket(
-            flow_id,
-            chat_id,
-            websocket,
-            settings.get_from_db('default_operator').get('user'),
-            gragh_data=graph_data,
-            source="api"
-        )
-    except Exception as exc:
-        logger.exception('union_websocket error: ')
-        await websocket.close(code=status.WS_1011_INTERNAL_ERROR, reason=str(exc))
 
 
 # @router.get('/source')

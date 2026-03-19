@@ -1,3 +1,4 @@
+import { useLocalize } from "~/hooks";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
     LayoutGridIcon,
@@ -23,6 +24,8 @@ interface ChannelSidebarProps {
     onChannelSquare: () => void;
     onManageMembers: (channel: Channel) => void;
     onChannelSettings: (channel: Channel) => void;
+    /** Report created channel count back to parent so it doesn't need a duplicate query */
+    onCreatedCountChange?: (count: number) => void;
 }
 
 export function ChannelSidebar({
@@ -31,8 +34,10 @@ export function ChannelSidebar({
     onCreateChannel,
     onChannelSquare,
     onManageMembers,
-    onChannelSettings
+    onChannelSettings,
+    onCreatedCountChange,
 }: ChannelSidebarProps) {
+    const localize = useLocalize();
     const [collapsed, setCollapsed] = useState(false);
     const [createdCollapsed, setCreatedCollapsed] = useState(false);
     const [subscribedCollapsed, setSubscribedCollapsed] = useState(false);
@@ -70,16 +75,25 @@ export function ChannelSidebar({
 
     // Default select first channel
     useEffect(() => {
-        if (!activeChannelId && createdChannels.length > 0) {
-            onChannelSelect(createdChannels[0]);
+        if (!activeChannelId) {
+            if (createdChannels.length > 0) {
+                onChannelSelect(createdChannels[0]);
+            } else if (subscribedChannels.length > 0) {
+                onChannelSelect(subscribedChannels[0]);
+            }
         }
     }, [activeChannelId, createdChannels, onChannelSelect]);
 
+    // Notify parent of created channel count changes
+    useEffect(() => {
+        onCreatedCountChange?.(createdChannels.length);
+    }, [createdChannels.length, onCreatedCountChange]);
+
     const getSortText = (sortType: SortType) => {
         switch (sortType) {
-            case SortType.RECENT_UPDATE: return "最近更新";
-            case SortType.RECENT_ADDED: return "最近添加";
-            case SortType.NAME: return "频道名称";
+            case SortType.RECENT_UPDATE: return localize("com_subscription.recently_updated");
+            case SortType.RECENT_ADDED: return localize("com_subscription.recently_added");
+            case SortType.NAME: return localize("com_subscription.channel_name");
         }
     };
 
@@ -112,18 +126,17 @@ export function ChannelSidebar({
             {/* 顶部操作区 */}
             <div className="border-b border-[#e5e6eb] space-y-4 pb-4">
                 <div className="px-2 flex justify-between items-center text-[14px] font-medium">
-                    <span>订阅</span>
+                    <span>{localize("com_subscription.subscribe")}</span>
                     <Button size="icon" variant="ghost" className="w-5 h-5 text-[#86909c]" onClick={() => setCollapsed(true)}>
                         <PanelRightOpenIcon className="size-3.5" />
                     </Button>
                 </div>
                 <div className="flex items-center gap-3">
                     <Button variant="secondary" onClick={onCreateChannel} className="flex-1 h-8 text-[13px] bg-[#F2F3F5] hover:bg-[#E5E6EB] border-none gap-1">
-                        <Plus className="size-4" />创建
+                        <Plus className="size-4" />{localize("com_subscription.create")}
                     </Button>
                     <Button variant="secondary" onClick={onChannelSquare} className="flex-1 h-8 text-[13px] bg-[#F2F3F5] hover:bg-[#E5E6EB] border-none gap-1">
-                        <LayoutGridIcon className="size-4" />前往广场
-                    </Button>
+                        <LayoutGridIcon className="size-4" />{localize("com_subscription.go_to_square")}</Button>
                 </div>
             </div>
 
@@ -131,7 +144,7 @@ export function ChannelSidebar({
                 {/* 我创建的 */}
                 <div className="pt-4">
                     <SectionHeader
-                        title="我创建的"
+                        title={localize("com_subscription.created_by_me")}
                         collapsed={createdCollapsed}
                         onToggle={() => setCreatedCollapsed(!createdCollapsed)}
                         sortText={getSortText(createdSortBy)}
@@ -154,7 +167,7 @@ export function ChannelSidebar({
                                     onChannelSettings={onChannelSettings}
                                 />
                             ))}
-                            {!createdChannels.length && <div className="py-6 text-center text-sm text-[#818181]">暂无数据</div>}
+                            {!createdChannels.length && <div className="py-6 text-center text-sm text-[#818181]">{localize("com_subscription.no_data")}</div>}
                         </div>
                     )}
                 </div>
@@ -162,7 +175,7 @@ export function ChannelSidebar({
                 {/* 我关注的 */}
                 <div className="py-4">
                     <SectionHeader
-                        title="我关注的"
+                        title={localize("com_subscription.followed_by_me")}
                         collapsed={subscribedCollapsed}
                         onToggle={() => setSubscribedCollapsed(!subscribedCollapsed)}
                         sortText={getSortText(subscribedSortBy)}
@@ -185,7 +198,7 @@ export function ChannelSidebar({
                                     onChannelSettings={onChannelSettings}
                                 />
                             ))}
-                            {!subscribedChannels.length && <div className="py-6 text-center text-sm text-[#818181]">暂无数据</div>}
+                            {!subscribedChannels.length && <div className="py-6 text-center text-sm text-[#818181]">{localize("com_subscription.no_data")}</div>}
                         </div>
                     )}
                 </div>

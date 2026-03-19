@@ -19,13 +19,23 @@ class BishengInformationManager(BaseContextManager[BishengInformationClient]):
 
     async def _async_initialize(self) -> BishengInformationClient:
         """Async Initialization Bisheng Information Client"""
+
+        def get_api_key() -> str:
+            from bisheng.common.services.config_service import settings
+            return settings.get_intelligence_center_conf().api_key
+
         return BishengInformationClient(self.http_client, self.intelligence_center_conf.base_url,
-                                        self.intelligence_center_conf.api_key)
+                                        get_api_key)
 
     def _sync_initialize(self) -> BishengInformationClient:
         """Sync Initialization Bisheng Information Client"""
+
+        def get_api_key() -> str:
+            from bisheng.common.services.config_service import settings
+            return settings.get_intelligence_center_conf().api_key
+
         return BishengInformationClient(self.http_client, self.intelligence_center_conf.base_url,
-                                        self.intelligence_center_conf.api_key)
+                                        get_api_key)
 
     async def _async_cleanup(self) -> None:
         """Asynchronous Cleanup Bisheng Information Client"""

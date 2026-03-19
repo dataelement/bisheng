@@ -47,12 +47,14 @@ class InboxMessageRepository(BaseRepository[InboxMessage, int], ABC):
         pass
 
     @abstractmethod
-    async def update_message_status(
+    async def update_message_after_approval(
         self,
         message_id: int,
         status: MessageStatusEnum,
+        content: list,
+        operator_user_id: int,
     ) -> Optional[InboxMessage]:
-        """Update message approval status."""
+        """Atomically update message status, content, and operator after approval action."""
         pass
 
     @abstractmethod
@@ -61,5 +63,13 @@ class InboxMessageRepository(BaseRepository[InboxMessage, int], ABC):
         message_id: int,
         content: list,
     ) -> Optional[InboxMessage]:
-        """Update message content (e.g., after approval action)."""
+        """Update message content (e.g., after approval_id backfill)."""
+        pass
+
+    @abstractmethod
+    async def get_all_message_ids_by_receiver(
+        self,
+        user_id: int,
+    ) -> List[int]:
+        """Get all message IDs where the user is a receiver."""
         pass

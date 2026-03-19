@@ -41,8 +41,8 @@ from bisheng.common.errcode.channel import (
 from bisheng.common.models.space_channel_member import BusinessTypeEnum, UserRoleEnum
 from bisheng.common.repositories.interfaces.space_channel_member_repository import SpaceChannelMemberRepository
 from bisheng.core.external.bisheng_information_client.bisheng_information_manager import get_bisheng_information_client
+from bisheng.message.domain.services.message_service import MessageService
 from bisheng.user.domain.models.user import UserDao
-from bisheng.worker.information.article import sync_information_article
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +60,7 @@ class ChannelService:
                  channel_info_source_repository: 'ChannelInfoSourceRepository',
                  article_es_service: 'ArticleEsService' = None,
                  article_read_repository: 'ArticleReadRepository' = None,
-                 message_service: Optional[Any] = None):
+                 message_service: Optional[MessageService] = None):
         self.channel_repository = channel_repository
         self.space_channel_member_repository = space_channel_member_repository
         self.channel_info_source_repository = channel_info_source_repository
@@ -126,6 +126,7 @@ class ChannelService:
                     new_channel_info_sources.append(new_source)
 
                 if new_channel_info_sources:
+                    from bisheng.worker.information.article import sync_information_article
                     await self.channel_info_source_repository.batch_add(new_channel_info_sources)
                     for one in new_channel_info_sources:
                         # Sync articles for the new information source one hour later
@@ -754,6 +755,9 @@ class ChannelService:
             if channel.visibility != new_visibility and new_visibility == ChannelVisibilityEnum.PRIVATE:
                 await self.space_channel_member_repository.remove_non_creator_members(channel_id)
             channel.visibility = new_visibility
+
+        # Track if source_list changed for updating latest_article_update_time
+        source_list_changed = False
         if req.source_list is not None:
 
             # Calculate the difference between old and new source lists to minimize calls to bisheng_information_client
@@ -761,6 +765,10 @@ class ChannelService:
             new_sources = set(req.source_list)
             to_add_sources = list(new_sources - old_sources)
             to_remove_sources = list(old_sources - new_sources)
+
+            # Mark as changed if there are any additions or removals
+            if to_add_sources or to_remove_sources:
+                source_list_changed = True
 
             if to_add_sources:
                 await bisheng_information_client.subscribe_information_source(to_add_sources)
@@ -770,6 +778,10 @@ class ChannelService:
             channel.source_list = req.source_list
 
         channel = await self.channel_repository.update(channel)
+
+        # Update latest_article_update_time if source_list changed
+        if source_list_changed:
+            await self.update_channels_latest_article_time([channel])
 
         if channel.source_list:
 
@@ -795,6 +807,7 @@ class ChannelService:
                     new_channel_info_sources.append(new_source)
 
                 if new_channel_info_sources:
+                    from bisheng.worker.information.article import sync_information_article
                     await self.channel_info_source_repository.batch_add(new_channel_info_sources)
                     for one in new_channel_info_sources:
                         # Sync articles for the new information source one hour later
@@ -1127,3 +1140,172 @@ class ChannelService:
                 }
 
         return article
+
+    # ──────────────────────────────────────────
+    #  Channel latest article update time methods
+    # ──────────────────────────────────────────
+
+    @staticmethod
+    def _extract_main_filter_rules(channel: Channel) -> List[Dict[str, Any]]:
+        """Extract main channel filter rules from channel configuration."""
+        filter_rules_raw = channel.filter_rules or []
+        main_rules: List[Dict[str, Any]] = []
+
+        for filter_rule in filter_rules_raw:
+            channel_type = filter_rule.get("channel_type", "main")
+            if channel_type == "main":
+                main_rules.extend(filter_rule.get("rules", []))
+
+        return main_rules
+
+    @staticmethod
+    def _normalize_datetime(value: Optional[datetime]) -> Optional[datetime]:
+        """Normalize datetime values before comparison and persistence."""
+        if value is None:
+            return None
+        if value.tzinfo is not None:
+            return value.replace(tzinfo=None)
+        return value
+
+    async def _get_channel_latest_article_create_time(self, channel: Channel) -> Optional[datetime]:
+        """Get the latest article create_time for a channel under main filter rules (async version)."""
+        from bisheng.channel.domain.es.article_index import ARTICLE_INDEX_NAME
+        from bisheng.core.search.elasticsearch.manager import get_es_connection
+
+        query = self.article_es_service._build_count_query(
+            source_ids=channel.source_list or [],
+            filter_rules=self._extract_main_filter_rules(channel) or None,
+        )
+        if query is None:
+            return None
+
+        client = await get_es_connection()
+        body = {
+            "size": 1,
+            "query": query,
+            "sort": [{"create_time": {"order": "desc"}}],
+            "_source": ["create_time"],
+        }
+        response = await client.search(index=ARTICLE_INDEX_NAME, body=body)
+        hits = response["hits"]["hits"]
+        if not hits:
+            return None
+
+        latest_create_time = hits[0]["_source"].get("create_time")
+        if not latest_create_time:
+            return None
+
+        return self._normalize_datetime(datetime.fromisoformat(latest_create_time))
+
+    async def update_channels_latest_article_time(self, channels: List[Channel]) -> int:
+        """
+        Update latest_article_update_time for the given channels (async version).
+
+        Args:
+            channels: List of channels to update
+
+        Returns:
+            Number of channels updated
+        """
+        if not channels:
+            return 0
+
+        updated_count = 0
+        for channel in channels:
+            try:
+                latest_article_create_time = await self._get_channel_latest_article_create_time(channel)
+            except Exception as exc:
+                logger.exception(
+                    f"Failed to query latest article create_time for channel {channel.id}: {exc}"
+                )
+                continue
+
+            if latest_article_create_time is None:
+                continue
+
+            channel.latest_article_update_time = latest_article_create_time
+            await self.channel_repository.update(channel)
+            updated_count += 1
+
+        return updated_count
+
+    @staticmethod
+    def update_channels_latest_article_time_sync(channels: List[Channel]) -> int:
+        """
+        Update latest_article_update_time for the given channels (sync version).
+
+        This method is designed to be called from sync contexts like Celery workers.
+
+        Args:
+            channels: List of channels to update
+
+        Returns:
+            Number of channels updated
+        """
+        from bisheng.channel.domain.es.article_index import ARTICLE_INDEX_NAME
+        from bisheng.channel.domain.models.channel import Channel
+        from bisheng.core.database import get_sync_db_session
+        from bisheng.core.search.elasticsearch.manager import get_es_connection_sync
+        from sqlmodel import update
+
+        if not channels:
+            return 0
+
+        article_service = ArticleEsService()
+        updated_count = 0
+
+        with get_sync_db_session() as session:
+            update_channels = []
+            for channel in channels:
+                try:
+                    # Get latest article create_time
+                    query = article_service._build_count_query(
+                        source_ids=channel.source_list or [],
+                        filter_rules=ChannelService._extract_main_filter_rules(channel) or None,
+                    )
+                    if query is None:
+                        continue
+
+                    client = get_es_connection_sync()
+                    body = {
+                        "size": 1,
+                        "query": query,
+                        "sort": [{"create_time": {"order": "desc"}}],
+                        "_source": ["create_time"],
+                    }
+                    response = client.search(index=ARTICLE_INDEX_NAME, body=body)
+                    hits = response["hits"]["hits"]
+                    if not hits:
+                        continue
+
+                    latest_create_time = hits[0]["_source"].get("create_time")
+                    if not latest_create_time:
+                        continue
+
+                    latest_article_create_time = ChannelService._normalize_datetime(
+                        datetime.fromisoformat(latest_create_time)
+                    )
+                    if latest_article_create_time is None:
+                        continue
+
+                    channel.latest_article_update_time = latest_article_create_time
+                    update_channels.append(channel)
+                    updated_count += 1
+
+                except Exception as exc:
+                    logger.exception(
+                        f"Failed to update latest_article_update_time for channel {channel.id}: {exc}"
+                    )
+                    continue
+
+            if update_channels:
+                # Batch update channels in the database using UPDATE statements
+                for channel in update_channels:
+                    stmt = (
+                        update(Channel)
+                        .where(Channel.id == channel.id)
+                        .values(latest_article_update_time=channel.latest_article_update_time)
+                    )
+                    session.execute(stmt)
+                session.commit()
+        return updated_count

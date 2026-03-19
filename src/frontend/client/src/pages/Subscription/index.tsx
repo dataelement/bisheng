@@ -1,11 +1,11 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useLocalize } from "~/hooks";
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
     Article,
     Channel,
     ChannelRole,
-    getChannelsApi,
     SortType,
     createManagerChannelApi,
     updateChannelApi,
@@ -28,6 +28,7 @@ import { buildCreateChannelPayload } from "./channelUtils";
 const MAX_USER_CHANNELS = 10;
 
 export default function Subscription() {
+    const localize = useLocalize();
     const { channelId: previewChannelId } = useParams<{ channelId?: string }>();
     const navigate = useNavigate();
     const [activeChannel, setActiveChannel] = useState<Channel | null>(null);
@@ -36,6 +37,7 @@ export default function Subscription() {
     const [showCreateChannelDrawer, setShowCreateChannelDrawer] = useState(false);
     const [fullScreenArticle, setFullScreenArticle] = useState<Article | null>(null);
     const [showAiAssistant, setShowAiAssistant] = useState(false);
+    const [showFullScreenBtn, setShowFullScreenBtn] = useState(true);
     // Track whether fullscreen was entered via AI assistant button (not fullscreen button)
     const enteredFullscreenViaAiRef = useRef(false);
     const [previewDrawerOpen, setPreviewDrawerOpen] = useState(false);
@@ -61,11 +63,8 @@ export default function Subscription() {
         }
     };
 
-    const { data: createdChannels = [] } = useQuery({
-        queryKey: ["channels", "created", SortType.RECENT_UPDATE],
-        queryFn: () => getChannelsApi({ type: "created", sortBy: SortType.RECENT_UPDATE })
-    });
-    const createdChannelCount = createdChannels.length;
+    // Channel count is reported by ChannelSidebar via callback; ref avoids unnecessary re-renders
+    const createdChannelCountRef = useRef(0);
 
     // Handle channel selection
     const handleChannelSelect = (channel: Channel | null) => {
@@ -75,9 +74,9 @@ export default function Subscription() {
     // Create channel - opens drawer (with limit check)
     const handleCreateChannel = () => {
         setEditingChannel(null);
-        if (createdChannelCount >= MAX_USER_CHANNELS) {
+        if (createdChannelCountRef.current >= MAX_USER_CHANNELS) {
             showToast({
-                message: "您已达到创建频道数量的最大上限",
+                message: localize("com_subscription.channel_limit_reached"),
                 severity: NotificationSeverity.WARNING
             });
             return;
@@ -147,6 +146,7 @@ export default function Subscription() {
                         onChannelSelect={handleChannelSelect}
                         onCreateChannel={handleCreateChannel}
                         onChannelSquare={handleChannelSquare}
+                        onCreatedCountChange={(count) => { createdChannelCountRef.current = count; }}
                         onManageMembers={(channel) => {
                             setChannelMemberChannel(channel);
                             setChannelMemberOpen(true);
@@ -176,6 +176,7 @@ export default function Subscription() {
                                 enteredFullscreenViaAiRef.current = !!ai;
                                 setFullScreenArticle(article);
                                 setShowAiAssistant(ai || false);
+                                setShowFullScreenBtn(!!ai);
                             }}
                         />
                     ) : (
@@ -185,14 +186,10 @@ export default function Subscription() {
                                 src={`${__APP_ENV__.BASE_URL}/assets/channel/empty.png`}
                                 alt="empty"
                             />
-                            <p className="text-[14px] leading-6 text-[#4E5969]">
-                                无相关内容，请
-                                <span
+                            <p className="text-[14px] leading-6 text-[#4E5969]">{localize("com_subscription.no_related_content_please")}<span
                                     className="ml-1.5 cursor-pointer text-[#165DFF] transition-colors hover:text-[#4080FF] active:text-[#0E42D2]"
                                     onClick={handleCreateChannel}
-                                >
-                                    创建频道
-                                </span>
+                                >{localize("com_subscription.create_channel")}</span>
                             </p>
                         </div>
                     )}
@@ -204,7 +201,6 @@ export default function Subscription() {
                 open={showCreateChannelDrawer}
                 onOpenChange={setShowCreateChannelDrawer}
                 onConfirm={handleCreateChannelConfirm}
-                createdChannelCount={createdChannelCount}
                 mode={editingChannel ? "edit" : "create"}
                 editingChannel={editingChannel}
                 onViewChannel={(channelId) => {
@@ -263,6 +259,13 @@ export default function Subscription() {
                             enteredFullscreenViaAiRef.current = false;
                         }}
                         article={fullScreenArticle}
+                        showFullScreenBtn={showFullScreenBtn}
+                        onSwitchToFullScreen={() => {
+                            // Close AI panel, transition to normal fullscreen mode
+                            setShowAiAssistant(false);
+                            setShowFullScreenBtn(false);
+                            enteredFullscreenViaAiRef.current = false;
+                        }}
                         showAiAssistant={showAiAssistant}
                         setShowAiAssistant={setShowAiAssistant}
                         onCloseAiAssistant={() => {

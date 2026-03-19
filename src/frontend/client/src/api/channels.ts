@@ -119,6 +119,7 @@ export interface ChannelDetailResponse {
     create_time?: string;
     creator_name: string;
     subscriber_count: number;
+    subscription_status:string;
     article_count: number;
     filter_rules?: Array<{
         rules: Array<{ rule_type: string; keywords: string[]; relation: string }>;
@@ -481,7 +482,7 @@ export async function getChannelSquareApi(params?: {
 export async function subscribeManagerChannelApi(body: {
     channel_id: string;
 }): Promise<any> {
-    return await request.post(`/api/v1/channel/manager/subscribe`, body);
+    return await request.post(`/api/v1/channel/manager/subscribe`, body, { showError: true });
 }
 
 // 频道成员

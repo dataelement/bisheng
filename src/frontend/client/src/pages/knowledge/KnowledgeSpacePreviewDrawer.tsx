@@ -136,13 +136,12 @@ export function KnowledgeSpacePreviewDrawer({
                                 </div>
                                 <Button
                                     variant={btn.variant}
-                                    className={`h-8 px-5 py-1 text-sm font-normal rounded-md flex-shrink-0 ${
-                                        btn.label === "已加入"
+                                    className={`h-8 px-5 py-1 text-sm font-normal rounded-md flex-shrink-0 ${btn.label === "已加入"
                                             ? "bg-[#F2F3F5] text-[#86909C] border-[#E5E6EB]"
                                             : btn.label === "申请中"
                                                 ? "bg-[#F2F3F5] text-[#C9CDD4] border-[#E5E6EB]"
                                                 : ""
-                                    }`}
+                                        }`}
                                     disabled={btn.disabled}
                                     onClick={handleClickAction}
                                 >

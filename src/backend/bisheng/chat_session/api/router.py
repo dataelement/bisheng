@@ -9,12 +9,23 @@ from bisheng.common.schemas.api import resp_200
 from bisheng.common.schemas.telemetry.event_data_schema import MessageFeedbackEventData
 from bisheng.common.services import telemetry_service
 from bisheng.core.logger import trace_id_var
+from bisheng.database.models.flow import FlowType
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.database.models.session import MessageSessionDao
 from ..domain.chat import ChatSessionService
 from ...api.services.workstation import WorkstationMessage
 
 router = APIRouter(prefix='/session', tags=['Chat Session'])
+
+
+def get_session_app_type(flow_type: int) -> ApplicationTypeEnum:
+    if flow_type == FlowType.WORKFLOW.value:
+        return ApplicationTypeEnum.WORKFLOW
+    if flow_type == FlowType.ASSISTANT.value:
+        return ApplicationTypeEnum.ASSISTANT
+    if flow_type == FlowType.LINSIGHT.value:
+        return ApplicationTypeEnum.LINSIGHT
+    return ApplicationTypeEnum.DAILY_CHAT
 
 
 @router.get('/chat/history')
@@ -59,7 +70,7 @@ async def post_chat_message_telemetry(*,
                                           message_id=message_id,
                                           app_id=chat_info.flow_id,
                                           app_name=chat_info.flow_name,
-                                          app_type=ApplicationTypeEnum.SKILL,
+                                          app_type=get_session_app_type(chat_info.flow_type),
                                           operation_type=operation_type,
                                       ))
     return resp_200()

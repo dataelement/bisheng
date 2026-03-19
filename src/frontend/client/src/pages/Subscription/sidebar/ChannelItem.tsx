@@ -1,6 +1,6 @@
+import { useLocalize } from "~/hooks";
 import {
     BlendIcon,
-    MinimizeIcon,
     MoreHorizontal,
     Pin,
     PinOff,
@@ -18,6 +18,7 @@ import {
     DropdownMenuTrigger
 } from "~/components/ui/DropdownMenu";
 import { useConfirm, useToastContext } from "~/Providers";
+import ClosedIcon from "~/components/ui/icon/ClosedIcon";
 
 interface ChannelItemProps {
     channel: Channel;
@@ -44,6 +45,7 @@ export default function ChannelItem({
     onManageMembers,
     onChannelSettings
 }: ChannelItemProps) {
+    const localize = useLocalize();
     const [isEditing, setIsEditing] = useState(false);
     const [menuOpen, setMenuOpen] = useState(false); // 控制菜单打开时的状态显示
     const { showToast } = useToastContext();
@@ -55,7 +57,7 @@ export default function ChannelItem({
         if (!newName) return
         if (newName.length > 10) {
             return showToast({
-                message: "最多输入 10 个字符",
+                message: localize("com_subscription.max_10_characters"),
                 severity: NotificationSeverity.ERROR
             });
         }
@@ -143,16 +145,16 @@ export default function ChannelItem({
                                 onClick={() => onChannelSettings(channel)}
                             >
                                 <Settings className="size-4 mr-2 text-[#4e5969]" />
-                                <span className="text-[14px] text-[#1d2129]">频道设置</span>
+                                <span className="text-[14px] text-[#1d2129]">{localize("com_subscription.channel_settings")}</span>
                             </DropdownMenuItem>
                         )}
-                        {(type === "created" || channel.role === ChannelRole.ADMIN) && (
+                        {channel.role === ChannelRole.CREATOR && (
                             <DropdownMenuItem
                                 className="py-2 px-0 cursor-pointer focus:bg-[#f2f3f5]"
                                 onClick={() => onManageMembers(channel)}
                             >
                                 <Users className="size-4 mr-2 text-[#4e5969]" />
-                                <span className="text-[14px] text-[#1d2129]">成员管理</span>
+                                <span className="text-[14px] text-[#1d2129]">{localize("com_subscription.member_management")}</span>
                             </DropdownMenuItem>
                         )}
                         <DropdownMenuItem
@@ -160,9 +162,9 @@ export default function ChannelItem({
                             className="py-2 px-0 cursor-pointer focus:bg-[#f2f3f5]"
                         >
                             {channel.isPinned ? (
-                                <><PinOff className="size-4 mr-2 text-[#4e5969]" /><span className="text-[14px] text-[#1d2129]">取消置顶</span></>
+                                <><PinOff className="size-4 mr-2 text-[#4e5969]" /><span className="text-[14px] text-[#1d2129]">{localize("com_subscription.unpin")}</span></>
                             ) : (
-                                <><Pin className="size-4 mr-2 text-[#4e5969]" /><span className="text-[14px] text-[#1d2129]">置顶频道</span></>
+                                <><Pin className="size-4 mr-2 text-[#4e5969]" /><span className="text-[14px] text-[#1d2129]">{localize("com_subscription.pin_channel")}</span></>
                             )}
                         </DropdownMenuItem>
                         <div className="h-px bg-[#f2f3f5] mx-2 my-1" />
@@ -170,20 +172,20 @@ export default function ChannelItem({
                         <DropdownMenuItem
                             onClick={async () => {
                                 const ok = await confirm({
-                                    title: "提示",
-                                    description: type === "created" ? "其他已订阅成员处的该频道也将被删除，确认操作吗？" : "确定取消对该频道及其子频道的订阅吗？",
-                                    confirmText: "确定",
-                                    cancelText: "取消"
+                                    title: localize("com_subscription.prompt_tip"),
+                                    description: type === "created" ? localize("com_subscription.confirm_delete_channel_for_all") : localize("com_subscription.confirm_unsubscribe_channel_and_subs"),
+                                    confirmText: localize("com_subscription.confirm"),
+                                    cancelText: localize("com_subscription.cancel")
                                 })
 
                                 if (ok) {
                                     type === "created" ? onDelete(channel.id) : onUnsubscribe(channel.id);
                                 }
                             }}
-                            className="text-[#f53f3f] py-2 px-0 cursor-pointer focus:bg-[#f2f3f5] focus:text-[#f53f3f]"
+                            className="py-2 px-0 cursor-pointer focus:bg-[#f2f3f5]"
                         >
-                            <MinimizeIcon className="size-4 mr-2" />
-                            <span className="text-[14px] font-medium">{type === "created" ? "解散频道" : "取消订阅"}</span>
+                            <ClosedIcon className="size-4 mr-2 text-[#4e5969]" />
+                            <span className="text-[14px] text-[#1d2129]">{type === "created" ? localize("com_subscription.dissolve_channel") : localize("com_subscription.unsubscribe")}</span>
                         </DropdownMenuItem>
                     </DropdownMenuContent>
                 </DropdownMenu>

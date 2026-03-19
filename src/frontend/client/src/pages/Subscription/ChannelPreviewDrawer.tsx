@@ -1,3 +1,4 @@
+import { useLocalize } from "~/hooks";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -36,6 +37,7 @@ interface ChannelPreviewDrawerProps {
 type SubscribeStatus = "none" | "subscribed" | "pending";
 
 export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onNavigateToChannel }: ChannelPreviewDrawerProps) {
+    const localize = useLocalize();
     const navigate = useNavigate();
     const { showToast } = useToastContext();
     const { user } = useAuthContext();
@@ -52,7 +54,7 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onNavigate
         queryFn: async () => {
             const res: any = await getChannelDetailApi(channelId!);
             if (res?.status_code && res.status_code !== 200) {
-                throw new Error(res.status_message || "频道加载失败");
+                throw new Error(res.status_message || localize("com_subscription.channel_load_failed"));
             }
             return res;
         },
@@ -73,15 +75,13 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onNavigate
                 pageSize: PREVIEW_PAGE_SIZE,
             });
             if (res?.status_code && res.status_code !== 200) {
-                throw new Error(res.status_message || "文章加载失败");
+                throw new Error(res.status_message || localize("com_subscription.article_load_failed"));
             }
             return res;
         },
         enabled: !!channelId && open,
         staleTime: 30_000,
     });
-
-    console.log('channelDetail :>> ', channelDetail, articlesData);
 
     const articles = (articlesData?.data || []).map(item => mapToArticle(item, channelId || ""));
     const isLoading = isDetailLoading || isArticlesLoading;
@@ -99,22 +99,22 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onNavigate
                 const msg =
                     root?.status_message ||
                     root?.message ||
-                    "订阅失败，请重试";
+                    localize("com_subscription.subscribe_failed_retry");
                 throw new Error(msg);
             }
 
             if (channelDetail?.visibility === "review") {
                 setSubscribeStatus("pending");
-                showToast({ message: "已发送订阅申请，审批通过即可订阅。", severity: NotificationSeverity.SUCCESS });
+                showToast({ message: localize("com_subscription.subscribe_application_sent"), severity: NotificationSeverity.SUCCESS });
             } else {
                 setSubscribeStatus("subscribed");
-                showToast({ message: "订阅成功", severity: NotificationSeverity.SUCCESS });
+                showToast({ message: localize("com_subscription.subscribe_success"), severity: NotificationSeverity.SUCCESS });
             }
         } catch (e: any) {
             const msg =
                 e?.response?.data?.status_message ||
                 e?.message ||
-                "订阅失败，请重试";
+                localize("com_subscription.subscribe_failed_retry");
             showToast({ message: msg, severity: NotificationSeverity.ERROR });
         } finally {
             setSubscribing(false);
@@ -123,26 +123,40 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onNavigate
 
     // Button config based on visibility and subscribe status
     const getButtonConfig = (detail?: ChannelDetailResponse) => {
-        if (subscribeStatus === "subscribed") {
-            return { text: "已订阅", disabled: true, variant: "secondary" as const };
+        if (detail?.subscription_status === "subscribed") {
+            return { text: localize("com_subscription.subscribed"), disabled: true, variant: "secondary" as const };
         }
-        if (subscribeStatus === "pending") {
-            return { text: "申请中", disabled: true, variant: "secondary" as const };
+        if (detail?.subscription_status === "pending") {
+            return { text: localize("com_subscription.applying"), disabled: true, variant: "secondary" as const };
         }
-        if (detail?.visibility === "review") {
-            return { text: "申请订阅", disabled: false, variant: "outline" as const };
+        if (detail?.subscription_status === "review") {
+            return { text: localize("com_subscription.subscribe"), disabled: false, variant: "outline" as const };
         }
-        return { text: "订阅", disabled: false, variant: "outline" as const };
+        return { text: localize("com_subscription.subscribe"), disabled: false, variant: "outline" as const };
     };
 
     const btnConfig = getButtonConfig(channelDetail);
-    // Hide articles when channel requires review and user hasn't subscribed yet
-    const hideArticles = channelDetail?.visibility === "review" && subscribeStatus !== "subscribed";
+    const isCreatorView =
+        Boolean(user?.username) && Boolean(channelDetail?.creator_name) && user?.username === channelDetail?.creator_name;
+
+    const effectiveSubscribeStatus: SubscribeStatus = (() => {
+        // 优先使用本地交互态（点击订阅后的即时反馈），否则使用详情接口状态
+        if (subscribeStatus !== "none") return subscribeStatus;
+        if (channelDetail?.subscription_status === "subscribed") return "subscribed";
+        if (channelDetail?.subscription_status === "pending") return "pending";
+        return "none";
+    })();
+
+    // 需审核频道：非创建者且未订阅/未通过时才隐藏文章列表；创建者需可查看文章
+    const hideArticles =
+        channelDetail?.visibility === "review" &&
+        !isCreatorView &&
+        effectiveSubscribeStatus !== "subscribed";
 
     // Handle error — channel not found or inaccessible (must be in useEffect to avoid side-effects during render)
     useEffect(() => {
         if (isDetailError && open) {
-            showToast({ message: "该频道已失效或无法访问", severity: NotificationSeverity.WARNING });
+            showToast({ message: localize("com_subscription.channel_invalid_or_inaccessible"), severity: NotificationSeverity.WARNING });
             onOpenChange(false);
             navigate("/channel", { replace: true });
         }
@@ -209,8 +223,8 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onNavigate
                                             </div>
                                         </div>
                                     )}
-                                    <span className="mr-3">{channelDetail.article_count ?? 0} 篇内容</span>
-                                    <span>{channelDetail.subscriber_count ?? 0} 订阅</span>
+                                    <span className="mr-3">{channelDetail.article_count ?? 0}{localize("com_subscription.articles_count")}</span>
+                                    <span>{channelDetail.subscriber_count ?? 0}{localize("com_subscription.subscribe")}</span>
                                 </div>
 
                                 {/* Hide subscribe button for private channels or if the user is the creator */}
@@ -226,7 +240,7 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onNavigate
                                                 : "text-[#1d2129] border-[#e5e6eb] hover:bg-gray-50"
                                             }`}
                                     >
-                                        {subscribing ? "处理中..." : btnConfig.text}
+                                        {subscribing ? localize("com_subscription.processing") : btnConfig.text}
                                     </Button>
                                 )}
                             </div>
@@ -241,9 +255,7 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onNavigate
                                         src={`${__APP_ENV__.BASE_URL}/assets/channel/review.png`}
                                         alt="Review Pending"
                                     />
-                                    <div className="text-[#1d2129] text-[14px]">
-                                        该频道内容需申请通过后方可查看
-                                    </div>
+                                    <div className="text-[#1d2129] text-[14px]">{localize("com_subscription.channel_content_needs_approval")}</div>
                                 </div>
                             ) : articles.length > 0 ? (
                                 <div>
@@ -257,9 +269,7 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onNavigate
                                     ))}
                                 </div>
                             ) : (
-                                <div className="flex items-center justify-center h-64 text-[#86909c] text-sm">
-                                    暂无文章
-                                </div>
+                                <div className="flex items-center justify-center h-64 text-[#86909c] text-sm">{localize("com_subscription.no_articles")}</div>
                             )}
                         </div>
                     </>

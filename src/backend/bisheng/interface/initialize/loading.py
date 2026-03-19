@@ -273,9 +273,9 @@ def instantiate_llm(node_type, class_object, params: Dict, user_llm_request: boo
         elif not isinstance(params.get('max_tokens'), int):
             params.pop('max_tokens', None)
     if node_type == 'BishengLLM':
-        params['app_id'] = "flow(will be deprecated)"
-        params['app_name'] = "flow(will be deprecated)"
-        params['app_type'] = ApplicationTypeEnum.SKILL
+        params['app_id'] = "workflow(will be deprecated)"
+        params['app_name'] = "workflow(will be deprecated)"
+        params['app_type'] = ApplicationTypeEnum.WORKFLOW
         params['user_id'] = params.get('user_id', 0)
     llm = class_object(**params)
     llm_config = settings.get_from_db('llm_request')
@@ -472,9 +472,9 @@ def instantiate_embedding(class_object, params: Dict):
         if class_object.__name__ == 'OpenAIEmbeddings':
             params['check_embedding_ctx_length'] = False
         elif class_object.__name__ == 'BishengEmbedding':
-            params['app_id'] = "flow(will be deprecated)"
-            params['app_name'] = "flow(will be deprecated)"
-            params['app_type'] = ApplicationTypeEnum.SKILL
+            params['app_id'] = "workflow(will be deprecated)"
+            params['app_name'] = "workflow(will be deprecated)"
+            params['app_type'] = ApplicationTypeEnum.WORKFLOW
             params['user_id'] = params.get('user_id', 0)
         return class_object(**params)
     except ValidationError:

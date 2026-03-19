@@ -71,9 +71,7 @@ export function AddSourceDropdown({
                 >
                     <div className="flex items-center gap-2 px-4 py-3">
                         <Plus className="size-4 flex-shrink-0 text-[#86909C]" />
-                        <span className="flex-1 text-[14px] text-[#86909C] text-left">
-                            可添加公众号和网页作为该频道的信息源
-                        </span>
+                        <span className="flex-1 text-[14px] text-[#86909C] text-left">{localize("com_subscription.add_official_accounts_and_webpages")}</span>
                         <span className="flex-shrink-0 text-[12px] text-[#86909C]">
                             {sources.length}/{MAX_SOURCES}
                         </span>
@@ -103,7 +101,7 @@ export function AddSourceDropdown({
                                                 " border text-[#165DFF] border-[#165DFF]"  // 统一的白底蓝框蓝字
                                             )}
                                         >
-                                            {s.type === "official_account" ? "公众号" : "网站"}
+                                            {s.type === "official_account" ? localize("com_subscription.official_account") : localize("com_subscription.website")}
                                         </span>
                                     </span>
                                     <button
@@ -113,7 +111,7 @@ export function AddSourceDropdown({
                                             onSourcesChange(sources.filter((x) => x.id !== s.id));
                                         }}
                                         className="p-1 rounded"
-                                        aria-label="移除信息源"
+                                        aria-label={localize("com_subscription.remove_source")}
                                     >
                                         <span className="inline-flex items-center justify-center w-3 h-3 border-[1px] border-[#F53F3F]">
                                             <Minus className="size-3 text-[#F53F3F]" />
@@ -150,7 +148,7 @@ export function AddSourceDropdown({
                                         mgr.setSearchKeyword(inputValue.trim());
                                     }
                                 }}
-                                placeholder={localize("enter_official_account")}
+                                placeholder={localize("com_subscription.enter_official_account")}
                                 className="pl-9 pr-9 h-10 text-[14px] border-none bg-white w-full  rounded-none"
                                 autoFocus
                             />
@@ -181,7 +179,7 @@ export function AddSourceDropdown({
                                         : "text-[#86909C] border-transparent"
                                 )}
                             >
-                                {localize("official_account")}
+                                {localize("com_subscription.official_account")}
                             </button>
                             <button
                                 type="button"
@@ -193,7 +191,7 @@ export function AddSourceDropdown({
                                         : "text-[#86909C] border-transparent"
                                 )}
                             >
-                                {localize("website")}
+                                {localize("com_subscription.website")}
                             </button>
                         </div>
                     )}
@@ -213,8 +211,8 @@ export function AddSourceDropdown({
                                     />
                                 </div>
                                 <p className="text-[14px] leading-6 text-[#4E5969]">
-                                    {localize("no_source_collected") ||
-                                        "暂时没有收录该信源，试试在上方输入框中输入完整的网址，进行检索或添加"}
+                                    {localize("com_subscription.no_source_collected") ||
+                                        localize("com_subscription.source_not_indexed_try_full_url")}
                                 </p>
                             </div>
                         )}
@@ -224,7 +222,7 @@ export function AddSourceDropdown({
                                     <FileText className="size-8 text-[#165DFF]" strokeWidth={1.6} />
                                 </div>
                                 <p className="text-[14px] text-[#4E5969] mb-5">
-                                    {localize("website_not_indexed") || "网站尚未入库，是否需要爬取"}
+                                    {localize("com_subscription.website_not_indexed") || localize("com_subscription.website_not_in_database_crawl")}
                                 </p>
                                 <div className="flex gap-3 justify-center">
                                     <Button
@@ -232,7 +230,7 @@ export function AddSourceDropdown({
                                         onClick={mgr.handleClearSearch}
                                         className="h-9 min-w-[74px] border border-[#E5E6EB] bg-white text-[#4E5969]"
                                     >
-                                        {localize("do_not_crawl")}
+                                        {localize("com_subscription.do_not_crawl")}
                                     </Button>
                                     <Button
                                         onClick={() => {
@@ -240,7 +238,7 @@ export function AddSourceDropdown({
                                         }}
                                         className="h-9 min-w-[74px] bg-[#165DFF] hover:bg-[#4080FF]"
                                     >
-                                        {localize("confirm_crawl") || "确认爬取"}
+                                        {localize("com_subscription.confirm_crawl")}
                                     </Button>
                                 </div>
                             </div>
@@ -255,21 +253,21 @@ export function AddSourceDropdown({
                                     />
                                 </div>
                                 <p className="text-[14px] text-[#4E5969] mb-5">
-                                    {localize("detect_wechat_link") || "检测到是公众号链接，正在添加中..."}
+                                    {localize("com_subscription.detect_wechat_link") || localize("com_subscription.official_account_link_detected_adding")}
                                 </p>
                                 <Button
                                     variant="secondary"
                                     onClick={mgr.handleClearSearch}
                                     className="h-9 min-w-[84px] border border-[#E5E6EB] bg-white text-[#4E5969]"
                                 >
-                                    {localize("do_not_add")}
+                                    {localize("com_subscription.do_not_add")}
                                 </Button>
                             </div>
                         )}
                         {mgr.viewMode === "list" && (
                             <>
                                 {displayList.length === 0 ? (
-                                    <div className="p-8 text-center text-[14px] text-[#86909C]">暂无数据</div>
+                                    <div className="p-8 text-center text-[14px] text-[#86909C]">{localize("com_subscription.no_data")}</div>
                                 ) : (
                                     <div className="divide-y divide-[#E5E6EB]">
                                         {displayList.map((source) => {
@@ -320,7 +318,7 @@ export function AddSourceDropdown({
                                                                         : "bg-[#FFF7E8] text-[#F7BA2E]"
                                                                 )}
                                                             >
-                                                                {source.type === "official_account" ? "公众号" : "网站"}
+                                                                {source.type === "official_account" ? localize("com_subscription.official_account") : localize("com_subscription.website")}
                                                             </span>
                                                         )}
                                                     </span>
@@ -344,8 +342,7 @@ export function AddSourceDropdown({
                     </div>
                     {mgr.viewMode === "list" && (
                         <div className="flex justify-between items-center px-4 py-3 border-t border-[#E5E6EB] bg-[#FAFAFA]">
-                            <span className="text-[12px] text-[#86909C]">
-                                频道信息源总数: {mgr.pendingSources.length}/{MAX_SOURCES}
+                            <span className="text-[12px] text-[#86909C]">{localize("com_subscription.total_channel_sources")}{mgr.pendingSources.length}/{MAX_SOURCES}
                             </span>
                             <div className="flex gap-2">
                                 <Button
@@ -353,9 +350,9 @@ export function AddSourceDropdown({
                                     size="sm"
                                     onClick={async () => {
                                         const confirmed = await confirm({
-                                            description: "当前编辑尚未保存，确认关闭吗？",
-                                            cancelText: "继续编辑",
-                                            confirmText: "确认关闭"
+                                            description: localize("com_subscription.unsaved_edits_confirm_close"),
+                                            cancelText: localize("com_subscription.continue_editing"),
+                                            confirmText: localize("com_subscription.confirm_close")
                                         });
                                         if (!confirmed) return;
                                         mgr.handleCancel();
@@ -370,7 +367,7 @@ export function AddSourceDropdown({
                                     disabled={mgr.pendingSources.length === 0}
                                     className="bg-[#165DFF] disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
-                                    {localize("confirm_add") || "确认添加"}
+                                    {localize("com_subscription.confirm_add")}
                                 </Button>
                             </div>
                         </div>
@@ -395,12 +392,8 @@ export function AddSourceDropdown({
                                     <XCircle className="size-4 text-[#F53F3F]" />
                                 </span>
                                 <AlertDialogHeader className="text-left mt-6">
-                                    <AlertDialogTitle className="text-[16px] font-semibold text-[#1D2129]">
-                                        频道添加失败
-                                    </AlertDialogTitle>
-                                    <AlertDialogDescription className="mt-2 text-[14px] text-[#4E5969]">
-                                        再次添加试试吧～
-                                    </AlertDialogDescription>
+                                    <AlertDialogTitle className="text-[16px] font-semibold text-[#1D2129]">{localize("com_subscription.channel_add_failed")}</AlertDialogTitle>
+                                    <AlertDialogDescription className="mt-2 text-[14px] text-[#4E5969]">{localize("com_subscription.try_adding_again")}</AlertDialogDescription>
                                 </AlertDialogHeader>
                             </div>
                             <button
@@ -416,9 +409,7 @@ export function AddSourceDropdown({
                         <AlertDialogAction
                             onClick={() => mgr.setWechatAddError(false)}
                             className="h-8 px-6 rounded-md border border-[#E5E6EB] bg-white text-[14px] text-[#4E5969] hover:bg-[#F7F8FA]"
-                        >
-                            取消
-                        </AlertDialogAction>
+                        >{localize("com_subscription.cancel")}</AlertDialogAction>
                     </div>
                 </AlertDialogContent>
             </AlertDialog>

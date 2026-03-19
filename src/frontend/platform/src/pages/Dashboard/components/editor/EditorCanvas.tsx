@@ -69,17 +69,22 @@ export function EditorCanvas({ isLoading, isPreviewMode }: EditorCanvasProps) {
         },
     })
 
-    // When the page loads, it automatically refreshes according to the query component configuration 
+    // When the page loads, it automatically refreshes according to the query component configuration.
+    // Use a ref to track the previous dashboard object reference, so that even if the same
+    // dashboard id is reloaded after a store reset, the refresh will still be triggered.
+    const prevDashboardRef = useRef<any>(null);
     useEffect(() => {
         console.log('currentDashboard :>> ', currentDashboard);
-        if (currentDashboard && currentDashboard.components.length > 0) {
+        if (currentDashboard && currentDashboard.components.length > 0
+            && currentDashboard !== prevDashboardRef.current) {
+            prevDashboardRef.current = currentDashboard;
             // Delay execution to ensure all components are mounted
             const timer = setTimeout(() => {
                 initializeAutoRefresh()
             }, 300)
             return () => clearTimeout(timer)
         }
-    }, [currentDashboard?.id, initializeAutoRefresh])
+    }, [currentDashboard, initializeAutoRefresh])
 
     // 处理布局变化
     const isInitialMount = useRef(true);

@@ -37,9 +37,9 @@ export default function FilePreviewPage() {
     const [showAiAssistant, setShowAiAssistant] = useState(false);
     const splitContainerRef = useRef<HTMLDivElement>(null);
 
-    const { leftWidth, setLeftWidth, isResizing, startResizing } = useResizablePanel({
+    const { leftWidth, isResizing, startResizing } = useResizablePanel({
         storageKey: AI_SPLIT_STORAGE_KEY,
-        defaultWidth: 0,
+        defaultRatio: 0.6,
         minLeftWidth: AI_MIN_LEFT,
         minRightWidth: AI_MIN_RIGHT,
         containerRef: splitContainerRef,
@@ -51,13 +51,10 @@ export default function FilePreviewPage() {
             if (!prev && splitContainerRef.current) {
                 const w = splitContainerRef.current.getBoundingClientRect().width;
                 if (w < AI_MIN_LEFT + AI_MIN_RIGHT) return false;
-                if (!leftWidth || leftWidth <= 0) {
-                    setLeftWidth(Math.floor(w * 0.6));
-                }
             }
             return !prev;
         });
-    }, [leftWidth, setLeftWidth]);
+    }, []);
 
     // AI assistant button injected into FilePreview's TopBar slot
     const aiButton = (
