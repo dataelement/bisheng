@@ -73,3 +73,18 @@ class InboxMessageRepository(BaseRepository[InboxMessage, int], ABC):
     ) -> List[int]:
         """Get all message IDs where the user is a receiver."""
         pass
+
+    @abstractmethod
+    async def batch_approve_channel_subscription_messages(
+        self,
+        channel_id: str,
+        operator_user_id: int,
+    ) -> int:
+        """Batch approve all pending channel subscription messages for a specific channel.
+
+        Updates all messages with action_code='request_channel' and status=wait_approve
+        that contain the specified channel_id in their content.
+
+        Returns the number of messages updated.
+        """
+        pass

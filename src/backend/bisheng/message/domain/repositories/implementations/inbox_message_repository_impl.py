@@ -161,3 +161,37 @@ class InboxMessageRepositoryImpl(BaseRepositoryImpl[InboxMessage, int], InboxMes
         query = self._apply_receiver_filter(query, user_id)
         result = await self.session.exec(query)
         return list(result.all())
+
+    async def batch_approve_channel_subscription_messages(
+        self,
+        channel_id: str,
+        operator_user_id: int,
+    ) -> int:
+        """Batch approve all pending channel subscription messages for a specific channel.
+
+        Updates all messages with action_code='request_channel' and status=wait_approve
+        that contain the specified channel_id in their content.
+
+        Returns the number of messages updated.
+        """
+        from sqlalchemy import update
+
+        # Use JSON_CONTAINS to find messages containing the channel_id in content
+        # The channel_id is stored in content[*].metadata.data.channel_id
+        channel_id_json = f'%"channel_id": "{channel_id}"%'
+
+        query = (
+            update(InboxMessage)
+            .where(
+                InboxMessage.action_code == "request_channel",
+                InboxMessage.status == MessageStatusEnum.WAIT_APPROVE,
+                func.cast(InboxMessage.content, JSON).like(channel_id_json),
+            )
+            .values(
+                status=MessageStatusEnum.APPROVED,
+                operator_user_id=operator_user_id,
+            )
+        )
+        result = await self.session.exec(query)
+        await self.session.commit()
+        return result.rowcount

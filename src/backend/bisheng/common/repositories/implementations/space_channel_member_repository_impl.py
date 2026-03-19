@@ -126,3 +126,22 @@ class SpaceChannelMemberRepositoryImpl(BaseRepositoryImpl[SpaceChannelMember, in
         )
         await self.session.exec(query)
         await self.session.commit()
+
+    async def activate_pending_members(self, channel_id: str) -> int:
+        """Activate all pending members of a channel (set status to True).
+
+        Returns the number of members activated.
+        """
+        from sqlalchemy import update
+        query = (
+            update(SpaceChannelMember)
+            .where(
+                SpaceChannelMember.business_id == channel_id,
+                SpaceChannelMember.business_type == BusinessTypeEnum.CHANNEL,
+                SpaceChannelMember.status == False
+            )
+            .values(status=True)
+        )
+        result = await self.session.exec(query)
+        await self.session.commit()
+        return result.rowcount
