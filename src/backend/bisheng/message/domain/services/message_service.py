@@ -16,6 +16,7 @@ from bisheng.message.domain.schemas.message_schema import (
     ApprovalActionEnum,
     TabTypeEnum,
 )
+from bisheng.message.domain.services.approval_handler import ApprovalHandler
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.user.domain.models.user import UserDao
 
@@ -29,9 +30,17 @@ class MessageService:
         self,
         message_repository: 'InboxMessageRepository',
         message_read_repository: 'InboxMessageReadRepository',
+        approval_handlers: Optional[List[ApprovalHandler]] = None,
     ):
         self.message_repository = message_repository
         self.message_read_repository = message_read_repository
+        self._handler_map: Dict[str, ApprovalHandler] = {}
+
+        for handler in approval_handlers or []:
+            action_code = handler.get_action_code()
+            if action_code in self._handler_map:
+                logger.warning("Duplicate approval handler registered for action_code=%s", action_code)
+            self._handler_map[action_code] = handler
 
     async def send_message(
         self,
@@ -203,6 +212,15 @@ class MessageService:
         # 7. Auto-mark as read after action
         await self.message_read_repository.mark_as_read(message_id, login_user.user_id)
 
+        # 8. Execute business-specific approval handling
+        action_code = self._extract_action_code(message.content)
+        handler = self._handler_map.get(action_code)
+        if handler:
+            if action == ApprovalActionEnum.AGREE:
+                await handler.on_approved(updated_message, login_user.user_id)
+            else:
+                await handler.on_rejected(updated_message, login_user.user_id)
+
         logger.info(
             "Approval action processed: message_id=%s, action=%s, user=%s",
             message_id, action.value, login_user.user_id,
@@ -253,13 +271,14 @@ class MessageService:
     @staticmethod
     def build_generic_notify_content(
         text: str,
+        content_type: str = "text",
     ) -> List[Dict[str, Any]]:
         """
         Build generic notification content.
         """
         return [
             {
-                "type": "text",
+                "type": content_type,
                 "content": text,
             }
         ]
@@ -269,11 +288,12 @@ class MessageService:
         sender: int,
         text: str,
         receiver_user_ids: List[int],
+        content_type: str = "text",
     ) -> InboxMessage:
         """
         Send a generic notification message to specific receivers.
         """
-        content = self.build_generic_notify_content(text)
+        content = self.build_generic_notify_content(text, content_type=content_type)
 
         message = await self.send_message(
             content=content,
@@ -377,3 +397,16 @@ class MessageService:
 
         return message
 
+    @staticmethod
+    def _extract_action_code(content: List[Dict[str, Any]]) -> str:
+        """Extract approval action code from message content."""
+        for item in content:
+            if item.get('type') != 'agree_reject_button':
+                continue
+
+            metadata = item.get('metadata', {})
+            action_code = metadata.get('business_type')
+            if isinstance(action_code, str):
+                return action_code
+
+        return ""

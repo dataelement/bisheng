@@ -41,6 +41,7 @@ from bisheng.common.errcode.channel import (
 from bisheng.common.models.space_channel_member import BusinessTypeEnum, UserRoleEnum
 from bisheng.common.repositories.interfaces.space_channel_member_repository import SpaceChannelMemberRepository
 from bisheng.core.external.bisheng_information_client.bisheng_information_manager import get_bisheng_information_client
+from bisheng.message.domain.services.message_service import MessageService
 from bisheng.user.domain.models.user import UserDao
 
 logger = logging.getLogger(__name__)
@@ -59,7 +60,7 @@ class ChannelService:
                  channel_info_source_repository: 'ChannelInfoSourceRepository',
                  article_es_service: 'ArticleEsService' = None,
                  article_read_repository: 'ArticleReadRepository' = None,
-                 message_service: Optional[Any] = None):
+                 message_service: Optional[MessageService] = None):
         self.channel_repository = channel_repository
         self.space_channel_member_repository = space_channel_member_repository
         self.channel_info_source_repository = channel_info_source_repository
