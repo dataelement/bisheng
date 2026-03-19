@@ -77,10 +77,10 @@ class ChannelSubscribeApprovalHandler(ApprovalHandler):
     def _extract_channel_id(content: List[Dict[str, Any]]) -> str:
         """Extract channel ID from approval message content."""
         for item in content:
-            if item.get('type') != 'business_url':
+            metadata = item.get('metadata', {})
+            if metadata.get('business_type') != 'channel_id':
                 continue
 
-            metadata = item.get('metadata', {})
             data = metadata.get('data', {})
             channel_id = data.get('channel_id')
             if channel_id is not None:
@@ -92,9 +92,6 @@ class ChannelSubscribeApprovalHandler(ApprovalHandler):
     def _extract_applicant_user_id(content: List[Dict[str, Any]]) -> int:
         """Extract applicant user ID from approval message content."""
         for item in content:
-            if item.get('type') != 'user':
-                continue
-
             metadata = item.get('metadata', {})
             user_id = metadata.get('user_id')
             if user_id is not None:

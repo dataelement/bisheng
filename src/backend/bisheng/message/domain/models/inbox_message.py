@@ -59,6 +59,16 @@ class InboxMessage(SQLModelSerializable, table=True):
         sa_column=Column(SQLEnum(MessageStatusEnum), nullable=False, index=True)
     )
 
+    action_code: Optional[str] = Field(
+        default=None,
+        description='Approval action code for handler routing (e.g. request_channel)',
+        max_length=64,
+    )
+    operator_user_id: Optional[int] = Field(
+        default=None,
+        description='User ID of the operator who approved/rejected the message',
+    )
+
     create_time: datetime = Field(
         default_factory=datetime.now,
         description='Creation time',

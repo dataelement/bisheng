@@ -94,12 +94,16 @@ async def approve_message(
         message_service: MessageService = Depends(get_message_service),
 ):
     """Process approval action (agree/reject) on an approval message."""
-    result = await message_service.handle_approval(
-        message_id=req.message_id,
-        action=req.action,
-        login_user=login_user,
-    )
-    return resp_200(data=result.model_dump())
+    try:
+        result = await message_service.handle_approval(
+            message_id=req.message_id,
+            action=req.action,
+            login_user=login_user,
+        )
+        return resp_200(data=result.model_dump())
+    except Exception as e:
+        logger.error(f"Failed to process approval: {e}")
+        raise
 
 
 @router.delete("/{message_id}")
