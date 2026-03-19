@@ -200,6 +200,14 @@ export function AddSourceDropdown({
                             "overflow-y-auto hide-scrollbar",
                             mgr.viewMode === "list" ? "max-h-[420px]" : "h-[520px]"
                         )}
+                        onScroll={(e) => {
+                            if (mgr.viewMode !== "list") return;
+                            const el = e.currentTarget;
+                            const nearBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 24;
+                            if (nearBottom) {
+                                mgr.loadMoreSources();
+                            }
+                        }}
                     >
                         {mgr.viewMode === "noResultNonUrl" && (
                             <div className="h-[432px] flex flex-col items-center justify-center text-center">

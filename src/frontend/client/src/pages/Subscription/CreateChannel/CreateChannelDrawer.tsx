@@ -429,6 +429,7 @@ export function CreateChannelDrawer({
                                                     onTopRelationChange={
                                                         form.setTopFilterRelation
                                                     }
+                                                    disableFirstConditionDelete
                                                 />
                                             </div>
                                         )}

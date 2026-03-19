@@ -33,6 +33,8 @@ interface FilterConditionEditorProps {
     topRelation: FilterRelation;
     onGroupsChange: (groups: FilterGroup[]) => void;
     onTopRelationChange: (relation: FilterRelation) => void;
+    // 主频道可禁用首个条件删除（不显示减号）；子频道默认不禁用
+    disableFirstConditionDelete?: boolean;
 }
 
 function nanoid() {
@@ -41,7 +43,12 @@ function nanoid() {
 
 /** 中文分号转英文分号并规范化空白 */
 export function normalizeKeywords(raw: string): string {
-    return raw.replace(/；/g, ";").replace(/\s*;\s*/g, ";");
+    return raw
+        .replace(/；/g, ";")
+        // 把分号两侧的空白归一
+        .replace(/\s*;\s*/g, ";")
+        // 避免输入时产生连续分号（例如显示为 ";;"）
+        .replace(/;{2,}/g, ";");
 }
 
 export function countTotalConditions(groups: FilterGroup[]): number {
@@ -89,7 +96,8 @@ export function FilterConditionEditor({
     groups,
     topRelation,
     onGroupsChange,
-    onTopRelationChange
+    onTopRelationChange,
+    disableFirstConditionDelete = false
 }: FilterConditionEditorProps) {
     const localize = useLocalize();
     const total = countTotalConditions(groups);
@@ -338,7 +346,7 @@ export function FilterConditionEditor({
                                         />
                                     </div>
 
-                                    {/* 第一层 & 第二层：所有条目都可以删；仅当全局只剩 1 条时不展示 - */}
+                                    {/* 第一层 & 第二层：可按配置隐藏首个条件删除 */}
                                     <div className="flex items-center gap-1 mt-2.5 flex-shrink-0">
                                         {/* 第一层：group 仅 1 条时，这一条既是第一层，也有 + */}
                                         {group.conditions.length === 1 && !atTotalLimit && (
@@ -351,7 +359,12 @@ export function FilterConditionEditor({
                                                 <Plus className="size-3.5 text-[#165DFF]" />
                                             </button>
                                         )}
-                                        {(
+                                        {!(
+                                            disableFirstConditionDelete &&
+                                            groupIndex === 0 &&
+                                            condIndex === 0 &&
+                                            group.conditions.length === 1
+                                        ) && (
                                             <button
                                                 type="button"
                                                 onClick={() =>

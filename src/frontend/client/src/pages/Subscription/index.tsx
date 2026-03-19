@@ -1,7 +1,7 @@
 import { useLocalize } from "~/hooks";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
     Article,
     Channel,
@@ -10,6 +10,7 @@ import {
     createManagerChannelApi,
     updateChannelApi,
     getChannelDetailApi,
+    getArticlesApi,
 } from "~/api/channels";
 import { type KnowledgeSpace } from "~/api/knowledge";
 import { NotificationSeverity } from "~/common";
@@ -31,6 +32,7 @@ export default function Subscription() {
     const localize = useLocalize();
     const { channelId: previewChannelId } = useParams<{ channelId?: string }>();
     const navigate = useNavigate();
+    const location = useLocation();
     const [activeChannel, setActiveChannel] = useState<Channel | null>(null);
     const [channelRefreshToken, setChannelRefreshToken] = useState(0);
     const [showChannelSquare, setShowChannelSquare] = useState(false);
@@ -49,12 +51,51 @@ export default function Subscription() {
     const { showToast } = useToastContext();
     const queryClient = useQueryClient();
 
-    // Open preview drawer when channelId route param is present
+    // Open preview drawer when channelId route param is present.
+    // Prefetch data first to avoid showing a blank loading sheet (esp. private/dissolved channels).
     useEffect(() => {
-        if (previewChannelId) {
-            setPreviewDrawerOpen(true);
-        }
+        if (!previewChannelId) return;
+        let cancelled = false;
+        (async () => {
+            try {
+                await queryClient.prefetchQuery({
+                    queryKey: ["channelPreviewDetail", previewChannelId],
+                    queryFn: () => getChannelDetailApi(previewChannelId),
+                    staleTime: 30_000,
+                });
+                await queryClient.prefetchQuery({
+                    queryKey: ["channelPreviewArticles", previewChannelId],
+                    queryFn: () =>
+                        getArticlesApi({
+                            channelId: previewChannelId,
+                            page: 1,
+                            pageSize: 10,
+                        }),
+                    staleTime: 30_000,
+                });
+                if (cancelled) return;
+                setPreviewDrawerOpen(true);
+            } catch {
+                if (cancelled) return;
+                showToast({
+                    message: localize("com_subscription.channel_invalid_or_inaccessible"),
+                    severity: NotificationSeverity.WARNING,
+                });
+                navigate("/channel?square=1", { replace: true });
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
     }, [previewChannelId]);
+
+    // If navigation requests the channel square (e.g. via share-link error), open it.
+    useEffect(() => {
+        const params = new URLSearchParams(location.search);
+        if (params.get("square") === "1") {
+            setShowChannelSquare(true);
+        }
+    }, [location.search]);
 
     const handlePreviewDrawerClose = (open: boolean) => {
         setPreviewDrawerOpen(open);
@@ -133,7 +174,10 @@ export default function Subscription() {
         <div className="relative h-full flex">
             {showChannelSquare ? (
                 <ChannelSquare
-                    onBack={() => setShowChannelSquare(false)}
+                    onBack={() => {
+                        setShowChannelSquare(false);
+                        navigate("/channel", { replace: true });
+                    }}
                     onPreviewChannel={(id) => {
                         navigate(`/channel/share/${id}`);
                     }}
