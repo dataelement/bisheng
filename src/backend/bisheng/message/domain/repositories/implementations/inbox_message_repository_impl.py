@@ -21,7 +21,7 @@ class InboxMessageRepositoryImpl(BaseRepositoryImpl[InboxMessage, int], InboxMes
     def _apply_receiver_filter(self, query, user_id: int):
         """Apply JSON_CONTAINS filter for the receiver field."""
         return query.where(
-            InboxMessage.receiver.cast(JSON).contains(user_id)
+            func.json_contains(InboxMessage.receiver, str(user_id))
         )
 
     async def find_messages_by_receiver(

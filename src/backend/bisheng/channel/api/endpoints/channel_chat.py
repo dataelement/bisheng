@@ -3,8 +3,8 @@ Channel Article AI Assistant Chat API Endpoints
 
 Provides the following functionalities:
 - POST /chat/completions: SSE streaming chat
-- GET /chat/messages/{conversationId}: Query chat history
-- DELETE /chat/messages/{conversationId}: Clear chat content
+- GET /chat/messages/{article_doc_id}: Query chat history
+- DELETE /chat/messages/{article_doc_id}: Clear chat content
 """
 import json
 import logging
@@ -137,11 +137,15 @@ async def chat_completions(
         article_title = article.title
         article_content = article.content
 
-        # 2. Initialize session
-        conversation, message, bishengllm, is_new_conv = await ChannelChatService.initialize_chat(
+        # 2. Initialize session and get configuration
+        conversation, message, bishengllm, is_new_conv, subscription_config = await ChannelChatService.initialize_chat(
             data, login_user, article_title
         )
         conversationId = conversation.chat_id
+
+        # 3. Truncate article content if needed
+        max_chunk_size = subscription_config.max_chunk_size if subscription_config else 15000
+        article_content = ChannelChatService._truncate_article_content(article_content, max_chunk_size)
 
     except (BaseErrorCode, ValueError) as e:
         error_response = e if isinstance(e, BaseErrorCode) else ServerError(msg=str(e))
@@ -159,35 +163,45 @@ async def chat_completions(
         runId = uuid4().hex
         index = 0
         stepId = None
-        model_name = data.model
+        model_name = bishengllm.model_name if bishengllm else 'AI Assistant'
 
         try:
-            # Build article context prompt
-            prompt = ChannelChatService.build_article_context_prompt(
-                title=article_title,
-                content=article_content,
+            # Build system prompt from config or default
+            system_prompt = (
+                subscription_config.system_prompt
+                if subscription_config and subscription_config.system_prompt
+                else "You are a professional AI assistant helping users analyze and discuss articles."
+            )
+
+            # Build user prompt from template or default
+            user_prompt_template = (
+                subscription_config.user_prompt
+                if subscription_config and subscription_config.user_prompt
+                else (
+                    "# 参考资料\n```\n{article_content}\n```\n# 用户问题\n{question}"
+                )
+            )
+            user_prompt = user_prompt_template.format(
+                article_content=article_content,
                 question=data.text
             )
 
-            # Save prompt to message's extra field
+            # Save full prompt to message's extra field
+            full_prompt = f"{system_prompt}\n\n{user_prompt}"
             extra = json.loads(message.extra) if message.extra else {}
-            extra['prompt'] = prompt
+            extra['prompt'] = full_prompt
             message.extra = json.dumps(extra, ensure_ascii=False)
-            await ChatMessageDao.ainsert_one(message)
+            await ChatMessageDao.aupdate_message_model(message)
 
             # Get chat history (excluding the latest one)
             history_messages = (await ChannelChatService.get_chat_history(conversationId, 8))[:-1]
 
             # Build LLM input
-            system_prompt = (
-                f"You are a professional AI assistant helping users analyze and discuss an article. "
-                f"Here is the article information:\n\n"
-                f"## Article Title\n{article_title}\n\n"
-                f"## Article Content\n{article_content}\n\n"
-                f"Please answer the user's question based on this article content. Current time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-            )
-
-            inputs = [SystemMessage(content=system_prompt), *history_messages, HumanMessage(content=data.text)]
+            inputs = [
+                SystemMessage(content=system_prompt),
+                *history_messages,
+                HumanMessage(content=user_prompt)
+            ]
 
             stepId = 'step_' + uuid4().hex
             yield step_message(stepId, runId, index, f'msg_{uuid4().hex}')
@@ -235,28 +249,26 @@ async def chat_completions(
         return EventSourceResponse(iter([ServerError(exception=e).to_sse_event_instance()]))
 
 
-@router.get('/messages/{conversationId}', summary='Query Channel Article AI Assistant Chat History')
+@router.get('/messages/{article_doc_id}', summary='Query Channel Article AI Assistant Chat History')
 async def get_chat_history(
-        conversationId: str,
+        article_doc_id: str,
         login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     """Query Channel Article AI Assistant Chat History Content"""
-    messages = await ChannelChatService.get_chat_messages(conversationId, login_user)
+    messages = await ChannelChatService.get_chat_messages(article_doc_id, login_user)
     if messages is None:
         return UnAuthorizedError.return_resp()
     return resp_200(data=messages)
 
 
-@router.delete('/messages/{conversationId}', summary='Clear Channel Article AI Assistant Chat Content')
+@router.delete('/messages/{article_doc_id}', summary='Clear Channel Article AI Assistant Chat Content')
 async def clear_chat(
-        conversationId: str,
+        article_doc_id: str,
         login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     """Clear Channel Article AI Assistant Chat Content"""
     try:
-        result = await ChannelChatService.clear_chat(conversationId, login_user)
-        if not result:
-            return UnAuthorizedError.return_resp()
+        await ChannelChatService.clear_chat(article_doc_id, login_user)
         return resp_200(data=True)
     except ChannelChatConversationNotFoundError as e:
         return resp_500(message=e.Msg)

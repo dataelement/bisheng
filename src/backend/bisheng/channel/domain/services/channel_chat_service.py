@@ -7,23 +7,27 @@ Encapsulates business logic for channel article AI assistant chat, including:
 - Managing conversation sessions and message records
 """
 import json
-from typing import Optional, Any
+from typing import Optional, Any, Tuple
 from uuid import uuid4
 
 from langchain_core.messages import AIMessage, HumanMessage
 from loguru import logger
 
-from bisheng.api.services.workstation import WorkstationMessage, WorkstationConversation
+from bisheng.api.services.workstation import WorkstationMessage, WorkstationConversation, WorkStationService
+from bisheng.api.v1.schemas import SubscriptionConfig
 from bisheng.channel.domain.schemas.channel_chat_schema import ChannelArticleChatRequest
 from bisheng.channel.domain.services.article_es_service import ArticleEsService
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.common.errcode.channel import ArticleNotFoundError, ChannelChatConversationNotFoundError
+from bisheng.common.errcode.channel import (
+    ArticleNotFoundError, ChannelChatConversationNotFoundError, KnowledgeSpaceLLMNotConfiguredError
+)
 from bisheng.database.constants import MessageCategory
 from bisheng.database.models.flow import FlowType
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.llm.domain import LLMService
+from bisheng.llm.domain.schemas import WorkbenchModelConfig
 
 
 # Article context prompt template
@@ -38,6 +42,94 @@ ARTICLE_CONTEXT_PROMPT = (
 
 class ChannelChatService:
     """Channel Article AI Assistant Chat Service"""
+
+    @classmethod
+    async def _get_or_create_session(
+        cls,
+        article_doc_id: str,
+        user_id: int,
+        article_title: str
+    ) -> Tuple[MessageSession, bool]:
+        """
+        Get or create session by article_doc_id + user_id (one-to-one mapping)
+
+        Args:
+            article_doc_id: Article document ID
+            user_id: User ID
+            article_title: Article title (used for session name)
+
+        Returns:
+            tuple: (MessageSession, is_new_session)
+        """
+        # Query existing session by flow_id (article_doc_id) and user_id
+        sessions = await MessageSessionDao.afilter_session(
+            flow_ids=[article_doc_id],
+            user_ids=[user_id],
+            flow_type=[FlowType.CHANNEL_ARTICLE.value]
+        )
+
+        if sessions:
+            logger.info(f'Found existing session for article {article_doc_id}, user {user_id}')
+            return sessions[0], False
+
+        # Create new session
+        conversation_id = uuid4().hex
+        await MessageSessionDao.async_insert_one(
+            MessageSession(
+                chat_id=conversation_id,
+                flow_id=article_doc_id,
+                flow_name=f'Article Assistant: {article_title[:50]}',
+                flow_type=FlowType.CHANNEL_ARTICLE.value,
+                user_id=user_id,
+            )
+        )
+
+        session = await MessageSessionDao.async_get_one(conversation_id)
+        logger.info(f'Created new session {conversation_id} for article {article_doc_id}, user {user_id}')
+        return session, True
+
+    @classmethod
+    async def _get_chat_config(cls) -> Tuple[int, SubscriptionConfig]:
+        """
+        Get chat configuration (model and prompts)
+
+        Returns:
+            tuple: (model_id, subscription_config)
+
+        Raises:
+            KnowledgeSpaceLLMNotConfiguredError: If knowledge_space_llm not configured
+        """
+        # Get workbench LLM configuration
+        workbench_llm: WorkbenchModelConfig = await LLMService.get_workbench_llm()
+
+        if not workbench_llm or not workbench_llm.knowledge_space_llm:
+            raise KnowledgeSpaceLLMNotConfiguredError()
+
+        model_id = int(workbench_llm.knowledge_space_llm.id)
+
+        # Get subscription configuration
+        subscription_config = await WorkStationService.get_subscription_config()
+
+        return model_id, subscription_config
+
+    @classmethod
+    def _truncate_article_content(cls, content: str, max_length: int) -> str:
+        """
+        Truncate article content to max_length
+
+        Args:
+            content: Article content
+            max_length: Maximum length
+
+        Returns:
+            str: Truncated content
+        """
+        if len(content) <= max_length:
+            return content
+
+        truncated = content[:max_length]
+        logger.warning(f'Article content truncated from {len(content)} to {max_length} characters')
+        return truncated
 
     @classmethod
     async def get_article_content(cls, article_es_service: ArticleEsService, doc_id: str):
@@ -83,7 +175,7 @@ class ChannelChatService:
                               login_user: UserPayload,
                               article_title: str):
         """
-        Initialize chat session, reference workstation._initialize_chat
+        Initialize chat session (one-to-one: article + user = one session)
 
         Args:
             data: Chat request data
@@ -93,30 +185,18 @@ class ChannelChatService:
         Returns:
             tuple: (conversation, message, bishengllm, is_new_conversation)
         """
-        conversationId = data.conversationId
-        is_new_conversation = False
-
-        if not conversationId:
-            is_new_conversation = True
-            conversationId = uuid4().hex
-            await MessageSessionDao.async_insert_one(
-                MessageSession(
-                    chat_id=conversationId,
-                    flow_id=data.article_doc_id,
-                    flow_name=f'Article Assistant: {article_title[:50]}',
-                    flow_type=FlowType.CHANNEL_ARTICLE.value,
-                    user_id=login_user.user_id,
-                ))
-
-        conversation = await MessageSessionDao.async_get_one(conversationId)
-        if conversation is None:
-            raise ChannelChatConversationNotFoundError()
+        # Get or create session (one-to-one mapping)
+        conversation, is_new_conversation = await cls._get_or_create_session(
+            article_doc_id=data.article_doc_id,
+            user_id=login_user.user_id,
+            article_title=article_title
+        )
 
         # Create user message record
         message = await ChatMessageDao.ainsert_one(
             ChatMessage(
                 user_id=login_user.user_id,
-                chat_id=conversationId,
+                chat_id=conversation.chat_id,
                 flow_id=data.article_doc_id,
                 type='human',
                 is_bot=False,
@@ -127,15 +207,18 @@ class ChannelChatService:
                 source=0,
             ))
 
+        # Get chat configuration
+        model_id, subscription_config = await cls._get_chat_config()
+
         # Get LLM instance
         bishengllm = await LLMService.get_bisheng_llm(
-            model_id=data.model,
+            model_id=model_id,
             app_id=ApplicationTypeEnum.DAILY_CHAT.value,
             app_name='channel_article_chat',
             app_type=ApplicationTypeEnum.DAILY_CHAT,
             user_id=login_user.user_id)
 
-        return conversation, message, bishengllm, is_new_conversation
+        return conversation, message, bishengllm, is_new_conversation, subscription_config
 
     @classmethod
     async def get_chat_history(cls, chat_id: str, size: int = 8):
@@ -152,7 +235,10 @@ class ChannelChatService:
         chat_history = []
         messages = await ChatMessageDao.aget_messages_by_chat_id(chat_id, ['question', 'answer'], size)
         for one in messages:
-            extra = json.loads(one.extra) or {}
+            try:
+                extra = json.loads(one.extra) if one.extra else {}
+            except json.JSONDecodeError:
+                extra = {}
             content = extra.get('prompt', one.message)
             if one.category == MessageCategory.QUESTION.value:
                 chat_history.append(HumanMessage(content=content))
@@ -162,45 +248,66 @@ class ChannelChatService:
         return chat_history
 
     @classmethod
-    async def get_chat_messages(cls, conversation_id: str, login_user: UserPayload):
+    async def get_chat_messages(cls, article_doc_id: str, login_user: UserPayload):
         """
-        Query chat history message list
+        Query chat history message list by article_doc_id
 
         Args:
-            conversation_id: Session ID
+            article_doc_id: Article document ID
             login_user: Logged-in user information
 
         Returns:
-            list: WorkstationMessage list
+            list: WorkstationMessage list or None if no permission
         """
-        messages = await ChatMessageDao.aget_messages_by_chat_id(chat_id=conversation_id, limit=1000)
-        if messages:
-            if login_user.user_id != messages[0].user_id:
-                return None  # No permission
-            return [await WorkstationMessage.from_chat_message(message) for message in messages]
-        return []
+        # Find session by article_doc_id + user_id
+        sessions = await MessageSessionDao.afilter_session(
+            flow_ids=[article_doc_id],
+            user_ids=[login_user.user_id],
+            flow_type=[FlowType.CHANNEL_ARTICLE.value]
+        )
+
+        if not sessions:
+            return []
+
+        conversation = sessions[0]
+        # Permission already verified by user_ids filter above
+        messages = await ChatMessageDao.aget_messages_by_chat_id(chat_id=conversation.chat_id, limit=1000)
+
+        if not messages:
+            return []
+
+        return [await WorkstationMessage.from_chat_message(message) for message in messages]
 
     @classmethod
-    async def clear_chat(cls, conversation_id: str, login_user: UserPayload) -> bool:
+    async def clear_chat(cls, article_doc_id: str, login_user: UserPayload) -> bool:
         """
-        Clear chat content
+        Clear chat content by article_doc_id
 
         Args:
-            conversation_id: Session ID
+            article_doc_id: Article document ID
             login_user: Logged-in user information
 
         Returns:
             bool: Whether the clear operation succeeded
+
+        Raises:
+            ChannelChatConversationNotFoundError: If conversation not found
         """
-        # Verify session exists and belongs to current user
-        conversation = await MessageSessionDao.async_get_one(conversation_id)
-        if not conversation:
+        # Find session by article_doc_id + user_id
+        sessions = await MessageSessionDao.afilter_session(
+            flow_ids=[article_doc_id],
+            user_ids=[login_user.user_id],
+            flow_type=[FlowType.CHANNEL_ARTICLE.value]
+        )
+
+        if not sessions:
             raise ChannelChatConversationNotFoundError()
-        if conversation.user_id != login_user.user_id:
-            return False
+
+        conversation = sessions[0]
+        # Permission already verified by user_ids filter above
 
         # Delete chat messages
-        ChatMessageDao.delete_by_user_chat_id(login_user.user_id, conversation_id)
+        ChatMessageDao.delete_by_user_chat_id(login_user.user_id, conversation.chat_id)
         # Mark session as deleted
-        await MessageSessionDao.delete_session(conversation_id)
+        await MessageSessionDao.delete_session(conversation.chat_id)
         return True
