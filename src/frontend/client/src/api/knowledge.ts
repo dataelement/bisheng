@@ -1,6 +1,17 @@
 import request from "./request";
 
-// 文件状态
+// Standard backend response wrapper
+interface ApiResponse<T> {
+    status_code: number;
+    status_message: string;
+    data: T;
+}
+
+// ─────────────────────────────────────────────
+// Enums (kept aligned with backend value strings)
+// ─────────────────────────────────────────────
+
+/** File processing status */
 export enum FileStatus {
     UPLOADING = "uploading",
     QUEUED = "queued",
@@ -10,7 +21,7 @@ export enum FileStatus {
     TIMEOUT = "timeout"
 }
 
-// 文件类型
+/** File / folder type used for UI rendering */
 export enum FileType {
     FOLDER = "folder",
     PDF = "pdf",
@@ -26,13 +37,13 @@ export enum FileType {
     OTHER = "other"
 }
 
-// 可见方式
+/** Space visibility / auth type */
 export enum VisibilityType {
-    PUBLIC = "public",      // 公开
-    PRIVATE = "private"     // 私有
+    PUBLIC = "public",
+    PRIVATE = "private"
 }
 
-// 排序类型
+/** Sort field */
 export enum SortType {
     NAME = "name",
     TYPE = "type",
@@ -40,208 +51,456 @@ export enum SortType {
     UPDATE_TIME = "update_time"
 }
 
-// 排序方向
+/** Sort direction */
 export enum SortDirection {
     ASC = "asc",
     DESC = "desc"
 }
 
-// 知识空间角色
+/** User role within a space */
 export enum SpaceRole {
     CREATOR = "creator",
     ADMIN = "admin",
     MEMBER = "member"
 }
 
-// 知识空间接口
+// ─────────────────────────────────────────────
+// Frontend domain interfaces (used by components)
+// ─────────────────────────────────────────────
+
+/** Knowledge space model used throughout the UI */
 export interface KnowledgeSpace {
     id: string;
     name: string;
     description?: string;
-    visibility: VisibilityType;
-    creator: string;
-    creatorId: string;
-    memberCount: number;
-    fileCount: number;       // 成功入库的文件数
-    totalFileCount: number;  // 总文件数
+    icon?: string;
+    visibility: VisibilityType;   // mapped from auth_type
+    creator: string;              // mapped from user_name
+    creatorId: string;            // mapped from user_id
+    memberCount: number;          // mapped from member_count
+    fileCount: number;            // success-indexed file count
+    totalFileCount: number;
     role: SpaceRole;
     isPinned: boolean;
-    createdAt: string;
-    updatedAt: string;
-    tags: string[];          // 空间标签池
+    createdAt: string;            // mapped from create_time
+    updatedAt: string;            // mapped from update_time
+    tags: string[];
+    isReleased: boolean;          // mapped from is_released
 }
 
-// 文件/文件夹接口
+/** File or folder item returned from the space children API */
 export interface KnowledgeFile {
     id: string;
     name: string;
     type: FileType;
-    size?: number;           // 文件大小（字节），文件夹无此字段
-    status?: FileStatus;     // 处理状态（文件夹无此字段）
+    size?: number;
+    status?: FileStatus;
     tags: string[];
-    path: string;            // 完整路径
-    parentId?: string;       // 父文件夹ID
+    path: string;
+    parentId?: string;           // mapped from parent_id
     spaceId: string;
-    createdAt: string;
-    updatedAt: string;
-    thumbnail?: string;      // 缩略图URL
-    errorMessage?: string;   // 失败原因
+    createdAt: string;           // mapped from create_time
+    updatedAt: string;           // mapped from update_time
+    thumbnail?: string;
+    errorMessage?: string;
+    // Transient UI-only fields
+    isCreating?: boolean;
 }
 
-/**
- * 获取知识空间列表
- */
-export async function getKnowledgeSpacesApi(params: {
-    type: "created" | "joined";
-}): Promise<KnowledgeSpace[]> {
-    return await request.get(`/api/v1/knowledge-spaces`, { params });
-}
+// ─────────────────────────────────────────────
+// Backend raw types (snake_case from API responses)
+// ─────────────────────────────────────────────
 
-/**
- * 创建知识空间
- */
-export async function createKnowledgeSpaceApi(data: {
+interface RawKnowledgeSpace {
+    id: number;
     name: string;
     description?: string;
-    visibility: VisibilityType;
-}): Promise<KnowledgeSpace> {
-    return await request.post(`/api/v1/knowledge-spaces`, data);
+    icon?: string;
+    auth_type: string;           // "public" | "private"
+    user_name?: string;
+    user_id?: number;
+    member_count?: number;
+    file_count?: number;
+    total_file_count?: number;
+    role?: string;
+    is_pinned?: boolean;
+    create_time?: string;
+    update_time?: string;
+    tags?: string[];
+    is_released?: boolean;
 }
 
-/**
- * 更新知识空间
- */
-export async function updateKnowledgeSpaceApi(spaceId: string, data: {
-    name?: string;
-    description?: string;
-    visibility?: VisibilityType;
-}): Promise<KnowledgeSpace> {
-    return await request.put(`/api/v1/knowledge-spaces/${spaceId}`, data);
+interface RawSpaceChild {
+    id: number;
+    name: string;
+    /** "folder" | "file" */
+    type: string;
+    /** For files: "pdf" | "docx" | etc. */
+    file_type?: string;
+    size?: number;
+    status?: string;
+    tags?: string[];
+    path?: string;
+    parent_id?: number;
+    space_id?: number;
+    create_time?: string;
+    update_time?: string;
+    thumbnail?: string;
+    error_message?: string;
 }
 
-/**
- * 删除知识空间
- */
-export async function deleteKnowledgeSpaceApi(spaceId: string): Promise<void> {
-    return await request.delete(`/api/v1/knowledge-spaces/${spaceId}`);
+/** Upload API response */
+export interface UploadFileResponse {
+    file_name: string;
+    file_path: string;
+    flowId: string | null;
+    relative_path: string | null;
+    repeat: boolean;
+    repeat_file_name: string | null;
+    repeat_update_time: string | null;
 }
 
-/**
- * 退出知识空间
- */
-export async function leaveKnowledgeSpaceApi(spaceId: string): Promise<void> {
-    return await request.post(`/api/v1/knowledge-spaces/${spaceId}/leave`);
+// ─────────────────────────────────────────────
+// Mapper functions (backend → frontend)
+// ─────────────────────────────────────────────
+
+/** Map a raw backend space to the frontend KnowledgeSpace model */
+function mapSpace(raw: RawKnowledgeSpace): KnowledgeSpace {
+    return {
+        id: String(raw.id),
+        name: raw.name,
+        description: raw.description,
+        icon: raw.icon,
+        visibility: (raw.auth_type as VisibilityType) || VisibilityType.PRIVATE,
+        creator: raw.user_name || "",
+        creatorId: String(raw.user_id ?? ""),
+        memberCount: raw.member_count ?? 0,
+        fileCount: raw.file_count ?? 0,
+        totalFileCount: raw.total_file_count ?? 0,
+        role: (raw.role as SpaceRole) || SpaceRole.MEMBER,
+        isPinned: raw.is_pinned ?? false,
+        createdAt: raw.create_time || "",
+        updatedAt: raw.update_time || "",
+        tags: raw.tags || [],
+        isReleased: raw.is_released ?? false,
+    };
 }
 
-/**
- * 置顶知识空间
- */
-export async function pinKnowledgeSpaceApi(spaceId: string, pinned: boolean): Promise<void> {
-    return await request.post(`/api/v1/knowledge-spaces/${spaceId}/pin`, { pinned });
-}
-
-/**
- * 获取文件列表
- */
-export async function getFilesApi(params: {
-    spaceId: string;
-    parentId?: string;       // 父文件夹ID，不传则为根目录
-    search?: string;
-    searchScope?: "current" | "space";  // 搜索范围
-    statusFilter?: FileStatus[];
-    sortBy?: SortType;
-    sortDirection?: SortDirection;
-    page?: number;
-    pageSize?: number;
-}): Promise<{
-    data: KnowledgeFile[];
-    total: number;
-}> {
-    return await request.get(`/api/v1/knowledge-spaces/${params.spaceId}/files`, { params });
-}
-
-/**
- * 上传文件
- */
-export async function uploadFileApi(spaceId: string, parentId: string | undefined, file: File): Promise<KnowledgeFile> {
-    const formData = new FormData();
-    formData.append('file', file);
-    if (parentId) {
-        formData.append('parentId', parentId);
+/** Derive explicit FileType enum value from a raw child item */
+function deriveFileType(raw: RawSpaceChild): FileType {
+    if (raw.type === "folder") return FileType.FOLDER;
+    const ext = (raw.file_type || "").toLowerCase();
+    switch (ext) {
+        case "pdf": return FileType.PDF;
+        case "doc": return FileType.DOC;
+        case "docx": return FileType.DOCX;
+        case "xls": return FileType.XLS;
+        case "xlsx": return FileType.XLSX;
+        case "ppt": return FileType.PPT;
+        case "pptx": return FileType.PPTX;
+        case "jpg": return FileType.JPG;
+        case "jpeg": return FileType.JPEG;
+        case "png": return FileType.PNG;
+        default: return FileType.OTHER;
     }
-    return await request.postMultiPart(`/api/v1/knowledge-spaces/${spaceId}/files`, formData);
+}
+
+/** Map a raw space child (file/folder) to the frontend KnowledgeFile model */
+function mapChild(raw: RawSpaceChild, spaceId: string): KnowledgeFile {
+    return {
+        id: String(raw.id),
+        name: raw.name,
+        type: deriveFileType(raw),
+        size: raw.size,
+        status: raw.status as FileStatus | undefined,
+        tags: raw.tags || [],
+        path: raw.path || raw.name,
+        parentId: raw.parent_id !== undefined ? String(raw.parent_id) : undefined,
+        spaceId: raw.space_id !== undefined ? String(raw.space_id) : spaceId,
+        createdAt: raw.create_time || "",
+        updatedAt: raw.update_time || "",
+        thumbnail: raw.thumbnail,
+        errorMessage: raw.error_message,
+    };
+}
+
+// ─────────────────────────────────────────────
+// API functions — Space management
+// ─────────────────────────────────────────────
+
+/**
+ * Get spaces created by the current user
+ */
+export async function getMineSpacesApi(params?: {
+    order_by?: string;
+}): Promise<KnowledgeSpace[]> {
+    const res = await request.get<ApiResponse<RawKnowledgeSpace[]>>(`/api/v1/knowledge/space/mine`, { params });
+    return (res?.data || []).map(mapSpace);
 }
 
 /**
- * 创建文件夹
+ * Get spaces joined by the current user
  */
-export async function createFolderApi(data: {
-    spaceId: string;
-    parentId?: string;
+export async function getJoinedSpacesApi(params?: {
+    order_by?: string;
+}): Promise<KnowledgeSpace[]> {
+    const res = await request.get<ApiResponse<RawKnowledgeSpace[]>>(`/api/v1/knowledge/space/joined`, { params });
+    return (res?.data || []).map(mapSpace);
+}
+
+/**
+ * Get public knowledge square (paginated)
+ */
+export async function getSquareSpacesApi(params?: {
+    order_by?: string;
+    page?: number;
+    page_size?: number;
+}): Promise<{ data: KnowledgeSpace[]; total: number }> {
+    const res = await request.get<ApiResponse<{ list: RawKnowledgeSpace[]; total: number }>>(
+        `/api/v1/knowledge/space/square`,
+        { params }
+    );
+    return {
+        data: (res?.data?.list || []).map(mapSpace),
+        total: res?.data?.total ?? 0,
+    };
+}
+
+/**
+ * Create a new knowledge space
+ */
+export async function createSpaceApi(data: {
     name: string;
-}): Promise<KnowledgeFile> {
-    return await request.post(`/api/v1/knowledge-spaces/${data.spaceId}/folders`, data);
+    description?: string;
+    icon?: string;
+    auth_type: string;
+    is_released?: boolean;
+}): Promise<KnowledgeSpace> {
+    const res = await request.post(`/api/v1/knowledge/space`, data) as ApiResponse<RawKnowledgeSpace>;
+    return mapSpace(res.data);
 }
 
 /**
- * 重命名文件/文件夹
+ * Update an existing knowledge space
  */
-export async function renameFileApi(fileId: string, name: string): Promise<void> {
-    return await request.put(`/api/v1/files/${fileId}/rename`, { name });
+export async function updateSpaceApi(
+    space_id: string,
+    data: {
+        name?: string;
+        description?: string;
+        icon?: string;
+        auth_type?: string;
+        is_released?: boolean;
+    }
+): Promise<KnowledgeSpace> {
+    if (!space_id) throw new Error("space_id is required");
+    const res = await request.put(`/api/v1/knowledge/space/${space_id}`, data) as ApiResponse<RawKnowledgeSpace>;
+    return mapSpace(res.data);
 }
 
 /**
- * 删除文件/文件夹
+ * Get space detail info
  */
-export async function deleteFileApi(fileId: string): Promise<void> {
-    return await request.delete(`/api/v1/files/${fileId}`);
+export async function getSpaceInfoApi(space_id: string): Promise<KnowledgeSpace> {
+    if (!space_id) throw new Error("space_id is required");
+    const res = await request.get<ApiResponse<RawKnowledgeSpace>>(
+        `/api/v1/knowledge/space/${space_id}/info`
+    );
+    return mapSpace(res.data);
 }
 
 /**
- * 批量删除
+ * Get members of a space
  */
-export async function batchDeleteFilesApi(fileIds: string[]): Promise<void> {
-    return await request.post(`/api/v1/files/batch-delete`, { fileIds });
+export async function getSpaceMembersApi(space_id: string): Promise<unknown[]> {
+    return request.get(`/api/v1/knowledge/space/${space_id}/members`);
 }
 
 /**
- * 编辑标签
+ * Subscribe to a space
+ * POST /api/v1/knowledge/space/{space_id}/subscribe
  */
-export async function updateFileTagsApi(fileId: string, tags: string[]): Promise<void> {
-    return await request.put(`/api/v1/files/${fileId}/tags`, { tags });
+export async function subscribeSpaceApi(space_id: string): Promise<void> {
+    await request.post(`/api/v1/knowledge/space/${space_id}/subscribe`);
 }
 
 /**
- * 批量添加标签
+ * Unsubscribe from a space (leave)
+ * POST /api/v1/knowledge/space/{space_id}/unsubscribe
  */
-export async function batchAddTagsApi(fileIds: string[], tags: string[]): Promise<void> {
-    return await request.post(`/api/v1/files/batch-add-tags`, { fileIds, tags });
+export async function unsubscribeSpaceApi(space_id: string): Promise<void> {
+    await request.post(`/api/v1/knowledge/space/${space_id}/unsubscribe`);
 }
 
 /**
- * 重试失败文件
+ * Delete a space
+ * DELETE /api/v1/knowledge/space/{space_id}
  */
-export async function retryFileApi(fileId: string): Promise<void> {
-    return await request.post(`/api/v1/files/${fileId}/retry`);
+export async function deleteSpaceApi(space_id: string): Promise<void> {
+    await request.delete(`/api/v1/knowledge/space/${space_id}`);
 }
 
 /**
- * 批量重试
+ * Pin / unpin a space
+ * POST /api/v1/knowledge/space/{space_id}/set-pin
+ * @param is_pined - true to pin, false to unpin (backend field name: is_pined)
  */
-export async function batchRetryFilesApi(fileIds: string[]): Promise<void> {
-    return await request.post(`/api/v1/files/batch-retry`, { fileIds });
+export async function pinSpaceApi(space_id: string, is_pined: boolean): Promise<void> {
+    await request.post(`/api/v1/knowledge/space/${space_id}/set-pin`, { is_pined });
 }
 
 /**
- * 下载文件
+ * Get items (folders and files) under a space directory
+ * If parent_id is omitted, returns root-level items
  */
-export async function downloadFileApi(fileId: string): Promise<Blob> {
-    return await request.get(`/api/v1/files/${fileId}/download`, { responseType: 'blob' });
+export async function getSpaceChildrenApi(params: {
+    space_id: string;
+    parent_id?: string;
+    page?: number;
+    page_size?: number;
+}): Promise<{ data: KnowledgeFile[]; total: number }> {
+    const { space_id, ...queryParams } = params;
+    if (!space_id) return { data: [], total: 0 };
+    const res = await request.get<ApiResponse<{ list: RawSpaceChild[]; total: number }>>(
+        `/api/v1/knowledge/space/${space_id}/children`,
+        {
+            params: {
+                parent_id: queryParams.parent_id,
+                page: queryParams.page,
+                page_size: queryParams.page_size,
+            }
+        }
+    );
+    return {
+        data: (res?.data?.list || []).map(raw => mapChild(raw, space_id)),
+        total: res?.data?.total ?? 0,
+    };
+}
+
+// ─────────────────────────────────────────────
+// API functions — Folder management
+// ─────────────────────────────────────────────
+
+/**
+ * Create a new folder inside a space
+ */
+export async function createFolderApi(
+    space_id: string,
+    data: { name: string; parent_id?: string | null }
+): Promise<KnowledgeFile> {
+    const res = await request.post(
+        `/api/v1/knowledge/space/${space_id}/folders`,
+        {
+            name: data.name,
+            parent_id: data.parent_id ? Number(data.parent_id) : null,
+        }
+    ) as ApiResponse<RawSpaceChild>;
+    return mapChild(res.data, space_id);
 }
 
 /**
- * 批量下载
+ * Rename a folder
  */
-export async function batchDownloadFilesApi(fileIds: string[]): Promise<Blob> {
-    return await request.post(`/api/v1/files/batch-download`, { fileIds }, { responseType: 'blob' });
+export async function renameFolderApi(
+    space_id: string,
+    folder_id: string,
+    name: string
+): Promise<void> {
+    return request.put(`/api/v1/knowledge/space/${space_id}/folders/${folder_id}`, { name });
+}
+
+/**
+ * Delete a folder (recursively deletes all children)
+ */
+export async function deleteFolderApi(space_id: string, folder_id: string): Promise<void> {
+    return request.delete(`/api/v1/knowledge/space/${space_id}/folders/${folder_id}`);
+}
+
+// ─────────────────────────────────────────────
+// API functions — File management
+// ─────────────────────────────────────────────
+
+/**
+ * Step 1: Upload a file to the server and get back its server path
+ * Returns the upload response containing file_path to use in addFilesApi
+ */
+export async function uploadFileToServerApi(
+    space_id: string,
+    file: File
+): Promise<UploadFileResponse> {
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await request.postMultiPart(`/api/v1/knowledge/upload/${space_id}`, formData) as ApiResponse<UploadFileResponse>;
+    return res.data;
+}
+
+/**
+ * Step 2: Register uploaded file paths into a knowledge space
+ */
+export async function addFilesApi(
+    space_id: string,
+    data: { file_path: string[]; parent_id?: number | null }
+): Promise<KnowledgeFile[]> {
+    const res = await request.post(
+        `/api/v1/knowledge/space/${space_id}/files`,
+        data
+    ) as ApiResponse<RawSpaceChild[]>;
+    return (res?.data || []).map(raw => mapChild(raw, space_id));
+}
+
+/**
+ * Rename a file
+ */
+export async function renameFileApi(
+    space_id: string,
+    file_id: string,
+    name: string
+): Promise<void> {
+    return request.put(`/api/v1/knowledge/space/${space_id}/files/${file_id}`, { name });
+}
+
+/**
+ * Delete a single file
+ */
+export async function deleteFileApi(space_id: string, file_id: string): Promise<void> {
+    return request.delete(`/api/v1/knowledge/space/${space_id}/files/${file_id}`);
+}
+
+// ─────────────────────────────────────────────
+// API functions — Batch operations
+// ─────────────────────────────────────────────
+
+/**
+ * Batch delete files and/or folders
+ */
+export async function batchDeleteApi(
+    space_id: string,
+    data: { file_ids?: number[]; folder_ids?: number[] }
+): Promise<void> {
+    return request.post(`/api/v1/knowledge/space/${space_id}/files/batch-delete`, data);
+}
+
+/**
+ * Batch download files and/or folders (returns a download URL or triggers download)
+ */
+export async function batchDownloadApi(
+    space_id: string,
+    data: { file_ids?: number[]; folder_ids?: number[] }
+): Promise<Blob> {
+    return request.post(
+        `/api/v1/knowledge/space/${space_id}/files/batch-download`,
+        data,
+        { responseType: "blob" }
+    );
+}
+
+// ─────────────────────────────────────────────
+// API functions — File preview
+// ─────────────────────────────────────────────
+
+/**
+ * Get file preview content
+ */
+export async function getFilePreviewApi(space_id: string, file_id: string): Promise<unknown> {
+    return request.get(`/api/v1/knowledge/space/${space_id}/files/${file_id}/preview`);
 }

@@ -33,6 +33,7 @@ export function ChannelSquareCard({
   onPreview
 }: ChannelSquareCardProps) {
   const localize = useLocalize();
+
   const getButtonConfig = () => {
     switch (status) {
       case "joined":

@@ -54,3 +54,11 @@ class SpaceChannelMemberRepository(BaseRepository[SpaceChannelMember, int], ABC)
         """Remove all members of a channel except the creator (hard delete)."""
         pass
 
+    @abstractmethod
+    async def activate_pending_members(self, channel_id: str) -> int:
+        """Activate all pending members of a channel (set status to True).
+
+        Returns the number of members activated.
+        """
+        pass
+

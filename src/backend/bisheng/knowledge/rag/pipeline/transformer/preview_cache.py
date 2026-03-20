@@ -38,6 +38,7 @@ class PreviewCacheTransformer(BaseDocumentTransformer):
                 for k in doc.metadata:
                     if k not in knowledge_metadata_fields:
                         del doc.metadata[k]
+                doc.metadata.update(self.file_metadata)
                 doc.page_content = KnowledgeUtils.aggregate_chunk_metadata(doc.page_content, doc.metadata)
 
         return documents

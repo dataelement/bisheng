@@ -64,7 +64,7 @@ class KnowledgeBase(SQLModelSerializable):
     index_name: Optional[str] = Field(default=None, index=False)
     state: Optional[int] = Field(index=False, default=KnowledgeState.PUBLISHED.value,
                                  description='value from KnowledgeState')
-    icon: Optional[str] = Field(default=None, description='Knowledge Space Icon')
+    is_released: bool = Field(default=False, description='is released to knowledge space square')
     auth_type: AuthTypeEnum = Field(default=AuthTypeEnum.PUBLIC, description='Authentication Type')
 
     metadata_fields: Optional[List[Dict]] = Field(default=None, sa_column=Column(JSON, nullable=True),
@@ -515,6 +515,14 @@ class KnowledgeDao(KnowledgeBase):
             session.commit()
 
     @classmethod
+    async def async_delete_knowledge(cls, knowledge_id: int, only_clear: bool = False):
+        async with get_async_db_session() as session:
+            await session.exec(delete(Knowledge).where(col(Knowledge.id) == knowledge_id))
+            if not only_clear:
+                await session.exec(delete(Knowledge).where(col(Knowledge.id) == knowledge_id))
+            await session.commit()
+
+    @classmethod
     def get_knowledge_by_time_range(cls, start_time: datetime, end_time: datetime, page: int = 0,
                                     page_size: int = 0) -> List[Knowledge]:
         """ Get a list of knowledge bases based on the creation timeframe """
@@ -625,6 +633,7 @@ class KnowledgeDao(KnowledgeBase):
         """ Async: Get all PUBLIC and APPROVAL Knowledge Spaces (Knowledge Square) """
         statement = select(Knowledge).where(
             Knowledge.type == KnowledgeTypeEnum.SPACE.value,
+            Knowledge.is_released == True,
             Knowledge.auth_type.in_([AuthTypeEnum.PUBLIC.value, AuthTypeEnum.APPROVAL.value])
         )
         statement = cls._apply_space_order(statement, order_by)

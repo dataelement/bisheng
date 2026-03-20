@@ -1,6 +1,6 @@
 import { useLocalize } from "~/hooks";
-import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
     type ChannelDetailResponse,
@@ -9,6 +9,7 @@ import {
     subscribeManagerChannelApi,
 } from "~/api/channels";
 import { NotificationSeverity } from "~/common";
+import { InfiniteScroll } from "~/components/InfiniteScroll";
 import { Avatar, AvatarImage, AvatarName } from "~/components/ui/avatar";
 import { Button } from "~/components/ui/Button";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
@@ -41,8 +42,23 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onNavigate
     const navigate = useNavigate();
     const { showToast } = useToastContext();
     const { user } = useAuthContext();
+    const queryClient = useQueryClient();
     const [subscribeStatus, setSubscribeStatus] = useState<SubscribeStatus>("none");
     const [subscribing, setSubscribing] = useState(false);
+    const [articles, setArticles] = useState<any[]>([]);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [hasMore, setHasMore] = useState(false);
+    const [loadingMore, setLoadingMore] = useState(false);
+
+    // 切换频道/关闭抽屉时，重置本地订阅交互态，避免状态串到下一条频道
+    useEffect(() => {
+        if (!open) {
+            setSubscribeStatus("none");
+            setSubscribing(false);
+            return;
+        }
+        setSubscribeStatus("none");
+    }, [channelId, open]);
 
     // Fetch channel detail
     const {
@@ -66,6 +82,7 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onNavigate
     const {
         data: articlesData,
         isLoading: isArticlesLoading,
+        isError: isArticlesError,
     } = useQuery({
         queryKey: ["channelPreviewArticles", channelId],
         queryFn: async () => {
@@ -83,8 +100,50 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onNavigate
         staleTime: 30_000,
     });
 
-    const articles = (articlesData?.data || []).map(item => mapToArticle(item, channelId || ""));
     const isLoading = isDetailLoading || isArticlesLoading;
+
+    useEffect(() => {
+        if (!channelId) {
+            setArticles([]);
+            setCurrentPage(1);
+            setHasMore(false);
+            return;
+        }
+        const mapped = (articlesData?.data || []).map(item => mapToArticle(item, channelId));
+        setArticles(mapped);
+        setCurrentPage(1);
+        const total = articlesData?.total || 0;
+        setHasMore(PREVIEW_PAGE_SIZE < total);
+    }, [channelId, articlesData]);
+
+    const loadMoreArticles = async () => {
+        if (!channelId || loadingMore || !hasMore) return;
+        const nextPage = currentPage + 1;
+        setLoadingMore(true);
+        try {
+            const res: any = await getArticlesApi({
+                channelId,
+                page: nextPage,
+                pageSize: PREVIEW_PAGE_SIZE,
+            });
+            if (res?.status_code && res.status_code !== 200) {
+                throw new Error(res.status_message || localize("com_subscription.article_load_failed"));
+            }
+            const nextMapped = (res?.data || []).map((item: any) => mapToArticle(item, channelId));
+            setArticles(prev => [...prev, ...nextMapped]);
+            setCurrentPage(nextPage);
+            const total = res?.total || 0;
+            setHasMore(nextPage * PREVIEW_PAGE_SIZE < total);
+        } catch (e: any) {
+            showToast({
+                message: e?.message || localize("com_subscription.article_load_failed"),
+                severity: NotificationSeverity.ERROR,
+            });
+            setHasMore(false);
+        } finally {
+            setLoadingMore(false);
+        }
+    };
 
     // Handle subscribe action
     const handleSubscribe = async () => {
@@ -110,6 +169,10 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onNavigate
                 setSubscribeStatus("subscribed");
                 showToast({ message: localize("com_subscription.subscribe_success"), severity: NotificationSeverity.SUCCESS });
             }
+
+            // Refresh background channel lists (sidebar uses ["channels","subscribed",sort])
+            queryClient.invalidateQueries({ queryKey: ["channels", "subscribed"] });
+            queryClient.invalidateQueries({ queryKey: ["channels"] });
         } catch (e: any) {
             const msg =
                 e?.response?.data?.status_message ||
@@ -121,23 +184,32 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onNavigate
         }
     };
 
-    // Button config based on visibility and subscribe status
-    const getButtonConfig = (detail?: ChannelDetailResponse) => {
-        if (detail?.subscription_status === "subscribed") {
+    // Button config based on effective subscribe status
+    const getButtonConfig = (status: SubscribeStatus) => {
+        if (status === "subscribed") {
             return { text: localize("com_subscription.subscribed"), disabled: true, variant: "secondary" as const };
         }
-        if (detail?.subscription_status === "pending") {
+        if (status === "pending") {
             return { text: localize("com_subscription.applying"), disabled: true, variant: "secondary" as const };
-        }
-        if (detail?.subscription_status === "review") {
-            return { text: localize("com_subscription.subscribe"), disabled: false, variant: "outline" as const };
         }
         return { text: localize("com_subscription.subscribe"), disabled: false, variant: "outline" as const };
     };
-
-    const btnConfig = getButtonConfig(channelDetail);
     const isCreatorView =
         Boolean(user?.username) && Boolean(channelDetail?.creator_name) && user?.username === channelDetail?.creator_name;
+
+    // If the current user is the creator and this drawer is opened via share link,
+    // automatically navigate into the channel detail page and close the drawer.
+    const autoNavigatedRef = useRef(false);
+    useEffect(() => {
+        if (!open || !channelId || !channelDetail || !isCreatorView || autoNavigatedRef.current) return;
+        autoNavigatedRef.current = true;
+        if (onNavigateToChannel) {
+            onNavigateToChannel(channelId);
+        } else {
+            navigate("/channel", { replace: true });
+        }
+        onOpenChange(false);
+    }, [open, channelId, channelDetail, isCreatorView, onNavigateToChannel]);
 
     const effectiveSubscribeStatus: SubscribeStatus = (() => {
         // 优先使用本地交互态（点击订阅后的即时反馈），否则使用详情接口状态
@@ -146,6 +218,7 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onNavigate
         if (channelDetail?.subscription_status === "pending") return "pending";
         return "none";
     })();
+    const btnConfig = getButtonConfig(effectiveSubscribeStatus);
 
     // 需审核频道：非创建者且未订阅/未通过时才隐藏文章列表；创建者需可查看文章
     const hideArticles =
@@ -153,18 +226,18 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onNavigate
         !isCreatorView &&
         effectiveSubscribeStatus !== "subscribed";
 
-    // Handle error — channel not found or inaccessible (must be in useEffect to avoid side-effects during render)
+    // Handle error — channel not found, inaccessible, or articles cannot be loaded
     useEffect(() => {
-        if (isDetailError && open) {
+        if (open && (isDetailError || isArticlesError)) {
             showToast({ message: localize("com_subscription.channel_invalid_or_inaccessible"), severity: NotificationSeverity.WARNING });
             onOpenChange(false);
-            navigate("/channel", { replace: true });
+            navigate("/channel?square=1", { replace: true });
         }
-    }, [isDetailError, open]);
+    }, [isDetailError, isArticlesError, open]);
 
     return (
         <Sheet open={open} onOpenChange={onOpenChange}>
-            <SheetContent hideClose side="right" className="w-[1000px] sm:max-w-[1000px] p-0 px-16 flex flex-col">
+            <SheetContent side="right" className="w-[1000px] sm:max-w-[1000px] p-0 px-16 flex flex-col">
                 {isLoading ? (
                     <div className="flex flex-col items-center justify-center h-full gap-3 text-[#86909c]">
                         <LoadingIcon className="size-16 text-primary" />
@@ -233,9 +306,9 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onNavigate
                                         variant={btnConfig.variant}
                                         disabled={btnConfig.disabled || subscribing}
                                         onClick={handleSubscribe}
-                                        className={`h-8 px-5 py-1 text-sm font-normal rounded-md flex-shrink-0 ${subscribeStatus === "subscribed"
+                                        className={`h-8 px-5 py-1 text-sm font-normal rounded-md flex-shrink-0 ${effectiveSubscribeStatus === "subscribed"
                                             ? "bg-[#f2f3f5] text-[#86909c] border-[#e5e6eb] cursor-default"
-                                            : subscribeStatus === "pending"
+                                            : effectiveSubscribeStatus === "pending"
                                                 ? "bg-[#f2f3f5] text-[#c9cdd4] border-[#e5e6eb] cursor-not-allowed"
                                                 : "text-[#1d2129] border-[#e5e6eb] hover:bg-gray-50"
                                             }`}
@@ -258,16 +331,32 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onNavigate
                                     <div className="text-[#1d2129] text-[14px]">{localize("com_subscription.channel_content_needs_approval")}</div>
                                 </div>
                             ) : articles.length > 0 ? (
-                                <div>
+                                <InfiniteScroll
+                                    loadMore={loadMoreArticles}
+                                    hasMore={hasMore}
+                                    isLoading={loadingMore}
+                                    emptyText={localize("com_subscription.all_messages_are_here")}
+                                    className=""
+                                >
                                     {articles.map(article => (
                                         <ArticleCard
                                             key={article.id}
                                             article={article}
-                                            onSelect={() => { }}
+                                            onSelect={(a) => {
+                                                const url = (a?.url || "").trim();
+                                                if (!url) {
+                                                    showToast({
+                                                        message: localize("com_subscription.no_original_link"),
+                                                        severity: NotificationSeverity.WARNING
+                                                    });
+                                                    return;
+                                                }
+                                                window.open(url, "_blank", "noopener,noreferrer");
+                                            }}
                                             isSelected={false}
                                         />
                                     ))}
-                                </div>
+                                </InfiniteScroll>
                             ) : (
                                 <div className="flex items-center justify-center h-64 text-[#86909c] text-sm">{localize("com_subscription.no_articles")}</div>
                             )}

@@ -1,6 +1,6 @@
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Body
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.schemas.api import resp_200
@@ -29,8 +29,18 @@ async def create_space(
         description=req.description,
         icon=req.icon,
         auth_type=req.auth_type,
+        is_released=req.is_released,
     )
     return resp_200(space)
+
+
+@router.get('/{space_id}/info')
+async def get_space_info(
+        space_id: int,
+        svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    space_info = await svc.get_space_info(space_id)
+    return resp_200(space_info)
 
 
 @router.put('/{space_id}')
@@ -45,8 +55,29 @@ async def update_space(
         description=req.description,
         icon=req.icon,
         auth_type=req.auth_type,
+        is_released=req.is_released
     )
     return resp_200(space)
+
+
+@router.post("/{space_id}/set-pin")
+async def set_channel_pin(
+        space_id: int,
+        is_pined: bool = Body(default=True, embed=True),
+        svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+):
+    """Set channel pin status."""
+    await svc.pin_space(space_id, is_pined)
+    return resp_200(data=True)
+
+
+@router.delete('/{space_id}')
+async def delete_space(
+        space_id: int,
+        svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+):
+    await svc.delete_space(space_id)
+    return resp_200()
 
 
 # ──────────────────────────── Space Listings ───────────────────────────────────
@@ -218,6 +249,15 @@ async def subscribe_space(
         svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
     result = await svc.subscribe_space(space_id)
+    return resp_200(result)
+
+
+@router.post('/{space_id}/unsubscribe', response_model=None)
+async def subscribe_space(
+        space_id: int,
+        svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    result = await svc.unsubscribe_space(space_id)
     return resp_200(result)
 
 

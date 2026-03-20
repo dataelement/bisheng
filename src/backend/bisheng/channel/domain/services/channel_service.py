@@ -752,8 +752,24 @@ class ChannelService:
             channel.filter_rules = [f.model_dump() for f in req.filter_rules]
         if req.visibility is not None:
             new_visibility = ChannelVisibilityEnum(req.visibility)
-            if channel.visibility != new_visibility and new_visibility == ChannelVisibilityEnum.PRIVATE:
-                await self.space_channel_member_repository.remove_non_creator_members(channel_id)
+            old_visibility = channel.visibility
+            if old_visibility != new_visibility:
+                # When changing to PRIVATE, remove all non-creator members
+                if new_visibility == ChannelVisibilityEnum.PRIVATE:
+                    await self.space_channel_member_repository.remove_non_creator_members(channel_id)
+                # When changing from REVIEW to PUBLIC, activate pending members and approve their messages
+                elif old_visibility == ChannelVisibilityEnum.REVIEW and new_visibility == ChannelVisibilityEnum.PUBLIC:
+                    activated_count = await self.space_channel_member_repository.activate_pending_members(channel_id)
+                    if activated_count > 0:
+                        logger.info(
+                            "Activated %d pending members for channel_id=%s after visibility change from REVIEW to PUBLIC",
+                            activated_count, channel_id
+                        )
+                    if self.message_service:
+                        await self.message_service.batch_approve_channel_subscription_messages(
+                            channel_id=channel_id,
+                            operator_user_id=login_user.user_id,
+                        )
             channel.visibility = new_visibility
 
         # Track if source_list changed for updating latest_article_update_time

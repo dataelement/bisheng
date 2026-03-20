@@ -82,3 +82,9 @@ class ChannelAdminLimitExceededError(BaseErrorCode):
 class ChannelSubscribeLimitExceededError(BaseErrorCode):
     Code: int = 13052
     Msg: str = 'Maximum limit for subscribing channels reached (up to 20 channels)'
+
+
+# Knowledge space LLM not configured
+class KnowledgeSpaceLLMNotConfiguredError(BaseErrorCode):
+    Code: int = 13053
+    Msg: str = 'Knowledge space LLM is not configured. Please configure it in workbench settings first'

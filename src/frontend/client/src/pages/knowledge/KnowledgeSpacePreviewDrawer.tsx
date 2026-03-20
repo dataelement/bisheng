@@ -4,8 +4,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip
 import { Button } from "~/components/ui/Button";
 import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
-import { KnowledgeSpace, VisibilityType } from "~/api/knowledge";
-import { getMockFiles, mockKnowledgeSpaces } from "~/mock/knowledge";
+import { KnowledgeSpace, VisibilityType, getSquareSpacesApi, getSpaceChildrenApi } from "~/api/knowledge";
 import { FileType } from "~/api/knowledge";
 
 interface KnowledgeSpacePreviewDrawerProps {
@@ -22,29 +21,44 @@ export function KnowledgeSpacePreviewDrawer({
     const { showToast } = useToastContext();
     const [space, setSpace] = useState<KnowledgeSpace | null>(null);
     const [status, setStatus] = useState<"none" | "joined" | "pending">("none");
+    const [filesPreview, setFilesPreview] = useState<{ id: string; name: string; type: string }[]>([]);
 
     useEffect(() => {
         if (!open || !spaceId) return;
-        const found = mockKnowledgeSpaces.find((s) => s.id === spaceId) || null;
-        if (!found) {
-            showToast({
-                message: "该知识空间已失效或被删除",
-                severity: NotificationSeverity.WARNING,
+
+        // Fetch space info from the square list — no single-space detail endpoint yet
+        getSquareSpacesApi({ page: 1, page_size: 100 })
+            .then(res => {
+                const found = res.data.find(s => s.id === spaceId) || null;
+                if (!found) {
+                    showToast({
+                        message: "该知识空间已失效或被删除",
+                        severity: NotificationSeverity.WARNING,
+                    });
+                    onOpenChange(false);
+                    return;
+                }
+                setSpace(found);
+                setStatus("none");
+            })
+            .catch(() => {
+                showToast({ message: "加载知识空间信息失败", severity: NotificationSeverity.ERROR });
+                onOpenChange(false);
             });
-            onOpenChange(false);
-            return;
-        }
-        setSpace(found);
-        // 根据当前 mock 的 memberCount 简单推导是否“已加入”（仅用于样式展示）
-        // 真实场景下这里应由后端返回当前用户在空间中的状态
-        setStatus("none");
     }, [open, spaceId]);
 
-    const filesPreview = useMemo(() => {
-        if (!space) return [];
-        const res = getMockFiles({ spaceId: space.id, page: 1, pageSize: 20 });
-        return res.data;
-    }, [space]);
+    // Load file preview list for public spaces
+    useEffect(() => {
+        if (!space || space.visibility !== VisibilityType.PUBLIC) {
+            setFilesPreview([]);
+            return;
+        }
+        getSpaceChildrenApi({ space_id: space.id, page: 1, page_size: 20 })
+            .then(res => {
+                setFilesPreview(res.data.map(f => ({ id: f.id, name: f.name, type: f.type })));
+            })
+            .catch(() => setFilesPreview([]));
+    }, [space?.id]);
 
     if (!open) return null;
 
@@ -53,44 +67,21 @@ export function KnowledgeSpacePreviewDrawer({
     const handleClickAction = () => {
         if (!space) return;
 
-        // 上限校验：纯前端模拟，真实场景下应改为后端返回的“已加入空间数”
-        const USER_SPACE_LIMIT = 50;
-        const mockJoinedCount = 3; // 仅用于样式演示
-        if (mockJoinedCount >= USER_SPACE_LIMIT) {
-            showToast({
-                message: "您已达到知识空间的上限50",
-                severity: NotificationSeverity.WARNING,
-            });
-            return;
-        }
-
         if (status === "joined" || status === "pending") return;
 
         if (isPublic) {
             setStatus("joined");
-            showToast({
-                message: "成功加入",
-                severity: NotificationSeverity.SUCCESS,
-            });
+            showToast({ message: "成功加入", severity: NotificationSeverity.SUCCESS });
         } else {
             setStatus("pending");
-            showToast({
-                message: "已发送订阅申请，审批通过即可订阅。",
-                severity: NotificationSeverity.SUCCESS,
-            });
+            showToast({ message: "已发送订阅申请，审批通过即可订阅。", severity: NotificationSeverity.SUCCESS });
         }
     };
 
     const getButtonConfig = () => {
-        if (status === "joined") {
-            return { label: "已加入", variant: "secondary" as const, disabled: true };
-        }
-        if (status === "pending") {
-            return { label: "申请中", variant: "secondary" as const, disabled: true };
-        }
-        if (isPublic) {
-            return { label: "加入", variant: "default" as const, disabled: false };
-        }
+        if (status === "joined") return { label: "已加入", variant: "secondary" as const, disabled: true };
+        if (status === "pending") return { label: "申请中", variant: "secondary" as const, disabled: true };
+        if (isPublic) return { label: "加入", variant: "default" as const, disabled: false };
         return { label: "申请", variant: "outline" as const, disabled: false };
     };
 
@@ -137,10 +128,10 @@ export function KnowledgeSpacePreviewDrawer({
                                 <Button
                                     variant={btn.variant}
                                     className={`h-8 px-5 py-1 text-sm font-normal rounded-md flex-shrink-0 ${btn.label === "已加入"
-                                            ? "bg-[#F2F3F5] text-[#86909C] border-[#E5E6EB]"
-                                            : btn.label === "申请中"
-                                                ? "bg-[#F2F3F5] text-[#C9CDD4] border-[#E5E6EB]"
-                                                : ""
+                                        ? "bg-[#F2F3F5] text-[#86909C] border-[#E5E6EB]"
+                                        : btn.label === "申请中"
+                                            ? "bg-[#F2F3F5] text-[#C9CDD4] border-[#E5E6EB]"
+                                            : ""
                                         }`}
                                     disabled={btn.disabled}
                                     onClick={handleClickAction}
@@ -194,4 +185,3 @@ export function KnowledgeSpacePreviewDrawer({
         </Sheet>
     );
 }
-

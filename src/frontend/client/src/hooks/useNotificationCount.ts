@@ -1,17 +1,13 @@
 import { useState, useEffect } from "react";
-import { getNotificationsApi } from "~/api/notifications";
-import { getMockNotifications } from "~/mock/notifications";
+import { getMessageUnreadCountApi } from "~/api/message";
 
 export function useNotificationCount() {
     const [unreadCount, setUnreadCount] = useState(0);
 
     const fetchUnreadCount = async () => {
         try {
-            // 使用模拟数据
-            const response = getMockNotifications({
-                onlyUnread: true
-            });
-            setUnreadCount(response.unreadCount || 0);
+            const { total } = await getMessageUnreadCountApi();
+            setUnreadCount(total || 0);
         } catch (error) {
             console.error("Failed to fetch unread count:", error);
         }

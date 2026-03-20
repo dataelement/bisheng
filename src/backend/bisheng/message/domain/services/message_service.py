@@ -431,3 +431,27 @@ class MessageService:
                 return code
 
         return ""
+
+    async def batch_approve_channel_subscription_messages(
+        self,
+        channel_id: str,
+        operator_user_id: int,
+    ) -> int:
+        """
+        Batch approve all pending channel subscription messages for a specific channel.
+
+        This is used when a channel's visibility changes from REVIEW to PUBLIC,
+        automatically approving all pending subscription requests.
+
+        Returns the number of messages updated.
+        """
+        count = await self.message_repository.batch_approve_channel_subscription_messages(
+            channel_id=channel_id,
+            operator_user_id=operator_user_id,
+        )
+        if count > 0:
+            logger.info(
+                "Batch approved %d channel subscription messages for channel_id=%s, operator=%s",
+                count, channel_id, operator_user_id,
+            )
+        return count

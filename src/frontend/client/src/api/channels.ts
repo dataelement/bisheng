@@ -442,14 +442,14 @@ export async function addWebsiteSourceApi(body: {
 /**
  * POST /api/v1/channel/manager/add_wechat_source
  * 添加公众号信息源
- * （具体字段以后如果后端定死了可以再细化类型，目前留为通用 body）
  */
 export async function addWechatSourceApi(body: {
     url?: string;
     account?: string;
     [key: string]: any;
-}): Promise<any> {
-    return await request.post(`/api/v1/channel/manager/add_wechat_source`, body);
+}, options?: any): Promise<any> {
+    // options supports AbortController signal, e.g. { signal }
+    return await request.post(`/api/v1/channel/manager/add_wechat_source`, body, options);
 }
 
 /**

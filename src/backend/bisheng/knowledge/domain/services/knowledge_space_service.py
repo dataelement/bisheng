@@ -23,6 +23,7 @@ from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao, K
 from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFile, KnowledgeFileDao, KnowledgeFileStatus, SpaceFileDao
 )
+from bisheng.knowledge.domain.schemas.knowledge_space_schema import KnowledgeSpaceInfoResp
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.llm.domain import LLMService
@@ -77,6 +78,7 @@ class KnowledgeSpaceService:
             description: Optional[str] = None,
             icon: Optional[str] = None,
             auth_type: AuthTypeEnum = AuthTypeEnum.PUBLIC,
+            is_released: bool = False,
     ) -> Knowledge:
         """ Create a new knowledge space (max 30 per user). """
 
@@ -94,7 +96,8 @@ class KnowledgeSpaceService:
             icon=icon,
             auth_type=auth_type,
             type=KnowledgeTypeEnum.SPACE.value,
-            model=workbench_llm.embedding_model.id
+            model=workbench_llm.embedding_model.id,
+            is_released=is_released,
         )
 
         knowledge_space = KnowledgeService.create_knowledge_base(self.request, self.login_user, db_knowledge)
@@ -109,6 +112,40 @@ class KnowledgeSpaceService:
 
         return knowledge_space
 
+    async def get_space_info(self, space_id: int) -> KnowledgeSpaceInfoResp:
+        await self._require_read_permission(space_id)
+        space = await KnowledgeDao.aquery_by_id(space_id)
+        if not space or space.type != KnowledgeTypeEnum.SPACE.value:
+            raise SpaceNotFoundError()
+
+        follower_num = await SpaceChannelMemberDao.async_count_space_members(space_id)
+        total_file_num = await KnowledgeFileDao.async_count_file_by_knowledge_id(space_id)
+        result = KnowledgeSpaceInfoResp(**space.model_dump())
+        if space.user_id != self.login_user.user_id:
+            create_user = await UserDao.aget_user(space.user_id)
+            result.user_name = create_user.user_name if create_user else str(space.user_id)
+        else:
+            result.user_name = self.login_user.user_name
+        result.follower_num = follower_num
+        result.file_num = total_file_num
+        return result
+
+    async def delete_space(self, space_id: int) -> None:
+        space = await KnowledgeDao.aquery_by_id(space_id)
+        if not space or space.type != KnowledgeTypeEnum.SPACE.value:
+            raise SpaceNotFoundError()
+        if space.user_id != self.login_user.user_id:
+            raise SpacePermissionDeniedError()
+
+        # Cleaned vectorData in
+        await asyncio.to_thread(KnowledgeService.delete_knowledge_file_in_vector, space)
+
+        # CleanedminioData
+        await asyncio.to_thread(KnowledgeService.delete_knowledge_file_in_minio, space_id)
+
+        await KnowledgeDao.async_delete_knowledge(knowledge_id=space_id)
+        return
+
     async def update_knowledge_space(
             self,
             space_id: int,
@@ -116,6 +153,7 @@ class KnowledgeSpaceService:
             description: Optional[str] = None,
             icon: Optional[str] = None,
             auth_type: Optional[AuthTypeEnum] = None,
+            is_released: bool = False,
     ) -> Knowledge:
         """ Modify an existing knowledge space. """
         space = await KnowledgeDao.aquery_by_id(space_id)
@@ -134,6 +172,7 @@ class KnowledgeSpaceService:
             space.icon = icon
         if auth_type is not None:
             space.auth_type = auth_type
+        space.is_released = is_released
 
         space = await KnowledgeDao.async_update_space(space)
 
@@ -148,7 +187,21 @@ class KnowledgeSpaceService:
     async def get_my_created_spaces(
             self, order_by: str = 'update_time'
     ) -> List[Knowledge]:
-        return await KnowledgeDao.async_get_spaces_by_user(self.login_user.user_id, order_by)
+        res = await KnowledgeDao.async_get_spaces_by_user(self.login_user.user_id, order_by)
+        space_members = await SpaceChannelMemberDao.async_get_all_members_for_spaces(self.login_user.user_id,
+                                                                                     [str(one.id) for one in res])
+        space_members = {
+            one.business_id: one for one in space_members
+        }
+        pinned_res = []
+        not_pinned_res = []
+        for one in res:
+            spcae_config = space_members.get(str(one.id))
+            if spcae_config and spcae_config.is_pinned:
+                pinned_res.append(one)
+            else:
+                not_pinned_res.append(one)
+        return pinned_res + not_pinned_res
 
     async def get_my_followed_spaces(
             self, order_by: str = 'update_time'
@@ -172,6 +225,9 @@ class KnowledgeSpaceService:
         normal_spaces = await KnowledgeDao.async_get_spaces_by_ids(normal_ids, order_by) if normal_ids else []
 
         return list(pinned_spaces) + list(normal_spaces)
+
+    async def pin_space(self, space_id: int, is_pinned: bool = True) -> bool:
+        return await SpaceChannelMemberDao.pin_space_id(space_id, self.login_user.user_id, is_pinned)
 
     async def get_knowledge_square(
             self, order_by: str = 'update_time', page: int = 1, page_size: int = 20
@@ -612,7 +668,7 @@ class KnowledgeSpaceService:
         - APPROVAL spaces: status = pending (False) → 'pending'
         Returns {"status": "subscribed" | "pending", "space_id": space_id}
         """
-        space = KnowledgeDao.query_by_id(space_id)
+        space = await KnowledgeDao.aquery_by_id(space_id)
         if not space or space.type != KnowledgeTypeEnum.SPACE.value:
             raise SpaceNotFoundError()
 
@@ -624,7 +680,7 @@ class KnowledgeSpaceService:
             raise SpaceAlreadySubscribedError()
 
         count = await SpaceChannelMemberDao.async_count_user_space_subscriptions(self.login_user.user_id)
-        if count >= self._MAX_SUBSCRIBE_PER_USER:
+        if count >= _MAX_SUBSCRIBE_PER_USER:
             raise SpaceSubscribeLimitError()
 
         is_active = space.auth_type == AuthTypeEnum.PUBLIC
@@ -642,3 +698,10 @@ class KnowledgeSpaceService:
             "status": "subscribed" if is_active else "pending",
             "space_id": space_id,
         }
+
+    async def unsubscribe_space(self, space_id: int) -> bool:
+        space = await KnowledgeDao.aquery_by_id(space_id)
+        if not space or space.type != KnowledgeTypeEnum.SPACE.value:
+            raise SpaceNotFoundError()
+
+        return await SpaceChannelMemberDao.delete_space_member(space_id, self.login_user.user_id)

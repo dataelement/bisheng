@@ -184,7 +184,23 @@ const useKnowledgeConfig = () => {
         }
 
         setErrors(nextErrors);
-        if (!isValid) return false;
+        if (!isValid) {
+            if (!sys) {
+                toast({
+                    variant: 'error',
+                    description: '系统提示词不可为空',
+                });
+                return false;
+            }
+            if (!user) {
+                toast({
+                    variant: 'error',
+                    description: '用户提示词不可为空',
+                });
+                return false;
+            }
+            return false;
+        }
 
         const dataToSave = {
             system_prompt: formData.systemPrompt,

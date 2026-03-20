@@ -14,6 +14,7 @@ import {
 } from "~/components/ui/Sheet";
 import { Textarea } from "~/components/ui/Textarea";
 import { useLocalize } from "~/hooks";
+import { KnowledgeSpace, VisibilityType } from "~/api/knowledge";
 
 const MAX_SPACE_NAME = 20;
 const MAX_SPACE_DESC = 200;
@@ -34,6 +35,8 @@ interface CreateKnowledgeSpaceDrawerProps {
     onConfirm?: (data: CreateKnowledgeSpaceFormData) => void;
     onViewSpace?: () => void;
     onManageMembers?: () => void;
+    mode?: "create" | "edit";
+    editingSpace?: KnowledgeSpace | null;
 }
 
 export function CreateKnowledgeSpaceDrawer({
@@ -41,7 +44,9 @@ export function CreateKnowledgeSpaceDrawer({
     onOpenChange,
     onConfirm,
     onViewSpace,
-    onManageMembers
+    onManageMembers,
+    mode = "create",
+    editingSpace,
 }: CreateKnowledgeSpaceDrawerProps) {
     const { showToast } = useToastContext();
     const localize = useLocalize();
@@ -64,9 +69,23 @@ export function CreateKnowledgeSpaceDrawer({
         setShowSuccess(false);
     };
 
+    // Pre-fill form in edit mode
     useEffect(() => {
-        if (!open) resetForm();
-    }, [open]);
+        if (!open) {
+            resetForm();
+            return;
+        }
+        if (mode === "edit" && editingSpace) {
+            setName(editingSpace.name || "");
+            setDescription(editingSpace.description || "");
+            // Map visibility back to joinPolicy
+            setJoinPolicy(
+                editingSpace.visibility === VisibilityType.PUBLIC ? "public" : "review"
+            );
+            setPublishToSquare(editingSpace.isReleased ? "yes" : "no");
+            setShowSuccess(false);
+        }
+    }, [open, mode, editingSpace]);
 
     const handleConfirm = () => {
         if (!name.trim()) {
@@ -83,14 +102,19 @@ export function CreateKnowledgeSpaceDrawer({
             publishToSquare: needPublishOption ? publishToSquare : "no"
         };
         onConfirm?.(payload);
-        setShowSuccess(true);
+        // Only show success page in create mode
+        if (mode === "create") {
+            setShowSuccess(true);
+        } else {
+            onOpenChange(false);
+        }
     };
     return (
         <Sheet open={open} onOpenChange={onOpenChange}>
             <SheetContent side="right" className="min-w-[1000px] p-0 bg-white">
                 <SheetHeader className="px-8 pt-7 pb-4 border-b border-[#E5E6EB]">
                     <SheetTitle className="text-[20px] font-medium text-[#1D2129] leading-none">
-                        {localize("create_konwledge_space")}
+                        {mode === "edit" ? localize("edit_knowledge_space") || "编辑知识空间" : localize("create_konwledge_space")}
                     </SheetTitle>
                 </SheetHeader>
 
@@ -285,7 +309,7 @@ export function CreateKnowledgeSpaceDrawer({
                             className="h-9 bg-[#165DFF] hover:bg-[#4080FF] text-white"
                             onClick={handleConfirm}
                         >
-                            确认创建
+                            {mode === "edit" ? "保存" : "确认创建"}
                         </Button>
                     </div>
                 )}

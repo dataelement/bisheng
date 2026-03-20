@@ -52,9 +52,9 @@ export default function ChannelSquare({
   const localize = useLocalize();
   const [joiningId, setJoiningId] = useState<string | null>(null);
 
-  const tTitle = title || localize("explore_channel_plaza");
-  const tSubtitle = subtitle || localize("explore_more_channel");
-  const tSearchPlaceholder = searchPlaceholder || localize("enter_channel_search");
+  const tTitle = title || localize("com_subscription.explore_channel_plaza");
+  const tSubtitle = subtitle || localize("com_subscription.explore_more_channel");
+  const tSearchPlaceholder = searchPlaceholder || localize("com_subscription.enter_channel_search");
   const tEmptyText = emptyText || "无相关内容，请重新搜索";
   const tJoinPrefix = joinToastPrefix || localize("applied_join_channel");
 
