@@ -20,7 +20,7 @@ from bisheng.database.models.flow import UserLinkType
 from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
 from bisheng.database.models.role_access import AccessType, RoleAccessDao
-from bisheng.database.models.tag import TagDao
+from bisheng.database.models.tag import TagDao, TagBusinessTypeEnum
 from bisheng.database.models.user_link import UserLinkDao
 from bisheng.user.domain.models.user import UserDao
 from bisheng.user.domain.models.user_role import UserRoleDao
@@ -414,7 +414,8 @@ class WorkFlowService(BaseService):
         Get a list of unsorted skills
         """
         # SetujutagDapatkanidVertical
-        all_tags = TagDao.search_tags(None, None, None)
+        all_tags = TagDao.search_tags(None, 0, 0, business_type=TagBusinessTypeEnum.APPLICATION,
+                                      business_id=TagBusinessTypeEnum.APPLICATION.value)
         tag_id = [tag.id for tag in all_tags]
         flow_ids_not_in = []
         if tag_id:
@@ -429,7 +430,8 @@ class WorkFlowService(BaseService):
         else:
             user_role = UserRoleDao.get_user_roles(user.user_id)
             role_ids = [role.role_id for role in user_role]
-            role_access = RoleAccessDao.get_role_access_batch(role_ids, [AccessType.WORKFLOW, AccessType.ASSISTANT_READ])
+            role_access = RoleAccessDao.get_role_access_batch(role_ids,
+                                                              [AccessType.WORKFLOW, AccessType.ASSISTANT_READ])
             flow_id_extra = []
             if role_access:
                 flow_id_extra = [access.third_id for access in role_access]

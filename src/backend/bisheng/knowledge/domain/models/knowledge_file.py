@@ -266,6 +266,31 @@ class KnowledgeFileDao(KnowledgeFileBase):
             return session.exec(select(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids))).all()
 
     @classmethod
+    async def aget_file_by_ids(cls, file_ids: List[int]) -> List[KnowledgeFile]:
+        if not file_ids:
+            return []
+        stat = select(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids))
+        async with get_async_db_session() as session:
+            return (await session.exec(stat)).all()
+
+    @classmethod
+    def _build_file_filters_statement(cls, statement, file_name: str = None, status: List[int] = None,
+                                      file_ids: List[int] = None, file_level_path: str = None, order_by: str = None):
+        if file_name:
+            statement = statement.where(KnowledgeFile.file_name.like(f'%{file_name}%'))
+        if status:
+            statement = statement.where(KnowledgeFile.status.in_(status))
+        if file_ids:
+            statement = statement.where(KnowledgeFile.id.in_(file_ids))
+        if file_level_path:
+            statement = statement.where(KnowledgeFile.file_level_path == file_level_path)
+        if order_by == "file_type":
+            statement = statement.order_by(col(KnowledgeFile.file_type).asc())
+        elif order_by == "update_time":
+            statement = statement.order_by(col(KnowledgeFile.update_time).desc())
+        return statement
+
+    @classmethod
     def get_file_by_filters(cls,
                             knowledge_id: int,
                             file_name: str = None,
@@ -274,17 +299,31 @@ class KnowledgeFileDao(KnowledgeFileBase):
                             page_size: int = 0,
                             file_ids: List[int] = None) -> List[KnowledgeFile]:
         statement = select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id)
-        if file_name:
-            statement = statement.where(KnowledgeFile.file_name.like(f'%{file_name}%'))
-        if status:
-            statement = statement.where(KnowledgeFile.status.in_(status))
-        if file_ids:
-            statement = statement.where(KnowledgeFile.id.in_(file_ids))
+        statment = cls._build_file_filters_statement(statement, file_name, status, file_ids, order_by="update_time")
         if page and page_size:
             statement = statement.offset((page - 1) * page_size).limit(page_size)
-        statement = statement.order_by(KnowledgeFile.update_time.desc())
         with get_sync_db_session() as session:
             return session.exec(statement).all()
+
+    @classmethod
+    async def aget_file_by_filters(cls, knowledge_id: int, file_name: str = None, status: List[int] = None,
+                                   file_ids: List[int] = None, file_level_path: str = None, order_by: str = None,
+                                   *, page: int = 0, page_size: int = 0) -> List[KnowledgeFile]:
+        statement = select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id)
+        statement = cls._build_file_filters_statement(statement, file_name, status, file_ids, file_level_path,
+                                                      order_by=order_by)
+        if page and page_size:
+            statement = statement.offset((page - 1) * page_size).limit(page_size)
+        async with get_async_db_session() as session:
+            return (await session.exec(statement)).all()
+
+    @classmethod
+    async def acount_file_by_filters(cls, knowledge_id: int, file_name: str = None, status: List[int] = None,
+                                     file_ids: List[int] = None, file_level_path: str = None) -> int:
+        statement = select(func.count()).where(KnowledgeFile.knowledge_id == knowledge_id)
+        statement = cls._build_file_filters_statement(statement, file_name, status, file_ids, file_level_path)
+        async with get_async_db_session() as session:
+            return await session.scalar(statement)
 
     @classmethod
     def get_files_by_multiple_status(cls, knowledge_id: int, status_list: List[int]) -> List[KnowledgeFile]:

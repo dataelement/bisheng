@@ -12,7 +12,7 @@ from bisheng.database.models.assistant import AssistantDao
 from bisheng.database.models.flow import FlowDao
 from bisheng.database.models.group_resource import ResourceTypeEnum, GroupResourceDao
 from bisheng.database.models.role_access import AccessType
-from bisheng.database.models.tag import TagDao, Tag, TagLink
+from bisheng.database.models.tag import TagDao, Tag, TagLink, TagBusinessTypeEnum
 
 
 class TagService:
@@ -23,8 +23,10 @@ class TagService:
                     login_user: UserPayload,
                     keyword: str = None, page: int = 0, limit: int = 10) -> (List[Tag], int):
         """ Get all tags """
-        result = TagDao.search_tags(keyword, page, limit)
-        return result, TagDao.count_tags(keyword)
+        result = TagDao.search_tags(keyword, page, limit, business_type=TagBusinessTypeEnum.APPLICATION,
+                                    business_id=TagBusinessTypeEnum.APPLICATION.value)
+        return result, TagDao.count_tags(keyword, business_type=TagBusinessTypeEnum.APPLICATION,
+                                         business_id=TagBusinessTypeEnum.APPLICATION.value)
 
     @classmethod
     def create_tag(cls,
@@ -35,7 +37,8 @@ class TagService:
         exist_tag = TagDao.get_tag_by_name(name)
         if exist_tag:
             raise TagExistError.http_exception()
-        new_tag = Tag(name=name, user_id=login_user.user_id)
+        new_tag = Tag(name=name, user_id=login_user.user_id, business_type=TagBusinessTypeEnum.APPLICATION,
+                      business_id=TagBusinessTypeEnum.APPLICATION.value)
         new_tag = TagDao.insert_tag(new_tag)
         return new_tag
 
@@ -54,7 +57,7 @@ class TagService:
             raise TagExistError.http_exception()
 
         tag_info.name = name
-        new_tag = TagDao.insert_tag(tag_info)
+        new_tag = TagDao.update_tag(tag_info)
         return new_tag
 
     @classmethod

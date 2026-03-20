@@ -1,6 +1,6 @@
-from typing import Any, Optional
+from typing import Any, Optional, List
 
-from fastapi import APIRouter, Depends, Body
+from fastapi import APIRouter, Depends, Body, Query
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.schemas.api import resp_200
@@ -105,9 +105,10 @@ async def get_knowledge_square(
         order_by: str = 'update_time',
         page: int = 1,
         page_size: int = 20,
+        keyword: str = None,
         svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
-    result = await svc.get_knowledge_square(order_by, page, page_size)
+    result = await svc.get_knowledge_square(keyword, order_by, page, page_size)
     return resp_200(result)
 
 
@@ -132,6 +133,50 @@ async def list_space_children(
         svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
     result = await svc.list_space_children(space_id, parent_id, page, page_size)
+    return resp_200(result)
+
+
+@router.get('/{space_id}/search')
+async def list_space_children(
+        space_id: int,
+        parent_id: Optional[int] = None,
+        page: int = 1,
+        page_size: int = 20,
+        tag_ids: List[int] = Query(default=None, description='标签ID列表'),
+        keyword: Optional[str] = None,
+        svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    result = await svc.search_space_children(space_id, parent_id, tag_ids=tag_ids, keyword=keyword, page=page,
+                                             page_size=page_size)
+    return resp_200(result)
+
+
+@router.get("/{space_id}/tag")
+async def get_space_tag(
+        space_id: int,
+        svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+):
+    result = await svc.get_space_tags(space_id)
+    return resp_200(result)
+
+
+@router.post('/{space_id}/tag')
+async def add_space_tags(
+        space_id: int,
+        tag_name: str = Body(..., embed=True, description='标签名称'),
+        svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+):
+    result = await svc.add_space_tag(space_id, tag_name)
+    return resp_200(result)
+
+
+@router.delete('/{space_id}/tag')
+async def delete_space_tags(
+        space_id: int,
+        tag_id: int = Body(..., embed=True, description='标签ID'),
+        svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+):
+    result = await svc.delete_space_tag(space_id, tag_id)
     return resp_200(result)
 
 
@@ -219,6 +264,17 @@ async def get_file_preview(
     return resp_200(urls)
 
 
+@router.post('/{space_id}/files/{file_id}/tag')
+async def update_file_tags(
+        space_id: int,
+        file_id: int,
+        tag_ids: List[int] = Body(..., embed=True, description='标签ID列表'),
+        svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+):
+    result = await svc.update_file_tags(space_id, file_id, tag_ids)
+    return resp_200(result)
+
+
 # ──────────────────────────── Batch Ops ───────────────────────────────────────
 
 @router.post('/{space_id}/files/batch-download')
@@ -239,6 +295,17 @@ async def batch_delete(
 ) -> Any:
     await svc.batch_delete(space_id, req.file_ids, req.folder_ids)
     return resp_200()
+
+
+@router.post('/{space_id}/files/batch-tag')
+async def batch_update_tags(
+        space_id: int,
+        file_ids: List[int] = Body(..., embed=True, description='文件ID列表'),
+        tag_ids: List[int] = Body(..., embed=True, description='标签ID列表'),
+        svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    result = await svc.batch_add_file_tags(space_id, file_ids, tag_ids)
+    return resp_200(result)
 
 
 # ──────────────────────────── Subscribe ───────────────────────────────────────

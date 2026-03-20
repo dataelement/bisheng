@@ -1,25 +1,31 @@
 import asyncio
 import tempfile
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Dict
 
 from fastapi import Request
+from sqlmodel import select, func
 
 from bisheng.api.v1.schemas import KnowledgeFileOne, FileProcessBase, ExcelRule
 from bisheng.common.dependencies.user_deps import UserPayload  # noqa: F401 – kept for type hints
+from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.common.errcode.knowledge_space import (
     SpaceLimitError, SpaceNotFoundError,
     SpaceFolderNotFoundError, SpaceFolderDepthError, SpaceFolderDuplicateError,
     SpaceFileNotFoundError, SpaceFileExtensionError, SpaceFileNameDuplicateError,
     SpaceSubscribePrivateError, SpaceAlreadySubscribedError, SpaceSubscribeLimitError,
-    SpacePermissionDeniedError,
+    SpacePermissionDeniedError, SpaceTagExistsError,
 )
 from bisheng.common.errcode.llm import WorkbenchEmbeddingError
 from bisheng.common.models.space_channel_member import (
     SpaceChannelMember, SpaceChannelMemberDao, BusinessTypeEnum, UserRoleEnum
 )
+from bisheng.core.database import get_async_db_session
+from bisheng.database.models.group_resource import ResourceTypeEnum
+from bisheng.database.models.tag import TagDao, TagBusinessTypeEnum, Tag, TagLink
 from bisheng.database.models.user_group import UserGroupDao
-from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao, KnowledgeTypeEnum, AuthTypeEnum
+from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao, KnowledgeTypeEnum, AuthTypeEnum, \
+    KnowledgeRead
 from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFile, KnowledgeFileDao, KnowledgeFileStatus, SpaceFileDao
 )
@@ -186,7 +192,7 @@ class KnowledgeSpaceService:
 
     async def get_my_created_spaces(
             self, order_by: str = 'update_time'
-    ) -> List[Knowledge]:
+    ) -> List[KnowledgeRead]:
         res = await KnowledgeDao.async_get_spaces_by_user(self.login_user.user_id, order_by)
         space_members = await SpaceChannelMemberDao.async_get_all_members_for_spaces(self.login_user.user_id,
                                                                                      [str(one.id) for one in res])
@@ -198,14 +204,14 @@ class KnowledgeSpaceService:
         for one in res:
             spcae_config = space_members.get(str(one.id))
             if spcae_config and spcae_config.is_pinned:
-                pinned_res.append(one)
+                pinned_res.append(KnowledgeRead(**one.model_dump(), is_pinned=True))
             else:
-                not_pinned_res.append(one)
+                not_pinned_res.append(KnowledgeRead(**one.model_dump(), is_pinned=False))
         return pinned_res + not_pinned_res
 
     async def get_my_followed_spaces(
             self, order_by: str = 'update_time'
-    ) -> List[Knowledge]:
+    ) -> List[KnowledgeRead]:
         """
         Return the spaces the current user follows (non-creator).
         Pinned spaces always appear first; within each pinned/non-pinned group
@@ -224,13 +230,16 @@ class KnowledgeSpaceService:
         pinned_spaces = await KnowledgeDao.async_get_spaces_by_ids(pinned_ids, order_by) if pinned_ids else []
         normal_spaces = await KnowledgeDao.async_get_spaces_by_ids(normal_ids, order_by) if normal_ids else []
 
-        return list(pinned_spaces) + list(normal_spaces)
+        pinned_spaces = [KnowledgeRead(**one.model_dump(), is_pinned=True) for one in pinned_spaces]
+        normal_spaces = [KnowledgeRead(**one.model_dump(), is_pinned=False) for one in normal_spaces]
+
+        return pinned_spaces + normal_spaces
 
     async def pin_space(self, space_id: int, is_pinned: bool = True) -> bool:
         return await SpaceChannelMemberDao.pin_space_id(space_id, self.login_user.user_id, is_pinned)
 
     async def get_knowledge_square(
-            self, order_by: str = 'update_time', page: int = 1, page_size: int = 20
+            self, keyword: str = None, order_by: str = 'update_time', page: int = 1, page_size: int = 20
     ) -> dict:
         """
         Return PUBLIC/APPROVAL spaces for the Knowledge Square with pagination, sorted by:
@@ -239,7 +248,7 @@ class KnowledgeSpaceService:
         3. Within each group: sorted by update_time DESC (or caller's order_by)
         Returns: {"total": int, "page": int, "page_size": int, "data": List[dict]}
         """
-        spaces = await KnowledgeDao.async_get_public_spaces(order_by)
+        spaces = await KnowledgeDao.async_get_public_spaces(keyword=keyword, order_by=order_by)
         if not spaces:
             return {"total": 0, "page": page, "page_size": page_size, "data": []}
 
@@ -317,6 +326,31 @@ class KnowledgeSpaceService:
             SpaceFileDao.async_list_children(space_id, parent_id, page, page_size),
         )
         return {"total": total, "page": page, "page_size": page_size, "data": items}
+
+    async def search_space_children(self, space_id: int, parent_id: Optional[int] = None, tag_ids: List[int] = None,
+                                    keyword: str = None, page: int = 1, page_size: int = 20) -> Dict:
+        await self._require_read_permission(space_id)
+
+        filter_files = []
+        if tag_ids:
+            resources = await TagDao.aget_resources_by_tags(tag_ids, ResourceTypeEnum.SPACE_FILE)
+            if not resources:
+                return {"total": 0, "page": page, "page_size": page_size, "data": []}
+            filter_files = [int(one.resource_id) for one in resources]
+
+        file_level_path = None
+        if parent_id:
+            parent_folder = await KnowledgeFileDao.query_by_id(parent_id)
+            if not parent_folder:
+                raise NotFoundError()
+            file_level_path = f"{parent_folder.file_level_path}/{parent_folder.id}"
+
+        res = await KnowledgeFileDao.aget_file_by_filters(space_id, keyword, file_ids=filter_files,
+                                                          file_level_path=file_level_path, order_by="file_type")
+        total = await KnowledgeFileDao.acount_file_by_filters(space_id, file_name=keyword, file_ids=filter_files,
+                                                              file_level_path=file_level_path)
+
+        return {"total": total, "page": page, "page_size": page_size, "data": res}
 
     # ──────────────────────────── Folders ─────────────────────────────────────
 
@@ -506,6 +540,101 @@ class KnowledgeSpaceService:
             "original_url": original_url,
             "preview_url": preview_url,
         }
+
+    # ──────────────────────────── Tags ───────────────────────────────────
+    async def get_space_tags(self, space_id: int) -> List[Tag]:
+        await self._require_read_permission(space_id)
+        tags = await TagDao.get_tags_by_business(business_type=TagBusinessTypeEnum.KNOWLEDGE_SPACE,
+                                                 business_id=str(space_id))
+        return tags
+
+    async def add_space_tag(self, space_id: int, tag_name: str) -> Tag:
+        await self._require_write_permission(space_id)
+
+        existing_tags = await TagDao.get_tags_by_business(business_type=TagBusinessTypeEnum.KNOWLEDGE_SPACE,
+                                                          business_id=str(space_id), name=tag_name)
+        if any(t.name == tag_name for t in existing_tags):
+            raise SpaceTagExistsError()
+
+        new_tag = Tag(
+            name=tag_name,
+            user_id=self.login_user.user_id,
+            business_type=TagBusinessTypeEnum.KNOWLEDGE_SPACE,
+            business_id=str(space_id),
+        )
+        return await TagDao.ainsert_tag(new_tag)
+
+    async def delete_space_tag(self, space_id: int, tag_id: int):
+        await self._require_write_permission(space_id)
+        return await TagDao.delete_business_tag(tag_id, business_id=str(space_id),
+                                                business_type=TagBusinessTypeEnum.KNOWLEDGE_SPACE)
+
+    async def update_file_tags(self, space_id: int, file_id: int, tag_ids: List[int]):
+        """ 2：支持对单文件的标签管理: Overwrite tags for a single file. """
+        await self._require_write_permission(space_id)
+
+        file_record = await KnowledgeFileDao.query_by_id(file_id)
+        if not file_record or file_record.knowledge_id != space_id:
+            raise SpaceFileNotFoundError()
+
+        resource_id = str(file_id)
+        resource_type = ResourceTypeEnum.SPACE_FILE
+        await TagDao.aupdate_resource_tags(tag_ids, resource_id, resource_type, self.login_user.user_id)
+
+    async def batch_add_file_tags(self, space_id: int, file_ids: List[int], tag_ids: List[int]):
+        """ 1：支持对文件批量添加标签: Batch add tags to files. """
+        await self._require_write_permission(space_id)
+        if not file_ids or not tag_ids:
+            return
+
+        files = await KnowledgeFileDao.aget_file_by_ids(file_ids)
+        valid_file_ids = [f.id for f in files if f.knowledge_id == space_id]
+        if not valid_file_ids:
+            return
+
+        resource_type = ResourceTypeEnum.SPACE_FILE
+        for file_id in valid_file_ids:
+            await TagDao.add_tags(tag_ids, str(file_id), resource_type, self.login_user.user_id)
+
+    async def get_files_by_tags(self, space_id: int, tag_ids: List[int], page: int = 1, page_size: int = 20) -> dict:
+        """ 3：支持通过标签检索文件: Get files in space filtered by tags. """
+        await self._require_read_permission(space_id)
+        if not tag_ids:
+            return await self.list_space_children(space_id, parent_id=None, page=page, page_size=page_size)
+
+        resource_type = ResourceTypeEnum.SPACE_FILE.value
+
+        async with get_async_db_session() as session:
+            # Intersection of tags: a file must have ALL specified tags
+            stmt = select(TagLink.resource_id).where(
+                TagLink.resource_type == resource_type,
+                TagLink.tag_id.in_(tag_ids)
+            ).group_by(TagLink.resource_id).having(
+                func.count(func.distinct(TagLink.tag_id)) == len(set(tag_ids))
+            )
+            result = await session.exec(stmt)
+            resource_ids = result.all()
+
+        if not resource_ids:
+            return {"total": 0, "page": page, "page_size": page_size, "data": []}
+
+        file_ids = [int(r) for r in resource_ids]
+
+        async with get_async_db_session() as session:
+            count_stmt = select(func.count(KnowledgeFile.id)).where(
+                KnowledgeFile.knowledge_id == space_id,
+                KnowledgeFile.id.in_(file_ids)
+            )
+            total = await session.scalar(count_stmt)
+
+            start = (page - 1) * page_size
+            item_stmt = select(KnowledgeFile).where(
+                KnowledgeFile.knowledge_id == space_id,
+                KnowledgeFile.id.in_(file_ids)
+            ).order_by(KnowledgeFile.update_time.desc()).offset(start).limit(page_size)
+            items = (await session.exec(item_stmt)).all()
+
+        return {"total": total, "page": page, "page_size": page_size, "data": items}
 
     # ──────────────────────────── Batch Ops ───────────────────────────────────
 

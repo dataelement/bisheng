@@ -69,3 +69,9 @@ class SpaceSubscribeLimitError(BaseErrorCode):
 class SpacePermissionDeniedError(BaseErrorCode):
     Code: int = 18040
     Msg: str = 'Permission denied: only the creator or admin can perform this operation'
+
+
+# —— TAG
+class SpaceTagExistsError(BaseErrorCode):
+    Code: int = 18050
+    Msg: str = 'Tag already exists in this space'
