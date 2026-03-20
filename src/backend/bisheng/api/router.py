@@ -6,7 +6,7 @@ from bisheng.api.v1 import (assistant_router, audit_router, chat_router, compone
                             group_router, mark_router,
                             report_router, tag_router,
                             user_router, validate_router, variable_router, workflow_router,
-                            workstation_router, tool_router, invite_code_router)
+                            workstation_router, tool_router, invite_code_router, skillcenter_router, flows_router)
 from bisheng.channel.api.router import router as channel_router
 from bisheng.chat_session.api.router import router as session_router
 from bisheng.finetune.api.finetune import router as finetune_router
@@ -47,6 +47,8 @@ router.include_router(llm_router)
 router.include_router(workflow_router)
 router.include_router(mark_router)
 router.include_router(workstation_router)
+router.include_router(skillcenter_router)
+router.include_router(flows_router)
 router.include_router(linsight_router)
 router.include_router(tool_router)
 router.include_router(invite_code_router)
