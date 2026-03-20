@@ -233,8 +233,7 @@ class UserService:
         # Get share link
         avatar_url = await minio_client.get_share_link(
             object_name=object_name,
-            clear_host=True,
-            expire_days=365  # Long expiration for avatar
+            clear_host=True
         )
 
         # Update user avatar in database
