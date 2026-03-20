@@ -316,6 +316,8 @@ class KnowledgeSpaceService:
             self,
             space_id: int,
             parent_id: Optional[int] = None,
+            order_field: str = 'file_type',
+            order_sort: str = 'asc',
             page: int = 1,
             page_size: int = 20,
     ) -> dict:
@@ -327,7 +329,7 @@ class KnowledgeSpaceService:
         await self._require_read_permission(space_id)
         total, items = await asyncio.gather(
             SpaceFileDao.async_count_children(space_id, parent_id),
-            SpaceFileDao.async_list_children(space_id, parent_id, page, page_size),
+            SpaceFileDao.async_list_children(space_id, parent_id, order_field, order_sort, page, page_size),
         )
         return {"total": total, "page": page, "page_size": page_size, "data": items}
 

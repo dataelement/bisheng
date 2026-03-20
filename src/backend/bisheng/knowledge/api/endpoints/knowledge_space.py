@@ -128,11 +128,13 @@ async def get_space_members(
 async def list_space_children(
         space_id: int,
         parent_id: Optional[int] = None,
+        order_field: str = 'file_type',
+        order_sort: str = 'asc',
         page: int = 1,
         page_size: int = 20,
         svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
-    result = await svc.list_space_children(space_id, parent_id, page, page_size)
+    result = await svc.list_space_children(space_id, parent_id, order_field, order_sort, page, page_size)
     return resp_200(result)
 
 

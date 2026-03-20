@@ -728,6 +728,8 @@ class SpaceFileDao:
             cls,
             knowledge_id: int,
             parent_id: Optional[int],
+            order_field: str = "file_type",
+            order_sort: str = "desc",
             page: int = 1,
             page_size: int = 20,
     ) -> List[KnowledgeFile]:
@@ -747,11 +749,11 @@ class SpaceFileDao:
                 KnowledgeFile.knowledge_id == knowledge_id,
                 path_filter,
             )
-            # file_type 0 = folder (sorts first), 1 = file (sorts after)
-            .order_by(KnowledgeFile.file_type.asc(), KnowledgeFile.create_time.desc())
             .offset((page - 1) * page_size)
             .limit(page_size)
         )
+        if order_field and order_sort:
+            statement = statement.order_by(text(f"{order_field} {order_sort}"))
         async with get_async_db_session() as session:
             result = await session.exec(statement)
             return result.all()
