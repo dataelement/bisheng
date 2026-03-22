@@ -371,7 +371,7 @@ class KnowledgeSpaceService:
         file_level_path = ""
 
         if parent_id:
-            parent_folder = KnowledgeFileDao.query_by_id_sync(parent_id)
+            parent_folder = await KnowledgeFileDao.query_by_id(parent_id)
             if (
                     not parent_folder
                     or parent_folder.knowledge_id != knowledge_id
@@ -383,10 +383,10 @@ class KnowledgeSpaceService:
                 raise SpaceFolderDepthError()
             file_level_path = f"{parent_folder.file_level_path}/{parent_id}"
 
-        if SpaceFileDao.count_folder_by_name(knowledge_id, folder_name, file_level_path) > 0:
+        if await SpaceFileDao.count_folder_by_name(knowledge_id, folder_name, file_level_path) > 0:
             raise SpaceFolderDuplicateError()
 
-        return KnowledgeFileDao.add_file(KnowledgeFile(
+        return await KnowledgeFileDao.aadd_file(KnowledgeFile(
             knowledge_id=knowledge_id,
             user_id=self.login_user.user_id,
             user_name=self.login_user.user_name,
@@ -402,31 +402,31 @@ class KnowledgeSpaceService:
     async def rename_folder(
             self, folder_id: int, new_name: str
     ) -> KnowledgeFile:
-        folder = KnowledgeFileDao.query_by_id_sync(folder_id)
+        folder = await KnowledgeFileDao.query_by_id(folder_id)
         if not folder or folder.file_type != 0:
             raise SpaceFolderNotFoundError()
 
         await self._require_write_permission(folder.knowledge_id)
 
-        if SpaceFileDao.count_folder_by_name(
+        if await SpaceFileDao.count_folder_by_name(
                 folder.knowledge_id, new_name, folder.file_level_path, exclude_id=folder_id
         ) > 0:
             raise SpaceFolderDuplicateError()
 
         folder.file_name = new_name
-        return KnowledgeFileDao.update(folder)
+        return await KnowledgeFileDao.async_update(folder)
 
     async def delete_folder(self, space_id: int, folder_id: int):
         from bisheng.worker.knowledge.file_worker import delete_knowledge_file_celery
 
-        folder = KnowledgeFileDao.query_by_id_sync(folder_id)
+        folder = await KnowledgeFileDao.query_by_id(folder_id)
         if not folder or folder.file_type != 0:
             raise SpaceFolderNotFoundError()
 
         await self._require_write_permission(space_id)
 
         prefix = f"{folder.file_level_path}/{folder.id}"
-        children = SpaceFileDao.get_children_by_prefix(folder.knowledge_id, prefix)
+        children = await SpaceFileDao.get_children_by_prefix(folder.knowledge_id, prefix)
         floder_ids = [folder_id]
         file_ids = []
         for child in children:
@@ -457,7 +457,7 @@ class KnowledgeSpaceService:
         file_level_path = ""
 
         if parent_id:
-            parent_folder = KnowledgeFileDao.query_by_id_sync(parent_id)
+            parent_folder = await KnowledgeFileDao.query_by_id(parent_id)
             if (
                     not parent_folder
                     or parent_folder.knowledge_id != knowledge_id
@@ -498,7 +498,7 @@ class KnowledgeSpaceService:
     async def rename_file(
             self, file_id: int, new_name: str
     ) -> KnowledgeFile:
-        file_record = KnowledgeFileDao.query_by_id_sync(file_id)
+        file_record = await KnowledgeFileDao.query_by_id(file_id)
         if not file_record or file_record.file_type != 1:
             raise SpaceFileNotFoundError()
 
@@ -509,11 +509,11 @@ class KnowledgeSpaceService:
         if old_suffix != new_suffix:
             raise SpaceFileExtensionError()
 
-        if SpaceFileDao.count_file_by_name(file_record.knowledge_id, new_name, exclude_id=file_id) > 0:
+        if await SpaceFileDao.count_file_by_name(file_record.knowledge_id, new_name, exclude_id=file_id) > 0:
             raise SpaceFileNameDuplicateError()
 
         file_record.file_name = new_name
-        updated_file = KnowledgeFileDao.update(file_record)
+        updated_file = await KnowledgeFileDao.async_update(file_record)
 
         if updated_file.status == KnowledgeFileStatus.SUCCESS.value:
             # TODO: Rebuild chunks metadata and update vector store
@@ -524,13 +524,13 @@ class KnowledgeSpaceService:
     async def delete_file(self, file_id: int):
         from bisheng.worker.knowledge.file_worker import delete_knowledge_file_celery
 
-        file_record = KnowledgeFileDao.query_by_id_sync(file_id)
+        file_record = await KnowledgeFileDao.query_by_id(file_id)
         if not file_record or file_record.file_type != 1:
             raise SpaceFileNotFoundError()
 
         await self._require_write_permission(file_record.knowledge_id)
 
-        KnowledgeFileDao.delete_batch([file_id])
+        await KnowledgeFileDao.adelete_batch([file_id])
         delete_knowledge_file_celery.delay(file_ids=[file_id], knowledge_id=file_record.knowledge_id, clear_minio=True)
 
     async def get_file_preview(self, file_id: int) -> dict:
@@ -616,12 +616,12 @@ class KnowledgeSpaceService:
         await self._require_write_permission(knowledge_id)
 
         for folder_id in folder_ids:
-            folder = KnowledgeFileDao.query_by_id_sync(folder_id)
+            folder = await KnowledgeFileDao.query_by_id(folder_id)
             if folder and folder.file_type == 0:
                 await self.delete_folder(knowledge.id, folder_id)
 
         if file_ids:
-            KnowledgeFileDao.delete_batch(file_ids)
+            await KnowledgeFileDao.adelete_batch(file_ids)
             delete_knowledge_file_celery.delay(file_ids=file_ids, knowledge_id=knowledge.id,
                                                clear_minio=True)
 
@@ -640,16 +640,16 @@ class KnowledgeSpaceService:
 
         # ── 1. Collect all file records to include ────────────────────────────
         # Explicit files requested directly
-        direct_files: List[KnowledgeFile] = KnowledgeFileDao.get_file_by_ids(file_ids) if file_ids else []
+        direct_files: List[KnowledgeFile] = await KnowledgeFileDao.aget_file_by_ids(file_ids) if file_ids else []
 
         # Files & sub-folders under every requested folder_id
         folder_db_records: List[KnowledgeFile] = []
         for folder_id in folder_ids:
-            folder = KnowledgeFileDao.query_by_id_sync(folder_id)
+            folder = await KnowledgeFileDao.query_by_id(folder_id)
             if not folder or folder.file_type != 0:
                 continue
             prefix = f"{folder.file_level_path}/{folder.id}"
-            descendants = SpaceFileDao.get_children_by_prefix(folder.knowledge_id, prefix)
+            descendants = await SpaceFileDao.get_children_by_prefix(folder.knowledge_id, prefix)
             folder_db_records.append(folder)
             folder_db_records.extend(descendants)
 
@@ -679,7 +679,7 @@ class KnowledgeSpaceService:
                     pass
 
         if missing_ids:
-            extra_folders = KnowledgeFileDao.get_file_by_ids(list(missing_ids))
+            extra_folders = await KnowledgeFileDao.aget_file_by_ids(list(missing_ids))
             for f in extra_folders:
                 if f.file_type == 0:
                     folder_id_to_name[f.id] = f.file_name

@@ -195,6 +195,14 @@ class KnowledgeFileDao(KnowledgeFileBase):
         return knowledge_file
 
     @classmethod
+    async def aadd_file(cls, knowledge_file: KnowledgeFile) -> KnowledgeFile:
+        async with get_async_db_session() as session:
+            session.add(knowledge_file)
+            await session.commit()
+            await session.refresh(knowledge_file)
+            return knowledge_file
+
+    @classmethod
     def update(cls, knowledge_file):
         with get_sync_db_session() as session:
             session.add(knowledge_file)
@@ -659,8 +667,8 @@ class SpaceFileDao:
     """ DAO for space folder and file operations in the knowledge_file table """
 
     @classmethod
-    def count_folder_by_name(cls, knowledge_id: int, folder_name: str, file_level_path: str,
-                             exclude_id: Optional[int] = None) -> int:
+    async def count_folder_by_name(cls, knowledge_id: int, folder_name: str, file_level_path: str,
+                                   exclude_id: Optional[int] = None) -> int:
         """ Count folders with the same name in the same directory level """
         statement = select(func.count(KnowledgeFile.id)).where(
             KnowledgeFile.knowledge_id == knowledge_id,
@@ -670,26 +678,12 @@ class SpaceFileDao:
         )
         if exclude_id is not None:
             statement = statement.where(KnowledgeFile.id != exclude_id)
-        with get_sync_db_session() as session:
-            return session.scalar(statement)
+        async with get_async_db_session() as session:
+            return await session.scalar(statement)
 
     @classmethod
-    def count_file_by_name_or_md5(cls, knowledge_id: int, file_name: str, md5: str) -> int:
-        """ Count files matching name or md5 in the space (duplicate check on upload) """
-        statement = select(func.count(KnowledgeFile.id)).where(
-            KnowledgeFile.knowledge_id == knowledge_id,
-            KnowledgeFile.file_type == 1,
-            or_(
-                KnowledgeFile.file_name == file_name,
-                KnowledgeFile.md5 == md5
-            )
-        )
-        with get_sync_db_session() as session:
-            return session.scalar(statement)
-
-    @classmethod
-    def count_file_by_name(cls, knowledge_id: int, file_name: str,
-                           exclude_id: Optional[int] = None) -> int:
+    async def count_file_by_name(cls, knowledge_id: int, file_name: str,
+                                 exclude_id: Optional[int] = None) -> int:
         """ Count files with the same name in the space (duplicate check on rename) """
         statement = select(func.count(KnowledgeFile.id)).where(
             KnowledgeFile.knowledge_id == knowledge_id,
@@ -698,30 +692,21 @@ class SpaceFileDao:
         )
         if exclude_id is not None:
             statement = statement.where(KnowledgeFile.id != exclude_id)
-        with get_sync_db_session() as session:
-            return session.scalar(statement)
+        async with get_async_db_session() as session:
+            return await session.scalar(statement)
 
     @classmethod
-    def get_children_by_prefix(cls, knowledge_id: int, prefix: str) -> List[KnowledgeFile]:
+    async def get_children_by_prefix(cls, knowledge_id: int, prefix: str) -> List[KnowledgeFile]:
         """ Get all files/folders whose file_level_path starts with the given prefix """
         statement = select(KnowledgeFile).where(
             KnowledgeFile.knowledge_id == knowledge_id,
             or_(
-                KnowledgeFile.file_level_path == prefix,
-                KnowledgeFile.file_level_path.like(f"{prefix}/%")
+                col(KnowledgeFile.file_level_path) == prefix,
+                col(KnowledgeFile.file_level_path).like(f"{prefix}/%")
             )
         )
-        with get_sync_db_session() as session:
-            return session.exec(statement).all()
-
-    @classmethod
-    def delete_by_ids(cls, ids: List[int]):
-        """ Delete knowledge file records by IDs """
-        if not ids:
-            return
-        with get_sync_db_session() as session:
-            session.exec(delete(KnowledgeFile).where(KnowledgeFile.id.in_(ids)))
-            session.commit()
+        async with get_async_db_session() as session:
+            return (await session.exec(statement)).all()
 
     @classmethod
     async def async_list_children(

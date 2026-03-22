@@ -1,10 +1,12 @@
 from typing import Any, Optional, List
 
 from fastapi import APIRouter, Depends, Body, Query
+from starlette.responses import StreamingResponse
 
-from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.common.schemas.api import resp_200
-from bisheng.knowledge.api.dependencies import get_knowledge_space_service
+from bisheng.common.errcode import BaseErrorCode
+from bisheng.common.errcode.http_error import ServerError
+from bisheng.common.schemas.api import resp_200, SSEResponse
+from bisheng.knowledge.api.dependencies import get_knowledge_space_service, get_knowledge_space_chat_service
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     KnowledgeSpaceCreateReq, KnowledgeSpaceUpdateReq,
     FolderCreateReq, FolderRenameReq,
@@ -337,18 +339,88 @@ async def chat_single_file(
         space_id: int,
         file_id: int,
         req: ChatReq,
-        login_user: UserPayload = Depends(UserPayload.get_login_user),
+        svc: KnowledgeSpaceChatService = Depends(get_knowledge_space_chat_service),
 ) -> Any:
-    response = KnowledgeSpaceChatService.chat_single_file(space_id, login_user.user_id, file_id, req.query)
+    async def event_stream():
+        try:
+            async for one in svc.chat_single_file(space_id, file_id, req.query):
+                yield SSEResponse(data=one)
+        except BaseErrorCode as e:
+            yield e.to_sse_event_instance_str()
+        except Exception as e:
+            yield ServerError(exception=e).to_sse_event_instance_str()
+
+    return StreamingResponse(event_stream(), media_type='text/event-stream')
+
+
+@router.post('/{space_id}/chat/file/{file_id}/history')
+async def chat_single_file_history(
+        space_id: int,
+        file_id: int,
+        page_size: int = 20,
+        svc: KnowledgeSpaceChatService = Depends(get_knowledge_space_chat_service),
+) -> Any:
+    response = await svc.single_file_history(space_id, file_id, page_size)
     return resp_200(response)
 
 
-@router.post('/{space_id}/chat/folder/{folder_id}')
+@router.get('/{space_id}/chat/folder/{folder_id}/session')
+async def get_chat_folder_session(
+        space_id: int,
+        folder_id: int,
+        svc: KnowledgeSpaceChatService = Depends(get_knowledge_space_chat_service),
+):
+    result = await svc.get_chat_folder_session(space_id, folder_id)
+    return resp_200(result)
+
+
+@router.post('/{space_id}/chat/folder/{folder_id}/session')
+async def create_chat_folder_session(
+        space_id: int,
+        folder_id: int,
+        svc: KnowledgeSpaceChatService = Depends(get_knowledge_space_chat_service),
+):
+    result = await svc.create_chat_folder_session(space_id, folder_id)
+    return resp_200(result)
+
+
+@router.delete('/{space_id}/chat/folder/{folder_id}/session')
+async def create_chat_folder_session(
+        space_id: int,
+        folder_id: int,
+        chat_id: str = Body(..., embed=True, description='Chat ID'),
+        svc: KnowledgeSpaceChatService = Depends(get_knowledge_space_chat_service),
+):
+    result = await svc.delete_chat_folder_session(space_id, folder_id, chat_id)
+    return resp_200(result)
+
+
+@router.get('/{space_id}/chat/folder/{folder_id}/history')
+async def get_chat_folder_history(
+        space_id: int,
+        folder_id: int,
+        chat_id: str,
+        page_size: int = 20,
+        svc: KnowledgeSpaceChatService = Depends(get_knowledge_space_chat_service),
+):
+    result = await svc.get_chat_folder_history(space_id, folder_id, chat_id, page_size)
+    return resp_200(result)
+
+
+@router.post('/{space_id}/chat/folder/{folder_id}/chat')
 async def chat_folder(
         space_id: int,
         folder_id: int,
         req: ChatFolderReq,
-        login_user: UserPayload = Depends(UserPayload.get_login_user),
+        svc: KnowledgeSpaceChatService = Depends(get_knowledge_space_chat_service),
 ) -> Any:
-    response = KnowledgeSpaceChatService.chat_folder(space_id, login_user.user_id, folder_id, req.query, req.tags)
-    return resp_200(response)
+    async def event_stream():
+        try:
+            async for one in svc.chat_folder(space_id, folder_id, req.chat_id, req.query, req.tags):
+                yield SSEResponse(data=one)
+        except BaseErrorCode as e:
+            yield e.to_sse_event_instance_str()
+        except Exception as e:
+            yield ServerError(exception=e).to_sse_event_instance_str()
+
+    return StreamingResponse(event_stream(), media_type='text/event-stream')

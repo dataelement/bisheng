@@ -1,4 +1,4 @@
-from typing import Optional, List
+from typing import Optional, List, Dict
 
 from pydantic import BaseModel, Field
 
@@ -60,7 +60,8 @@ class ChatReq(BaseModel):
 
 
 class ChatFolderReq(ChatReq):
-    tags: Optional[List[int]] = Field(None, description="List of Tag IDs for filtering")
+    chat_id: str = Field(..., description="Chat ID")
+    tags: Optional[List[Dict]] = Field(None, description="List of Tag info for filtering")
 
 
 class SubscribeSpaceResp(BaseModel):

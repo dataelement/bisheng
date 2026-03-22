@@ -30,14 +30,18 @@ class MessageBase(SQLModelSerializable):
     flow_id: str = Field(index=True, description='Corresponding Skillsid')
     chat_id: Optional[str] = Field(default=None, index=True, description='chat_id, Frontend Generation')
     user_id: Optional[int] = Field(default=None, index=True, description='Usersid')
-    liked: Optional[int] = Field(index=False, default=0, description="Whether the user likes it or 0Not assessed/1 Love/2 don't like}")
-    solved: Optional[int] = Field(index=False, default=0, description='Whether the user likes it or 0Not assessed/1 Solution/2 Unresolve')
+    liked: Optional[int] = Field(index=False, default=0,
+                                 description="Whether the user likes it or 0Not assessed/1 Love/2 don't like}")
+    solved: Optional[int] = Field(index=False, default=0,
+                                  description='Whether the user likes it or 0Not assessed/1 Solution/2 Unresolve')
     copied: Optional[int] = Field(index=False, default=0, description='Is the user copying 0: Not copied 1Copied: ')
-    sensitive_status: Optional[int] = Field(index=False, default=1, description='Sensitive Word Status 1Pass 2violates regulation')
+    sensitive_status: Optional[int] = Field(index=False, default=1,
+                                            description='Sensitive Word Status 1Pass 2violates regulation')
     sender: Optional[str] = Field(index=False, default='', description='autogen Sender')
     receiver: Optional[Dict] = Field(index=False, default=None, description='autogen Sender')
     intermediate_steps: Optional[str] = Field(default=None, sa_column=Column(Text), description='Process Log')
-    files: Optional[str] = Field(default=None, sa_column=Column(String(length=4096)), description='Uploaded documents, etc.')
+    files: Optional[str] = Field(default=None, sa_column=Column(String(length=4096)),
+                                 description='Uploaded documents, etc.')
     remark: Optional[str] = Field(default=None, sa_column=Column(String(length=4096)),
                                   description='Note. break_answer: Interrupted response inactionhistoryPass to Model')
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
@@ -297,6 +301,12 @@ class ChatMessageDao(MessageBase):
                 session.refresh(one)
                 ret.append(one)
             return ret
+
+    @classmethod
+    async def ainsert_batch(cls, messages: List[ChatMessage]):
+        async with get_async_db_session() as session:
+            session.add_all(messages)
+            await session.commit()
 
     @classmethod
     def get_message_by_id(cls, message_id: int) -> Optional[ChatMessage]:

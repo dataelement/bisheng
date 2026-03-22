@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from bisheng.knowledge.domain.services.knowledge_file_service import KnowledgeFileService
     from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
     from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
+    from bisheng.knowledge.domain.services.knowledge_space_chat_service import KnowledgeSpaceChatService
 
 
 async def get_knowledge_repository(
@@ -61,4 +62,13 @@ def get_knowledge_space_service(
 ) -> 'KnowledgeSpaceService':
     """Get KnowledgeSpaceService instance, bound to the current request and login user"""
     from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService as _SvcClass
+    return _SvcClass(request=request, login_user=login_user)
+
+
+def get_knowledge_space_chat_service(
+        request: Request,
+        login_user: UserPayload = Depends(UserPayload.get_login_user),
+) -> 'KnowledgeSpaceChatService':
+    """Get KnowledgeSpaceChatService instance, bound to the current request and login user"""
+    from bisheng.knowledge.domain.services.knowledge_space_chat_service import KnowledgeSpaceChatService as _SvcClass
     return _SvcClass(request=request, login_user=login_user)
