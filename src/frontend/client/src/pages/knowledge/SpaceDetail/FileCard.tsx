@@ -24,9 +24,10 @@ interface FileCardProps {
     onDelete: () => void;
     onEditTags: () => void;
     onRetry?: () => void;
-    onNavigateFolder?: () => void;
+    onNavigateFolder?: (folderId?: string) => void;
     onValidateName?: (newName: string) => string | null;
     onCancelCreate?: () => void;
+    disableClickNavigate?: boolean;
 }
 
 export function FileCard({
@@ -41,7 +42,8 @@ export function FileCard({
     onRetry,
     onNavigateFolder,
     onValidateName,
-    onCancelCreate
+    onCancelCreate,
+    disableClickNavigate = false,
 }: FileCardProps) {
     const isCreating = !!(file as any).isCreating;
     const [hovered, setHovered] = useState(false);
@@ -193,10 +195,15 @@ export function FileCard({
 
     const handleCardClick = () => {
         if (isCreating || isRenaming) return;
+        // Folder click is treated as "enter folder"/"navigate directory"
+        // (depending on the parent component's onNavigateFolder implementation).
         if (isFolder) {
-            onNavigateFolder?.();
+            onNavigateFolder?.(file.id);
             return;
         }
+
+        // In preview drawer mode we disable page navigation for file clicks.
+        if (disableClickNavigate) return;
         const url = `${__APP_ENV__.BASE_URL}/knowledge/file/${file.id}?name=${encodeURIComponent(file.name)}&type=${encodeURIComponent(file.type)}`;
         window.open(url, '_blank');
     };

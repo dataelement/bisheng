@@ -116,7 +116,7 @@ export function ChannelSquareCard({
             )}
           </div>
           <span>
-            {articleCount} {localize("articles")}
+            {articleCount} {localize("com_subscription.articles")}
           </span>
           <span>{subscriberCount}{localize("com_ui_subscription")}</span>
         </div>

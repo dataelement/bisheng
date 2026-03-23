@@ -30,12 +30,12 @@ import { SearchParams } from "./SpaceDetail/CompoundSearchInput";
 import { NotificationSeverity } from "~/common";
 import { KnowledgeSpaceMemberDialog } from "~/components/KnowledgeSpaceMemberDialog";
 import { useToastContext } from "~/Providers";
-import ChannelSquare from "../ChannelSquare";
 import { CreateKnowledgeSpaceDrawer, type CreateKnowledgeSpaceFormData } from "./CreateKnowledgeSpaceDrawer";
 import { KnowledgeSpaceSidebar } from "./sidebar/KnowledgeSpaceSidebar";
 import { KnowledgeSpaceContent } from "./SpaceDetail";
 import { KnowledgeAiPanel } from "./SpaceDetail/AiChat/KnowledgeAiPanel";
 import { KnowledgeSpacePreviewDrawer } from "./KnowledgeSpacePreviewDrawer";
+import KnowledgeSquare from "./KnowledgeSquare";
 
 /** Derive FileType enum from a file extension */
 function getFileType(name: string): FileType {
@@ -92,6 +92,8 @@ export default function Knowledge() {
     const queryClient = useQueryClient();
     const { spaceId: previewSpaceId } = useParams<{ spaceId?: string }>();
     const [previewDrawerOpen, setPreviewDrawerOpen] = useState(false);
+    const [squarePreviewSpaceId, setSquarePreviewSpaceId] = useState<string | undefined>();
+    const [squarePreviewDrawerOpen, setSquarePreviewDrawerOpen] = useState(false);
 
     // ─── Load file/folder list ──────────────────────────────────────────
     const loadFiles = async (page: number = 1) => {
@@ -521,15 +523,25 @@ export default function Knowledge() {
     if (showKnowledgeSquare) {
         return (
             <div className="relative h-full flex">
-                <ChannelSquare
+                <KnowledgeSquare
                     onBack={() => setShowKnowledgeSquare(false)}
                     title="探索知识广场"
                     subtitle="您可以在这里探索更多的知识空间"
                     searchPlaceholder="输入知识空间名称或描述进行搜索"
                     emptyText="未找到匹配知识空间"
                     joinToastPrefix="已申请加入知识空间："
-                    fetchApi={getSquareSpacesApi}
-                    subscribeApi={subscribeSpaceApi}
+                    onPreviewSpace={(id) => {
+                        setSquarePreviewSpaceId(id);
+                        setSquarePreviewDrawerOpen(true);
+                    }}
+                />
+                <KnowledgeSpacePreviewDrawer
+                    spaceId={squarePreviewSpaceId}
+                    open={squarePreviewDrawerOpen}
+                    onOpenChange={(open) => {
+                        setSquarePreviewDrawerOpen(open);
+                        if (!open) setSquarePreviewSpaceId(undefined);
+                    }}
                 />
             </div>
         );

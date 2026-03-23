@@ -124,7 +124,7 @@ export function getSearchEnabled(): Promise<boolean> {
 
 export function getUser(): Promise<t.TUser> {
   return request.get(endpoints.user()).then(res => {
-    const { user_id, user_name, create_time, update_time, role, web_menu } = res.data;
+    const { user_id, user_name, create_time, update_time, role, web_menu, avatar } = res.data;
     if (role !== 'admin' && !web_menu.includes('frontend')) {
       location.href = `${location.origin}${__APP_ENV__.BISHENG_HOST}?error=90002`  // workspace useErrorPrompt
     }
@@ -134,7 +134,13 @@ export function getUser(): Promise<t.TUser> {
       "username": user_name,
       "email": user_name,
       "emailVerified": true,
-      "avatar": null,
+      // Backend avatar is usually a path like "/bisheng/avatar/..jpg?...".
+      // Convert it to a front-end accessible URL using BASE_URL.
+      "avatar": avatar
+        ? String(avatar).startsWith("/")
+          ? `${__APP_ENV__.BASE_URL}${avatar}`
+          : `${__APP_ENV__.BASE_URL}/${avatar}`
+        : "",
       "provider": "local",
       "role": role,
       "plugins": web_menu,

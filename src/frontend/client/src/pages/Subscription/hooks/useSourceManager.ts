@@ -58,6 +58,11 @@ export function useSourceManager(
     const [wechatAddError, setWechatAddError] = useState(false);
     const localize = useLocalize();
 
+    const normalizeUrlForSearch = (value?: string) => {
+        if (!value) return "";
+        return value.trim().toLowerCase().replace(/\/+$/, "");
+    };
+
     const abortWechatRequest = () => {
         wechatAbortRef.current?.abort();
         wechatAbortRef.current = null;
@@ -72,12 +77,16 @@ export function useSourceManager(
     const allSourcesByTab = activeTab === "official_account" ? wechatSources : websiteSources;
     const filteredSources = useMemo(() => {
         const kw = searchKeyword.trim().toLowerCase();
+        const kwNorm = normalizeUrlForSearch(searchKeyword);
         if (!kw) return allSourcesByTab;
         const combined = [...wechatSources, ...websiteSources];
         return combined.filter(
             (s) =>
                 s.name.toLowerCase().includes(kw) ||
-                (s.url && s.url.toLowerCase().includes(kw))
+                (s.url && (
+                    s.url.toLowerCase().includes(kw) ||
+                    normalizeUrlForSearch(s.url).includes(kwNorm)
+                ))
         );
     }, [allSourcesByTab, searchKeyword, wechatSources, websiteSources]);
 

@@ -114,7 +114,7 @@ export function CreateKnowledgeSpaceDrawer({
             <SheetContent side="right" className="min-w-[1000px] p-0 bg-white">
                 <SheetHeader className="px-8 pt-7 pb-4 border-b border-[#E5E6EB]">
                     <SheetTitle className="text-[20px] font-medium text-[#1D2129] leading-none">
-                        {mode === "edit" ? localize("edit_knowledge_space") || "编辑知识空间" : localize("create_konwledge_space")}
+                        {mode === "edit" ? localize("edit_knowledge_space") || "编辑知识空间" : localize("com_subscription.create_konwledge_space")}
                     </SheetTitle>
                 </SheetHeader>
 
@@ -122,7 +122,7 @@ export function CreateKnowledgeSpaceDrawer({
                     <div className="flex-1 flex flex-col items-center justify-center">
                         <Database className="size-16 text-[#165DFF] mb-5" strokeWidth={1.5} />
                         <div className="text-[30px] font-semibold text-[#1D2129] mb-8">
-                            {localize("create_knowledge_space_success")}
+                            {localize("com_subscription.create_knowledge_space_success")}
                         </div>
                         <div className="flex items-center gap-3">
                             <Button
@@ -133,7 +133,7 @@ export function CreateKnowledgeSpaceDrawer({
                                     onOpenChange(false);
                                 }}
                             >
-                                {localize("goto_knowledge_space")}
+                                {localize("com_subscription.goto_knowledge_space")}
                             </Button>
                             <Button
                                 className="h-10 px-5 bg-[#165DFF] hover:bg-[#4080FF] text-white"
@@ -142,7 +142,7 @@ export function CreateKnowledgeSpaceDrawer({
                                     onOpenChange(false);
                                 }}
                             >
-                                {localize("member_management")}
+                                {localize("com_subscription.member_management")}
                             </Button>
                         </div>
                     </div>
@@ -153,7 +153,7 @@ export function CreateKnowledgeSpaceDrawer({
                             <div className="space-y-2">
                                 <Label className="text-sm text-[#1D2129] font-medium">
                                     <span className="text-[#F53F3F]">*</span>
-                                    {localize("knowledge_space_name")}
+                                    {localize("com_subscription.knowledge_space_name")}
                                 </Label>
                                 <div className="relative flex items-center gap-2">
                                     <Input
@@ -162,7 +162,7 @@ export function CreateKnowledgeSpaceDrawer({
                                             const v = e.target.value;
                                             if (v.length > MAX_SPACE_NAME) {
                                                 showToast({
-                                                    message: localize("max_knowledge_space_name") || "最多输入 20个字符",
+                                                    message: localize("com_subscription.max_knowledge_space_name") || "最多输入 20个字符",
                                                     severity: NotificationSeverity.WARNING
                                                 });
                                                 setName(v.slice(0, MAX_SPACE_NAME));
@@ -170,7 +170,7 @@ export function CreateKnowledgeSpaceDrawer({
                                                 setName(v);
                                             }
                                         }}
-                                        placeholder={localize("enter_knowledge_space_name")}
+                                        placeholder={localize("com_subscription.enter_knowledge_space_name")}
                                         className="h-11 border-[#E5E6EB] text-[14px] pr-16"
                                     />
                                     <span className="absolute right-4 text-[12px] text-[#86909C]">
@@ -191,7 +191,7 @@ export function CreateKnowledgeSpaceDrawer({
                                             const v = e.target.value;
                                             if (v.length > MAX_SPACE_DESC) {
                                                 showToast({
-                                                    message: localize("max_knowledge_space_desc") || "最多输入200个字符",
+                                                    message: localize("com_subscription.max_knowledge_space_desc") || "最多输入200个字符",
                                                     severity: NotificationSeverity.WARNING
                                                 });
                                                 setDescription(v.slice(0, MAX_SPACE_DESC));
@@ -199,7 +199,7 @@ export function CreateKnowledgeSpaceDrawer({
                                                 setDescription(v);
                                             }
                                         }}
-                                        placeholder={localize("enter_knowledge_space_description")}
+                                        placeholder={localize("com_subscription.enter_knowledge_space_description")}
                                         className="min-h-[104px] border-[#E5E6EB] text-[14px]"
                                     />
                                 </div>
@@ -209,7 +209,7 @@ export function CreateKnowledgeSpaceDrawer({
                             <div className="space-y-3">
                                 <Label className="text-sm text-[#1D2129] font-medium">
                                     <span className="text-[#F53F3F]">*</span>
-                                    {localize("premission_settings")}
+                                    {localize("com_subscription.premission_settings")}
                                 </Label>
                                 <RadioGroup.Root
                                     value={joinPolicy}
@@ -219,18 +219,18 @@ export function CreateKnowledgeSpaceDrawer({
                                     {[
                                         {
                                             value: "private",
-                                            label: localize("private"),
-                                            desc: localize("cannot_subscribe")
+                                            label: localize("com_subscription.private"),
+                                            desc: localize("com_subscription.cannot_subscribe")
                                         },
                                         {
                                             value: "review",
-                                            label: localize("approval_required"),
-                                            desc: localize("require_approval")
+                                            label: localize("com_subscription.approval_required"),
+                                            desc: localize("com_subscription.require_approval")
                                         },
                                         {
                                             value: "public",
                                             label: localize("publice"),
-                                            desc: localize("anyone_can_subscribe") || "任何人可直接订阅,无需审核"
+                                            desc: localize("com_subscription.anyone_can_subscribe") || "任何人可直接订阅,无需审核"
                                         }
                                     ].map((opt) => (
                                         <label
