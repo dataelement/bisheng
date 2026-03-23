@@ -23,5 +23,6 @@ class BishengHtmlLoader(BaseBishengLoader):
 
         with open(md_file_path, "r", encoding="utf-8") as f:
             content = f.read()
-        self.local_image_dir = converter.current_image_absolute_path
+        if os.path.exists(converter.current_image_absolute_path):
+            self.local_image_dir = converter.current_image_absolute_path
         return [Document(page_content=content, metadata=self.file_metadata.copy())]
