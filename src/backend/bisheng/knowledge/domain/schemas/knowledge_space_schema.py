@@ -18,6 +18,8 @@ class KnowledgeSpaceInfoResp(KnowledgeBase):
     avatar: Optional[str] = Field(default=None, description="Knowledge Space creator avatar")
     follower_num: int = Field(1, description="Follower Number")
     file_num: int = Field(1, description="Total File Number")
+    is_followed: bool = Field(default=False, description="Knowledge Space followed by current user or not")
+    is_pending: bool = Field(default=False, description="Knowledge Space pending or not")
 
 
 class KnowledgeSpaceUpdateReq(BaseModel):

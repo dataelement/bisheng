@@ -134,6 +134,16 @@ class KnowledgeSpaceService:
             result.user_name = create_user.user_name if create_user else str(space.user_id)
         else:
             result.user_name = self.login_user.user_name
+
+        result.is_followed = True
+        if space.user_id != self.login_user.user_id:
+            member_info = await SpaceChannelMemberDao.async_find_member(space_id=space.id,
+                                                                        user_id=self.login_user.user_id)
+            if not member_info:
+                result.is_followed = False
+            else:
+                result.is_pending = member_info.status == False
+
         result.follower_num = follower_num
         result.file_num = total_file_num
         return result
@@ -277,16 +287,21 @@ class KnowledgeSpaceService:
         for s in spaces:
             sid = str(s.id)
             creator = user_map.get(s.user_id)
-            entry = {
-                "space": s,
-                "is_followed": sid in joined_ids and sid not in pending_ids,
-                "is_pending": sid in pending_ids,
-                "user_name": creator.user_name if creator else str(s.user_id),
-                "avatar": creator.avatar if creator else None,
-                "file_num": success_file_map.get(s.id, 0),
-                "follower_num": subscriber_map.get(sid, 0),
-            }
-            (already_joined if sid in joined_ids else not_joined).append(entry)
+
+            (already_joined if sid in joined_ids else not_joined).append(
+                KnowledgeSpaceInfoResp(
+                    **s.model_dump(),
+                    **{
+                        "space": s,
+                        "is_followed": sid in joined_ids and sid not in pending_ids,
+                        "is_pending": sid in pending_ids,
+                        "user_name": creator.user_name if creator else str(s.user_id),
+                        "avatar": creator.avatar if creator else None,
+                        "file_num": success_file_map.get(s.id, 0),
+                        "follower_num": subscriber_map.get(sid, 0),
+                    }
+                )
+            )
 
         sorted_list = not_joined + already_joined
         total = len(sorted_list)
