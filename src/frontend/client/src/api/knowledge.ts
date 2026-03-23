@@ -149,6 +149,28 @@ interface RawSpaceChild {
     error_message?: string;
 }
 
+/** Raw file record returned by addFiles / knowledge file APIs */
+interface RawKnowledgeFile {
+    id: number;
+    knowledge_id: number;
+    file_name: string;
+    /** Numeric file type from backend (e.g. 1 = docx, etc.) */
+    file_type: number;
+    /** Numeric status: 1 = processing, 2 = failed, 3 = success */
+    status: number;
+    file_size?: number;
+    object_name?: string;
+    file_path?: string;
+    file_level_path?: string;
+    level?: number;
+    user_name?: string;
+    user_id?: number;
+    create_time?: string;
+    update_time?: string;
+    remark?: string;
+    thumbnails?: string | null;
+}
+
 /** Upload API response */
 export interface UploadFileResponse {
     file_name: string;
@@ -224,6 +246,52 @@ function mapChild(raw: RawSpaceChild, spaceId: string): KnowledgeFile {
     };
 }
 
+/** Derive FileType from file extension in file_name */
+function deriveFileTypeFromName(fileName: string): FileType {
+    const ext = fileName.split('.').pop()?.toLowerCase() || "";
+    switch (ext) {
+        case "pdf": return FileType.PDF;
+        case "doc": return FileType.DOC;
+        case "docx": return FileType.DOCX;
+        case "xls": return FileType.XLS;
+        case "xlsx": return FileType.XLSX;
+        case "ppt": return FileType.PPT;
+        case "pptx": return FileType.PPTX;
+        case "jpg": return FileType.JPG;
+        case "jpeg": return FileType.JPEG;
+        case "png": return FileType.PNG;
+        default: return FileType.OTHER;
+    }
+}
+
+/** Map numeric status to FileStatus enum */
+function mapFileStatus(status: number): FileStatus {
+    switch (status) {
+        case 1: return FileStatus.PROCESSING;
+        case 2: return FileStatus.FAILED;
+        case 3: return FileStatus.SUCCESS;
+        default: return FileStatus.QUEUED;
+    }
+}
+
+/** Map a raw knowledge file record to the frontend KnowledgeFile model */
+function mapRawFile(raw: RawKnowledgeFile): KnowledgeFile {
+    return {
+        id: String(raw.id),
+        name: raw.file_name,
+        type: deriveFileTypeFromName(raw.file_name),
+        size: raw.file_size,
+        status: mapFileStatus(raw.status),
+        tags: [],
+        path: raw.object_name || raw.file_name,
+        parentId: undefined,
+        spaceId: String(raw.knowledge_id),
+        createdAt: raw.create_time || "",
+        updatedAt: raw.update_time || "",
+        thumbnail: raw.thumbnails || undefined,
+    };
+}
+
 // ─────────────────────────────────────────────
 // API functions — Space management
 // ─────────────────────────────────────────────
@@ -250,19 +318,41 @@ export async function getJoinedSpacesApi(params?: {
 
 /**
  * Get public knowledge square (paginated)
+ * Response items are { space, is_followed, is_pending } — flatten to ChannelSquare-compatible format
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function getSquareSpacesApi(params?: {
-    order_by?: string;
+    keyword?: string;
     page?: number;
     page_size?: number;
-}): Promise<{ data: KnowledgeSpace[]; total: number }> {
-    const res = await request.get<ApiResponse<{ list: RawKnowledgeSpace[]; total: number }>>(
+}): Promise<{ data: { data: any[]; total: number } }> {
+    interface SquareItem {
+        space: RawKnowledgeSpace;
+        is_followed: boolean;
+        is_pending: boolean;
+    }
+    const res = await request.get<ApiResponse<{ total: number; data: SquareItem[] }>>(
         `/api/v1/knowledge/space/square`,
         { params }
     );
+    const items = (res?.data?.data || []).map((item) => ({
+        id: item.space?.id,
+        name: item.space?.name ?? "",
+        description: item.space?.description ?? "",
+        creator: "",
+        auth_type: item.space?.auth_type,
+        visibility: item.space?.auth_type,
+        subscription_status: item.is_followed
+            ? "subscribed"
+            : item.is_pending
+                ? "pending"
+                : "not_subscribed",
+    }));
     return {
-        data: (res?.data?.list || []).map(mapSpace),
-        total: res?.data?.total ?? 0,
+        data: {
+            data: items,
+            total: res?.data?.total ?? 0,
+        },
     };
 }
 
@@ -361,7 +451,7 @@ export async function getSpaceChildrenApi(params: {
 }): Promise<{ data: KnowledgeFile[]; total: number }> {
     const { space_id, ...queryParams } = params;
     if (!space_id) return { data: [], total: 0 };
-    const res = await request.get<ApiResponse<{ list: RawSpaceChild[]; total: number }>>(
+    const res = await request.get<ApiResponse<{ data: RawKnowledgeFile[]; total: number }>>(
         `/api/v1/knowledge/space/${space_id}/children`,
         {
             params: {
@@ -372,7 +462,56 @@ export async function getSpaceChildrenApi(params: {
         }
     );
     return {
-        data: (res?.data?.list || []).map(raw => mapChild(raw, space_id)),
+        data: (res?.data?.data || []).map(mapRawFile),
+        total: res?.data?.total ?? 0,
+    };
+}
+
+/**
+ * Search files under a space with keyword and/or tag filters
+ * GET /api/v1/knowledge/space/{space_id}/search
+ */
+/** Serialize params so arrays become key=val1&key=val2 (not key[]=...) */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const paramsSerializer = (params: any) => {
+    return Object.keys(params)
+        .map(key => {
+            const value = params[key];
+            if (value === undefined) return null;
+            if (Array.isArray(value)) {
+                return value.map(val => `${key}=${val}`).join('&');
+            }
+            return `${key}=${value}`;
+        })
+        .filter(item => item !== null)
+        .join('&');
+};
+
+export async function searchSpaceChildrenApi(params: {
+    space_id: string;
+    parent_id?: string;
+    page?: number;
+    page_size?: number;
+    keyword?: string;
+    tag_ids?: number[];
+}): Promise<{ data: KnowledgeFile[]; total: number }> {
+    const { space_id, ...queryParams } = params;
+    if (!space_id) return { data: [], total: 0 };
+    const res = await request.get<ApiResponse<{ data: RawKnowledgeFile[]; total: number }>>(
+        `/api/v1/knowledge/space/${space_id}/search`,
+        {
+            params: {
+                parent_id: queryParams.parent_id,
+                page: queryParams.page,
+                page_size: queryParams.page_size,
+                keyword: queryParams.keyword || undefined,
+                tag_ids: queryParams.tag_ids?.length ? queryParams.tag_ids : undefined,
+            },
+            paramsSerializer,
+        }
+    );
+    return {
+        data: (res?.data?.data || []).map(mapRawFile),
         total: res?.data?.total ?? 0,
     };
 }
@@ -444,8 +583,8 @@ export async function addFilesApi(
     const res = await request.post(
         `/api/v1/knowledge/space/${space_id}/files`,
         data
-    ) as ApiResponse<RawSpaceChild[]>;
-    return (res?.data || []).map(raw => mapChild(raw, space_id));
+    ) as ApiResponse<RawKnowledgeFile[]>;
+    return (res?.data || []).map(mapRawFile);
 }
 
 /**
@@ -491,6 +630,89 @@ export async function batchDownloadApi(
         `/api/v1/knowledge/space/${space_id}/files/batch-download`,
         data,
         { responseType: "blob" }
+    );
+}
+
+// ─────────────────────────────────────────────
+// API functions — Tag management
+// ─────────────────────────────────────────────
+
+/** Tag entity returned by the backend */
+export interface SpaceTag {
+    id: number;
+    name: string;
+    business_type: string;
+    business_id: string;
+    user_id: number;
+    create_time: string;
+    update_time: string;
+}
+
+/**
+ * Get all tags for a knowledge space
+ * GET /api/v1/knowledge/space/{space_id}/tag
+ */
+export async function getSpaceTagsApi(space_id: string): Promise<SpaceTag[]> {
+    const res = await request.get<ApiResponse<SpaceTag[]>>(
+        `/api/v1/knowledge/space/${space_id}/tag`
+    );
+    return res?.data || [];
+}
+
+/**
+ * Add a new tag to a knowledge space
+ * POST /api/v1/knowledge/space/{space_id}/tag
+ */
+export async function addSpaceTagApi(
+    space_id: string,
+    tag_name: string
+): Promise<SpaceTag> {
+    const res = await request.post(
+        `/api/v1/knowledge/space/${space_id}/tag`,
+        { tag_name }
+    ) as ApiResponse<SpaceTag>;
+    return res.data;
+}
+
+/**
+ * Delete a tag from a knowledge space
+ * DELETE /api/v1/knowledge/space/{space_id}/tag
+ */
+export async function deleteSpaceTagApi(
+    space_id: string,
+    tag_id: number
+): Promise<void> {
+    await request.delete(`/api/v1/knowledge/space/${space_id}/tag`, {
+        data: { tag_id },
+    });
+}
+
+/**
+ * Update (overwrite) tags for a single file
+ * POST /api/v1/knowledge/space/{space_id}/files/{file_id}/tag
+ */
+export async function updateFileTagsApi(
+    space_id: string,
+    file_id: string,
+    tag_ids: number[]
+): Promise<void> {
+    await request.post(
+        `/api/v1/knowledge/space/${space_id}/files/${file_id}/tag`,
+        { tag_ids }
+    );
+}
+
+/**
+ * Batch append tags to multiple files
+ * POST /api/v1/knowledge/space/{space_id}/files/batch-tag
+ */
+export async function batchUpdateTagsApi(
+    space_id: string,
+    data: { file_ids: number[]; tag_ids: number[] }
+): Promise<void> {
+    await request.post(
+        `/api/v1/knowledge/space/${space_id}/files/batch-tag`,
+        data
     );
 }
 

@@ -13,7 +13,7 @@ from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.database.base import async_get_count, get_count
 
 
-class KnowledgeFileStatus(Enum):
+class KnowledgeFileStatus(int, Enum):
     PROCESSING = 1  # Sedang diproses
     SUCCESS = 2  # Berhasil
     FAILED = 3  # Parse Failure
@@ -43,13 +43,18 @@ class FileSource(Enum):
     CHANNEL = 'channel'  # sync from channel
 
 
+class FileType(int, Enum):
+    DIR = 0
+    FILE = 1
+
+
 class KnowledgeFileBase(SQLModelSerializable):
     user_id: Optional[int] = Field(default=None, index=True)
     user_name: Optional[str] = Field(default=None, index=True)
     knowledge_id: int = Field(index=True)
     thumbnails: Optional[str] = Field(default=None, description='File thumbnails in Stored object name')
     file_name: str = Field(max_length=200, index=True)
-    file_type: int = Field(default=1, description='File type. 0: dir; 1: file')
+    file_type: int = Field(default=FileType.FILE.value, description='File type. 0: dir; 1: file')
     file_source: Optional[str] = Field(default=FileSource.UPLOAD.value, description='File source')
     level: Optional[int] = Field(default=0)
     file_level_path: Optional[str] = Field(default=None, index=True)
@@ -173,6 +178,27 @@ class KnowledgeFileDao(KnowledgeFileBase):
             return await session.scalar(statement)
 
     @classmethod
+    async def async_count_success_files_batch(cls, knowledge_ids: List[int]) -> dict:
+        """Async: Batch count SUCCESS files for multiple knowledge spaces.
+
+        Returns a dict mapping knowledge_id (int) -> success file count.
+        """
+        if not knowledge_ids:
+            return {}
+        statement = (
+            select(KnowledgeFile.knowledge_id, func.count().label('cnt'))
+            .where(
+                KnowledgeFile.knowledge_id.in_(knowledge_ids),
+                KnowledgeFile.file_type == 1,
+                KnowledgeFile.status == KnowledgeFileStatus.SUCCESS.value,
+            )
+            .group_by(KnowledgeFile.knowledge_id)
+        )
+        async with get_async_db_session() as session:
+            rows = (await session.exec(statement)).all()
+        return {row[0]: row[1] for row in rows}
+
+    @classmethod
     def delete_batch(cls, file_ids: List[int]) -> bool:
         with get_sync_db_session() as session:
             session.exec(delete(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids)))
@@ -193,6 +219,14 @@ class KnowledgeFileDao(KnowledgeFileBase):
             session.commit()
             session.refresh(knowledge_file)
         return knowledge_file
+
+    @classmethod
+    async def aadd_file(cls, knowledge_file: KnowledgeFile) -> KnowledgeFile:
+        async with get_async_db_session() as session:
+            session.add(knowledge_file)
+            await session.commit()
+            await session.refresh(knowledge_file)
+            return knowledge_file
 
     @classmethod
     def update(cls, knowledge_file):
@@ -266,6 +300,31 @@ class KnowledgeFileDao(KnowledgeFileBase):
             return session.exec(select(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids))).all()
 
     @classmethod
+    async def aget_file_by_ids(cls, file_ids: List[int]) -> List[KnowledgeFile]:
+        if not file_ids:
+            return []
+        stat = select(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids))
+        async with get_async_db_session() as session:
+            return (await session.exec(stat)).all()
+
+    @classmethod
+    def _build_file_filters_statement(cls, statement, file_name: str = None, status: List[int] = None,
+                                      file_ids: List[int] = None, file_level_path: str = None, order_by: str = None):
+        if file_name:
+            statement = statement.where(KnowledgeFile.file_name.like(f'%{file_name}%'))
+        if status:
+            statement = statement.where(KnowledgeFile.status.in_(status))
+        if file_ids:
+            statement = statement.where(KnowledgeFile.id.in_(file_ids))
+        if file_level_path:
+            statement = statement.where(KnowledgeFile.file_level_path == file_level_path)
+        if order_by == "file_type":
+            statement = statement.order_by(col(KnowledgeFile.file_type).asc())
+        elif order_by == "update_time":
+            statement = statement.order_by(col(KnowledgeFile.update_time).desc())
+        return statement
+
+    @classmethod
     def get_file_by_filters(cls,
                             knowledge_id: int,
                             file_name: str = None,
@@ -274,17 +333,31 @@ class KnowledgeFileDao(KnowledgeFileBase):
                             page_size: int = 0,
                             file_ids: List[int] = None) -> List[KnowledgeFile]:
         statement = select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id)
-        if file_name:
-            statement = statement.where(KnowledgeFile.file_name.like(f'%{file_name}%'))
-        if status:
-            statement = statement.where(KnowledgeFile.status.in_(status))
-        if file_ids:
-            statement = statement.where(KnowledgeFile.id.in_(file_ids))
+        statment = cls._build_file_filters_statement(statement, file_name, status, file_ids, order_by="update_time")
         if page and page_size:
             statement = statement.offset((page - 1) * page_size).limit(page_size)
-        statement = statement.order_by(KnowledgeFile.update_time.desc())
         with get_sync_db_session() as session:
             return session.exec(statement).all()
+
+    @classmethod
+    async def aget_file_by_filters(cls, knowledge_id: int, file_name: str = None, status: List[int] = None,
+                                   file_ids: List[int] = None, file_level_path: str = None, order_by: str = None,
+                                   *, page: int = 0, page_size: int = 0) -> List[KnowledgeFile]:
+        statement = select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id)
+        statement = cls._build_file_filters_statement(statement, file_name, status, file_ids, file_level_path,
+                                                      order_by=order_by)
+        if page and page_size:
+            statement = statement.offset((page - 1) * page_size).limit(page_size)
+        async with get_async_db_session() as session:
+            return (await session.exec(statement)).all()
+
+    @classmethod
+    async def acount_file_by_filters(cls, knowledge_id: int, file_name: str = None, status: List[int] = None,
+                                     file_ids: List[int] = None, file_level_path: str = None) -> int:
+        statement = select(func.count()).where(KnowledgeFile.knowledge_id == knowledge_id)
+        statement = cls._build_file_filters_statement(statement, file_name, status, file_ids, file_level_path)
+        async with get_async_db_session() as session:
+            return await session.scalar(statement)
 
     @classmethod
     def get_files_by_multiple_status(cls, knowledge_id: int, status_list: List[int]) -> List[KnowledgeFile]:
@@ -613,128 +686,4 @@ class QAKnoweldgeDao(QAKnowledgeBase):
             session.exec(statement)
             session.commit()
 
-
 # ─── Space Folder / File helpers (Space-scoped operations on KnowledgeFile) ──
-
-class SpaceFileDao:
-    """ DAO for space folder and file operations in the knowledge_file table """
-
-    @classmethod
-    def count_folder_by_name(cls, knowledge_id: int, folder_name: str, file_level_path: str,
-                             exclude_id: Optional[int] = None) -> int:
-        """ Count folders with the same name in the same directory level """
-        statement = select(func.count(KnowledgeFile.id)).where(
-            KnowledgeFile.knowledge_id == knowledge_id,
-            KnowledgeFile.file_type == 0,
-            KnowledgeFile.file_name == folder_name,
-            KnowledgeFile.file_level_path == file_level_path
-        )
-        if exclude_id is not None:
-            statement = statement.where(KnowledgeFile.id != exclude_id)
-        with get_sync_db_session() as session:
-            return session.scalar(statement)
-
-    @classmethod
-    def count_file_by_name_or_md5(cls, knowledge_id: int, file_name: str, md5: str) -> int:
-        """ Count files matching name or md5 in the space (duplicate check on upload) """
-        statement = select(func.count(KnowledgeFile.id)).where(
-            KnowledgeFile.knowledge_id == knowledge_id,
-            KnowledgeFile.file_type == 1,
-            or_(
-                KnowledgeFile.file_name == file_name,
-                KnowledgeFile.md5 == md5
-            )
-        )
-        with get_sync_db_session() as session:
-            return session.scalar(statement)
-
-    @classmethod
-    def count_file_by_name(cls, knowledge_id: int, file_name: str,
-                           exclude_id: Optional[int] = None) -> int:
-        """ Count files with the same name in the space (duplicate check on rename) """
-        statement = select(func.count(KnowledgeFile.id)).where(
-            KnowledgeFile.knowledge_id == knowledge_id,
-            KnowledgeFile.file_type == 1,
-            KnowledgeFile.file_name == file_name
-        )
-        if exclude_id is not None:
-            statement = statement.where(KnowledgeFile.id != exclude_id)
-        with get_sync_db_session() as session:
-            return session.scalar(statement)
-
-    @classmethod
-    def get_children_by_prefix(cls, knowledge_id: int, prefix: str) -> List[KnowledgeFile]:
-        """ Get all files/folders whose file_level_path starts with the given prefix """
-        statement = select(KnowledgeFile).where(
-            KnowledgeFile.knowledge_id == knowledge_id,
-            or_(
-                KnowledgeFile.file_level_path == prefix,
-                KnowledgeFile.file_level_path.like(f"{prefix}/%")
-            )
-        )
-        with get_sync_db_session() as session:
-            return session.exec(statement).all()
-
-    @classmethod
-    def delete_by_ids(cls, ids: List[int]):
-        """ Delete knowledge file records by IDs """
-        if not ids:
-            return
-        with get_sync_db_session() as session:
-            session.exec(delete(KnowledgeFile).where(KnowledgeFile.id.in_(ids)))
-            session.commit()
-
-    @classmethod
-    async def async_list_children(
-            cls,
-            knowledge_id: int,
-            parent_id: Optional[int],
-            page: int = 1,
-            page_size: int = 20,
-    ) -> List[KnowledgeFile]:
-        """
-        Async: List direct children (folders first, then files) under a given parent.
-        When parent_id is None, returns root-level items (file_level_path == '').
-        Paginated: page is 1-indexed.
-        """
-        if parent_id is None:
-            path_filter = KnowledgeFile.file_level_path == ''
-        else:
-            path_filter = KnowledgeFile.file_level_path == f"/{parent_id}"
-
-        statement = (
-            select(KnowledgeFile)
-            .where(
-                KnowledgeFile.knowledge_id == knowledge_id,
-                path_filter,
-            )
-            # file_type 0 = folder (sorts first), 1 = file (sorts after)
-            .order_by(KnowledgeFile.file_type.asc(), KnowledgeFile.create_time.desc())
-            .offset((page - 1) * page_size)
-            .limit(page_size)
-        )
-        async with get_async_db_session() as session:
-            result = await session.exec(statement)
-            return result.all()
-
-    @classmethod
-    async def async_count_children(
-            cls,
-            knowledge_id: int,
-            parent_id: Optional[int],
-    ) -> int:
-        """
-        Async: Count direct children under a given parent.
-        When parent_id is None, counts root-level items.
-        """
-        if parent_id is None:
-            path_filter = KnowledgeFile.file_level_path == ''
-        else:
-            path_filter = KnowledgeFile.file_level_path == f"/{parent_id}"
-
-        statement = select(func.count(KnowledgeFile.id)).where(
-            KnowledgeFile.knowledge_id == knowledge_id,
-            path_filter,
-        )
-        async with get_async_db_session() as session:
-            return await session.scalar(statement)

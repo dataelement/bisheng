@@ -1,4 +1,4 @@
-from typing import Optional, List
+from typing import Optional, List, Dict
 
 from pydantic import BaseModel, Field
 
@@ -15,8 +15,11 @@ class KnowledgeSpaceCreateReq(BaseModel):
 
 class KnowledgeSpaceInfoResp(KnowledgeBase):
     user_name: str = Field(default="", description="Knowledge Space creator name")
+    avatar: Optional[str] = Field(default=None, description="Knowledge Space creator avatar")
     follower_num: int = Field(1, description="Follower Number")
     file_num: int = Field(1, description="Total File Number")
+    is_followed: bool = Field(default=False, description="Knowledge Space followed by current user or not")
+    is_pending: bool = Field(default=False, description="Knowledge Space pending or not")
 
 
 class KnowledgeSpaceUpdateReq(BaseModel):
@@ -60,7 +63,9 @@ class ChatReq(BaseModel):
 
 
 class ChatFolderReq(ChatReq):
-    tags: Optional[List[int]] = Field(None, description="List of Tag IDs for filtering")
+    folder_id: int = Field(default=0, description="Folder ID")
+    chat_id: str = Field(..., description="Chat ID")
+    tags: Optional[List[Dict]] = Field(None, description="List of Tag info for filtering")
 
 
 class SubscribeSpaceResp(BaseModel):

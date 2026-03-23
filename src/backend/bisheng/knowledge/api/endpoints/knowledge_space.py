@@ -1,10 +1,13 @@
-from typing import Any, Optional
+from typing import Any, Optional, List
 
-from fastapi import APIRouter, Depends, Body
+from fastapi import APIRouter, Depends, Body, Query
+from starlette.responses import StreamingResponse
 
-from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.common.schemas.api import resp_200
-from bisheng.knowledge.api.dependencies import get_knowledge_space_service
+from bisheng.common.errcode import BaseErrorCode
+from bisheng.common.errcode.http_error import ServerError
+from bisheng.common.schemas.api import resp_200, SSEResponse
+from bisheng.knowledge.api.dependencies import get_knowledge_space_service, get_knowledge_space_chat_service
+from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileStatus
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     KnowledgeSpaceCreateReq, KnowledgeSpaceUpdateReq,
     FolderCreateReq, FolderRenameReq,
@@ -105,9 +108,10 @@ async def get_knowledge_square(
         order_by: str = 'update_time',
         page: int = 1,
         page_size: int = 20,
+        keyword: str = None,
         svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
-    result = await svc.get_knowledge_square(order_by, page, page_size)
+    result = await svc.get_knowledge_square(keyword, order_by, page, page_size)
     return resp_200(result)
 
 
@@ -127,11 +131,59 @@ async def get_space_members(
 async def list_space_children(
         space_id: int,
         parent_id: Optional[int] = None,
+        order_field: str = 'file_type',
+        order_sort: str = 'asc',
+        file_status: Optional[KnowledgeFileStatus] = None,
         page: int = 1,
         page_size: int = 20,
         svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
-    result = await svc.list_space_children(space_id, parent_id, page, page_size)
+    result = await svc.list_space_children(space_id, parent_id, order_field, order_sort,
+                                           file_status=file_status, page=page, page_size=page_size)
+    return resp_200(result)
+
+
+@router.get('/{space_id}/search')
+async def list_space_children(
+        space_id: int,
+        parent_id: Optional[int] = None,
+        page: int = 1,
+        page_size: int = 20,
+        tag_ids: List[int] = Query(default=None, description='标签ID列表'),
+        keyword: Optional[str] = None,
+        svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    result = await svc.search_space_children(space_id, parent_id, tag_ids=tag_ids, keyword=keyword, page=page,
+                                             page_size=page_size)
+    return resp_200(result)
+
+
+@router.get("/{space_id}/tag")
+async def get_space_tag(
+        space_id: int,
+        svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+):
+    result = await svc.get_space_tags(space_id)
+    return resp_200(result)
+
+
+@router.post('/{space_id}/tag')
+async def add_space_tags(
+        space_id: int,
+        tag_name: str = Body(..., embed=True, description='标签名称'),
+        svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+):
+    result = await svc.add_space_tag(space_id, tag_name)
+    return resp_200(result)
+
+
+@router.delete('/{space_id}/tag')
+async def delete_space_tags(
+        space_id: int,
+        tag_id: int = Body(..., embed=True, description='标签ID'),
+        svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+):
+    result = await svc.delete_space_tag(space_id, tag_id)
     return resp_200(result)
 
 
@@ -170,6 +222,16 @@ async def delete_folder(
 ) -> Any:
     await svc.delete_folder(space_id, folder_id)
     return resp_200()
+
+
+@router.get('/{space_id}/folders/{folder_id}/parent')
+async def get_folder_parent(
+        space_id: int,
+        folder_id: int,
+        svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    result = await svc.get_folder_file_parent(space_id, folder_id)
+    return resp_200(result)
 
 
 # ──────────────────────────── Files ───────────────────────────────────────────
@@ -219,6 +281,17 @@ async def get_file_preview(
     return resp_200(urls)
 
 
+@router.post('/{space_id}/files/{file_id}/tag')
+async def update_file_tags(
+        space_id: int,
+        file_id: int,
+        tag_ids: List[int] = Body(..., embed=True, description='标签ID列表'),
+        svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+):
+    result = await svc.update_file_tags(space_id, file_id, tag_ids)
+    return resp_200(result)
+
+
 # ──────────────────────────── Batch Ops ───────────────────────────────────────
 
 @router.post('/{space_id}/files/batch-download')
@@ -239,6 +312,17 @@ async def batch_delete(
 ) -> Any:
     await svc.batch_delete(space_id, req.file_ids, req.folder_ids)
     return resp_200()
+
+
+@router.post('/{space_id}/files/batch-tag')
+async def batch_update_tags(
+        space_id: int,
+        file_ids: List[int] = Body(..., embed=True, description='文件ID列表'),
+        tag_ids: List[int] = Body(..., embed=True, description='标签ID列表'),
+        svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    result = await svc.batch_add_file_tags(space_id, file_ids, tag_ids)
+    return resp_200(result)
 
 
 # ──────────────────────────── Subscribe ───────────────────────────────────────
@@ -268,18 +352,87 @@ async def chat_single_file(
         space_id: int,
         file_id: int,
         req: ChatReq,
-        login_user: UserPayload = Depends(UserPayload.get_login_user),
+        svc: KnowledgeSpaceChatService = Depends(get_knowledge_space_chat_service),
 ) -> Any:
-    response = KnowledgeSpaceChatService.chat_single_file(space_id, login_user.user_id, file_id, req.query)
+    async def event_stream():
+        try:
+            async for one in svc.chat_single_file(space_id, file_id, req.query):
+                yield SSEResponse(data=one).to_string()
+        except BaseErrorCode as e:
+            yield e.to_sse_event_instance_str()
+        except Exception as e:
+            yield ServerError(exception=e).to_sse_event_instance_str()
+
+    return StreamingResponse(event_stream(), media_type='text/event-stream')
+
+
+@router.post('/{space_id}/chat/file/{file_id}/history')
+async def chat_single_file_history(
+        space_id: int,
+        file_id: int,
+        page_size: int = 20,
+        svc: KnowledgeSpaceChatService = Depends(get_knowledge_space_chat_service),
+) -> Any:
+    response = await svc.single_file_history(space_id, file_id, page_size)
     return resp_200(response)
 
 
-@router.post('/{space_id}/chat/folder/{folder_id}')
+@router.get('/{space_id}/chat/folder/session')
+async def get_chat_folder_session(
+        space_id: int,
+        folder_id: int = Query(default=0, description="folder id"),
+        svc: KnowledgeSpaceChatService = Depends(get_knowledge_space_chat_service),
+):
+    result = await svc.get_chat_folder_session(space_id, folder_id)
+    return resp_200(result)
+
+
+@router.post('/{space_id}/chat/folder/session')
+async def create_chat_folder_session(
+        space_id: int,
+        folder_id: int = Body(default=0, embed=True, description="folder id"),
+        svc: KnowledgeSpaceChatService = Depends(get_knowledge_space_chat_service),
+):
+    result = await svc.create_chat_folder_session(space_id, folder_id)
+    return resp_200(result)
+
+
+@router.delete('/{space_id}/chat/folder/session')
+async def create_chat_folder_session(
+        space_id: int,
+        folder_id: int = Body(default=0, description="folder id"),
+        chat_id: str = Body(..., description='Chat ID'),
+        svc: KnowledgeSpaceChatService = Depends(get_knowledge_space_chat_service),
+):
+    result = await svc.delete_chat_folder_session(space_id, folder_id, chat_id)
+    return resp_200(result)
+
+
+@router.get('/{space_id}/chat/folder/history')
+async def get_chat_folder_history(
+        space_id: int,
+        folder_id: int = Query(default=0, description="folder id"),
+        chat_id: str = Query(..., description='Chat ID'),
+        page_size: int = 20,
+        svc: KnowledgeSpaceChatService = Depends(get_knowledge_space_chat_service),
+):
+    result = await svc.get_chat_folder_history(space_id, folder_id, chat_id, page_size)
+    return resp_200(result)
+
+
+@router.post('/{space_id}/chat/folder')
 async def chat_folder(
         space_id: int,
-        folder_id: int,
         req: ChatFolderReq,
-        login_user: UserPayload = Depends(UserPayload.get_login_user),
+        svc: KnowledgeSpaceChatService = Depends(get_knowledge_space_chat_service),
 ) -> Any:
-    response = KnowledgeSpaceChatService.chat_folder(space_id, login_user.user_id, folder_id, req.query, req.tags)
-    return resp_200(response)
+    async def event_stream():
+        try:
+            async for one in svc.chat_folder(space_id, req.folder_id, req.chat_id, req.query, req.tags):
+                yield SSEResponse(data=one).to_string()
+        except BaseErrorCode as e:
+            yield e.to_sse_event_instance_str()
+        except Exception as e:
+            yield ServerError(exception=e).to_sse_event_instance_str()
+
+    return StreamingResponse(event_stream(), media_type='text/event-stream')

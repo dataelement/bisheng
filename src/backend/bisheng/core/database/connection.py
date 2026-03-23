@@ -113,7 +113,7 @@ class DatabaseConnectionManager:
                 yield session
             except Exception as e:
                 session.rollback()
-                logger.error(f"Database session rolled back due to error: {e}")
+                logger.exception(f"Database session rolled back due to error: {e}")
                 raise
             finally:
                 session.close()
@@ -135,7 +135,7 @@ class DatabaseConnectionManager:
                 yield session
             except Exception as e:
                 await session.rollback()
-                logger.error(f"Database session rolled back due to error: {e}")
+                logger.exception(f"Database session rolled back due to error: {e}")
                 raise
             finally:
                 await session.close()

@@ -90,6 +90,7 @@ class KnowledgeRead(KnowledgeBase):
     id: int
     user_name: Optional[str] = None
     copiable: Optional[bool] = None
+    is_pinned: Optional[bool] = False
 
 
 class KnowledgeUpdate(BaseModel):
@@ -629,13 +630,16 @@ class KnowledgeDao(KnowledgeBase):
             return session.exec(statement).all()
 
     @classmethod
-    async def async_get_public_spaces(cls, order_by: str = 'update_time') -> List[Knowledge]:
+    async def async_get_public_spaces(cls, keyword: str = None, order_by: str = 'update_time') -> List[Knowledge]:
         """ Async: Get all PUBLIC and APPROVAL Knowledge Spaces (Knowledge Square) """
         statement = select(Knowledge).where(
             Knowledge.type == KnowledgeTypeEnum.SPACE.value,
             Knowledge.is_released == True,
             Knowledge.auth_type.in_([AuthTypeEnum.PUBLIC.value, AuthTypeEnum.APPROVAL.value])
         )
+        if keyword:
+            statement = statement.where(or_(Knowledge.name.like(f"%{keyword}%"),
+                                            Knowledge.description.like(f"%{keyword}%")))
         statement = cls._apply_space_order(statement, order_by)
         async with get_async_db_session() as session:
             result = await session.exec(statement)

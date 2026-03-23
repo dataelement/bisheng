@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import React, { useRef, useState } from "react";
 import { FileStatus, FileType, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceRole } from "~/api/knowledge";
+import { SearchParams } from "./CompoundSearchInput";
 import {
     Breadcrumb,
     BreadcrumbItem, BreadcrumbLink,
@@ -29,7 +30,7 @@ interface KnowledgeSpaceContentProps {
     total: number;
     onPageChange: (page: number) => void;
     loading: boolean;
-    onSearch: (query: string) => void;
+    onSearch: (params: SearchParams) => void;
     onFilterStatus: (status: FileStatus[]) => void;
     onSort: (sortBy: SortType, direction: SortDirection) => void;
     onNavigateFolder: (folderId?: string) => void;
@@ -83,6 +84,7 @@ export function KnowledgeSpaceContent({
     ];
 
     const [searchQuery, setSearchQuery] = useState("");
+    const [searchTagIds, setSearchTagIds] = useState<number[]>([]);
     const [searchScope, setSearchScope] = useState<"current" | "space">("current");
     const [viewMode, setViewMode] = useState<"card" | "list">("card");
     const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
@@ -95,11 +97,10 @@ export function KnowledgeSpaceContent({
     // Drag and drop state
     const dragCounter = useRef(0);
 
-    // Mock/placeholder for space tags or fetch them
-    // In a real scenario, this might come from an API endpoint or context
-    const spaceTags = ["国际", "进出口", "大豆油", "政策", "水稻", "粮食", "进口", "出口", "大豆"];
 
-    const isAdmin = space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
+
+    const isAdmin = true // space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
+    const isSearching = searchQuery.trim().length > 0 || searchTagIds.length > 0;
 
     const { showToast } = useToastContext();
     const confirm = useConfirm();
@@ -113,9 +114,10 @@ export function KnowledgeSpaceContent({
         });
     };
 
-    const handleSearch = (query: string) => {
-        setSearchQuery(query);
-        onSearch(query);
+    const handleSearch = (params: SearchParams) => {
+        setSearchQuery(params.keyword);
+        setSearchTagIds(params.tagIds);
+        onSearch(params);
     };
 
     const handleStatusFilter = (status: FileStatus, checked: boolean) => {
@@ -184,34 +186,13 @@ export function KnowledgeSpaceContent({
         }
     };
 
-    const handleSaveTags = async (tags: string[]) => {
-        if (isBatchTagging) {
-            try {
-                // Here you'd call an API to add tags to all files in `selectedFiles`
-                // e.g., await api.batchAddTags(Array.from(selectedFiles), tags);
-                console.log("Batch saving tags for files", Array.from(selectedFiles), "Tags:", tags);
-
-                // Mock success for now: in reality trigger a refresh
-                setIsBatchTagging(false);
-                setSelectedFiles(new Set());
-                showToast({ message: "批量添加标签成功", status: "success" });
-            } catch (error) {
-                showToast({ message: "批量添加标签失败", status: "error" });
-            }
-            return;
-        }
-
-        if (!editingTagsFileId) return;
-        try {
-            // Here you'd normally call an API to save the tags to `editingTagsFileId`
-            // e.g., await api.updateFileTags(editingTagsFileId, tags);
-            console.log("Saving tags for file", editingTagsFileId, "Tags:", tags);
-            onEditTags(editingTagsFileId); // Note: might need to adjust props if onEditTags is just a trigger
-            setEditingTagsFileId(null);
-            showToast({ message: "标签保存成功", status: "success" });
-        } catch (error) {
-            showToast({ message: "标签保存失败", status: "error" });
-        }
+    // Called after tags are saved successfully — refresh file list
+    const handleTagsSaved = () => {
+        setEditingTagsFileId(null);
+        setIsBatchTagging(false);
+        setSelectedFiles(new Set());
+        // Trigger a refresh of the file list from parent
+        onEditTags(editingTagsFileId || "");
     };
 
     const handleBatchDelete = async () => {
@@ -412,6 +393,7 @@ export function KnowledgeSpaceContent({
                 currentPath={currentPath}
                 onNavigateFolder={onNavigateFolder}
                 searchQuery={searchQuery}
+                isSearching={isSearching}
                 onSearch={handleSearch}
                 viewMode={viewMode}
                 setViewMode={setViewMode}
@@ -591,9 +573,10 @@ export function KnowledgeSpaceContent({
             <EditTagsModal
                 isOpen={!!editingTagsFileId || isBatchTagging}
                 onClose={handleCloseEditTags}
-                onSave={handleSaveTags}
-                initialTags={isBatchTagging ? [] : files.find(f => f.id === editingTagsFileId)?.tags || []}
-                spaceTags={spaceTags}
+                onSaved={handleTagsSaved}
+                spaceId={space.id}
+                fileId={isBatchTagging ? null : editingTagsFileId}
+                fileIds={isBatchTagging ? Array.from(selectedFiles) : undefined}
             />
         </div>
     );

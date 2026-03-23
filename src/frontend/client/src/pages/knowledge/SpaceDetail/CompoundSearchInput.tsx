@@ -7,20 +7,27 @@ import {
     DropdownMenuItem
 } from '~/components/ui/DropdownMenu';
 import { cn } from '~/utils';
+import { SpaceTag, getSpaceTagsApi } from '~/api/knowledge';
+
+export interface SearchParams {
+    scope: 'current' | 'all';
+    tagIds: number[];
+    keyword: string;
+}
 
 export interface CompoundSearchInputProps {
+    spaceId: string;
     isRoot?: boolean;
-    onSearch?: (params: { scope: 'current' | 'all', tags: string[], keyword: string }) => void;
+    onSearch?: (params: SearchParams) => void;
     className?: string;
 }
 
-const ALL_TAGS = ["国际", "进出口", "大豆油", "政策", "水稻", "粮食"];
-
-export function CompoundSearchInput({ isRoot = false, onSearch, className }: CompoundSearchInputProps) {
+export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, className }: CompoundSearchInputProps) {
     const [scope, setScope] = useState<'current' | 'all'>('current');
-    const [tags, setTags] = useState<string[]>([]);
+    const [selectedTags, setSelectedTags] = useState<SpaceTag[]>([]);
     const [keyword, setKeyword] = useState('');
     const [isFocused, setIsFocused] = useState(false);
+    const [spaceTags, setSpaceTags] = useState<SpaceTag[]>([]);
 
     const containerRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
@@ -28,6 +35,12 @@ export function CompoundSearchInput({ isRoot = false, onSearch, className }: Com
     useEffect(() => {
         if (isRoot) setScope('all');
     }, [isRoot]);
+
+    // Fetch space tags when spaceId changes
+    useEffect(() => {
+        if (!spaceId) return;
+        getSpaceTagsApi(spaceId).then(setSpaceTags).catch(() => {});
+    }, [spaceId]);
 
     // Handle clicking outside to close the dropdown
     useEffect(() => {
@@ -40,39 +53,50 @@ export function CompoundSearchInput({ isRoot = false, onSearch, className }: Com
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
+    const isSearching = selectedTags.length > 0 || keyword.trim().length > 0;
+
+    const fireSearch = (tags: SpaceTag[], kw: string) => {
+        onSearch?.({
+            scope: isRoot ? 'all' : scope,
+            tagIds: tags.map((t) => t.id),
+            keyword: kw,
+        });
+    };
+
     const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
         if (e.key === 'Enter') {
-            onSearch?.({ scope: isRoot ? 'all' : scope, tags, keyword });
+            e.preventDefault();
+            fireSearch(selectedTags, keyword);
             setIsFocused(false);
             inputRef.current?.blur();
-        } else if (e.key === 'Backspace' && keyword === '' && tags.length > 0) {
-            setTags(tags.slice(0, -1));
+        } else if (e.key === 'Backspace' && keyword === '' && selectedTags.length > 0) {
+            const newTags = selectedTags.slice(0, -1);
+            setSelectedTags(newTags);
         }
     };
 
-    const handleAddTag = (tag: string) => {
-        if (tags.length < 5 && !tags.includes(tag)) {
-            const newTags = [...tags, tag];
-            setTags(newTags);
-            // immediately trigger search
-            onSearch?.({ scope: isRoot ? 'all' : scope, tags: newTags, keyword });
-            inputRef.current?.focus();
-            setIsFocused(true);
-        }
+    // Click a tag in the dropdown → select it and immediately search
+    const handleAddTag = (tag: SpaceTag) => {
+        if (selectedTags.length >= 5 || selectedTags.some((t) => t.id === tag.id)) return;
+        const newTags = [...selectedTags, tag];
+        setSelectedTags(newTags);
+        fireSearch(newTags, keyword);
+        inputRef.current?.focus();
+        setIsFocused(true);
     };
 
-    const handleRemoveTag = (tagToRemove: string) => {
-        const newTags = tags.filter(t => t !== tagToRemove);
-        setTags(newTags);
-        onSearch?.({ scope: isRoot ? 'all' : scope, tags: newTags, keyword });
+    const handleRemoveTag = (tagId: number) => {
+        const newTags = selectedTags.filter((t) => t.id !== tagId);
+        setSelectedTags(newTags);
+        fireSearch(newTags, keyword);
         inputRef.current?.focus();
     };
 
     const handleClearAll = () => {
-        setTags([]);
+        setSelectedTags([]);
         setKeyword('');
         setIsFocused(false);
-        onSearch?.({ scope: isRoot ? 'all' : scope, tags: [], keyword: '' });
+        onSearch?.({ scope: isRoot ? 'all' : scope, tagIds: [], keyword: '' });
     };
 
     const scopeLabel = scope === 'current' ? '当前位置' : '当前知识空间';
@@ -107,15 +131,15 @@ export function CompoundSearchInput({ isRoot = false, onSearch, className }: Com
                     </DropdownMenu>
                 )}
 
-                {/* Tags */}
-                {tags.map(tag => (
-                    <div key={tag} className="flex items-center h-[22px] gap-1 bg-[#f2f3f5] text-[#4e5969] text-sm px-2 py-1 rounded truncate max-w-[100px] shrink-0">
-                        {tag}
+                {/* Selected Tags */}
+                {selectedTags.map((tag) => (
+                    <div key={tag.id} className="flex items-center h-[22px] gap-1 bg-[#f2f3f5] text-[#4e5969] text-sm px-2 py-1 rounded truncate max-w-[100px] shrink-0">
+                        {tag.name}
                         <X
                             className="size-3 text-[#86909c] hover:text-[#4e5969] cursor-pointer shrink-0"
                             onClick={(e) => {
                                 e.stopPropagation();
-                                handleRemoveTag(tag);
+                                handleRemoveTag(tag.id);
                             }}
                         />
                     </div>
@@ -128,13 +152,13 @@ export function CompoundSearchInput({ isRoot = false, onSearch, className }: Com
                     onChange={(e) => setKeyword(e.target.value)}
                     onKeyDown={handleKeyDown}
                     maxLength={100}
-                    placeholder={tags.length === 0 ? "在当前知识空间进行搜索" : ""}
+                    placeholder={selectedTags.length === 0 ? "在当前知识空间进行搜索" : ""}
                     className="flex-1 min-w-[50px] bg-transparent outline-none text-[13px] text-[#1d2129] placeholder:text-[#86909c] h-[22px]"
                     onFocus={() => setIsFocused(true)}
                 />
 
                 {/* Clear button */}
-                {(keyword || tags.length > 0) && (
+                {isSearching && (
                     <button
                         className="ml-auto w-4 h-4 rounded-full bg-[#f2f3f5] flex items-center justify-center hover:bg-[#e5e6eb] shrink-0 transition-colors"
                         onClick={(e) => {
@@ -148,16 +172,19 @@ export function CompoundSearchInput({ isRoot = false, onSearch, className }: Com
                 )}
             </div>
 
-            {/* Dropdown Panel */}
+            {/* Dropdown Panel — space tags */}
             {isFocused && (
                 <div className="absolute top-full left-0 mt-1 min-w-[320px] max-w-full bg-white border border-[#e5e6eb] shadow-[0_4px_10px_rgba(0,0,0,0.1)] rounded-md z-50 p-3">
                     <div className="text-sm font-medium text-gray-800 mb-2">已有标签</div>
                     <div className="flex flex-wrap gap-2">
-                        {ALL_TAGS.map(tag => {
-                            const isSelected = tags.includes(tag);
+                        {spaceTags.length === 0 && (
+                            <span className="text-sm text-[#86909c]">暂无标签</span>
+                        )}
+                        {spaceTags.map((tag) => {
+                            const isSelected = selectedTags.some((t) => t.id === tag.id);
                             return (
                                 <button
-                                    key={tag}
+                                    key={tag.id}
                                     className={cn(
                                         "px-2 rounded text-sm transition-colors border outline-none",
                                         isSelected
@@ -169,10 +196,10 @@ export function CompoundSearchInput({ isRoot = false, onSearch, className }: Com
                                         e.stopPropagation();
                                         if (!isSelected) handleAddTag(tag);
                                     }}
-                                    disabled={isSelected || tags.length >= 5}
+                                    disabled={isSelected || selectedTags.length >= 5}
                                     type="button"
                                 >
-                                    {tag}
+                                    {tag.name}
                                 </button>
                             );
                         })}

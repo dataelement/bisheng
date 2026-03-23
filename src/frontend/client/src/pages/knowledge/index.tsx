@@ -10,9 +10,12 @@ import {
     SortType,
     VisibilityType,
     getSpaceChildrenApi,
+    searchSpaceChildrenApi,
     getSpaceInfoApi,
     createSpaceApi,
     updateSpaceApi,
+    getSquareSpacesApi,
+    subscribeSpaceApi,
     createFolderApi,
     renameFolderApi,
     deleteFolderApi,
@@ -21,6 +24,7 @@ import {
     renameFileApi,
     deleteFileApi,
 } from "~/api/knowledge";
+import { SearchParams } from "./SpaceDetail/CompoundSearchInput";
 import { NotificationSeverity } from "~/common";
 import { KnowledgeSpaceMemberDialog } from "~/components/KnowledgeSpaceMemberDialog";
 import { useToastContext } from "~/Providers";
@@ -58,6 +62,7 @@ export default function Knowledge() {
     const [total, setTotal] = useState(0);
     const [loading, setLoading] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
+    const [searchTagIds, setSearchTagIds] = useState<number[]>([]);
     const [statusFilter, setStatusFilter] = useState<FileStatus[]>([]);
     const [sortBy, setSortBy] = useState(SortType.UPDATE_TIME);
     const [sortDirection, setSortDirection] = useState(SortDirection.DESC);
@@ -91,12 +96,22 @@ export default function Knowledge() {
 
         setLoading(true);
         try {
-            const res = await getSpaceChildrenApi({
-                space_id: activeSpace.id,
-                parent_id: currentFolderId,
-                page,
-                page_size: pageSize,
-            });
+            const isSearching = searchQuery.trim().length > 0 || searchTagIds.length > 0;
+            const res = isSearching
+                ? await searchSpaceChildrenApi({
+                    space_id: activeSpace.id,
+                    parent_id: currentFolderId,
+                    page,
+                    page_size: pageSize,
+                    keyword: searchQuery || undefined,
+                    tag_ids: searchTagIds.length > 0 ? searchTagIds : undefined,
+                })
+                : await getSpaceChildrenApi({
+                    space_id: activeSpace.id,
+                    parent_id: currentFolderId,
+                    page,
+                    page_size: pageSize,
+                });
             setFiles(res.data);
             setTotal(res.total);
             setCurrentPage(page);
@@ -132,7 +147,13 @@ export default function Knowledge() {
             setCurrentPage(1);
             loadFiles(1);
         }
-    }, [searchQuery, statusFilter, sortBy, sortDirection, currentFolderId]);
+    }, [searchQuery, searchTagIds, statusFilter, sortBy, sortDirection, currentFolderId]);
+
+    // Handle search from CompoundSearchInput
+    const handleSearch = useCallback((params: SearchParams) => {
+        setSearchQuery(params.keyword);
+        setSearchTagIds(params.tagIds);
+    }, []);
 
     // ─── Space actions ──────────────────────────────────────────────────
     const handleSpaceSelect = async (space: KnowledgeSpace | null) => {
@@ -286,6 +307,7 @@ export default function Knowledge() {
             // Refresh the file list to reflect new entries
             loadFiles(currentPage);
         } catch (err) {
+            console.log('err :>> ', err);
             showToast({ message: "文件注册到知识空间失败", severity: NotificationSeverity.ERROR });
         }
     };
@@ -483,6 +505,8 @@ export default function Knowledge() {
                     searchPlaceholder="输入知识空间名称或描述进行搜索"
                     emptyText="未找到匹配知识空间"
                     joinToastPrefix="已申请加入知识空间："
+                    fetchApi={getSquareSpacesApi}
+                    subscribeApi={subscribeSpaceApi}
                 />
             </div>
         );
@@ -532,7 +556,7 @@ export default function Knowledge() {
                             total={total}
                             onPageChange={handlePageChange}
                             loading={loading}
-                            onSearch={setSearchQuery}
+                            onSearch={handleSearch}
                             onFilterStatus={setStatusFilter}
                             onSort={handleSort}
                             onNavigateFolder={handleNavigateFolder}

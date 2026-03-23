@@ -173,6 +173,28 @@ class SpaceChannelMemberDao:
             return await session.scalar(statement)
 
     @classmethod
+    async def async_count_members_batch(cls, space_ids: List[str]) -> dict:
+        """Async: Batch count active (non-creator) members for multiple spaces.
+
+        Returns a dict mapping space_id (str) -> subscriber count.
+        """
+        if not space_ids:
+            return {}
+        statement = (
+            select(SpaceChannelMember.business_id, func.count().label('cnt'))
+            .where(
+                SpaceChannelMember.business_id.in_(space_ids),
+                SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
+                SpaceChannelMember.user_role != UserRoleEnum.CREATOR,
+                SpaceChannelMember.status == True,
+            )
+            .group_by(SpaceChannelMember.business_id)
+        )
+        async with get_async_db_session() as session:
+            rows = (await session.exec(statement)).all()
+        return {row[0]: row[1] for row in rows}
+
+    @classmethod
     async def async_get_members_by_space(cls, space_id: int, order_by: str = 'user_id') -> List[SpaceChannelMember]:
         """ Async: Get all active members of a space """
 

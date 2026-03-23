@@ -35,9 +35,9 @@ class PreviewCacheTransformer(BaseDocumentTransformer):
         else:
             # aggregate chunk
             for doc in documents:
-                for k in doc.metadata:
+                for k in list(doc.metadata.keys()):
                     if k not in knowledge_metadata_fields:
-                        del doc.metadata[k]
+                        doc.metadata.pop(k)
                 doc.metadata.update(self.file_metadata)
                 doc.page_content = KnowledgeUtils.aggregate_chunk_metadata(doc.page_content, doc.metadata)
 

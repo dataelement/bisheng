@@ -47,7 +47,7 @@ from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.interface.importing.utils import import_vectorstore
 from bisheng.interface.initialize.loading import instantiate_vectorstore
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
-from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao
+from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFile,
     KnowledgeFileDao,
@@ -287,12 +287,13 @@ def addEmbedding(
 ):
     """Adding Files to Vector SumsesCunene"""
 
+    knowledge_info = KnowledgeDao.query_by_id(knowledge_id)
     logger.info("start init Milvus")
     vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(knowledge_files[0].updater_id,
-                                                                        knowledge_id=knowledge_id,
+                                                                        knowledge=knowledge_info,
                                                                         metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
     logger.info("start init ES")
-    es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge_id=knowledge_id,
+    es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=knowledge_info,
                                                                 metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
     for index, db_file in enumerate(knowledge_files):
         # Try to get chunks of a file from the cache
@@ -312,6 +313,7 @@ def addEmbedding(
                 invoke_user_id=db_file.user_id,
                 db_file=db_file,
                 preview_cache_key=preview_cache_key,
+                need_thumbnail=knowledge_info.type == KnowledgeTypeEnum.SPACE.value,
                 vector_store=[vector_client, es_client],
             )
             _ = knowledge_file_pipeline.run()
