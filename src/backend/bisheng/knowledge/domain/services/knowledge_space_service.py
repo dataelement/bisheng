@@ -5,6 +5,7 @@ from typing import List, Optional, Dict
 
 from fastapi import Request
 
+from bisheng.api.services.base import BaseService
 from bisheng.api.v1.schemas import KnowledgeFileOne, FileProcessBase, ExcelRule
 from bisheng.common.dependencies.user_deps import UserPayload  # noqa: F401 – kept for type hints
 from bisheng.common.errcode.http_error import NotFoundError
@@ -42,7 +43,7 @@ _MAX_SPACE_PER_USER = 30
 _MAX_SUBSCRIBE_PER_USER = 50
 
 
-class KnowledgeSpaceService:
+class KnowledgeSpaceService(BaseService):
     """ Service for Knowledge Space operations.
     Instance-based; each method receives login_user as an argument.
     All business logic is async; DB access is delegated to DAO classes.
@@ -396,6 +397,7 @@ class KnowledgeSpaceService:
                 counts = folder_counts.get(one.id, {"file_num": 0, "success_file_num": 0})
                 item.update(counts)
             else:
+                item["thumbnails"] = self.get_logo_share_link(one.thumbnails)
                 item["tags"] = file_tags.get(one.id, [])
             result.append(item)
 
