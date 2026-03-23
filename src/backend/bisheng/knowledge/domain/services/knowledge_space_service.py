@@ -217,9 +217,11 @@ class KnowledgeSpaceService(BaseService):
         for one in res:
             spcae_config = space_members.get(str(one.id))
             if spcae_config and spcae_config.is_pinned:
-                pinned_res.append(KnowledgeRead(**one.model_dump(), is_pinned=True))
+                pinned_res.append(
+                    KnowledgeSpaceInfoResp(**one.model_dump(), is_pinned=True, user_role=UserRoleEnum.CREATOR))
             else:
-                not_pinned_res.append(KnowledgeRead(**one.model_dump(), is_pinned=False))
+                not_pinned_res.append(
+                    KnowledgeSpaceInfoResp(**one.model_dump(), is_pinned=False, user_role=UserRoleEnum.CREATOR))
         return pinned_res + not_pinned_res
 
     async def get_my_followed_spaces(
@@ -235,16 +237,21 @@ class KnowledgeSpaceService(BaseService):
         if not members:
             return []
 
-        # Split into pinned and non-pinned while preserving relative order
-        pinned_ids = [int(m.business_id) for m in members if m.is_pinned]
-        normal_ids = [int(m.business_id) for m in members if not m.is_pinned]
+        members_map = {}
+        for one in members:
+            members_map[int(one.business_id)] = one
 
-        # Fetch each group sorted by the caller's order_by preference
-        pinned_spaces = await KnowledgeDao.async_get_spaces_by_ids(pinned_ids, order_by) if pinned_ids else []
-        normal_spaces = await KnowledgeDao.async_get_spaces_by_ids(normal_ids, order_by) if normal_ids else []
-
-        pinned_spaces = [KnowledgeRead(**one.model_dump(), is_pinned=True) for one in pinned_spaces]
-        normal_spaces = [KnowledgeRead(**one.model_dump(), is_pinned=False) for one in normal_spaces]
+        res = await KnowledgeDao.async_get_spaces_by_ids(list(members_map.keys()), order_by)
+        pinned_spaces = []
+        normal_spaces = []
+        for one in res:
+            member_conf = members_map[one.id]
+            if member_conf.is_pinned:
+                pinned_spaces.append(
+                    KnowledgeSpaceInfoResp(**one.model_dump(), is_pinned=True, user_role=member_conf.user_role))
+            else:
+                normal_spaces.append(
+                    KnowledgeSpaceInfoResp(**one.model_dump(), is_pinned=True, user_role=member_conf.user_role))
 
         return pinned_spaces + normal_spaces
 
