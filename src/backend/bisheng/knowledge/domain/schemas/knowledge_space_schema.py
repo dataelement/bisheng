@@ -15,6 +15,7 @@ class KnowledgeSpaceCreateReq(BaseModel):
 
 
 class KnowledgeSpaceInfoResp(KnowledgeBase):
+    id: int = Field(..., description="Knowledge Space ID")
     is_pinned: bool = Field(default=False, description="Knowledge Space pinned by current user or not")
     user_name: str = Field(default="", description="Knowledge Space creator name")
     avatar: Optional[str] = Field(default=None, description="Knowledge Space creator avatar")
