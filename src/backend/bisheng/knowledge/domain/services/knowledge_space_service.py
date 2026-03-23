@@ -253,20 +253,37 @@ class KnowledgeSpaceService:
         if not spaces:
             return {"total": 0, "page": page, "page_size": page_size, "data": []}
 
-        all_members = await SpaceChannelMemberDao.async_get_all_members_for_spaces(
-            self.login_user.user_id, [str(s.id) for s in spaces]
+        space_ids_str = [str(s.id) for s in spaces]
+        space_ids_int = [s.id for s in spaces]
+        creator_ids = list({s.user_id for s in spaces if s.user_id})
+
+        # Batch fetch: current-user memberships, creator user info, file counts, subscriber counts
+        all_members, creator_users, success_file_map, subscriber_map = await asyncio.gather(
+            SpaceChannelMemberDao.async_get_all_members_for_spaces(
+                self.login_user.user_id, space_ids_str
+            ),
+            UserDao.aget_user_by_ids(creator_ids) if creator_ids else asyncio.coroutine(lambda: [])(),
+            KnowledgeFileDao.async_count_success_files_batch(space_ids_int),
+            SpaceChannelMemberDao.async_count_members_batch(space_ids_str),
         )
+
         joined_ids = {m.business_id for m in all_members}
         pending_ids = {m.business_id for m in all_members if not m.status}
+        user_map = {u.user_id: u for u in (creator_users or [])}
 
         not_joined: list = []
         already_joined: list = []
         for s in spaces:
             sid = str(s.id)
+            creator = user_map.get(s.user_id)
             entry = {
                 "space": s,
                 "is_followed": sid in joined_ids and sid not in pending_ids,
                 "is_pending": sid in pending_ids,
+                "user_name": creator.user_name if creator else str(s.user_id),
+                "avatar": creator.avatar if creator else None,
+                "file_num": success_file_map.get(s.id, 0),
+                "follower_num": subscriber_map.get(sid, 0),
             }
             (already_joined if sid in joined_ids else not_joined).append(entry)
 

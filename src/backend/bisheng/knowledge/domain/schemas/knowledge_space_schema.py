@@ -15,6 +15,7 @@ class KnowledgeSpaceCreateReq(BaseModel):
 
 class KnowledgeSpaceInfoResp(KnowledgeBase):
     user_name: str = Field(default="", description="Knowledge Space creator name")
+    avatar: Optional[str] = Field(default=None, description="Knowledge Space creator avatar")
     follower_num: int = Field(1, description="Follower Number")
     file_num: int = Field(1, description="Total File Number")
 
@@ -60,6 +61,7 @@ class ChatReq(BaseModel):
 
 
 class ChatFolderReq(ChatReq):
+    folder_id: int = Field(default=0, description="Folder ID")
     chat_id: str = Field(..., description="Chat ID")
     tags: Optional[List[Dict]] = Field(None, description="List of Tag info for filtering")
 

@@ -9,7 +9,7 @@ from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 
 from bisheng.api.services.workstation import WorkStationService
 from bisheng.api.v1.schema.chat_schema import ChatMessageHistoryResponse
-from bisheng.api.v1.schemas import SubscriptionConfig, ChatResponse
+from bisheng.api.v1.schemas import ChatResponse, KnowledgeSpaceConfig
 from bisheng.chat_session.domain.chat import ChatSessionService
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
@@ -43,7 +43,7 @@ class KnowledgeSpaceChatService:
         return f"space_{knowledge_id}_file_{file_id}"
 
     @classmethod
-    def generate_flow_id_for_folder(cls, knowledge_id: int, folder_id: int) -> str:
+    def generate_flow_id_for_folder(cls, knowledge_id: int, folder_id: int = 0) -> str:
         """ Generate a unique flow_id representation for a folder chat """
         return f"space_{knowledge_id}_folder_{folder_id}"
 
@@ -65,7 +65,7 @@ class KnowledgeSpaceChatService:
                                                           flow_type=[FlowType.KNOLEDGE_SPACE.value],
                                                           include_delete=False)
         if not session:
-            session = MessageSessionDao.async_insert_one(MessageSession(
+            session = await MessageSessionDao.async_insert_one(MessageSession(
                 chat_id=generate_uuid(),
                 flow_id=flow_id,
                 flow_name=file_record.file_name,
@@ -121,32 +121,50 @@ class KnowledgeSpaceChatService:
             )
             inputs = [SystemMessage(content=prompt_obj.prompt.system), HumanMessage(content=prompt_obj.prompt.user)]
         answer = ""
+        reasoning_content = ""
         async for one in llm.astream(inputs):
             yield ChatResponse(
                 category="stream",
                 message={
                     "content": one.content,
-                }
+                    "reasoning_content": one.additional_kwargs.get("reasoning_content", ""),
+                },
+                type="stream"
             )
+            reasoning_content += one.additional_kwargs.get("reasoning_content", "")
             answer += one.content
-
+        yield ChatResponse(
+            category="stream",
+            message={
+                "content": answer,
+                "reasoning_content": reasoning_content
+            },
+            type="end"
+        )
         await ChatMessageDao.ainsert_batch([
             ChatMessage(
                 category="question",
-                message={
+                message=json.dumps({
                     "query": query,
                     "tags": tags,
-                },
+                }, ensure_ascii=False),
                 chat_id=session.chat_id,
                 flow_id=session.flow_id,
                 user_id=self.login_user.user_id,
+                type="end",
+                is_bot=False,
             ),
             ChatMessage(
                 category="answer",
-                message=answer,
+                message=json.dumps({
+                    "content": answer,
+                    "reasoning_content": reasoning_content
+                }, ensure_ascii=False),
                 chat_id=session.chat_id,
                 flow_id=session.flow_id,
                 user_id=self.login_user.user_id,
+                type="end",
+                is_bot=True,
             )
         ])
 
@@ -173,13 +191,22 @@ class KnowledgeSpaceChatService:
         return session
 
     async def create_chat_folder_session(self, space_id: int, folder_id: int) -> MessageSession:
-        folder_record = await KnowledgeFileDao.query_by_id(folder_id)
+        space = await KnowledgeDao.aquery_by_id(space_id)
+        if not space:
+            raise NotFoundError(msg="Knowledge space not found for chat")
+        flow_name = space.name
+        if folder_id:
+            folder_record = await KnowledgeFileDao.query_by_id(folder_id)
+            if not folder_record or folder_record.knowledge_id != space_id:
+                raise NotFoundError(msg="Knowledge folder not found for chat")
+            flow_name = f"{flow_name}-{folder_record.file_name}"
         flow_id = self.generate_flow_id_for_folder(space_id, folder_id)
         session = await MessageSessionDao.async_insert_one(MessageSession(
             chat_id=generate_uuid(),
             flow_id=flow_id,
-            flow_type=[FlowType.KNOLEDGE_SPACE.value],
-            flow_name=folder_record.file_name,
+            flow_type=FlowType.KNOLEDGE_SPACE.value,
+            flow_name=flow_name,
+            user_id=self.login_user.user_id,
         ))
         return session
 
@@ -201,9 +228,12 @@ class KnowledgeSpaceChatService:
     async def chat_folder(self, knowledge_id: int, folder_id: int, chat_id: str, query: str,
                           tags: Optional[List[Dict]] = None) -> AsyncIterator[ChatResponse]:
         """ Folder RAG query """
-        file_record = await KnowledgeFileDao.query_by_id(folder_id)
-        if not file_record or file_record.knowledge_id != knowledge_id or file_record.file_type != 0:
-            raise NotFoundError(msg="Invalid folder for chat")
+        file_level_path = ""
+        if folder_id:
+            file_record = await KnowledgeFileDao.query_by_id(folder_id)
+            if not file_record or file_record.knowledge_id != knowledge_id or file_record.file_type != 0:
+                raise NotFoundError(msg="Invalid folder for chat")
+            file_level_path = file_record.file_level_path
 
         space = await KnowledgeDao.aquery_by_id(knowledge_id)
         if not space:
@@ -217,7 +247,7 @@ class KnowledgeSpaceChatService:
             raise NotFoundError(msg="Folder session not found")
         session = session[0]
 
-        file_ids = await SpaceFileDao.get_children_by_prefix(space.id, file_record.file_level_path)
+        file_ids = await SpaceFileDao.get_children_by_prefix(space.id, file_level_path)
         file_ids = [one.id for one in file_ids]
         if tags:
             file_ids = await TagDao.aget_resources_by_tags([one.get("id") for one in tags],
@@ -236,7 +266,7 @@ class KnowledgeSpaceChatService:
         async for one in self.space_rag(session, vector_retriever, es_retriever, query, tags):
             yield one
 
-    async def get_space_llm_config(self) -> Tuple[BaseChatModel, SubscriptionConfig]:
+    async def get_space_llm_config(self) -> Tuple[BaseChatModel, KnowledgeSpaceConfig]:
         """
         Get chat configuration (model and prompts)
 
@@ -261,9 +291,9 @@ class KnowledgeSpaceChatService:
                                                user_id=self.login_user.user_id)
 
         # Get subscription configuration
-        subscription_config = await WorkStationService.get_subscription_config()
+        config = await WorkStationService.get_knowledge_space_config()
 
-        return llm, subscription_config
+        return llm, config
 
     @staticmethod
     async def get_history(chat_id: str, limit: int = 4) -> List[BaseMessage]:

@@ -173,6 +173,27 @@ class KnowledgeFileDao(KnowledgeFileBase):
             return await session.scalar(statement)
 
     @classmethod
+    async def async_count_success_files_batch(cls, knowledge_ids: List[int]) -> dict:
+        """Async: Batch count SUCCESS files for multiple knowledge spaces.
+
+        Returns a dict mapping knowledge_id (int) -> success file count.
+        """
+        if not knowledge_ids:
+            return {}
+        statement = (
+            select(KnowledgeFile.knowledge_id, func.count().label('cnt'))
+            .where(
+                KnowledgeFile.knowledge_id.in_(knowledge_ids),
+                KnowledgeFile.file_type == 1,
+                KnowledgeFile.status == KnowledgeFileStatus.SUCCESS.value,
+            )
+            .group_by(KnowledgeFile.knowledge_id)
+        )
+        async with get_async_db_session() as session:
+            rows = (await session.exec(statement)).all()
+        return {row[0]: row[1] for row in rows}
+
+    @classmethod
     def delete_batch(cls, file_ids: List[int]) -> bool:
         with get_sync_db_session() as session:
             session.exec(delete(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids)))

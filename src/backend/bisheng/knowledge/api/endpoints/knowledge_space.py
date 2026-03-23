@@ -344,7 +344,7 @@ async def chat_single_file(
     async def event_stream():
         try:
             async for one in svc.chat_single_file(space_id, file_id, req.query):
-                yield SSEResponse(data=one)
+                yield SSEResponse(data=one).to_string()
         except BaseErrorCode as e:
             yield e.to_sse_event_instance_str()
         except Exception as e:
@@ -364,42 +364,42 @@ async def chat_single_file_history(
     return resp_200(response)
 
 
-@router.get('/{space_id}/chat/folder/{folder_id}/session')
+@router.get('/{space_id}/chat/folder/session')
 async def get_chat_folder_session(
         space_id: int,
-        folder_id: int,
+        folder_id: int = Query(default=0, description="folder id"),
         svc: KnowledgeSpaceChatService = Depends(get_knowledge_space_chat_service),
 ):
     result = await svc.get_chat_folder_session(space_id, folder_id)
     return resp_200(result)
 
 
-@router.post('/{space_id}/chat/folder/{folder_id}/session')
+@router.post('/{space_id}/chat/folder/session')
 async def create_chat_folder_session(
         space_id: int,
-        folder_id: int,
+        folder_id: int = Body(default=0, embed=True, description="folder id"),
         svc: KnowledgeSpaceChatService = Depends(get_knowledge_space_chat_service),
 ):
     result = await svc.create_chat_folder_session(space_id, folder_id)
     return resp_200(result)
 
 
-@router.delete('/{space_id}/chat/folder/{folder_id}/session')
+@router.delete('/{space_id}/chat/folder/session')
 async def create_chat_folder_session(
         space_id: int,
-        folder_id: int,
-        chat_id: str = Body(..., embed=True, description='Chat ID'),
+        folder_id: int = Body(default=0, description="folder id"),
+        chat_id: str = Body(..., description='Chat ID'),
         svc: KnowledgeSpaceChatService = Depends(get_knowledge_space_chat_service),
 ):
     result = await svc.delete_chat_folder_session(space_id, folder_id, chat_id)
     return resp_200(result)
 
 
-@router.get('/{space_id}/chat/folder/{folder_id}/history')
+@router.get('/{space_id}/chat/folder/history')
 async def get_chat_folder_history(
         space_id: int,
-        folder_id: int,
-        chat_id: str,
+        folder_id: int = Query(default=0, description="folder id"),
+        chat_id: str = Query(..., description='Chat ID'),
         page_size: int = 20,
         svc: KnowledgeSpaceChatService = Depends(get_knowledge_space_chat_service),
 ):
@@ -407,17 +407,16 @@ async def get_chat_folder_history(
     return resp_200(result)
 
 
-@router.post('/{space_id}/chat/folder/{folder_id}/chat')
+@router.post('/{space_id}/chat/folder')
 async def chat_folder(
         space_id: int,
-        folder_id: int,
         req: ChatFolderReq,
         svc: KnowledgeSpaceChatService = Depends(get_knowledge_space_chat_service),
 ) -> Any:
     async def event_stream():
         try:
-            async for one in svc.chat_folder(space_id, folder_id, req.chat_id, req.query, req.tags):
-                yield SSEResponse(data=one)
+            async for one in svc.chat_folder(space_id, req.folder_id, req.chat_id, req.query, req.tags):
+                yield SSEResponse(data=one).to_string()
         except BaseErrorCode as e:
             yield e.to_sse_event_instance_str()
         except Exception as e:
