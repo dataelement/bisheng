@@ -337,8 +337,54 @@ class KnowledgeSpaceService:
                 file_ids.append(one.id)
 
         # folder need find all success file num and all file num
+        folder_counts = {}
+        if folder_ids:
+            from sqlmodel import select, col
+            from sqlalchemy import func, or_
+            from bisheng.core.database import get_async_db_session
+
+            async def count_folder(folder: KnowledgeFile):
+                prefix = f"{folder.file_level_path or ''}/{folder.id}"
+                stmt = select(KnowledgeFile.status, func.count(KnowledgeFile.id)).where(
+                    KnowledgeFile.knowledge_id == folder.knowledge_id,
+                    KnowledgeFile.file_type == 1,
+                    or_(
+                        col(KnowledgeFile.file_level_path) == prefix,
+                        col(KnowledgeFile.file_level_path).like(f"{prefix}/%")
+                    )
+                ).group_by(KnowledgeFile.status)
+
+                async with get_async_db_session() as session:
+                    rows = (await session.exec(stmt)).all()
+                    total = sum(r[1] for r in rows)
+                    success = sum(r[1] for r in rows if r[0] == KnowledgeFileStatus.SUCCESS.value)
+                    folder_counts[folder.id] = {"file_num": total, "success_file_num": success}
+
+            folders = [f for f in res if f.file_type == FileType.DIR]
+            await asyncio.gather(*(count_folder(f) for f in folders))
 
         # file need find all tags
+        file_tags = {}
+        if file_ids:
+            tag_dict = await asyncio.to_thread(
+                TagDao.get_tags_by_resource_batch,
+                [ResourceTypeEnum.SPACE_FILE],
+                [str(fid) for fid in file_ids]
+            )
+            for fid_str, tags in tag_dict.items():
+                file_tags[int(fid_str)] = [{"id": t.id, "name": t.name} for t in tags]
+
+        result = []
+        for one in res:
+            item = one.model_dump()
+            if one.file_type == FileType.DIR:
+                counts = folder_counts.get(one.id, {"file_num": 0, "success_file_num": 0})
+                item.update(counts)
+            else:
+                item["tags"] = file_tags.get(one.id, [])
+            result.append(item)
+
+        return result
 
     async def list_space_children(
             self,
@@ -361,7 +407,8 @@ class KnowledgeSpaceService:
             SpaceFileDao.async_list_children(space_id, parent_id, order_field, order_sort, file_status, page,
                                              page_size),
         )
-        return {"total": total, "page": page, "page_size": page_size, "data": items}
+        data = await self._handle_file_folder_extra_info(items)
+        return {"total": total, "page": page, "page_size": page_size, "data": data}
 
     async def search_space_children(self, space_id: int, parent_id: Optional[int] = None, tag_ids: List[int] = None,
                                     keyword: str = None, page: int = 1, page_size: int = 20) -> Dict:
@@ -383,11 +430,13 @@ class KnowledgeSpaceService:
             file_level_path = f"{parent_folder.file_level_path}/{parent_folder.id}"
 
         res = await KnowledgeFileDao.aget_file_by_filters(space_id, keyword, file_ids=filter_files,
-                                                          file_level_path=file_level_path, order_by="file_type")
+                                                          file_level_path=file_level_path, order_by="file_type",
+                                                          page=page, page_size=page_size)
         total = await KnowledgeFileDao.acount_file_by_filters(space_id, file_name=keyword, file_ids=filter_files,
                                                               file_level_path=file_level_path)
 
-        return {"total": total, "page": page, "page_size": page_size, "data": res}
+        data = await self._handle_file_folder_extra_info(res)
+        return {"total": total, "page": page, "page_size": page_size, "data": data}
 
     # ──────────────────────────── Folders ─────────────────────────────────────
 
