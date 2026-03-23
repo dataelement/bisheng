@@ -5,6 +5,7 @@ from typing import List, Optional, Dict
 
 from fastapi import Request
 
+from bisheng.api.services.base import BaseService
 from bisheng.api.v1.schemas import KnowledgeFileOne, FileProcessBase, ExcelRule
 from bisheng.common.dependencies.user_deps import UserPayload  # noqa: F401 – kept for type hints
 from bisheng.common.errcode.http_error import NotFoundError
@@ -42,7 +43,7 @@ _MAX_SPACE_PER_USER = 30
 _MAX_SUBSCRIBE_PER_USER = 50
 
 
-class KnowledgeSpaceService:
+class KnowledgeSpaceService(BaseService):
     """ Service for Knowledge Space operations.
     Instance-based; each method receives login_user as an argument.
     All business logic is async; DB access is delegated to DAO classes.
@@ -216,9 +217,11 @@ class KnowledgeSpaceService:
         for one in res:
             spcae_config = space_members.get(str(one.id))
             if spcae_config and spcae_config.is_pinned:
-                pinned_res.append(KnowledgeRead(**one.model_dump(), is_pinned=True))
+                pinned_res.append(
+                    KnowledgeSpaceInfoResp(**one.model_dump(), is_pinned=True, user_role=UserRoleEnum.CREATOR))
             else:
-                not_pinned_res.append(KnowledgeRead(**one.model_dump(), is_pinned=False))
+                not_pinned_res.append(
+                    KnowledgeSpaceInfoResp(**one.model_dump(), is_pinned=False, user_role=UserRoleEnum.CREATOR))
         return pinned_res + not_pinned_res
 
     async def get_my_followed_spaces(
@@ -234,16 +237,21 @@ class KnowledgeSpaceService:
         if not members:
             return []
 
-        # Split into pinned and non-pinned while preserving relative order
-        pinned_ids = [int(m.business_id) for m in members if m.is_pinned]
-        normal_ids = [int(m.business_id) for m in members if not m.is_pinned]
+        members_map = {}
+        for one in members:
+            members_map[int(one.business_id)] = one
 
-        # Fetch each group sorted by the caller's order_by preference
-        pinned_spaces = await KnowledgeDao.async_get_spaces_by_ids(pinned_ids, order_by) if pinned_ids else []
-        normal_spaces = await KnowledgeDao.async_get_spaces_by_ids(normal_ids, order_by) if normal_ids else []
-
-        pinned_spaces = [KnowledgeRead(**one.model_dump(), is_pinned=True) for one in pinned_spaces]
-        normal_spaces = [KnowledgeRead(**one.model_dump(), is_pinned=False) for one in normal_spaces]
+        res = await KnowledgeDao.async_get_spaces_by_ids(list(members_map.keys()), order_by)
+        pinned_spaces = []
+        normal_spaces = []
+        for one in res:
+            member_conf = members_map[one.id]
+            if member_conf.is_pinned:
+                pinned_spaces.append(
+                    KnowledgeSpaceInfoResp(**one.model_dump(), is_pinned=True, user_role=member_conf.user_role))
+            else:
+                normal_spaces.append(
+                    KnowledgeSpaceInfoResp(**one.model_dump(), is_pinned=True, user_role=member_conf.user_role))
 
         return pinned_spaces + normal_spaces
 
@@ -396,6 +404,7 @@ class KnowledgeSpaceService:
                 counts = folder_counts.get(one.id, {"file_num": 0, "success_file_num": 0})
                 item.update(counts)
             else:
+                item["thumbnails"] = self.get_logo_share_link(one.thumbnails)
                 item["tags"] = file_tags.get(one.id, [])
             result.append(item)
 

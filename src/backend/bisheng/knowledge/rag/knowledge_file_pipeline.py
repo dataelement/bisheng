@@ -23,6 +23,7 @@ from bisheng.knowledge.rag.pipeline.transformer.abstract import AbstractTransfor
 from bisheng.knowledge.rag.pipeline.transformer.extra_file import ExtraFileTransformer
 from bisheng.knowledge.rag.pipeline.transformer.preview_cache import PreviewCacheTransformer
 from bisheng.knowledge.rag.pipeline.transformer.splitter import SplitterTransformer
+from bisheng.knowledge.rag.pipeline.transformer.thumbnail import ThumbnailTransformer
 from bisheng.knowledge.rag.pipeline.types import PipelineResult, PipelineConfig
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils.file import download_minio_file
@@ -50,12 +51,13 @@ FileExtensionMap = {
 class KnowledgeFilePipeline(BasePipeline):
 
     def __init__(self, invoke_user_id: int, db_file: KnowledgeFile, preview_cache_key: Optional[str] = None,
-                 no_summary: bool = False, **kwargs):
+                 no_summary: bool = False, need_thumbnail: bool = False, **kwargs):
         super(KnowledgeFilePipeline, self).__init__(**kwargs)
         self.invoke_user_id = invoke_user_id
         self.db_file = db_file
         self.preview_cache_key = preview_cache_key
         self.no_summary = no_summary
+        self.need_thumbnail = need_thumbnail
 
         self.file_name = db_file.file_name
 
@@ -145,6 +147,11 @@ class KnowledgeFilePipeline(BasePipeline):
             knowledge_file=self.db_file,
             retain_images=self.file_split_rule.retain_images == 1
         ))
+        if self.need_thumbnail:
+            abstract_transformers.append(ThumbnailTransformer(
+                loader=self.loader,
+                knowledge_file=self.db_file,
+            ))
         abstract_transformers.append(SplitterTransformer(
             separator=self.file_split_rule.separator,
             separator_rule=self.file_split_rule.separator_rule,
