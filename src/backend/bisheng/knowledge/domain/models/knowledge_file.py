@@ -13,7 +13,7 @@ from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.database.base import async_get_count, get_count
 
 
-class KnowledgeFileStatus(Enum):
+class KnowledgeFileStatus(int, Enum):
     PROCESSING = 1  # Sedang diproses
     SUCCESS = 2  # Berhasil
     FAILED = 3  # Parse Failure
@@ -43,13 +43,18 @@ class FileSource(Enum):
     CHANNEL = 'channel'  # sync from channel
 
 
+class FileType(int, Enum):
+    DIR = 0
+    FILE = 1
+
+
 class KnowledgeFileBase(SQLModelSerializable):
     user_id: Optional[int] = Field(default=None, index=True)
     user_name: Optional[str] = Field(default=None, index=True)
     knowledge_id: int = Field(index=True)
     thumbnails: Optional[str] = Field(default=None, description='File thumbnails in Stored object name')
     file_name: str = Field(max_length=200, index=True)
-    file_type: int = Field(default=1, description='File type. 0: dir; 1: file')
+    file_type: int = Field(default=FileType.FILE.value, description='File type. 0: dir; 1: file')
     file_source: Optional[str] = Field(default=FileSource.UPLOAD.value, description='File source')
     level: Optional[int] = Field(default=0)
     file_level_path: Optional[str] = Field(default=None, index=True)
@@ -681,107 +686,4 @@ class QAKnoweldgeDao(QAKnowledgeBase):
             session.exec(statement)
             session.commit()
 
-
 # ─── Space Folder / File helpers (Space-scoped operations on KnowledgeFile) ──
-
-class SpaceFileDao:
-    """ DAO for space folder and file operations in the knowledge_file table """
-
-    @classmethod
-    async def count_folder_by_name(cls, knowledge_id: int, folder_name: str, file_level_path: str,
-                                   exclude_id: Optional[int] = None) -> int:
-        """ Count folders with the same name in the same directory level """
-        statement = select(func.count(KnowledgeFile.id)).where(
-            KnowledgeFile.knowledge_id == knowledge_id,
-            KnowledgeFile.file_type == 0,
-            KnowledgeFile.file_name == folder_name,
-            KnowledgeFile.file_level_path == file_level_path
-        )
-        if exclude_id is not None:
-            statement = statement.where(KnowledgeFile.id != exclude_id)
-        async with get_async_db_session() as session:
-            return await session.scalar(statement)
-
-    @classmethod
-    async def count_file_by_name(cls, knowledge_id: int, file_name: str,
-                                 exclude_id: Optional[int] = None) -> int:
-        """ Count files with the same name in the space (duplicate check on rename) """
-        statement = select(func.count(KnowledgeFile.id)).where(
-            KnowledgeFile.knowledge_id == knowledge_id,
-            KnowledgeFile.file_type == 1,
-            KnowledgeFile.file_name == file_name
-        )
-        if exclude_id is not None:
-            statement = statement.where(KnowledgeFile.id != exclude_id)
-        async with get_async_db_session() as session:
-            return await session.scalar(statement)
-
-    @classmethod
-    async def get_children_by_prefix(cls, knowledge_id: int, prefix: str) -> List[KnowledgeFile]:
-        """ Get all files/folders whose file_level_path starts with the given prefix """
-        statement = select(KnowledgeFile).where(
-            KnowledgeFile.knowledge_id == knowledge_id,
-            or_(
-                col(KnowledgeFile.file_level_path) == prefix,
-                col(KnowledgeFile.file_level_path).like(f"{prefix}/%")
-            )
-        )
-        async with get_async_db_session() as session:
-            return (await session.exec(statement)).all()
-
-    @classmethod
-    async def async_list_children(
-            cls,
-            knowledge_id: int,
-            parent_id: Optional[int],
-            order_field: str = "file_type",
-            order_sort: str = "desc",
-            page: int = 1,
-            page_size: int = 20,
-    ) -> List[KnowledgeFile]:
-        """
-        Async: List direct children (folders first, then files) under a given parent.
-        When parent_id is None, returns root-level items (file_level_path == '').
-        Paginated: page is 1-indexed.
-        """
-        if parent_id is None:
-            path_filter = KnowledgeFile.file_level_path == ''
-        else:
-            path_filter = KnowledgeFile.file_level_path == f"/{parent_id}"
-
-        statement = (
-            select(KnowledgeFile)
-            .where(
-                KnowledgeFile.knowledge_id == knowledge_id,
-                path_filter,
-            )
-            .offset((page - 1) * page_size)
-            .limit(page_size)
-        )
-        if order_field and order_sort:
-            statement = statement.order_by(text(f"{order_field} {order_sort}"))
-        async with get_async_db_session() as session:
-            result = await session.exec(statement)
-            return result.all()
-
-    @classmethod
-    async def async_count_children(
-            cls,
-            knowledge_id: int,
-            parent_id: Optional[int],
-    ) -> int:
-        """
-        Async: Count direct children under a given parent.
-        When parent_id is None, counts root-level items.
-        """
-        if parent_id is None:
-            path_filter = KnowledgeFile.file_level_path == ''
-        else:
-            path_filter = KnowledgeFile.file_level_path == f"/{parent_id}"
-
-        statement = select(func.count(KnowledgeFile.id)).where(
-            KnowledgeFile.knowledge_id == knowledge_id,
-            path_filter,
-        )
-        async with get_async_db_session() as session:
-            return await session.scalar(statement)

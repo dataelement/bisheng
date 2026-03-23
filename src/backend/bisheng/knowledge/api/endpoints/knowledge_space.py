@@ -7,6 +7,7 @@ from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import ServerError
 from bisheng.common.schemas.api import resp_200, SSEResponse
 from bisheng.knowledge.api.dependencies import get_knowledge_space_service, get_knowledge_space_chat_service
+from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileStatus
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     KnowledgeSpaceCreateReq, KnowledgeSpaceUpdateReq,
     FolderCreateReq, FolderRenameReq,
@@ -132,11 +133,13 @@ async def list_space_children(
         parent_id: Optional[int] = None,
         order_field: str = 'file_type',
         order_sort: str = 'asc',
+        file_status: Optional[KnowledgeFileStatus] = None,
         page: int = 1,
         page_size: int = 20,
         svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
-    result = await svc.list_space_children(space_id, parent_id, order_field, order_sort, page, page_size)
+    result = await svc.list_space_children(space_id, parent_id, order_field, order_sort,
+                                           file_status=file_status, page=page, page_size=page_size)
     return resp_200(result)
 
 
@@ -219,6 +222,16 @@ async def delete_folder(
 ) -> Any:
     await svc.delete_folder(space_id, folder_id)
     return resp_200()
+
+
+@router.get('/{space_id}/folders/{folder_id}/parent')
+async def get_folder_parent(
+        space_id: int,
+        folder_id: int,
+        svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    result = await svc.get_folder_file_parent(space_id, folder_id)
+    return resp_200(result)
 
 
 # ──────────────────────────── Files ───────────────────────────────────────────

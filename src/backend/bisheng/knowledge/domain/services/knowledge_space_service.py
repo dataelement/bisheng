@@ -25,8 +25,9 @@ from bisheng.database.models.user_group import UserGroupDao
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao, KnowledgeTypeEnum, AuthTypeEnum, \
     KnowledgeRead
 from bisheng.knowledge.domain.models.knowledge_file import (
-    KnowledgeFile, KnowledgeFileDao, KnowledgeFileStatus, SpaceFileDao
+    KnowledgeFile, KnowledgeFileDao, KnowledgeFileStatus, FileType
 )
+from bisheng.knowledge.domain.models.knowledge_space_file import SpaceFileDao
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import KnowledgeSpaceInfoResp
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
@@ -327,7 +328,17 @@ class KnowledgeSpaceService:
         return result
 
     async def _handle_file_folder_extra_info(self, res: List[KnowledgeFile]) -> List[Dict]:
-        pass
+        folder_ids = []
+        file_ids = []
+        for one in res:
+            if one.file_type == FileType.DIR:
+                folder_ids.append(one.id)
+            else:
+                file_ids.append(one.id)
+
+        # folder need find all success file num and all file num
+
+        # file need find all tags
 
     async def list_space_children(
             self,
@@ -335,6 +346,7 @@ class KnowledgeSpaceService:
             parent_id: Optional[int] = None,
             order_field: str = 'file_type',
             order_sort: str = 'asc',
+            file_status: KnowledgeFileStatus = None,
             page: int = 1,
             page_size: int = 20,
     ) -> dict:
@@ -345,8 +357,9 @@ class KnowledgeSpaceService:
         """
         await self._require_read_permission(space_id)
         total, items = await asyncio.gather(
-            SpaceFileDao.async_count_children(space_id, parent_id),
-            SpaceFileDao.async_list_children(space_id, parent_id, order_field, order_sort, page, page_size),
+            SpaceFileDao.async_count_children(space_id, parent_id, file_status),
+            SpaceFileDao.async_list_children(space_id, parent_id, order_field, order_sort, file_status, page,
+                                             page_size),
         )
         return {"total": total, "page": page, "page_size": page_size, "data": items}
 
@@ -354,6 +367,7 @@ class KnowledgeSpaceService:
                                     keyword: str = None, page: int = 1, page_size: int = 20) -> Dict:
         await self._require_read_permission(space_id)
 
+        # todo 文件内容也支持关键词搜索
         filter_files = []
         if tag_ids:
             resources = await TagDao.aget_resources_by_tags(tag_ids, ResourceTypeEnum.SPACE_FILE)
@@ -455,6 +469,27 @@ class KnowledgeSpaceService:
         if file_ids:
             delete_knowledge_file_celery.delay(file_ids=file_ids, knowledge_id=folder.knowledge_id, clear_minio=True)
         await KnowledgeFileDao.adelete_batch(file_ids + floder_ids)
+
+    async def get_folder_file_parent(self, space_id: int, file_id: int) -> List[Dict]:
+        await self._require_read_permission(space_id)
+        file_record = await KnowledgeFileDao.query_by_id(file_id)
+        if not file_record:
+            raise SpaceFileNotFoundError()
+        if file_record.level == 0:
+            return []
+        file_level_path_list = file_record.file_level_path.split("/")
+        file_ids = [int(one) for one in file_level_path_list if one]
+        file_list = await KnowledgeFileDao.aget_file_by_ids(file_ids)
+        file_list = {
+            file.id: file for file in file_list
+        }
+        res = []
+        for one in file_ids:
+            res.append({
+                "id": one,
+                "file_name": file_list.get(one).file_name if file_list.get(one) else one,
+            })
+        return res
 
     # ──────────────────────────── Files ───────────────────────────────────────
 

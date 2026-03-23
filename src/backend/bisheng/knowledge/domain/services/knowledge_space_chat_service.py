@@ -23,7 +23,8 @@ from bisheng.database.models.session import MessageSessionDao, MessageSession
 from bisheng.database.models.tag import TagDao
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
-from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao, SpaceFileDao
+from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
+from bisheng.knowledge.domain.models.knowledge_space_file import SpaceFileDao
 from bisheng.llm.domain import LLMService
 from bisheng.llm.domain.schemas import WorkbenchModelConfig
 from bisheng.tool.domain.langchain.knowledge import KnowledgeRetrieverTool
