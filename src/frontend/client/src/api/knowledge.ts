@@ -280,19 +280,24 @@ function mapChild(raw: any, spaceId: string): KnowledgeFile {
 
     const tags: FileTag[] = Array.isArray(raw?.tags)
         ? raw.tags
-              .map((t: any) => {
-                  if (typeof t === "string") return { id: -1, name: t as string };
-                  const id = t?.id !== undefined && t?.id !== null ? Number(t.id) : -1;
-                  const name = t?.name !== undefined && t?.name !== null ? String(t.name) : "";
-                  if (!name) return null;
-                  return { id, name };
-              })
-              .filter((v: FileTag | null): v is FileTag => v !== null)
+            .map((t: any) => {
+                if (typeof t === "string") return { id: -1, name: t as string };
+                const id = t?.id !== undefined && t?.id !== null ? Number(t.id) : -1;
+                const name = t?.name !== undefined && t?.name !== null ? String(t.name) : "";
+                if (!name) return null;
+                return { id, name };
+            })
+            .filter((v: FileTag | null): v is FileTag => v !== null)
         : [];
 
     const statusVal = raw?.status;
     const status: FileStatus | undefined =
-        typeof statusVal === "number" ? mapFileStatus(statusVal) : undefined;
+        typeof statusVal === "number"
+            ? mapFileStatus(statusVal)
+            : typeof statusVal === "string" && statusVal
+                // Backend may return uppercase string like "FAILED" — normalize to lowercase enum value
+                ? statusVal.toLowerCase() as FileStatus
+                : undefined;
 
     return {
         id: idVal !== undefined && idVal !== null ? String(idVal) : "",
@@ -308,6 +313,8 @@ function mapChild(raw: any, spaceId: string): KnowledgeFile {
         updatedAt: raw?.update_time ?? "",
         thumbnail: raw?.thumbnail ?? raw?.thumbnails,
         errorMessage: raw?.error_message,
+        successFileNum: raw?.success_file_num !== undefined ? Number(raw.success_file_num) : undefined,
+        fileNum: raw?.file_num !== undefined ? Number(raw.file_num) : undefined,
     };
 }
 
@@ -582,8 +589,11 @@ export async function getSpaceTagsApi(space_id: string): Promise<SpaceTag[]> {
  * Backend: POST /api/v1/knowledge/space/{space_id}/tag
  */
 export async function addSpaceTagApi(space_id: string, tag_name: string): Promise<SpaceTag> {
-    const res = (await request.post(`/api/v1/knowledge/space/${space_id}/tag`, { tag_name })) as ApiResponse<SpaceTag>;
-    return res?.data as SpaceTag;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const res = (await request.post(`/api/v1/knowledge/space/${space_id}/tag`, { tag_name })) as any;
+    // Handle both flat { id, name } and wrapped { data: { id, name } } responses
+    const tag = res?.data?.id !== undefined ? res.data : res?.data?.data;
+    return tag as SpaceTag;
 }
 
 /**
@@ -845,12 +855,14 @@ export async function batchDeleteApi(
 export async function batchDownloadApi(
     space_id: string,
     data: { file_ids?: number[]; folder_ids?: number[] }
-): Promise<Blob> {
-    return request.post(
+): Promise<string> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const res = await request.post<any>(
         `/api/v1/knowledge/space/${space_id}/files/batch-download`,
-        data,
-        { responseType: "blob" }
+        data
     );
+    // Response: { status_code, data: { url: "/tmp-dir/..." } }
+    return res?.data?.url ?? res?.url ?? "";
 }
 
 // ─────────────────────────────────────────────

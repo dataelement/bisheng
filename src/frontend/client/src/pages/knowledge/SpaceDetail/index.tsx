@@ -5,7 +5,7 @@ import {
     Upload
 } from "lucide-react";
 import React, { useRef, useState } from "react";
-import { FileStatus, FileType, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceRole } from "~/api/knowledge";
+import { FileStatus, FileType, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceRole, batchDownloadApi, batchDeleteApi } from "~/api/knowledge";
 import { SearchParams } from "./CompoundSearchInput";
 import { useSelectionPath } from "./useSelectionPath";
 import {
@@ -49,6 +49,20 @@ interface KnowledgeSpaceContentProps {
     onCancelCreateFolder?: () => void;
     onToggleAiAssistant?: () => void;
     isAiAssistantOpen?: boolean;
+}
+
+/** Trigger browser download from a relative URL returned by the backend.
+ * Full URL = window.location.origin + BASE_URL + relativeUrl
+ */
+function triggerUrlDownload(relativeUrl: string, filename?: string) {
+    const fullUrl = `${window.location.origin}${__APP_ENV__.BASE_URL}${relativeUrl}`;
+    const a = document.createElement("a");
+    a.href = fullUrl;
+    if (filename) a.download = filename;
+    a.target = "_blank";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
 }
 
 export function KnowledgeSpaceContent({
@@ -165,13 +179,40 @@ export function KnowledgeSpaceContent({
         }
     };
 
-    const handleBatchDownload = () => {
-        // TODO: Implement batch download
-        console.log("Batch download:", Array.from(selectedFiles));
+    const handleBatchDownload = async () => {
+        const selectedList = displayFiles.filter(f => selectedFiles.has(f.id));
+        const fileIds = selectedList.filter(f => f.type !== FileType.FOLDER).map(f => Number(f.id));
+        const folderIds = selectedList.filter(f => f.type === FileType.FOLDER).map(f => Number(f.id));
+        try {
+            const url = await batchDownloadApi(space.id, {
+                file_ids: fileIds.length ? fileIds : undefined,
+                folder_ids: folderIds.length ? folderIds : undefined,
+            });
+            if (!url) { showToast({ message: "下载链接获取失败", status: "error" }); return; }
+            triggerUrlDownload(url, `download_${Date.now()}.zip`);
+        } catch {
+            showToast({ message: "下载失败", status: "error" });
+        }
     };
 
     const handleBatchTag = () => {
         setIsBatchTagging(true);
+    };
+
+    const handleSingleDownload = async (fileId: string) => {
+        const file = displayFiles.find(f => f.id === fileId);
+        const isFolder = file?.type === FileType.FOLDER;
+        const id = Number(fileId);
+        try {
+            const url = await batchDownloadApi(space.id, {
+                file_ids: isFolder ? undefined : [id],
+                folder_ids: isFolder ? [id] : undefined,
+            });
+            if (!url) { showToast({ message: "下载链接获取失败", status: "error" }); return; }
+            triggerUrlDownload(url, file?.name);
+        } catch {
+            showToast({ message: "下载失败", status: "error" });
+        }
     };
 
     const handleOpenEditTags = (fileId: string) => {
@@ -214,11 +255,23 @@ export function KnowledgeSpaceContent({
             variant: "destructive"
         });
 
-        if (confirmed) {
-            // TODO: Implement batch delete API call
-            console.log("Batch delete:", Array.from(selectedFiles));
+        if (!confirmed) return;
+
+        const selectedList = displayFiles.filter(f => selectedFiles.has(f.id));
+        const fileIds = selectedList.filter(f => f.type !== FileType.FOLDER).map(f => Number(f.id));
+        const folderIds = selectedList.filter(f => f.type === FileType.FOLDER).map(f => Number(f.id));
+
+        try {
+            await batchDeleteApi(space.id, {
+                file_ids: fileIds.length ? fileIds : undefined,
+                folder_ids: folderIds.length ? folderIds : undefined,
+            });
             setSelectedFiles(new Set());
             showToast({ message: "批量删除成功", status: "success" });
+            // Notify parent to refresh the list
+            onDeleteFile("");
+        } catch {
+            showToast({ message: "批量删除失败", status: "error" });
         }
     };
 
@@ -457,10 +510,9 @@ export function KnowledgeSpaceContent({
                                     userRole={space.role}
                                     isSelected={selectedFiles.has(file.id)}
                                     onSelect={(selected) => handleSelectFile(file.id, selected)}
-                                    onDownload={() => onDownloadFile(file.id)}
+                                    onDownload={() => handleSingleDownload(file.id)}
                                     onRename={(newName) => onRenameFile(file.id, newName)}
                                     onDelete={() => handleDelete(file.id)}
-                                    // Use new handler to open modal instead of raw callback
                                     onEditTags={() => handleOpenEditTags(file.id)}
                                     onRetry={file.status === FileStatus.FAILED ? () => onRetryFile(file.id) : undefined}
                                     onNavigateFolder={() => onNavigateFolder(file.id)}
@@ -478,7 +530,7 @@ export function KnowledgeSpaceContent({
                                 handleSelectAll={handleSelectAll}
                                 handleSelectFile={handleSelectFile}
                                 isAdmin={isAdmin}
-                                onDownload={(id) => onDownloadFile(id)}
+                                onDownload={(id) => handleSingleDownload(id)}
                                 onEditTags={(id) => handleOpenEditTags(id)}
                                 onRename={(id, newName) => onRenameFile(id, newName)}
                                 onDelete={(id) => handleDelete(id)}

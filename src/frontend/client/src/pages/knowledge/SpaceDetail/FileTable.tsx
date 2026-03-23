@@ -649,7 +649,18 @@ function FileRow({
                     className="py-3"
                     style={{ width: columnWidths.status, minWidth: columnWidths.status, maxWidth: columnWidths.status }}
                 >
-                    {isFolder ? <span className="text-[#86909c] text-sm">7/11</span> : <StatusBadge status={file.status} />}
+                    {isFolder
+                        ? (
+                            <span className={`text-sm ${
+                                file.successFileNum !== undefined && file.fileNum !== undefined && file.successFileNum < file.fileNum
+                                    ? 'text-[#f53f3f]'
+                                    : 'text-[#86909c]'
+                            }`}>
+                                {file.successFileNum ?? 0}/{file.fileNum ?? 0}
+                            </span>
+                        )
+                        : <StatusBadge status={file.status} />
+                    }
                 </TableCell>
             )}
 
@@ -682,7 +693,14 @@ function FileRow({
                                     }}>
                                         <Edit className="size-4 mr-2" />重命名
                                     </DropdownMenuItem>
-                                    {file.status === 'FAILED' && (
+                                    {/* Retry for failed files */}
+                                    {!isFolder && file.status === FileStatus.FAILED && (
+                                        <DropdownMenuItem onClick={onRetry}>
+                                            <RefreshCw className="size-4 mr-2" />重试
+                                        </DropdownMenuItem>
+                                    )}
+                                    {/* Retry for folders with partial failures */}
+                                    {isFolder && file.successFileNum !== undefined && file.fileNum !== undefined && file.successFileNum < file.fileNum && (
                                         <DropdownMenuItem onClick={onRetry}>
                                             <RefreshCw className="size-4 mr-2" />重试
                                         </DropdownMenuItem>

@@ -244,7 +244,7 @@ export function FileCard({
                                 </Button>
                             </DropdownMenuTrigger>
 
-                            <DropdownMenuContent align="end" className="min-w-[120px]">
+                            <DropdownMenuContent align="end" className="min-w-[120px]" onClick={(e) => e.stopPropagation()}>
                                 {/* 下载功能现在移到了列表第一项 */}
                                 <DropdownMenuItem onClick={(e) => {
                                     e.stopPropagation();
@@ -256,12 +256,13 @@ export function FileCard({
                                 {/* 如果是管理员，显示后续管理操作 */}
                                 {isAdmin && (
                                     <>
-                                        {!isFolder && <DropdownMenuItem onClick={onEditTags}>编辑标签</DropdownMenuItem>}
-                                        <DropdownMenuItem onClick={() => {
+                                        {!isFolder && <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEditTags(); }}>编辑标签</DropdownMenuItem>}
+                                        <DropdownMenuItem onClick={(e) => {
+                                            e.stopPropagation();
                                             setRenameValue(file.name);
                                             setIsRenaming(true);
                                         }}>重命名</DropdownMenuItem>
-                                        <DropdownMenuItem onClick={onDelete} className="text-[#f53f3f] focus:text-[#f53f3f]">
+                                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDelete(); }} className="text-[#f53f3f] focus:text-[#f53f3f]">
                                             删除
                                         </DropdownMenuItem>
                                     </>
@@ -269,7 +270,7 @@ export function FileCard({
 
                                 {/* 失败重试逻辑 */}
                                 {file.status === FileStatus.FAILED && onRetry && (
-                                    <DropdownMenuItem onClick={onRetry}>重试</DropdownMenuItem>
+                                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onRetry(); }}>重试</DropdownMenuItem>
                                 )}
                             </DropdownMenuContent>
                         </DropdownMenu>

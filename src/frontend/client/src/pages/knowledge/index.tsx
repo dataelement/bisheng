@@ -181,7 +181,11 @@ export default function Knowledge() {
         // Then fetch full detail from info API
         try {
             const detail = await getSpaceInfoApi(space.id);
-            setActiveSpace(prev => prev?.id === space.id ? { ...space, ...detail, id: space.id } : prev);
+            // Preserve the role from the list API (which has user_role).
+            // The /info endpoint may not return user_role, so mapSpace defaults to MEMBER.
+            // Only update role if detail explicitly provides a non-MEMBER role.
+            const mergedRole = detail.role !== SpaceRole.MEMBER ? detail.role : space.role;
+            setActiveSpace(prev => prev?.id === space.id ? { ...space, ...detail, id: space.id, role: mergedRole } : prev);
         } catch {
             // Keep list-level data if info fetch fails
         }
@@ -409,6 +413,13 @@ export default function Knowledge() {
 
     const handleDeleteFile = async (fileId: string) => {
         if (!activeSpace) return;
+
+        // Empty fileId is used as a "batch delete done" signal — just refresh
+        if (!fileId) {
+            loadFiles(currentPage);
+            return;
+        }
+
         const target = files.find(f => f.id === fileId);
         if (!target) return;
 
@@ -434,7 +445,7 @@ export default function Knowledge() {
     };
 
     const handleRetryFile = (fileId: string) => {
-        showToast({ message: "重试中...", severity: NotificationSeverity.INFO });
+        showToast({ message: "重试功能开发中", severity: NotificationSeverity.INFO });
     };
 
     const handleSort = (newSortBy: SortType, newDirection: SortDirection) => {
