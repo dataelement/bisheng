@@ -31,6 +31,12 @@ interface ChannelSquareProps {
   emptyText?: string;
   joinToastPrefix?: string;
   onPreviewChannel?: (id: string) => void;
+  /** Override the list-fetch API (default: getChannelSquareApi) */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  fetchApi?: (params: { keyword?: string; page: number; page_size: number }) => Promise<any>;
+  /** Override the subscribe API (default: subscribeManagerChannelApi) */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  subscribeApi?: (id: string) => Promise<any>;
 }
 
 export default function ChannelSquare({
@@ -41,6 +47,8 @@ export default function ChannelSquare({
   emptyText,
   joinToastPrefix,
   onPreviewChannel,
+  fetchApi,
+  subscribeApi,
 }: ChannelSquareProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [loadingMore, setLoadingMore] = useState(false);
@@ -73,7 +81,9 @@ export default function ChannelSquare({
           prev.map((c) => (c.id === channelId ? { ...c, status: nextStatus } : c))
         );
 
-        const res: any = await subscribeManagerChannelApi({ channel_id: channelId });
+        const res: any = subscribeApi
+          ? await subscribeApi(channelId)
+          : await subscribeManagerChannelApi({ channel_id: channelId });
         const root = res;
         const statusCode = root?.status_code ?? root?.code;
         if (statusCode && statusCode !== 200) {
@@ -130,11 +140,13 @@ export default function ChannelSquare({
   const load = useCallback(
     async (nextPage: number) => {
       try {
-        const res = await getChannelSquareApi({
-          keyword: searchQuery.trim() || undefined,
-          page: nextPage,
-          page_size: 20
-        });
+        const res = fetchApi
+          ? await fetchApi({ keyword: searchQuery.trim() || undefined, page: nextPage, page_size: 20 })
+          : await getChannelSquareApi({
+              keyword: searchQuery.trim() || undefined,
+              page: nextPage,
+              page_size: 20
+            });
         const root: any = res;
         const payload = root.data ?? root;
         const list: any[] = (payload?.data || payload?.list || []) as any[];

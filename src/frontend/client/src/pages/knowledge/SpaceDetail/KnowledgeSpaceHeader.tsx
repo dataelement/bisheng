@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { KnowledgeSpace, FileStatus, SortType, SortDirection, SpaceRole } from "~/api/knowledge";
 import { cn, copyText } from "~/utils";
-import { CompoundSearchInput } from "./CompoundSearchInput";
+import { CompoundSearchInput, SearchParams } from "./CompoundSearchInput";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -36,7 +36,8 @@ interface KnowledgeSpaceHeaderProps {
     currentPath: Array<{ id?: string; name: string }>;
     onNavigateFolder: (folderId?: string) => void;
     searchQuery: string;
-    onSearch: (query: string) => void;
+    isSearching: boolean;
+    onSearch: (params: SearchParams) => void;
     viewMode: "card" | "list";
     setViewMode: (mode: "card" | "list") => void;
     statusFilter: FileStatus[];
@@ -65,6 +66,7 @@ export function KnowledgeSpaceHeader({
     currentPath,
     onNavigateFolder,
     searchQuery,
+    isSearching,
     onSearch,
     viewMode,
     setViewMode,
@@ -86,7 +88,7 @@ export function KnowledgeSpaceHeader({
     onToggleAiAssistant,
     isAiAssistantOpen
 }: KnowledgeSpaceHeaderProps) {
-    const isAdmin = space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
+    const isAdmin = true // space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
     const { showToast } = useToastContext();
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -213,10 +215,10 @@ export function KnowledgeSpaceHeader({
                     <Button
                         variant="ghost"
                         className={`h-8 px-1.5 gap-1 bg-gradient-to-br from-[#335CFF] to-[#7433FF] bg-clip-text text-transparent hover:text-transparent ${isAiAssistantOpen ? 'bg-[#f0f5ff] rounded-md' : ''}`}
-                        disabled={!!searchQuery}
+                        disabled={isSearching}
                         onClick={onToggleAiAssistant}
                     >
-                        <AiChatIcon className="size-3.5" stroke={!!searchQuery ? "#c9cdd4" : "#335CFF"} />
+                        <AiChatIcon className="size-3.5" stroke={isSearching ? "#c9cdd4" : "#335CFF"} />
                         AI 助手
                     </Button>
 
@@ -239,13 +241,9 @@ export function KnowledgeSpaceHeader({
                     <div className="flex-1 sm:flex-none flex items-center gap-2 w-full sm:w-auto">
                         <div className="relative flex-1 sm:flex-none sm:w-[450px]">
                             <CompoundSearchInput
+                                spaceId={space.id}
                                 isRoot={currentPath.length === 0}
-                                onSearch={(params) => {
-                                    const query = params.tags.length > 0
-                                        ? `${params.tags.join(' ')} ${params.keyword}`.trim()
-                                        : params.keyword;
-                                    onSearch(query);
-                                }}
+                                onSearch={onSearch}
                             />
                         </div>
                     </div>
@@ -360,7 +358,7 @@ export function KnowledgeSpaceHeader({
                                 </Button> */}
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
-                                        <Button size="sm" variant="outline" className="h-8 font-normal rounded-md border-[#e5e6eb] text-[#4e5969]" disabled={!!searchQuery}>
+                                        <Button size="sm" variant="outline" className="h-8 font-normal rounded-md border-[#e5e6eb] text-[#4e5969]" disabled={isSearching}>
                                             批量操作 <ChevronDown className="size-4 ml-1" />
                                         </Button>
                                     </DropdownMenuTrigger>
@@ -391,7 +389,7 @@ export function KnowledgeSpaceHeader({
                         )}
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <Button size="sm" className="h-8 font-normal rounded-md" disabled={!!searchQuery}>
+                                <Button size="sm" className="h-8 font-normal rounded-md" disabled={isSearching}>
                                     新增 <ChevronDown className="size-4 ml-1" />
                                 </Button>
                             </DropdownMenuTrigger>
