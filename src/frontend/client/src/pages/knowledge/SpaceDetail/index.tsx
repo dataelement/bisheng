@@ -7,6 +7,7 @@ import {
 import React, { useRef, useState } from "react";
 import { FileStatus, FileType, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceRole } from "~/api/knowledge";
 import { SearchParams } from "./CompoundSearchInput";
+import { useSelectionPath } from "./useSelectionPath";
 import {
     Breadcrumb,
     BreadcrumbItem, BreadcrumbLink,
@@ -82,11 +83,19 @@ export function KnowledgeSpaceContent({
         ...uploadingFiles,
         ...files
     ];
+    console.log('uploadingFiles :>> ', uploadingFiles, displayFiles);
 
     const [searchQuery, setSearchQuery] = useState("");
     const [searchTagIds, setSearchTagIds] = useState<number[]>([]);
     const [searchScope, setSearchScope] = useState<"current" | "space">("current");
-    const [viewMode, setViewMode] = useState<"card" | "list">("card");
+    const [viewMode, setViewModeState] = useState<"card" | "list">(() => {
+        const saved = localStorage.getItem("knowledge-view-mode");
+        return saved === "list" || saved === "card" ? saved : "card";
+    });
+    const setViewMode = (mode: "card" | "list") => {
+        setViewModeState(mode);
+        localStorage.setItem("knowledge-view-mode", mode);
+    };
     const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
     const [statusFilter, setStatusFilter] = useState<FileStatus[]>([]);
     const [sortBy, setSortBy] = useState<SortType>(SortType.UPDATE_TIME);
@@ -99,7 +108,7 @@ export function KnowledgeSpaceContent({
 
 
 
-    const isAdmin = true // space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
+    const isAdmin = space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
     const isSearching = searchQuery.trim().length > 0 || searchTagIds.length > 0;
 
     const { showToast } = useToastContext();
@@ -117,6 +126,7 @@ export function KnowledgeSpaceContent({
     const handleSearch = (params: SearchParams) => {
         setSearchQuery(params.keyword);
         setSearchTagIds(params.tagIds);
+        setSelectedFiles(new Set());
         onSearch(params);
     };
 
@@ -453,6 +463,7 @@ export function KnowledgeSpaceContent({
                                     // Use new handler to open modal instead of raw callback
                                     onEditTags={() => handleOpenEditTags(file.id)}
                                     onRetry={file.status === FileStatus.FAILED ? () => onRetryFile(file.id) : undefined}
+                                    onNavigateFolder={() => onNavigateFolder(file.id)}
                                     onValidateName={(newName) => validateFileName(newName, file.type === FileType.FOLDER, file.id, !!file.isCreating)}
                                     onCancelCreate={onCancelCreateFolder}
                                 />
@@ -472,8 +483,12 @@ export function KnowledgeSpaceContent({
                                 onRename={(id, newName) => onRenameFile(id, newName)}
                                 onDelete={(id) => handleDelete(id)}
                                 onRetry={(id) => onRetryFile(id)}
+                                onNavigateFolder={(id) => onNavigateFolder(id)}
                                 onValidateName={validateFileName}
                                 onCancelCreate={onCancelCreateFolder}
+                                sortBy={sortBy}
+                                sortDirection={sortDirection}
+                                onSort={handleSort}
                             />
                         </div>
                     </div>
@@ -482,33 +497,17 @@ export function KnowledgeSpaceContent({
 
             {/* Footer */}
             <div className="py-3 px-4 flex items-center justify-between border-t border-[#e5e6eb] flex-shrink-0 bg-white">
-                <Breadcrumb>
-                    <BreadcrumbList>
-                        {currentPath.map((path, index) => {
-                            const isLast = index === currentPath.length - 1;
-                            return (
-                                <React.Fragment key={path.id || index}>
-                                    <BreadcrumbItem>
-                                        {isLast ? (
-                                            <BreadcrumbPage className="text-[#1d2129] font-medium">{path.name}</BreadcrumbPage>
-                                        ) : (
-                                            <BreadcrumbLink
-                                                href="#"
-                                                onClick={(e) => {
-                                                    e.preventDefault();
-                                                    onNavigateFolder(path.id);
-                                                }}
-                                            >
-                                                {path.name}
-                                            </BreadcrumbLink>
-                                        )}
-                                    </BreadcrumbItem>
-                                    {!isLast && <BreadcrumbSeparator>/</BreadcrumbSeparator>}
-                                </React.Fragment>
-                            );
-                        })}
-                    </BreadcrumbList>
-                </Breadcrumb>
+                {/* Left side: selection path (only in search mode with selections) */}
+                {isSearching && selectedFiles.size > 0 ? (
+                    <SelectionPathBreadcrumb
+                        spaceId={space.id}
+                        spaceName={space.name}
+                        selectedFiles={selectedFiles}
+                        displayFiles={displayFiles}
+                    />
+                ) : (
+                    <div />
+                )}
 
                 {files.length > 0 && (
                     <div className="flex items-center gap-4 text-sm text-[#4e5969]">
@@ -577,7 +576,48 @@ export function KnowledgeSpaceContent({
                 spaceId={space.id}
                 fileId={isBatchTagging ? null : editingTagsFileId}
                 fileIds={isBatchTagging ? Array.from(selectedFiles) : undefined}
+                initialTagIds={
+                    editingTagsFileId && !isBatchTagging
+                        ? (displayFiles.find(f => f.id === editingTagsFileId)?.tags?.map(t => t.id) || [])
+                        : []
+                }
             />
+        </div>
+    );
+}
+
+// ============================================================
+// Selection Path Breadcrumb — shows common ancestor of selected files
+// ============================================================
+function SelectionPathBreadcrumb({
+    spaceId,
+    spaceName,
+    selectedFiles,
+    displayFiles,
+}: {
+    spaceId: string;
+    spaceName: string;
+    selectedFiles: Set<string>;
+    displayFiles: Array<{ id: string; name: string }>;
+}) {
+    const { commonPath, isLoading } = useSelectionPath(spaceId, spaceName, selectedFiles, displayFiles);
+
+    if (isLoading) {
+        return <span className="text-xs text-[#86909c]">加载路径中...</span>;
+    }
+
+    if (commonPath.length === 0) {
+        return null;
+    }
+
+    return (
+        <div className="flex items-center gap-0.5 text-sm text-[#86909c] min-w-0">
+            {commonPath.map((item, index) => (
+                <React.Fragment key={item.id || index}>
+                    {index > 0 && <span className="mx-0.5">/</span>}
+                    <span className="truncate max-w-[120px]">{item.name}</span>
+                </React.Fragment>
+            ))}
         </div>
     );
 }

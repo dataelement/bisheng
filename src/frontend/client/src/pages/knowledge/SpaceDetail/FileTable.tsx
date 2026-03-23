@@ -30,6 +30,8 @@ import FileIcon from "./FileIcon";
 import TagGroup from "./TagGroup";
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { useToastContext } from "~/Providers";
+import { SortType, SortDirection, FileStatus, FileType } from "~/api/knowledge";
+import { formatBytes } from "~/utils";
 
 // ============================================================
 // 列定义：key、最小宽度、初始宽度
@@ -145,12 +147,16 @@ function useScrollShadow(scrollRef: React.RefObject<HTMLDivElement | null>) {
 // 辅助组件：状态标签渲染
 // ============================================================
 const StatusBadge = ({ status }) => {
-    const config = {
-        SUCCESS: { label: "成功", color: "text-[#00b42a]", bg: "bg-[#e8ffea]", dot: "bg-[#00b42a]" },
-        PROCESSING: { label: "处理中", color: "text-[#165dff]", bg: "bg-[#e8f3ff]", dot: "bg-[#165dff]" },
-        FAILED: { label: "失败", color: "text-[#f53f3f]", bg: "bg-[#fff2f0]", dot: "bg-[#f53f3f]" },
+    const config: Record<string, { label: string; color: string; bg: string; dot: string }> = {
+        [FileStatus.SUCCESS]: { label: "成功", color: "text-[#00b42a]", bg: "bg-[#e8ffea]", dot: "bg-[#00b42a]" },
+        [FileStatus.PROCESSING]: { label: "解析中", color: "text-[#165dff]", bg: "bg-[#e8f3ff]", dot: "bg-[#165dff]" },
+        [FileStatus.WAITING]: { label: "排队中", color: "text-[#165dff]", bg: "bg-[#e8f3ff]", dot: "bg-[#165dff]" },
+        [FileStatus.REBUILDING]: { label: "重建中", color: "text-[#165dff]", bg: "bg-[#e8f3ff]", dot: "bg-[#165dff]" },
+        [FileStatus.UPLOADING]: { label: "上传中", color: "text-[#165dff]", bg: "bg-[#e8f3ff]", dot: "bg-[#165dff]" },
+        [FileStatus.FAILED]: { label: "失败", color: "text-[#f53f3f]", bg: "bg-[#fff2f0]", dot: "bg-[#f53f3f]" },
+        [FileStatus.TIMEOUT]: { label: "超时", color: "text-[#f53f3f]", bg: "bg-[#fff2f0]", dot: "bg-[#f53f3f]" },
     };
-    const item = config[status] || config.PROCESSING;
+    const item = config[status] || config[FileStatus.WAITING];
     return (
         <div className={cn("inline-flex items-center gap-1.5 px-2 py-0.5 rounded-sm text-xs font-medium", item.bg, item.color)}>
             <span className={cn("size-1.5 rounded-full", item.dot)} />
@@ -252,18 +258,23 @@ function FileTableHeader({
     columnWidths,
     onResizeStart,
     showLeftShadow,
+    sortBy,
+    sortDirection,
+    onSort,
+    isAdmin,
 }: {
     columnWidths: Record<ColumnKey, number>;
     onResizeStart: (key: ColumnKey, e: React.MouseEvent) => void;
     showLeftShadow: boolean;
+    sortBy: SortType;
+    sortDirection: SortDirection;
+    onSort: (sortBy: SortType) => void;
+    isAdmin: boolean;
 }) {
-    const [sort, setSort] = useState({ key: "UPDATE_TIME", direction: "asc" });
+    const currentSort = { key: sortBy, direction: sortDirection };
 
-    const handleSort = (key) => {
-        setSort(prev => ({
-            key,
-            direction: prev.key === key && prev.direction === "asc" ? "desc" : "asc"
-        }));
+    const handleSort = (key: string) => {
+        onSort(key as SortType);
     };
 
     return (
@@ -279,8 +290,8 @@ function FileTableHeader({
 
                 {/* 文件名 — 左侧固定 */}
                 <SortableHeader
-                    sortKey="NAME"
-                    currentSort={sort}
+                    sortKey={SortType.NAME}
+                    currentSort={currentSort}
                     onSort={handleSort}
                     width={columnWidths.name}
                     columnKey="name"
@@ -293,8 +304,8 @@ function FileTableHeader({
 
                 {/* 文件大小 */}
                 <SortableHeader
-                    sortKey="SIZE"
-                    currentSort={sort}
+                    sortKey={SortType.SIZE}
+                    currentSort={currentSort}
                     onSort={handleSort}
                     width={columnWidths.size}
                     columnKey="size"
@@ -316,8 +327,8 @@ function FileTableHeader({
 
                 {/* 更新时间 */}
                 <SortableHeader
-                    sortKey="UPDATE_TIME"
-                    currentSort={sort}
+                    sortKey={SortType.UPDATE_TIME}
+                    currentSort={currentSort}
                     onSort={handleSort}
                     width={columnWidths.updateTime}
                     columnKey="updateTime"
@@ -326,17 +337,18 @@ function FileTableHeader({
                     更新时间
                 </SortableHeader>
 
-                {/* 状态 */}
-                <SortableHeader
-                    sortKey="STATUS"
-                    currentSort={sort}
-                    onSort={handleSort}
-                    width={columnWidths.status}
-                    columnKey="status"
-                    onResizeStart={onResizeStart}
-                >
-                    状态
-                </SortableHeader>
+                {/* 状态 — 不排序, only visible to admins */}
+                {isAdmin && (
+                    <TableHead
+                        className="text-[#4e5969] font-normal p-0 pr-3 relative"
+                        style={{ width: columnWidths.status, minWidth: columnWidths.status, maxWidth: columnWidths.status }}
+                    >
+                        <div className="flex items-center gap-1.5 border-l pl-3">
+                            状态
+                        </div>
+                        <ResizeHandle columnKey="status" onResizeStart={onResizeStart} />
+                    </TableHead>
+                )}
 
                 {/* 操作 */}
                 <TableHead
@@ -355,7 +367,7 @@ function FileTableHeader({
 // ============================================================
 // 主表格组件
 // ============================================================
-export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, onDownload, onEditTags, onRename, onDelete, onRetry, onValidateName, onCancelCreate }) {
+export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, onDownload, onEditTags, onRename, onDelete, onRetry, onNavigateFolder, onValidateName, onCancelCreate, sortBy, sortDirection, onSort }) {
     const { columnWidths, onResizeStart, totalWidth } = useResizableColumns();
     const scrollRef = useRef<HTMLDivElement>(null);
     const { showLeftShadow, showRightShadow } = useScrollShadow(scrollRef);
@@ -375,6 +387,10 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                         columnWidths={columnWidths}
                         onResizeStart={onResizeStart}
                         showLeftShadow={showLeftShadow}
+                        sortBy={sortBy}
+                        sortDirection={sortDirection}
+                        onSort={onSort}
+                        isAdmin={isAdmin}
                     />
                     <TableBody>
                         {files.map((file) => (
@@ -389,6 +405,7 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                                 onRename={(newName) => onRename(file.id, newName)}
                                 onDelete={() => onDelete(file.id)}
                                 onRetry={() => onRetry?.(file.id)}
+                                onNavigateFolder={() => onNavigateFolder?.(file.id)}
                                 onValidateName={(newName) => onValidateName?.(newName, file.type === 'FOLDER', file.id, !!file.isCreating)}
                                 onCancelCreate={onCancelCreate}
                                 columnWidths={columnWidths}
@@ -425,6 +442,7 @@ function FileRow({
     onRename,
     onDelete,
     onRetry,
+    onNavigateFolder,
     onValidateName,
     onCancelCreate,
     columnWidths,
@@ -439,12 +457,13 @@ function FileRow({
     onRename: (newName: string) => void;
     onDelete: () => void;
     onRetry: () => void;
+    onNavigateFolder?: () => void;
     onValidateName?: (newName: string) => string | null;
     onCancelCreate?: () => void;
     columnWidths: Record<ColumnKey, number>;
     showLeftShadow: boolean;
 }) {
-    const isFolder = file.type === 'FOLDER';
+    const isFolder = file.type === FileType.FOLDER;
     const isCreating = !!file.isCreating;
     const rowBg = isSelected ? "bg-primary/10" : "bg-white";
 
@@ -542,8 +561,10 @@ function FileRow({
             >
                 <div className="flex items-center gap-2 min-w-0 text-gray-300 ">
                     <div className="bg-white rounded-sm size-5 flex items-center justify-center flex-shrink-0">
-                        {isFolder && <FolderIcon className="size-4" />}
-                        {file.thumbnail ? <FileImageIcon className="size-4" /> : <FileUserIcon className="size-4" />}
+                        {isFolder
+                            ? <FolderIcon className="size-4" />
+                            : (file.thumbnail ? <FileImageIcon className="size-4" /> : <FileUserIcon className="size-4" />)
+                        }
                     </div>
                     {isRenaming ? (
                         <input
@@ -560,8 +581,11 @@ function FileRow({
                         <span
                             className="text-sm text-[#1d2129] truncate cursor-pointer hover:text-[#165dff] flex-1"
                             onClick={(e) => {
-                                if (file.type === 'FOLDER') return;
                                 e.stopPropagation();
+                                if (isFolder) {
+                                    onNavigateFolder?.();
+                                    return;
+                                }
                                 const url = `${__APP_ENV__.BASE_URL}/knowledge/file/${file.id}?name=${encodeURIComponent(file.name)}&type=${encodeURIComponent(file.type)}`;
                                 window.open(url, '_blank');
                             }}
@@ -580,7 +604,7 @@ function FileRow({
                 style={{ width: columnWidths.size, minWidth: columnWidths.size, maxWidth: columnWidths.size }}
             >
                 <span className="truncate block">
-                    {isFolder ? "--" : (file.size ? (file.size / 1024 / 1024).toFixed(2) + "MB" : "0MB")}
+                    {isFolder ? "--" : (file.size ? formatBytes(file.size, 2, true) : "--")}
                 </span>
             </TableCell>
 
@@ -590,22 +614,24 @@ function FileRow({
                 style={{ width: columnWidths.tags, minWidth: columnWidths.tags, maxWidth: columnWidths.tags }}
             >
                 <div className="flex items-center gap-1.5 overflow-hidden w-full h-full">
-                    <TagGroup
-                        tags={file.tags}
-                        actionButton={
-                            isAdmin ? (
-                                <div
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        onEditTags();
-                                    }}
-                                    className="hidden group-hover/tags:flex items-center justify-center text-[#165dff] hover:text-[#165dff]/80 transition-colors cursor-pointer"
-                                >
-                                    <PencilLineIcon className="size-3.5" />
-                                </div>
-                            ) : undefined
-                        }
-                    />
+                    {!isFolder && (
+                        <TagGroup
+                            tags={file.tags}
+                            actionButton={
+                                isAdmin ? (
+                                    <div
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            onEditTags();
+                                        }}
+                                        className="hidden group-hover/tags:flex items-center justify-center text-[#165dff] hover:text-[#165dff]/80 transition-colors cursor-pointer"
+                                    >
+                                        <PencilLineIcon className="size-3.5" />
+                                    </div>
+                                ) : undefined
+                            }
+                        />
+                    )}
                 </div>
             </TableCell>
 
@@ -617,13 +643,15 @@ function FileRow({
                 <span className="truncate block">{file.updatedAt}</span>
             </TableCell>
 
-            {/* 状态 */}
-            <TableCell
-                className="py-3"
-                style={{ width: columnWidths.status, minWidth: columnWidths.status, maxWidth: columnWidths.status }}
-            >
-                {isFolder ? <span className="text-[#86909c] text-sm">7/11</span> : <StatusBadge status={file.status} />}
-            </TableCell>
+            {/* 状态 — only visible to admins */}
+            {isAdmin && (
+                <TableCell
+                    className="py-3"
+                    style={{ width: columnWidths.status, minWidth: columnWidths.status, maxWidth: columnWidths.status }}
+                >
+                    {isFolder ? <span className="text-[#86909c] text-sm">7/11</span> : <StatusBadge status={file.status} />}
+                </TableCell>
+            )}
 
             {/* 操作 */}
             <TableCell
@@ -643,9 +671,11 @@ function FileRow({
                             </DropdownMenuItem>
                             {isAdmin && (
                                 <>
-                                    <DropdownMenuItem onClick={onEditTags}>
-                                        <Tag className="size-4 mr-2" />编辑标签
-                                    </DropdownMenuItem>
+                                    {!isFolder && (
+                                        <DropdownMenuItem onClick={onEditTags}>
+                                            <Tag className="size-4 mr-2" />编辑标签
+                                        </DropdownMenuItem>
+                                    )}
                                     <DropdownMenuItem onClick={() => {
                                         setRenameValue(file.name);
                                         setIsRenaming(true);

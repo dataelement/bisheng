@@ -14,10 +14,11 @@ interface ApiResponse<T> {
 /** File processing status */
 export enum FileStatus {
     UPLOADING = "uploading",
-    QUEUED = "queued",
     PROCESSING = "processing",
     SUCCESS = "success",
     FAILED = "failed",
+    REBUILDING = "rebuilding",
+    WAITING = "waiting",
     TIMEOUT = "timeout"
 }
 
@@ -45,9 +46,9 @@ export enum VisibilityType {
 
 /** Sort field */
 export enum SortType {
-    NAME = "name",
-    TYPE = "type",
-    SIZE = "size",
+    NAME = "file_name",
+    TYPE = "file_type",
+    SIZE = "file_size",
     UPDATE_TIME = "update_time"
 }
 
@@ -89,13 +90,18 @@ export interface KnowledgeSpace {
 }
 
 /** File or folder item returned from the space children API */
+export interface FileTag {
+    id: number;
+    name: string;
+}
+
 export interface KnowledgeFile {
     id: string;
     name: string;
     type: FileType;
     size?: number;
     status?: FileStatus;
-    tags: string[];
+    tags: FileTag[];
     path: string;
     parentId?: string;           // mapped from parent_id
     spaceId: string;
@@ -103,6 +109,10 @@ export interface KnowledgeFile {
     updatedAt: string;           // mapped from update_time
     thumbnail?: string;
     errorMessage?: string;
+    /** Number of successfully parsed files (folders only) */
+    successFileNum?: number;
+    /** Total number of files (folders only) */
+    fileNum?: number;
     // Transient UI-only fields
     isCreating?: boolean;
 }
@@ -123,6 +133,7 @@ interface RawKnowledgeSpace {
     file_count?: number;
     total_file_count?: number;
     role?: string;
+    user_role?: string;
     is_pinned?: boolean;
     create_time?: string;
     update_time?: string;
@@ -169,6 +180,9 @@ interface RawKnowledgeFile {
     update_time?: string;
     remark?: string;
     thumbnails?: string | null;
+    success_file_num?: number;
+    file_num?: number;
+    tags?: Array<{ id: number; name: string }>;
 }
 
 /** Upload API response */
@@ -199,7 +213,7 @@ function mapSpace(raw: RawKnowledgeSpace): KnowledgeSpace {
         memberCount: raw.member_count ?? 0,
         fileCount: raw.file_count ?? 0,
         totalFileCount: raw.total_file_count ?? 0,
-        role: (raw.role as SpaceRole) || SpaceRole.MEMBER,
+        role: (raw.user_role as SpaceRole) || (raw.role as SpaceRole) || SpaceRole.MEMBER,
         isPinned: raw.is_pinned ?? false,
         createdAt: raw.create_time || "",
         updatedAt: raw.update_time || "",
@@ -268,27 +282,46 @@ function deriveFileTypeFromName(fileName: string): FileType {
 function mapFileStatus(status: number): FileStatus {
     switch (status) {
         case 1: return FileStatus.PROCESSING;
-        case 2: return FileStatus.FAILED;
-        case 3: return FileStatus.SUCCESS;
-        default: return FileStatus.QUEUED;
+        case 2: return FileStatus.SUCCESS;
+        case 3: return FileStatus.FAILED;
+        case 4: return FileStatus.REBUILDING;
+        case 5: return FileStatus.WAITING;
+        case 6: return FileStatus.TIMEOUT;
+        default: return FileStatus.WAITING;
+    }
+}
+
+/** Convert FileStatus enum to backend numeric value */
+export function fileStatusToNumber(status: FileStatus): number {
+    switch (status) {
+        case FileStatus.PROCESSING: return 1;
+        case FileStatus.SUCCESS: return 2;
+        case FileStatus.FAILED: return 3;
+        case FileStatus.REBUILDING: return 4;
+        case FileStatus.WAITING: return 5;
+        case FileStatus.TIMEOUT: return 6;
+        default: return 0;
     }
 }
 
 /** Map a raw knowledge file record to the frontend KnowledgeFile model */
 function mapRawFile(raw: RawKnowledgeFile): KnowledgeFile {
+    const isFolder = raw.file_type === 0;
     return {
         id: String(raw.id),
         name: raw.file_name,
-        type: deriveFileTypeFromName(raw.file_name),
+        type: isFolder ? FileType.FOLDER : deriveFileTypeFromName(raw.file_name),
         size: raw.file_size,
-        status: mapFileStatus(raw.status),
-        tags: [],
+        status: isFolder ? undefined : mapFileStatus(raw.status),
+        tags: isFolder ? [] : (raw.tags || []),
         path: raw.object_name || raw.file_name,
         parentId: undefined,
         spaceId: String(raw.knowledge_id),
         createdAt: raw.create_time || "",
         updatedAt: raw.update_time || "",
         thumbnail: raw.thumbnails || undefined,
+        successFileNum: raw.success_file_num,
+        fileNum: raw.file_num,
     };
 }
 
@@ -431,6 +464,30 @@ export async function deleteSpaceApi(space_id: string): Promise<void> {
 }
 
 /**
+ * Get the parent folder chain for a folder/file
+ * GET /api/v1/knowledge/space/{space_id}/folders/{folder_id}/parent
+ * Returns the ancestor path from root to the given folder
+ */
+export async function getFolderParentPathApi(
+    spaceId: string,
+    folderId: string
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+): Promise<Array<{ id: string; name: string }>> {
+    const res = await request.get<ApiResponse<any>>(
+        `/api/v1/knowledge/space/${spaceId}/folders/${folderId}/parent`
+    );
+    const data = res?.data;
+    // Normalize: backend may return an array of objects with id/name or file_name
+    if (Array.isArray(data)) {
+        return data.map((item: any) => ({
+            id: String(item.id),
+            name: item.name || item.file_name || String(item.id),
+        }));
+    }
+    return [];
+}
+
+/**
  * Pin / unpin a space
  * POST /api/v1/knowledge/space/{space_id}/set-pin
  * @param is_pined - true to pin, false to unpin (backend field name: is_pined)
@@ -448,6 +505,9 @@ export async function getSpaceChildrenApi(params: {
     parent_id?: string;
     page?: number;
     page_size?: number;
+    order_field?: string;
+    order_sort?: string;
+    file_status?: number[];
 }): Promise<{ data: KnowledgeFile[]; total: number }> {
     const { space_id, ...queryParams } = params;
     if (!space_id) return { data: [], total: 0 };
@@ -458,7 +518,11 @@ export async function getSpaceChildrenApi(params: {
                 parent_id: queryParams.parent_id,
                 page: queryParams.page,
                 page_size: queryParams.page_size,
-            }
+                order_field: queryParams.order_field,
+                order_sort: queryParams.order_sort,
+                file_status: queryParams.file_status?.length ? queryParams.file_status : undefined,
+            },
+            paramsSerializer,
         }
     );
     return {
@@ -494,6 +558,9 @@ export async function searchSpaceChildrenApi(params: {
     page_size?: number;
     keyword?: string;
     tag_ids?: number[];
+    order_field?: string;
+    order_sort?: string;
+    file_status?: number[];
 }): Promise<{ data: KnowledgeFile[]; total: number }> {
     const { space_id, ...queryParams } = params;
     if (!space_id) return { data: [], total: 0 };
@@ -506,6 +573,9 @@ export async function searchSpaceChildrenApi(params: {
                 page_size: queryParams.page_size,
                 keyword: queryParams.keyword || undefined,
                 tag_ids: queryParams.tag_ids?.length ? queryParams.tag_ids : undefined,
+                order_field: queryParams.order_field,
+                order_sort: queryParams.order_sort,
+                file_status: queryParams.file_status?.length ? queryParams.file_status : undefined,
             },
             paramsSerializer,
         }

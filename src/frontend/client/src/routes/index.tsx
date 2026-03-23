@@ -86,6 +86,8 @@ export const router = createBrowserRouter([
           { path: 'channel', element: <Subscription /> },
           { path: 'channel/share/:channelId', element: <Subscription /> },
           { path: 'knowledge', element: <Knowledge /> },
+          { path: 'knowledge/space/:spaceId', element: <Knowledge /> },
+          { path: 'knowledge/space/:spaceId/folder/:folderId', element: <Knowledge /> },
           { path: 'knowledge/share/:spaceId', element: <Knowledge /> },
         ],
       },

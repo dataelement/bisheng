@@ -88,7 +88,7 @@ export function KnowledgeSpaceHeader({
     onToggleAiAssistant,
     isAiAssistantOpen
 }: KnowledgeSpaceHeaderProps) {
-    const isAdmin = true // space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
+    const isAdmin = space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
     const { showToast } = useToastContext();
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -142,6 +142,7 @@ export function KnowledgeSpaceHeader({
             showToast({ message: "复制失败，请重试", status: "error" });
         }
     };
+    console.log('currentPath :>> ', currentPath);
 
     return (
         <div className="pt-5 space-y-4">
@@ -158,7 +159,7 @@ export function KnowledgeSpaceHeader({
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 {/* 左侧：标题与信息 / 面包屑 */}
                 <div className="flex items-center gap-1 text-sm flex-wrap w-full sm:w-auto">
-                    {currentPath.length !== 0 ? (
+                    {currentPath.length === 0 ? (
                         <div className="flex items-center gap-1">
                             <h1 className="text-base text-[#1d2129]">{space.name}</h1>
                             <Tooltip>
@@ -187,25 +188,50 @@ export function KnowledgeSpaceHeader({
                         <div className="flex items-center gap-1 text-[#1d2129]">
                             <button
                                 onClick={() => onNavigateFolder(undefined)}
-                                className="text-[#4e5969] hover:text-[#165dff]"
+                                className="text-[#4e5969] hover:text-[#165dff] shrink-0"
                             >
                                 {space.name}
                             </button>
-                            {currentPath.map((item, index) => (
-                                <div key={index} className="flex items-center gap-1">
-                                    <span className="text-[#86909c] mx-0.5">/</span>
-                                    {index === currentPath.length - 1 ? (
-                                        <span className="font-medium text-[#1d2129]">{item.name}</span>
-                                    ) : (
-                                        <button
-                                            onClick={() => onNavigateFolder(item.id)}
-                                            className="text-[#4e5969] hover:text-[#165dff]"
-                                        >
-                                            {item.name}
-                                        </button>
-                                    )}
-                                </div>
-                            ))}
+                            {(() => {
+                                // Show ellipsis when path is longer than 3 levels
+                                const MAX_VISIBLE = 3;
+                                let visibleItems = currentPath;
+                                let showEllipsis = false;
+                                if (currentPath.length > MAX_VISIBLE) {
+                                    // Show first item, ellipsis, then last 2 items
+                                    visibleItems = [
+                                        currentPath[0],
+                                        ...currentPath.slice(-2),
+                                    ];
+                                    showEllipsis = true;
+                                }
+                                return visibleItems.map((item, displayIdx) => {
+                                    const isLast = displayIdx === visibleItems.length - 1;
+                                    return (
+                                        <div key={item.id} className="flex items-center gap-1 min-w-0">
+                                            <span className="text-[#86909c] mx-0.5 shrink-0">/</span>
+                                            {showEllipsis && displayIdx === 1 && (
+                                                <>
+                                                    <span className="text-[#86909c]">...</span>
+                                                    <span className="text-[#86909c] mx-0.5 shrink-0">/</span>
+                                                </>
+                                            )}
+                                            {isLast ? (
+                                                <span className="font-medium text-[#1d2129] truncate max-w-[160px]">
+                                                    {item.name}
+                                                </span>
+                                            ) : (
+                                                <button
+                                                    onClick={() => onNavigateFolder(item.id)}
+                                                    className="text-[#4e5969] hover:text-[#165dff] truncate max-w-[120px]"
+                                                >
+                                                    {item.name}
+                                                </button>
+                                            )}
+                                        </div>
+                                    );
+                                });
+                            })()}
                         </div>
                     )}
                 </div>
@@ -289,8 +315,8 @@ export function KnowledgeSpaceHeader({
                                             上传中
                                         </DropdownMenuCheckboxItem>
                                         <DropdownMenuCheckboxItem
-                                            checked={statusFilter.includes(FileStatus.QUEUED)}
-                                            onCheckedChange={(checked) => onFilterStatus(FileStatus.QUEUED, checked)}
+                                            checked={statusFilter.includes(FileStatus.WAITING)}
+                                            onCheckedChange={(checked) => onFilterStatus(FileStatus.WAITING, checked)}
                                         >
                                             排队中
                                         </DropdownMenuCheckboxItem>
@@ -299,6 +325,12 @@ export function KnowledgeSpaceHeader({
                                             onCheckedChange={(checked) => onFilterStatus(FileStatus.PROCESSING, checked)}
                                         >
                                             解析中
+                                        </DropdownMenuCheckboxItem>
+                                        <DropdownMenuCheckboxItem
+                                            checked={statusFilter.includes(FileStatus.REBUILDING)}
+                                            onCheckedChange={(checked) => onFilterStatus(FileStatus.REBUILDING, checked)}
+                                        >
+                                            重建中
                                         </DropdownMenuCheckboxItem>
                                         <DropdownMenuCheckboxItem
                                             checked={statusFilter.includes(FileStatus.SUCCESS)}

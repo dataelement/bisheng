@@ -24,6 +24,7 @@ interface FileCardProps {
     onDelete: () => void;
     onEditTags: () => void;
     onRetry?: () => void;
+    onNavigateFolder?: () => void;
     onValidateName?: (newName: string) => string | null;
     onCancelCreate?: () => void;
 }
@@ -38,6 +39,7 @@ export function FileCard({
     onDelete,
     onEditTags,
     onRetry,
+    onNavigateFolder,
     onValidateName,
     onCancelCreate
 }: FileCardProps) {
@@ -151,14 +153,29 @@ export function FileCard({
         }
 
         switch (file.status) {
-            case FileStatus.PROCESSING:
-            case FileStatus.QUEUED:
             case FileStatus.UPLOADING:
                 return (
                     <div className="flex items-center flex-1 min-w-0">
                         <Circle className="size-1.5 fill-[#165dff] text-[#165dff] shrink-0 mr-1.5" />
                         <span className="truncate text-[#1d2129]">{file.name}</span>
                         <span className="text-[#86909c] text-xs ml-1.5 shrink-0">上传中...</span>
+                    </div>
+                );
+            case FileStatus.PROCESSING:
+            case FileStatus.REBUILDING:
+                return (
+                    <div className="flex items-center flex-1 min-w-0">
+                        <Circle className="size-1.5 fill-[#165dff] text-[#165dff] shrink-0 mr-1.5" />
+                        <span className="truncate text-[#1d2129]">{file.name}</span>
+                        <span className="text-[#86909c] text-xs ml-1.5 shrink-0">解析中...</span>
+                    </div>
+                );
+            case FileStatus.WAITING:
+                return (
+                    <div className="flex items-center flex-1 min-w-0">
+                        <Circle className="size-1.5 fill-[#165dff] text-[#165dff] shrink-0 mr-1.5" />
+                        <span className="truncate text-[#1d2129]">{file.name}</span>
+                        <span className="text-[#86909c] text-xs ml-1.5 shrink-0">排队中...</span>
                     </div>
                 );
             case FileStatus.FAILED:
@@ -175,7 +192,11 @@ export function FileCard({
     };
 
     const handleCardClick = () => {
-        if (isFolder || isCreating || isRenaming) return;
+        if (isCreating || isRenaming) return;
+        if (isFolder) {
+            onNavigateFolder?.();
+            return;
+        }
         const url = `${__APP_ENV__.BASE_URL}/knowledge/file/${file.id}?name=${encodeURIComponent(file.name)}&type=${encodeURIComponent(file.type)}`;
         window.open(url, '_blank');
     };
@@ -228,7 +249,7 @@ export function FileCard({
                                 {/* 如果是管理员，显示后续管理操作 */}
                                 {isAdmin && (
                                     <>
-                                        <DropdownMenuItem onClick={onEditTags}>编辑标签</DropdownMenuItem>
+                                        {!isFolder && <DropdownMenuItem onClick={onEditTags}>编辑标签</DropdownMenuItem>}
                                         <DropdownMenuItem onClick={() => {
                                             setRenameValue(file.name);
                                             setIsRenaming(true);
@@ -258,10 +279,10 @@ export function FileCard({
                     {/* 底部信息 (标签、数量和时间) */}
                     <div className="flex items-center justify-between mt-1 min-w-0 gap-2">
                         <div className="flex items-center flex-1 min-w-0">
-                            {isAdmin && isFolder && (
+                            {isAdmin && isFolder && file.fileNum != null && (
                                 <div className="text-sm font-medium leading-none">
-                                    <span className="text-[#00b42a]">7</span>
-                                    <span className="text-[#86909c]">/11</span>
+                                    <span className="text-[#86909c]">{file.successFileNum ?? 0}</span>
+                                    <span className="text-[#86909c]">/{file.fileNum}</span>
                                 </div>
                             )}
                             {(!isFolder && file.tags && file.tags.length > 0) && (

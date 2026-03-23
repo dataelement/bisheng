@@ -11,6 +11,8 @@ import {
     VisibilityType,
     getSpaceChildrenApi,
     searchSpaceChildrenApi,
+    fileStatusToNumber,
+    getFolderParentPathApi,
     getSpaceInfoApi,
     createSpaceApi,
     updateSpaceApi,
@@ -63,9 +65,10 @@ export default function Knowledge() {
     const [loading, setLoading] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
     const [searchTagIds, setSearchTagIds] = useState<number[]>([]);
+    const [searchScope, setSearchScope] = useState<'current' | 'all'>('all');
     const [statusFilter, setStatusFilter] = useState<FileStatus[]>([]);
-    const [sortBy, setSortBy] = useState(SortType.UPDATE_TIME);
-    const [sortDirection, setSortDirection] = useState(SortDirection.DESC);
+    const [sortBy, setSortBy] = useState<SortType | undefined>(undefined);
+    const [sortDirection, setSortDirection] = useState<SortDirection | undefined>(undefined);
     const [currentFolderId, setCurrentFolderId] = useState<string | undefined>();
     const [currentPath, setCurrentPath] = useState<Array<{ id?: string; name: string }>>([]);
     const [showCreateDrawer, setShowCreateDrawer] = useState(false);
@@ -97,20 +100,29 @@ export default function Knowledge() {
         setLoading(true);
         try {
             const isSearching = searchQuery.trim().length > 0 || searchTagIds.length > 0;
+            const fileStatusNums = statusFilter.length > 0
+                ? statusFilter.map(fileStatusToNumber)
+                : undefined;
             const res = isSearching
                 ? await searchSpaceChildrenApi({
                     space_id: activeSpace.id,
-                    parent_id: currentFolderId,
+                    parent_id: searchScope === 'all' ? undefined : currentFolderId,
                     page,
                     page_size: pageSize,
                     keyword: searchQuery || undefined,
                     tag_ids: searchTagIds.length > 0 ? searchTagIds : undefined,
+                    order_field: sortBy || undefined,
+                    order_sort: sortDirection || undefined,
+                    file_status: fileStatusNums,
                 })
                 : await getSpaceChildrenApi({
                     space_id: activeSpace.id,
                     parent_id: currentFolderId,
                     page,
                     page_size: pageSize,
+                    order_field: sortBy || undefined,
+                    order_sort: sortDirection || undefined,
+                    file_status: fileStatusNums,
                 });
             setFiles(res.data);
             setTotal(res.total);
@@ -134,7 +146,7 @@ export default function Knowledge() {
         if (activeSpace) {
             setCurrentPage(1);
             setCurrentFolderId(undefined);
-            setCurrentPath([{ id: activeSpace.id, name: activeSpace.name }]);
+            setCurrentPath([]);
             setSearchQuery("");
             setStatusFilter([]);
             loadFiles(1);
@@ -147,12 +159,13 @@ export default function Knowledge() {
             setCurrentPage(1);
             loadFiles(1);
         }
-    }, [searchQuery, searchTagIds, statusFilter, sortBy, sortDirection, currentFolderId]);
+    }, [searchQuery, searchTagIds, searchScope, statusFilter, sortBy, sortDirection, currentFolderId]);
 
     // Handle search from CompoundSearchInput
     const handleSearch = useCallback((params: SearchParams) => {
         setSearchQuery(params.keyword);
         setSearchTagIds(params.tagIds);
+        setSearchScope(params.scope);
     }, []);
 
     // ─── Space actions ──────────────────────────────────────────────────
@@ -215,7 +228,7 @@ export default function Knowledge() {
                     is_released,
                 });
                 setActiveSpace(newSpace);
-                setCurrentPath([{ id: newSpace.id, name: newSpace.name }]);
+                setCurrentPath([]);
                 queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces", "mine"] });
                 showToast({ message: "知识空间创建成功", severity: NotificationSeverity.SUCCESS });
             }
@@ -234,23 +247,33 @@ export default function Knowledge() {
     };
 
     // ─── Folder navigation ───────────────────────────────────────────────
-    const handleNavigateFolder = (folderId?: string) => {
-        if (!folderId) {
+    const handleNavigateFolder = async (folderId?: string) => {
+        if (!folderId || !activeSpace) {
             // Navigate back to root
             setCurrentFolderId(undefined);
-            setCurrentPath(activeSpace ? [{ id: activeSpace.id, name: activeSpace.name }] : []);
+            setCurrentPath([]);
             return;
         }
 
-        // Navigate into a folder — find the folder in current list to get its name
-        const folder = files.find(f => f.id === folderId);
         setCurrentFolderId(folderId);
-        setCurrentPath(prev => {
-            // If folder already in path (breadcrumb click), trim back to it
-            const existingIdx = prev.findIndex(p => p.id === folderId);
-            if (existingIdx >= 0) return prev.slice(0, existingIdx + 1);
-            return [...prev, { id: folderId, name: folder?.name || folderId }];
-        });
+
+        // Check if clicking a breadcrumb item already in the path
+        const existingIdx = currentPath.findIndex(p => p.id === folderId);
+        if (existingIdx >= 0) {
+            setCurrentPath(prev => prev.slice(0, existingIdx + 1));
+            return;
+        }
+
+        // Fetch the full parent chain from API
+        const folder = files.find(f => f.id === folderId);
+        const currentFolder = { id: folderId, name: folder?.name || folderId };
+        try {
+            const parentPath = await getFolderParentPathApi(activeSpace.id, folderId);
+            setCurrentPath([...parentPath, currentFolder]);
+        } catch {
+            // Fallback: append folder to current path
+            setCurrentPath(prev => [...prev, currentFolder]);
+        }
     };
 
     // ─── File upload (two-step: server upload → register) ────────────────
@@ -268,7 +291,7 @@ export default function Knowledge() {
             name: file.name,
             type: getFileType(file.name),
             size: file.size,
-            status: FileStatus.PROCESSING,
+            status: FileStatus.UPLOADING,
             tags: [],
             path: file.name,
             parentId: currentFolderId,
@@ -405,7 +428,7 @@ export default function Knowledge() {
     };
 
     const handleEditTags = (fileId: string) => {
-        showToast({ message: "编辑标签功能开发中", severity: NotificationSeverity.INFO });
+        loadFiles(currentPage);
     };
 
     const handleRetryFile = (fileId: string) => {
