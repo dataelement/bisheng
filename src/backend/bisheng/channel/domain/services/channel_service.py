@@ -1199,19 +1199,19 @@ class ChannelService:
         body = {
             "size": 1,
             "query": query,
-            "sort": [{"create_time": {"order": "desc"}}],
-            "_source": ["create_time"],
+            "sort": [{"publish_time": {"order": "desc"}}],
+            "_source": ["publish_time"],
         }
         response = await client.search(index=ARTICLE_INDEX_NAME, body=body)
         hits = response["hits"]["hits"]
         if not hits:
             return None
 
-        latest_create_time = hits[0]["_source"].get("create_time")
-        if not latest_create_time:
+        latest_time = hits[0]["_source"].get("publish_time")
+        if not latest_time:
             return None
 
-        return self._normalize_datetime(datetime.fromisoformat(latest_create_time))
+        return self._normalize_datetime(datetime.fromisoformat(latest_time))
 
     async def update_channels_latest_article_time(self, channels: List[Channel]) -> int:
         """
@@ -1234,9 +1234,6 @@ class ChannelService:
                 logger.exception(
                     f"Failed to query latest article create_time for channel {channel.id}: {exc}"
                 )
-                continue
-
-            if latest_article_create_time is None:
                 continue
 
             channel.latest_article_update_time = latest_article_create_time
@@ -1280,31 +1277,39 @@ class ChannelService:
                         filter_rules=ChannelService._extract_main_filter_rules(channel) or None,
                     )
                     if query is None:
+                        # No valid query (empty source_list or no filter rules), clear the time
+                        channel.latest_article_update_time = None
+                        update_channels.append(channel)
+                        updated_count += 1
                         continue
 
                     client = get_es_connection_sync()
                     body = {
                         "size": 1,
                         "query": query,
-                        "sort": [{"create_time": {"order": "desc"}}],
-                        "_source": ["create_time"],
+                        "sort": [{"publish_time": {"order": "desc"}}],
+                        "_source": ["publish_time"],
                     }
                     response = client.search(index=ARTICLE_INDEX_NAME, body=body)
                     hits = response["hits"]["hits"]
                     if not hits:
+                        # No articles found, clear the time
+                        channel.latest_article_update_time = None
+                        update_channels.append(channel)
+                        updated_count += 1
                         continue
 
-                    latest_create_time = hits[0]["_source"].get("create_time")
-                    if not latest_create_time:
+                    latest_publish_time = hits[0]["_source"].get("publish_time")
+                    if not latest_publish_time:
+                        channel.latest_article_update_time = None
+                        update_channels.append(channel)
+                        updated_count += 1
                         continue
 
-                    latest_article_create_time = ChannelService._normalize_datetime(
-                        datetime.fromisoformat(latest_create_time)
+                    latest_article_time = ChannelService._normalize_datetime(
+                        datetime.fromisoformat(latest_publish_time)
                     )
-                    if latest_article_create_time is None:
-                        continue
-
-                    channel.latest_article_update_time = latest_article_create_time
+                    channel.latest_article_update_time = latest_article_time
                     update_channels.append(channel)
                     updated_count += 1
 
