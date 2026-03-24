@@ -191,14 +191,16 @@ class SpaceChannelMemberDao:
 
     @classmethod
     async def async_get_members_by_space(cls, space_id: int, order_by: str = 'user_id',
-                                         user_roles: List[UserRoleEnum] = None) -> List[SpaceChannelMember]:
+                                         user_roles: List[UserRoleEnum] = None, status: bool = True) -> List[
+        SpaceChannelMember]:
         """ Async: Get all active members of a space """
 
         statement = select(SpaceChannelMember).where(
             SpaceChannelMember.business_id == str(space_id),
             SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
-            SpaceChannelMember.status == True
+            SpaceChannelMember.status == status
         )
+
         if user_roles:
             statement = statement.where(SpaceChannelMember.user_role.in_(user_roles))
         if order_by == 'user_id':

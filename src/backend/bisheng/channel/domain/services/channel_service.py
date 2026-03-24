@@ -431,8 +431,8 @@ class ChannelService:
                 raise ChannelAdminLimitExceededError()
 
         should_notify_admin_assignment = (
-            target_membership.user_role == UserRoleEnum.MEMBER
-            and req.role == UserRoleEnum.ADMIN.value
+                target_membership.user_role == UserRoleEnum.MEMBER
+                and req.role == UserRoleEnum.ADMIN.value
         )
 
         # 6. Update role
@@ -1453,7 +1453,8 @@ class ChannelService:
                 file=md_content.encode("utf-8"),
                 content_type="text/markdown",
             )
-            md_file_paths.append(md_object_name)
+            md_file_paths.append(
+                await minio_client.get_share_link(md_object_name, bucket=minio_client.tmp_bucket, clear_host=False))
 
             # Upload content_html as .html for preview
             if article.content_html:
@@ -1463,7 +1464,9 @@ class ChannelService:
                     file=article.content_html.encode("utf-8"),
                     content_type="text/html",
                 )
-                preview_map[md_object_name] = preview_object_name
+                preview_map[md_object_name] = await minio_client.get_share_link(preview_object_name,
+                                                                                bucket=minio_client.tmp_bucket,
+                                                                                clear_host=False)
 
         # 4. Call KnowledgeSpaceService.add_file
         from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService

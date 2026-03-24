@@ -1155,8 +1155,8 @@ class KnowledgeSpaceService(BaseService):
         if space.auth_type != AuthTypeEnum.APPROVAL or not self.message_service:
             return
         members = await SpaceChannelMemberDao.async_get_members_by_space(space.id,
-                                                                         user_roles=[UserRoleEnum.MEMBER,
-                                                                                     UserRoleEnum.ADMIN])
+                                                                         user_roles=[UserRoleEnum.ADMIN,
+                                                                                     UserRoleEnum.CREATOR])
         member_ids = [one.user_id for one in members]
         await self.message_service.send_generic_approval(
             applicant_user_id=self.login_user.user_id,
