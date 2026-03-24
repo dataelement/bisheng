@@ -316,12 +316,19 @@ class MessageService:
             applicant_user_id: int = None,
             applicant_user_name: str = None,
             business_name: str = None,
+            content: Optional[List[Dict[str, Any]]] = None,
     ) -> InboxMessage:
         """
         Send a generic notification message to specific receivers.
         """
-        content = self.build_generic_notify_content(text, content_type, applicant_user_id, applicant_user_name,
-                                                    business_name)
+        if content is None:
+            content = self.build_generic_notify_content(
+                text=text,
+                content_type=content_type,
+                applicant_user_id=applicant_user_id,
+                applicant_user_name=applicant_user_name,
+                business_name=business_name,
+            )
 
         message = await self.send_message(
             content=content,

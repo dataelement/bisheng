@@ -56,6 +56,7 @@ MAX_USER_CHANNEL_COUNT = 10
 MAX_ADMIN_COUNT = 5
 # Maximum number of channels a user can subscribe to (excluding self-created channels)
 MAX_USER_SUBSCRIBE_COUNT = 20
+CHANNEL_ADMIN_ASSIGNMENT_MESSAGE = "assigned_channel_admin"
 
 
 class ChannelService:
@@ -429,11 +430,69 @@ class ChannelService:
             if len(current_admins) >= MAX_ADMIN_COUNT:
                 raise ChannelAdminLimitExceededError()
 
+        should_notify_admin_assignment = (
+            target_membership.user_role == UserRoleEnum.MEMBER
+            and req.role == UserRoleEnum.ADMIN.value
+        )
+
         # 6. Update role
         target_membership.user_role = UserRoleEnum(req.role)
         await self.space_channel_member_repository.update(target_membership)
 
+        if should_notify_admin_assignment and self.message_service:
+            await self._send_admin_assignment_notification(
+                operator_user_id=login_user.user_id,
+                target_user_id=target_membership.user_id,
+                channel_id=req.channel_id,
+            )
+
         return True
+
+    async def _send_admin_assignment_notification(
+            self,
+            operator_user_id: int,
+            target_user_id: int,
+            channel_id: str,
+    ) -> None:
+        """Notify a channel member after being promoted from member to admin."""
+        channel = await self.channel_repository.find_by_id(channel_id)
+        if not channel:
+            logger.warning(
+                "Channel not found when sending admin assignment notification: channel_id=%s, target_user_id=%s",
+                channel_id,
+                target_user_id,
+            )
+            return
+
+        user = await UserDao.aget_user(target_user_id)
+        target_user_name = user.user_name if user else f"User {target_user_id}"
+
+        content = [
+            {
+                "type": "user",
+                "content": f"@{target_user_name}",
+                "metadata": {"user_id": target_user_id},
+            },
+            {
+                "type": "system_text",
+                "content": CHANNEL_ADMIN_ASSIGNMENT_MESSAGE,
+            },
+            {
+                "type": "business_url",
+                "content": f"--{channel.name}",
+                "metadata": {
+                    "business_type": "channel_id",
+                    "data": {"channel_id": channel.id},
+                },
+            },
+        ]
+
+        await self.message_service.send_generic_notify(
+            sender=operator_user_id,
+            receiver_user_ids=[target_user_id],
+            text=CHANNEL_ADMIN_ASSIGNMENT_MESSAGE,
+            content=content,
+        )
 
     async def remove_member(self, req: RemoveMemberRequest, login_user: UserPayload) -> bool:
         """

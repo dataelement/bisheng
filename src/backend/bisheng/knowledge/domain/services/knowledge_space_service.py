@@ -1,7 +1,7 @@
 import asyncio
 import tempfile
 from pathlib import Path
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, TYPE_CHECKING
 
 from fastapi import Request
 
@@ -35,16 +35,19 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.llm.domain import LLMService
-from bisheng.message.api.dependencies import get_message_service
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_uuid
 from bisheng.worker import retry_knowledge_file_celery
 from bisheng.worker.knowledge import file_worker
 
+if TYPE_CHECKING:
+    from bisheng.message.domain.services.message_service import MessageService
+
 # Maximum number of Knowledge Spaces a user can create
 _MAX_SPACE_PER_USER = 30
 # Maximum number of spaces a user can subscribe to (not as creator)
 _MAX_SUBSCRIBE_PER_USER = 50
+SPACE_ADMIN_ASSIGNMENT_MESSAGE = "assigned_knowledge_space_admin"
 
 
 class KnowledgeSpaceService(BaseService):
@@ -56,6 +59,7 @@ class KnowledgeSpaceService(BaseService):
     def __init__(self, request: Request, login_user: UserPayload):
         self.request = request
         self.login_user = login_user
+        self.message_service: Optional['MessageService'] = None
 
     # ──────────────────────────── Permission helpers ───────────────────────────
 
@@ -414,9 +418,20 @@ class KnowledgeSpaceService(BaseService):
             if len(current_admins) >= 5:
                 raise ValueError("Maximum number of administrators reached")
 
+        should_notify_admin_assignment = (
+            target_membership.user_role == UserRoleEnum.MEMBER
+            and req.role == UserRoleEnum.ADMIN.value
+        )
+
         # 6. Update role
         target_membership.user_role = UserRoleEnum(req.role)
         await SpaceChannelMemberDao.update(target_membership)
+
+        if should_notify_admin_assignment:
+            await self._send_admin_assignment_notification(
+                space_id=req.space_id,
+                target_user_id=target_membership.user_id,
+            )
 
         return True
 
@@ -429,7 +444,7 @@ class KnowledgeSpaceService(BaseService):
         - Admins cannot remove other admins or creators
         """
         # 1. Verify current user permissions
-        current_role = self._require_write_permission(req.space_id)
+        current_role = await self._require_write_permission(req.space_id)
 
         # 2. Cannot remove yourself
         if req.user_id == self.login_user.user_id:
@@ -455,6 +470,49 @@ class KnowledgeSpaceService(BaseService):
         await SpaceChannelMemberDao.delete_space_member(space_id=req.space_id, user_id=req.user_id)
 
         return True
+
+    async def _send_admin_assignment_notification(
+            self,
+            space_id: int,
+            target_user_id: int,
+    ) -> None:
+        """Notify a space member after being promoted from member to admin."""
+        space = await KnowledgeDao.aquery_by_id(space_id)
+        if not space or space.type != KnowledgeTypeEnum.SPACE.value:
+            raise SpaceNotFoundError()
+
+        user = await UserDao.aget_user(target_user_id)
+        target_user_name = user.user_name if user else f"User {target_user_id}"
+
+        content = [
+            {
+                "type": "user",
+                "content": f"@{target_user_name}",
+                "metadata": {"user_id": target_user_id},
+            },
+            {
+                "type": "system_text",
+                "content": SPACE_ADMIN_ASSIGNMENT_MESSAGE,
+            },
+            {
+                "type": "business_url",
+                "content": f"--{space.name}",
+                "metadata": {
+                    "business_type": "knowledge_space_id",
+                    "data": {"knowledge_space_id": str(space.id)},
+                },
+            },
+        ]
+
+        if not self.message_service:
+            return
+
+        await self.message_service.send_generic_notify(
+            sender=self.login_user.user_id,
+            receiver_user_ids=[target_user_id],
+            text=SPACE_ADMIN_ASSIGNMENT_MESSAGE,
+            content=content,
+        )
 
     async def _handle_file_folder_extra_info(self, res: List[KnowledgeFile]) -> List[Dict]:
         folder_ids = []
@@ -1054,14 +1112,13 @@ class KnowledgeSpaceService(BaseService):
         }
 
     async def _send_subscription_notification(self, space: Knowledge):
-        if space.auth_type != AuthTypeEnum.APPROVAL:
+        if space.auth_type != AuthTypeEnum.APPROVAL or not self.message_service:
             return
-        message_service = await get_message_service()
         members = await SpaceChannelMemberDao.async_get_members_by_space(space.id,
                                                                          user_roles=[UserRoleEnum.MEMBER,
                                                                                      UserRoleEnum.ADMIN])
         member_ids = [one.user_id for one in members]
-        await message_service.send_generic_approval(
+        await self.message_service.send_generic_approval(
             applicant_user_id=self.login_user.user_id,
             applicant_user_name=self.login_user.user_name,
             action_code="request_knowledge_space",
