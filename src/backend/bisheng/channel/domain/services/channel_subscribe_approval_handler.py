@@ -1,10 +1,11 @@
 import logging
-from typing import Awaitable, Callable, List
+from typing import Awaitable, Callable, List, Any
 
 from bisheng.channel.domain.repositories.interfaces.channel_repository import ChannelRepository
 from bisheng.common.models.space_channel_member import BusinessTypeEnum
 from bisheng.common.repositories.interfaces.space_channel_member_repository import SpaceChannelMemberRepository
 from bisheng.message.domain.models.inbox_message import InboxMessage
+from bisheng.message.domain.schemas.message_schema import UserContentItem, MessageContentItem, BusinessContentItem
 from bisheng.message.domain.services.approval_handler import ApprovalHandler
 from bisheng.user.domain.models.user import UserDao
 
@@ -18,7 +19,7 @@ class ChannelSubscribeApprovalHandler(ApprovalHandler):
             self,
             space_channel_member_repository: SpaceChannelMemberRepository,
             channel_repository: ChannelRepository,
-            notify_sender: Callable[[int, List[int], str, str, int, str, str], Awaitable[InboxMessage]],
+            notify_sender: Callable[[int, List[int], Any], Awaitable[InboxMessage]],
     ):
         self.space_channel_member_repository = space_channel_member_repository
         self.channel_repository = channel_repository
@@ -49,11 +50,21 @@ class ChannelSubscribeApprovalHandler(ApprovalHandler):
         await self.notify_sender(
             operator_user_id,
             [applicant_user_id],
-            "approved_channel",
-            "system_text",
-            operator_user_id,
-            operator_user_info.user_name if operator_user_info else f"Unknown user {operator_user_id}",
-            channel_info.name
+            [
+                UserContentItem(
+                    user_id=operator_user_id,
+                    user_name=operator_user_info.user_name if operator_user_info else f"Unknown user {operator_user_id}",
+                ),
+                MessageContentItem(
+                    type="system_text",
+                    content="approved_channel",
+                ),
+                BusinessContentItem(
+                    business_name=channel_info.name,
+                    business_type="channel_id",
+                    business_id=channel_info.id,
+                )
+            ]
         )
 
     async def on_rejected(self, message: InboxMessage, operator_user_id: int) -> None:
@@ -78,11 +89,21 @@ class ChannelSubscribeApprovalHandler(ApprovalHandler):
         await self.notify_sender(
             operator_user_id,
             [applicant_user_id],
-            "rejected_channel",
-            "system_text",
-            operator_user_id,
-            operator_user_info.user_name if operator_user_info else f"Unknown user {operator_user_id}",
-            channel_info.name
+            [
+                UserContentItem(
+                    user_id=operator_user_id,
+                    user_name=operator_user_info.user_name if operator_user_info else f"Unknown user {operator_user_id}",
+                ),
+                MessageContentItem(
+                    type="system_text",
+                    content="rejected_channel",
+                ),
+                BusinessContentItem(
+                    business_name=channel_info.name,
+                    business_type="channel_id",
+                    business_id=channel_info.id,
+                )
+            ]
         )
 
     async def _get_membership(self, channel_id: str, applicant_user_id: int):

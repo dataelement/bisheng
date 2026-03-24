@@ -10,7 +10,6 @@ import json
 import logging
 from datetime import datetime
 from typing import List
-from uuid import uuid4
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
@@ -19,17 +18,18 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from sse_starlette import EventSourceResponse
 
 from bisheng.api.services.workstation import (
-    WorkStationService, WorkstationConversation, WorkstationMessage
+    WorkstationConversation, WorkstationMessage
 )
-from bisheng.api.v1.schemas import resp_200, UnifiedResponseModel
+from bisheng.api.v1.schemas import resp_200, ChatResponse
 from bisheng.channel.domain.schemas.channel_chat_schema import ChannelArticleChatRequest
 from bisheng.channel.domain.services.article_es_service import ArticleEsService
 from bisheng.channel.domain.services.channel_chat_service import ChannelChatService
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
-from bisheng.common.errcode.channel import ArticleNotFoundError, ChannelChatConversationNotFoundError
+from bisheng.common.errcode.channel import ChannelChatConversationNotFoundError
 from bisheng.common.errcode.http_error import ServerError, UnAuthorizedError
-from bisheng.common.schemas.api import resp_500
+from bisheng.common.schemas.api import resp_500, SSEResponse
+from bisheng.database.constants import MessageCategory
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession
 
@@ -78,15 +78,6 @@ def step_message(stepId, runId, index, msgId):
 
 def delta(id, delta):
     return {'id': id, 'delta': delta}
-
-
-class SSEResponse:
-    def __init__(self, event: str, data: dict):
-        self.event = event
-        self.data = data
-
-    def toString(self):
-        return f'event: {self.event}\ndata: {json.dumps(self.data)}\n\n'
 
 
 async def final_message(conversation: MessageSession, title: str, requestMessage: ChatMessage,
@@ -138,7 +129,7 @@ async def chat_completions(
         article_content = article.content
 
         # 2. Initialize session and get configuration
-        conversation, message, bishengllm, is_new_conv, subscription_config = await ChannelChatService.initialize_chat(
+        conversation, bishengllm, is_new_conv, subscription_config = await ChannelChatService.initialize_chat(
             data, login_user, article_title
         )
         conversationId = conversation.chat_id
@@ -155,15 +146,6 @@ async def chat_completions(
         return EventSourceResponse(iter([ServerError(exception=e).to_sse_event_instance()]))
 
     async def event_stream():
-        yield user_message(message.id, conversationId, 'User', data.text)
-
-        error = False
-        final_res = ''
-        reasoning_res = ''
-        runId = uuid4().hex
-        index = 0
-        stepId = None
-        model_name = bishengllm.model_name if bishengllm else 'AI Assistant'
 
         try:
             # Build system prompt from config or default
@@ -185,14 +167,18 @@ async def chat_completions(
                 article_content=article_content,
                 question=data.text
             )
-
-            # Save full prompt to message's extra field
-            full_prompt = f"{system_prompt}\n\n{user_prompt}"
-            extra = json.loads(message.extra) if message.extra else {}
-            extra['prompt'] = full_prompt
-            message.extra = json.dumps(extra, ensure_ascii=False)
-            await ChatMessageDao.aupdate_message_model(message)
-
+            await ChatMessageDao.ainsert_one(
+                ChatMessage(
+                    user_id=login_user.user_id,
+                    chat_id=conversation.chat_id,
+                    flow_id=data.article_doc_id,
+                    type='human',
+                    is_bot=False,
+                    sender='User',
+                    message=json.dumps({"query": data.text}, ensure_ascii=False),
+                    category=MessageCategory.QUESTION,
+                    source=0,
+                ))
             # Get chat history (excluding the latest one)
             history_messages = (await ChannelChatService.get_chat_history(conversationId, 8))[:-1]
 
@@ -203,44 +189,52 @@ async def chat_completions(
                 HumanMessage(content=user_prompt)
             ]
 
-            stepId = 'step_' + uuid4().hex
-            yield step_message(stepId, runId, index, f'msg_{uuid4().hex}')
-            index += 1
-
+            answer = ""
+            reasoning_answer = ""
             # Streaming call to LLM
             async for chunk in bishengllm.astream(inputs):
                 content = chunk.content
                 reasoning_content = chunk.additional_kwargs.get('reasoning_content', '')
+                answer += content
+                reasoning_answer += reasoning_content
+                yield SSEResponse(data=ChatResponse(
+                    category=MessageCategory.STREAM,
+                    message={
+                        "content": content,
+                        "reasoning_content": reasoning_content,
+                    },
+                    type="stream"
+                )).to_string()
 
-                if content:
-                    final_res += content
-                    yield SSEResponse(event='on_message_delta',
-                                      data=delta(id=stepId,
-                                                 delta={'content': [{'type': 'text', 'text': content}]})).toString()
-                if reasoning_content:
-                    reasoning_res += reasoning_content
-                    yield SSEResponse(event='on_reasoning_delta',
-                                      data=delta(id=stepId, delta={
-                                          'content': [{'type': 'think', 'think': reasoning_content}]})).toString()
+            yield SSEResponse(data=ChatResponse(
+                category=MessageCategory.STREAM,
+                message={
+                    "content": answer,
+                    "reasoning_content": reasoning_answer
+                },
+                type="end"
+            )).to_string()
 
             # Append reasoning process to final result
-            if reasoning_res:
-                final_res = ':::thinking\n' + reasoning_res + '\n:::' + final_res
-
+            await ChatMessageDao.ainsert_one(
+                ChatMessage(
+                    category=MessageCategory.ANSWER,
+                    message=json.dumps({
+                        "content": answer,
+                        "reasoning_content": reasoning_answer
+                    }, ensure_ascii=False),
+                    user_id=login_user.user_id,
+                    chat_id=conversation.chat_id,
+                    flow_id=data.article_doc_id,
+                    type="end",
+                    is_bot=True,
+                )
+            )
         except BaseErrorCode as e:
-            error = True
-            final_res = json.dumps(e.to_dict())
             yield e.to_sse_event_instance_str()
         except Exception as e:
-            error = True
-            server_error = ServerError(exception=e)
             logger.exception(f'Error in channel article chat processing')
-            final_res = json.dumps(server_error.to_dict())
-            yield server_error.to_sse_event_instance_str()
-
-        # Send final message
-        yield await final_message(conversation, conversation.flow_name, message, final_res,
-                                  error, model_name)
+            yield ServerError(exception=e).to_sse_event_instance_str()
 
     try:
         return StreamingResponse(event_stream(), media_type='text/event-stream')

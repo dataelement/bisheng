@@ -1,14 +1,15 @@
-from typing import Callable, List, Awaitable, Tuple
+from typing import Callable, List, Awaitable, Tuple, Any
 
 from bisheng.common.models.space_channel_member import SpaceChannelMemberDao, SpaceChannelMember
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, Knowledge
 from bisheng.message.domain.models.inbox_message import InboxMessage
+from bisheng.message.domain.schemas.message_schema import MessageContentItem, UserContentItem, BusinessContentItem
 from bisheng.message.domain.services.approval_handler import ApprovalHandler
 from bisheng.user.domain.models.user import UserDao, User
 
 
 class KnowledgeSpaceSubscribeHandler(ApprovalHandler):
-    def __init__(self, notify_sender: Callable[[int, List[int], str, str, int, str, str], Awaitable[InboxMessage]]):
+    def __init__(self, notify_sender: Callable[[int, List[int], Any], Awaitable[InboxMessage]]):
         self.notify_sender = notify_sender
 
     def get_action_code(self) -> str:
@@ -44,11 +45,21 @@ class KnowledgeSpaceSubscribeHandler(ApprovalHandler):
         await self.notify_sender(
             operator_user_id,
             [memory_info.user_id],
-            "approved_knowledge_space",
-            "system_text",
-            operator_user_id,
-            operator_user_info.user_name if operator_user_info else f"Unknown user {operator_user_id}",
-            space_info.name
+            [
+                UserContentItem(
+                    user_id=operator_user_id,
+                    user_name=operator_user_info.user_name if operator_user_info else f"Unknown user {operator_user_id}",
+                ),
+                MessageContentItem(
+                    type="system_text",
+                    content="approved_knowledge_space",
+                ),
+                BusinessContentItem(
+                    business_name=space_info.name,
+                    business_type="knowledge_space_id",
+                    business_id=str(space_info.id),
+                )
+            ],
         )
 
     async def on_rejected(self, message: InboxMessage, operator_user_id: int) -> None:
@@ -60,9 +71,19 @@ class KnowledgeSpaceSubscribeHandler(ApprovalHandler):
         await self.notify_sender(
             operator_user_id,
             [memory_info.user_id],
-            "rejected_knowledge_space",
-            "system_text",
-            operator_user_id,
-            operator_user_info.user_name if operator_user_info else f"Unknown user {operator_user_id}",
-            space_info.name
+            [
+                UserContentItem(
+                    user_id=operator_user_id,
+                    user_name=operator_user_info.user_name if operator_user_info else f"Unknown user {operator_user_id}",
+                ),
+                MessageContentItem(
+                    type="system_text",
+                    content="rejected_knowledge_space",
+                ),
+                BusinessContentItem(
+                    business_name=space_info.name,
+                    business_type="knowledge_space_id",
+                    business_id=str(space_info.id),
+                )
+            ],
         )

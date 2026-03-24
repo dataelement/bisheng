@@ -39,9 +39,9 @@ from bisheng.common.errcode.channel import (
     ChannelAdminLimitExceededError,
     ChannelSubscribeLimitExceededError,
 )
+from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError
 from bisheng.common.models.space_channel_member import BusinessTypeEnum, UserRoleEnum, SpaceChannelMemberDao
 from bisheng.common.repositories.interfaces.space_channel_member_repository import SpaceChannelMemberRepository
-from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError
 from bisheng.core.external.bisheng_information_client.bisheng_information_manager import get_bisheng_information_client
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.message.domain.services.message_service import MessageService
@@ -490,8 +490,7 @@ class ChannelService:
         await self.message_service.send_generic_notify(
             sender=operator_user_id,
             receiver_user_ids=[target_user_id],
-            text=CHANNEL_ADMIN_ASSIGNMENT_MESSAGE,
-            content=content,
+            content_item_list=content,
         )
 
     async def remove_member(self, req: RemoveMemberRequest, login_user: UserPayload) -> bool:

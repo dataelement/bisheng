@@ -7,13 +7,13 @@ Encapsulates business logic for channel article AI assistant chat, including:
 - Managing conversation sessions and message records
 """
 import json
-from typing import Optional, Any, Tuple
+from typing import Tuple
 from uuid import uuid4
 
 from langchain_core.messages import AIMessage, HumanMessage
 from loguru import logger
 
-from bisheng.api.services.workstation import WorkstationMessage, WorkstationConversation, WorkStationService
+from bisheng.api.services.workstation import WorkstationMessage, WorkStationService
 from bisheng.api.v1.schemas import SubscriptionConfig
 from bisheng.channel.domain.schemas.channel_chat_schema import ChannelArticleChatRequest
 from bisheng.channel.domain.services.article_es_service import ArticleEsService
@@ -24,11 +24,10 @@ from bisheng.common.errcode.channel import (
 )
 from bisheng.database.constants import MessageCategory
 from bisheng.database.models.flow import FlowType
-from bisheng.database.models.message import ChatMessage, ChatMessageDao
+from bisheng.database.models.message import ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.llm.domain import LLMService
 from bisheng.llm.domain.schemas import WorkbenchModelConfig
-
 
 # Article context prompt template
 ARTICLE_CONTEXT_PROMPT = (
@@ -45,10 +44,10 @@ class ChannelChatService:
 
     @classmethod
     async def _get_or_create_session(
-        cls,
-        article_doc_id: str,
-        user_id: int,
-        article_title: str
+            cls,
+            article_doc_id: str,
+            user_id: int,
+            article_title: str
     ) -> Tuple[MessageSession, bool]:
         """
         Get or create session by article_doc_id + user_id (one-to-one mapping)
@@ -193,19 +192,6 @@ class ChannelChatService:
         )
 
         # Create user message record
-        message = await ChatMessageDao.ainsert_one(
-            ChatMessage(
-                user_id=login_user.user_id,
-                chat_id=conversation.chat_id,
-                flow_id=data.article_doc_id,
-                type='human',
-                is_bot=False,
-                sender='User',
-                extra=json.dumps({'parentMessageId': data.parentMessageId}),
-                message=data.text,
-                category='question',
-                source=0,
-            ))
 
         # Get chat configuration
         model_id, subscription_config = await cls._get_chat_config()
@@ -218,7 +204,7 @@ class ChannelChatService:
             app_type=ApplicationTypeEnum.DAILY_CHAT,
             user_id=login_user.user_id)
 
-        return conversation, message, bishengllm, is_new_conversation, subscription_config
+        return conversation, bishengllm, is_new_conversation, subscription_config
 
     @classmethod
     async def get_chat_history(cls, chat_id: str, size: int = 8):
