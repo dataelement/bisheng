@@ -460,12 +460,25 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                         </div>
                     ) : isApproved ? (
                         <div className="absolute right-6 bottom-4">
-                            <span className={`text-[12px] ${isApprovedStatus(approvalStatus)
-                                ? "text-[#00b42a]"
-                                : "text-[#f53f3f]"
-                                }`}>
-                                {isApprovedStatus(approvalStatus) ? "已同意" : "已拒绝"}
-                            </span>
+                            {isApprovedStatus(approvalStatus) ? (
+                                <button
+                                    type="button"
+                                    disabled
+                                    className="flex items-center gap-1 px-3 py-1 text-[12px] text-[#86909C] border border-[#E5E6EB] bg-[#F7F8FA] rounded cursor-default"
+                                >
+                                    <Check className="size-3" />
+                                    已接受
+                                </button>
+                            ) : (
+                                <button
+                                    type="button"
+                                    disabled
+                                    className="flex items-center gap-1 px-3 py-1 text-[12px] text-[#86909C] border border-[#E5E6EB] bg-[#F7F8FA] rounded cursor-default"
+                                >
+                                    <XIcon className="size-3" />
+                                    已拒绝
+                                </button>
+                            )}
                         </div>
                     ) : null}
                 </div>
@@ -630,18 +643,18 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                                         {/* 待审批 */}
                                         {requestGroups.pending.length > 0 && (
                                             <div>
-                                                <div className="px-6 py-2 bg-[#f7f8fa] text-[12px] text-[#86909c] font-medium">
+                                                <div className="px-6 py-2 text-[12px] text-[#86909c] font-medium">
                                                     待审批
                                                 </div>
                                                 {requestGroups.pending.map(renderNotificationItem)}
                                             </div>
                                         )}
 
-                                        {/* 已审批 */}
+                                        {/* 已完成 */}
                                         {requestGroups.approved.length > 0 && (
                                             <div className="mt-2">
-                                                <div className="px-6 py-2 bg-[#f7f8fa] text-[12px] text-[#86909c] font-medium">
-                                                    已审批
+                                                <div className="px-6 py-2 text-[12px] text-[#86909c] font-medium">
+                                                    已完成
                                                 </div>
                                                 {requestGroups.approved.map(renderNotificationItem)}
                                             </div>
