@@ -23,6 +23,7 @@ from bisheng.common.models.space_channel_member import (
 from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.role import RoleDao
 from bisheng.database.models.tag import TagDao, TagBusinessTypeEnum, Tag
+from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao, KnowledgeTypeEnum, AuthTypeEnum, \
     KnowledgeRead
 from bisheng.knowledge.domain.models.knowledge_file import (
@@ -420,8 +421,8 @@ class KnowledgeSpaceService(BaseService):
                 raise ValueError("Maximum number of administrators reached")
 
         should_notify_admin_assignment = (
-            target_membership.user_role == UserRoleEnum.MEMBER
-            and req.role == UserRoleEnum.ADMIN.value
+                target_membership.user_role == UserRoleEnum.MEMBER
+                and req.role == UserRoleEnum.ADMIN.value
         )
 
         # 6. Update role
@@ -601,15 +602,37 @@ class KnowledgeSpaceService(BaseService):
 
     async def search_space_children(self, space_id: int, parent_id: Optional[int] = None, tag_ids: List[int] = None,
                                     keyword: str = None, page: int = 1, page_size: int = 20) -> Dict:
-        await self._require_read_permission(space_id)
+        space = await self._require_read_permission(space_id)
 
-        # todo 文件内容也支持关键词搜索
         filter_files = []
         if tag_ids:
             resources = await TagDao.aget_resources_by_tags(tag_ids, ResourceTypeEnum.SPACE_FILE)
             if not resources:
                 return {"total": 0, "page": page, "page_size": page_size, "data": []}
             filter_files = [int(one.resource_id) for one in resources]
+
+        extra_file_ids = []
+        if keyword:
+            es_vector = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge=space)
+            es_result = await es_vector.client.search(body={
+                "query": {
+                    "match_phrase": {"text": keyword}
+                },
+                "aggs": {
+                    "document_ids": {
+                        "terms": {
+                            "field": "metadata.document_id",
+                        }
+                    }
+                },
+                "size": 0,
+            })
+            aggregations = es_result.get("aggregations")
+            if aggregations:
+                for one in aggregations.get("document_ids", {}).get("buckets", []):
+                    extra_file_ids.append(one["key"])
+            if filter_files:
+                extra_file_ids = list(set(filter_files) & set(extra_file_ids))
 
         file_level_path = None
         if parent_id:
@@ -618,10 +641,12 @@ class KnowledgeSpaceService(BaseService):
                 raise NotFoundError()
             file_level_path = f"{parent_folder.file_level_path}/{parent_folder.id}"
 
-        res = await KnowledgeFileDao.aget_file_by_filters(space_id, keyword, file_ids=filter_files,
+        res = await KnowledgeFileDao.aget_file_by_filters(space_id, file_name=keyword, file_ids=filter_files,
+                                                          extra_file_ids=extra_file_ids,
                                                           file_level_path=file_level_path, order_by="file_type",
                                                           page=page, page_size=page_size)
         total = await KnowledgeFileDao.acount_file_by_filters(space_id, file_name=keyword, file_ids=filter_files,
+                                                              extra_file_ids=extra_file_ids,
                                                               file_level_path=file_level_path)
 
         data = await self._handle_file_folder_extra_info(res)
@@ -757,7 +782,6 @@ class KnowledgeSpaceService(BaseService):
             level = parent_folder.level + 1
             file_level_path = f"{parent_folder.file_level_path}/{parent_id}"
 
-        # todo max file size limit
         default_file_size_limit = 40
 
         roles = await UserRoleDao.aget_user_roles(db_knowledge.user_id)

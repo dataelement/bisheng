@@ -5,7 +5,7 @@ from typing import List, Optional, Dict, Any, Literal
 
 # if TYPE_CHECKING:
 from pydantic import field_validator
-from sqlalchemy import JSON, Column, DateTime, String, or_, text, Text
+from sqlalchemy import JSON, Column, DateTime, String, or_, text, Text, and_
 from sqlmodel import Field, delete, func, select, update, col
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -318,15 +318,22 @@ class KnowledgeFileDao(KnowledgeFileBase):
 
     @classmethod
     def _build_file_filters_statement(cls, statement, file_name: str = None, status: List[int] = None,
-                                      file_ids: List[int] = None, file_level_path: str = None, order_by: str = None):
+                                      file_ids: List[int] = None, file_level_path: str = None,
+                                      extra_file_ids: List[int] = None,
+                                      *, order_by: str = None):
+        and_statement = []
         if file_name:
-            statement = statement.where(KnowledgeFile.file_name.like(f'%{file_name}%'))
+            and_statement.append(KnowledgeFile.file_name.like(f'%{file_name}%'))
         if status:
-            statement = statement.where(KnowledgeFile.status.in_(status))
+            and_statement.append(KnowledgeFile.status.in_(status))
         if file_ids:
-            statement = statement.where(KnowledgeFile.id.in_(file_ids))
+            and_statement.append(KnowledgeFile.id.in_(file_ids))
         if file_level_path:
-            statement = statement.where(KnowledgeFile.file_level_path == file_level_path)
+            and_statement.append(KnowledgeFile.file_level_path == file_level_path)
+        if extra_file_ids:
+            statement = statement.where(or_(KnowledgeFile.id.in_(extra_file_ids), and_(*and_statement)))
+        else:
+            statement = statement.where(*and_statement)
         if order_by == "file_type":
             statement = statement.order_by(col(KnowledgeFile.file_type).asc())
         elif order_by == "update_time":
@@ -342,7 +349,7 @@ class KnowledgeFileDao(KnowledgeFileBase):
                             page_size: int = 0,
                             file_ids: List[int] = None) -> List[KnowledgeFile]:
         statement = select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id)
-        statment = cls._build_file_filters_statement(statement, file_name, status, file_ids, order_by="update_time")
+        statement = cls._build_file_filters_statement(statement, file_name, status, file_ids, order_by="update_time")
         if page and page_size:
             statement = statement.offset((page - 1) * page_size).limit(page_size)
         with get_sync_db_session() as session:
@@ -350,11 +357,12 @@ class KnowledgeFileDao(KnowledgeFileBase):
 
     @classmethod
     async def aget_file_by_filters(cls, knowledge_id: int, file_name: str = None, status: List[int] = None,
-                                   file_ids: List[int] = None, file_level_path: str = None, order_by: str = None,
+                                   file_ids: List[int] = None, extra_file_ids: List[int] = None,
+                                   file_level_path: str = None, order_by: str = None,
                                    *, page: int = 0, page_size: int = 0) -> List[KnowledgeFile]:
         statement = select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id)
         statement = cls._build_file_filters_statement(statement, file_name, status, file_ids, file_level_path,
-                                                      order_by=order_by)
+                                                      extra_file_ids=extra_file_ids, order_by=order_by)
         if page and page_size:
             statement = statement.offset((page - 1) * page_size).limit(page_size)
         async with get_async_db_session() as session:
@@ -362,9 +370,11 @@ class KnowledgeFileDao(KnowledgeFileBase):
 
     @classmethod
     async def acount_file_by_filters(cls, knowledge_id: int, file_name: str = None, status: List[int] = None,
-                                     file_ids: List[int] = None, file_level_path: str = None) -> int:
+                                     file_ids: List[int] = None, extra_file_ids: List[int] = None,
+                                     file_level_path: str = None) -> int:
         statement = select(func.count()).where(KnowledgeFile.knowledge_id == knowledge_id)
-        statement = cls._build_file_filters_statement(statement, file_name, status, file_ids, file_level_path)
+        statement = cls._build_file_filters_statement(statement, file_name, status, file_ids, file_level_path,
+                                                      extra_file_ids=extra_file_ids)
         async with get_async_db_session() as session:
             return await session.scalar(statement)
 
