@@ -80,6 +80,55 @@ class SpaceChannelMemberDao:
             return result.first()
 
     @classmethod
+    async def find_space_members_paginated(
+            cls, space_id: int, user_ids: Optional[List[int]] = None, page: int = 1, page_size: int = 20
+    ) -> List[SpaceChannelMember]:
+        """ Async: Paginate active members for a space, creators and admins first """
+        from sqlalchemy import case
+        statement = select(SpaceChannelMember).where(
+            SpaceChannelMember.business_id == str(space_id),
+            SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
+            SpaceChannelMember.status == True
+        )
+        if user_ids is not None:
+            if not user_ids:
+                return []
+            statement = statement.where(SpaceChannelMember.user_id.in_(user_ids))
+
+        role_order = case(
+            (SpaceChannelMember.user_role == UserRoleEnum.CREATOR, 1),
+            (SpaceChannelMember.user_role == UserRoleEnum.ADMIN, 2),
+            else_=3
+        )
+        statement = statement.order_by(role_order, SpaceChannelMember.user_id.asc())
+
+        offset = (page - 1) * page_size
+        statement = statement.offset(offset).limit(page_size)
+
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return result.all()
+
+    @classmethod
+    async def count_space_members_with_keyword(
+            cls, space_id: int, user_ids: Optional[List[int]] = None
+    ) -> int:
+        """ Async: Count active members for a space, filtered by user_ids, for pagination """
+        from sqlalchemy import func
+        statement = select(func.count()).where(
+            SpaceChannelMember.business_id == str(space_id),
+            SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
+            SpaceChannelMember.status == True
+        )
+        if user_ids is not None:
+            if not user_ids:
+                return 0
+            statement = statement.where(SpaceChannelMember.user_id.in_(user_ids))
+
+        async with get_async_db_session() as session:
+            return await session.scalar(statement)
+
+    @classmethod
     async def async_get_active_member_role(cls, space_id: int, user_id: int) -> Optional[UserRoleEnum]:
         """ Async: Return the role of an ACTIVE member, or None if not an active member """
 

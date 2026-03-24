@@ -13,6 +13,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     FolderCreateReq, FolderRenameReq,
     FileCreateReq, FileRenameReq,
     BatchDeleteReq, BatchDownloadReq,
+    UpdateSpaceMemberRoleRequest, RemoveSpaceMemberRequest,
     ChatReq, ChatFolderReq, )
 from bisheng.knowledge.domain.services.knowledge_space_chat_service import KnowledgeSpaceChatService
 from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
@@ -120,11 +121,35 @@ async def get_knowledge_square(
 @router.get('/{space_id}/members')
 async def get_space_members(
         space_id: int,
-        order_by: str = 'user_id',
+        page: int = Query(1, description="Page number"),
+        page_size: int = Query(20, description="Page size"),
+        keyword: Optional[str] = Query(None, description="Search keyword"),
         svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
-    members = await svc.get_space_members(space_id, order_by)
-    return resp_200(members)
+    result = await svc.get_space_members(space_id, page, page_size, keyword)
+    return resp_200(result)
+
+
+@router.put('/{space_id}/members/role')
+async def update_member_role(
+        space_id: int,
+        req: UpdateSpaceMemberRoleRequest,
+        svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    req.space_id = space_id
+    result = await svc.update_member_role(req)
+    return resp_200(result)
+
+
+@router.delete('/{space_id}/members')
+async def remove_member(
+        space_id: int,
+        req: RemoveSpaceMemberRequest,
+        svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    req.space_id = space_id
+    result = await svc.remove_member(req)
+    return resp_200(result)
 
 
 @router.get('/{space_id}/children')

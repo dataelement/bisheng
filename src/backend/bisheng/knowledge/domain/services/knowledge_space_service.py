@@ -22,14 +22,16 @@ from bisheng.common.models.space_channel_member import (
 )
 from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.tag import TagDao, TagBusinessTypeEnum, Tag
-from bisheng.database.models.user_group import UserGroupDao
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao, KnowledgeTypeEnum, AuthTypeEnum, \
     KnowledgeRead
 from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFile, KnowledgeFileDao, KnowledgeFileStatus, FileType
 )
 from bisheng.knowledge.domain.models.knowledge_space_file import SpaceFileDao
-from bisheng.knowledge.domain.schemas.knowledge_space_schema import KnowledgeSpaceInfoResp
+from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
+    KnowledgeSpaceInfoResp, SpaceMemberResponse, SpaceMemberPageResponse,
+    UpdateSpaceMemberRoleRequest, RemoveSpaceMemberRequest
+)
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.llm.domain import LLMService
@@ -60,7 +62,7 @@ class KnowledgeSpaceService(BaseService):
     # Roles with write access to a space
     _WRITE_ROLES = {UserRoleEnum.CREATOR, UserRoleEnum.ADMIN}
 
-    async def _require_write_permission(self, space_id: int) -> None:
+    async def _require_write_permission(self, space_id: int) -> UserRoleEnum:
         """
         Verify that the current user (self.login_user) is an active CREATOR or ADMIN
         of the given space. Raises SpacePermissionDeniedError otherwise.
@@ -70,6 +72,7 @@ class KnowledgeSpaceService(BaseService):
         )
         if role not in self._WRITE_ROLES:
             raise SpacePermissionDeniedError()
+        return role
 
     async def _require_read_permission(self, space_id: int) -> Knowledge:
         space = await KnowledgeDao.aquery_by_id(space_id)
@@ -322,35 +325,136 @@ class KnowledgeSpaceService(BaseService):
 
     # ──────────────────────────── Members ─────────────────────────────────────
 
-    async def get_space_members(
-            self, space_id: int, order_by: str = 'user_id'
-    ) -> List[dict]:
-        """Return space members enriched with user_name, avatar, and group info."""
+    async def get_space_members(self, space_id: int, page: int, page_size: int,
+                                keyword: Optional[str] = None) -> SpaceMemberPageResponse:
+        """
+        Paginate through the list of space members.
+        - Verify if the current user has read permission
+        - Support fuzzy search by username
+        - Return user information and associated user groups
+        - Sorting: Creators and administrators at the top, regular members sorted by user_id
+        """
         await self._require_write_permission(space_id)
 
-        members = await SpaceChannelMemberDao.async_get_members_by_space(space_id, order_by)
+        search_user_ids = None
+        if keyword:
+            matched_users = await UserDao.afilter_users(user_ids=[], keyword=keyword)
+            search_user_ids = [u.user_id for u in matched_users]
+            if not search_user_ids:
+                return SpaceMemberPageResponse(data=[], total=0)
+
+        members = await SpaceChannelMemberDao.find_space_members_paginated(
+            space_id=space_id, user_ids=search_user_ids, page=page, page_size=page_size
+        )
+
+        total = await SpaceChannelMemberDao.count_space_members_with_keyword(
+            space_id=space_id, user_ids=search_user_ids
+        )
+
         if not members:
-            return []
+            return SpaceMemberPageResponse(data=[], total=total)
 
-        user_ids = [m.user_id for m in members]
-
-        # Batch-fetch user records and group memberships in parallel
-        users = await UserDao.aget_user_by_ids(user_ids)
+        member_user_ids = [m.user_id for m in members]
+        users = await UserDao.aget_user_by_ids(member_user_ids)
         user_map = {u.user_id: u for u in (users or [])}
-        user_groups_map = await UserGroupDao.aget_user_groups_batch(user_ids)
 
-        result = []
-        for m in members:
-            user = user_map.get(m.user_id)
-            groups = user_groups_map.get(m.user_id, [])
-            entry = m.model_dump()
-            entry['user_name'] = user.user_name if user else None
-            entry['avatar'] = user.avatar if user else None
-            entry['groups'] = [
-                {'id': g.id, 'group_name': g.group_name} for g in groups
-            ]
-            result.append(entry)
-        return result
+        result_list = []
+        for member in members:
+            user = user_map.get(member.user_id)
+            user_name = user.user_name if user else f"User {member.user_id}"
+
+            # Query user groups the user belongs to
+            user_groups = await self.login_user.get_user_groups(member.user_id)
+
+            result_list.append(SpaceMemberResponse(
+                user_id=member.user_id,
+                user_name=user_name,
+                user_avatar=user.avatar if user else None,
+                user_role=member.user_role.value,
+                user_groups=user_groups,
+            ))
+
+        return SpaceMemberPageResponse(data=result_list, total=total)
+
+    async def update_member_role(self, req: UpdateSpaceMemberRoleRequest) -> bool:
+        """
+        Set member role (admin/regular member).
+        Permissions:
+        - Creators can set anyone as an admin or member
+        - Admins cannot promote others to admin, nor can they modify the roles of other admins or creators
+        - Modifying the creator's role is not allowed
+        """
+        current_role = await self._require_write_permission(req.space_id)
+
+        # 2. Query target member
+        target_membership = await SpaceChannelMemberDao.async_find_member(
+            space_id=req.space_id, user_id=req.user_id
+        )
+        if not target_membership or not target_membership.status:
+            raise ValueError("The target user is not a member of this space")
+
+        # 3. Modifying the creator's role is not allowed
+        if target_membership.user_role == UserRoleEnum.CREATOR:
+            raise ValueError("Modifying the creator's role is not allowed")
+
+        # 4. Admin permission limits
+        if current_role == UserRoleEnum.ADMIN:
+            # Admins cannot set others as admins
+            if req.role == UserRoleEnum.ADMIN.value:
+                raise ValueError("Admins do not have permission to set others as admins")
+            # Admins cannot modify the roles of other admins
+            if target_membership.user_role == UserRoleEnum.ADMIN:
+                raise ValueError("Admins do not have permission to modify the roles of other admins")
+
+        # 5. Check maximum limit when setting as an admin
+        if req.role == UserRoleEnum.ADMIN.value:
+            current_admins = await SpaceChannelMemberDao.async_get_members_by_space(
+                space_id=req.space_id, user_roles=[UserRoleEnum.ADMIN]
+            )
+            if len(current_admins) >= 5:
+                raise ValueError("Maximum number of administrators reached")
+
+        # 6. Update role
+        target_membership.user_role = UserRoleEnum(req.role)
+        await SpaceChannelMemberDao.update(target_membership)
+
+        return True
+
+    async def remove_member(self, req: RemoveSpaceMemberRequest) -> bool:
+        """
+        Remove a member (hard delete).
+        Permissions:
+        - Creators can remove anyone (except themselves)
+        - Admins can remove regular members
+        - Admins cannot remove other admins or creators
+        """
+        # 1. Verify current user permissions
+        current_role = self._require_write_permission(req.space_id)
+
+        # 2. Cannot remove yourself
+        if req.user_id == self.login_user.user_id:
+            raise ValueError("Cannot remove yourself")
+
+        # 3. Query target member
+        target_membership = await SpaceChannelMemberDao.async_find_member(
+            space_id=req.space_id, user_id=req.user_id
+        )
+        if not target_membership or not target_membership.status:
+            raise ValueError("The target user is not a member of this space")
+
+        # 4. Removing the creator is not allowed
+        if target_membership.user_role == UserRoleEnum.CREATOR:
+            raise ValueError("Removing the creator is not allowed")
+
+        # 5. Admins cannot remove other admins
+        if current_role == UserRoleEnum.ADMIN:
+            if target_membership.user_role == UserRoleEnum.ADMIN:
+                raise ValueError("Admins do not have permission to remove other admins")
+
+        # 6. Hard delete: remove from database
+        await SpaceChannelMemberDao.delete_space_member(space_id=req.space_id, user_id=req.user_id)
+
+        return True
 
     async def _handle_file_folder_extra_info(self, res: List[KnowledgeFile]) -> List[Dict]:
         folder_ids = []
