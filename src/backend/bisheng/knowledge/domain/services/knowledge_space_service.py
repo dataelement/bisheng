@@ -262,7 +262,7 @@ class KnowledgeSpaceService(BaseService):
                     KnowledgeSpaceInfoResp(**one.model_dump(), is_pinned=True, user_role=member_conf.user_role))
             else:
                 normal_spaces.append(
-                    KnowledgeSpaceInfoResp(**one.model_dump(), is_pinned=True, user_role=member_conf.user_role))
+                    KnowledgeSpaceInfoResp(**one.model_dump(), is_pinned=False, user_role=member_conf.user_role))
 
         return pinned_spaces + normal_spaces
 
