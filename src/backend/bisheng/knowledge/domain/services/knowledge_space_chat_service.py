@@ -64,6 +64,7 @@ class KnowledgeSpaceChatService:
 
         session = await MessageSessionDao.afilter_session(flow_ids=[flow_id],
                                                           flow_type=[FlowType.KNOLEDGE_SPACE.value],
+                                                          user_ids=[self.login_user.user_id],
                                                           include_delete=False)
         if not session:
             session = await MessageSessionDao.async_insert_one(MessageSession(
@@ -175,6 +176,7 @@ class KnowledgeSpaceChatService:
 
         session = await MessageSessionDao.afilter_session(flow_ids=[flow_id],
                                                           flow_type=[FlowType.KNOLEDGE_SPACE.value],
+                                                          user_ids=[self.login_user.user_id],
                                                           include_delete=False)
         if not session:
             return []
@@ -188,6 +190,7 @@ class KnowledgeSpaceChatService:
 
         session = await MessageSessionDao.afilter_session(flow_ids=[flow_id],
                                                           flow_type=[FlowType.KNOLEDGE_SPACE.value],
+                                                          user_ids=[self.login_user.user_id],
                                                           include_delete=False)
         return session
 
@@ -216,6 +219,7 @@ class KnowledgeSpaceChatService:
         session = await MessageSessionDao.afilter_session(chat_ids=[chat_id],
                                                           flow_ids=[flow_id],
                                                           flow_type=[FlowType.KNOLEDGE_SPACE.value],
+                                                          user_ids=[self.login_user.user_id],
                                                           include_delete=False)
         if session:
             await MessageSessionDao.delete_session(chat_id=chat_id)
@@ -243,6 +247,7 @@ class KnowledgeSpaceChatService:
         flow_id = self.generate_flow_id_for_folder(knowledge_id, folder_id)
         session = await MessageSessionDao.afilter_session(chat_ids=[chat_id],
                                                           flow_ids=[flow_id],
+                                                          user_ids=[self.login_user.user_id],
                                                           include_delete=False)
         if not session:
             raise NotFoundError(msg="Folder session not found")

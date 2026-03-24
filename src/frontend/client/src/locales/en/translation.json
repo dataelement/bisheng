@@ -1270,6 +1270,7 @@
     "channel_settings": "Channel Settings",
     "channel_updated": "Channel updated",
     "clear_chat": "Clear chat",
+    "clear_chat_confirm": "Are you sure you want to clear the current conversation?",
     "click_to_switch_to_and": "Click to switch to And",
     "click_to_switch_to_or": "Click to switch to Or",
     "confirm": "Confirm",

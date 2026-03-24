@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Search, Lightbulb, FileText, TrendingUp, Globe, ArrowLeft } from "lucide-react";
+import { Search, ArrowLeft } from "lucide-react";
 import { Input } from "~/components/ui/Input";
 import { Button } from "~/components/ui/Button";
 import { ChannelSquareCard } from "./ChannelSquareCard";
@@ -101,7 +101,7 @@ export default function ChannelSquare({
           });
         } else {
           showToast({
-            message: localize("apply_sent") || "申请已发送",
+            message: localize("com_subscription.apply_sent") || "申请已发送",
             severity: NotificationSeverity.SUCCESS
           });
         }
@@ -143,10 +143,10 @@ export default function ChannelSquare({
         const res = fetchApi
           ? await fetchApi({ keyword: searchQuery.trim() || undefined, page: nextPage, page_size: 20 })
           : await getChannelSquareApi({
-              keyword: searchQuery.trim() || undefined,
-              page: nextPage,
-              page_size: 20
-            });
+            keyword: searchQuery.trim() || undefined,
+            page: nextPage,
+            page_size: 20
+          });
         const root: any = res;
         const payload = root.data ?? root;
         const list: any[] = (payload?.data || payload?.list || []) as any[];
@@ -235,20 +235,10 @@ export default function ChannelSquare({
   return (
     <div className="h-full w-full flex flex-col bg-white overflow-hidden">
       {/* 头部区域 */}
-      <div className="bg-[#FAFBFF] w-full relative overflow-hidden border-b border-[#F0F1F5]">
-        {/* 装饰性图标 */}
-        <div className="absolute left-[32%] top-6 opacity-30">
-          <Lightbulb className="size-6 text-[#d0ddff]" strokeWidth={1.5} />
-        </div>
-        <div className="absolute left-[30%] top-14 opacity-30 rotate-[-40deg]">
-          <FileText className="size-7 text-[#d0ddff]" strokeWidth={1.5} />
-        </div>
-        <div className="absolute right-[32%] top-5 opacity-30 rotate-[11deg]">
-          <TrendingUp className="size-6 text-[#d0ddff]" strokeWidth={1.5} />
-        </div>
-        <div className="absolute right-[28%] top-16 opacity-30 rotate-[28deg]">
-          <Globe className="size-7 text-[#d0ddff]" strokeWidth={1.5} />
-        </div>
+      <div
+        className="w-full relative overflow-hidden border-b border-[#F0F1F5] bg-center bg-no-repeat bg-cover"
+        style={{ backgroundImage: `url(${__APP_ENV__.BASE_URL}/assets/tabbg.svg)` }}
+      >
 
         {/* 返回按钮：固定在头部左上，不跟随居中容器偏移 */}
         {onBack && (

@@ -106,7 +106,12 @@ export default function Knowledge() {
     const handleConfirmCreateSpace = async (form: CreateKnowledgeSpaceFormData) => {
         try {
             // Map joinPolicy → auth_type
-            const auth_type = form.joinPolicy === "public" ? VisibilityType.PUBLIC : VisibilityType.PRIVATE;
+            const auth_type =
+                form.joinPolicy === "public"
+                    ? VisibilityType.PUBLIC
+                    : form.joinPolicy === "review"
+                        ? VisibilityType.APPROVAL
+                        : VisibilityType.PRIVATE;
             const is_released = form.publishToSquare === "yes";
 
             if (editingSpace) {
@@ -202,6 +207,10 @@ export default function Knowledge() {
                 onSpaceSelect={handleSpaceSelect}
                 onCreateSpace={handleCreateSpace}
                 onSpaceSettings={handleSpaceSettings}
+                onManageMembers={(space) => {
+                    setMemberDialogSpace(space);
+                    setMemberDialogOpen(true);
+                }}
                 onKnowledgeSquare={() => setShowKnowledgeSquare(true)}
             />
 

@@ -8,7 +8,7 @@ const types = {
   15: 'workbench_chat'
 };
 
-export default function HeaderTitle({ conversation, readOnly }) {
+export default function HeaderTitle({ conversation, readOnly, hideShare = false }) {
   const localize = useLocalize();
 
   return (
@@ -25,7 +25,7 @@ export default function HeaderTitle({ conversation, readOnly }) {
 
       {/* Right actions */}
       <div className="flex-1 flex justify-end items-center">
-        {!readOnly && (
+        {!readOnly && !hideShare && (
           <ShareChat 
             type={types[conversation?.flowType as keyof typeof types]} 
             flowId={conversation?.flowId} 
@@ -36,3 +36,4 @@ export default function HeaderTitle({ conversation, readOnly }) {
     </div>
   );
 }
+

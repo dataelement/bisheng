@@ -4,7 +4,7 @@ import { Dialog, DialogContent } from "~/components/ui/Dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "~/components/ui/Tabs";
 import { Button } from "~/components/ui/Button";
 import { Input } from "~/components/ui/Input";
-import { Avatar, AvatarImage } from "~/components/ui/avatar";
+import { Avatar, AvatarImage, AvatarName } from "~/components/ui/avatar";
 import { TooltipAnchor } from "~/components/ui/Tooltip";
 import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
@@ -42,8 +42,12 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
     const observersRef = useRef<Record<string, IntersectionObserver>>({});
 
     const isVisuallyUnread = (n: MessageItem) => !n.is_read;
-    const isApprovalMessageType = (messageType?: string) =>
-        messageType === "request" || messageType === "approve";
+    const isKnowledgeSpaceApprovalActionCode = (actionCode?: string) =>
+        actionCode === "request_knowledge_space" ||
+        actionCode === "approved_knowledge_space" ||
+        actionCode === "rejected_knowledge_space";
+    const isApprovalMessageType = (messageType?: string, actionCode?: string) =>
+        messageType === "request" || messageType === "approve" || isKnowledgeSpaceApprovalActionCode(actionCode);
     const isPendingApprovalStatus = (status?: string) =>
         !!status && ["pending", "PENDING", "wait_approve", "WAIT_APPROVE"].includes(status);
     const isApprovedStatus = (status?: string) =>
@@ -57,7 +61,7 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
     const unreadCounts = useMemo(() => {
         const allUnread = notifications.filter(isVisuallyUnread).length;
         const requestUnread = notifications.filter(
-            n => isApprovalMessageType(n.message_type) && isVisuallyUnread(n)
+            n => isApprovalMessageType(n.message_type, n.action_code) && isVisuallyUnread(n)
         ).length;
         return { all: allUnread, request: requestUnread };
     }, [notifications]);
@@ -131,10 +135,10 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
         if (activeTab !== "request") return { pending: [], approved: [] };
 
         const pending = filteredNotifications.filter(
-            n => isApprovalMessageType(n.message_type) && isPendingApprovalStatus(n.status)
+            n => isApprovalMessageType(n.message_type, n.action_code) && isPendingApprovalStatus(n.status)
         );
         const approved = filteredNotifications.filter(
-            n => isApprovalMessageType(n.message_type) && !isPendingApprovalStatus(n.status)
+            n => isApprovalMessageType(n.message_type, n.action_code) && !isPendingApprovalStatus(n.status)
         );
 
         return { pending, approved };
@@ -205,16 +209,66 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
         }
     };
 
+    const getTargetName = (notification: MessageItem): string => {
+        const parts = Array.isArray(notification.content) ? notification.content : [];
+        const businessUrlPart = parts.find((c: any) => c?.type === "business_url") as any;
+
+        // Prefer business_url.content, e.g. "--测试一下" -> "测试一下"
+        const rawBusinessName = typeof businessUrlPart?.content === "string" ? businessUrlPart.content.trim() : "";
+        if (rawBusinessName) {
+            const cleaned = rawBusinessName.replace(/^[-—\s]+/, "").trim();
+            if (cleaned) return cleaned;
+        }
+
+        // Prefer explicit business/title part in content payload
+        const businessPart = parts.find((c: any) =>
+            c?.type === "business" ||
+            c?.type === "business_name" ||
+            c?.type === "target" ||
+            c?.type === "title"
+        ) as any;
+        if (businessPart?.content) return String(businessPart.content);
+        const data = businessUrlPart?.metadata?.data || {};
+        const fromMeta =
+            data?.business_name ??
+            data?.channel_name ??
+            data?.space_name ??
+            data?.name;
+        if (fromMeta) return String(fromMeta);
+
+        return "";
+    };
+
+    const getSystemTextCode = (notification: MessageItem): string => {
+        const parts = Array.isArray(notification.content) ? notification.content : [];
+        const part = parts.find((c: any) => c?.type === "system_text");
+        const code = part?.content;
+        if (typeof code === "string" && code.trim()) return code.trim();
+        return notification.action_code || "";
+    };
+
     // 获取消息文本
     const getNotificationText = (notification: MessageItem) => {
         const userName = notification.sender_name || "系统";
-        const text =
-            notification.content?.map((c) => c.content).filter(Boolean).join("") ||
-            "";
+        const targetName = getTargetName(notification);
+        // Prefer backend content[{type:"system_text"}].content as message enum
+        const actionCode = getSystemTextCode(notification);
+        const textByActionCode: Record<string, string> = {
+            request_channel: `申请订阅你的频道——${targetName}`,
+            request_knowledge_space: `申请加入你的知识空间——${targetName}`,
+            approved_channel: `同意了你的订阅频道申请——${targetName}`,
+            rejected_channel: `拒绝了你的订阅频道申请——${targetName}`,
+            approved_knowledge_space: `同意了你加入知识空间申请——${targetName}`,
+            rejected_knowledge_space: `拒绝了你加入知识空间申请——${targetName}`,
+            assigned_knowledge_space_admin: `将你添加为知识空间的管理员——${targetName}`,
+            assigned_channel_admin: `将你添加为频道的管理员——${targetName}`,
+        };
+        const fallbackText = notification.content?.map((c) => c.content).filter(Boolean).join("") || "";
+        const text = textByActionCode[actionCode] || fallbackText;
         const showApproval =
-            isApprovalMessageType(notification.message_type) &&
+            isApprovalMessageType(notification.message_type, notification.action_code) &&
             isPendingApprovalStatus(notification.status);
-        return { text, userName, targetName: "", showApproval };
+        return { text, userName, targetName, showApproval };
     };
 
     // Parse target info from business_url content part.
@@ -226,8 +280,29 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
         if (businessType === "channel_id" && data?.channel_id) {
             return { targetType: "channel", targetId: String(data.channel_id) };
         }
+        // Some backends return business_type as "channel" + business_id
+        if (businessType === "channel") {
+            const channelId = data?.channel_id ?? data?.business_id ?? (notification as any)?.business_id;
+            if (channelId !== undefined && channelId !== null && String(channelId) !== "") {
+                return { targetType: "channel", targetId: String(channelId) };
+            }
+        }
         if (businessType === "space_id" && data?.space_id) {
             return { targetType: "space", targetId: String(data.space_id) };
+        }
+        // Some backends return business_type as "space" + business_id
+        if (businessType === "space") {
+            const spaceId = data?.space_id ?? data?.business_id ?? (notification as any)?.business_id;
+            if (spaceId !== undefined && spaceId !== null && String(spaceId) !== "") {
+                return { targetType: "space", targetId: String(spaceId) };
+            }
+        }
+        // New enum variant from backend: knowledge_space_Id
+        if (businessType === "knowledge_space_Id" || businessType === "knowledge_space_id") {
+            const knowledgeSpaceId = data?.knowledge_space_Id ?? data?.knowledge_space_id ?? data?.space_id;
+            if (knowledgeSpaceId !== undefined && knowledgeSpaceId !== null && String(knowledgeSpaceId) !== "") {
+                return { targetType: "space", targetId: String(knowledgeSpaceId) };
+            }
         }
         return null;
     };
@@ -242,13 +317,15 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
         const createdAt = notification.create_time;
         const approvalStatus = notification.status;
         const { text, targetName, showApproval } = getNotificationText(notification);
+        const canSplitTarget = Boolean(targetName) && text.includes(targetName);
+        const textPrefix = canSplitTarget ? text.split(targetName)[0] : text;
         const isHovered = hoveredId === id;
 
         // 已审批的消息显示为浅色
         const isApproved = isApprovedStatus(approvalStatus) || isRejectedStatus(approvalStatus);
         const showDeleteMessage =
             !showApproval &&
-            !isApprovalMessageType(notification.message_type) &&
+            !isApprovalMessageType(notification.message_type, notification.action_code) &&
             (isApproved || isDecisionActionCode(notification.action_code));
         const textColor = !isVisuallyUnread(notification) || isApproved ? "text-[#86909c]" : "text-[#1d2129]";
 
@@ -260,7 +337,7 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
         const onRowMouseEnter = () => {
             setHoveredId(id);
             // 请求类：hover 0.5s 才已读（滚动不触发）
-            if (notification.message_type === "request" && !notification.is_read) {
+            if (isApprovalMessageType(notification.message_type, notification.action_code) && !notification.is_read) {
                 window.clearTimeout(requestHoverTimersRef.current[id]);
                 requestHoverTimersRef.current[id] = window.setTimeout(() => {
                     markOneAsRead(id);
@@ -277,7 +354,7 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
         return (
             <div
                 key={id}
-                className="flex items-start gap-3 px-6 py-4 border-b border-[#F2F3F5] hover:bg-[#f7f8fa] transition-colors relative"
+                className="flex items-start gap-3 px-6 py-6 border-b border-[#F2F3F5] hover:bg-[#f7f8fa] transition-colors relative"
                 onMouseEnter={onRowMouseEnter}
                 onMouseLeave={onRowMouseLeave}
                 ref={(node) => {
@@ -316,36 +393,41 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
             >
                 {/* 头像 */}
                 <Avatar className="size-9 flex-shrink-0">
-                    <AvatarImage src={userAvatar || "/default-avatar.png"} alt={userName} />
+                    {userAvatar ? <AvatarImage src={userAvatar} alt={userName} /> : null}
+                    <AvatarName name={userName} className="text-xs" />
                 </Avatar>
 
                 {/* 消息内容 */}
                 <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2">
-                        <div className={`text-[14px] ${textColor}`}>
+                        <div className={`text-[14px] ${textColor} flex items-center min-w-0 whitespace-nowrap`}>
                             <TooltipAnchor
                                 description={userGroup ? `${userName} - ${userGroup}` : userName}
                                 side="top"
                             >
-                                <span className="font-medium cursor-pointer hover:text-[#165dff]">
+                                <span className="font-medium cursor-pointer hover:text-[#165dff] shrink-0">
                                     @{userName}
                                 </span>
                             </TooltipAnchor>
-                            {" "}
-                            {text.split(targetName)[0]}
-                            <span
-                                className="font-medium cursor-pointer hover:text-[#165dff]"
-                                onClick={() => {
-                                    const target = getNotificationTarget(notification);
-                                    if (!target) return;
-                                    if (target.targetType === "channel") {
-                                        navigate(`/channel/share/${target.targetId}`);
-                                    } else {
-                                        navigate(`/knowledge/share/${target.targetId}`);
-                                    }
-                                }}
-                            >
-                                {targetName}
+                            <span className="mx-1 shrink-0"> </span>
+                            <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">
+                                {textPrefix}
+                                {canSplitTarget && (
+                                    <span
+                                        className="font-medium cursor-pointer hover:text-[#165dff]"
+                                        onClick={() => {
+                                            const target = getNotificationTarget(notification);
+                                            if (!target) return;
+                                            if (target.targetType === "channel") {
+                                                navigate(`/channel/share/${target.targetId}`);
+                                            } else {
+                                                navigate(`/knowledge/share/${target.targetId}`);
+                                            }
+                                        }}
+                                    >
+                                        {targetName}
+                                    </span>
+                                )}
                             </span>
                         </div>
 
@@ -363,7 +445,7 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
 
                     {/* 审批按钮/结果（请求类） */}
                     {showApproval ? (
-                        <div className="absolute right-6 bottom-4 flex items-center gap-2">
+                        <div className="absolute right-6 bottom-1 flex items-center gap-2">
                             <button
                                 onClick={() => {
                                     if (!notification.is_read) markOneAsRead(id);

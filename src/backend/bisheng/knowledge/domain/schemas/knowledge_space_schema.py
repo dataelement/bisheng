@@ -1,4 +1,4 @@
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Literal
 
 from pydantic import BaseModel, Field
 
@@ -81,3 +81,33 @@ class SpaceListReq(BaseModel):
     parent_id: Optional[int] = Field(None, description="Parent Folder ID; omit for root level")
     page: int = Field(1, ge=1, description="Page number (1-indexed)")
     page_size: int = Field(20, ge=1, le=200, description="Items per page")
+
+
+class SpaceMemberResponse(BaseModel):
+    """Space Member Response"""
+    user_id: int = Field(..., description='User ID')
+    user_name: str = Field(..., description='User Name')
+    user_avatar: Optional[str] = Field(None, description='User Avatar URL')
+    user_role: str = Field(..., description='User Role in Space: creator / admin / member')
+    user_groups: List[dict] = Field(default_factory=list,
+                                    description='User Groups the member belongs to, each group is represented as a dict with group details')
+
+
+class SpaceMemberPageResponse(BaseModel):
+    """Space Member Page Response"""
+    data: List[SpaceMemberResponse] = Field(default_factory=list,
+                                            description='List of space members in the current page')
+    total: int = Field(..., description='Total number of space members')
+
+
+class UpdateSpaceMemberRoleRequest(BaseModel):
+    """Update Space Member Role Request"""
+    space_id: int = Field(default=0, description='Space ID')
+    user_id: int = Field(..., description='Target User ID')
+    role: Literal['admin', 'member'] = Field(..., description='New Role to Assign: admin / member')
+
+
+class RemoveSpaceMemberRequest(BaseModel):
+    """Remove Space Member Request"""
+    space_id: int = Field(default=0, description='Space ID')
+    user_id: int = Field(..., description='Target User ID to Remove')

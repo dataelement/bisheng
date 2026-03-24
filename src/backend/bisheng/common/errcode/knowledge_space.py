@@ -47,6 +47,11 @@ class SpaceFileNameDuplicateError(BaseErrorCode):
     Msg: str = 'File name already exists in this space'
 
 
+class SpaceFileSizeLimitError(BaseErrorCode):
+    Code: int = 18024
+    Msg: str = 'File size limit exceeded'
+
+
 # ── Subscribe ────────────────────────────────────────────────────────────────
 
 class SpaceSubscribePrivateError(BaseErrorCode):

@@ -1,6 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronLeft, ChevronRight, Search } from "lucide-react";
-import { SpaceRole, type KnowledgeSpace } from "~/api/knowledge";
+import {
+    type KnowledgeSpace,
+    type SpaceMember,
+    SpaceRole,
+    getSpaceMembersApi,
+    removeSpaceMemberApi,
+    updateSpaceMemberRoleApi,
+} from "~/api/knowledge";
 import { NotificationSeverity } from "~/common";
 import { useToastContext } from "~/Providers";
 import { cn } from "~/utils";
@@ -22,187 +29,125 @@ import {
     AlertDialogAction,
     AlertDialogCancel,
     AlertDialogContent,
-    AlertDialogDescription,
     AlertDialogFooter,
     AlertDialogHeader,
     AlertDialogTitle
 } from "~/components/ui/AlertDialog";
 import { useLocalize } from "~/hooks";
 
+const PAGE_SIZE = 10;
 const MAX_ADMINS = 5;
 const MAX_NAME_LEN = 15;
 const MAX_GROUP_LEN = 30;
-const PAGE_SIZE = 10;
 
-interface SpaceMember {
-    id: string;
-    name: string;
-    groups: string[];
-    role: SpaceRole;
+function getRoleLabel(role: SpaceMember["role"], localize: (key: string) => string) {
+    if (role === "creator") return localize("creator") || "创建者";
+    if (role === "admin") return localize("admin") || "管理员";
+    return localize("member") || "订阅用户";
 }
 
-interface KnowledgeSpaceMemberDialogProps {
-    open: boolean;
-    onOpenChange: (open: boolean) => void;
-    space: KnowledgeSpace | null;
-}
-
-function truncateText(text: string, maxLen: number) {
-    if (text.length <= maxLen) return text;
-    return `${text.slice(0, maxLen)}...`;
-}
-
-function getRoleLabel(role: SpaceRole) {
-    if (role === SpaceRole.CREATOR) return "创建者";
-    if (role === SpaceRole.ADMIN) return "管理员";
-    return "订阅用户";
-}
-
-function makeMemberSeed(space: KnowledgeSpace): SpaceMember[] {
-    const fixed: SpaceMember[] = [
-        {
-            id: `${space.id}-creator`,
-            name: space.creator || "空间创建者",
-            groups: ["一号用户组", "二号用户组", "三号用户组", "四号用户组"],
-            role: SpaceRole.CREATOR
-        },
-        {
-            id: `${space.id}-admin-1`,
-            name: "admin@example.com",
-            groups: ["一号用户组", "二号用户组", "三号用户组", "四号用户组"],
-            role: SpaceRole.ADMIN
-        },
-        {
-            id: `${space.id}-admin-2`,
-            name: "alpha.admin",
-            groups: ["运维组", "知识库共建组"],
-            role: SpaceRole.ADMIN
-        },
-        {
-            id: `${space.id}-member-1`,
-            name: "张三-超长用户名用于截断展示示例",
-            groups: ["运营一组", "内容采编组", "日报订阅组", "测试长组名展示"],
-            role: SpaceRole.MEMBER
-        },
-        {
-            id: `${space.id}-member-2`,
-            name: "李四",
-            groups: ["内容审核组"],
-            role: SpaceRole.MEMBER
-        },
-        {
-            id: `${space.id}-member-3`,
-            name: "王五",
-            groups: ["数据标注组", "语料治理组"],
-            role: SpaceRole.MEMBER
-        },
-        {
-            id: `${space.id}-member-4`,
-            name: "zhao_ming",
-            groups: ["外部协作组"],
-            role: SpaceRole.MEMBER
-        },
-        {
-            id: `${space.id}-member-5`,
-            name: "chenyu",
-            groups: ["财务分析组"],
-            role: SpaceRole.MEMBER
-        }
-    ];
-    return fixed;
-}
-
-function roleWeight(role: SpaceRole) {
-    if (role === SpaceRole.CREATOR) return 0;
-    if (role === SpaceRole.ADMIN) return 1;
+function roleWeight(role: SpaceMember["role"]) {
+    if (role === "creator") return 0;
+    if (role === "admin") return 1;
     return 2;
 }
 
 function getInitials(name: string) {
-    const trimmed = name.trim();
+    const trimmed = (name || "").trim();
     return (trimmed[0] || "?").toUpperCase();
+}
+
+function truncateText(text: string, maxLen: number) {
+    if (!text) return "";
+    if (text.length <= maxLen) return text;
+    return `${text.slice(0, maxLen)}...`;
 }
 
 export function KnowledgeSpaceMemberDialog({
     open,
     onOpenChange,
     space
-}: KnowledgeSpaceMemberDialogProps) {
+}: {
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    space: KnowledgeSpace | null;
+}) {
     const { showToast } = useToastContext();
     const localize = useLocalize();
-    const [search, setSearch] = useState("");
-    const [membersBySpace, setMembersBySpace] = useState<Record<string, SpaceMember[]>>({});
-    const [removeTarget, setRemoveTarget] = useState<SpaceMember | null>(null);
+    const [keyword, setKeyword] = useState("");
     const [page, setPage] = useState(1);
+    const [loading, setLoading] = useState(false);
+    const [members, setMembers] = useState<SpaceMember[]>([]);
+    const [removeTarget, setRemoveTarget] = useState<SpaceMember | null>(null);
+    const [serverTotal, setServerTotal] = useState(0);
 
-    const spaceMembers = useMemo(() => {
-        if (!space) return [];
-        return membersBySpace[space.id] || makeMemberSeed(space);
-    }, [membersBySpace, space]);
-
-    const currentRole = space?.role;
-    const canCreatorManage = currentRole === SpaceRole.CREATOR;
-    const canAdminManage = currentRole === SpaceRole.ADMIN;
+    const currentUserRole = (space?.role || null) as SpaceRole | null;
+    const canCreatorManage = currentUserRole === SpaceRole.CREATOR;
+    const canAdminManage = currentUserRole === SpaceRole.ADMIN;
     const canManageMembers = canCreatorManage || canAdminManage;
 
-    const filteredAndSortedMembers = useMemo(() => {
-        const query = search.trim().toLowerCase();
-        const filtered = query
-            ? spaceMembers.filter((m) => m.name.toLowerCase().includes(query))
-            : spaceMembers;
-        return [...filtered].sort((a, b) => {
+    const filteredMembers = useMemo(() => {
+        const kw = keyword.trim().toLowerCase();
+        const list = kw
+            ? members.filter((m) => (m.user_name || "").toLowerCase().includes(kw))
+            : members;
+        return [...list].sort((a, b) => {
             const wa = roleWeight(a.role);
             const wb = roleWeight(b.role);
             if (wa !== wb) return wa - wb;
-            return a.name.localeCompare(b.name, "zh-Hans-CN");
+            return (a.user_name || "").localeCompare(b.user_name || "", "zh-Hans-CN");
         });
-    }, [search, spaceMembers]);
+    }, [members, keyword]);
 
     const adminCount = useMemo(
-        () => spaceMembers.filter((m) => m.role === SpaceRole.ADMIN).length,
-        [spaceMembers]
+        () => members.filter((m) => m.role === "admin").length,
+        [members]
     );
 
-    const totalPages = Math.max(1, Math.ceil(filteredAndSortedMembers.length / PAGE_SIZE));
+    const total = keyword.trim() ? filteredMembers.length : (serverTotal || members.length);
+    const totalPages = Math.max(1, Math.ceil(filteredMembers.length / PAGE_SIZE));
     const pagedMembers = useMemo(() => {
         const start = (page - 1) * PAGE_SIZE;
-        return filteredAndSortedMembers.slice(start, start + PAGE_SIZE);
-    }, [filteredAndSortedMembers, page]);
+        return filteredMembers.slice(start, start + PAGE_SIZE);
+    }, [filteredMembers, page]);
 
     const pageNumbers = useMemo(() => {
         const maxShow = 5;
-        if (totalPages <= maxShow) {
-            return Array.from({ length: totalPages }, (_, i) => i + 1);
-        }
+        if (totalPages <= maxShow) return Array.from({ length: totalPages }, (_, i) => i + 1);
         if (page <= 3) return [1, 2, 3, 4, totalPages];
         if (page >= totalPages - 2) return [1, totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
         return [1, page - 1, page, page + 1, totalPages];
     }, [page, totalPages]);
 
+    const fetchMembers = async () => {
+        if (!space?.id) return;
+        setLoading(true);
+        try {
+            const res = await getSpaceMembersApi(space.id);
+            setMembers(res.data || []);
+            setServerTotal(res.total || 0);
+            setPage(1);
+        } catch {
+            setMembers([]);
+            setServerTotal(0);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        if (!open || !space?.id) return;
+        fetchMembers();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [open, space?.id]);
+
     useEffect(() => {
         setPage(1);
-    }, [search, open, space?.id]);
+    }, [keyword]);
 
-    const setMemberRole = (memberId: string, role: SpaceRole) => {
-        if (!space) return;
-        setMembersBySpace((prev) => {
-            const current = prev[space.id] || makeMemberSeed(space);
-            const next = current.map((m) => (m.id === memberId ? { ...m, role } : m));
-            return { ...prev, [space.id]: next };
-        });
-    };
-
-    const removeMember = (memberId: string) => {
-        if (!space) return;
-        setMembersBySpace((prev) => {
-            const current = prev[space.id] || makeMemberSeed(space);
-            const next = current.filter((m) => m.id !== memberId);
-            return { ...prev, [space.id]: next };
-        });
-    };
-
-    const handlePromoteAdmin = (member: SpaceMember) => {
-        if (member.role === SpaceRole.ADMIN) return;
+    const handlePromoteAdmin = async (m: SpaceMember) => {
+        if (!space?.id || !canCreatorManage) return;
+        if (m.role === "admin" || m.role === "creator") return;
         if (adminCount >= MAX_ADMINS) {
             showToast({
                 message: localize("exceeded_admin_limit") || "已超出管理员上限",
@@ -210,30 +155,82 @@ export function KnowledgeSpaceMemberDialog({
             });
             return;
         }
-        setMemberRole(member.id, SpaceRole.ADMIN);
+        try {
+            await updateSpaceMemberRoleApi(space.id, { user_id: m.user_id, role: "admin" });
+            await fetchMembers();
+        } catch {
+            showToast({
+                message: localize("update_role_failed") || "角色更新失败，请稍后重试",
+                severity: NotificationSeverity.ERROR
+            });
+        }
     };
 
-    const handleDemoteToMember = (member: SpaceMember) => {
-        if (member.role === SpaceRole.MEMBER) return;
-        setMemberRole(member.id, SpaceRole.MEMBER);
+    const handleDemoteToMember = async (m: SpaceMember) => {
+        if (!space?.id || !canCreatorManage) return;
+        if (m.role !== "admin") return;
+        try {
+            await updateSpaceMemberRoleApi(space.id, { user_id: m.user_id, role: "member" });
+            await fetchMembers();
+        } catch {
+            showToast({
+                message: localize("update_role_failed") || "角色更新失败，请稍后重试",
+                severity: NotificationSeverity.ERROR
+            });
+        }
     };
 
-    const getGroupText = (member: SpaceMember) => member.groups.join("、");
+    const handleRemove = async (m: SpaceMember) => {
+        if (!space?.id) return;
+        try {
+            await removeSpaceMemberApi(space.id, m.user_id);
+            await fetchMembers();
+            showToast({
+                message: localize("remove_success") || "已移除成员",
+                severity: NotificationSeverity.SUCCESS
+            });
+        } catch {
+            showToast({
+                message: localize("remove_failed") || "移除失败，请稍后重试",
+                severity: NotificationSeverity.ERROR
+            });
+        }
+    };
 
-    const getRoleActionMenu = (member: SpaceMember) => {
-        if (!canManageMembers || member.role === SpaceRole.CREATOR) {
-            return (
-                <span className="text-[14px] text-[#4E5969]">
-                    {getRoleLabel(member.role)}
-                </span>
-            );
+    const getRoleActionMenu = (m: SpaceMember) => {
+        if (!canManageMembers || m.role === "creator") {
+            return <span className="text-[14px] text-[#4E5969]">{getRoleLabel(m.role, localize)}</span>;
         }
 
-        if (canAdminManage && member.role === SpaceRole.ADMIN) {
+        if (canAdminManage) {
+            if (m.role === "admin") {
+                return <span className="text-[14px] text-[#4E5969]">{getRoleLabel(m.role, localize)}</span>;
+            }
             return (
-                <span className="text-[14px] text-[#4E5969]">
-                    {getRoleLabel(member.role)}
-                </span>
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <button className="inline-flex items-center gap-1 text-[14px] text-[#4E5969] hover:text-[#165DFF]">
+                            {getRoleLabel(m.role, localize)}
+                            <ChevronDown className="size-3.5" />
+                        </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-28">
+                        <DropdownMenuItem
+                            className={cn(
+                                "cursor-default",
+                                m.role === "member" && "bg-[#E8F3FF] text-[#165DFF]"
+                            )}
+                            onClick={(e) => e.preventDefault()}
+                        >
+                            {localize("member") || "订阅用户"}
+                        </DropdownMenuItem>
+                        {m.role === "member" && (
+                            <DropdownMenuItem onClick={() => setRemoveTarget(m)}>
+                                {localize("remove")}
+                            </DropdownMenuItem>
+                        )}
+                    </DropdownMenuContent>
+                </DropdownMenu>
             );
         }
 
@@ -241,27 +238,32 @@ export function KnowledgeSpaceMemberDialog({
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                     <button className="inline-flex items-center gap-1 text-[14px] text-[#4E5969] hover:text-[#165DFF]">
-                        {getRoleLabel(member.role)}
+                        {getRoleLabel(m.role, localize)}
                         <ChevronDown className="size-3.5" />
                     </button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-32">
+                <DropdownMenuContent align="end" className="w-28">
+                    <DropdownMenuItem
+                        className={cn(m.role === "admin" && "bg-[#E8F3FF] text-[#165DFF]")}
+                        onClick={() => {
+                            if (!canCreatorManage || m.role === "admin" || m.role === "creator") return;
+                            handlePromoteAdmin(m);
+                        }}
+                    >
+                        {localize("admin") || "管理员"}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                        className={cn(m.role === "member" && "bg-[#E8F3FF] text-[#165DFF]")}
+                        onClick={() => {
+                            if (!canCreatorManage || m.role === "member") return;
+                            handleDemoteToMember(m);
+                        }}
+                    >
+                        {localize("member") || "订阅用户"}
+                    </DropdownMenuItem>
                     {canCreatorManage && (
-                        <DropdownMenuItem onClick={() => handlePromoteAdmin(member)}>
-                            管理员
-                        </DropdownMenuItem>
-                    )}
-                    {canCreatorManage && (
-                        <DropdownMenuItem onClick={() => handleDemoteToMember(member)}>
-                            订阅用户
-                        </DropdownMenuItem>
-                    )}
-                    {(canCreatorManage || (canAdminManage && member.role === SpaceRole.MEMBER)) && (
-                        <DropdownMenuItem
-                            className=""
-                            onClick={() => setRemoveTarget(member)}
-                        >
-                            移除
+                        <DropdownMenuItem onClick={() => setRemoveTarget(m)}>
+                            {localize("remove")}
                         </DropdownMenuItem>
                     )}
                 </DropdownMenuContent>
@@ -269,13 +271,15 @@ export function KnowledgeSpaceMemberDialog({
         );
     };
 
+    if (!open) return null;
+
     return (
         <>
             <Dialog open={open} onOpenChange={onOpenChange}>
-                <DialogContent className="max-w-[760px] p-0 gap-0 rounded-[10px]" close={true}>
+                <DialogContent className="max-w-[760px] p-0 gap-0 rounded-[10px]">
                     <DialogHeader className="px-5 pt-5 pb-3 border-b border-[#E5E6EB]">
                         <DialogTitle className="text-[16px] text-[#1D2129]">
-                            {localize("management_member")}
+                            {localize("com_subscription.management_member")}
                         </DialogTitle>
                     </DialogHeader>
 
@@ -283,61 +287,63 @@ export function KnowledgeSpaceMemberDialog({
                         <div className="relative mb-3">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#C9CDD4]" />
                             <input
-                                value={search}
-                                onChange={(e) => setSearch(e.target.value)}
-                                placeholder={localize("search_user_placeholder") || "请输入用户名进行搜索"}
+                                value={keyword}
+                                onChange={(e) => setKeyword(e.target.value)}
+                                placeholder={localize("com_subscription.search_user_placeholder") || "请输入用户名进行搜索"}
                                 className="w-full h-9 pl-9 pr-3 rounded border border-[#E5E6EB] text-[14px] focus:outline-none focus:border-[#165DFF]"
                             />
                         </div>
 
                         <div className="h-[360px] overflow-y-auto">
-                            {pagedMembers.length === 0 ? (
+                            {loading ? (
                                 <div className="h-full flex items-center justify-center text-[13px] text-[#86909C]">
-                                    {localize("nofound_mathcing_member")}
+                                    {localize("loading") || "加载中..."}
+                                </div>
+                            ) : pagedMembers.length === 0 ? (
+                                <div className="h-full flex items-center justify-center text-[13px] text-[#86909C]">
+                                    {localize("com_subscription.nofound_mathcing_member")}
                                 </div>
                             ) : (
-                                pagedMembers.map((member) => {
-                                    const groupText = getGroupText(member);
-                                    return (
-                                        <div
-                                            key={member.id}
-                                            className="h-10 px-1 flex items-center gap-2.5 border-b border-[#F2F3F5] last:border-0"
-                                        >
-                                            <div className="size-6 rounded-full bg-[#C9CDD4] text-white text-[11px] flex items-center justify-center">
-                                                {getInitials(member.name)}
-                                            </div>
-                                            <div
-                                                title={member.name}
-                                                className="w-[160px] text-[13px] text-[#1D2129] truncate"
-                                            >
-                                                {truncateText(member.name, MAX_NAME_LEN)}
-                                            </div>
-                                            <div
-                                                title={groupText}
-                                                className="flex-1 min-w-0 text-[12px] text-[#86909C] truncate"
-                                            >
-                                                {truncateText(groupText, MAX_GROUP_LEN)}
-                                            </div>
-                                            <div className="w-[110px] flex justify-end">
-                                                {getRoleActionMenu(member)}
-                                            </div>
+                                pagedMembers.map((m) => (
+                                    <div
+                                        key={m.user_id}
+                                        className="h-10 px-1 flex items-center gap-2.5 border-b border-[#F2F3F5] last:border-0"
+                                    >
+                                        <div className="size-6 rounded-full bg-[#C9CDD4] text-white text-[11px] flex items-center justify-center">
+                                            {getInitials(m.user_name)}
                                         </div>
-                                    );
-                                })
+                                        <div
+                                            title={m.user_name}
+                                            className="w-[220px] text-[13px] text-[#1D2129] truncate"
+                                        >
+                                            {truncateText(m.user_name, MAX_NAME_LEN)}
+                                        </div>
+                                        <div
+                                            className="flex-1 min-w-0 text-[12px] text-[#86909C] truncate"
+                                            title={(m.groups || []).join("、")}
+                                        >
+                                            {truncateText((m.groups || []).join("、"), MAX_GROUP_LEN)}
+                                        </div>
+                                        <div className="w-[130px] flex justify-end">
+                                            {getRoleActionMenu(m)}
+                                        </div>
+                                    </div>
+                                ))
                             )}
                         </div>
                     </div>
 
                     <div className="h-11 px-5 border-t border-[#E5E6EB] flex items-center justify-between text-[12px] text-[#4E5969]">
                         <span className="text-[#86909C]">
-                            共 <span className="text-[#165DFF]">{filteredAndSortedMembers.length}</span> 条数据，每页 {PAGE_SIZE} 条
+                            {localize("com_subscription.total_members") || "总成员数"}：
+                            <span className="text-[#165DFF] ml-1">{total}</span>
                         </span>
                         <div className="flex items-center gap-1.5">
                             <Button
                                 variant="ghost"
                                 className="h-7 w-7 p-0 text-[#86909C] disabled:opacity-40"
                                 disabled={page <= 1}
-                                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                                onClick={() => setPage(Math.max(1, page - 1))}
                             >
                                 <ChevronLeft className="size-3.5" />
                             </Button>
@@ -365,7 +371,7 @@ export function KnowledgeSpaceMemberDialog({
                                 variant="ghost"
                                 className="h-7 w-7 p-0 text-[#86909C] disabled:opacity-40"
                                 disabled={page >= totalPages}
-                                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                                onClick={() => setPage(Math.min(totalPages, page + 1))}
                             >
                                 <ChevronRight className="size-3.5" />
                             </Button>
@@ -378,24 +384,21 @@ export function KnowledgeSpaceMemberDialog({
                 <AlertDialogContent className="max-w-sm">
                     <AlertDialogHeader>
                         <AlertDialogTitle className="text-[16px]">
-                            {localize("remove_member")}
+                            {localize("com_subscription.remove_member")}
                         </AlertDialogTitle>
-                        <AlertDialogDescription>
-                            确认将 “{removeTarget?.name}” 移出该频道库吗？
-                        </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                         <AlertDialogCancel onClick={() => setRemoveTarget(null)}>
-                            {localize("cancel")}
+                            {localize("com_subscription.cancel")}
                         </AlertDialogCancel>
                         <AlertDialogAction
                             className={cn("bg-[#F53F3F] hover:bg-[#F76965]")}
                             onClick={() => {
-                                if (removeTarget) removeMember(removeTarget.id);
+                                if (removeTarget) handleRemove(removeTarget);
                                 setRemoveTarget(null);
                             }}
                         >
-                            {localize("confirm_removal")}
+                            {localize("com_subscription.confirm_removal")}
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>

@@ -8,6 +8,7 @@ import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
 import { copyText } from "~/utils";
 import { AddSpaceIcon, ShareOutlineIcon } from "~/components/icons";
+import { AddToKnowledgeModal } from "../Article/AddToKnowledgeModal";
 
 interface ArticleCardProps {
     article: Article;
@@ -19,6 +20,7 @@ interface ArticleCardProps {
 export function ArticleCard({ article, onSelect, isSelected, searchQuery }: ArticleCardProps) {
     const localize = useLocalize();
     const [hovered, setHovered] = useState(false);
+    const [showKnowledgeModal, setShowKnowledgeModal] = useState(false);
     const { handleShare } = useArticleShare();
     const { showToast } = useToastContext();
 
@@ -107,6 +109,7 @@ export function ArticleCard({ article, onSelect, isSelected, searchQuery }: Arti
                         <button
                             onClick={(e) => {
                                 e.stopPropagation();
+                                setShowKnowledgeModal(true);
                             }}
                             className=" rounded-full bg-gray-50 flex items-center justify-center size-8 text-gray-800 hover:bg-gray-100 transition-colors cursor-pointer"
                             title={localize("com_subscription.add_to_knowledge_space")}
@@ -140,6 +143,13 @@ export function ArticleCard({ article, onSelect, isSelected, searchQuery }: Arti
                     </div>
                 </div>
             </div>
+
+            {/* Add to Knowledge Space Modal */}
+            <AddToKnowledgeModal
+                open={showKnowledgeModal}
+                onOpenChange={setShowKnowledgeModal}
+                articleId={article.id}
+            />
         </div>
     );
 }

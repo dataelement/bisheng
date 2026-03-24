@@ -80,7 +80,11 @@ export function CreateKnowledgeSpaceDrawer({
             setDescription(editingSpace.description || "");
             // Map visibility back to joinPolicy
             setJoinPolicy(
-                editingSpace.visibility === VisibilityType.PUBLIC ? "public" : "review"
+                editingSpace.visibility === VisibilityType.PUBLIC
+                    ? "public"
+                    : editingSpace.visibility === VisibilityType.PRIVATE
+                        ? "private"
+                        : "review"
             );
             setPublishToSquare(editingSpace.isReleased ? "yes" : "no");
             setShowSuccess(false);
@@ -114,7 +118,7 @@ export function CreateKnowledgeSpaceDrawer({
             <SheetContent side="right" className="min-w-[1000px] p-0 bg-white">
                 <SheetHeader className="px-8 pt-7 pb-4 border-b border-[#E5E6EB]">
                     <SheetTitle className="text-[20px] font-medium text-[#1D2129] leading-none">
-                        {mode === "edit" ? localize("edit_knowledge_space") || "编辑知识空间" : localize("com_subscription.create_konwledge_space")}
+                        {mode === "edit" ? localize("com_subscription.edit_knowledge_space") || "编辑知识空间" : localize("com_subscription.create_konwledge_space")}
                     </SheetTitle>
                 </SheetHeader>
 

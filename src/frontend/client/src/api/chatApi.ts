@@ -107,6 +107,12 @@ export function getSSEUrl(): string {
     return `${base}${API.sseChat()}`;
 }
 
+/** Get the full SSE URL for channel article chat */
+export function getChannelSSEUrl(): string {
+    const base = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
+    return `${base}/api/v1/channel/chat/completions`;
+}
+
 /** Fetch platform config (models, features, etc.) */
 export async function getBsConfig(): Promise<BsConfig> {
     const res = await http.get(API.bsConfig());
@@ -144,3 +150,20 @@ export function buildMessageTree(messages: ChatMessage[]): ChatMessage[] {
 
     return roots;
 }
+
+// --- Channel Article Chat API Functions ---
+
+/** Fetch channel article chat history (returns ChatMessage-compatible objects) */
+export async function getChannelChatHistory(
+    articleDocId: string
+): Promise<ChatMessage[]> {
+    if (!articleDocId) return [];
+    const res = await http.get(`/api/v1/channel/chat/messages/${articleDocId}`);
+    return res.data?.data ?? res.data ?? [];
+}
+
+/** Clear channel article chat history */
+export async function clearChannelChat(articleDocId: string): Promise<void> {
+    await http.delete(`/api/v1/channel/chat/messages/${articleDocId}`);
+}
+

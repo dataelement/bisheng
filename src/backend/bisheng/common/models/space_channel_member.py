@@ -6,7 +6,7 @@ from sqlalchemy import Column, CHAR, Enum as SQLEnum, DateTime, text, Boolean, d
 from sqlmodel import Field, select, update, col
 
 from bisheng.common.models.base import SQLModelSerializable
-from bisheng.core.database import get_sync_db_session, get_async_db_session
+from bisheng.core.database import get_async_db_session
 
 
 class BusinessTypeEnum(str, Enum):
@@ -45,70 +45,16 @@ class SpaceChannelMemberDao:
     """ DAO for all DB access on space_channel_member table """
 
     @classmethod
-    def insert_member(cls, member: SpaceChannelMember) -> SpaceChannelMember:
-        """ Insert a new member record """
-        with get_sync_db_session() as session:
+    async def update(cls, member: SpaceChannelMember) -> SpaceChannelMember:
+        """ Async: Update an existing member record """
+        if member.id is None:
+            raise ValueError('Member ID is required')
+
+        async with get_async_db_session() as session:
             session.add(member)
-            session.commit()
-            session.refresh(member)
+            await session.commit()
+            await session.refresh(member)
             return member
-
-    @classmethod
-    def get_members_by_space(cls, space_id: int, order_by: str = 'user_id') -> List[SpaceChannelMember]:
-        """ Get all active members of a space """
-        statement = select(SpaceChannelMember).where(
-            SpaceChannelMember.business_id == str(space_id),
-            SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
-            SpaceChannelMember.status == True
-        )
-        if order_by == 'user_id':
-            statement = statement.order_by(SpaceChannelMember.user_id.asc())
-        elif order_by == 'create_time':
-            statement = statement.order_by(SpaceChannelMember.create_time.desc())
-        with get_sync_db_session() as session:
-            return session.exec(statement).all()
-
-    @classmethod
-    def get_user_followed_space_ids(cls, user_id: int) -> List[str]:
-        """ Get the list of space_ids the user follows (not as creator) """
-        statement = select(SpaceChannelMember.business_id).where(
-            SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
-            SpaceChannelMember.user_id == user_id,
-            SpaceChannelMember.status == True,
-            SpaceChannelMember.user_role != UserRoleEnum.CREATOR
-        )
-        with get_sync_db_session() as session:
-            return session.exec(statement).all()
-
-    @classmethod
-    def get_followed_members_for_spaces(cls, user_id: int, space_ids: List[str]) -> List[SpaceChannelMember]:
-        """ Get follow-status members for a batch of space IDs and a given user """
-        if not space_ids:
-            return []
-        statement = select(SpaceChannelMember).where(
-            SpaceChannelMember.business_id.in_(space_ids),
-            SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
-            SpaceChannelMember.user_id == user_id,
-            SpaceChannelMember.status == True,
-            SpaceChannelMember.user_role != UserRoleEnum.CREATOR
-        )
-        with get_sync_db_session() as session:
-            return session.exec(statement).all()
-
-    @classmethod
-    def delete_non_creator_members(cls, space_id: int):
-        """ Remove all non-creator members from a space (e.g. when space becomes private) """
-        with get_sync_db_session() as session:
-            session.exec(
-                delete(SpaceChannelMember).where(
-                    SpaceChannelMember.business_id == str(space_id),
-                    SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
-                    SpaceChannelMember.user_role != UserRoleEnum.CREATOR
-                )
-            )
-            session.commit()
-
-    # ─── Async counterparts ──────────────────────────────────────────────────
 
     @classmethod
     async def async_insert_member(cls, member: SpaceChannelMember) -> SpaceChannelMember:
@@ -132,6 +78,55 @@ class SpaceChannelMemberDao:
         async with get_async_db_session() as session:
             result = await session.exec(statement)
             return result.first()
+
+    @classmethod
+    async def find_space_members_paginated(
+            cls, space_id: int, user_ids: Optional[List[int]] = None, page: int = 1, page_size: int = 20
+    ) -> List[SpaceChannelMember]:
+        """ Async: Paginate active members for a space, creators and admins first """
+        from sqlalchemy import case
+        statement = select(SpaceChannelMember).where(
+            SpaceChannelMember.business_id == str(space_id),
+            SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
+            SpaceChannelMember.status == True
+        )
+        if user_ids is not None:
+            if not user_ids:
+                return []
+            statement = statement.where(SpaceChannelMember.user_id.in_(user_ids))
+
+        role_order = case(
+            (SpaceChannelMember.user_role == UserRoleEnum.CREATOR, 1),
+            (SpaceChannelMember.user_role == UserRoleEnum.ADMIN, 2),
+            else_=3
+        )
+        statement = statement.order_by(role_order, SpaceChannelMember.user_id.asc())
+
+        offset = (page - 1) * page_size
+        statement = statement.offset(offset).limit(page_size)
+
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return result.all()
+
+    @classmethod
+    async def count_space_members_with_keyword(
+            cls, space_id: int, user_ids: Optional[List[int]] = None
+    ) -> int:
+        """ Async: Count active members for a space, filtered by user_ids, for pagination """
+        from sqlalchemy import func
+        statement = select(func.count()).where(
+            SpaceChannelMember.business_id == str(space_id),
+            SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
+            SpaceChannelMember.status == True
+        )
+        if user_ids is not None:
+            if not user_ids:
+                return 0
+            statement = statement.where(SpaceChannelMember.user_id.in_(user_ids))
+
+        async with get_async_db_session() as session:
+            return await session.scalar(statement)
 
     @classmethod
     async def async_get_active_member_role(cls, space_id: int, user_id: int) -> Optional[UserRoleEnum]:
@@ -195,14 +190,19 @@ class SpaceChannelMemberDao:
         return {row[0]: row[1] for row in rows}
 
     @classmethod
-    async def async_get_members_by_space(cls, space_id: int, order_by: str = 'user_id') -> List[SpaceChannelMember]:
+    async def async_get_members_by_space(cls, space_id: int, order_by: str = 'user_id',
+                                         user_roles: List[UserRoleEnum] = None, status: bool = True) -> List[
+        SpaceChannelMember]:
         """ Async: Get all active members of a space """
 
         statement = select(SpaceChannelMember).where(
             SpaceChannelMember.business_id == str(space_id),
             SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
-            SpaceChannelMember.status == True
+            SpaceChannelMember.status == status
         )
+
+        if user_roles:
+            statement = statement.where(SpaceChannelMember.user_role.in_(user_roles))
         if order_by == 'user_id':
             statement = statement.order_by(SpaceChannelMember.user_id.asc())
         elif order_by == 'create_time':

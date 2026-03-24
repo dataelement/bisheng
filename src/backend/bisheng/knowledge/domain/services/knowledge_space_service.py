@@ -1,7 +1,7 @@
 import asyncio
 import tempfile
 from pathlib import Path
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, TYPE_CHECKING
 
 from fastapi import Request
 
@@ -14,34 +14,42 @@ from bisheng.common.errcode.knowledge_space import (
     SpaceFolderNotFoundError, SpaceFolderDepthError, SpaceFolderDuplicateError,
     SpaceFileNotFoundError, SpaceFileExtensionError, SpaceFileNameDuplicateError,
     SpaceSubscribePrivateError, SpaceAlreadySubscribedError, SpaceSubscribeLimitError,
-    SpacePermissionDeniedError, SpaceTagExistsError,
+    SpacePermissionDeniedError, SpaceTagExistsError, SpaceFileSizeLimitError,
 )
 from bisheng.common.errcode.llm import WorkbenchEmbeddingError
 from bisheng.common.models.space_channel_member import (
     SpaceChannelMember, SpaceChannelMemberDao, BusinessTypeEnum, UserRoleEnum
 )
 from bisheng.database.models.group_resource import ResourceTypeEnum
+from bisheng.database.models.role import RoleDao
 from bisheng.database.models.tag import TagDao, TagBusinessTypeEnum, Tag
-from bisheng.database.models.user_group import UserGroupDao
+from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao, KnowledgeTypeEnum, AuthTypeEnum, \
     KnowledgeRead
 from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFile, KnowledgeFileDao, KnowledgeFileStatus, FileType
 )
 from bisheng.knowledge.domain.models.knowledge_space_file import SpaceFileDao
-from bisheng.knowledge.domain.schemas.knowledge_space_schema import KnowledgeSpaceInfoResp
+from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
+    KnowledgeSpaceInfoResp, SpaceMemberResponse, SpaceMemberPageResponse,
+    UpdateSpaceMemberRoleRequest, RemoveSpaceMemberRequest
+)
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.llm.domain import LLMService
 from bisheng.user.domain.models.user import UserDao
+from bisheng.user.domain.models.user_role import UserRoleDao
 from bisheng.utils import generate_uuid
-from bisheng.worker import retry_knowledge_file_celery
 from bisheng.worker.knowledge import file_worker
+
+if TYPE_CHECKING:
+    from bisheng.message.domain.services.message_service import MessageService
 
 # Maximum number of Knowledge Spaces a user can create
 _MAX_SPACE_PER_USER = 30
 # Maximum number of spaces a user can subscribe to (not as creator)
 _MAX_SUBSCRIBE_PER_USER = 50
+SPACE_ADMIN_ASSIGNMENT_MESSAGE = "assigned_knowledge_space_admin"
 
 
 class KnowledgeSpaceService(BaseService):
@@ -53,13 +61,14 @@ class KnowledgeSpaceService(BaseService):
     def __init__(self, request: Request, login_user: UserPayload):
         self.request = request
         self.login_user = login_user
+        self.message_service: Optional['MessageService'] = None
 
     # ──────────────────────────── Permission helpers ───────────────────────────
 
     # Roles with write access to a space
     _WRITE_ROLES = {UserRoleEnum.CREATOR, UserRoleEnum.ADMIN}
 
-    async def _require_write_permission(self, space_id: int) -> None:
+    async def _require_write_permission(self, space_id: int) -> UserRoleEnum:
         """
         Verify that the current user (self.login_user) is an active CREATOR or ADMIN
         of the given space. Raises SpacePermissionDeniedError otherwise.
@@ -69,6 +78,7 @@ class KnowledgeSpaceService(BaseService):
         )
         if role not in self._WRITE_ROLES:
             raise SpacePermissionDeniedError()
+        return role
 
     async def _require_read_permission(self, space_id: int) -> Knowledge:
         space = await KnowledgeDao.aquery_by_id(space_id)
@@ -321,35 +331,190 @@ class KnowledgeSpaceService(BaseService):
 
     # ──────────────────────────── Members ─────────────────────────────────────
 
-    async def get_space_members(
-            self, space_id: int, order_by: str = 'user_id'
-    ) -> List[dict]:
-        """Return space members enriched with user_name, avatar, and group info."""
+    async def get_space_members(self, space_id: int, page: int, page_size: int,
+                                keyword: Optional[str] = None) -> SpaceMemberPageResponse:
+        """
+        Paginate through the list of space members.
+        - Verify if the current user has read permission
+        - Support fuzzy search by username
+        - Return user information and associated user groups
+        - Sorting: Creators and administrators at the top, regular members sorted by user_id
+        """
         await self._require_write_permission(space_id)
 
-        members = await SpaceChannelMemberDao.async_get_members_by_space(space_id, order_by)
+        search_user_ids = None
+        if keyword:
+            matched_users = await UserDao.afilter_users(user_ids=[], keyword=keyword)
+            search_user_ids = [u.user_id for u in matched_users]
+            if not search_user_ids:
+                return SpaceMemberPageResponse(data=[], total=0)
+
+        members = await SpaceChannelMemberDao.find_space_members_paginated(
+            space_id=space_id, user_ids=search_user_ids, page=page, page_size=page_size
+        )
+
+        total = await SpaceChannelMemberDao.count_space_members_with_keyword(
+            space_id=space_id, user_ids=search_user_ids
+        )
+
         if not members:
-            return []
+            return SpaceMemberPageResponse(data=[], total=total)
 
-        user_ids = [m.user_id for m in members]
-
-        # Batch-fetch user records and group memberships in parallel
-        users = await UserDao.aget_user_by_ids(user_ids)
+        member_user_ids = [m.user_id for m in members]
+        users = await UserDao.aget_user_by_ids(member_user_ids)
         user_map = {u.user_id: u for u in (users or [])}
-        user_groups_map = await UserGroupDao.aget_user_groups_batch(user_ids)
 
-        result = []
-        for m in members:
-            user = user_map.get(m.user_id)
-            groups = user_groups_map.get(m.user_id, [])
-            entry = m.model_dump()
-            entry['user_name'] = user.user_name if user else None
-            entry['avatar'] = user.avatar if user else None
-            entry['groups'] = [
-                {'id': g.id, 'group_name': g.group_name} for g in groups
-            ]
-            result.append(entry)
-        return result
+        result_list = []
+        for member in members:
+            user = user_map.get(member.user_id)
+            user_name = user.user_name if user else f"User {member.user_id}"
+
+            # Query user groups the user belongs to
+            user_groups = await self.login_user.get_user_groups(member.user_id)
+
+            result_list.append(SpaceMemberResponse(
+                user_id=member.user_id,
+                user_name=user_name,
+                user_avatar=user.avatar if user else None,
+                user_role=member.user_role.value,
+                user_groups=user_groups,
+            ))
+
+        return SpaceMemberPageResponse(data=result_list, total=total)
+
+    async def update_member_role(self, req: UpdateSpaceMemberRoleRequest) -> bool:
+        """
+        Set member role (admin/regular member).
+        Permissions:
+        - Creators can set anyone as an admin or member
+        - Admins cannot promote others to admin, nor can they modify the roles of other admins or creators
+        - Modifying the creator's role is not allowed
+        """
+        current_role = await self._require_write_permission(req.space_id)
+
+        # 2. Query target member
+        target_membership = await SpaceChannelMemberDao.async_find_member(
+            space_id=req.space_id, user_id=req.user_id
+        )
+        if not target_membership or not target_membership.status:
+            raise ValueError("The target user is not a member of this space")
+
+        # 3. Modifying the creator's role is not allowed
+        if target_membership.user_role == UserRoleEnum.CREATOR:
+            raise ValueError("Modifying the creator's role is not allowed")
+
+        # 4. Admin permission limits
+        if current_role == UserRoleEnum.ADMIN:
+            # Admins cannot set others as admins
+            if req.role == UserRoleEnum.ADMIN.value:
+                raise ValueError("Admins do not have permission to set others as admins")
+            # Admins cannot modify the roles of other admins
+            if target_membership.user_role == UserRoleEnum.ADMIN:
+                raise ValueError("Admins do not have permission to modify the roles of other admins")
+
+        # 5. Check maximum limit when setting as an admin
+        if req.role == UserRoleEnum.ADMIN.value:
+            current_admins = await SpaceChannelMemberDao.async_get_members_by_space(
+                space_id=req.space_id, user_roles=[UserRoleEnum.ADMIN]
+            )
+            if len(current_admins) >= 5:
+                raise ValueError("Maximum number of administrators reached")
+
+        should_notify_admin_assignment = (
+                target_membership.user_role == UserRoleEnum.MEMBER
+                and req.role == UserRoleEnum.ADMIN.value
+        )
+
+        # 6. Update role
+        target_membership.user_role = UserRoleEnum(req.role)
+        await SpaceChannelMemberDao.update(target_membership)
+
+        if should_notify_admin_assignment:
+            await self._send_admin_assignment_notification(
+                space_id=req.space_id,
+                target_user_id=target_membership.user_id,
+            )
+
+        return True
+
+    async def remove_member(self, req: RemoveSpaceMemberRequest) -> bool:
+        """
+        Remove a member (hard delete).
+        Permissions:
+        - Creators can remove anyone (except themselves)
+        - Admins can remove regular members
+        - Admins cannot remove other admins or creators
+        """
+        # 1. Verify current user permissions
+        current_role = await self._require_write_permission(req.space_id)
+
+        # 2. Cannot remove yourself
+        if req.user_id == self.login_user.user_id:
+            raise ValueError("Cannot remove yourself")
+
+        # 3. Query target member
+        target_membership = await SpaceChannelMemberDao.async_find_member(
+            space_id=req.space_id, user_id=req.user_id
+        )
+        if not target_membership or not target_membership.status:
+            raise ValueError("The target user is not a member of this space")
+
+        # 4. Removing the creator is not allowed
+        if target_membership.user_role == UserRoleEnum.CREATOR:
+            raise ValueError("Removing the creator is not allowed")
+
+        # 5. Admins cannot remove other admins
+        if current_role == UserRoleEnum.ADMIN:
+            if target_membership.user_role == UserRoleEnum.ADMIN:
+                raise ValueError("Admins do not have permission to remove other admins")
+
+        # 6. Hard delete: remove from database
+        await SpaceChannelMemberDao.delete_space_member(space_id=req.space_id, user_id=req.user_id)
+
+        return True
+
+    async def _send_admin_assignment_notification(
+            self,
+            space_id: int,
+            target_user_id: int,
+    ) -> None:
+        """Notify a space member after being promoted from member to admin."""
+        space = await KnowledgeDao.aquery_by_id(space_id)
+        if not space or space.type != KnowledgeTypeEnum.SPACE.value:
+            raise SpaceNotFoundError()
+
+        user = await UserDao.aget_user(target_user_id)
+        target_user_name = user.user_name if user else f"User {target_user_id}"
+
+        content = [
+            {
+                "type": "user",
+                "content": f"@{target_user_name}",
+                "metadata": {"user_id": target_user_id},
+            },
+            {
+                "type": "system_text",
+                "content": SPACE_ADMIN_ASSIGNMENT_MESSAGE,
+            },
+            {
+                "type": "business_url",
+                "content": f"--{space.name}",
+                "metadata": {
+                    "business_type": "knowledge_space_id",
+                    "data": {"knowledge_space_id": str(space.id)},
+                },
+            },
+        ]
+
+        if not self.message_service:
+            return
+
+        await self.message_service.send_generic_notify(
+            sender=self.login_user.user_id,
+            receiver_user_ids=[target_user_id],
+            text=SPACE_ADMIN_ASSIGNMENT_MESSAGE,
+            content=content,
+        )
 
     async def _handle_file_folder_extra_info(self, res: List[KnowledgeFile]) -> List[Dict]:
         folder_ids = []
@@ -437,15 +602,37 @@ class KnowledgeSpaceService(BaseService):
 
     async def search_space_children(self, space_id: int, parent_id: Optional[int] = None, tag_ids: List[int] = None,
                                     keyword: str = None, page: int = 1, page_size: int = 20) -> Dict:
-        await self._require_read_permission(space_id)
+        space = await self._require_read_permission(space_id)
 
-        # todo 文件内容也支持关键词搜索
         filter_files = []
         if tag_ids:
             resources = await TagDao.aget_resources_by_tags(tag_ids, ResourceTypeEnum.SPACE_FILE)
             if not resources:
                 return {"total": 0, "page": page, "page_size": page_size, "data": []}
             filter_files = [int(one.resource_id) for one in resources]
+
+        extra_file_ids = []
+        if keyword:
+            es_vector = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge=space)
+            es_result = await es_vector.client.search(body={
+                "query": {
+                    "match_phrase": {"text": keyword}
+                },
+                "aggs": {
+                    "document_ids": {
+                        "terms": {
+                            "field": "metadata.document_id",
+                        }
+                    }
+                },
+                "size": 0,
+            })
+            aggregations = es_result.get("aggregations")
+            if aggregations:
+                for one in aggregations.get("document_ids", {}).get("buckets", []):
+                    extra_file_ids.append(one["key"])
+            if filter_files:
+                extra_file_ids = list(set(filter_files) & set(extra_file_ids))
 
         file_level_path = None
         if parent_id:
@@ -454,10 +641,12 @@ class KnowledgeSpaceService(BaseService):
                 raise NotFoundError()
             file_level_path = f"{parent_folder.file_level_path}/{parent_folder.id}"
 
-        res = await KnowledgeFileDao.aget_file_by_filters(space_id, keyword, file_ids=filter_files,
+        res = await KnowledgeFileDao.aget_file_by_filters(space_id, file_name=keyword, file_ids=filter_files,
+                                                          extra_file_ids=extra_file_ids,
                                                           file_level_path=file_level_path, order_by="file_type",
                                                           page=page, page_size=page_size)
         total = await KnowledgeFileDao.acount_file_by_filters(space_id, file_name=keyword, file_ids=filter_files,
+                                                              extra_file_ids=extra_file_ids,
                                                               file_level_path=file_level_path)
 
         data = await self._handle_file_folder_extra_info(res)
@@ -593,19 +782,30 @@ class KnowledgeSpaceService(BaseService):
             level = parent_folder.level + 1
             file_level_path = f"{parent_folder.file_level_path}/{parent_id}"
 
-        # todo max file size limit
+        default_file_size_limit = 40
+
+        roles = await UserRoleDao.aget_user_roles(db_knowledge.user_id)
+        if roles:
+            roles = await RoleDao.aget_role_by_ids([one.role_id for one in roles])
+            for one in roles:
+                default_file_size_limit = max(default_file_size_limit, one.knowledge_space_file_limit)
+        default_file_size_limit = default_file_size_limit * 1024 * 1024 * 1024
+        current_total_file_size = await SpaceFileDao.get_total_file_size(db_knowledge.id)
+
         file_split_rule = FileProcessBase(knowledge_id=knowledge_id)
         process_files = []
         failed_files = []
         preview_cache_keys = []
         for one in file_path:
+            if current_total_file_size > default_file_size_limit:
+                raise SpaceFileSizeLimitError()
             db_file = KnowledgeService.process_one_file(self.login_user, knowledge=db_knowledge,
                                                         file_info=KnowledgeFileOne(
                                                             file_path=one,
                                                             excel_rule=ExcelRule()
                                                         ), split_rule=file_split_rule.model_dump(),
                                                         file_kwargs={"level": level,
-                                                                     "file_level_path": file_level_path}, )
+                                                                     "file_level_path": file_level_path})
             if db_file.status != KnowledgeFileStatus.FAILED.value:
                 # Get a preview cache of this filekey
                 cache_key = KnowledgeUtils.get_preview_cache_key(
@@ -613,6 +813,7 @@ class KnowledgeSpaceService(BaseService):
                 )
                 preview_cache_keys.append(cache_key)
                 process_files.append(db_file)
+                current_total_file_size += db_file.file_size
             else:
                 failed_file_info = db_file.model_dump()
                 failed_file_info["file_path"] = one
@@ -729,6 +930,8 @@ class KnowledgeSpaceService(BaseService):
             await TagDao.add_tags(tag_ids, str(file_id), resource_type, self.login_user.user_id)
 
     async def batch_retry_failed_files(self, space_id: int, file_ids: List[int]):
+        from bisheng.worker import retry_knowledge_file_celery
+
         space = await KnowledgeDao.aquery_by_id(space_id)
         if not space:
             raise SpaceNotFoundError()
@@ -939,13 +1142,32 @@ class KnowledgeSpaceService(BaseService):
             user_role=UserRoleEnum.MEMBER,
             status=is_active,
         )
-        # todo 发送站内信
+
         await SpaceChannelMemberDao.async_insert_member(member)
+        await self._send_subscription_notification(space)
 
         return {
             "status": "subscribed" if is_active else "pending",
             "space_id": space_id,
         }
+
+    async def _send_subscription_notification(self, space: Knowledge):
+        if space.auth_type != AuthTypeEnum.APPROVAL or not self.message_service:
+            return
+        members = await SpaceChannelMemberDao.async_get_members_by_space(space.id,
+                                                                         user_roles=[UserRoleEnum.ADMIN,
+                                                                                     UserRoleEnum.CREATOR])
+        member_ids = [one.user_id for one in members]
+        await self.message_service.send_generic_approval(
+            applicant_user_id=self.login_user.user_id,
+            applicant_user_name=self.login_user.user_name,
+            action_code="request_knowledge_space",
+            business_type="knowledge_space_id",
+            business_id=str(space.id),
+            business_name=space.name,
+            button_action_code="request_knowledge_space",
+            receiver_user_ids=member_ids,
+        )
 
     async def unsubscribe_space(self, space_id: int) -> bool:
         space = await KnowledgeDao.aquery_by_id(space_id)

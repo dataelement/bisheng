@@ -110,6 +110,12 @@ class RoleDao(RoleBase):
             return session.query(Role).filter(Role.id.in_(role_ids)).all()
 
     @classmethod
+    async def aget_role_by_ids(cls, role_ids: List[int]) -> List[Role]:
+        statement = select(Role).where(Role.id.in_(role_ids))
+        async with get_async_db_session() as session:
+            return (await session.exec(statement)).all()
+
+    @classmethod
     def get_role_by_id(cls, role_id: int) -> Role:
         with get_sync_db_session() as session:
             return session.query(Role).filter(Role.id == role_id).first()

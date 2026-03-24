@@ -1,5 +1,5 @@
 import { Lock } from "lucide-react";
-import { Avatar, AvatarImage } from "~/components/ui/avatar";
+import { Avatar, AvatarImage, AvatarName } from "~/components/ui/avatar";
 import { Button } from "~/components/ui/Button";
 import { Card, CardContent } from "~/components/ui/Card";
 import { cn } from "~/utils";
@@ -32,7 +32,7 @@ export default function KnowledgeSquareCard({
             case "pending":
                 return { text: localize("pending") || "申请中", variant: "secondary" as const, disabled: true };
             default: {
-                const isPrivate = space.visibility === VisibilityType.PRIVATE;
+                const isPrivate = space.visibility !== VisibilityType.PUBLIC;
                 return {
                     text: isPrivate ? localize("request") || "申请" : localize("subscribe") || "加入",
                     variant: "outline" as const,
@@ -43,7 +43,7 @@ export default function KnowledgeSquareCard({
     };
 
     const buttonConfig = getButtonConfig();
-    const isPrivateOrLocked = space.visibility === VisibilityType.PRIVATE;
+    const isPrivateOrLocked = space.visibility !== VisibilityType.PUBLIC;
 
     const creatorAvatar = space.icon;
 
@@ -90,17 +90,12 @@ export default function KnowledgeSquareCard({
 
                 <div className="flex items-center gap-2.5 text-[12px] text-[#86909C]">
                     <div className="flex items-center gap-1.5">
-                        {creatorAvatar ? (
-                            <div className="flex -space-x-2">
-                                <Avatar key={creatorAvatar} className="border border-white h-6 w-6">
-                                    <AvatarImage src={creatorAvatar} alt={space.creator} />
-                                </Avatar>
-                            </div>
-                        ) : (
-                            <Avatar className="border border-white h-6 w-6">
-                                <AvatarImage src="/default-avatar.png" alt={space.creator} />
-                            </Avatar>
-                        )}
+                        <Avatar className="border border-white h-6 w-6">
+                            {creatorAvatar ? (
+                                <AvatarImage src={creatorAvatar} alt={space.creator} />
+                            ) : null}
+                            <AvatarName name={space.creator} className="text-xs" />
+                        </Avatar>
                     </div>
 
                     <span>

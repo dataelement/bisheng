@@ -2,14 +2,15 @@ import copy
 import logging
 from typing import List, Optional, Any, Dict
 
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.message import (
     MessageNotFoundError,
     MessagePermissionDeniedError,
     MessageAlreadyApprovedError,
 )
 from bisheng.message.domain.models.inbox_message import InboxMessage, MessageTypeEnum, MessageStatusEnum
-from bisheng.message.domain.repositories.interfaces.inbox_message_repository import InboxMessageRepository
 from bisheng.message.domain.repositories.interfaces.inbox_message_read_repository import InboxMessageReadRepository
+from bisheng.message.domain.repositories.interfaces.inbox_message_repository import InboxMessageRepository
 from bisheng.message.domain.schemas.message_schema import (
     MessageItemResponse,
     MessagePageResponse,
@@ -18,7 +19,6 @@ from bisheng.message.domain.schemas.message_schema import (
     TabTypeEnum,
 )
 from bisheng.message.domain.services.approval_handler import ApprovalHandler
-from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.user.domain.models.user import UserDao
 
 logger = logging.getLogger(__name__)
@@ -28,10 +28,10 @@ class MessageService:
     """Service layer for in-app messaging (inbox) operations."""
 
     def __init__(
-        self,
-        message_repository: 'InboxMessageRepository',
-        message_read_repository: 'InboxMessageReadRepository',
-        approval_handlers: Optional[List[ApprovalHandler]] = None,
+            self,
+            message_repository: 'InboxMessageRepository',
+            message_read_repository: 'InboxMessageReadRepository',
+            approval_handlers: Optional[List[ApprovalHandler]] = None,
     ):
         self.message_repository = message_repository
         self.message_read_repository = message_read_repository
@@ -44,13 +44,13 @@ class MessageService:
             self._handler_map[action_code] = handler
 
     async def send_message(
-        self,
-        content: List[Dict[str, Any]],
-        sender: int,
-        message_type: MessageTypeEnum,
-        receiver: List[int],
-        status: MessageStatusEnum = MessageStatusEnum.WAIT_APPROVE,
-        action_code: Optional[str] = None,
+            self,
+            content: List[Dict[str, Any]],
+            sender: int,
+            message_type: MessageTypeEnum,
+            receiver: List[int],
+            status: MessageStatusEnum = MessageStatusEnum.WAIT_APPROVE,
+            action_code: Optional[str] = None,
     ) -> InboxMessage:
         """Create and save a new inbox message."""
         message = InboxMessage(
@@ -69,13 +69,13 @@ class MessageService:
         return saved_message
 
     async def get_message_list(
-        self,
-        login_user: UserPayload,
-        tab: TabTypeEnum = TabTypeEnum.ALL,
-        only_unread: bool = False,
-        keyword: Optional[str] = None,
-        page: int = 1,
-        page_size: int = 20,
+            self,
+            login_user: UserPayload,
+            tab: TabTypeEnum = TabTypeEnum.ALL,
+            only_unread: bool = False,
+            keyword: Optional[str] = None,
+            page: int = 1,
+            page_size: int = 20,
     ) -> MessagePageResponse:
         """Get paginated message list for the current user with read status annotation."""
         # 1. Get read message IDs for this user
@@ -174,10 +174,10 @@ class MessageService:
         return await self.message_read_repository.batch_mark_as_read(unread_ids, login_user.user_id)
 
     async def handle_approval(
-        self,
-        message_id: int,
-        action: ApprovalActionEnum,
-        login_user: UserPayload,
+            self,
+            message_id: int,
+            action: ApprovalActionEnum,
+            login_user: UserPayload,
     ) -> InboxMessage:
         """
         Handle approval action (agree/reject) on an approval message.
@@ -249,8 +249,8 @@ class MessageService:
 
     @staticmethod
     def _update_content_after_approval(
-        content: List[Dict[str, Any]],
-        action: ApprovalActionEnum,
+            content: List[Dict[str, Any]],
+            action: ApprovalActionEnum,
     ) -> List[Dict[str, Any]]:
         """
         Update message content after approval action.
@@ -282,30 +282,53 @@ class MessageService:
 
     @staticmethod
     def build_generic_notify_content(
-        text: str,
-        content_type: str = "text",
+            text: str,
+            content_type: str = "text",
+            applicant_user_id: int = None,
+            applicant_user_name: str = None,
+            business_name: str = None,
     ) -> List[Dict[str, Any]]:
         """
         Build generic notification content.
         """
         return [
             {
+                "type": "user",
+                "content": f"@{applicant_user_name}",
+                "metadata": {"user_id": applicant_user_id},
+            },
+            {
                 "type": content_type,
                 "content": text,
+            },
+            {
+                "type": "text",
+                "content": f" -- {business_name}",
             }
         ]
 
     async def send_generic_notify(
-        self,
-        sender: int,
-        text: str,
-        receiver_user_ids: List[int],
-        content_type: str = "text",
+            self,
+            sender: int,
+            receiver_user_ids: List[int],
+            text: str,
+            content_type: str = "text",
+            applicant_user_id: int = None,
+            applicant_user_name: str = None,
+            business_name: str = None,
+            content: Optional[List[Dict[str, Any]]] = None,
     ) -> InboxMessage:
         """
         Send a generic notification message to specific receivers.
         """
-        content = self.build_generic_notify_content(text, content_type=content_type)
+        if content is None:
+            content = self.build_generic_notify_content(
+                text=text,
+                content_type=content_type,
+                applicant_user_id=applicant_user_id,
+                applicant_user_name=applicant_user_name,
+                business_name=business_name,
+            )
 
         message = await self.send_message(
             content=content,
@@ -318,14 +341,14 @@ class MessageService:
 
     @staticmethod
     def build_generic_approval_content(
-        applicant_user_id: int,
-        applicant_user_name: str,
-        action_code: str,
-        business_type: str,
-        business_id: str,
-        business_name: str,
-        button_action_code: str,
-        approval_message_id: Optional[int] = None,
+            applicant_user_id: int,
+            applicant_user_name: str,
+            action_code: str,
+            business_type: str,
+            business_id: str,
+            business_name: str,
+            button_action_code: str,
+            approval_message_id: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         """
         Build the generic message content structure for a business approval request.
@@ -360,15 +383,15 @@ class MessageService:
         return content
 
     async def send_generic_approval(
-        self,
-        applicant_user_id: int,
-        applicant_user_name: str,
-        action_code: str,
-        business_type: str,
-        business_id: str,
-        business_name: str,
-        button_action_code: str,
-        receiver_user_ids: List[int],
+            self,
+            applicant_user_id: int,
+            applicant_user_name: str,
+            action_code: str,
+            business_type: str,
+            business_id: str,
+            business_name: str,
+            button_action_code: str,
+            receiver_user_ids: List[int],
     ) -> InboxMessage:
         """
         Send a generic approval notification to specific receivers.
@@ -433,9 +456,9 @@ class MessageService:
         return ""
 
     async def batch_approve_channel_subscription_messages(
-        self,
-        channel_id: str,
-        operator_user_id: int,
+            self,
+            channel_id: str,
+            operator_user_id: int,
     ) -> int:
         """
         Batch approve all pending channel subscription messages for a specific channel.

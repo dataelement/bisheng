@@ -18,6 +18,8 @@ import { getSSEUrl } from "~/api/chatApi";
 export interface SSESubmission {
     payload: Record<string, any>;
     userMessage: ChatMessage;
+    /** Optional SSE endpoint URL override. Defaults to workstation SSE URL. */
+    sseUrl?: string;
     onCreated: (conversationId: string, userMsg: ChatMessage) => void;
     onMessage: (text: string, messageId: string) => void;
     onFinal: (data: any) => void;
@@ -52,7 +54,7 @@ export default function useAiChatSSE(submission: SSESubmission | null) {
         let responseText = "";
         let currentMessageId = "";
 
-        const sseUrl = getSSEUrl();
+        const sseUrl = submission.sseUrl || getSSEUrl();
 
         const sse = new SSE(sseUrl, {
             payload: JSON.stringify(payload),

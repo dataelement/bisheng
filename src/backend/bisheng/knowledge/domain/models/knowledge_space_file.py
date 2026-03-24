@@ -4,7 +4,8 @@ from sqlalchemy import func, or_, text
 from sqlmodel import select, col
 
 from bisheng.core.database import get_async_db_session
-from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao, KnowledgeFile, KnowledgeFileStatus
+from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao, KnowledgeFile, KnowledgeFileStatus, \
+    FileType
 
 
 class SpaceFileDao(KnowledgeFileDao):
@@ -145,7 +146,7 @@ class SpaceFileDao(KnowledgeFileDao):
             folder_prefix = func.concat(exact_path, '/', KnowledgeFile.id)
             descendant_exists = exists().where(
                 Descendant.knowledge_id == knowledge_id,
-                Descendant.file_type == 1,
+                Descendant.file_type == FileType.FILE.value,
                 Descendant.status == file_status.value,
                 or_(
                     Descendant.file_level_path == folder_prefix,
@@ -153,11 +154,21 @@ class SpaceFileDao(KnowledgeFileDao):
                 )
             )
             status_filter = or_(
-                and_(KnowledgeFile.file_type == 1, KnowledgeFile.status == file_status.value),
-                and_(KnowledgeFile.file_type == 0, descendant_exists)
+                and_(KnowledgeFile.file_type == FileType.FILE.value, KnowledgeFile.status == file_status.value),
+                and_(KnowledgeFile.file_type == FileType.DIR.value, descendant_exists)
             )
             filters.append(status_filter)
 
         statement = select(func.count(KnowledgeFile.id)).where(*filters)
         async with get_async_db_session() as session:
             return await session.scalar(statement)
+
+    @classmethod
+    async def get_total_file_size(cls, knowledge_id: int) -> int:
+        """ Get total file size for all files in the knowledge space (excluding folders) """
+        statement = select(func.sum(KnowledgeFile.file_size)).where(
+            KnowledgeFile.knowledge_id == knowledge_id,
+            KnowledgeFile.file_type == 1
+        )
+        async with get_async_db_session() as session:
+            return await session.scalar(statement) or 0

@@ -10,6 +10,7 @@ from bisheng.knowledge.domain.repositories.implementations.knowledge_file_reposi
 from bisheng.knowledge.domain.repositories.implementations.knowledge_repository_impl import KnowledgeRepositoryImpl
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository import KnowledgeFileRepository
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_repository import KnowledgeRepository
+from bisheng.message.api.dependencies import get_message_service as _get_message_service
 
 # Service imports are deferred to avoid circular imports
 if TYPE_CHECKING:
@@ -56,13 +57,17 @@ async def get_knowledge_file_service(
     )
 
 
-def get_knowledge_space_service(
+async def get_knowledge_space_service(
         request: Request,
+        session: AsyncSession = Depends(get_db_session),
         login_user: UserPayload = Depends(UserPayload.get_login_user),
 ) -> 'KnowledgeSpaceService':
     """Get KnowledgeSpaceService instance, bound to the current request and login user"""
     from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService as _SvcClass
-    return _SvcClass(request=request, login_user=login_user)
+    message_service = await _get_message_service(session)
+    service = _SvcClass(request=request, login_user=login_user)
+    service.message_service = message_service
+    return service
 
 
 def get_knowledge_space_chat_service(

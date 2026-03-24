@@ -41,7 +41,8 @@ export enum FileType {
 /** Space visibility / auth type */
 export enum VisibilityType {
     PUBLIC = "public",
-    PRIVATE = "private"
+    PRIVATE = "private",
+    APPROVAL = "approval"
 }
 
 /** Sort field */
@@ -101,6 +102,15 @@ export interface SpaceTag {
     name: string;
 }
 
+/** Space member entity used by member-management dialog */
+export interface SpaceMember {
+    user_id: number;
+    user_name: string;
+    user_avatar?: string | null;
+    role: "creator" | "admin" | "member";
+    groups?: string[];
+}
+
 /** File or folder item returned from the space children API */
 export interface FileTag {
     id: number;
@@ -153,6 +163,8 @@ interface RawKnowledgeSpace {
     update_time?: string;
     tags?: string[];
     is_released?: boolean;
+    is_pending?: boolean;
+    is_followed?: boolean;
 }
 
 interface RawSpaceChild {
@@ -234,6 +246,8 @@ function mapSpace(raw: RawKnowledgeSpace): KnowledgeSpace {
         updatedAt: raw.update_time || "",
         tags: raw.tags || [],
         isReleased: raw.is_released ?? false,
+        isPending: raw.is_pending ?? false,
+        isFollowed: raw.is_followed ?? false,
     };
 }
 
@@ -478,12 +492,11 @@ export async function getSquareSpacesApi(params?: {
             const authTypeVal = rawAny?.auth_type ?? itemAny?.auth_type ?? rawAny?.authType ?? itemAny?.authType;
             const visibility = (authTypeVal as VisibilityType) || VisibilityType.PRIVATE;
 
-            // status rules: first is_pending, then is_released
+            // status rules in square: first is_pending, then is_followed
             const isPending = Boolean(itemAny?.is_pending ?? rawAny?.is_pending);
+            const isFollowed = Boolean(itemAny?.is_followed ?? rawAny?.is_followed);
             const isReleased = Boolean(rawAny?.is_released ?? itemAny?.is_released);
-            const squareStatus: "join" | "joined" | "pending" = isPending ? "pending" : isReleased ? "joined" : "join";
-
-            const isFollowed = Boolean(itemAny?.is_followed ?? rawAny?.is_followed ?? (isReleased && !isPending));
+            const squareStatus: "join" | "joined" | "pending" = isPending ? "pending" : isFollowed ? "joined" : "join";
 
             const fileNum = itemAny?.file_num ?? rawAny?.file_num ?? rawAny?.fileNum ?? itemAny?.fileNum ?? 0;
             const followerNum =
@@ -571,8 +584,58 @@ export async function getSpaceInfoApi(space_id: string): Promise<KnowledgeSpace>
 /**
  * Get members of a space
  */
-export async function getSpaceMembersApi(space_id: string): Promise<unknown[]> {
-    return request.get(`/api/v1/knowledge/space/${space_id}/members`);
+export async function getSpaceMembersApi(space_id: string): Promise<{ data: SpaceMember[]; total: number }> {
+    const res: any = await request.get(`/api/v1/knowledge/space/${space_id}/members`);
+    // Compatible response variants:
+    // 1) { status_code, data: { data: [...], total } }
+    // 2) { status_code, data: [...] }
+    // 3) { data: [...] }
+    // 4) [...]
+    const wrapper = res ?? {};
+    const payload = wrapper?.data ?? wrapper;
+    const list = Array.isArray(payload)
+        ? payload
+        : Array.isArray(payload?.data)
+            ? payload.data
+            : Array.isArray(payload?.members)
+                ? payload.members
+                : [];
+
+    const mapped: SpaceMember[] = list.map((m: any) => ({
+        user_id: Number(m?.user_id ?? 0),
+        user_name: String(m?.user_name ?? ""),
+        user_avatar: m?.user_avatar ?? m?.avatar ?? null,
+        role: String(m?.user_role ?? m?.role ?? "member") as SpaceMember["role"],
+        groups: (m?.user_groups ?? m?.groups ?? [])
+            .map((g: any) => String(g?.name ?? g?.group_name ?? g))
+            .filter(Boolean),
+    }));
+
+    return {
+        data: mapped,
+        total: Number(payload?.total ?? wrapper?.total ?? mapped.length ?? 0),
+    };
+}
+
+/**
+ * Update space member role
+ * PUT /api/v1/knowledge/space/{space_id}/members/role
+ */
+export async function updateSpaceMemberRoleApi(space_id: string, body: {
+    user_id: number;
+    role: "admin" | "member";
+}): Promise<void> {
+    await request.put(`/api/v1/knowledge/space/${space_id}/members/role`, body);
+}
+
+/**
+ * Delete space member
+ * DELETE /api/v1/knowledge/space/{space_id}/members
+ */
+export async function removeSpaceMemberApi(space_id: string, user_id: number): Promise<void> {
+    await request.deleteWithOptions(`/api/v1/knowledge/space/${space_id}/members`, {
+        data: { user_id },
+    });
 }
 
 /**
@@ -818,6 +881,22 @@ export async function addFilesApi(
 }
 
 /**
+ * Add article(s) to a knowledge space folder
+ * POST /api/v1/channel/manager/articles/add_to_knowledge_space
+ */
+export async function addArticleToKnowledgeApi(
+    knowledge_id: string,
+    article_ids: string[],
+    parent_id?: string | null
+): Promise<void> {
+    await request.post(`/api/v1/channel/manager/articles/add_to_knowledge_space`, {
+        knowledge_id: Number(knowledge_id),
+        article_ids,
+        parent_id: parent_id ? Number(parent_id) : null,
+    });
+}
+
+/**
  * Rename a file
  */
 export async function renameFileApi(
@@ -856,8 +935,7 @@ export async function batchDownloadApi(
     space_id: string,
     data: { file_ids?: number[]; folder_ids?: number[] }
 ): Promise<string> {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const res = await request.post<any>(
+    const res: any = await request.post(
         `/api/v1/knowledge/space/${space_id}/files/batch-download`,
         data
     );

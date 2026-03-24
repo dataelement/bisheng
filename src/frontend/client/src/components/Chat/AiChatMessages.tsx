@@ -20,6 +20,8 @@ interface AiChatMessagesProps {
     isStreaming?: boolean;
     presetQuestions?: string[];
     shareToken?: string;
+    /** When true, hides the share button in the header */
+    hideShare?: boolean;
     onPresetClick?: (question: string) => void;
     onRegenerate?: (parentMessageId: string) => void;
 }
@@ -104,6 +106,7 @@ export default function AiChatMessages({
     isStreaming,
     presetQuestions = [],
     shareToken = '',
+    hideShare = false,
     onPresetClick,
     onRegenerate,
 }: AiChatMessagesProps) {
@@ -210,8 +213,8 @@ export default function AiChatMessages({
         <div className="flex-1 overflow-hidden relative">
             <HeaderTitle
                 readOnly={!!shareToken}
+                hideShare={hideShare}
                 conversation={{ title: tree[0]?.flow_name || title, flowId: "", conversationId, flowType: 15 }}
-                logo={null}
             />
             <div
                 ref={scrollRef}

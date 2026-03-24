@@ -30,6 +30,7 @@ interface FileCardProps {
     onValidateName?: (newName: string) => string | null;
     onCancelCreate?: () => void;
     disableClickNavigate?: boolean;
+    hideSelectionCheckbox?: boolean;
 }
 
 export function FileCard({
@@ -47,6 +48,7 @@ export function FileCard({
     onValidateName,
     onCancelCreate,
     disableClickNavigate = false,
+    hideSelectionCheckbox = false,
 }: FileCardProps) {
     const isCreating = !!file.isCreating;
     const [hovered, setHovered] = useState(false);
@@ -166,7 +168,7 @@ export function FileCard({
                     <FileIconRenderer file={file} isFolder={isFolder} />
 
                     {/* Hover 时显示的操作 */}
-                    {(hovered || isSelected) && (
+                    {!hideSelectionCheckbox && (hovered || isSelected) && (
                         <div className="absolute top-2 left-2 z-10">
                             <Checkbox className={isSelected ? "border-primary" : "border-gray-400"} checked={isSelected} onCheckedChange={(checked) => onSelect(!!checked)} onClick={(e) => e.stopPropagation()} />
                         </div>

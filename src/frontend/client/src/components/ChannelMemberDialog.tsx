@@ -288,7 +288,7 @@ export function ChannelMemberDialog({
                 <DialogContent className="max-w-[760px] p-0 gap-0 rounded-[10px]" close={true}>
                     <DialogHeader className="px-5 pt-5 pb-3 border-b border-[#E5E6EB]">
                         <DialogTitle className="text-[16px] text-[#1D2129]">
-                            {localize("management_member")}
+                            {localize("com_subscription.management_member")}
                         </DialogTitle>
                     </DialogHeader>
 
@@ -298,7 +298,7 @@ export function ChannelMemberDialog({
                             <input
                                 value={keyword}
                                 onChange={(e) => setKeyword(e.target.value)}
-                                placeholder={localize("search_user_placeholder") || "请输入用户名进行搜索"}
+                                placeholder={localize("com_subscription.search_user_placeholder") || "请输入用户名进行搜索"}
                                 className="w-full h-9 pl-9 pr-3 rounded border border-[#E5E6EB] text-[14px] focus:outline-none focus:border-[#165DFF]"
                             />
                         </div>
@@ -310,7 +310,7 @@ export function ChannelMemberDialog({
                                 </div>
                             ) : members.length === 0 ? (
                                 <div className="h-full flex items-center justify-center text-[13px] text-[#86909C]">
-                                    {localize("nofound_mathcing_member")}
+                                    {localize("com_subscription.nofound_mathcing_member")}
                                 </div>
                             ) : (
                                 members.map((m) => (
@@ -344,7 +344,7 @@ export function ChannelMemberDialog({
 
                     <div className="h-11 px-5 border-t border-[#E5E6EB] flex items-center justify-between text-[12px] text-[#4E5969]">
                         <span className="text-[#86909C]">
-                            {localize("total_members") || "总成员数"}：
+                            {localize("com_subscription.total_members") || "总成员数"}：
                             <span className="text-[#165DFF] ml-1">{total}</span>
                         </span>
                         <div className="flex items-center gap-1.5">
@@ -393,12 +393,12 @@ export function ChannelMemberDialog({
                 <AlertDialogContent className="max-w-sm">
                     <AlertDialogHeader>
                         <AlertDialogTitle className="text-[16px]">
-                            {localize("remove_member")}
+                            {localize("com_subscription.remove_member")}
                         </AlertDialogTitle>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                         <AlertDialogCancel onClick={() => setRemoveTarget(null)}>
-                            {localize("cancel")}
+                            {localize("com_subscription.cancel")}
                         </AlertDialogCancel>
                         <AlertDialogAction
                             className={cn("bg-[#F53F3F] hover:bg-[#F76965]")}
@@ -407,7 +407,7 @@ export function ChannelMemberDialog({
                                 setRemoveTarget(null);
                             }}
                         >
-                            {localize("confirm_removal")}
+                            {localize("com_subscription.confirm_removal")}
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>

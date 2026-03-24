@@ -29,6 +29,7 @@ interface KnowledgeSpaceItemProps {
     onLeave: (id: string) => void;
     onPin: (id: string, pinned: boolean) => void;
     onSettings?: (space: KnowledgeSpace) => void;
+    onManageMembers?: (space: KnowledgeSpace) => void;
 }
 
 export default function KnowledgeSpaceItem({
@@ -41,6 +42,7 @@ export default function KnowledgeSpaceItem({
     onLeave,
     onPin,
     onSettings,
+    onManageMembers,
 }: KnowledgeSpaceItemProps) {
     const [isEditing, setIsEditing] = useState(false);
     const [menuOpen, setMenuOpen] = useState(false);
@@ -134,7 +136,10 @@ export default function KnowledgeSpaceItem({
                             <span className="">空间设置</span>
                         </DropdownMenuItem>}
                         {(type === "created" || space.role === SpaceRole.ADMIN) && (
-                            <DropdownMenuItem className="py-2 px-0 cursor-pointer focus:bg-[#f2f3f5]">
+                            <DropdownMenuItem
+                                className="py-2 px-0 cursor-pointer focus:bg-[#f2f3f5]"
+                                onClick={() => onManageMembers?.(space)}
+                            >
                                 <Users className="size-4 mr-2 text-[#4e5969]" />
                                 <span className="text-[14px] text-[#1d2129]">成员管理</span>
                             </DropdownMenuItem>

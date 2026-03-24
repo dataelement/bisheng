@@ -56,7 +56,7 @@ export function UserPopMenu() {
         <>
             <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
                 <DropdownMenuTrigger asChild>
-                    <div className="relative p-1 cursor-pointer outline-none active:scale-95 transition-transform">
+                    <div className="relative size-10 cursor-pointer outline-none active:scale-95 transition-transform">
                         <Avatar className="size-10 hover:opacity-90 transition-opacity">
                             {avatarUrl ? (
                                 <AvatarImage src={avatarUrl} alt="User" />
@@ -68,7 +68,7 @@ export function UserPopMenu() {
                         </Avatar>
                         {/* 头像右上角红点 */}
                         {unreadCount > 0 && (
-                            <div className="absolute -top-0 -right-0 size-2.5 bg-[#f53f3f] rounded-full border-2 border-white" />
+                            <div className="absolute top-0 right-0 size-2.5 bg-[#f53f3f] rounded-full ring-2 ring-white" />
                         )}
                     </div>
                 </DropdownMenuTrigger>

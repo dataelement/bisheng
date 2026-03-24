@@ -1,12 +1,19 @@
 import { useLocalize } from "~/hooks";
-import { BookCopyIcon, ChevronDown, ChevronRight, FolderClosedIcon, FolderIcon, LibraryIcon, Loader2, Plus, Search, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { BookCopyIcon, ChevronDown, ChevronRight, FolderClosedIcon, Loader2, Plus, Search, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { NotificationSeverity } from "~/common";
 import { Input } from "~/components";
 import { Button } from "~/components/ui/Button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "~/components/ui/Dialog";
 import { useToastContext } from "~/Providers";
 import { generateUUID } from "~/utils";
+import {
+    getMineSpacesApi,
+    getSpaceChildrenApi,
+    createFolderApi,
+    addArticleToKnowledgeApi,
+    FileType,
+} from "~/api/knowledge";
 
 // ─── Types ─────────────────────────────────────────────────────────────
 
@@ -14,49 +21,26 @@ export interface KnowledgeNode {
     id: string;
     name: string;
     type: "space" | "folder";
-    level: number;       // 1 = 知识空间, 2+ = 文件夹
+    level: number;       // 1 = knowledge space, 2+ = folder
     parentId: string | null;
+    /** The space_id this node belongs to (for API calls) */
+    spaceId: string;
     children?: KnowledgeNode[];
+    /** Whether children have been loaded from the API */
+    childrenLoaded?: boolean;
+    /** Whether children are currently loading */
+    childrenLoading?: boolean;
 }
 
 interface AddToKnowledgeModalProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
+    /** Article ID to add to the selected knowledge space/folder */
+    articleId?: string | number;
 }
 
-// ─── Mock Data ──────────────────────────────────────────────────────────
-
-const MOCK_SPACES: KnowledgeNode[] = [
-    {
-        id: "space-1", name: "政策信息", type: "space", level: 1, parentId: null,
-        children: [
-            { id: "folder-1-1", name: "人力政策文件", type: "folder", level: 2, parentId: "space-1", children: [] },
-            { id: "folder-1-2", name: "财务政策文件", type: "folder", level: 2, parentId: "space-1", children: [] },
-        ]
-    },
-    {
-        id: "space-2", name: "财经报告", type: "space", level: 1, parentId: null,
-        children: [
-            { id: "folder-2-1", name: "进出口数量", type: "folder", level: 2, parentId: "space-2", children: [] },
-            {
-                id: "folder-2-2", name: "综合报告", type: "folder", level: 2, parentId: "space-2",
-                children: [
-                    { id: "folder-2-2-1", name: "海关", type: "folder", level: 3, parentId: "folder-2-2", children: [] },
-                    { id: "folder-2-2-2", name: "运输", type: "folder", level: 3, parentId: "folder-2-2", children: [] },
-                ]
-            },
-        ]
-    },
-    {
-        id: "space-3", name: "AI产品", type: "space", level: 1, parentId: null,
-        children: [
-            { id: "folder-3-1", name: "国内产品", type: "folder", level: 2, parentId: "space-3", children: [] },
-            { id: "folder-3-2", name: "海外产品", type: "folder", level: 2, parentId: "space-3", children: [] },
-        ]
-    },
-];
-
 // ─── Helpers ─────────────────────────────────────────────────────────────
+
 /** Deep copy tree */
 function cloneTree(nodes: KnowledgeNode[]): KnowledgeNode[] {
     return nodes.map(n => ({ ...n, children: n.children ? cloneTree(n.children) : [] }));
@@ -85,6 +69,18 @@ function filterTree(nodes: KnowledgeNode[], keyword: string): KnowledgeNode[] {
         }
         return acc;
     }, []);
+}
+
+/** Find a node by id recursively */
+function findNode(nodes: KnowledgeNode[], id: string): KnowledgeNode | undefined {
+    for (const n of nodes) {
+        if (n.id === id) return n;
+        if (n.children) {
+            const found = findNode(n.children, id);
+            if (found) return found;
+        }
+    }
+    return undefined;
 }
 
 // ─── Inline Editing Input ─────────────────────────────────────────────
@@ -151,7 +147,7 @@ interface TreeNodeProps {
     editingId: string | null;
     onSelect: (id: string) => void;
     onToggle: (id: string) => void;
-    onAddFolder: (parentId: string, parentLevel: number) => void;
+    onAddFolder: (parentId: string, parentLevel: number, spaceId: string) => void;
     onSaveEdit: (id: string, name: string) => void;
     onCancelEdit: () => void;
     searchMode: boolean;
@@ -165,7 +161,8 @@ function TreeNode({
     const isExpanded = searchMode || expandedIds.has(node.id);
     const isSelected = selectedId === node.id;
     const isEditing = editingId === node.id;
-    const hasChildren = (node.children?.length ?? 0) > 0;
+    // Show expand arrow for spaces (always expandable) or folders with known children
+    const hasOrMayHaveChildren = node.type === "space" || (node.children?.length ?? 0) > 0 || !node.childrenLoaded;
     const indent = (node.level - 1) * 16;
 
     const { showToast } = useToastContext();
@@ -183,9 +180,11 @@ function TreeNode({
                     className="shrink-0 size-4 flex items-center justify-center text-[#86909c]"
                     onClick={e => { e.stopPropagation(); onToggle(node.id); }}
                 >
-                    {hasChildren
-                        ? (isExpanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />)
-                        : <span className="size-3.5" />}
+                    {node.childrenLoading
+                        ? <Loader2 className="size-3 animate-spin" />
+                        : hasOrMayHaveChildren
+                            ? (isExpanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />)
+                            : <span className="size-3.5" />}
                 </span>
 
                 {/* Icon */}
@@ -217,7 +216,7 @@ function TreeNode({
                     <button
                         className="shrink-0 opacity-0 group-hover:opacity-100 size-4 flex items-center justify-center rounded hover:bg-[#dce4ff] text-[#86909c] hover:text-primary transition-all"
                         title={localize("com_subscription.new_subfolder")}
-                        onClick={e => { e.stopPropagation(); onAddFolder(node.id, node.level); }}
+                        onClick={e => { e.stopPropagation(); onAddFolder(node.id, node.level, node.spaceId); }}
                     >
                         <Plus className="size-4 text-primary" />
                     </button>
@@ -251,78 +250,194 @@ function TreeNode({
 
 // ─── Main Modal ──────────────────────────────────────────────────────────
 
-export function AddToKnowledgeModal({ open, onOpenChange }: AddToKnowledgeModalProps) {
+export function AddToKnowledgeModal({ open, onOpenChange, articleId }: AddToKnowledgeModalProps) {
     const localize = useLocalize();
     const { showToast } = useToastContext();
-    const [tree, setTree] = useState<KnowledgeNode[]>(() => cloneTree(MOCK_SPACES));
+    const [tree, setTree] = useState<KnowledgeNode[]>([]);
     const [search, setSearch] = useState("");
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
     const [editingId, setEditingId] = useState<string | null>(null);
     const [isConfirming, setIsConfirming] = useState(false);
+    const [spacesLoading, setSpacesLoading] = useState(false);
 
     // Filtered tree by search
     const displayTree = search.trim() ? filterTree(tree, search) : tree;
     const isSearchMode = !!search.trim();
 
-    const toggleExpand = (id: string) => {
+    // ─── Load spaces list on open ──────────────────────────────
+    useEffect(() => {
+        if (!open) return;
+        setSpacesLoading(true);
+        getMineSpacesApi()
+            .then((spaces) => {
+                const nodes: KnowledgeNode[] = spaces.map(s => ({
+                    id: s.id,
+                    name: s.name,
+                    type: "space" as const,
+                    level: 1,
+                    parentId: null,
+                    spaceId: s.id,
+                    children: [],
+                    childrenLoaded: false,
+                }));
+                setTree(nodes);
+            })
+            .catch(() => showToast({ message: "加载空间列表失败", severity: NotificationSeverity.ERROR }))
+            .finally(() => setSpacesLoading(false));
+    }, [open]);
+
+    // ─── Lazy-load children on expand ─────────────────────────
+    const loadChildren = useCallback(async (nodeId: string) => {
+        const node = findNode(tree, nodeId);
+        if (!node || node.childrenLoaded || node.childrenLoading) return;
+
+        // Mark loading
+        setTree(prev => mapTree(prev, n => n.id === nodeId, n => ({ ...n, childrenLoading: true })));
+
+        try {
+            const parentId = node.type === "space" ? undefined : nodeId;
+            const res = await getSpaceChildrenApi({
+                space_id: node.spaceId,
+                parent_id: parentId,
+                page_size: 200,
+            });
+
+            // Only keep folders for the tree
+            const folderChildren: KnowledgeNode[] = res.data
+                .filter(f => f.type === FileType.FOLDER)
+                .map(f => ({
+                    id: f.id,
+                    name: f.name,
+                    type: "folder" as const,
+                    level: node.level + 1,
+                    parentId: nodeId,
+                    spaceId: node.spaceId,
+                    children: [],
+                    childrenLoaded: false,
+                }));
+
+            setTree(prev => mapTree(prev, n => n.id === nodeId, n => ({
+                ...n,
+                // Merge: keep any locally-created "new-folder-*" nodes AND add API results
+                children: [
+                    ...(n.children?.filter(c => c.id.startsWith("new-folder-")) ?? []),
+                    ...folderChildren,
+                ],
+                childrenLoaded: true,
+                childrenLoading: false,
+            })));
+        } catch {
+            setTree(prev => mapTree(prev, n => n.id === nodeId, n => ({ ...n, childrenLoading: false })));
+        }
+    }, [tree]);
+
+    const toggleExpand = useCallback((id: string) => {
         setExpandedIds(prev => {
             const next = new Set(prev);
-            next.has(id) ? next.delete(id) : next.add(id);
+            if (next.has(id)) {
+                next.delete(id);
+            } else {
+                next.add(id);
+                // Trigger lazy-load
+                loadChildren(id);
+            }
             return next;
         });
-    };
+    }, [loadChildren]);
 
     const handleSelect = (id: string) => {
         if (editingId) return;
         setSelectedId(id);
     };
 
-    /** New folder */
-    const handleAddFolder = (parentId: string, parentLevel: number) => {
+    /** Create folder via API */
+    const handleAddFolder = async (parentId: string, parentLevel: number, spaceId: string) => {
         if (parentLevel >= 10) {
             showToast({ message: "Folder limit 10 levels reached", severity: NotificationSeverity.WARNING });
             return;
         }
         const code = generateUUID(12).toLocaleUpperCase()
-        const newId = `new-folder-${Date.now()}`;
-        const newNode: KnowledgeNode = {
-            id: newId,
-            name: localize("com_subscription.unnamed_folder_code", { code }),
+        const tempId = `new-folder-${Date.now()}`;
+        const defaultName = localize("com_subscription.unnamed_folder_code", { code });
+
+        // Optimistic UI: insert a temporary node
+        const tempNode: KnowledgeNode = {
+            id: tempId,
+            name: defaultName,
             type: "folder",
             level: parentLevel + 1,
             parentId,
+            spaceId,
             children: [],
+            childrenLoaded: true,
         };
 
-        // Insert into tree
         setTree(prev => mapTree(prev, n => n.id === parentId, n => ({
             ...n,
-            children: [...(n.children ?? []), newNode],
+            children: [...(n.children ?? []), tempNode],
         })));
-
-        // Expand parent node
         setExpandedIds(prev => new Set([...prev, parentId]));
-
-        // Enter editing state
-        setEditingId(newId);
-        setSelectedId(newId);
+        setEditingId(tempId);
+        setSelectedId(tempId);
     };
 
-    /** Save folder name */
-    const handleSaveEdit = (id: string, name: string) => {
+    /** Save folder name — creates via API */
+    const handleSaveEdit = async (id: string, name: string) => {
         if (name.length > 50) {
             showToast({ message: "Name cannot exceed 50 characters", severity: NotificationSeverity.WARNING });
             return;
         }
-        setTree(prev => mapTree(prev, n => n.id === id, n => ({ ...n, name })));
+
+        const node = findNode(tree, id);
+        if (!node) return;
+
+        // If it's a newly created temp node, call createFolder API
+        if (id.startsWith("new-folder-")) {
+            try {
+                // Determine the real parent_id: if parent is a space, parent_id is null
+                const parentNode = node.parentId ? findNode(tree, node.parentId) : null;
+                const apiParentId = parentNode?.type === "space" ? null : node.parentId;
+
+                const created = await createFolderApi(node.spaceId, {
+                    name,
+                    parent_id: apiParentId,
+                });
+
+                // Replace temp node with real node
+                setTree(prev => mapTree(prev, n => n.id === id, () => ({
+                    id: created.id,
+                    name: created.name || name,
+                    type: "folder" as const,
+                    level: node.level,
+                    parentId: node.parentId,
+                    spaceId: node.spaceId,
+                    children: [],
+                    childrenLoaded: true,
+                })));
+                setSelectedId(created.id);
+            } catch {
+                showToast({ message: "创建文件夹失败", severity: NotificationSeverity.ERROR });
+                // Remove the temp node
+                setTree(prev => {
+                    function removeNode(nodes: KnowledgeNode[]): KnowledgeNode[] {
+                        return nodes
+                            .filter(n => n.id !== id)
+                            .map(n => ({ ...n, children: n.children ? removeNode(n.children) : [] }));
+                    }
+                    return removeNode(prev);
+                });
+            }
+        } else {
+            // Just update name in local tree (rename not needed here)
+            setTree(prev => mapTree(prev, n => n.id === id, n => ({ ...n, name })));
+        }
         setEditingId(null);
     };
 
-    /** Cancel editing (remove newly created empty node) */
+    /** Cancel editing (remove newly created temp node) */
     const handleCancelEdit = () => {
         if (editingId?.startsWith("new-folder-")) {
-            // Delete the node just created
             function removeNode(nodes: KnowledgeNode[]): KnowledgeNode[] {
                 return nodes
                     .filter(n => n.id !== editingId)
@@ -334,15 +449,28 @@ export function AddToKnowledgeModal({ open, onOpenChange }: AddToKnowledgeModalP
         setEditingId(null);
     };
 
-    /** Confirm add */
+    /** Confirm — add article to selected space/folder */
     const handleConfirm = async () => {
-        if (!selectedId) return;
+        if (!selectedId || !articleId) return;
         setIsConfirming(true);
-        // Mock API request
-        await new Promise(r => setTimeout(r, 600));
-        setIsConfirming(false);
-        showToast({ message: "Added to knowledge base", severity: NotificationSeverity.SUCCESS });
-        onOpenChange(false);
+
+        // Find the selected node to determine spaceId and folderId
+        const node = findNode(tree, selectedId);
+        if (!node) { setIsConfirming(false); return; }
+
+        const spaceId = node.spaceId;
+        // If selected a space (root), parent_id = null; if a folder, parent_id = folderId
+        const parentFolderId = node.type === "space" ? null : selectedId;
+
+        try {
+            await addArticleToKnowledgeApi(spaceId, [String(articleId)], parentFolderId);
+            showToast({ message: "已添加到知识空间", severity: NotificationSeverity.SUCCESS });
+            onOpenChange(false);
+        } catch {
+            showToast({ message: "添加失败", severity: NotificationSeverity.ERROR });
+        } finally {
+            setIsConfirming(false);
+        }
     };
 
     // Reset on close
@@ -352,11 +480,12 @@ export function AddToKnowledgeModal({ open, onOpenChange }: AddToKnowledgeModalP
             setSelectedId(null);
             setEditingId(null);
             setExpandedIds(new Set());
+            setTree([]);
         }
         onOpenChange(val);
     };
 
-    const isEmpty = MOCK_SPACES.length === 0;
+    const isEmpty = !spacesLoading && tree.length === 0;
 
     return (
         <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -390,9 +519,12 @@ export function AddToKnowledgeModal({ open, onOpenChange }: AddToKnowledgeModalP
                 {/* Tree / Empty state */}
                 <div className="px-6 pt-4">
                     <div className="p-3 w-[552px] overflow-auto border rounded-md" style={{ height: 340 }}>
-                        {isEmpty ? (
+                        {spacesLoading ? (
+                            <div className="flex items-center justify-center h-full text-[#86909c]">
+                                <Loader2 className="size-5 animate-spin mr-2" />加载中...
+                            </div>
+                        ) : isEmpty ? (
                             <div className="flex flex-col items-center justify-center h-full text-gray-800">
-                                {/* Empty state illustration */}
                                 <img
                                     className="size-[120px] mb-4 object-contain opacity-90"
                                     src={`${__APP_ENV__.BASE_URL}/assets/channel/empty.png`}
@@ -446,7 +578,8 @@ export function AddToKnowledgeModal({ open, onOpenChange }: AddToKnowledgeModalP
                         disabled={!selectedId || isConfirming}
                         className="h-8 px-4 text-sm rounded-md"
                     >
-                        {isConfirming && <Loader2 className="size-3.5 mr-1.5 animate-spin" />}{localize("com_subscription.add")}</Button>
+                        {isConfirming && <Loader2 className="size-3.5 mr-1.5 animate-spin" />}{localize("com_subscription.add")}
+                    </Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
