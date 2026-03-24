@@ -243,35 +243,44 @@ class ArticleEsService:
             filter_clauses.append({"terms": {"_id": include_article_ids}})
 
         if filter_rules:
+            # relation controls the relationship between rules, taken from the first rule
+            relation = filter_rules[0].get("relation", "or") if filter_rules else "or"
+
+            include_queries = []
+            exclude_queries = []
+
             for rule in filter_rules:
                 rule_type = rule.get("rule_type")
                 keywords = rule.get("keywords", [])
-                relation = rule.get("relation", "or")
 
                 if not keywords:
                     continue
 
+                # Keywords within a single rule are always OR
                 keyword_queries = []
                 for kw in keywords:
-                    keyword_queries.append({
-                        "bool": {
-                            "should": [
-                                {"match_phrase": {"title": {"query": kw}}},
-                                {"match_phrase": {"content": {"query": kw}}},
-                            ],
-                            "minimum_should_match": 1,
-                        }
-                    })
+                    keyword_queries.append({"match_phrase": {"title": {"query": kw}}})
+                    keyword_queries.append({"match_phrase": {"content": {"query": kw}}})
 
-                if relation == "and":
-                    combined = {"bool": {"must": keyword_queries}}
-                else:
-                    combined = {"bool": {"should": keyword_queries, "minimum_should_match": 1}}
+                rule_query = {"bool": {"should": keyword_queries, "minimum_should_match": 1}}
 
                 if rule_type == "include":
-                    must_clauses.append(combined)
+                    include_queries.append(rule_query)
                 elif rule_type == "exclude":
-                    must_not_clauses.append(combined)
+                    exclude_queries.append(rule_query)
+
+            # Combine multiple rules by relation
+            if include_queries:
+                if relation == "and":
+                    must_clauses.append({"bool": {"must": include_queries}})
+                else:
+                    must_clauses.append({"bool": {"should": include_queries, "minimum_should_match": 1}})
+
+            if exclude_queries:
+                if relation == "and":
+                    must_not_clauses.append({"bool": {"must": exclude_queries}})
+                else:
+                    must_not_clauses.append({"bool": {"should": exclude_queries, "minimum_should_match": 1}})
 
         bool_query: Dict[str, Any] = {}
         if must_clauses:
@@ -363,8 +372,9 @@ class ArticleEsService:
             source_ids: Source ID list filter
             keyword: Search keyword (matches title, content, source ID)
             filter_rules: Channel filter rules list
-                          Each rule format: {"rule_type": "include"/"exclude",
-                                        "keywords": [...], "relation": "and"/"or"}
+                          Each rule format: {"rule_type": "include"/"exclude", "keywords": [...]}
+                          The "relation" field (from the first rule) controls AND/OR between multiple rules.
+                          Keywords within a single rule are always OR (match any keyword).
             page: Page number (starts from 1)
             page_size: Page size
             exclude_article_ids: List of article IDs to exclude
@@ -406,36 +416,44 @@ class ArticleEsService:
 
         # 3. Channel filter rules
         if filter_rules:
+            # relation controls the relationship between rules, taken from the first rule
+            relation = filter_rules[0].get("relation", "or") if filter_rules else "or"
+
+            include_queries = []
+            exclude_queries = []
+
             for rule in filter_rules:
                 rule_type = rule.get("rule_type")
                 keywords = rule.get("keywords", [])
-                relation = rule.get("relation", "or")
 
                 if not keywords:
                     continue
 
-                # Build keyword matching subquery
+                # Keywords within a single rule are always OR
                 keyword_queries = []
                 for kw in keywords:
-                    keyword_queries.append({
-                        "bool": {
-                            "should": [
-                                {"match_phrase": {"title": {"query": kw}}},
-                                {"match_phrase": {"content": {"query": kw}}},
-                            ],
-                            "minimum_should_match": 1,
-                        }
-                    })
+                    keyword_queries.append({"match_phrase": {"title": {"query": kw}}})
+                    keyword_queries.append({"match_phrase": {"content": {"query": kw}}})
 
-                if relation == "and":
-                    combined = {"bool": {"must": keyword_queries}}
-                else:
-                    combined = {"bool": {"should": keyword_queries, "minimum_should_match": 1}}
+                rule_query = {"bool": {"should": keyword_queries, "minimum_should_match": 1}}
 
                 if rule_type == "include":
-                    must_clauses.append(combined)
+                    include_queries.append(rule_query)
                 elif rule_type == "exclude":
-                    must_not_clauses.append(combined)
+                    exclude_queries.append(rule_query)
+
+            # Combine multiple rules by relation
+            if include_queries:
+                if relation == "and":
+                    must_clauses.append({"bool": {"must": include_queries}})
+                else:
+                    must_clauses.append({"bool": {"should": include_queries, "minimum_should_match": 1}})
+
+            if exclude_queries:
+                if relation == "and":
+                    must_not_clauses.append({"bool": {"must": exclude_queries}})
+                else:
+                    must_not_clauses.append({"bool": {"should": exclude_queries, "minimum_should_match": 1}})
 
         # Assemble complete query
         bool_query: Dict[str, Any] = {}
