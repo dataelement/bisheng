@@ -418,6 +418,7 @@ export function KnowledgeSpaceContent({
                                 onDelete={(id) => handleDelete(id)}
                                 onRetry={(id) => handleSingleRetry(id)}
                                 onNavigateFolder={(id) => onNavigateFolder(id)}
+                                onPreview={(id) => handlePreviewFile(id)}
                                 onValidateName={validateFileName}
                                 onCancelCreate={onCancelCreateFolder}
                                 sortBy={sortBy}

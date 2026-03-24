@@ -1196,6 +1196,7 @@
     "channel_settings": "频道设置",
     "channel_updated": "频道已更新",
     "clear_chat": "清空对话",
+    "clear_chat_confirm": "是否要清除当前会话？",
     "click_to_switch_to_and": "点击切换为 And",
     "click_to_switch_to_or": "点击切换为 Or",
     "confirm": "确定",

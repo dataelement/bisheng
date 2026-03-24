@@ -236,6 +236,7 @@ export function ArticleDetail({ article, loading = false, screenFull = false, sh
             <AddToKnowledgeModal
                 open={showKnowledgeModal}
                 onOpenChange={setShowKnowledgeModal}
+                articleId={article.id}
             />
         </div>
     );

@@ -1190,6 +1190,7 @@
     "channel_settings": "チャンネル設定",
     "channel_updated": "チャンネルが更新されました",
     "clear_chat": "チャットをクリア",
+    "clear_chat_confirm": "現在の会話をクリアしてもよろしいですか？",
     "click_to_switch_to_and": "クリックしてAndに切り替え",
     "click_to_switch_to_or": "クリックしてOrに切り替え",
     "confirm": "確認",

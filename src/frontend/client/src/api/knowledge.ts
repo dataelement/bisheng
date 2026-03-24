@@ -880,6 +880,22 @@ export async function addFilesApi(
 }
 
 /**
+ * Add article(s) to a knowledge space folder
+ * POST /api/v1/channel/manager/articles/add_to_knowledge_space
+ */
+export async function addArticleToKnowledgeApi(
+    knowledge_id: string,
+    article_ids: string[],
+    parent_id?: string | null
+): Promise<void> {
+    await request.post(`/api/v1/channel/manager/articles/add_to_knowledge_space`, {
+        knowledge_id: Number(knowledge_id),
+        article_ids,
+        parent_id: parent_id ? Number(parent_id) : null,
+    });
+}
+
+/**
  * Rename a file
  */
 export async function renameFileApi(

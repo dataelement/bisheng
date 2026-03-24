@@ -380,6 +380,7 @@ interface FileTableProps {
     onDelete: (id: string) => void;
     onRetry: (id: string) => void;
     onNavigateFolder: (id: string) => void;
+    onPreview?: (id: string) => void;
     onValidateName: (name: string, isFolder: boolean, fileId: string, isCreating: boolean) => string | null;
     onCancelCreate?: () => void;
     sortBy: SortType;
@@ -387,7 +388,7 @@ interface FileTableProps {
     onSort: (sortBy: SortType) => void;
 }
 
-export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, onDownload, onEditTags, onRename, onDelete, onRetry, onNavigateFolder, onValidateName, onCancelCreate, sortBy, sortDirection, onSort }: FileTableProps) {
+export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, onDownload, onEditTags, onRename, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, sortBy, sortDirection, onSort }: FileTableProps) {
     const { columnWidths, onResizeStart, totalWidth } = useResizableColumns();
     const scrollRef = useRef<HTMLDivElement>(null);
     const { showLeftShadow, showRightShadow } = useScrollShadow(scrollRef);
@@ -426,6 +427,7 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                                 onDelete={() => onDelete(file.id)}
                                 onRetry={() => onRetry?.(file.id)}
                                 onNavigateFolder={() => onNavigateFolder?.(file.id)}
+                                onPreview={() => onPreview?.(file.id)}
                                 onValidateName={(newName) => onValidateName?.(newName, file.type === 'FOLDER', file.id, !!file.isCreating)}
                                 onCancelCreate={onCancelCreate}
                                 columnWidths={columnWidths}
@@ -463,6 +465,7 @@ function FileRow({
     onDelete,
     onRetry,
     onNavigateFolder,
+    onPreview,
     onValidateName,
     onCancelCreate,
     columnWidths,
@@ -478,6 +481,7 @@ function FileRow({
     onDelete: () => void;
     onRetry: () => void;
     onNavigateFolder?: () => void;
+    onPreview?: () => void;
     onValidateName?: (newName: string) => string | null;
     onCancelCreate?: () => void;
     columnWidths: Record<ColumnKey, number>;
@@ -560,8 +564,7 @@ function FileRow({
                                     onNavigateFolder?.();
                                     return;
                                 }
-                                const url = `${__APP_ENV__.BASE_URL}/knowledge/file/${file.id}?name=${encodeURIComponent(file.name)}&type=${encodeURIComponent(file.type)}`;
-                                window.open(url, '_blank');
+                                onPreview?.();
                             }}
                         >
                             {file.name}

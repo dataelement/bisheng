@@ -1,6 +1,9 @@
 import { useLocalize } from "~/hooks";
 /**
  * AI Assistant Panel — complete chat interface.
+ * Supports two modes:
+ *   - Workstation mode (default): uses useAiChat with full payload
+ *   - Channel article mode: when articleDocId is provided, uses useChannelChat with simplified payload
  */
 import { BrushCleaningIcon, ChevronsRightIcon } from "lucide-react";
 import { useState } from "react";
@@ -18,6 +21,8 @@ import type { AiChatInputFeatures } from "~/components/Chat/AiChatInput";
 import AiChatInput from "~/components/Chat/AiChatInput";
 import AiChatMessages from "~/components/Chat/AiChatMessages";
 import useAiChat from "~/hooks/useAiChat";
+import useChannelChat from "~/hooks/useChannelChat";
+import { useConfirm } from "~/Providers";
 
 interface AiAssistantPanelProps {
     onClose: () => void;
@@ -25,6 +30,8 @@ interface AiAssistantPanelProps {
     features?: AiChatInputFeatures;
     /** When true, the header won't render a bottom border */
     noBorder?: boolean;
+    /** ES article document ID — when provided, switches to channel chat mode */
+    articleDocId?: string;
 }
 
 /**
@@ -35,8 +42,18 @@ export function AiAssistantPanel({
     conversationId = "new",
     features,
     noBorder,
+    articleDocId,
 }: AiAssistantPanelProps) {
     const localize = useLocalize();
+
+    // Determine chat mode based on articleDocId
+    const isChannelMode = !!articleDocId;
+
+    // Both hooks are always called (React hooks rules), but only one is active
+    const workstationChat = useAiChat(isChannelMode ? "new" : conversationId);
+    const channelChat = useChannelChat(isChannelMode ? articleDocId : "");
+
+    // Pick the active chat based on mode
     const {
         messages,
         conversationId: activeConvoId,
@@ -47,13 +64,15 @@ export function AiAssistantPanel({
         stopGenerating,
         clearConversation,
         regenerate,
-    } = useAiChat(conversationId);
+    } = isChannelMode ? channelChat : workstationChat;
 
     const { data: bsConfig } = useGetBsConfig();
     const [chatModel, setChatModel] = useRecoilState(store.chatModel);
     const [selectedOrgKbs, setSelectedOrgKbs] = useRecoilState(store.selectedOrgKbs);
     const [searchType, setSearchType] = useRecoilState(store.searchType);
     const [inputText, setInputText] = useState("");
+
+    const confirm = useConfirm();
 
     const presetQuestions = [
         localize("com_subscription.summarize_article_points"),
@@ -63,6 +82,16 @@ export function AiAssistantPanel({
     const handleSend = (text: string, files?: any[] | null) => {
         sendMessage(text, files);
         setInputText("");
+    };
+
+    const handleClearConversation = async () => {
+        const ok = await confirm({
+            title: localize("com_subscription.prompt_tip"),
+            description: localize("com_subscription.clear_chat_confirm"),
+            confirmText: localize("com_subscription.confirm"),
+            cancelText: localize("com_subscription.cancel"),
+        });
+        if (ok) clearConversation();
     };
 
     return (
@@ -77,7 +106,7 @@ export function AiAssistantPanel({
                                 <Button
                                     variant="ghost"
                                     className="text-gray-400 p-0.5 group relative w-5 h-5"
-                                    onClick={clearConversation}
+                                    onClick={handleClearConversation}
                                 >
                                     <BrushCleaningIcon className="size-full" />
                                 </Button>
@@ -102,9 +131,10 @@ export function AiAssistantPanel({
                 messages={messages}
                 conversationId={activeConvoId}
                 title={chatTitle}
-                isLoading={isLoading && conversationId !== "new"}
+                isLoading={isChannelMode ? isLoading : (isLoading && conversationId !== "new")}
                 isStreaming={isStreaming}
                 presetQuestions={presetQuestions}
+                hideShare={isChannelMode}
                 onPresetClick={(q) => setInputText(q)}
                 onRegenerate={regenerate}
             />
@@ -113,12 +143,12 @@ export function AiAssistantPanel({
             <AiChatInput
                 size="mini"
                 features={features}
-                disabled={!bsConfig?.models?.length}
+                disabled={isChannelMode ? false : !bsConfig?.models?.length}
                 placeholder={localize("com_subscription.input_question_placeholder")}
                 isStreaming={isStreaming}
-                modelOptions={bsConfig?.models}
-                modelValue={chatModel.id}
-                onModelChange={(val) => {
+                modelOptions={isChannelMode ? undefined : bsConfig?.models}
+                modelValue={isChannelMode ? undefined : chatModel.id}
+                onModelChange={isChannelMode ? undefined : (val) => {
                     const model = bsConfig?.models?.find((m) => m.id === val);
                     setChatModel({
                         id: Number(val),
@@ -129,12 +159,13 @@ export function AiAssistantPanel({
                 onStop={stopGenerating}
                 value={inputText}
                 onChange={setInputText}
-                bsConfig={bsConfig}
-                selectedOrgKbs={selectedOrgKbs}
-                onSelectedOrgKbsChange={setSelectedOrgKbs}
-                searchType={searchType}
-                onSearchTypeChange={setSearchType}
+                bsConfig={isChannelMode ? undefined : bsConfig}
+                selectedOrgKbs={isChannelMode ? [] : selectedOrgKbs}
+                onSelectedOrgKbsChange={isChannelMode ? undefined : setSelectedOrgKbs}
+                searchType={isChannelMode ? undefined : searchType}
+                onSearchTypeChange={isChannelMode ? undefined : setSearchType}
             />
         </div>
     );
 }
+
