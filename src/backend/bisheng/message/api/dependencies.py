@@ -1,3 +1,5 @@
+from typing import List, Any
+
 from fastapi import Depends
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -53,20 +55,12 @@ async def get_message_service(
     async def notify_sender(
             sender: int,
             receiver_user_ids: list[int],
-            text: str,
-            content_type: str = "text",
-            applicant_user_id: int = None,
-            applicant_user_name: str = None,
-            business_name: str = None,
+            content_item_list: List[Any]
     ):
         return await message_service.send_generic_notify(
             sender=sender,
             receiver_user_ids=receiver_user_ids,
-            text=text,
-            content_type=content_type,
-            applicant_user_id=applicant_user_id,
-            applicant_user_name=applicant_user_name,
-            business_name=business_name,
+            content_item_list=content_item_list
         )
 
     channel_subscribe_handler = ChannelSubscribeApprovalHandler(

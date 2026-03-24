@@ -16,7 +16,7 @@ from bisheng.message.domain.schemas.message_schema import (
     MessagePageResponse,
     UnreadCountResponse,
     ApprovalActionEnum,
-    TabTypeEnum,
+    TabTypeEnum, MessageContentItem,
 )
 from bisheng.message.domain.services.approval_handler import ApprovalHandler
 from bisheng.user.domain.models.user import UserDao
@@ -282,53 +282,23 @@ class MessageService:
 
     @staticmethod
     def build_generic_notify_content(
-            text: str,
-            content_type: str = "text",
-            applicant_user_id: int = None,
-            applicant_user_name: str = None,
-            business_name: str = None,
+            content_list: List[MessageContentItem | Dict],
     ) -> List[Dict[str, Any]]:
         """
         Build generic notification content.
         """
-        return [
-            {
-                "type": "user",
-                "content": f"@{applicant_user_name}",
-                "metadata": {"user_id": applicant_user_id},
-            },
-            {
-                "type": content_type,
-                "content": text,
-            },
-            {
-                "type": "text",
-                "content": f" -- {business_name}",
-            }
-        ]
+        return [one if isinstance(one, dict) else one.to_message() for one in content_list]
 
     async def send_generic_notify(
             self,
             sender: int,
             receiver_user_ids: List[int],
-            text: str,
-            content_type: str = "text",
-            applicant_user_id: int = None,
-            applicant_user_name: str = None,
-            business_name: str = None,
-            content: Optional[List[Dict[str, Any]]] = None,
+            content_item_list: List[MessageContentItem | Dict],
     ) -> InboxMessage:
         """
         Send a generic notification message to specific receivers.
         """
-        if content is None:
-            content = self.build_generic_notify_content(
-                text=text,
-                content_type=content_type,
-                applicant_user_id=applicant_user_id,
-                applicant_user_name=applicant_user_name,
-                business_name=business_name,
-            )
+        content = self.build_generic_notify_content(content_item_list)
 
         message = await self.send_message(
             content=content,

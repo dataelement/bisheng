@@ -7,9 +7,35 @@ from pydantic import BaseModel, Field
 
 class MessageContentItem(BaseModel):
     """Single content item within a message's content array."""
-    type: str = Field(..., description='Content type: text, system_text, user, business_url, tooltip_text, agree_reject_button')
+    type: str = Field(...,
+                      description='Content type: text, system_text, user, business_url, tooltip_text, agree_reject_button')
     content: str = Field(default='', description='Display content text')
     metadata: Optional[Dict[str, Any]] = Field(default=None, description='Additional metadata for the content item')
+
+    def to_message(self) -> Dict[str, Any]:
+        if self.metadata:
+            return {'type': self.type, 'content': self.content, 'metadata': self.metadata}
+        return {'type': self.type, 'content': self.content}
+
+
+class BusinessContentItem(MessageContentItem):
+    """Single business item within a message's content array."""
+    type: str = "business_url"
+    business_type: str = Field(..., description='Business type')
+    business_id: str = Field(..., description='Business ID')
+
+    @property
+    def metadata(self) -> Dict[str, Any]:
+        return {'business_type': self.business_type, 'business_id': self.business_id}
+
+
+class UserContentItem(MessageContentItem):
+    type: str = "user"
+    user_name: str = Field(..., description='User display name')
+    user_id: int = Field(..., description='User ID')
+
+    def to_message(self) -> Dict[str, Any]:
+        return {'type': self.type, 'content': self.user_name, 'metadata': {'user_id': self.user_id}}
 
 
 class TabTypeEnum(str, Enum):

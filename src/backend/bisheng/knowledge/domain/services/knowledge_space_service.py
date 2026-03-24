@@ -512,8 +512,7 @@ class KnowledgeSpaceService(BaseService):
         await self.message_service.send_generic_notify(
             sender=self.login_user.user_id,
             receiver_user_ids=[target_user_id],
-            text=SPACE_ADMIN_ASSIGNMENT_MESSAGE,
-            content=content,
+            content_item_list=content,
         )
 
     async def _handle_file_folder_extra_info(self, res: List[KnowledgeFile]) -> List[Dict]:
