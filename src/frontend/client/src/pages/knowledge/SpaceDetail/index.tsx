@@ -1,27 +1,20 @@
 import {
-    ChevronLeft,
-    ChevronRight,
     FolderPlus,
     Upload
 } from "lucide-react";
-import React, { useRef, useState } from "react";
-import { FileStatus, FileType, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceRole, batchDownloadApi, batchDeleteApi } from "~/api/knowledge";
+import React, { useState } from "react";
+import { FileStatus, FileType, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceRole, batchDownloadApi, batchDeleteApi, batchRetryApi } from "~/api/knowledge";
 import { SearchParams } from "./CompoundSearchInput";
-import { useSelectionPath } from "./useSelectionPath";
-import {
-    Breadcrumb,
-    BreadcrumbItem, BreadcrumbLink,
-    BreadcrumbList,
-    BreadcrumbPage, BreadcrumbSeparator,
-    Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink
-} from "~/components";
 import { Button } from "~/components/ui/Button";
 import { useConfirm, useToastContext } from "~/Providers";
-import { copyText } from "~/utils";
 import { EditTagsModal } from "./EditTagsModal";
 import { FileCard } from "./FileCard";
 import { FileTable } from "./FileTable";
 import { KnowledgeSpaceHeader } from "./KnowledgeSpaceHeader";
+import { PaginationBar } from "./PaginationBar";
+import { SelectionPathBreadcrumb } from "./SelectionPathBreadcrumb";
+import { useFileDragDrop } from "../hooks/useFileDragDrop";
+import { triggerUrlDownload } from "../knowledgeUtils";
 
 interface KnowledgeSpaceContentProps {
     space: KnowledgeSpace;
@@ -45,24 +38,10 @@ interface KnowledgeSpaceContentProps {
     currentPath: Array<{ id?: string; name: string }>;
     onDragStateChange?: (isDragging: boolean, error?: string | null) => void;
     uploadingFiles?: KnowledgeFile[];
-    creatingFolder?: any;
+    creatingFolder?: KnowledgeFile | null;
     onCancelCreateFolder?: () => void;
     onToggleAiAssistant?: () => void;
     isAiAssistantOpen?: boolean;
-}
-
-/** Trigger browser download from a relative URL returned by the backend.
- * Full URL = window.location.origin + BASE_URL + relativeUrl
- */
-function triggerUrlDownload(relativeUrl: string, filename?: string) {
-    const fullUrl = `${window.location.origin}${__APP_ENV__.BASE_URL}${relativeUrl}`;
-    const a = document.createElement("a");
-    a.href = fullUrl;
-    if (filename) a.download = filename;
-    a.target = "_blank";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
 }
 
 export function KnowledgeSpaceContent({
@@ -97,11 +76,9 @@ export function KnowledgeSpaceContent({
         ...uploadingFiles,
         ...files
     ];
-    console.log('uploadingFiles :>> ', uploadingFiles, displayFiles);
 
     const [searchQuery, setSearchQuery] = useState("");
     const [searchTagIds, setSearchTagIds] = useState<number[]>([]);
-    const [searchScope, setSearchScope] = useState<"current" | "space">("current");
     const [viewMode, setViewModeState] = useState<"card" | "list">(() => {
         const saved = localStorage.getItem("knowledge-view-mode");
         return saved === "list" || saved === "card" ? saved : "card";
@@ -117,25 +94,17 @@ export function KnowledgeSpaceContent({
     const [editingTagsFileId, setEditingTagsFileId] = useState<string | null>(null);
     const [isBatchTagging, setIsBatchTagging] = useState(false);
 
-    // Drag and drop state
-    const dragCounter = useRef(0);
-
-
-
     const isAdmin = space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
     const isSearching = searchQuery.trim().length > 0 || searchTagIds.length > 0;
 
     const { showToast } = useToastContext();
     const confirm = useConfirm();
 
-    const handleShare = () => {
-        const shareText = `欢迎加入知识空间【${space.name}】`;
-        copyText(shareText).then(() => {
-            showToast({ message: '分享链接已复制到粘贴板', status: 'success' });
-        }).catch(() => {
-            showToast({ message: '复制失败，请重试', status: 'error' });
-        });
-    };
+    // ─── Drag and drop ──────────────────────────────────────────────────
+    const { handleDragEnter, handleDragLeave, handleDragOver, handleDrop } = useFileDragDrop({
+        onDragStateChange,
+        onUploadFile,
+    });
 
     const handleSearch = (params: SearchParams) => {
         setSearchQuery(params.keyword);
@@ -215,6 +184,14 @@ export function KnowledgeSpaceContent({
         }
     };
 
+    const handlePreviewFile = (fileId: string) => {
+        const file = displayFiles.find(f => f.id === fileId);
+        const fileName = file?.name || "未知文件";
+        const fileType = file?.type || "";
+        const url = `${__APP_ENV__.BASE_URL}/knowledge/file/${fileId}?name=${encodeURIComponent(fileName)}&type=${encodeURIComponent(fileType)}&spaceId=${encodeURIComponent(space.id)}`;
+        window.open(url, '_blank');
+    };
+
     const handleOpenEditTags = (fileId: string) => {
         setEditingTagsFileId(fileId);
         setIsBatchTagging(false);
@@ -282,7 +259,7 @@ export function KnowledgeSpaceContent({
         const isFolder = file.type === FileType.FOLDER;
 
         const confirmed = await confirm({
-            title: isFolder ? `确认删除文件夹 “${file.name}” 吗？` : "确认删除当前文件吗？",
+            title: isFolder ? `确认删除文件夹 "${file.name}" 吗？` : "确认删除当前文件吗？",
             description: isFolder ? "此操作将永久删除该文件夹及其目录下的所有文件，无法撤销。" : undefined,
             cancelText: "取消",
             confirmText: "删除",
@@ -294,18 +271,36 @@ export function KnowledgeSpaceContent({
         }
     };
 
-    const handleBatchRetry = () => {
-        // Find selected files that have FAILED status
-        const failedFileIds = displayFiles
-            .filter(f => selectedFiles.has(f.id) && f.status === FileStatus.FAILED)
-            .map(f => f.id);
+    const handleBatchRetry = async () => {
+        // Find selected files/folders that have FAILED status or partial failures
+        const retryIds = displayFiles
+            .filter(f => selectedFiles.has(f.id) && (
+                f.status === FileStatus.FAILED ||
+                (f.successFileNum !== undefined && f.fileNum !== undefined && f.successFileNum < f.fileNum)
+            ))
+            .map(f => Number(f.id));
 
-        if (failedFileIds.length > 0) {
-            // Trigger retry for each failed file
-            failedFileIds.forEach(id => onRetryFile(id));
-            console.log("Batch retry triggered for:", failedFileIds);
+        if (retryIds.length === 0) return;
+
+        try {
+            await batchRetryApi(space.id, retryIds);
             showToast({ message: "已开始批量重试", status: "success" });
             setSelectedFiles(new Set());
+            // Refresh list
+            onDeleteFile("");
+        } catch {
+            showToast({ message: "批量重试失败", status: "error" });
+        }
+    };
+
+    const handleSingleRetry = async (fileId: string) => {
+        try {
+            await batchRetryApi(space.id, [Number(fileId)]);
+            showToast({ message: "已开始重试", status: "success" });
+            // Refresh list
+            onDeleteFile("");
+        } catch {
+            showToast({ message: "重试失败", status: "error" });
         }
     };
 
@@ -327,120 +322,6 @@ export function KnowledgeSpaceContent({
 
     const hasFailedFiles = displayFiles.some(f => selectedFiles.has(f.id) && f.status === FileStatus.FAILED);
     const hasFoldersSelected = displayFiles.some(f => selectedFiles.has(f.id) && f.type === FileType.FOLDER);
-    console.log('files :>> ', displayFiles);
-
-    const totalPages = Math.max(1, Math.ceil(total / pageSize));
-
-    const getPageNumbers = () => {
-        const pages: (number | 'ellipsis')[] = [];
-        if (totalPages <= 5) {
-            for (let i = 1; i <= totalPages; i++) {
-                pages.push(i);
-            }
-        } else {
-            if (currentPage <= 3) {
-                pages.push(1, 2, 3, 4, 'ellipsis', totalPages);
-            } else if (currentPage >= totalPages - 2) {
-                pages.push(1, 'ellipsis', totalPages - 3, totalPages - 2, totalPages - 1, totalPages);
-            } else {
-                pages.push(1, 'ellipsis', currentPage - 1, currentPage, currentPage + 1, 'ellipsis', totalPages);
-            }
-        }
-        return pages;
-    };
-
-    const validateDragItems = (items: DataTransferItemList) => {
-        if (items.length > 50) return "单次最多允许上传 50 个文件";
-
-        for (let i = 0; i < items.length; i++) {
-            const item = items[i];
-            if (item.kind === 'file') {
-                const type = item.type.toLowerCase();
-
-                // Allowed extension mapping to MIME types for drag validation
-                const allowedMimeTypes = [
-                    'application/pdf',
-                    'text/plain',
-                    'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // docx
-                    'application/msword', // doc
-                    'application/vnd.ms-excel', // xls
-                    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // xlsx
-                    'application/vnd.ms-powerpoint', // ppt
-                    'application/vnd.openxmlformats-officedocument.presentationml.presentation', // pptx
-                    'text/markdown', 'text/html', 'text/csv',
-                    'image/png', 'image/jpeg', 'image/bmp'
-                ];
-
-                if (type && !allowedMimeTypes.includes(type)) {
-                    return `包含不支持的文件格式 (${type || '未知格式'})`;
-                }
-            }
-        }
-
-        return null;
-    };
-
-    const handleDragEnter = (e: React.DragEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-        dragCounter.current += 1;
-        if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
-            const error = validateDragItems(e.dataTransfer.items);
-            onDragStateChange?.(true, error);
-        }
-    };
-
-    const handleDragLeave = (e: React.DragEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-        dragCounter.current -= 1;
-        if (dragCounter.current === 0) {
-            onDragStateChange?.(false);
-        }
-    };
-
-    const handleDragOver = (e: React.DragEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
-            const error = validateDragItems(e.dataTransfer.items);
-            onDragStateChange?.(true, error);
-        }
-    };
-
-    const handleDrop = (e: React.DragEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-        dragCounter.current = 0;
-
-        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-            const filesList = Array.from(e.dataTransfer.files);
-            if (filesList.length > 50) {
-                onDragStateChange?.(true, "单次最多允许上传 50 个文件");
-                onDragStateChange?.(false)
-                return;
-            }
-
-            for (let f of filesList) {
-                if (f.size > 200 * 1024 * 1024) {
-                    onDragStateChange?.(true, `文件 ${f.name} 超过 200MB 限制`);
-                    setTimeout(() => onDragStateChange?.(false), 2000);
-                    return;
-                }
-                const ext = f.name.split('.').pop()?.toLowerCase();
-                if (!ext || !['pdf', 'txt', 'docx', 'ppt', 'pptx', 'md', 'html', 'xls', 'xlsx', 'csv', 'doc', 'png', 'jpg', 'jpeg', 'bmp'].includes(ext)) {
-                    onDragStateChange?.(true, `不支持文件 ${f.name} 的格式`);
-                    onDragStateChange?.(false)
-                    return;
-                }
-            }
-
-            onDragStateChange?.(false);
-            onUploadFile(filesList);
-        } else {
-            onDragStateChange?.(false);
-        }
-    };
 
     return (
         <div
@@ -514,8 +395,9 @@ export function KnowledgeSpaceContent({
                                     onRename={(newName) => onRenameFile(file.id, newName)}
                                     onDelete={() => handleDelete(file.id)}
                                     onEditTags={() => handleOpenEditTags(file.id)}
-                                    onRetry={file.status === FileStatus.FAILED ? () => onRetryFile(file.id) : undefined}
+                                    onRetry={() => handleSingleRetry(file.id)}
                                     onNavigateFolder={() => onNavigateFolder(file.id)}
+                                    onPreview={handlePreviewFile}
                                     onValidateName={(newName) => validateFileName(newName, file.type === FileType.FOLDER, file.id, !!file.isCreating)}
                                     onCancelCreate={onCancelCreateFolder}
                                 />
@@ -534,7 +416,7 @@ export function KnowledgeSpaceContent({
                                 onEditTags={(id) => handleOpenEditTags(id)}
                                 onRename={(id, newName) => onRenameFile(id, newName)}
                                 onDelete={(id) => handleDelete(id)}
-                                onRetry={(id) => onRetryFile(id)}
+                                onRetry={(id) => handleSingleRetry(id)}
                                 onNavigateFolder={(id) => onNavigateFolder(id)}
                                 onValidateName={validateFileName}
                                 onCancelCreate={onCancelCreateFolder}
@@ -562,61 +444,12 @@ export function KnowledgeSpaceContent({
                 )}
 
                 {files.length > 0 && (
-                    <div className="flex items-center gap-4 text-sm text-[#4e5969]">
-                        <div className="flex items-center gap-1">
-                            <span>共 <span className="text-[#165dff]">{total}</span> 条数据，</span>
-                            <span>每页 {pageSize} 条</span>
-                        </div>
-                        <Pagination className="mx-0 w-auto">
-                            <PaginationContent>
-                                <PaginationItem>
-                                    <PaginationLink
-                                        href="#"
-                                        size="icon"
-                                        className={"w-6 h-6 " + (currentPage === 1 ? "pointer-events-none opacity-50" : "")}
-                                        onClick={(e) => {
-                                            e.preventDefault();
-                                            if (currentPage > 1) onPageChange(currentPage - 1);
-                                        }}
-                                    >
-                                        <ChevronLeft className="size-4" />
-                                    </PaginationLink>
-                                </PaginationItem>
-                                {getPageNumbers().map((pageNum, idx) => (
-                                    <PaginationItem key={idx}>
-                                        {pageNum === 'ellipsis' ? (
-                                            <PaginationEllipsis />
-                                        ) : (
-                                            <PaginationLink
-                                                href="#"
-                                                isActive={pageNum === currentPage}
-                                                className={"w-6 h-6 " + (pageNum === currentPage ? "border-primary text-primary" : "")}
-                                                onClick={(e) => {
-                                                    e.preventDefault();
-                                                    onPageChange(pageNum as number);
-                                                }}
-                                            >
-                                                {pageNum}
-                                            </PaginationLink>
-                                        )}
-                                    </PaginationItem>
-                                ))}
-                                <PaginationItem>
-                                    <PaginationLink
-                                        href="#"
-                                        size="icon"
-                                        className={currentPage === totalPages ? "pointer-events-none opacity-50" : ""}
-                                        onClick={(e) => {
-                                            e.preventDefault();
-                                            if (currentPage < totalPages) onPageChange(currentPage + 1);
-                                        }}
-                                    >
-                                        <ChevronRight className="size-4" />
-                                    </PaginationLink>
-                                </PaginationItem>
-                            </PaginationContent>
-                        </Pagination>
-                    </div>
+                    <PaginationBar
+                        currentPage={currentPage}
+                        pageSize={pageSize}
+                        total={total}
+                        onPageChange={onPageChange}
+                    />
                 )}
             </div>
 
@@ -634,42 +467,6 @@ export function KnowledgeSpaceContent({
                         : []
                 }
             />
-        </div>
-    );
-}
-
-// ============================================================
-// Selection Path Breadcrumb — shows common ancestor of selected files
-// ============================================================
-function SelectionPathBreadcrumb({
-    spaceId,
-    spaceName,
-    selectedFiles,
-    displayFiles,
-}: {
-    spaceId: string;
-    spaceName: string;
-    selectedFiles: Set<string>;
-    displayFiles: Array<{ id: string; name: string }>;
-}) {
-    const { commonPath, isLoading } = useSelectionPath(spaceId, spaceName, selectedFiles, displayFiles);
-
-    if (isLoading) {
-        return <span className="text-xs text-[#86909c]">加载路径中...</span>;
-    }
-
-    if (commonPath.length === 0) {
-        return null;
-    }
-
-    return (
-        <div className="flex items-center gap-0.5 text-sm text-[#86909c] min-w-0">
-            {commonPath.map((item, index) => (
-                <React.Fragment key={item.id || index}>
-                    {index > 0 && <span className="mx-0.5">/</span>}
-                    <span className="truncate max-w-[120px]">{item.name}</span>
-                </React.Fragment>
-            ))}
         </div>
     );
 }

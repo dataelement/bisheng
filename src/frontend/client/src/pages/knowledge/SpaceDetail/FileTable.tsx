@@ -29,9 +29,9 @@ import { cn } from "~/utils";
 import FileIcon from "./FileIcon";
 import TagGroup from "./TagGroup";
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
-import { useToastContext } from "~/Providers";
-import { SortType, SortDirection, FileStatus, FileType } from "~/api/knowledge";
+import { SortType, SortDirection, FileStatus, FileType, KnowledgeFile } from "~/api/knowledge";
 import { formatBytes } from "~/utils";
+import { useInlineRename } from "../hooks/useInlineRename";
 
 // ============================================================
 // 列定义：key、最小宽度、初始宽度
@@ -146,7 +146,7 @@ function useScrollShadow(scrollRef: React.RefObject<HTMLDivElement | null>) {
 // ============================================================
 // 辅助组件：状态标签渲染
 // ============================================================
-const StatusBadge = ({ status }) => {
+const StatusBadge = ({ status }: { status: FileStatus }) => {
     const config: Record<string, { label: string; color: string; bg: string; dot: string }> = {
         [FileStatus.SUCCESS]: { label: "成功", color: "text-[#00b42a]", bg: "bg-[#e8ffea]", dot: "bg-[#00b42a]" },
         [FileStatus.PROCESSING]: { label: "解析中", color: "text-[#165dff]", bg: "bg-[#e8f3ff]", dot: "bg-[#165dff]" },
@@ -367,7 +367,27 @@ function FileTableHeader({
 // ============================================================
 // 主表格组件
 // ============================================================
-export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, onDownload, onEditTags, onRename, onDelete, onRetry, onNavigateFolder, onValidateName, onCancelCreate, sortBy, sortDirection, onSort }) {
+
+interface FileTableProps {
+    files: KnowledgeFile[];
+    selectedFiles: Set<string>;
+    handleSelectAll: () => void;
+    handleSelectFile: (id: string, selected: boolean) => void;
+    isAdmin: boolean;
+    onDownload: (id: string) => void;
+    onEditTags: (id: string) => void;
+    onRename: (id: string, newName: string) => void;
+    onDelete: (id: string) => void;
+    onRetry: (id: string) => void;
+    onNavigateFolder: (id: string) => void;
+    onValidateName: (name: string, isFolder: boolean, fileId: string, isCreating: boolean) => string | null;
+    onCancelCreate?: () => void;
+    sortBy: SortType;
+    sortDirection: SortDirection;
+    onSort: (sortBy: SortType) => void;
+}
+
+export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, onDownload, onEditTags, onRename, onDelete, onRetry, onNavigateFolder, onValidateName, onCancelCreate, sortBy, sortDirection, onSort }: FileTableProps) {
     const { columnWidths, onResizeStart, totalWidth } = useResizableColumns();
     const scrollRef = useRef<HTMLDivElement>(null);
     const { showLeftShadow, showRightShadow } = useScrollShadow(scrollRef);
@@ -448,7 +468,7 @@ function FileRow({
     columnWidths,
     showLeftShadow,
 }: {
-    file: any;
+    file: KnowledgeFile;
     isSelected: boolean;
     onSelect: (val: boolean) => void;
     isAdmin: boolean;
@@ -467,68 +487,22 @@ function FileRow({
     const isCreating = !!file.isCreating;
     const rowBg = isSelected ? "bg-primary/10" : "bg-white";
 
-    const [isRenaming, setIsRenaming] = useState(isCreating);
-    const [renameValue, setRenameValue] = useState(file.name);
-    const inputRef = useRef<HTMLInputElement>(null);
-    const { showToast } = useToastContext();
-
-    useEffect(() => {
-        if (isRenaming && inputRef.current) {
-            inputRef.current.focus();
-            const dotIndex = file.name.lastIndexOf('.');
-            if (dotIndex > 0 && !isFolder) {
-                inputRef.current.setSelectionRange(0, dotIndex);
-            } else {
-                inputRef.current.select();
-            }
-        }
-    }, [isRenaming, isFolder, file.name]);
-
-    const handleRenameSubmit = () => {
-        const trimmed = renameValue.trim();
-
-        if (isCreating && !trimmed) {
-            showToast({ message: "文件夹名称不能为空", status: "error", severity: "error" } as any);
-            inputRef.current?.focus();
-            return;
-        }
-
-        if (!isCreating && !trimmed) {
-            setRenameValue(file.name);
-            setIsRenaming(false);
-            return;
-        }
-
-        if (trimmed === file.name && !isCreating) {
-            setIsRenaming(false);
-            return;
-        }
-
-        if (onValidateName) {
-            const err = onValidateName(trimmed);
-            if (err) {
-                showToast({ message: err, status: "error", severity: "error" } as any);
-                inputRef.current?.focus();
-                return;
-            }
-        }
-
-        onRename(trimmed);
-        setIsRenaming(false);
-    };
-
-    const handleKeyDown = (e: React.KeyboardEvent) => {
-        if (e.key === 'Enter') {
-            handleRenameSubmit();
-        } else if (e.key === 'Escape') {
-            if (isCreating) {
-                onCancelCreate?.();
-            } else {
-                setRenameValue(file.name);
-                setIsRenaming(false);
-            }
-        }
-    };
+    const {
+        isRenaming,
+        renameValue,
+        setRenameValue,
+        inputRef,
+        handleRenameSubmit,
+        handleKeyDown,
+        startRenaming,
+    } = useInlineRename({
+        fileName: file.name,
+        isFolder,
+        isCreating,
+        onRename,
+        onValidateName,
+        onCancelCreate,
+    });
 
     return (
         <TableRow className={cn(
@@ -687,10 +661,7 @@ function FileRow({
                                             <Tag className="size-4 mr-2" />编辑标签
                                         </DropdownMenuItem>
                                     )}
-                                    <DropdownMenuItem onClick={() => {
-                                        setRenameValue(file.name);
-                                        setIsRenaming(true);
-                                    }}>
+                                    <DropdownMenuItem onClick={() => startRenaming()}>
                                         <Edit className="size-4 mr-2" />重命名
                                     </DropdownMenuItem>
                                     {/* Retry for failed files */}

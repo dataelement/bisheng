@@ -1,5 +1,5 @@
 import { Circle, MoreVertical, X } from "lucide-react";
-import { useState, useRef, useEffect } from "react";
+import { useState } from "react";
 import { FileStatus, FileType, KnowledgeFile, SpaceRole } from "~/api/knowledge";
 import { Button, Checkbox } from "~/components";
 import { Card, CardContent } from "~/components/ui/Card";
@@ -12,7 +12,8 @@ import {
 import { cn } from "~/utils";
 import FileIconRenderer from "./FileIcon";
 import TagGroup from "./TagGroup";
-import { useToastContext } from "~/Providers";
+import { useInlineRename } from "../hooks/useInlineRename";
+import { formatTime } from "../knowledgeUtils";
 
 interface FileCardProps {
     file: KnowledgeFile;
@@ -25,6 +26,7 @@ interface FileCardProps {
     onEditTags: () => void;
     onRetry?: () => void;
     onNavigateFolder?: (folderId?: string) => void;
+    onPreview?: (fileId: string) => void;
     onValidateName?: (newName: string) => string | null;
     onCancelCreate?: () => void;
     disableClickNavigate?: boolean;
@@ -41,96 +43,35 @@ export function FileCard({
     onEditTags,
     onRetry,
     onNavigateFolder,
+    onPreview,
     onValidateName,
     onCancelCreate,
     disableClickNavigate = false,
 }: FileCardProps) {
-    const isCreating = !!(file as any).isCreating;
+    const isCreating = !!file.isCreating;
     const [hovered, setHovered] = useState(false);
-    const [isRenaming, setIsRenaming] = useState(isCreating);
-    const [renameValue, setRenameValue] = useState(file.name);
-    const inputRef = useRef<HTMLInputElement>(null);
-    const { showToast } = useToastContext();
 
     const isAdmin = userRole === SpaceRole.CREATOR || userRole === SpaceRole.ADMIN;
     const isFolder = file.type === FileType.FOLDER;
 
-    useEffect(() => {
-        if (isRenaming && inputRef.current) {
-            inputRef.current.focus();
-            // Select text before extension if possible
-            const dotIndex = file.name.lastIndexOf('.');
-            if (dotIndex > 0 && !isFolder) {
-                inputRef.current.setSelectionRange(0, dotIndex);
-            } else {
-                inputRef.current.select();
-            }
-        }
-    }, [isRenaming, isFolder, file.name]);
+    const {
+        isRenaming,
+        renameValue,
+        setRenameValue,
+        inputRef,
+        handleRenameSubmit,
+        handleKeyDown,
+        startRenaming,
+    } = useInlineRename({
+        fileName: file.name,
+        isFolder,
+        isCreating,
+        onRename,
+        onValidateName,
+        onCancelCreate,
+    });
 
-    const handleRenameSubmit = () => {
-        const trimmed = renameValue.trim();
-
-        if (isCreating && !trimmed) {
-            showToast({ message: "文件夹名称不能为空", status: "error", severity: "error" } as any);
-            inputRef.current?.focus();
-            return;
-        }
-
-        if (!isCreating && !trimmed) {
-            setRenameValue(file.name);
-            setIsRenaming(false);
-            return;
-        }
-
-        if (trimmed === file.name && !isCreating) {
-            setIsRenaming(false);
-            return;
-        }
-
-        if (onValidateName) {
-            const err = onValidateName(trimmed);
-            if (err) {
-                showToast({ message: err, status: "error", severity: "error" } as any);
-                inputRef.current?.focus();
-                return;
-            }
-        }
-
-        onRename(trimmed);
-        setIsRenaming(false);
-    };
-
-    const handleKeyDown = (e: React.KeyboardEvent) => {
-        if (e.key === 'Enter') {
-            handleRenameSubmit();
-        } else if (e.key === 'Escape') {
-            if (isCreating) {
-                onCancelCreate?.();
-            } else {
-                setRenameValue(file.name);
-                setIsRenaming(false);
-            }
-        }
-    };
-
-    const formatTime = (dateString: string) => {
-        const date = new Date(dateString);
-        const yyyy = date.getFullYear();
-        const mm = String(date.getMonth() + 1).padStart(2, '0');
-        const dd = String(date.getDate()).padStart(2, '0');
-        const HH = String(date.getHours()).padStart(2, '0');
-        const min = String(date.getMinutes()).padStart(2, '0');
-
-        const now = new Date();
-        const isToday = date.toDateString() === now.toDateString();
-
-        if (isToday) {
-            return `${HH}:${min}`;
-        } else {
-            return `${yyyy}-${mm}-${dd}`;
-        }
-    };
+    // formatTime is now imported from ../knowledgeUtils
 
     const getStatusText = () => {
         if (isRenaming) {
@@ -204,8 +145,8 @@ export function FileCard({
 
         // In preview drawer mode we disable page navigation for file clicks.
         if (disableClickNavigate) return;
-        const url = `${__APP_ENV__.BASE_URL}/knowledge/file/${file.id}?name=${encodeURIComponent(file.name)}&type=${encodeURIComponent(file.type)}`;
-        window.open(url, '_blank');
+        // Call parent-provided preview handler
+        onPreview?.(file.id);
     };
 
     return (
@@ -259,8 +200,7 @@ export function FileCard({
                                         {!isFolder && <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEditTags(); }}>编辑标签</DropdownMenuItem>}
                                         <DropdownMenuItem onClick={(e) => {
                                             e.stopPropagation();
-                                            setRenameValue(file.name);
-                                            setIsRenaming(true);
+                                            startRenaming();
                                         }}>重命名</DropdownMenuItem>
                                         <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDelete(); }} className="text-[#f53f3f] focus:text-[#f53f3f]">
                                             删除
@@ -268,8 +208,11 @@ export function FileCard({
                                     </>
                                 )}
 
-                                {/* 失败重试逻辑 */}
-                                {file.status === FileStatus.FAILED && onRetry && (
+                                {/* Retry for failed files or folders with partial failures */}
+                                {onRetry && (
+                                    file.status === FileStatus.FAILED ||
+                                    (isFolder && file.successFileNum !== undefined && file.fileNum !== undefined && file.successFileNum < file.fileNum)
+                                ) && (
                                     <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onRetry(); }}>重试</DropdownMenuItem>
                                 )}
                             </DropdownMenuContent>

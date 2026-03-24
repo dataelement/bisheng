@@ -142,7 +142,7 @@ export function KnowledgeSpaceHeader({
             showToast({ message: "复制失败，请重试", status: "error" });
         }
     };
-    console.log('currentPath :>> ', currentPath);
+    // Debug log removed during refactoring
 
     return (
         <div className="pt-5 space-y-4">

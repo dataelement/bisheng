@@ -865,13 +865,34 @@ export async function batchDownloadApi(
     return res?.data?.url ?? res?.url ?? "";
 }
 
+/**
+ * Batch retry failed files/folders
+ * POST /api/v1/knowledge/space/{space_id}/files/batch-retry
+ */
+export async function batchRetryApi(
+    space_id: string,
+    file_ids: number[]
+): Promise<void> {
+    await request.post(`/api/v1/knowledge/space/${space_id}/files/batch-retry`, { file_ids });
+}
+
 // ─────────────────────────────────────────────
 // API functions — File preview
 // ─────────────────────────────────────────────
 
 /**
- * Get file preview content
+ * Get file preview URL
+ * Returns { original_url, preview_url } — prefer preview_url, fallback to original_url
  */
-export async function getFilePreviewApi(space_id: string, file_id: string): Promise<unknown> {
-    return request.get(`/api/v1/knowledge/space/${space_id}/files/${file_id}/preview`);
+export async function getFilePreviewApi(
+    space_id: string,
+    file_id: string
+): Promise<{ original_url: string; preview_url: string }> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const res = await request.get<any>(`/api/v1/knowledge/space/${space_id}/files/${file_id}/preview`);
+    const data = res?.data ?? res;
+    return {
+        original_url: data?.original_url ?? "",
+        preview_url: data?.preview_url ?? "",
+    };
 }
