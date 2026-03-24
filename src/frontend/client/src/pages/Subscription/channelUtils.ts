@@ -58,7 +58,8 @@ export function buildFilterRules(data: CreateChannelFormData): ManagerChannelFil
                 return {
                     rule_type: cond.include ? "include" : "exclude",
                     keywords,
-                    relation: group.relation
+                    // Persist top-level relation selected in UI.
+                    relation: data.topFilterRelation
                 };
             });
             rules.push({
@@ -83,7 +84,8 @@ export function buildFilterRules(data: CreateChannelFormData): ManagerChannelFil
                     return {
                         rule_type: cond.include ? "include" : "exclude",
                         keywords,
-                        relation: group.relation
+                        // Persist each sub-channel's top-level relation.
+                        relation: sub.topRelation
                     };
                 });
                 rules.push({

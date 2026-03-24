@@ -184,7 +184,7 @@ export default function KnowledgeSquare({
             </div>
 
             <div ref={scrollRef} className="flex-1 overflow-y-auto bg-white">
-                <div className="relative w-full max-w-[380px] mx-auto mt-2 mb-1">
+                <div className="relative w-full max-w-[480px] mx-auto mt-2 mb-1">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#8B8FA8] pointer-events-none" />
                     <Input
                         type="text"

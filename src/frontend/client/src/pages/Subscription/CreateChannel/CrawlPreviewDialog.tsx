@@ -17,6 +17,7 @@ import {
 } from "~/components/ui/AlertDialog";
 import { Button } from "~/components/ui/Button";
 import { Input } from "~/components/ui/Input";
+import { Avatar, AvatarImage, AvatarName } from "~/components/ui/avatar";
 import { useLocalize } from "~/hooks";
 import { addWebsiteSourceApi, crawlTempSourceApi, getFeedbackTips } from "~/api/channels";
 import type { InformationSource } from "~/api/channels";
@@ -221,13 +222,10 @@ export function CrawlPreviewDialog({
                     {status === "success" && previewData && (
                         <div className="space-y-4">
                             <div className="flex items-center gap-3 p-3 rounded-lg bg-[#F7F8FA]">
-                                <div className="w-10 h-10 rounded-full bg-[#E5E6EB] flex items-center justify-center text-[14px] text-[#86909C] overflow-hidden">
-                                    {previewData.icon ? (
-                                        <img src={previewData.icon} alt="" className="w-full h-full object-cover" />
-                                    ) : (
-                                        previewData.name[0]
-                                    )}
-                                </div>
+                                <Avatar className="w-10 h-10 border border-[#E5E6EB]">
+                                    {previewData.icon ? <AvatarImage src={previewData.icon} alt={previewData.name} /> : null}
+                                    <AvatarName name={previewData.name} className="text-xs" />
+                                </Avatar>
                                 <div>
                                     <p className="text-[14px] font-medium text-[#1D2129]">
                                         {previewData.name}
