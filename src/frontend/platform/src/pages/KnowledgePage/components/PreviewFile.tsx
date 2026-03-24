@@ -56,7 +56,10 @@ export default function PreviewFile({
   }
   const suffix = useMemo(() => {
     if (!urlState.url) return '';
-    return urlState.url?.split('?')[0].split('/').pop().split('.')[1].toLowerCase() || '';
+    const fileName = urlState.url?.split('?')[0].split('/').pop() || '';
+    const parts = fileName.split('.');
+    // Default to 'pdf' if no file extension found
+    return parts.length > 1 ? parts.pop().toLowerCase() : 'pdf';
   }, [urlState.url]);
 
   const isUnsType = useMemo(() => {
