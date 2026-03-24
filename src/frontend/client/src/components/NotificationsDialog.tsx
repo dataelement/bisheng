@@ -42,10 +42,12 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
     const observersRef = useRef<Record<string, IntersectionObserver>>({});
 
     const isVisuallyUnread = (n: MessageItem) => !n.is_read;
-    const isKnowledgeSpaceRequestActionCode = (actionCode?: string) =>
-        actionCode === "request_knowledge_space";
+    const isKnowledgeSpaceApprovalActionCode = (actionCode?: string) =>
+        actionCode === "request_knowledge_space" ||
+        actionCode === "approved_knowledge_space" ||
+        actionCode === "rejected_knowledge_space";
     const isApprovalMessageType = (messageType?: string, actionCode?: string) =>
-        messageType === "request" || messageType === "approve" || isKnowledgeSpaceRequestActionCode(actionCode);
+        messageType === "request" || messageType === "approve" || isKnowledgeSpaceApprovalActionCode(actionCode);
     const isPendingApprovalStatus = (status?: string) =>
         !!status && ["pending", "PENDING", "wait_approve", "WAIT_APPROVE"].includes(status);
     const isApprovedStatus = (status?: string) =>
@@ -231,6 +233,13 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
         if (businessType === "space_id" && data?.space_id) {
             return { targetType: "space", targetId: String(data.space_id) };
         }
+        // New enum variant from backend: knowledge_space_Id
+        if (businessType === "knowledge_space_Id" || businessType === "knowledge_space_id") {
+            const knowledgeSpaceId = data?.knowledge_space_Id ?? data?.knowledge_space_id ?? data?.space_id;
+            if (knowledgeSpaceId !== undefined && knowledgeSpaceId !== null && String(knowledgeSpaceId) !== "") {
+                return { targetType: "space", targetId: String(knowledgeSpaceId) };
+            }
+        }
         return null;
     };
 
@@ -279,7 +288,7 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
         return (
             <div
                 key={id}
-                className="flex items-start gap-3 px-6 py-4 border-b border-[#F2F3F5] hover:bg-[#f7f8fa] transition-colors relative"
+                className="flex items-start gap-3 px-6 py-6 border-b border-[#F2F3F5] hover:bg-[#f7f8fa] transition-colors relative"
                 onMouseEnter={onRowMouseEnter}
                 onMouseLeave={onRowMouseLeave}
                 ref={(node) => {
@@ -365,7 +374,7 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
 
                     {/* 审批按钮/结果（请求类） */}
                     {showApproval ? (
-                        <div className="absolute right-6 bottom-4 flex items-center gap-2">
+                        <div className="absolute right-6 bottom-1 flex items-center gap-2">
                             <button
                                 onClick={() => {
                                     if (!notification.is_read) markOneAsRead(id);

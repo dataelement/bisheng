@@ -101,7 +101,7 @@ export default function ChannelSquare({
           });
         } else {
           showToast({
-            message: localize("apply_sent") || "申请已发送",
+            message: localize("com_subscription.apply_sent") || "申请已发送",
             severity: NotificationSeverity.SUCCESS
           });
         }
@@ -143,10 +143,10 @@ export default function ChannelSquare({
         const res = fetchApi
           ? await fetchApi({ keyword: searchQuery.trim() || undefined, page: nextPage, page_size: 20 })
           : await getChannelSquareApi({
-              keyword: searchQuery.trim() || undefined,
-              page: nextPage,
-              page_size: 20
-            });
+            keyword: searchQuery.trim() || undefined,
+            page: nextPage,
+            page_size: 20
+          });
         const root: any = res;
         const payload = root.data ?? root;
         const list: any[] = (payload?.data || payload?.list || []) as any[];

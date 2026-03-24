@@ -1385,6 +1385,7 @@
     "publice": "公开",
     "remove": "移除",
     "subscriber": "订阅用户",
-    "create": "创建"
+    "create": "创建",
+    "edit_knowledge_space": "编辑知识空间"
   }
 }

@@ -19,6 +19,7 @@ interface KnowledgeSpaceSidebarProps {
     onSpaceSelect: (space: KnowledgeSpace | null) => void;
     onCreateSpace: () => void;
     onSpaceSettings: (space: KnowledgeSpace) => void;
+    onManageMembers: (space: KnowledgeSpace) => void;
     onKnowledgeSquare?: () => void;
 }
 
@@ -34,6 +35,7 @@ export function KnowledgeSpaceSidebar({
     onSpaceSelect,
     onCreateSpace,
     onSpaceSettings,
+    onManageMembers,
     onKnowledgeSquare,
 }: KnowledgeSpaceSidebarProps) {
     const [collapsed, setCollapsed] = useState(false);
@@ -150,6 +152,7 @@ export function KnowledgeSpaceSidebar({
                                     onLeave={handleLeaveSpace}
                                     onPin={(id, pinned) => handlePinSpace(id, pinned, "created")}
                                     onSettings={onSpaceSettings}
+                                    onManageMembers={onManageMembers}
                                 />
                             ))}
                             {!createdSpaces.length && <div className="py-6 text-center text-sm text-[#818181]">暂无数据</div>}
@@ -180,6 +183,7 @@ export function KnowledgeSpaceSidebar({
                                     onLeave={handleLeaveSpace}
                                     onPin={(id, pinned) => handlePinSpace(id, pinned, "joined")}
                                     onSettings={onSpaceSettings}
+                                    onManageMembers={onManageMembers}
                                 />
                             ))}
                             {!joinedSpaces.length && <div className="py-6 text-center text-sm text-[#818181]">暂无数据</div>}
