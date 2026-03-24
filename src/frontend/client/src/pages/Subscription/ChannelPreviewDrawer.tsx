@@ -2,6 +2,7 @@ import { useLocalize } from "~/hooks";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { ChevronRight } from "lucide-react";
 import {
     type ChannelDetailResponse,
     getArticlesApi,
@@ -238,6 +239,14 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onNavigate
     return (
         <Sheet open={open} onOpenChange={onOpenChange}>
             <SheetContent side="right" className="w-[1000px] sm:max-w-[1000px] p-0 px-16 flex flex-col">
+                <button
+                    type="button"
+                    aria-label="收起抽屉"
+                    onClick={() => onOpenChange(false)}
+                    className="absolute left-1 top-1/2 -translate-y-1/2 h-16 w-6 bg-white text-[#C9CDD4] hover:text-[#B6BBC5] flex items-center justify-center z-20"
+                >
+                    <ChevronRight className="size-6 stroke-[2.75]" />
+                </button>
                 {isLoading ? (
                     <div className="flex flex-col items-center justify-center h-full gap-3 text-[#86909c]">
                         <LoadingIcon className="size-16 text-primary" />

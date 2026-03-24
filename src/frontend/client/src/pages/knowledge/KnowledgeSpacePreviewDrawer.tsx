@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
+import { ChevronRight } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "~/components/ui/Sheet";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
 import { Button } from "~/components/ui/Button";
 import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
 import { FileCard } from "./SpaceDetail/FileCard";
-import { KnowledgeFile, KnowledgeSpace, SpaceRole, VisibilityType, getSquareSpacesApi, getSpaceChildrenApi, getSpaceInfoApi, subscribeSpaceApi } from "~/api/knowledge";
+import { KnowledgeFile, KnowledgeSpace, SpaceRole, VisibilityType, getSpaceChildrenApi, getSpaceInfoApi, subscribeSpaceApi } from "~/api/knowledge";
 
 interface KnowledgeSpacePreviewDrawerProps {
     spaceId: string | undefined;
@@ -42,23 +43,15 @@ export function KnowledgeSpacePreviewDrawer({
 
         // 1) Top detail: GET /api/v1/knowledge/space/{space_id}/info
         getSpaceInfoApi(spaceId)
-            .then(info => setSpace(info))
-            .catch(() => {
-                showToast({ message: "该知识空间已失效或被删除", severity: NotificationSeverity.WARNING });
-                onOpenChange(false);
-            });
-
-        // 2) Membership status: currently derived from square list
-        getSquareSpacesApi({ page: 1, page_size: 100 })
-            .then(res => {
-                const found = res.data.find(s => s.id === spaceId) || null;
-                if (!found) return;
-                if (found.squareStatus === "joined") setStatus("joined");
-                else if (found.squareStatus === "pending") setStatus("pending");
+            .then(info => {
+                setSpace(info);
+                if (info.isPending) setStatus("pending");
+                else if (info.isReleased) setStatus("joined");
                 else setStatus("none");
             })
             .catch(() => {
-                // non-blocking
+                showToast({ message: "该知识空间已失效或被删除", severity: NotificationSeverity.WARNING });
+                onOpenChange(false);
             });
     }, [open, spaceId]);
 
@@ -164,8 +157,16 @@ export function KnowledgeSpacePreviewDrawer({
         <Sheet open={open} onOpenChange={onOpenChange}>
             <SheetContent
                 side="right"
-                className="w-[960px] sm:max-w-[960px] p-0 px-12 flex flex-col h-full"
+                className="w-[1000px] sm:max-w-[1000px] p-0 px-12 flex flex-col h-full"
             >
+                <button
+                    type="button"
+                    aria-label="收起抽屉"
+                    onClick={() => onOpenChange(false)}
+                    className="absolute left-1 top-1/2 -translate-y-1/2 h-16 w-6 bg-white text-[#C9CDD4] hover:text-[#B6BBC5] flex items-center justify-center z-20"
+                >
+                    <ChevronRight className="size-6 stroke-[2.75]" />
+                </button>
                 {space && (
                     <>
                         <SheetHeader className="px-6 pt-6 pb-4 gap-0 border-b border-gray-100 text-left">
@@ -272,6 +273,7 @@ export function KnowledgeSpacePreviewDrawer({
                                                         setParentNameStack((prev) => [...prev, f.name]);
                                                     }}
                                                     disableClickNavigate
+                                                    hideSelectionCheckbox
                                                 />
                                             ))}
                                         </div>

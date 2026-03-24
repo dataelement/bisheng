@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, FileText, Globe, Lightbulb, Search, TrendingUp } from "lucide-react";
+import { ArrowLeft, Search } from "lucide-react";
 import { Input } from "~/components/ui/Input";
 import { Button } from "~/components/ui/Button";
 import { useToastContext } from "~/Providers";
@@ -160,19 +160,10 @@ export default function KnowledgeSquare({
 
     return (
         <div className="h-full w-full flex flex-col bg-white overflow-hidden">
-            <div className="bg-[#FAFBFF] w-full relative overflow-hidden border-b border-[#F0F1F5]">
-                <div className="absolute left-[32%] top-6 opacity-30">
-                    <Lightbulb className="size-6 text-[#d0ddff]" strokeWidth={1.5} />
-                </div>
-                <div className="absolute left-[30%] top-14 opacity-30 rotate-[-40deg]">
-                    <FileText className="size-7 text-[#d0ddff]" strokeWidth={1.5} />
-                </div>
-                <div className="absolute right-[32%] top-5 opacity-30 rotate-[11deg]">
-                    <TrendingUp className="size-6 text-[#d0ddff]" strokeWidth={1.5} />
-                </div>
-                <div className="absolute right-[28%] top-16 opacity-30 rotate-[28deg]">
-                    <Globe className="size-7 text-[#d0ddff]" strokeWidth={1.5} />
-                </div>
+            <div
+                className="w-full relative overflow-hidden border-b border-[#F0F1F5] bg-center bg-no-repeat bg-cover"
+                style={{ backgroundImage: `url(${__APP_ENV__.BASE_URL}/assets/tabbg.svg)` }}
+            >
 
                 {onBack && (
                     <div className="absolute left-4 top-4 z-10">

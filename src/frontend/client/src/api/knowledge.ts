@@ -153,6 +153,7 @@ interface RawKnowledgeSpace {
     update_time?: string;
     tags?: string[];
     is_released?: boolean;
+    is_pending?: boolean;
 }
 
 interface RawSpaceChild {
@@ -234,6 +235,7 @@ function mapSpace(raw: RawKnowledgeSpace): KnowledgeSpace {
         updatedAt: raw.update_time || "",
         tags: raw.tags || [],
         isReleased: raw.is_released ?? false,
+        isPending: raw.is_pending ?? false,
     };
 }
 

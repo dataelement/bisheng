@@ -42,8 +42,10 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
     const observersRef = useRef<Record<string, IntersectionObserver>>({});
 
     const isVisuallyUnread = (n: MessageItem) => !n.is_read;
-    const isApprovalMessageType = (messageType?: string) =>
-        messageType === "request" || messageType === "approve";
+    const isKnowledgeSpaceRequestActionCode = (actionCode?: string) =>
+        actionCode === "request_knowledge_space";
+    const isApprovalMessageType = (messageType?: string, actionCode?: string) =>
+        messageType === "request" || messageType === "approve" || isKnowledgeSpaceRequestActionCode(actionCode);
     const isPendingApprovalStatus = (status?: string) =>
         !!status && ["pending", "PENDING", "wait_approve", "WAIT_APPROVE"].includes(status);
     const isApprovedStatus = (status?: string) =>
@@ -57,7 +59,7 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
     const unreadCounts = useMemo(() => {
         const allUnread = notifications.filter(isVisuallyUnread).length;
         const requestUnread = notifications.filter(
-            n => isApprovalMessageType(n.message_type) && isVisuallyUnread(n)
+            n => isApprovalMessageType(n.message_type, n.action_code) && isVisuallyUnread(n)
         ).length;
         return { all: allUnread, request: requestUnread };
     }, [notifications]);
@@ -131,10 +133,10 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
         if (activeTab !== "request") return { pending: [], approved: [] };
 
         const pending = filteredNotifications.filter(
-            n => isApprovalMessageType(n.message_type) && isPendingApprovalStatus(n.status)
+            n => isApprovalMessageType(n.message_type, n.action_code) && isPendingApprovalStatus(n.status)
         );
         const approved = filteredNotifications.filter(
-            n => isApprovalMessageType(n.message_type) && !isPendingApprovalStatus(n.status)
+            n => isApprovalMessageType(n.message_type, n.action_code) && !isPendingApprovalStatus(n.status)
         );
 
         return { pending, approved };
@@ -212,7 +214,7 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
             notification.content?.map((c) => c.content).filter(Boolean).join("") ||
             "";
         const showApproval =
-            isApprovalMessageType(notification.message_type) &&
+            isApprovalMessageType(notification.message_type, notification.action_code) &&
             isPendingApprovalStatus(notification.status);
         return { text, userName, targetName: "", showApproval };
     };
@@ -248,7 +250,7 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
         const isApproved = isApprovedStatus(approvalStatus) || isRejectedStatus(approvalStatus);
         const showDeleteMessage =
             !showApproval &&
-            !isApprovalMessageType(notification.message_type) &&
+            !isApprovalMessageType(notification.message_type, notification.action_code) &&
             (isApproved || isDecisionActionCode(notification.action_code));
         const textColor = !isVisuallyUnread(notification) || isApproved ? "text-[#86909c]" : "text-[#1d2129]";
 
@@ -260,7 +262,7 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
         const onRowMouseEnter = () => {
             setHoveredId(id);
             // 请求类：hover 0.5s 才已读（滚动不触发）
-            if (notification.message_type === "request" && !notification.is_read) {
+            if (isApprovalMessageType(notification.message_type, notification.action_code) && !notification.is_read) {
                 window.clearTimeout(requestHoverTimersRef.current[id]);
                 requestHoverTimersRef.current[id] = window.setTimeout(() => {
                     markOneAsRead(id);
