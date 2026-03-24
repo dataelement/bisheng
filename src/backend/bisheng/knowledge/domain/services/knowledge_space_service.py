@@ -14,13 +14,14 @@ from bisheng.common.errcode.knowledge_space import (
     SpaceFolderNotFoundError, SpaceFolderDepthError, SpaceFolderDuplicateError,
     SpaceFileNotFoundError, SpaceFileExtensionError, SpaceFileNameDuplicateError,
     SpaceSubscribePrivateError, SpaceAlreadySubscribedError, SpaceSubscribeLimitError,
-    SpacePermissionDeniedError, SpaceTagExistsError,
+    SpacePermissionDeniedError, SpaceTagExistsError, SpaceFileSizeLimitError,
 )
 from bisheng.common.errcode.llm import WorkbenchEmbeddingError
 from bisheng.common.models.space_channel_member import (
     SpaceChannelMember, SpaceChannelMemberDao, BusinessTypeEnum, UserRoleEnum
 )
 from bisheng.database.models.group_resource import ResourceTypeEnum
+from bisheng.database.models.role import RoleDao
 from bisheng.database.models.tag import TagDao, TagBusinessTypeEnum, Tag
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao, KnowledgeTypeEnum, AuthTypeEnum, \
     KnowledgeRead
@@ -36,8 +37,8 @@ from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.llm.domain import LLMService
 from bisheng.user.domain.models.user import UserDao
+from bisheng.user.domain.models.user_role import UserRoleDao
 from bisheng.utils import generate_uuid
-from bisheng.worker import retry_knowledge_file_celery
 from bisheng.worker.knowledge import file_worker
 
 if TYPE_CHECKING:
@@ -757,18 +758,30 @@ class KnowledgeSpaceService(BaseService):
             file_level_path = f"{parent_folder.file_level_path}/{parent_id}"
 
         # todo max file size limit
+        default_file_size_limit = 40
+
+        roles = await UserRoleDao.aget_user_roles(db_knowledge.user_id)
+        if roles:
+            roles = await RoleDao.aget_role_by_ids([one.role_id for one in roles])
+            for one in roles:
+                default_file_size_limit = max(default_file_size_limit, one.knowledge_space_file_limit)
+        default_file_size_limit = default_file_size_limit * 1024 * 1024 * 1024
+        current_total_file_size = await SpaceFileDao.get_total_file_size(db_knowledge.id)
+
         file_split_rule = FileProcessBase(knowledge_id=knowledge_id)
         process_files = []
         failed_files = []
         preview_cache_keys = []
         for one in file_path:
+            if current_total_file_size > default_file_size_limit:
+                raise SpaceFileSizeLimitError()
             db_file = KnowledgeService.process_one_file(self.login_user, knowledge=db_knowledge,
                                                         file_info=KnowledgeFileOne(
                                                             file_path=one,
                                                             excel_rule=ExcelRule()
                                                         ), split_rule=file_split_rule.model_dump(),
                                                         file_kwargs={"level": level,
-                                                                     "file_level_path": file_level_path}, )
+                                                                     "file_level_path": file_level_path})
             if db_file.status != KnowledgeFileStatus.FAILED.value:
                 # Get a preview cache of this filekey
                 cache_key = KnowledgeUtils.get_preview_cache_key(
@@ -776,6 +789,7 @@ class KnowledgeSpaceService(BaseService):
                 )
                 preview_cache_keys.append(cache_key)
                 process_files.append(db_file)
+                current_total_file_size += db_file.file_size
             else:
                 failed_file_info = db_file.model_dump()
                 failed_file_info["file_path"] = one
@@ -892,6 +906,8 @@ class KnowledgeSpaceService(BaseService):
             await TagDao.add_tags(tag_ids, str(file_id), resource_type, self.login_user.user_id)
 
     async def batch_retry_failed_files(self, space_id: int, file_ids: List[int]):
+        from bisheng.worker import retry_knowledge_file_celery
+
         space = await KnowledgeDao.aquery_by_id(space_id)
         if not space:
             raise SpaceNotFoundError()
