@@ -33,6 +33,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import KnowledgeSpa
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.llm.domain import LLMService
+from bisheng.message.api.dependencies import get_message_service
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_uuid
 from bisheng.worker import retry_knowledge_file_celery
@@ -939,13 +940,33 @@ class KnowledgeSpaceService(BaseService):
             user_role=UserRoleEnum.MEMBER,
             status=is_active,
         )
-        # todo 发送站内信
+
         await SpaceChannelMemberDao.async_insert_member(member)
+        await self._send_subscription_notification(space)
 
         return {
             "status": "subscribed" if is_active else "pending",
             "space_id": space_id,
         }
+
+    async def _send_subscription_notification(self, space: Knowledge):
+        if space.auth_type != AuthTypeEnum.APPROVAL:
+            return
+        message_service = await get_message_service()
+        members = await SpaceChannelMemberDao.async_get_members_by_space(space.id,
+                                                                         user_roles=[UserRoleEnum.MEMBER,
+                                                                                     UserRoleEnum.ADMIN])
+        member_ids = [one.user_id for one in members]
+        await message_service.send_generic_approval(
+            applicant_user_id=self.login_user.user_id,
+            applicant_user_name=self.login_user.user_name,
+            action_code="request_knowledge_space",
+            business_type="knowledge_space_id",
+            business_id=str(space.id),
+            business_name=space.name,
+            button_action_code="request_knowledge_space",
+            receiver_user_ids=member_ids,
+        )
 
     async def unsubscribe_space(self, space_id: int) -> bool:
         space = await KnowledgeDao.aquery_by_id(space_id)

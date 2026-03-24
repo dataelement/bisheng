@@ -1,10 +1,12 @@
 import logging
-from typing import Any, Awaitable, Callable, Dict, List
+from typing import Awaitable, Callable, List
 
+from bisheng.channel.domain.repositories.interfaces.channel_repository import ChannelRepository
 from bisheng.common.models.space_channel_member import BusinessTypeEnum
 from bisheng.common.repositories.interfaces.space_channel_member_repository import SpaceChannelMemberRepository
 from bisheng.message.domain.models.inbox_message import InboxMessage
 from bisheng.message.domain.services.approval_handler import ApprovalHandler
+from bisheng.user.domain.models.user import UserDao
 
 logger = logging.getLogger(__name__)
 
@@ -13,11 +15,13 @@ class ChannelSubscribeApprovalHandler(ApprovalHandler):
     """Handle channel subscription approval actions."""
 
     def __init__(
-        self,
-        space_channel_member_repository: SpaceChannelMemberRepository,
-        notify_sender: Callable[[int, str, List[int], str], Awaitable[InboxMessage]],
+            self,
+            space_channel_member_repository: SpaceChannelMemberRepository,
+            channel_repository: ChannelRepository,
+            notify_sender: Callable[[int, List[int], str, str, int, str, str], Awaitable[InboxMessage]],
     ):
         self.space_channel_member_repository = space_channel_member_repository
+        self.channel_repository = channel_repository
         self.notify_sender = notify_sender
 
     def get_action_code(self) -> str:
@@ -26,7 +30,7 @@ class ChannelSubscribeApprovalHandler(ApprovalHandler):
 
     async def on_approved(self, message: InboxMessage, operator_user_id: int) -> None:
         """Activate the pending channel membership after approval."""
-        channel_id = self._extract_channel_id(message.content)
+        channel_id = self._extract_business_id(message.content, "channel_id")
         applicant_user_id = self._extract_applicant_user_id(message.content)
         membership = await self._get_membership(channel_id, applicant_user_id)
         if not membership:
@@ -35,19 +39,26 @@ class ChannelSubscribeApprovalHandler(ApprovalHandler):
                 channel_id, applicant_user_id, message.id,
             )
             return
+        channel_info = await self.channel_repository.find_by_id(channel_id)
+        if not channel_info:
+            return
 
         membership.status = True
         await self.space_channel_member_repository.update(membership)
+        operator_user_info = await UserDao.aget_user(operator_user_id)
         await self.notify_sender(
             operator_user_id,
-            "approved_channel",
             [applicant_user_id],
+            "approved_channel",
             "system_text",
+            operator_user_id,
+            operator_user_info.user_name if operator_user_info else f"Unknown user {operator_user_id}",
+            channel_info.name
         )
 
     async def on_rejected(self, message: InboxMessage, operator_user_id: int) -> None:
         """Remove the pending channel membership after rejection."""
-        channel_id = self._extract_channel_id(message.content)
+        channel_id = self._extract_business_id(message.content, "channel_id")
         applicant_user_id = self._extract_applicant_user_id(message.content)
         membership = await self._get_membership(channel_id, applicant_user_id)
         if not membership or membership.id is None:
@@ -56,13 +67,22 @@ class ChannelSubscribeApprovalHandler(ApprovalHandler):
                 channel_id, applicant_user_id, message.id,
             )
             return
+        channel_info = await self.channel_repository.find_by_id(channel_id)
+        if not channel_info:
+            return
 
         await self.space_channel_member_repository.delete(membership.id)
+
+        operator_user_info = await UserDao.aget_user(operator_user_id)
+
         await self.notify_sender(
             operator_user_id,
-            "rejected_channel",
             [applicant_user_id],
+            "rejected_channel",
             "system_text",
+            operator_user_id,
+            operator_user_info.user_name if operator_user_info else f"Unknown user {operator_user_id}",
+            channel_info.name
         )
 
     async def _get_membership(self, channel_id: str, applicant_user_id: int):
@@ -72,29 +92,3 @@ class ChannelSubscribeApprovalHandler(ApprovalHandler):
             business_type=BusinessTypeEnum.CHANNEL,
             user_id=applicant_user_id,
         )
-
-    @staticmethod
-    def _extract_channel_id(content: List[Dict[str, Any]]) -> str:
-        """Extract channel ID from approval message content."""
-        for item in content:
-            metadata = item.get('metadata', {})
-            if metadata.get('business_type') != 'channel_id':
-                continue
-
-            data = metadata.get('data', {})
-            channel_id = data.get('channel_id')
-            if channel_id is not None:
-                return str(channel_id)
-
-        raise ValueError("Missing channel_id in approval message content")
-
-    @staticmethod
-    def _extract_applicant_user_id(content: List[Dict[str, Any]]) -> int:
-        """Extract applicant user ID from approval message content."""
-        for item in content:
-            metadata = item.get('metadata', {})
-            user_id = metadata.get('user_id')
-            if user_id is not None:
-                return int(user_id)
-
-        raise ValueError("Missing applicant user_id in approval message content")
