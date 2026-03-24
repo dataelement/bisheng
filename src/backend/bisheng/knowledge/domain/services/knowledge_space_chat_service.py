@@ -16,6 +16,7 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.channel import KnowledgeSpaceLLMNotConfiguredError
 from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.core.prompts.manager import get_prompt_manager
+from bisheng.database.constants import MessageCategory
 from bisheng.database.models.flow import FlowType
 from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.message import ChatMessageDao, ChatMessage
@@ -126,7 +127,7 @@ class KnowledgeSpaceChatService:
         reasoning_content = ""
         async for one in llm.astream(inputs):
             yield ChatResponse(
-                category="stream",
+                category=MessageCategory.STREAM,
                 message={
                     "content": one.content,
                     "reasoning_content": one.additional_kwargs.get("reasoning_content", ""),
@@ -136,7 +137,7 @@ class KnowledgeSpaceChatService:
             reasoning_content += one.additional_kwargs.get("reasoning_content", "")
             answer += one.content
         yield ChatResponse(
-            category="stream",
+            category=MessageCategory.STREAM,
             message={
                 "content": answer,
                 "reasoning_content": reasoning_content
@@ -145,7 +146,7 @@ class KnowledgeSpaceChatService:
         )
         await ChatMessageDao.ainsert_batch([
             ChatMessage(
-                category="question",
+                category=MessageCategory.QUESTION,
                 message=json.dumps({
                     "query": query,
                     "tags": tags,
@@ -157,7 +158,7 @@ class KnowledgeSpaceChatService:
                 is_bot=False,
             ),
             ChatMessage(
-                category="answer",
+                category=MessageCategory.ANSWER,
                 message=json.dumps({
                     "content": answer,
                     "reasoning_content": reasoning_content
