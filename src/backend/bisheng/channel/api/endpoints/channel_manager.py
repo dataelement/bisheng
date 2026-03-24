@@ -92,7 +92,6 @@ async def add_website_information_source(
     return resp_200(data=result.model_dump())
 
 
-
 @router.post("/add_wechat_source")
 async def add_wechat_information_source(
         req_param: AddInformationSourceRequest,
@@ -102,7 +101,6 @@ async def add_wechat_information_source(
     client = await get_bisheng_information_client()
     result = await client.add_wechat_information_source(req_param.url)
     return resp_200(data=result.model_dump())
-
 
 
 @router.post("/crawl")
@@ -365,12 +363,5 @@ async def add_articles_to_knowledge_space(
         channel_service: 'ChannelService' = Depends(get_channel_service)
 ):
     """Add channel articles to a knowledge space."""
-    try:
-        result = await channel_service.add_articles_to_knowledge_space(req, login_user, request)
-        return resp_200(data=result)
-    except ValueError as e:
-        logger.warning(f"Add articles to knowledge space failed: {e}")
-        return resp_500(message=str(e))
-    except Exception as e:
-        logger.error(f"Failed to add articles to knowledge space: {e}")
-        return resp_500(message="Failed to add articles to knowledge space")
+    result = await channel_service.add_articles_to_knowledge_space(req, login_user, request)
+    return resp_200(data=result)
