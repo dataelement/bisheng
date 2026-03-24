@@ -21,12 +21,13 @@ class MessageContentItem(BaseModel):
 class BusinessContentItem(MessageContentItem):
     """Single business item within a message's content array."""
     type: str = "business_url"
+    business_name: str = Field(default=None, description='Business display name')
     business_type: str = Field(..., description='Business type')
     business_id: str = Field(..., description='Business ID')
 
-    @property
-    def metadata(self) -> Dict[str, Any]:
-        return {'business_type': self.business_type, 'business_id': self.business_id}
+    def to_message(self) -> Dict[str, Any]:
+        return {'type': self.type, 'content': f"--{self.business_name}",
+                'metadata': {'business_type': self.business_type, 'business_id': self.business_id}}
 
 
 class UserContentItem(MessageContentItem):
@@ -35,7 +36,7 @@ class UserContentItem(MessageContentItem):
     user_id: int = Field(..., description='User ID')
 
     def to_message(self) -> Dict[str, Any]:
-        return {'type': self.type, 'content': self.user_name, 'metadata': {'user_id': self.user_id}}
+        return {'type': self.type, 'content': f"@{self.user_name}", 'metadata': {'user_id': self.user_id}}
 
 
 class TabTypeEnum(str, Enum):

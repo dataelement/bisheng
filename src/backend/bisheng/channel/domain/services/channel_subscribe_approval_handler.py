@@ -60,7 +60,7 @@ class ChannelSubscribeApprovalHandler(ApprovalHandler):
                     content="approved_channel",
                 ),
                 BusinessContentItem(
-                    content=f"--{channel_info.name}",
+                    business_name=channel_info.name,
                     business_type="channel_id",
                     business_id=channel_info.id,
                 )
@@ -99,7 +99,7 @@ class ChannelSubscribeApprovalHandler(ApprovalHandler):
                     content="rejected_channel",
                 ),
                 BusinessContentItem(
-                    content=f"--{channel_info.name}",
+                    business_name=channel_info.name,
                     business_type="channel_id",
                     business_id=channel_info.id,
                 )

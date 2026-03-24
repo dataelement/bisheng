@@ -55,7 +55,7 @@ class KnowledgeSpaceSubscribeHandler(ApprovalHandler):
                     content="approved_knowledge_space",
                 ),
                 BusinessContentItem(
-                    content=f"--{space_info.name}",
+                    business_name=space_info.name,
                     business_type="knowledge_space_id",
                     business_id=str(space_info.id),
                 )
@@ -81,7 +81,7 @@ class KnowledgeSpaceSubscribeHandler(ApprovalHandler):
                     content="rejected_knowledge_space",
                 ),
                 BusinessContentItem(
-                    content=f"--{space_info.name}",
+                    business_name=space_info.name,
                     business_type="knowledge_space_id",
                     business_id=str(space_info.id),
                 )
