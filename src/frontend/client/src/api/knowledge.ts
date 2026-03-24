@@ -164,6 +164,7 @@ interface RawKnowledgeSpace {
     tags?: string[];
     is_released?: boolean;
     is_pending?: boolean;
+    is_followed?: boolean;
 }
 
 interface RawSpaceChild {
@@ -246,6 +247,7 @@ function mapSpace(raw: RawKnowledgeSpace): KnowledgeSpace {
         tags: raw.tags || [],
         isReleased: raw.is_released ?? false,
         isPending: raw.is_pending ?? false,
+        isFollowed: raw.is_followed ?? false,
     };
 }
 
@@ -490,12 +492,11 @@ export async function getSquareSpacesApi(params?: {
             const authTypeVal = rawAny?.auth_type ?? itemAny?.auth_type ?? rawAny?.authType ?? itemAny?.authType;
             const visibility = (authTypeVal as VisibilityType) || VisibilityType.PRIVATE;
 
-            // status rules: first is_pending, then is_released
+            // status rules in square: first is_pending, then is_followed
             const isPending = Boolean(itemAny?.is_pending ?? rawAny?.is_pending);
+            const isFollowed = Boolean(itemAny?.is_followed ?? rawAny?.is_followed);
             const isReleased = Boolean(rawAny?.is_released ?? itemAny?.is_released);
-            const squareStatus: "join" | "joined" | "pending" = isPending ? "pending" : isReleased ? "joined" : "join";
-
-            const isFollowed = Boolean(itemAny?.is_followed ?? rawAny?.is_followed ?? (isReleased && !isPending));
+            const squareStatus: "join" | "joined" | "pending" = isPending ? "pending" : isFollowed ? "joined" : "join";
 
             const fileNum = itemAny?.file_num ?? rawAny?.file_num ?? rawAny?.fileNum ?? itemAny?.fileNum ?? 0;
             const followerNum =

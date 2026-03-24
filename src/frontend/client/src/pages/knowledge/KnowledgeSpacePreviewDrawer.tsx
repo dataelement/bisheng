@@ -46,7 +46,7 @@ export function KnowledgeSpacePreviewDrawer({
             .then(info => {
                 setSpace(info);
                 if (info.isPending) setStatus("pending");
-                else if (info.isReleased) setStatus("joined");
+                else if (info.isFollowed) setStatus("joined");
                 else setStatus("none");
             })
             .catch(() => {
