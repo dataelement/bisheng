@@ -7,6 +7,7 @@ AdminRole = 1
 
 
 # Some of the basiccategoryType
-class MessageCategory(Enum):
+class MessageCategory(str, Enum):
     QUESTION = 'question'  # User Questions
     ANSWER = 'answer'  # Answers
+    STREAM = 'stream'  # stream
