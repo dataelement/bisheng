@@ -40,7 +40,8 @@ class SpaceFileDao(KnowledgeFileDao):
             return await session.scalar(statement)
 
     @classmethod
-    async def get_children_by_prefix(cls, knowledge_id: int, prefix: str) -> List[KnowledgeFile]:
+    async def get_children_by_prefix(cls, knowledge_id: int, prefix: str, file_status: KnowledgeFileStatus = None) \
+            -> List[KnowledgeFile]:
         """ Get all files/folders whose file_level_path starts with the given prefix """
         statement = select(KnowledgeFile).where(
             KnowledgeFile.knowledge_id == knowledge_id,
@@ -49,6 +50,8 @@ class SpaceFileDao(KnowledgeFileDao):
                 col(KnowledgeFile.file_level_path).like(f"{prefix}/%")
             )
         )
+        if file_status is not None:
+            statement = statement.where(KnowledgeFile.status == file_status.value)
         async with get_async_db_session() as session:
             return (await session.exec(statement)).all()
 

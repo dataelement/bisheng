@@ -14,10 +14,11 @@ interface ApiResponse<T> {
 /** File processing status */
 export enum FileStatus {
     UPLOADING = "uploading",
-    QUEUED = "queued",
     PROCESSING = "processing",
     SUCCESS = "success",
     FAILED = "failed",
+    REBUILDING = "rebuilding",
+    WAITING = "waiting",
     TIMEOUT = "timeout"
 }
 
@@ -45,9 +46,9 @@ export enum VisibilityType {
 
 /** Sort field */
 export enum SortType {
-    NAME = "name",
-    TYPE = "type",
-    SIZE = "size",
+    NAME = "file_name",
+    TYPE = "file_type",
+    SIZE = "file_size",
     UPDATE_TIME = "update_time"
 }
 
@@ -86,16 +87,33 @@ export interface KnowledgeSpace {
     updatedAt: string;            // mapped from update_time
     tags: string[];
     isReleased: boolean;          // mapped from is_released
+
+    // Used only by the "square explore" UI
+    isFollowed?: boolean;
+    isPending?: boolean;
+    // join | joined | pending
+    squareStatus?: "join" | "joined" | "pending";
+}
+
+/** Space tag entity used by tagging UI */
+export interface SpaceTag {
+    id: number;
+    name: string;
 }
 
 /** File or folder item returned from the space children API */
+export interface FileTag {
+    id: number;
+    name: string;
+}
+
 export interface KnowledgeFile {
     id: string;
     name: string;
     type: FileType;
     size?: number;
     status?: FileStatus;
-    tags: string[];
+    tags: FileTag[];
     path: string;
     parentId?: string;           // mapped from parent_id
     spaceId: string;
@@ -103,6 +121,10 @@ export interface KnowledgeFile {
     updatedAt: string;           // mapped from update_time
     thumbnail?: string;
     errorMessage?: string;
+    /** Number of successfully parsed files (folders only) */
+    successFileNum?: number;
+    /** Total number of files (folders only) */
+    fileNum?: number;
     // Transient UI-only fields
     isCreating?: boolean;
 }
@@ -122,7 +144,10 @@ interface RawKnowledgeSpace {
     member_count?: number;
     file_count?: number;
     total_file_count?: number;
+    follower_num?: number;
+    file_num?: number;
     role?: string;
+    user_role?: string;
     is_pinned?: boolean;
     create_time?: string;
     update_time?: string;
@@ -169,6 +194,9 @@ interface RawKnowledgeFile {
     update_time?: string;
     remark?: string;
     thumbnails?: string | null;
+    success_file_num?: number;
+    file_num?: number;
+    tags?: Array<{ id: number; name: string }>;
 }
 
 /** Upload API response */
@@ -196,10 +224,11 @@ function mapSpace(raw: RawKnowledgeSpace): KnowledgeSpace {
         visibility: (raw.auth_type as VisibilityType) || VisibilityType.PRIVATE,
         creator: raw.user_name || "",
         creatorId: String(raw.user_id ?? ""),
-        memberCount: raw.member_count ?? 0,
-        fileCount: raw.file_count ?? 0,
-        totalFileCount: raw.total_file_count ?? 0,
-        role: (raw.role as SpaceRole) || SpaceRole.MEMBER,
+        // Some endpoints (e.g. /info) return follower_num/file_num instead of member_count/file_count.
+        memberCount: raw.member_count ?? raw.follower_num ?? 0,
+        fileCount: raw.file_count ?? raw.file_num ?? 0,
+        totalFileCount: raw.total_file_count ?? raw.file_num ?? raw.file_count ?? 0,
+        role: (raw.user_role as SpaceRole) || (raw.role as SpaceRole) || SpaceRole.MEMBER,
         isPinned: raw.is_pinned ?? false,
         createdAt: raw.create_time || "",
         updatedAt: raw.update_time || "",
@@ -209,40 +238,83 @@ function mapSpace(raw: RawKnowledgeSpace): KnowledgeSpace {
 }
 
 /** Derive explicit FileType enum value from a raw child item */
-function deriveFileType(raw: RawSpaceChild): FileType {
-    if (raw.type === "folder") return FileType.FOLDER;
-    const ext = (raw.file_type || "").toLowerCase();
+function deriveFileType(raw: any): FileType {
+    // Backend: file_type: 0(dir) | 1(file)
+    if (raw?.type === "folder" || raw?.file_type === 0 || raw?.file_type === "0") return FileType.FOLDER;
+
+    const fileName = raw?.file_name ?? raw?.name ?? raw?.object_name ?? raw?.path ?? "";
+    const ext = String(fileName).split(".").pop()?.toLowerCase() ?? "";
     switch (ext) {
-        case "pdf": return FileType.PDF;
-        case "doc": return FileType.DOC;
-        case "docx": return FileType.DOCX;
-        case "xls": return FileType.XLS;
-        case "xlsx": return FileType.XLSX;
-        case "ppt": return FileType.PPT;
-        case "pptx": return FileType.PPTX;
-        case "jpg": return FileType.JPG;
-        case "jpeg": return FileType.JPEG;
-        case "png": return FileType.PNG;
-        default: return FileType.OTHER;
+        case "pdf":
+            return FileType.PDF;
+        case "doc":
+            return FileType.DOC;
+        case "docx":
+            return FileType.DOCX;
+        case "xls":
+            return FileType.XLS;
+        case "xlsx":
+            return FileType.XLSX;
+        case "ppt":
+            return FileType.PPT;
+        case "pptx":
+            return FileType.PPTX;
+        case "jpg":
+            return FileType.JPG;
+        case "jpeg":
+            return FileType.JPEG;
+        case "png":
+            return FileType.PNG;
+        default:
+            return FileType.OTHER;
     }
 }
 
 /** Map a raw space child (file/folder) to the frontend KnowledgeFile model */
-function mapChild(raw: RawSpaceChild, spaceId: string): KnowledgeFile {
+function mapChild(raw: any, spaceId: string): KnowledgeFile {
+    // Backend keys in children response usually look like:
+    // id, file_name, file_type(0|1), file_level_path, knowledge_id,
+    // status(numeric), update_time/create_time, tags(list of {id,name}) for files
+    const idVal = raw?.id ?? raw?.file_id ?? raw?.knowledge_file_id ?? "";
+    const nameVal = raw?.name ?? raw?.file_name ?? raw?.object_name ?? raw?.file_name ?? raw?.path ?? "";
+
+    const tags: FileTag[] = Array.isArray(raw?.tags)
+        ? raw.tags
+            .map((t: any) => {
+                if (typeof t === "string") return { id: -1, name: t as string };
+                const id = t?.id !== undefined && t?.id !== null ? Number(t.id) : -1;
+                const name = t?.name !== undefined && t?.name !== null ? String(t.name) : "";
+                if (!name) return null;
+                return { id, name };
+            })
+            .filter((v: FileTag | null): v is FileTag => v !== null)
+        : [];
+
+    const statusVal = raw?.status;
+    const status: FileStatus | undefined =
+        typeof statusVal === "number"
+            ? mapFileStatus(statusVal)
+            : typeof statusVal === "string" && statusVal
+                // Backend may return uppercase string like "FAILED" — normalize to lowercase enum value
+                ? statusVal.toLowerCase() as FileStatus
+                : undefined;
+
     return {
-        id: String(raw.id),
-        name: raw.name,
+        id: idVal !== undefined && idVal !== null ? String(idVal) : "",
+        name: String(nameVal),
         type: deriveFileType(raw),
-        size: raw.size,
-        status: raw.status as FileStatus | undefined,
-        tags: raw.tags || [],
-        path: raw.path || raw.name,
-        parentId: raw.parent_id !== undefined ? String(raw.parent_id) : undefined,
-        spaceId: raw.space_id !== undefined ? String(raw.space_id) : spaceId,
-        createdAt: raw.create_time || "",
-        updatedAt: raw.update_time || "",
-        thumbnail: raw.thumbnail,
-        errorMessage: raw.error_message,
+        size: raw?.size ?? raw?.file_size,
+        status,
+        tags,
+        path: raw?.path ?? raw?.file_level_path ?? String(nameVal),
+        parentId: raw?.parent_id !== undefined && raw?.parent_id !== null ? String(raw.parent_id) : undefined,
+        spaceId: raw?.space_id ?? raw?.knowledge_id ?? spaceId,
+        createdAt: raw?.create_time ?? "",
+        updatedAt: raw?.update_time ?? "",
+        thumbnail: raw?.thumbnail ?? raw?.thumbnails,
+        errorMessage: raw?.error_message,
+        successFileNum: raw?.success_file_num !== undefined ? Number(raw.success_file_num) : undefined,
+        fileNum: raw?.file_num !== undefined ? Number(raw.file_num) : undefined,
     };
 }
 
@@ -268,27 +340,46 @@ function deriveFileTypeFromName(fileName: string): FileType {
 function mapFileStatus(status: number): FileStatus {
     switch (status) {
         case 1: return FileStatus.PROCESSING;
-        case 2: return FileStatus.FAILED;
-        case 3: return FileStatus.SUCCESS;
-        default: return FileStatus.QUEUED;
+        case 2: return FileStatus.SUCCESS;
+        case 3: return FileStatus.FAILED;
+        case 4: return FileStatus.REBUILDING;
+        case 5: return FileStatus.WAITING;
+        case 6: return FileStatus.TIMEOUT;
+        default: return FileStatus.WAITING;
+    }
+}
+
+/** Convert FileStatus enum to backend numeric value */
+export function fileStatusToNumber(status: FileStatus): number {
+    switch (status) {
+        case FileStatus.PROCESSING: return 1;
+        case FileStatus.SUCCESS: return 2;
+        case FileStatus.FAILED: return 3;
+        case FileStatus.REBUILDING: return 4;
+        case FileStatus.WAITING: return 5;
+        case FileStatus.TIMEOUT: return 6;
+        default: return 0;
     }
 }
 
 /** Map a raw knowledge file record to the frontend KnowledgeFile model */
 function mapRawFile(raw: RawKnowledgeFile): KnowledgeFile {
+    const isFolder = raw.file_type === 0;
     return {
         id: String(raw.id),
         name: raw.file_name,
-        type: deriveFileTypeFromName(raw.file_name),
+        type: isFolder ? FileType.FOLDER : deriveFileTypeFromName(raw.file_name),
         size: raw.file_size,
-        status: mapFileStatus(raw.status),
-        tags: [],
+        status: isFolder ? undefined : mapFileStatus(raw.status),
+        tags: isFolder ? [] : (raw.tags || []),
         path: raw.object_name || raw.file_name,
         parentId: undefined,
         spaceId: String(raw.knowledge_id),
         createdAt: raw.create_time || "",
         updatedAt: raw.update_time || "",
         thumbnail: raw.thumbnails || undefined,
+        successFileNum: raw.success_file_num,
+        fileNum: raw.file_num,
     };
 }
 
@@ -318,41 +409,119 @@ export async function getJoinedSpacesApi(params?: {
 
 /**
  * Get public knowledge square (paginated)
- * Response items are { space, is_followed, is_pending } — flatten to ChannelSquare-compatible format
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function getSquareSpacesApi(params?: {
-    keyword?: string;
+    order_by?: string;
     page?: number;
     page_size?: number;
-}): Promise<{ data: { data: any[]; total: number } }> {
-    interface SquareItem {
-        space: RawKnowledgeSpace;
-        is_followed: boolean;
-        is_pending: boolean;
-    }
-    const res = await request.get<ApiResponse<{ total: number; data: SquareItem[] }>>(
-        `/api/v1/knowledge/space/square`,
-        { params }
-    );
-    const items = (res?.data?.data || []).map((item) => ({
-        id: item.space?.id,
-        name: item.space?.name ?? "",
-        description: item.space?.description ?? "",
-        creator: "",
-        auth_type: item.space?.auth_type,
-        visibility: item.space?.auth_type,
-        subscription_status: item.is_followed
-            ? "subscribed"
-            : item.is_pending
-                ? "pending"
-                : "not_subscribed",
-    }));
+}): Promise<{ data: KnowledgeSpace[]; total: number }> {
+    const res = await request.get<ApiResponse<any>>(`/api/v1/knowledge/space/square`, { params });
+    const payload = res?.data ?? {};
+
+    // Backend currently returns:
+    // { total, page, page_size, data: [ { space: RawKnowledgeSpace, is_followed, is_pending }, ... ] }
+    const rawList: any[] = Array.isArray(payload?.list)
+        ? payload.list
+        : Array.isArray(payload?.data)
+            ? payload.data
+            : [];
+
+    const mapped: KnowledgeSpace[] = rawList
+        .map((item) => {
+            const itemAny: any = item ?? {};
+            const rawAny: any = itemAny?.space ?? itemAny;
+
+            // Derive id/name defensively. Never use String(undefined) -> "undefined".
+            const idVal =
+                rawAny?.id ??
+                rawAny?.space_id ??
+                rawAny?.knowledge_id ??
+                rawAny?.spaceId ??
+                rawAny?.knowledgeId ??
+                rawAny?.business_id ??
+                rawAny?.businessId ??
+                itemAny?.id ??
+                itemAny?.space_id ??
+                itemAny?.knowledge_id ??
+                itemAny?.spaceId ??
+                itemAny?.knowledgeId ??
+                itemAny?.business_id ??
+                itemAny?.businessId;
+
+            const id = idVal !== undefined && idVal !== null ? String(idVal) : "";
+
+            const nameVal =
+                rawAny?.name ??
+                rawAny?.space_name ??
+                rawAny?.title ??
+                itemAny?.name ??
+                itemAny?.space_name ??
+                itemAny?.title ??
+                "";
+
+            const descriptionVal =
+                rawAny?.description ??
+                rawAny?.desc ??
+                itemAny?.description ??
+                itemAny?.desc ??
+                undefined;
+
+            const creator =
+                itemAny?.user_name ??
+                rawAny?.user_name ??
+                itemAny?.creator ??
+                rawAny?.creator ??
+                "";
+
+            const creatorIdVal = rawAny?.user_id ?? itemAny?.user_id ?? rawAny?.userId ?? itemAny?.userId ?? "";
+
+            const authTypeVal = rawAny?.auth_type ?? itemAny?.auth_type ?? rawAny?.authType ?? itemAny?.authType;
+            const visibility = (authTypeVal as VisibilityType) || VisibilityType.PRIVATE;
+
+            // status rules: first is_pending, then is_released
+            const isPending = Boolean(itemAny?.is_pending ?? rawAny?.is_pending);
+            const isReleased = Boolean(rawAny?.is_released ?? itemAny?.is_released);
+            const squareStatus: "join" | "joined" | "pending" = isPending ? "pending" : isReleased ? "joined" : "join";
+
+            const isFollowed = Boolean(itemAny?.is_followed ?? rawAny?.is_followed ?? (isReleased && !isPending));
+
+            const fileNum = itemAny?.file_num ?? rawAny?.file_num ?? rawAny?.fileNum ?? itemAny?.fileNum ?? 0;
+            const followerNum =
+                itemAny?.follower_num ?? rawAny?.follower_num ?? rawAny?.followerNum ?? itemAny?.followerNum ?? 0;
+
+            const iconOrAvatar = itemAny?.avatar ?? rawAny?.avatar ?? rawAny?.icon ?? itemAny?.icon ?? "";
+
+            const createdAt = rawAny?.create_time ?? itemAny?.create_time ?? "";
+            const updatedAt = rawAny?.update_time ?? itemAny?.update_time ?? "";
+
+            return {
+                id,
+                name: String(nameVal ?? ""),
+                description: descriptionVal !== undefined ? String(descriptionVal) : undefined,
+                icon: iconOrAvatar,
+                visibility,
+                creator,
+                creatorId: creatorIdVal !== undefined && creatorIdVal !== null ? String(creatorIdVal) : "",
+                memberCount: Number(followerNum ?? 0),
+                fileCount: Number(fileNum ?? 0),
+                totalFileCount: Number(fileNum ?? 0),
+                role: SpaceRole.MEMBER,
+                isPinned: false,
+                createdAt: createdAt ? String(createdAt) : "",
+                updatedAt: updatedAt ? String(updatedAt) : "",
+                tags: [],
+                isReleased,
+                isFollowed,
+                isPending,
+                squareStatus,
+            };
+        })
+        // Keep entries without id but avoid "undefined" key; drawer won't open for them.
+        .map((s) => s);
+
     return {
-        data: {
-            data: items,
-            total: res?.data?.total ?? 0,
-        },
+        data: mapped,
+        total: payload?.total ?? 0,
     };
 }
 
@@ -407,6 +576,46 @@ export async function getSpaceMembersApi(space_id: string): Promise<unknown[]> {
 }
 
 /**
+ * Get tags for a knowledge space.
+ * Backend: GET /api/v1/knowledge/space/{space_id}/tag
+ */
+export async function getSpaceTagsApi(space_id: string): Promise<SpaceTag[]> {
+    const res = await request.get<ApiResponse<SpaceTag[]>>(`/api/v1/knowledge/space/${space_id}/tag`);
+    return res?.data ?? [];
+}
+
+/**
+ * Add a new space tag.
+ * Backend: POST /api/v1/knowledge/space/{space_id}/tag
+ */
+export async function addSpaceTagApi(space_id: string, tag_name: string): Promise<SpaceTag> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const res = (await request.post(`/api/v1/knowledge/space/${space_id}/tag`, { tag_name })) as any;
+    // Handle both flat { id, name } and wrapped { data: { id, name } } responses
+    const tag = res?.data?.id !== undefined ? res.data : res?.data?.data;
+    return tag as SpaceTag;
+}
+
+/**
+ * Overwrite tags for a single file.
+ * Backend: POST /api/v1/knowledge/space/{space_id}/files/{file_id}/tag
+ */
+export async function updateFileTagsApi(space_id: string, file_id: string, tag_ids: number[]): Promise<void> {
+    await request.post(`/api/v1/knowledge/space/${space_id}/files/${file_id}/tag`, { tag_ids });
+}
+
+/**
+ * Batch add tags for files.
+ * Backend: POST /api/v1/knowledge/space/{space_id}/files/batch-tag
+ */
+export async function batchUpdateTagsApi(
+    space_id: string,
+    data: { file_ids: number[]; tag_ids: number[] }
+): Promise<void> {
+    await request.post(`/api/v1/knowledge/space/${space_id}/files/batch-tag`, data);
+}
+
+/**
  * Subscribe to a space
  * POST /api/v1/knowledge/space/{space_id}/subscribe
  */
@@ -431,6 +640,30 @@ export async function deleteSpaceApi(space_id: string): Promise<void> {
 }
 
 /**
+ * Get the parent folder chain for a folder/file
+ * GET /api/v1/knowledge/space/{space_id}/folders/{folder_id}/parent
+ * Returns the ancestor path from root to the given folder
+ */
+export async function getFolderParentPathApi(
+    spaceId: string,
+    folderId: string
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+): Promise<Array<{ id: string; name: string }>> {
+    const res = await request.get<ApiResponse<any>>(
+        `/api/v1/knowledge/space/${spaceId}/folders/${folderId}/parent`
+    );
+    const data = res?.data;
+    // Normalize: backend may return an array of objects with id/name or file_name
+    if (Array.isArray(data)) {
+        return data.map((item: any) => ({
+            id: String(item.id),
+            name: item.name || item.file_name || String(item.id),
+        }));
+    }
+    return [];
+}
+
+/**
  * Pin / unpin a space
  * POST /api/v1/knowledge/space/{space_id}/set-pin
  * @param is_pined - true to pin, false to unpin (backend field name: is_pined)
@@ -448,56 +681,50 @@ export async function getSpaceChildrenApi(params: {
     parent_id?: string;
     page?: number;
     page_size?: number;
+    order_field?: string;
+    order_sort?: string;
+    file_status?: number[];
 }): Promise<{ data: KnowledgeFile[]; total: number }> {
     const { space_id, ...queryParams } = params;
     if (!space_id) return { data: [], total: 0 };
-    const res = await request.get<ApiResponse<{ data: RawKnowledgeFile[]; total: number }>>(
+    const res = await request.get<ApiResponse<{ data: RawSpaceChild[]; total: number }>>(
         `/api/v1/knowledge/space/${space_id}/children`,
         {
             params: {
                 parent_id: queryParams.parent_id,
                 page: queryParams.page,
                 page_size: queryParams.page_size,
-            }
+                order_field: queryParams.order_field,
+                order_sort: queryParams.order_sort,
+                file_status: queryParams.file_status?.length ? queryParams.file_status : undefined,
+            },
         }
     );
     return {
-        data: (res?.data?.data || []).map(mapRawFile),
+        data: (res?.data?.data || []).map(raw => mapChild(raw, space_id)),
         total: res?.data?.total ?? 0,
     };
 }
 
 /**
- * Search files under a space with keyword and/or tag filters
- * GET /api/v1/knowledge/space/{space_id}/search
+ * Search children (folders and files) within a space.
+ * Backend: GET /api/v1/knowledge/space/{space_id}/search
  */
-/** Serialize params so arrays become key=val1&key=val2 (not key[]=...) */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const paramsSerializer = (params: any) => {
-    return Object.keys(params)
-        .map(key => {
-            const value = params[key];
-            if (value === undefined) return null;
-            if (Array.isArray(value)) {
-                return value.map(val => `${key}=${val}`).join('&');
-            }
-            return `${key}=${value}`;
-        })
-        .filter(item => item !== null)
-        .join('&');
-};
-
 export async function searchSpaceChildrenApi(params: {
     space_id: string;
     parent_id?: string;
-    page?: number;
-    page_size?: number;
     keyword?: string;
     tag_ids?: number[];
+    page?: number;
+    page_size?: number;
+    order_field?: string;
+    order_sort?: string;
+    file_status?: number[];
 }): Promise<{ data: KnowledgeFile[]; total: number }> {
     const { space_id, ...queryParams } = params;
     if (!space_id) return { data: [], total: 0 };
-    const res = await request.get<ApiResponse<{ data: RawKnowledgeFile[]; total: number }>>(
+
+    const res = await request.get<ApiResponse<{ data: RawSpaceChild[]; total: number }>>(
         `/api/v1/knowledge/space/${space_id}/search`,
         {
             params: {
@@ -506,12 +733,15 @@ export async function searchSpaceChildrenApi(params: {
                 page_size: queryParams.page_size,
                 keyword: queryParams.keyword || undefined,
                 tag_ids: queryParams.tag_ids?.length ? queryParams.tag_ids : undefined,
+                order_field: queryParams.order_field,
+                order_sort: queryParams.order_sort,
+                file_status: queryParams.file_status?.length ? queryParams.file_status : undefined,
             },
-            paramsSerializer,
         }
     );
+
     return {
-        data: (res?.data?.data || []).map(mapRawFile),
+        data: (res?.data?.data || []).map(raw => mapChild(raw, space_id)),
         total: res?.data?.total ?? 0,
     };
 }
@@ -583,8 +813,8 @@ export async function addFilesApi(
     const res = await request.post(
         `/api/v1/knowledge/space/${space_id}/files`,
         data
-    ) as ApiResponse<RawKnowledgeFile[]>;
-    return (res?.data || []).map(mapRawFile);
+    ) as ApiResponse<RawSpaceChild[]>;
+    return (res?.data || []).map(raw => mapChild(raw, space_id));
 }
 
 /**
@@ -625,95 +855,25 @@ export async function batchDeleteApi(
 export async function batchDownloadApi(
     space_id: string,
     data: { file_ids?: number[]; folder_ids?: number[] }
-): Promise<Blob> {
-    return request.post(
+): Promise<string> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const res = await request.post<any>(
         `/api/v1/knowledge/space/${space_id}/files/batch-download`,
-        data,
-        { responseType: "blob" }
-    );
-}
-
-// ─────────────────────────────────────────────
-// API functions — Tag management
-// ─────────────────────────────────────────────
-
-/** Tag entity returned by the backend */
-export interface SpaceTag {
-    id: number;
-    name: string;
-    business_type: string;
-    business_id: string;
-    user_id: number;
-    create_time: string;
-    update_time: string;
-}
-
-/**
- * Get all tags for a knowledge space
- * GET /api/v1/knowledge/space/{space_id}/tag
- */
-export async function getSpaceTagsApi(space_id: string): Promise<SpaceTag[]> {
-    const res = await request.get<ApiResponse<SpaceTag[]>>(
-        `/api/v1/knowledge/space/${space_id}/tag`
-    );
-    return res?.data || [];
-}
-
-/**
- * Add a new tag to a knowledge space
- * POST /api/v1/knowledge/space/{space_id}/tag
- */
-export async function addSpaceTagApi(
-    space_id: string,
-    tag_name: string
-): Promise<SpaceTag> {
-    const res = await request.post(
-        `/api/v1/knowledge/space/${space_id}/tag`,
-        { tag_name }
-    ) as ApiResponse<SpaceTag>;
-    return res.data;
-}
-
-/**
- * Delete a tag from a knowledge space
- * DELETE /api/v1/knowledge/space/{space_id}/tag
- */
-export async function deleteSpaceTagApi(
-    space_id: string,
-    tag_id: number
-): Promise<void> {
-    await request.delete(`/api/v1/knowledge/space/${space_id}/tag`, {
-        data: { tag_id },
-    });
-}
-
-/**
- * Update (overwrite) tags for a single file
- * POST /api/v1/knowledge/space/{space_id}/files/{file_id}/tag
- */
-export async function updateFileTagsApi(
-    space_id: string,
-    file_id: string,
-    tag_ids: number[]
-): Promise<void> {
-    await request.post(
-        `/api/v1/knowledge/space/${space_id}/files/${file_id}/tag`,
-        { tag_ids }
-    );
-}
-
-/**
- * Batch append tags to multiple files
- * POST /api/v1/knowledge/space/{space_id}/files/batch-tag
- */
-export async function batchUpdateTagsApi(
-    space_id: string,
-    data: { file_ids: number[]; tag_ids: number[] }
-): Promise<void> {
-    await request.post(
-        `/api/v1/knowledge/space/${space_id}/files/batch-tag`,
         data
     );
+    // Response: { status_code, data: { url: "/tmp-dir/..." } }
+    return res?.data?.url ?? res?.url ?? "";
+}
+
+/**
+ * Batch retry failed files/folders
+ * POST /api/v1/knowledge/space/{space_id}/files/batch-retry
+ */
+export async function batchRetryApi(
+    space_id: string,
+    file_ids: number[]
+): Promise<void> {
+    await request.post(`/api/v1/knowledge/space/${space_id}/files/batch-retry`, { file_ids });
 }
 
 // ─────────────────────────────────────────────
@@ -721,8 +881,18 @@ export async function batchUpdateTagsApi(
 // ─────────────────────────────────────────────
 
 /**
- * Get file preview content
+ * Get file preview URL
+ * Returns { original_url, preview_url } — prefer preview_url, fallback to original_url
  */
-export async function getFilePreviewApi(space_id: string, file_id: string): Promise<unknown> {
-    return request.get(`/api/v1/knowledge/space/${space_id}/files/${file_id}/preview`);
+export async function getFilePreviewApi(
+    space_id: string,
+    file_id: string
+): Promise<{ original_url: string; preview_url: string }> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const res = await request.get<any>(`/api/v1/knowledge/space/${space_id}/files/${file_id}/preview`);
+    const data = res?.data ?? res;
+    return {
+        original_url: data?.original_url ?? "",
+        preview_url: data?.preview_url ?? "",
+    };
 }

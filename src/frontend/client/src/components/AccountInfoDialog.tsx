@@ -1,4 +1,6 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useSetRecoilState } from "recoil";
 import { X, Eye, EyeOff, Check, Camera } from "lucide-react";
 import { Avatar, AvatarImage } from "~/components/ui/avatar";
 import { Button } from "~/components/ui/Button";
@@ -6,7 +8,11 @@ import { Input } from "~/components/ui/Input";
 import { Dialog, DialogContent } from "~/components/ui/Dialog";
 import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
-import { updatePasswordApi } from "~/api/user";
+import { updatePasswordApi, uploadUserAvatarFileApi, getPublicKeyApi } from "~/api/user";
+import { JSEncrypt } from 'jsencrypt';
+import store from "~/store";
+import { QueryKeys } from "~/types/chat";
+
 
 interface PasswordStrength {
     minLength: boolean;
@@ -18,18 +24,27 @@ interface AccountInfoDialogProps {
     onOpenChange?: (open: boolean) => void;
     username?: string;
     avatarUrl?: string;
+    onAvatarUpdated?: (url: string) => void;
 }
 
 export function AccountInfoDialog({
     open = false,
     onOpenChange,
     username = "admin",
-    avatarUrl = "/path-to-avatar.png"
+    avatarUrl = "/path-to-avatar.png",
+    onAvatarUpdated
 }: AccountInfoDialogProps) {
     const [isEditing, setIsEditing] = useState(false);
     const { showToast } = useToastContext();
+    const queryClient = useQueryClient();
+    const setUser = useSetRecoilState(store.user);
     const [currentAvatarUrl, setCurrentAvatarUrl] = useState(avatarUrl);
     const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+    // 外部 avatarUrl 变化时，同步当前弹窗内展示
+    useEffect(() => {
+        setCurrentAvatarUrl(avatarUrl);
+    }, [avatarUrl]);
 
     // 密码输入状态
     const [oldPassword, setOldPassword] = useState("");
@@ -79,7 +94,25 @@ export function AccountInfoDialog({
         return false;
     };
 
-    // 提交密码修改
+    const publicKeyRef = useRef<string | null>(null);
+
+    const encryptPassword = async (pwd: string) => {
+        if (!pwd) return "";
+        try {
+            if (!publicKeyRef.current) {
+                const { public_key } = await getPublicKeyApi();
+                publicKeyRef.current = public_key;
+            }
+            const encrypt = new JSEncrypt();
+            encrypt.setPublicKey(publicKeyRef.current!);
+            const encrypted = encrypt.encrypt(pwd);
+            return encrypted || "";
+        } catch {
+            return "";
+        }
+    };
+
+    // 提交密码修改（对标后台 resetPwd 逻辑，先加密再提交）
     const handleSubmit = async () => {
         // 校验原密码是否为空
         if (!oldPassword) {
@@ -100,8 +133,17 @@ export function AccountInfoDialog({
         }
 
         try {
+            const encryptedOld = await encryptPassword(oldPassword);
+            const encryptedNew = await encryptPassword(newPassword);
+            if (!encryptedOld || !encryptedNew) {
+                showToast({
+                    message: "密码加密失败，请稍后重试",
+                    severity: NotificationSeverity.ERROR
+                });
+                return;
+            }
             // 调用修改密码 API
-            await updatePasswordApi({ oldPassword, newPassword });
+            await updatePasswordApi({ oldPassword: encryptedOld, newPassword: encryptedNew });
 
             // 修改成功
             showToast({
@@ -164,7 +206,7 @@ export function AccountInfoDialog({
         fileInputRef.current?.click();
     };
 
-    const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
 
@@ -178,42 +220,53 @@ export function AccountInfoDialog({
             return;
         }
 
-        const reader = new FileReader();
-        reader.onload = () => {
-            if (typeof reader.result === "string") {
-                setCurrentAvatarUrl(reader.result);
-                showToast({
-                    message: "头像更新成功",
-                    severity: NotificationSeverity.SUCCESS
-                });
-            } else {
-                showToast({
-                    message: "头像上传失败，请重试",
-                    severity: NotificationSeverity.ERROR
-                });
+        let viewUrl: string | null = null;
+        try {
+            // Directly upload to backend so it returns a valid avatar URL.
+            const { avatar } = await uploadUserAvatarFileApi(file);
+            if (!avatar) {
+                throw new Error("missing avatar url in response");
             }
-        };
-        reader.onerror = () => {
+            viewUrl = avatar.startsWith("/")
+                ? `${__APP_ENV__.BASE_URL}${avatar}`
+                : `${__APP_ENV__.BASE_URL}/${avatar}`;
+
+            setCurrentAvatarUrl(viewUrl);
+            onAvatarUpdated?.(viewUrl);
+            showToast({
+                message: "头像更新成功",
+                severity: NotificationSeverity.SUCCESS
+            });
+        } catch (error) {
+            console.error("upload avatar error", error);
             showToast({
                 message: "头像上传失败，请重试",
                 severity: NotificationSeverity.ERROR
             });
-        };
-        reader.readAsDataURL(file);
+        }
+        // Update global user cache immediately (AuthContext uses QueryKeys.user).
+        // Don't fail the whole upload flow if recoil/query cache update throws.
+        try {
+            if (viewUrl && typeof viewUrl === "string") {
+                setUser((prev: any) => (prev ? ({ ...prev, avatar: viewUrl } as any) : prev));
+            } else if (typeof __APP_ENV__ !== "undefined") {
+                // fallback: do nothing; the invalidate below should refresh eventual source of truth
+            }
+            queryClient.invalidateQueries([QueryKeys.user]);
+        } catch (err) {
+            console.error("avatar sync to global state failed", err);
+        } finally {
+            // 允许重新选择同一个文件
+            e.target.value = "";
+        }
     };
 
     return (
         <Dialog open={open} onOpenChange={handleOpenChange}>
-            <DialogContent className="w-[480px] p-0 rounded-2xl shadow-[0_8px_24px_rgba(0,0,0,0.12)]" close={false}>
+            <DialogContent className="w-[480px] p-0 rounded-2xl shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
                 {/* 标题栏 */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-[#f2f3f5]">
                     <h2 className="text-[16px] font-semibold text-[#1d2129]">账号信息</h2>
-                    <button
-                        onClick={() => handleOpenChange(false)}
-                        className="text-[#86909c] hover:text-[#1d2129] transition-colors"
-                    >
-                        <X className="size-5" />
-                    </button>
                 </div>
 
                 {/* 内容区域 */}

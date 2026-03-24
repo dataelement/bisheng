@@ -1,0 +1,229 @@
+import { useState, useCallback } from "react";
+import {
+    FileStatus,
+    FileType,
+    KnowledgeFile,
+    KnowledgeSpace,
+    SpaceRole,
+    createFolderApi,
+    renameFolderApi,
+    deleteFolderApi,
+    uploadFileToServerApi,
+    addFilesApi,
+    renameFileApi,
+    deleteFileApi,
+} from "~/api/knowledge";
+import { NotificationSeverity } from "~/common";
+import { useToastContext } from "~/Providers";
+import { getFileTypeFromName, MAX_FOLDER_DEPTH } from "../knowledgeUtils";
+
+interface UseFileUploadOptions {
+    activeSpace: KnowledgeSpace | null;
+    currentFolderId: string | undefined;
+    currentPath: Array<{ id?: string; name: string }>;
+    files: KnowledgeFile[];
+    setFiles: React.Dispatch<React.SetStateAction<KnowledgeFile[]>>;
+    loadFiles: (page?: number) => Promise<void>;
+    currentPage: number;
+}
+
+/**
+ * Manages file upload, folder creation, and file CRUD operations.
+ * Extracted from the root Knowledge component.
+ */
+export function useFileUpload({
+    activeSpace,
+    currentFolderId,
+    currentPath,
+    files,
+    setFiles,
+    loadFiles,
+    currentPage,
+}: UseFileUploadOptions) {
+    const [uploadingFiles, setUploadingFiles] = useState<KnowledgeFile[]>([]);
+    const [creatingFolder, setCreatingFolder] = useState<KnowledgeFile | null>(null);
+
+    const { showToast } = useToastContext();
+
+    // ─── File upload (two-step: server upload → register) ────────────────
+    const handleUploadFile = useCallback(
+        async (fileList?: FileList | File[]) => {
+            if (!activeSpace || !fileList || fileList.length === 0) {
+                showToast({ message: "上传文件功能开发中", severity: NotificationSeverity.INFO });
+                return;
+            }
+
+            const fileArray = Array.from(fileList);
+
+            // Create placeholder uploading entries for UI
+            const placeholders: KnowledgeFile[] = fileArray.map(file => ({
+                id: `upload_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+                name: file.name,
+                type: getFileTypeFromName(file.name),
+                size: file.size,
+                status: FileStatus.UPLOADING,
+                tags: [],
+                path: file.name,
+                parentId: currentFolderId,
+                spaceId: activeSpace.id,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+            }));
+            setUploadingFiles(prev => [...placeholders, ...prev]);
+
+            showToast({ message: `已开始处理 ${fileArray.length} 个文件`, severity: NotificationSeverity.SUCCESS });
+
+            // Upload each file and collect server paths
+            const uploadedPaths: string[] = [];
+            for (const file of fileArray) {
+                try {
+                    const res = await uploadFileToServerApi(activeSpace.id, file);
+                    uploadedPaths.push(res.file_path);
+                } catch {
+                    showToast({ message: `文件 ${file.name} 上传失败`, severity: NotificationSeverity.ERROR });
+                }
+            }
+
+            // Remove all placeholder entries
+            setUploadingFiles(prev =>
+                prev.filter(f => !placeholders.some(p => p.id === f.id))
+            );
+
+            if (uploadedPaths.length === 0) return;
+
+            // Register uploaded files into the space
+            try {
+                await addFilesApi(activeSpace.id, {
+                    file_path: uploadedPaths,
+                    parent_id: currentFolderId ? Number(currentFolderId) : null,
+                });
+                // Refresh the file list to reflect new entries
+                loadFiles(currentPage);
+            } catch {
+                showToast({ message: "文件注册到知识空间失败", severity: NotificationSeverity.ERROR });
+            }
+        },
+        [activeSpace, currentFolderId, currentPage, loadFiles, showToast]
+    );
+
+    // ─── Folder creation ─────────────────────────────────────────────────
+    const handleCreateFolder = useCallback(() => {
+        if (currentPath.length >= MAX_FOLDER_DEPTH) {
+            showToast({ message: `已达文件夹层级上限 ${MAX_FOLDER_DEPTH} 级`, severity: NotificationSeverity.WARNING } as any);
+            return;
+        }
+
+        const genRandomStr = () =>
+            Math.random().toString(36).substring(2, 8).toUpperCase() +
+            Math.random().toString(36).substring(2, 8).toUpperCase();
+        const randomStr = genRandomStr().substring(0, 12);
+
+        const newFolder: KnowledgeFile = {
+            id: `temp_folder_${Date.now()}`,
+            name: `未命名文件夹_${randomStr}`,
+            type: FileType.FOLDER,
+            tags: [],
+            path: `未命名文件夹_${randomStr}`,
+            parentId: currentFolderId,
+            spaceId: activeSpace?.id || "",
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            status: FileStatus.SUCCESS,
+            isCreating: true,
+        };
+
+        setCreatingFolder(newFolder);
+    }, [currentPath.length, currentFolderId, activeSpace?.id, showToast]);
+
+    const handleCancelCreateFolder = useCallback(() => {
+        setCreatingFolder(null);
+    }, []);
+
+    // ─── Rename file/folder ──────────────────────────────────────────────
+    /** Called when the inline-rename input is confirmed (new name submitted) */
+    const handleRenameFile = useCallback(
+        async (fileId: string, newName: string) => {
+            if (!activeSpace) return;
+
+            // ── Confirm in-progress folder creation ──
+            if (creatingFolder && fileId === creatingFolder.id) {
+                try {
+                    const created = await createFolderApi(activeSpace.id, {
+                        name: newName,
+                        parent_id: currentFolderId || null,
+                    });
+                    setFiles(prev => [created, ...prev]);
+                    setCreatingFolder(null);
+                    showToast({ message: "文件夹新建成功", severity: NotificationSeverity.SUCCESS } as any);
+                } catch {
+                    showToast({ message: "新建文件夹失败", severity: NotificationSeverity.ERROR });
+                }
+                return;
+            }
+
+            // ── Rename existing item ──
+            const target = files.find(f => f.id === fileId);
+            if (!target) return;
+
+            try {
+                if (target.type === FileType.FOLDER) {
+                    await renameFolderApi(activeSpace.id, fileId, newName);
+                } else {
+                    await renameFileApi(activeSpace.id, fileId, newName);
+                }
+                setFiles(prev => prev.map(f => f.id === fileId ? { ...f, name: newName } : f));
+                showToast({ message: "重命名成功", severity: NotificationSeverity.SUCCESS } as any);
+            } catch {
+                showToast({ message: "重命名失败", severity: NotificationSeverity.ERROR });
+            }
+        },
+        [activeSpace, creatingFolder, currentFolderId, files, setFiles, showToast]
+    );
+
+    // ─── Delete file/folder ──────────────────────────────────────────────
+    const handleDeleteFile = useCallback(
+        async (fileId: string) => {
+            if (!activeSpace) return;
+
+            // Empty fileId is used as a "refresh" signal — just refresh
+            if (!fileId) {
+                loadFiles(currentPage);
+                return;
+            }
+
+            const target = files.find(f => f.id === fileId);
+            if (!target) return;
+
+            try {
+                if (target.type === FileType.FOLDER) {
+                    await deleteFolderApi(activeSpace.id, fileId);
+                } else {
+                    await deleteFileApi(activeSpace.id, fileId);
+                }
+                setFiles(prev => prev.filter(f => f.id !== fileId));
+                showToast({ message: "已删除", severity: NotificationSeverity.SUCCESS });
+            } catch {
+                showToast({ message: "删除失败", severity: NotificationSeverity.ERROR });
+            }
+        },
+        [activeSpace, currentPage, files, setFiles, loadFiles, showToast]
+    );
+
+    const handleEditTags = useCallback(
+        (_fileId: string) => {
+            loadFiles(currentPage);
+        },
+        [currentPage, loadFiles]
+    );
+
+    return {
+        uploadingFiles,
+        creatingFolder,
+        handleUploadFile,
+        handleCreateFolder,
+        handleCancelCreateFolder,
+        handleRenameFile,
+        handleDeleteFile,
+        handleEditTags,
+    };
+}

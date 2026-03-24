@@ -325,6 +325,16 @@ async def batch_update_tags(
     return resp_200(result)
 
 
+@router.post('/{space_id}/files/batch-retry')
+async def batch_retry_failed_files(
+        space_id: int,
+        file_ids: List[int] = Body(..., embed=True, description='file or folder ids'),
+        svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+):
+    result = await svc.batch_retry_failed_files(space_id, file_ids)
+    return resp_200(result)
+
+
 # ──────────────────────────── Subscribe ───────────────────────────────────────
 
 @router.post('/{space_id}/subscribe', response_model=None)

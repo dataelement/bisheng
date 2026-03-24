@@ -33,7 +33,7 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
     const inputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
-        if (isRoot) setScope('all');
+        setScope(isRoot ? 'all' : 'current');
     }, [isRoot]);
 
     // Fetch space tags when spaceId changes

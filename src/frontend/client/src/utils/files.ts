@@ -188,14 +188,22 @@ export function addFileToCache(queryClient: QueryClient, newfile: TFile) {
   );
 }
 
-export function formatBytes(bytes: number, decimals = 2) {
-  if (bytes === 0) {
-    return 0;
-  }
+const SIZE_UNITS = ['B', 'KB', 'MB', 'GB', 'TB'];
+
+/**
+ * Format a byte count into a human-readable value.
+ * @param withUnit - when true, returns a string with unit suffix (e.g. "17.27MB");
+ *                   when false (default), returns the numeric value only (legacy behaviour).
+ */
+export function formatBytes(bytes: number, decimals?: number, withUnit?: false): number;
+export function formatBytes(bytes: number, decimals: number, withUnit: true): string;
+export function formatBytes(bytes: number, decimals = 2, withUnit = false): number | string {
+  if (bytes === 0) return withUnit ? '0B' : 0;
   const k = 1024;
   const dm = decimals < 0 ? 0 : decimals;
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm));
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), SIZE_UNITS.length - 1);
+  const value = parseFloat((bytes / Math.pow(k, i)).toFixed(dm));
+  return withUnit ? `${value}${SIZE_UNITS[i]}` : value;
 }
 
 const { checkType } = defaultFileConfig;

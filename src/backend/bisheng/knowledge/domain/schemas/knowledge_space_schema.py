@@ -2,6 +2,7 @@ from typing import Optional, List, Dict
 
 from pydantic import BaseModel, Field
 
+from bisheng.common.models.space_channel_member import UserRoleEnum
 from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum, KnowledgeBase
 
 
@@ -14,12 +15,15 @@ class KnowledgeSpaceCreateReq(BaseModel):
 
 
 class KnowledgeSpaceInfoResp(KnowledgeBase):
+    id: int = Field(..., description="Knowledge Space ID")
+    is_pinned: bool = Field(default=False, description="Knowledge Space pinned by current user or not")
     user_name: str = Field(default="", description="Knowledge Space creator name")
     avatar: Optional[str] = Field(default=None, description="Knowledge Space creator avatar")
     follower_num: int = Field(1, description="Follower Number")
     file_num: int = Field(1, description="Total File Number")
     is_followed: bool = Field(default=False, description="Knowledge Space followed by current user or not")
     is_pending: bool = Field(default=False, description="Knowledge Space pending or not")
+    user_role: Optional[UserRoleEnum] = Field(default=None, description="Knowledge Space user role")
 
 
 class KnowledgeSpaceUpdateReq(BaseModel):

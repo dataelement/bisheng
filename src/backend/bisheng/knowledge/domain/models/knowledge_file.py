@@ -254,6 +254,15 @@ class KnowledgeFileDao(KnowledgeFileBase):
             session.commit()
 
     @classmethod
+    async def aupdate_file_status(cls, file_ids: list[int], status: KnowledgeFileStatus, reason: str = None):
+        """ Batch update file status """
+        statement = update(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids)).values(status=status.value,
+                                                                                       remark=reason)
+        async with get_async_db_session() as session:
+            await session.exec(statement)
+            await session.commit()
+
+    @classmethod
     def get_file_by_condition(cls, knowledge_id: int, md5_: str = None, file_name: str = None):
         with get_sync_db_session() as session:
             sql = select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id)

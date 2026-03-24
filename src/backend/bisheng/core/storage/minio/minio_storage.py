@@ -32,6 +32,13 @@ class MinioStorage(BaseStorage, ABC):
             secure=minio_config.secure,
             cert_check=minio_config.cert_check
         )
+        self.share_minio_client = minio.Minio(
+            endpoint=minio_config.sharepoint,
+            access_key=minio_config.access_key,
+            secret_key=minio_config.secret_key,
+            secure=minio_config.share_schema,
+            cert_check=minio_config.share_cert_check
+        )
 
         # self.minio_client = miniopy_async.Minio(
         #     endpoint=minio_config.endpoint,
@@ -307,8 +314,8 @@ class MinioStorage(BaseStorage, ABC):
         if object_name[0] == '/':
             object_name = object_name[1:]
 
-        share_link = self.minio_client_sync.presigned_get_object(bucket, object_name,
-                                                                 expires=timedelta(days=expire_days))
+        share_link = self.share_minio_client.presigned_get_object(bucket, object_name,
+                                                                  expires=timedelta(days=expire_days))
         if clear_host:
             share_link = self.clear_minio_share_host(share_link)
         return share_link

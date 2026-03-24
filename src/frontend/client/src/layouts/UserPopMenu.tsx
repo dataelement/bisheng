@@ -31,6 +31,7 @@ export function UserPopMenu() {
     const [langcode, setLangcode] = useRecoilState(store.lang);
     const changeLang = (lang: string) => setLangcode(lang);
     const displayName = user?.username || "admin";
+    const [avatarUrl, setAvatarUrl] = useState<string>(user?.avatar || "");
 
     // 保留原有方法
     const handleAccountInfoClick = () => {
@@ -49,13 +50,21 @@ export function UserPopMenu() {
         }
     };
 
+    const displayUnreadCount = unreadCount > 99 ? "99+" : String(unreadCount);
+
     return (
         <>
             <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
                 <DropdownMenuTrigger asChild>
                     <div className="relative p-1 cursor-pointer outline-none active:scale-95 transition-transform">
                         <Avatar className="size-10 hover:opacity-90 transition-opacity">
-                            {user?.avatar ? <AvatarImage src={user?.avatar} alt="User" /> : <AvatarName name={user?.username} />}
+                            {avatarUrl ? (
+                                <AvatarImage src={avatarUrl} alt="User" />
+                            ) : user?.avatar ? (
+                                <AvatarImage src={user.avatar} alt="User" />
+                            ) : (
+                                <AvatarName name={user?.username} />
+                            )}
                         </Avatar>
                         {/* 头像右上角红点 */}
                         {unreadCount > 0 && (
@@ -72,7 +81,13 @@ export function UserPopMenu() {
                     {/* 1. 用户头部信息 */}
                     <div className="flex items-center gap-3 px-3 py-3">
                         <Avatar className="size-10 border border-gray-100" onClick={handleAccountInfoClick}>
-                            {user?.avatar ? <AvatarImage src={user.avatar} alt="User" /> : <AvatarName name={user?.username} />}
+                            {avatarUrl ? (
+                                <AvatarImage src={avatarUrl} alt="User" />
+                            ) : user?.avatar ? (
+                                <AvatarImage src={user.avatar} alt="User" />
+                            ) : (
+                                <AvatarName name={user?.username} />
+                            )}
                         </Avatar>
                         <div className="flex flex-col justify-center overflow-hidden" onClick={handleAccountInfoClick}>
                             <span className="text-[15px] font-medium text-gray-900 truncate">
@@ -94,7 +109,7 @@ export function UserPopMenu() {
                         </div>
                         {unreadCount > 0 && (
                             <span className="bg-[#f53f3f] text-white text-[11px] font-medium px-2 py-0.5 rounded-full min-w-[24px] text-center">
-                                {unreadCount}
+                                {displayUnreadCount}
                             </span>
                         )}
                     </DropdownMenuItem>
@@ -139,7 +154,8 @@ export function UserPopMenu() {
                 open={accountDialogOpen}
                 onOpenChange={setAccountDialogOpen}
                 username={displayName}
-                avatarUrl={user?.avatar || ""}
+                avatarUrl={avatarUrl || user?.avatar || ""}
+                onAvatarUpdated={(url) => setAvatarUrl(url)}
             />
 
             <NotificationsDialog

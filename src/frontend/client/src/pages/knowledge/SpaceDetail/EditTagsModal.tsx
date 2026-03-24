@@ -107,6 +107,10 @@ export function EditTagsModal({
         // Create a new tag in the space
         try {
             const newTag = await addSpaceTagApi(spaceId, trimmed);
+            if (!newTag || newTag.id === undefined || newTag.id === null) {
+                showToast({ message: "创建标签失败：返回数据异常", status: "error" });
+                return;
+            }
             setSpaceTags((prev) => [...prev, newTag]);
             setSelectedTagIds((prev) => new Set(prev).add(newTag.id));
             setInputValue("");

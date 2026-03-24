@@ -1,8 +1,9 @@
 import { Folder } from 'lucide-react';
 import React from 'react';
 import { DocxIcon, PptxIcon, XlsxIcon, TxtIcon } from '~/components/icons';
+import { FileStatus } from '~/api/knowledge';
 
-const FileIconRenderer = ({ file, isFolder }) => {
+const FileIconRenderer = ({ file, isFolder }: { file: any; isFolder: boolean }) => {
     const iconMap = {
         'doc': <DocxIcon className="size-16" />,
         'docx': <DocxIcon className="size-16" />,
@@ -19,7 +20,8 @@ const FileIconRenderer = ({ file, isFolder }) => {
         return <Folder className="size-16 fill-[#4080ff] text-[#4080ff]" />;
     }
 
-    if (file.thumbnail) {
+    // Only show thumbnail when file is successfully parsed
+    if (file.thumbnail && file.status === FileStatus.SUCCESS) {
         return <img src={file.thumbnail} alt={file.name} className="w-full h-full object-contain" />;
     }
 

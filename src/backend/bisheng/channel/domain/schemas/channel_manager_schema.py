@@ -160,6 +160,13 @@ class ChannelSquareItemResponse(BaseModel):
                                                           description='Top 5 data sources for the channel')
 
 
+class AddArticlesToKnowledgeSpaceRequest(BaseModel):
+    """Add Channel Articles to Knowledge Space Request"""
+    knowledge_id: int = Field(..., description='Knowledge Space ID')
+    article_ids: List[str] = Field(..., min_length=1, description='Article ID list to add')
+    parent_id: Optional[int] = Field(None, description='Parent folder ID in the knowledge space')
+
+
 class ChannelSquarePageResponse(BaseModel):
     """Channel Square Page Response"""
     data: List[ChannelSquareItemResponse] = Field(default_factory=list,

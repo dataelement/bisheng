@@ -5,8 +5,9 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from '~/components/ui/Tooltip2';
+import { FileTag } from '~/api/knowledge';
 
-const TagGroup = ({ tags, actionButton }: { tags: string[], actionButton?: ReactNode }) => {
+const TagGroup = ({ tags, actionButton }: { tags: FileTag[], actionButton?: ReactNode }) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const [visibleCount, setVisibleCount] = useState(1); // 初始默认显示1个
 
@@ -57,11 +58,11 @@ const TagGroup = ({ tags, actionButton }: { tags: string[], actionButton?: React
                 {/* 1. 实际显示的标签 */}
                 {visibleTags.map((tag, index) => (
                     <div
-                        key={index}
+                        key={tag.id}
                         className={`bg-[#f2f3f5] text-[#4e5969] text-xs px-1.5 py-0.5 rounded-sm whitespace-nowrap
               ${index === 0 ? 'min-w-[30px] truncate flex-shrink' : 'flex-shrink-0'}`}
                     >
-                        {tag}
+                        {tag.name}
                     </div>
                 ))}
 
@@ -75,9 +76,9 @@ const TagGroup = ({ tags, actionButton }: { tags: string[], actionButton?: React
                         </TooltipTrigger>
                         <TooltipContent side="top" noArrow className="bg-white p-2 border border-gray-100 shadow-md">
                             <div className="flex flex-wrap gap-1 max-w-[200px]">
-                                {hiddenTags.map((tag, i) => (
-                                    <span key={i} className="bg-[#f2f3f5] text-[#4e5969] text-xs px-1.5 py-0.5 rounded-sm">
-                                        {tag}
+                                {hiddenTags.map((tag) => (
+                                    <span key={tag.id} className="bg-[#f2f3f5] text-[#4e5969] text-xs px-1.5 py-0.5 rounded-sm">
+                                        {tag.name}
                                     </span>
                                 ))}
                             </div>
@@ -94,9 +95,9 @@ const TagGroup = ({ tags, actionButton }: { tags: string[], actionButton?: React
 
                 {/* 3. 用于测量的隐藏元素 (不参与 Flex 布局) */}
                 <div className="absolute top-0 left-0 invisible flex -z-10">
-                    {tags.map((tag, index) => (
-                        <div key={index} className="tag-measure px-1.5 py-0.5 text-xs whitespace-nowrap">
-                            {tag}
+                    {tags.map((tag) => (
+                        <div key={tag.id} className="tag-measure px-1.5 py-0.5 text-xs whitespace-nowrap">
+                            {tag.name}
                         </div>
                     ))}
                 </div>

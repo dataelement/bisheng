@@ -1,0 +1,97 @@
+import React from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import {
+    Pagination,
+    PaginationContent,
+    PaginationEllipsis,
+    PaginationItem,
+    PaginationLink,
+} from "~/components/ui/Pagination";
+
+interface PaginationBarProps {
+    currentPage: number;
+    pageSize: number;
+    total: number;
+    onPageChange: (page: number) => void;
+}
+
+/** Reusable pagination footer for file lists */
+export function PaginationBar({ currentPage, pageSize, total, onPageChange }: PaginationBarProps) {
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+    const getPageNumbers = (): (number | "ellipsis")[] => {
+        const pages: (number | "ellipsis")[] = [];
+        if (totalPages <= 5) {
+            for (let i = 1; i <= totalPages; i++) {
+                pages.push(i);
+            }
+        } else {
+            if (currentPage <= 3) {
+                pages.push(1, 2, 3, 4, "ellipsis", totalPages);
+            } else if (currentPage >= totalPages - 2) {
+                pages.push(1, "ellipsis", totalPages - 3, totalPages - 2, totalPages - 1, totalPages);
+            } else {
+                pages.push(1, "ellipsis", currentPage - 1, currentPage, currentPage + 1, "ellipsis", totalPages);
+            }
+        }
+        return pages;
+    };
+
+    return (
+        <div className="flex items-center gap-4 text-sm text-[#4e5969]">
+            <div className="flex items-center gap-1">
+                <span>共 <span className="text-[#165dff]">{total}</span> 条数据，</span>
+                <span>每页 {pageSize} 条</span>
+            </div>
+            <Pagination className="mx-0 w-auto">
+                <PaginationContent>
+                    <PaginationItem>
+                        <PaginationLink
+                            href="#"
+                            size="icon"
+                            className={"w-6 h-6 " + (currentPage === 1 ? "pointer-events-none opacity-50" : "")}
+                            onClick={(e) => {
+                                e.preventDefault();
+                                if (currentPage > 1) onPageChange(currentPage - 1);
+                            }}
+                        >
+                            <ChevronLeft className="size-4" />
+                        </PaginationLink>
+                    </PaginationItem>
+                    {getPageNumbers().map((pageNum, idx) => (
+                        <PaginationItem key={idx}>
+                            {pageNum === "ellipsis" ? (
+                                <PaginationEllipsis />
+                            ) : (
+                                <PaginationLink
+                                    href="#"
+                                    isActive={pageNum === currentPage}
+                                    className={"w-6 h-6 " + (pageNum === currentPage ? "border-primary text-primary" : "")}
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        onPageChange(pageNum as number);
+                                    }}
+                                >
+                                    {pageNum}
+                                </PaginationLink>
+                            )}
+                        </PaginationItem>
+                    ))}
+                    <PaginationItem>
+                        <PaginationLink
+                            href="#"
+                            size="icon"
+                            className={currentPage === totalPages ? "pointer-events-none opacity-50" : ""}
+                            onClick={(e) => {
+                                e.preventDefault();
+                                if (currentPage < totalPages) onPageChange(currentPage + 1);
+                            }}
+                        >
+                            <ChevronRight className="size-4" />
+                        </PaginationLink>
+                    </PaginationItem>
+                </PaginationContent>
+            </Pagination>
+        </div>
+    );
+}

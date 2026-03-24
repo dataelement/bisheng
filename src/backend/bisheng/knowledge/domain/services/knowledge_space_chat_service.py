@@ -234,7 +234,7 @@ class KnowledgeSpaceChatService:
             file_record = await KnowledgeFileDao.query_by_id(folder_id)
             if not file_record or file_record.knowledge_id != knowledge_id or file_record.file_type != 0:
                 raise NotFoundError(msg="Invalid folder for chat")
-            file_level_path = file_record.file_level_path
+            file_level_path = file_record.file_level_path + f"/{file_record.id}"
 
         space = await KnowledgeDao.aquery_by_id(knowledge_id)
         if not space:
@@ -251,8 +251,9 @@ class KnowledgeSpaceChatService:
         file_ids = await SpaceFileDao.get_children_by_prefix(space.id, file_level_path)
         file_ids = [one.id for one in file_ids]
         if tags:
-            file_ids = await TagDao.aget_resources_by_tags([one.get("id") for one in tags],
-                                                           resource_type=ResourceTypeEnum.SPACE_FILE)
+            tag_file_ids = await TagDao.aget_resources_by_tags([one.get("id") for one in tags],
+                                                               resource_type=ResourceTypeEnum.SPACE_FILE)
+            file_ids = list(set(file_ids) & set(tag_file_ids))
 
         milvus_vector = await KnowledgeRag.init_knowledge_milvus_vectorstore(self.login_user.user_id, knowledge=space)
         vector_retriever = milvus_vector.as_retriever(**{

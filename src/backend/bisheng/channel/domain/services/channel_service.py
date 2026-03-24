@@ -11,6 +11,7 @@ from bisheng.channel.domain.repositories.interfaces.channel_info_source_reposito
 from bisheng.channel.domain.repositories.interfaces.channel_repository import ChannelRepository
 from bisheng.channel.domain.schemas.article_schema import ArticleSearchPageResponse
 from bisheng.channel.domain.schemas.channel_manager_schema import (
+    AddArticlesToKnowledgeSpaceRequest,
     CreateChannelRequest,
     UpdateChannelRequest,
     MyChannelQueryRequest,
@@ -38,11 +39,14 @@ from bisheng.common.errcode.channel import (
     ChannelAdminLimitExceededError,
     ChannelSubscribeLimitExceededError,
 )
-from bisheng.common.models.space_channel_member import BusinessTypeEnum, UserRoleEnum
+from bisheng.common.models.space_channel_member import BusinessTypeEnum, UserRoleEnum, SpaceChannelMemberDao
 from bisheng.common.repositories.interfaces.space_channel_member_repository import SpaceChannelMemberRepository
+from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError
 from bisheng.core.external.bisheng_information_client.bisheng_information_manager import get_bisheng_information_client
+from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.message.domain.services.message_service import MessageService
 from bisheng.user.domain.models.user import UserDao
+from bisheng.utils import generate_uuid
 
 logger = logging.getLogger(__name__)
 
@@ -1330,3 +1334,99 @@ class ChannelService:
                     session.execute(stmt)
                 session.commit()
         return updated_count
+
+    # ──────────────────────────────────────────
+    #  Add articles to knowledge space
+    # ──────────────────────────────────────────
+
+    @staticmethod
+    def _sanitize_file_name(title: str) -> str:
+        """Remove or replace characters that are invalid in file names."""
+        invalid_chars = '/\\:*?"<>|\0'
+        for ch in invalid_chars:
+            title = title.replace(ch, '_')
+        return title.strip()[:200]
+
+    async def add_articles_to_knowledge_space(
+            self,
+            req: AddArticlesToKnowledgeSpaceRequest,
+            login_user: UserPayload,
+            request: 'Request',
+    ) -> List[dict]:
+        """Add channel articles to a knowledge space.
+
+        1. Validate articles exist in ES.
+        2. Check write permission on the target knowledge space.
+        3. Upload article content as .md and content_html as .html to minio.
+        4. Call KnowledgeSpaceService.add_file to import into the space.
+        5. Update preview_file_object_name for successfully created files.
+        """
+        # 1. Fetch all articles from ES and validate
+        articles = []
+        for article_id in req.article_ids:
+            article = await self.article_es_service.get_article(article_id)
+            if not article:
+                raise ValueError(f"Article not found: {article_id}")
+            articles.append(article)
+
+        # 2. Check write permission before uploading to minio
+        role = await SpaceChannelMemberDao.async_get_active_member_role(
+            req.knowledge_id, login_user.user_id
+        )
+        _WRITE_ROLES = {UserRoleEnum.CREATOR, UserRoleEnum.ADMIN}
+        if role not in _WRITE_ROLES:
+            raise SpacePermissionDeniedError()
+
+        # 3. Upload articles to minio
+        minio_client = await get_minio_storage()
+        md_file_paths = []
+        preview_map: dict[str, str] = {}  # md_object_name -> preview_object_name
+
+        for article in articles:
+            file_name = self._sanitize_file_name(article.title)
+            unique_id = generate_uuid()
+
+            # Upload content as .md
+            md_object_name = f"channel_articles/{unique_id}/{file_name}.md"
+            md_content = article.content or ""
+            await minio_client.put_object_tmp(
+                object_name=md_object_name,
+                file=md_content.encode("utf-8"),
+                content_type="text/markdown",
+            )
+            md_file_paths.append(md_object_name)
+
+            # Upload content_html as .html for preview
+            if article.content_html:
+                preview_object_name = f"channel_articles/{unique_id}/{file_name}.html"
+                await minio_client.put_object_tmp(
+                    object_name=preview_object_name,
+                    file=article.content_html.encode("utf-8"),
+                    content_type="text/html",
+                )
+                preview_map[md_object_name] = preview_object_name
+
+        # 4. Call KnowledgeSpaceService.add_file
+        from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
+        space_service = KnowledgeSpaceService(request=request, login_user=login_user)
+        knowledge_files = await space_service.add_file(
+            knowledge_id=req.knowledge_id,
+            file_path=md_file_paths,
+            parent_id=req.parent_id,
+        )
+
+        # 5. Update preview_file_object_name for successful files
+        from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
+        from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileStatus
+
+        result = []
+        for kf in knowledge_files:
+            item = kf.model_dump()
+            if kf.status != KnowledgeFileStatus.FAILED.value and kf.object_name in preview_map:
+                preview_name = preview_map[kf.object_name]
+                kf.preview_file_object_name = preview_name
+                await KnowledgeFileDao.async_update(kf)
+                item["preview_file_object_name"] = preview_name
+            result.append(item)
+
+        return result

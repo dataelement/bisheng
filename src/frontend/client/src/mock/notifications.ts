@@ -125,8 +125,35 @@ export const mockNotifications: Notification[] = [
     }
 ];
 
+export function mockMarkAsRead(notificationIds: string[]) {
+    const ids = new Set(notificationIds);
+    for (const n of mockNotifications) {
+        if (ids.has(n.id)) n.isRead = true;
+    }
+}
+
+export function mockMarkAllAsRead() {
+    for (const n of mockNotifications) n.isRead = true;
+}
+
+export function mockDeleteNotification(notificationId: string) {
+    const idx = mockNotifications.findIndex(n => n.id === notificationId);
+    if (idx >= 0) mockNotifications.splice(idx, 1);
+}
+
+export function mockApproveRequest(notificationId: string, status: ApprovalStatus.APPROVED | ApprovalStatus.REJECTED) {
+    for (const n of mockNotifications) {
+        if (n.id === notificationId) {
+            n.approvalStatus = status;
+            return;
+        }
+    }
+}
+
 // 模拟 API 响应
 export function getMockNotifications(params: {
+    page?: number;
+    pageSize?: number;
     type?: NotificationType;
     onlyUnread?: boolean;
     search?: string;
@@ -158,8 +185,14 @@ export function getMockNotifications(params: {
         n => n.type === NotificationType.REQUEST && !n.isRead
     ).length;
 
+    const page = Math.max(1, params.page || 1);
+    const pageSize = Math.max(1, params.pageSize || 20);
+    const start = (page - 1) * pageSize;
+    const end = start + pageSize;
+    const paged = filtered.slice(start, end);
+
     return {
-        data: filtered,
+        data: paged,
         total: filtered.length,
         unreadCount,
         requestUnreadCount
