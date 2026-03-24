@@ -56,6 +56,13 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
         !!status && ["rejected", "REJECTED"].includes(status);
     const isDecisionActionCode = (actionCode?: string) =>
         !!actionCode && /(approve|approved|reject|rejected)/i.test(actionCode);
+    const isNotifyMessageType = (messageType?: string) =>
+        messageType === "notify" || messageType === "notification";
+    const isSelfApplicationDecisionActionCode = (actionCode?: string) =>
+        actionCode === "approved_channel" ||
+        actionCode === "rejected_channel" ||
+        actionCode === "approved_knowledge_space" ||
+        actionCode === "rejected_knowledge_space";
 
     // 统计未读数量
     const unreadCounts = useMemo(() => {
@@ -323,6 +330,8 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
 
         // 已审批的消息显示为浅色
         const isApproved = isApprovedStatus(approvalStatus) || isRejectedStatus(approvalStatus);
+        const isSelfApplicationDecision = isSelfApplicationDecisionActionCode(notification.action_code);
+        const isNotifyMessage = isNotifyMessageType(notification.message_type);
         const showDeleteMessage =
             !showApproval &&
             !isApprovalMessageType(notification.message_type, notification.action_code) &&
@@ -414,7 +423,16 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                                 {textPrefix}
                                 {canSplitTarget && (
                                     <span
-                                        className="font-medium"
+                                        className="font-medium cursor-pointer hover:text-[#165dff]"
+                                        onClick={() => {
+                                            const target = getNotificationTarget(notification);
+                                            if (!target) return;
+                                            if (target.targetType === "channel") {
+                                                navigate(`/channel/share/${target.targetId}`);
+                                            } else {
+                                                navigate(`/knowledge/share/${target.targetId}`);
+                                            }
+                                        }}
                                     >
                                         {targetName}
                                     </span>
@@ -422,16 +440,18 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                             </span>
                         </div>
 
-                        {/* 时间 */}
-                        <span className="text-[12px] text-[#86909c] whitespace-nowrap flex-shrink-0">
-                            {new Date(createdAt).toLocaleString("zh-CN", {
-                                year: "numeric",
-                                month: "2-digit",
-                                day: "2-digit",
-                                hour: "2-digit",
-                                minute: "2-digit"
-                            })}
-                        </span>
+                        {/* 时间（notify 类型不展示） */}
+                        {!isNotifyMessage && (
+                            <span className="text-[12px] text-[#86909c] whitespace-nowrap flex-shrink-0">
+                                {new Date(createdAt).toLocaleString("zh-CN", {
+                                    year: "numeric",
+                                    month: "2-digit",
+                                    day: "2-digit",
+                                    hour: "2-digit",
+                                    minute: "2-digit"
+                                })}
+                            </span>
+                        )}
                     </div>
 
                     {/* 审批按钮/结果（请求类） */}
@@ -458,7 +478,7 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                                 接受
                             </button>
                         </div>
-                    ) : isApproved ? (
+                    ) : isApproved && !isSelfApplicationDecision && !isNotifyMessage ? (
                         <div className="absolute right-6 bottom-4">
                             {isApprovedStatus(approvalStatus) ? (
                                 <button
@@ -484,10 +504,10 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                 </div>
 
                 {/* 删除按钮（Hover 显示） */}
-                {isHovered && showDeleteMessage && (
+                {(isSelfApplicationDecision || isNotifyMessage || (isHovered && showDeleteMessage)) && (
                     <button
                         onClick={() => handleDelete(id)}
-                        className="absolute right-6 top-4 flex items-center gap-1 px-3 py-1 text-[12px] text-[#4e5969] bg-white border border-[#e5e6eb] rounded hover:text-[#f53f3f] hover:border-[#f53f3f] transition-colors"
+                        className={`absolute right-6 flex items-center gap-1 px-3 py-1 text-[12px] text-[#4e5969] bg-white border border-[#e5e6eb] rounded hover:text-[#f53f3f] hover:border-[#f53f3f] transition-colors ${(isSelfApplicationDecision || isNotifyMessage) ? "top-1/2 -translate-y-1/2" : "top-4"}`}
                         title="删除消息"
                     >
                         <Trash2 className="size-3" />

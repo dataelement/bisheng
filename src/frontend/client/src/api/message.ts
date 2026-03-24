@@ -55,12 +55,19 @@ export async function getMessageUnreadCountApi(): Promise<{
   approve: number;
 }> {
   const resp: any = await request.get(`/api/v1/message/unread_count`);
-  const root = resp?.data ?? resp ?? {};
-  const payload = root?.data ?? {};
+  // request.get already returns response.data in this project.
+  // Compatible with both:
+  // 1) { status_code, data: { total, notify, approve } }
+  // 2) { total, notify, approve }
+  const root = resp ?? {};
+  const payload = root?.data ?? root ?? {};
+  const notify = Number(payload?.notify ?? payload?.notify_count ?? payload?.notification ?? 0);
+  const approve = Number(payload?.approve ?? payload?.approve_count ?? payload?.request ?? 0);
+  const total = Number(payload?.total ?? payload?.unread_total ?? (notify + approve));
   return {
-    total: payload?.total ?? 0,
-    notify: payload?.notify ?? 0,
-    approve: payload?.approve ?? 0,
+    total,
+    notify,
+    approve,
   };
 }
 

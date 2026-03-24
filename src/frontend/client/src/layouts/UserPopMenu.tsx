@@ -51,10 +51,15 @@ export function UserPopMenu() {
     };
 
     const displayUnreadCount = unreadCount > 99 ? "99+" : String(unreadCount);
+    const handleDropdownOpenChange = (nextOpen: boolean) => {
+        setDropdownOpen(nextOpen);
+        // Open/close menu时都主动刷新一次未读计数
+        void refreshCount();
+    };
 
     return (
         <>
-            <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
+            <DropdownMenu open={dropdownOpen} onOpenChange={handleDropdownOpenChange}>
                 <DropdownMenuTrigger asChild>
                     <div className="relative size-10 cursor-pointer outline-none active:scale-95 transition-transform">
                         <Avatar className="size-10 hover:opacity-90 transition-opacity">
@@ -68,7 +73,7 @@ export function UserPopMenu() {
                         </Avatar>
                         {/* 头像右上角红点 */}
                         {unreadCount > 0 && (
-                            <div className="absolute top-0 right-0 size-2.5 bg-[#f53f3f] rounded-full ring-2 ring-white" />
+                            <div className="absolute -top-0.5 -right-0.5 z-20 size-2.5 bg-[#f53f3f] rounded-full ring-2 ring-white pointer-events-none" />
                         )}
                     </div>
                 </DropdownMenuTrigger>

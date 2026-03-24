@@ -16,10 +16,24 @@ export function useNotificationCount() {
     useEffect(() => {
         fetchUnreadCount();
 
-        // 定时刷新未读数量（每30秒）
-        const interval = setInterval(fetchUnreadCount, 30000);
+        // 定时刷新未读数量
+        const interval = setInterval(fetchUnreadCount, 15000);
 
-        return () => clearInterval(interval);
+        // 页面重新可见/聚焦时立即刷新，避免红点延迟
+        const onFocus = () => { void fetchUnreadCount(); };
+        const onVisibilityChange = () => {
+            if (document.visibilityState === "visible") {
+                void fetchUnreadCount();
+            }
+        };
+        window.addEventListener("focus", onFocus);
+        document.addEventListener("visibilitychange", onVisibilityChange);
+
+        return () => {
+            clearInterval(interval);
+            window.removeEventListener("focus", onFocus);
+            document.removeEventListener("visibilitychange", onVisibilityChange);
+        };
     }, []);
 
     return { unreadCount, refreshCount: fetchUnreadCount };
