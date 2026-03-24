@@ -35,6 +35,7 @@ from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.llm.domain import LLMService
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_uuid
+from bisheng.worker import retry_knowledge_file_celery
 from bisheng.worker.knowledge import file_worker
 
 # Maximum number of Knowledge Spaces a user can create
@@ -524,7 +525,7 @@ class KnowledgeSpaceService(BaseService):
         from bisheng.worker.knowledge.file_worker import delete_knowledge_file_celery
 
         folder = await KnowledgeFileDao.query_by_id(folder_id)
-        if not folder or folder.file_type != 0:
+        if not folder or folder.file_type != FileType.DIR.value:
             raise SpaceFolderNotFoundError()
 
         await self._require_write_permission(space_id)
@@ -534,7 +535,7 @@ class KnowledgeSpaceService(BaseService):
         floder_ids = [folder_id]
         file_ids = []
         for child in children:
-            if child.file_name == 0:
+            if child.file_type == FileType.DIR.value:
                 floder_ids.append(child.id)
             else:
                 file_ids.append(child.id)
@@ -727,6 +728,33 @@ class KnowledgeSpaceService(BaseService):
         for file_id in valid_file_ids:
             await TagDao.add_tags(tag_ids, str(file_id), resource_type, self.login_user.user_id)
 
+    async def batch_retry_failed_files(self, space_id: int, file_ids: List[int]):
+        space = await KnowledgeDao.aquery_by_id(space_id)
+        if not space:
+            raise SpaceNotFoundError()
+        await self._require_write_permission(space_id)
+
+        retry_files = await KnowledgeFileDao.aget_file_by_ids(file_ids)
+        all_file_ids = []
+        for file in retry_files:
+            if file.knowledge_id != space_id:
+                continue
+            if file.file_type == FileType.FILE.value and file.status == KnowledgeFileStatus.FAILED.value:
+                retry_knowledge_file_celery.delay(file.id)
+                all_file_ids.append(file.id)
+            elif file.file_type == FileType.DIR.value:
+                all_failed_files = await SpaceFileDao.get_children_by_prefix(knowledge_id=space_id,
+                                                                             prefix=file.file_level_path + f"{file.id}/",
+                                                                             file_status=KnowledgeFileStatus.FAILED)
+                for item in all_failed_files:
+                    if item.status == KnowledgeFileStatus.FAILED.value and item.file_type == FileType.FILE:
+                        retry_knowledge_file_celery.delay(item.id)
+                        all_file_ids.append(item.id)
+        if all_file_ids:
+            await KnowledgeFileDao.aupdate_file_status(all_file_ids, KnowledgeFileStatus.WAITING,
+                                                       "batch_retry_failed_files")
+        return True
+
     # ──────────────────────────── Batch Ops ───────────────────────────────────
 
     async def batch_delete(
@@ -771,7 +799,7 @@ class KnowledgeSpaceService(BaseService):
         folder_db_records: List[KnowledgeFile] = []
         for folder_id in folder_ids:
             folder = await KnowledgeFileDao.query_by_id(folder_id)
-            if not folder or folder.file_type != 0:
+            if not folder or folder.file_type != FileType.DIR.value:
                 continue
             prefix = f"{folder.file_level_path}/{folder.id}"
             descendants = await SpaceFileDao.get_children_by_prefix(folder.knowledge_id, prefix)
@@ -785,7 +813,7 @@ class KnowledgeSpaceService(BaseService):
         #       We need this to translate '/7/42' → 'Reports/Q1'
         folder_id_to_name: dict[int, str] = {}
         for rec in all_records:
-            if rec.file_type == 0:
+            if rec.file_type == FileType.DIR.value:
                 folder_id_to_name[rec.id] = rec.file_name
 
         # Collect any ancestor folder IDs referenced in file_level_path but not yet known
@@ -806,7 +834,7 @@ class KnowledgeSpaceService(BaseService):
         if missing_ids:
             extra_folders = await KnowledgeFileDao.aget_file_by_ids(list(missing_ids))
             for f in extra_folders:
-                if f.file_type == 0:
+                if f.file_type == FileType.DIR.value:
                     folder_id_to_name[f.id] = f.file_name
 
         def resolve_dir_path(file_level_path: Optional[str]) -> str:
@@ -833,7 +861,7 @@ class KnowledgeSpaceService(BaseService):
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             for rec in all_records:
-                if rec.file_type != 1:  # skip folders
+                if rec.file_type != FileType.FILE.value:  # skip folders
                     continue
                 if not rec.object_name:  # no stored object – skip
                     continue
