@@ -414,16 +414,7 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                                 {textPrefix}
                                 {canSplitTarget && (
                                     <span
-                                        className="font-medium cursor-pointer hover:text-[#165dff]"
-                                        onClick={() => {
-                                            const target = getNotificationTarget(notification);
-                                            if (!target) return;
-                                            if (target.targetType === "channel") {
-                                                navigate(`/channel/share/${target.targetId}`);
-                                            } else {
-                                                navigate(`/knowledge/share/${target.targetId}`);
-                                            }
-                                        }}
+                                        className="font-medium"
                                     >
                                         {targetName}
                                     </span>
