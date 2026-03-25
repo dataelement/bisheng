@@ -10,7 +10,7 @@ class Metadata(BaseModel):
     abstract: Optional[str] = Field(default=None, description="Abstract of the document")
     chunk_index: Optional[int] = Field(default=None, description="Chunk Index")
     bbox: Optional[str] = Field(default=None, description="Bounding Box information")
-    page: Optional[int] = Field(default=0, description="Page number")
+    page: Optional[int] = Field(default=None, description="Page number")
     knowledge_id: Optional[int] = Field(default=None, description="Knowledge ID")
     upload_time: Optional[int] = Field(default=None, description="Upload timestamp")
     update_time: Optional[int] = Field(default=None, description="Update timestamp")

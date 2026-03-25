@@ -15,6 +15,8 @@ from bisheng.knowledge.rag.pipeline.loader.base import BaseBishengLoader
 from bisheng.knowledge.rag.pipeline.loader.etl4lm import Etl4lmLoader
 from bisheng.knowledge.rag.pipeline.loader.excel import ExcelLoader
 from bisheng.knowledge.rag.pipeline.loader.html import BishengHtmlLoader
+from bisheng.knowledge.rag.pipeline.loader.mineru import MineruLoader
+from bisheng.knowledge.rag.pipeline.loader.paddle_ocr import PaddleOcrLoader
 from bisheng.knowledge.rag.pipeline.loader.pdf import LocalPdfLoader
 from bisheng.knowledge.rag.pipeline.loader.ppt import BishengPptLoader
 from bisheng.knowledge.rag.pipeline.loader.txt import BishengTextLoader
@@ -100,7 +102,7 @@ class KnowledgeFilePipeline(BasePipeline):
             uploader=uploader,
             updater=updater,
             user_metadata=self.db_file.user_metadata,
-        ).model_dump()
+        ).model_dump(exclude_none=True)
 
     def run(self, config: PipelineConfig = None) -> PipelineResult:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -205,11 +207,21 @@ class KnowledgeFilePipeline(BasePipeline):
 
     def _init_pdf_loader(self) -> BaseBishengLoader:
         knowledge_conf = settings.get_knowledge()
-        if knowledge_conf.loader_provide == "etl4lm" and knowledge_conf.etl4lm.url:
+        if knowledge_conf.loader_provider == "etl4lm" and knowledge_conf.etl4lm.url:
             self.db_file.parse_type = ParseType.ETL4LM.value
             return Etl4lmLoader(
                 **self._get_loader_common_params(),
                 **knowledge_conf.etl4lm.model_dump()
+            )
+        elif knowledge_conf.loader_provider == "mineru" and knowledge_conf.mineru.url:
+            return MineruLoader(
+                **self._get_loader_common_params(),
+                **knowledge_conf.mineru.model_dump()
+            )
+        elif knowledge_conf.loader_provider == "paddle_ocr" and knowledge_conf.paddle_ocr.url:
+            return PaddleOcrLoader(
+                **self._get_loader_common_params(),
+                **knowledge_conf.paddle_ocr.model_dump()
             )
         return LocalPdfLoader(
             **self._get_loader_common_params(),
