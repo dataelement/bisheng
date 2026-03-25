@@ -29,58 +29,48 @@ class PaddleOcrLoader(BaseBishengLoader):
 
     def __init__(
             self,
-            base_url: str,
+            url: str,
             auth_token: Optional[str] = None,
-            file_type: Optional[str] = None,
-            use_doc_orientation_classify: bool = False,
-            use_doc_unwarping: bool = False,
-            use_chart_recognition: bool = False,
+            headers: Optional[Dict] = None,
             timeout: int = 120,
             retain_images: bool = True,
+            request_kwargs: Optional[Dict] = None,
             *args,
             **kwargs,
     ):
         super(PaddleOcrLoader, self).__init__(*args, **kwargs)
-        self.base_url = base_url.rstrip("/")
+        self.url = url.rstrip("/")
         self.auth_token = auth_token
-        self.file_type = file_type or self._detect_file_type()
-        self.use_doc_orientation_classify = use_doc_orientation_classify
-        self.use_doc_unwarping = use_doc_unwarping
-        self.use_chart_recognition = use_chart_recognition
+
+        self.request_kwargs = request_kwargs if request_kwargs else {}
+
         self.timeout = timeout
         self.retain_images = retain_images
 
-        self.headers = (
-            {
+        if headers:
+            self.headers = headers
+            self.headers["Authorization"] = f"token {self.auth_token}"
+        else:
+            self.headers = {
                 "Authorization": f"token {self.auth_token}",
-                "Content-Type": "application/json",
             }
-            if self.auth_token
-            else {"Content-Type": "application/json"}
-        )
 
-    def _detect_file_type(self) -> str:
+    @property
+    def _detect_file_type(self) -> int:
         """Detect file type from file extension."""
-        ext = self.file_extension.lower().lstrip(".")
-        type_map = {
-            "pdf": "pdf",
-            "png": "image",
-            "jpg": "image",
-            "jpeg": "image",
-            "bmp": "image",
-            "tiff": "image",
-            "tif": "image",
-        }
-        return type_map.get(ext, "pdf")
+        if self.file_extension == "pdf":
+            return 0
+        return 1
 
     def _build_payload(self, b64_data: str) -> Dict:
         """Build API request payload."""
         return {
             "file": b64_data,
-            "fileType": self.file_type,
-            "useDocOrientationClassify": self.use_doc_orientation_classify,
-            "useDocUnwarping": self.use_doc_unwarping,
-            "useChartRecognition": self.use_chart_recognition,
+            "fileType": self._detect_file_type,
+            "useDocOrientationClassify": True,
+            "useDocUnwarping": True,
+            "useChartRecognition": True,
+            **self.request_kwargs
         }
 
     def _validate_response(self, result: Dict) -> Dict:
@@ -97,7 +87,7 @@ class PaddleOcrLoader(BaseBishengLoader):
         payload = self._build_payload(b64_data)
         try:
             resp = requests.post(
-                f"{self.base_url}/layout-parsing",
+                self.url,
                 json=payload,
                 headers=self.headers,
                 timeout=self.timeout,
@@ -128,7 +118,7 @@ class PaddleOcrLoader(BaseBishengLoader):
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 resp = await client.post(
-                    f"{self.base_url}/layout-parsing",
+                    self.url,
                     json=payload,
                     headers=self.headers,
                 )

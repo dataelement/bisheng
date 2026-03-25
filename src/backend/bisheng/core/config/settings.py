@@ -220,10 +220,28 @@ class Etl4lmConf(BaseModel):
     ocr_sdk_url: str = Field(default='', description='etl4lm ocr sdkService Address')
 
 
+class MineruConf(BaseModel):
+    url: str = Field(default='', description='MineruService Address')
+    timeout: int = Field(default=60, description='MineruService Request Timeout (sec)')
+    headers: Dict = Field(default_factory=dict, description='MineruService Request Headers')
+    request_kwargs: Dict = Field(default_factory=dict, description='MineruService Request Arguments')
+
+
+class PaddleOcrConf(BaseModel):
+    """ PaddleOcr Configure """
+    url: str = Field(default='', description='PaddleOcrService Address')
+    timeout: int = Field(default=60, description='PaddleOcrService Request Timeout (sec)')
+    auth_token: str = Field(default='', description='PaddleOcrService Authentication Token')
+    headers: Dict = Field(default_factory=dict, description='PaddleOcrService Headers')
+    request_kwargs: Dict = Field(default_factory=dict, description='PaddleOcrService Request Arguments')
+
+
 class KnowledgeConf(BaseModel):
     """ Knowledge Configure """
-    loader_provide: str = Field(default="etl4lm", description='Knowledge Config Provide Settings')
-    etl4lm: Etl4lmConf
+    loader_provider: str = Field(default="etl4lm", description='Knowledge Config Provide Settings')
+    etl4lm: Etl4lmConf = Field(default_factory=Etl4lmConf, description='Etl4lm Configure')
+    mineru: MineruConf = Field(default_factory=MineruConf, description='Mineru Configure')
+    paddle_ocr: PaddleOcrConf = Field(default_factory=PaddleOcrConf, description='PaddleOcr Config')
 
 
 class IntelligenceCenterConf(BaseModel):

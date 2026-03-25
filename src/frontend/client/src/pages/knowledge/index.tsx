@@ -6,6 +6,7 @@ import {
     SpaceRole,
     VisibilityType,
     getSpaceInfoApi,
+    getMineSpacesApi,
     createSpaceApi,
     updateSpaceApi,
     getSpaceTagsApi,
@@ -101,8 +102,25 @@ export default function Knowledge() {
     };
 
     const handleCreateSpace = () => {
-        setEditingSpace(null);
-        setShowCreateDrawer(true);
+        (async () => {
+            try {
+                const mineSpaces = await getMineSpacesApi();
+                if (mineSpaces.length >= MAX_USER_SPACES) {
+                    showToast({
+                        message: "您已达到创建知识空间的上限",
+                        severity: NotificationSeverity.WARNING,
+                    });
+                    return;
+                }
+                setEditingSpace(null);
+                setShowCreateDrawer(true);
+            } catch {
+                // 如果校验接口失败，为避免阻塞用户操作，仍允许打开创建抽屉
+                // （可根据需要改成硬拦截）
+                setEditingSpace(null);
+                setShowCreateDrawer(true);
+            }
+        })();
     };
 
     // Open space settings drawer — fetch detail first, then open

@@ -123,7 +123,7 @@ export function KnowledgeSpaceSidebar({
                         <Plus className="size-4" />创建
                     </Button>
                     <Button variant="secondary" onClick={() => onKnowledgeSquare?.()} className="flex-1 h-8 text-[13px] bg-[#F2F3F5] hover:bg-[#E5E6EB] border-none gap-1">
-                        <LayoutGridIcon className="size-4" />探索知识广场
+                        <LayoutGridIcon className="size-4" />前往广场
                     </Button>
                 </div>
             </div>
