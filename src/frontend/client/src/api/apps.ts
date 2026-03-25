@@ -343,7 +343,7 @@ export function getVariablesApi(params) {
     });
 }
 export async function getFrequently(page, limit) {
-    return await request.get('/api/v1/workstation/app/frequently_used', {
+    return await request.get('/api/v1/workstation/app/used', {
         params: {
             page,
             limit
@@ -351,17 +351,16 @@ export async function getFrequently(page, limit) {
     })
 }
 
-export async function addToFrequentlyUsed(user_link_type, type_detail) {
-    return await request.post('/api/v1/workstation/app/frequently_used', {
-        user_link_type, type_detail
-    }, { showError: true });
+/** Pin an app to the top of the used apps list */
+export async function pinUsedAppApi(flowId: string) {
+    return await request.post('/api/v1/workstation/app/used/pin', { flow_id: flowId });
 }
 
-// 从常用列表移除
-export async function removeFromFrequentlyUsed(user_id, type, type_detail) {
-
-    const url = `/api/v1/workstation/app/frequently_used?user_id=${user_id}&user_link_type=${type}&type_detail=${type_detail}`;
-    return await request.delete(url);
+/** Unpin an app from the used apps list */
+export async function unpinUsedAppApi(flowId: string) {
+    return await request.delete('/api/v1/workstation/app/used/pin', {
+        data: { flow_id: flowId }
+    });
 }
 export async function getUncategorized(page: number = 1, pageSize: number = 8, keyword?: string) {
     return await request.get('/api/v1/workstation/app/uncategorized', {
@@ -403,25 +402,23 @@ export const getChatOnlineApi = async (page, keyword, tag_id, disableLimit = 8) 
 }
 
 /**
- * Pin/unpin an app.
- * Temporary: reuses frequently_used endpoints until dedicated pin API is ready.
+ * Pin/unpin an app in the used apps list.
  */
-export async function pinAppApi(flowType: number, appId: string, pinned: boolean) {
+export async function pinAppApi(appId: string, pinned: boolean) {
     if (pinned) {
-        return await addToFrequentlyUsed(flowType, appId)
+        return await pinUsedAppApi(appId)
     } else {
-        // removeFromFrequentlyUsed requires user_id — pass empty; backend resolves from session
-        return await removeFromFrequentlyUsed('', flowType, appId)
+        return await unpinUsedAppApi(appId)
     }
 }
 
 /**
- * Get conversation list for a specific app.
- * API pending — stubbed to match /api/v1/chat/list format.
+ * Get conversations for a specific app.
+ * Returns sessions sorted by update_time descending, with latest message preview.
  */
-export async function getAppConversationsApi(flowId: string) {
-    return await request.get('/api/v1/chat/list', {
-        params: { flow_id: flowId, page: 1, limit: 100 }
+export async function getAppConversationsApi(flowId: string, page: number = 1, limit: number = 100) {
+    return await request.get('/api/v1/workstation/app/conversations', {
+        params: { flow_id: flowId, page, limit }
     })
 }
 

@@ -118,7 +118,7 @@ export function AgentGrid({
       let nextPageData: Agent[] = []
       if (categoryType === "frequently") {
         const res = await getFrequently(nextPageNum, pageSize)
-        nextPageData = res.data || []
+        nextPageData = res.data?.list || []
       } else if (categoryType === "uncategorized") {
         const res = await getUncategorized(nextPageNum, uncategorizedPageSize)
         nextPageData = res.data || []
@@ -189,7 +189,7 @@ export function AgentGrid({
       // 步骤2：加载「第1页到目标页码」的所有数据（确保数据最新且完整）
       for (let page = 1; page <= targetPage; page++) {
         const res = await getFrequently(page, pageSize);
-        const pageAgents = res.data || [];
+        const pageAgents = res.data?.list || [];
         allLoadedAgents = [...allLoadedAgents, ...pageAgents];
       }
 

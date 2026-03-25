@@ -35,6 +35,9 @@ export enum FileType {
     JPG = "jpg",
     JPEG = "jpeg",
     PNG = "png",
+    HTML = "html",
+    TXT = "txt",
+    MD = "md",
     OTHER = "other"
 }
 
@@ -279,6 +282,14 @@ function deriveFileType(raw: any): FileType {
             return FileType.JPEG;
         case "png":
             return FileType.PNG;
+        case "html":
+            return FileType.HTML;
+        case "htm":
+            return FileType.HTML;
+        case "txt":
+            return FileType.TXT;
+        case "md":
+            return FileType.MD;
         default:
             return FileType.OTHER;
     }

@@ -2,19 +2,19 @@ import {
     FolderPlus,
     Upload
 } from "lucide-react";
-import React, { useState } from "react";
-import { FileStatus, FileType, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceRole, batchDownloadApi, batchDeleteApi, batchRetryApi } from "~/api/knowledge";
-import { SearchParams } from "./CompoundSearchInput";
+import { useState } from "react";
+import { FileStatus, FileType, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceRole, batchDeleteApi, batchDownloadApi, batchRetryApi } from "~/api/knowledge";
 import { Button } from "~/components/ui/Button";
 import { useConfirm, useToastContext } from "~/Providers";
+import { useFileDragDrop } from "../hooks/useFileDragDrop";
+import { triggerUrlDownload } from "../knowledgeUtils";
+import { SearchParams } from "./CompoundSearchInput";
 import { EditTagsModal } from "./EditTagsModal";
 import { FileCard } from "./FileCard";
 import { FileTable } from "./FileTable";
 import { KnowledgeSpaceHeader } from "./KnowledgeSpaceHeader";
 import { PaginationBar } from "./PaginationBar";
 import { SelectionPathBreadcrumb } from "./SelectionPathBreadcrumb";
-import { useFileDragDrop } from "../hooks/useFileDragDrop";
-import { triggerUrlDownload } from "../knowledgeUtils";
 
 interface KnowledgeSpaceContentProps {
     space: KnowledgeSpace;

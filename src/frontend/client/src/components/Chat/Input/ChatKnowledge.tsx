@@ -5,7 +5,11 @@ import {
   Loader2,
   SearchIcon,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  getMineSpacesApi,
+  getJoinedSpacesApi,
+} from "~/api/knowledge";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -169,18 +173,53 @@ export const ChatKnowledge = ({
   const [allOrgKbs, setAllOrgKbs] = useState<any[]>([]);
   const [hasMoreOrg, setHasMoreOrg] = useState(true);
 
+  // --- Knowledge space data (load all on mount, no pagination) ---
   const [spaceKeyword, setSpaceKeyword] = useState("");
-  const debouncedSpaceKeyword = useDebounce(spaceKeyword, 500);
-  const [spacePage, setSpacePage] = useState(1);
+  const debouncedSpaceKeyword = useDebounce(spaceKeyword, 300);
   const [allSpaces, setAllSpaces] = useState<any[]>([]);
-  const [hasMoreSpace, setHasMoreSpace] = useState(true);
+  const [spaceFetching, setSpaceFetching] = useState(false);
 
+  const loadSpaces = useCallback(async () => {
+    setSpaceFetching(true);
+    try {
+      const [mine, joined] = await Promise.all([
+        getMineSpacesApi(),
+        getJoinedSpacesApi(),
+      ]);
+      // Merge and deduplicate by id
+      const merged = [...mine, ...joined];
+      const seen = new Set<string>();
+      const unique = merged.filter((s) => {
+        if (seen.has(s.id)) return false;
+        seen.add(s.id);
+        return true;
+      });
+      setAllSpaces(unique);
+    } catch (err) {
+      console.error("[ChatKnowledge] Failed to load spaces:", err);
+    } finally {
+      setSpaceFetching(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadSpaces();
+  }, [loadSpaces]);
+
+  // Client-side filter by keyword
+  const filteredSpaces = useMemo(
+    () =>
+      debouncedSpaceKeyword
+        ? allSpaces.filter((s) =>
+          s.name?.toLowerCase().includes(debouncedSpaceKeyword.toLowerCase())
+        )
+        : allSpaces,
+    [allSpaces, debouncedSpaceKeyword]
+  );
+
+  // Org KB data fetching (paginated via react-query)
   const { data: orgData, isFetching: orgFetching } = useGetOrgToolList({
     page: orgPage, page_size: PAGE_SIZE, name: debouncedOrgKeyword,
-  });
-
-  const { data: spaceData, isFetching: spaceFetching } = useGetOrgToolList({
-    page: spacePage, page_size: PAGE_SIZE, name: debouncedSpaceKeyword,
   });
 
   useEffect(() => {
@@ -189,23 +228,11 @@ export const ChatKnowledge = ({
   }, [debouncedOrgKeyword]);
 
   useEffect(() => {
-    setSpacePage(1);
-    setAllSpaces([]);
-  }, [debouncedSpaceKeyword]);
-
-  useEffect(() => {
     if (orgData) {
       setAllOrgKbs((prev) => (orgPage === 1 ? [...orgData] : [...prev, ...orgData]));
       setHasMoreOrg(orgData.length === PAGE_SIZE);
     }
   }, [orgData, orgPage]);
-
-  useEffect(() => {
-    if (spaceData) {
-      setAllSpaces((prev) => (spacePage === 1 ? [...spaceData] : [...prev, ...spaceData]));
-      setHasMoreSpace(spaceData.length === PAGE_SIZE);
-    }
-  }, [spaceData, spacePage]);
 
   // checked data
   const handleToggle = (item: any, type: KnowledgeType) => {
@@ -269,12 +296,12 @@ export const ChatKnowledge = ({
               placeholder="搜索知识空间名称"
               keyword={spaceKeyword}
               setKeyword={setSpaceKeyword}
-              items={allSpaces}
+              items={filteredSpaces}
               selectedItems={selectedKnowledgeSpaces}
               onToggle={(item) => handleToggle(item, 'space')}
               isFetching={spaceFetching}
-              hasMore={hasMoreSpace}
-              onLoadMore={() => setSpacePage(p => p + 1)}
+              hasMore={false}
+              onLoadMore={() => { }}
               emptyText="暂无知识空间"
             />
           </DropdownMenuSubContent>

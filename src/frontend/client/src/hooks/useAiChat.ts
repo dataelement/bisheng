@@ -146,6 +146,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
             // Build SSE payload (same structure as useChatFunctions.ask)
             // Filter only org-type kbs (exclude personal/space)
             const orgKbs = selectedOrgKbs.filter((kb) => kb.type === 'org').map((kb) => kb.id);
+            const spaceKbs = selectedOrgKbs.filter((kb) => kb.type === 'space').map((kb) => Number(kb.id));
             const payload = {
                 text: text.trim(),
                 clientTimestamp: new Date().toLocaleString("sv").replace(" ", "T"),
@@ -159,6 +160,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                 use_knowledge_base: {
                     personal_knowledge_enabled: false,
                     organization_knowledge_ids: orgKbs,
+                    convert_organization_knowledge_ids: spaceKbs,
                 },
                 isContinued: false,
                 isTemporary: false,
@@ -374,7 +376,10 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                 endpointType: "custom",
                 model: chatModel.id + "",
                 search_enabled: searchType === "netSearch",
-                use_knowledge_base: { organization_knowledge_ids: selectedOrgKbs.map((kb) => kb.id) },
+                use_knowledge_base: {
+                    organization_knowledge_ids: selectedOrgKbs.filter((kb) => kb.type === 'org').map((kb) => kb.id),
+                    convert_organization_knowledge_ids: selectedOrgKbs.filter((kb) => kb.type === 'space').map((kb) => Number(kb.id)),
+                },
                 isContinued: false,
                 isRegenerate: true,
                 isTemporary: false,
