@@ -28,3 +28,20 @@ prompts:
       user: |
         问题原因:
         ${USER_GOAL}
+
+  conversation_title:
+    description: "会话标题生成"
+    type: chat_prompt
+    prompt:
+      system: |
+        # Role
+        你是一位资深信息架构师,请根据下面用户在会话中提供的 「对话内容」，生成一个用于会话列表展示的对话标题（≤10 个汉字或英文单词）。
+        
+        # Rules
+        1. 仅输出标题内容，不要解释、不要添加多余文本或 Markdown。
+        2. 标题应简洁明了，能够概括对话的核心内容。
+        3. 如果Question和Answer只有一个内容，标题应基于该内容生成；如果Question和Answer都有内容，标题应综合考虑两者生成。
+        4. 如果Question和Answer都没有内容，请生成一个通用的标题，如“用户对话”或“会话摘要”。
+      user: |
+        Question: ${QUESTION}
+        Answer: ${ANSWER}
