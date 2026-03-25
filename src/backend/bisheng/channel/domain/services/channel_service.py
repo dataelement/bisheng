@@ -44,6 +44,7 @@ from bisheng.common.models.space_channel_member import BusinessTypeEnum, UserRol
 from bisheng.common.repositories.interfaces.space_channel_member_repository import SpaceChannelMemberRepository
 from bisheng.core.external.bisheng_information_client.bisheng_information_manager import get_bisheng_information_client
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
+from bisheng.knowledge.domain.models.knowledge_file import FileSource
 from bisheng.message.domain.services.message_service import MessageService
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_uuid
@@ -1474,6 +1475,7 @@ class ChannelService:
             knowledge_id=req.knowledge_id,
             file_path=md_file_paths,
             parent_id=req.parent_id,
+            file_source=FileSource.SPACE_UPLOAD
         )
 
         # 5. Update preview_file_object_name for successful files

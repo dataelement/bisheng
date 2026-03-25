@@ -5,7 +5,7 @@ from sqlmodel import select, col
 
 from bisheng.core.database import get_async_db_session
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao, KnowledgeFile, KnowledgeFileStatus, \
-    FileType
+    FileType, FileSource
 
 
 class SpaceFileDao(KnowledgeFileDao):
@@ -164,11 +164,12 @@ class SpaceFileDao(KnowledgeFileDao):
             return await session.scalar(statement)
 
     @classmethod
-    async def get_total_file_size(cls, knowledge_id: int) -> int:
+    async def get_user_total_file_size(cls, user_id: int) -> int:
         """ Get total file size for all files in the knowledge space (excluding folders) """
         statement = select(func.sum(KnowledgeFile.file_size)).where(
-            KnowledgeFile.knowledge_id == knowledge_id,
-            KnowledgeFile.file_type == 1
+            KnowledgeFile.user_id == user_id,
+            KnowledgeFile.file_type == 1,
+            KnowledgeFile.file_source == FileSource.SPACE_UPLOAD.value,
         )
         async with get_async_db_session() as session:
             return await session.scalar(statement) or 0
