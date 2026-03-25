@@ -13,7 +13,7 @@ from uuid import uuid4
 from langchain_core.messages import AIMessage, HumanMessage
 from loguru import logger
 
-from bisheng.api.services.workstation import WorkstationMessage, WorkStationService
+from bisheng.api.services.workstation import WorkStationService
 from bisheng.api.v1.schemas import SubscriptionConfig
 from bisheng.channel.domain.schemas.channel_chat_schema import ChannelArticleChatRequest
 from bisheng.channel.domain.services.article_es_service import ArticleEsService
@@ -259,10 +259,7 @@ class ChannelChatService:
         # Permission already verified by user_ids filter above
         messages = await ChatMessageDao.aget_messages_by_chat_id(chat_id=conversation.chat_id, limit=1000)
 
-        if not messages:
-            return []
-
-        return [await WorkstationMessage.from_chat_message(message) for message in messages]
+        return messages
 
     @classmethod
     async def clear_chat(cls, article_doc_id: str, login_user: UserPayload) -> bool:
