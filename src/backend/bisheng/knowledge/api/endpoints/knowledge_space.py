@@ -401,7 +401,7 @@ async def chat_single_file(
     return StreamingResponse(event_stream(), media_type='text/event-stream')
 
 
-@router.post('/{space_id}/chat/file/{file_id}/history')
+@router.get('/{space_id}/chat/file/{file_id}/history')
 async def chat_single_file_history(
         space_id: int,
         file_id: int,
@@ -418,7 +418,7 @@ async def clear_single_file_history(
         file_id: int,
         svc: KnowledgeSpaceChatService = Depends(get_knowledge_space_chat_service),
 ):
-    response = await svc.clear_file_history(space_id, file_id, 0)
+    response = await svc.clear_file_history(space_id, file_id)
     return resp_200(response)
 
 
