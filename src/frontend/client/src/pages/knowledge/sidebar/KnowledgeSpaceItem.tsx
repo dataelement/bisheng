@@ -18,6 +18,7 @@ import {
     DropdownMenuTrigger
 } from "~/components/ui/DropdownMenu";
 import { useConfirm, useToastContext } from "~/Providers";
+import { useLocalize } from "~/hooks";
 
 interface KnowledgeSpaceItemProps {
     space: KnowledgeSpace;
@@ -44,7 +45,8 @@ export default function KnowledgeSpaceItem({
     onSettings,
     onManageMembers,
 }: KnowledgeSpaceItemProps) {
-    const [isEditing, setIsEditing] = useState(false);
+    const localize = useLocalize();
+  const [isEditing, setIsEditing] = useState(false);
     const [menuOpen, setMenuOpen] = useState(false);
     const { showToast } = useToastContext();
     const confirm = useConfirm()
@@ -55,7 +57,7 @@ export default function KnowledgeSpaceItem({
         if (!newName) return
         if (newName.length > 20) {
             return showToast({
-                message: "最多输入 20 个字符",
+                message: localize("com_knowledge.max_20_chars_spaced"),
                 severity: NotificationSeverity.ERROR
             });
         }
@@ -133,7 +135,7 @@ export default function KnowledgeSpaceItem({
                             onClick={() => onSettings?.(space)}
                         >
                             <Settings className="size-4 mr-2 text-[#4e5969]" />
-                            <span className="">空间设置</span>
+                            <span className="">{localize("com_knowledge.space_settings")}</span>
                         </DropdownMenuItem>}
                         {(type === "created" || space.role === SpaceRole.ADMIN) && (
                             <DropdownMenuItem
@@ -141,7 +143,7 @@ export default function KnowledgeSpaceItem({
                                 onClick={() => onManageMembers?.(space)}
                             >
                                 <Users className="size-4 mr-2 text-[#4e5969]" />
-                                <span className="text-[14px] text-[#1d2129]">成员管理</span>
+                                <span className="text-[14px] text-[#1d2129]">{localize("com_knowledge.member_management")}</span>
                             </DropdownMenuItem>
                         )}
                         <DropdownMenuItem
@@ -149,9 +151,9 @@ export default function KnowledgeSpaceItem({
                             className="py-2 px-0 cursor-pointer focus:bg-[#f2f3f5]"
                         >
                             {space.isPinned ? (
-                                <><PinOff className="size-4 mr-2 text-[#4e5969]" /><span className="text-[14px] text-[#1d2129]">取消置顶</span></>
+                                <><PinOff className="size-4 mr-2 text-[#4e5969]" /><span className="text-[14px] text-[#1d2129]">{localize("com_knowledge.unpin")}</span></>
                             ) : (
-                                <><Pin className="size-4 mr-2 text-[#4e5969]" /><span className="text-[14px] text-[#1d2129]">置顶知识空间</span></>
+                                <><Pin className="size-4 mr-2 text-[#4e5969]" /><span className="text-[14px] text-[#1d2129]">{localize("com_knowledge.pin_space")}</span></>
                             )}
                         </DropdownMenuItem>
 
@@ -159,13 +161,13 @@ export default function KnowledgeSpaceItem({
 
                         <DropdownMenuItem
                             onClick={async () => {
-                                const actionName = type === "created" ? "解散知识空间" : "退出知识空间";
-                                const description = type === "created" ? "确认操作吗？" : "确定退出该知识空间吗？";
+                                const actionName = type === "created" ? localize("com_knowledge.dissolve_space") : localize("com_knowledge.exit_space");
+                                const description = type === "created" ? localize("com_knowledge.confirm_operation") : localize("com_knowledge.confirm_exit_space");
                                 const ok = await confirm({
-                                    title: "提示",
+                                    title: localize("com_knowledge.prompt"),
                                     description,
-                                    confirmText: actionName === "解散知识空间" ? "删除" : "退出",
-                                    cancelText: "取消"
+                                    confirmText: actionName === localize("com_knowledge.dissolve_space") ? localize("com_knowledge.delete") : localize("com_knowledge.exit"),
+                                    cancelText: localize("com_knowledge.cancel")
                                 })
 
                                 if (ok) {
@@ -175,7 +177,7 @@ export default function KnowledgeSpaceItem({
                             className="text-[#f53f3f] py-2 px-0 cursor-pointer focus:bg-[#f2f3f5] focus:text-[#f53f3f]"
                         >
                             {type === "created" ? <MinimizeIcon className="size-4 mr-2" /> : <LogOut className="size-4 mr-2" />}
-                            <span className="text-[14px] font-medium">{type === "created" ? "删除空间" : "退出空间"}</span>
+                            <span className="text-[14px] font-medium">{type === "created" ? localize("com_knowledge.delete_space") : localize("com_knowledge.exit_space_short")}</span>
                         </DropdownMenuItem>
                     </DropdownMenuContent>
                 </DropdownMenu>

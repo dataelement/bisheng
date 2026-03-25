@@ -16,6 +16,7 @@ import {
     updateFileTagsApi,
     batchUpdateTagsApi,
 } from "~/api/knowledge";
+import { useLocalize } from "~/hooks";
 
 interface EditTagsModalProps {
     isOpen: boolean;
@@ -40,7 +41,8 @@ export function EditTagsModal({
     fileIds,
     initialTagIds = [],
 }: EditTagsModalProps) {
-    const [spaceTags, setSpaceTags] = useState<SpaceTag[]>([]);
+    const localize = useLocalize();
+  const [spaceTags, setSpaceTags] = useState<SpaceTag[]>([]);
     // IDs of tags selected for this file
     const [selectedTagIds, setSelectedTagIds] = useState<Set<number>>(new Set());
     const [inputValue, setInputValue] = useState("");
@@ -57,7 +59,7 @@ export function EditTagsModal({
         getSpaceTagsApi(spaceId)
             .then(setSpaceTags)
             .catch(() => {
-                showToast({ message: "获取空间标签失败", status: "error" });
+                showToast({ message: localize("com_knowledge.fetch_tags_failed"), status: "error" });
             });
     }, [isOpen, spaceId]);
 
@@ -69,7 +71,7 @@ export function EditTagsModal({
                 next.delete(tag.id);
             } else {
                 if (next.size >= 10) {
-                    showToast({ message: "标签数超过限制", status: "error" });
+                    showToast({ message: localize("com_knowledge.tags_count_limit_exceeded"), status: "error" });
                     return prev;
                 }
                 next.add(tag.id);
@@ -86,12 +88,12 @@ export function EditTagsModal({
         if (!trimmed) return;
 
         if (trimmed.length > 8) {
-            showToast({ message: "标签超过字符限制", status: "error" });
+            showToast({ message: localize("com_knowledge.tags_char_limit_exceeded"), status: "error" });
             return;
         }
 
         if (selectedTagIds.size >= 10) {
-            showToast({ message: "标签数超过限制", status: "error" });
+            showToast({ message: localize("com_knowledge.tags_count_limit_exceeded"), status: "error" });
             return;
         }
 
@@ -108,14 +110,14 @@ export function EditTagsModal({
         try {
             const newTag = await addSpaceTagApi(spaceId, trimmed);
             if (!newTag || newTag.id === undefined || newTag.id === null) {
-                showToast({ message: "创建标签失败：返回数据异常", status: "error" });
+                showToast({ message: localize("com_knowledge.create_tag_failed_abnormal"), status: "error" });
                 return;
             }
             setSpaceTags((prev) => [...prev, newTag]);
             setSelectedTagIds((prev) => new Set(prev).add(newTag.id));
             setInputValue("");
         } catch {
-            showToast({ message: "创建标签失败", status: "error" });
+            showToast({ message: localize("com_knowledge.create_tag_failed"), status: "error" });
         }
     };
 
@@ -130,16 +132,16 @@ export function EditTagsModal({
                     file_ids: fileIds.map(Number),
                     tag_ids: tagIds,
                 });
-                showToast({ message: "批量添加标签成功", status: "success" });
+                showToast({ message: localize("com_knowledge.batch_add_tags_success"), status: "success" });
             } else if (fileId) {
                 // Single file overwrite mode
                 await updateFileTagsApi(spaceId, fileId, tagIds);
-                showToast({ message: "标签保存成功", status: "success" });
+                showToast({ message: localize("com_knowledge.tag_save_success"), status: "success" });
             }
             onSaved?.();
             onClose(true);
         } catch {
-            showToast({ message: "标签保存失败", status: "error" });
+            showToast({ message: localize("com_knowledge.tag_save_failed"), status: "error" });
         } finally {
             setLoading(false);
         }
@@ -161,7 +163,7 @@ export function EditTagsModal({
             <DialogContent className="gap-0 sm:max-w-[600px] w-[600px] p-0 bg-white border-none shadow-[0px_5px_22px_0px_rgba(61,68,110,0.2)] rounded-xl outline-none flex flex-col items-stretch [&>button]:hidden">
                 <DialogHeader className="px-6 py-3 h-12 border-none space-y-0 text-left shrink-0">
                     <DialogTitle className="text-[16px] font-medium text-[#212121] leading-[24px]">
-                        {isBatchMode ? "批量添加标签" : "编辑标签"}
+                        {isBatchMode ? localize("com_knowledge.batch_add_tags") : localize("com_knowledge.edit_tags")}
                     </DialogTitle>
                 </DialogHeader>
 
@@ -196,7 +198,7 @@ export function EditTagsModal({
                             onKeyDown={handleKeyDown}
                             placeholder={
                                 selectedTags.length === 0 && !inputValue
-                                    ? "请输入要添加的标签，回车保存"
+                                    ? localize("com_knowledge.input_tags_placeholder")
                                     : ""
                             }
                             className="flex-1 min-w-[120px] bg-transparent outline-none text-sm leading-[22px] text-[#212121] placeholder-[#86909c] min-h-[22px]"
@@ -211,10 +213,10 @@ export function EditTagsModal({
 
                     {/* Existing Space Tags */}
                     <div className="flex flex-col gap-2 pt-1">
-                        <div className="text-[12px] leading-[20px] text-[#212121]">已有标签</div>
+                        <div className="text-[12px] leading-[20px] text-[#212121]">{localize("com_knowledge.existing_tags")}</div>
                         <div className="flex flex-wrap gap-1">
                             {spaceTags.length === 0 && (
-                                <span className="text-[12px] text-[#86909c]">暂无标签</span>
+                                <span className="text-[12px] text-[#86909c]">{localize("com_knowledge.no_tags")}</span>
                             )}
                             {spaceTags.map((tag) => {
                                 const isSelected = selectedTagIds.has(tag.id);
@@ -238,16 +240,14 @@ export function EditTagsModal({
 
                 <DialogFooter className="flex justify-end gap-3 px-6 py-3 border-none mt-2 sm:space-x-0 h-16 items-center shrink-0">
                     <Button variant="outline" className="h-8 px-4" onClick={handleClose}>
-                        取消
-                    </Button>
+                        {localize("com_knowledge.cancel")}</Button>
                     <Button
                         variant="default"
                         className="h-8 px-4"
                         onClick={handleSave}
                         disabled={loading}
                     >
-                        确认
-                    </Button>
+                        {localize("com_knowledge.confirm")}</Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>

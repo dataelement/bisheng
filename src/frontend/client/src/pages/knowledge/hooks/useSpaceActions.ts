@@ -9,6 +9,7 @@ import {
 } from "~/api/knowledge";
 import { NotificationSeverity } from "~/common";
 import { useToastContext } from "~/Providers";
+import { useLocalize } from "~/hooks";
 
 interface UseSpaceActionsOptions {
     activeSpaceId?: string;
@@ -32,6 +33,7 @@ export function useSpaceActions({
     joinedSpaces,
     onSpaceSelect,
 }: UseSpaceActionsOptions) {
+    const localize = useLocalize();
     const { showToast } = useToastContext();
     const queryClient = useQueryClient();
 
@@ -66,11 +68,11 @@ export function useSpaceActions({
                 icon: space.icon,
                 auth_type: space.visibility,
             });
-            showToast({ message: "空间已更新", severity: NotificationSeverity.SUCCESS });
+            showToast({ message: localize("com_knowledge.space_updated"), severity: NotificationSeverity.SUCCESS });
         } catch {
             // Rollback on failure
             queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
-            showToast({ message: "更新空间失败", severity: NotificationSeverity.ERROR });
+            showToast({ message: localize("com_knowledge.update_space_failed"), severity: NotificationSeverity.ERROR });
         }
     };
 
@@ -109,10 +111,10 @@ export function useSpaceActions({
         try {
             await deleteSpaceApi(spaceId);
             queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
-            showToast({ message: "空间已删除", severity: NotificationSeverity.SUCCESS });
+            showToast({ message: localize("com_knowledge.space_deleted"), severity: NotificationSeverity.SUCCESS });
         } catch {
             queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
-            showToast({ message: "删除空间失败", severity: NotificationSeverity.ERROR });
+            showToast({ message: localize("com_knowledge.delete_space_failed"), severity: NotificationSeverity.ERROR });
         }
     };
 
@@ -138,10 +140,10 @@ export function useSpaceActions({
 
         try {
             await unsubscribeSpaceApi(spaceId);
-            showToast({ message: "已退出空间", severity: NotificationSeverity.SUCCESS });
+            showToast({ message: localize("com_knowledge.exited_space"), severity: NotificationSeverity.SUCCESS });
         } catch {
             queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces", "joined"] });
-            showToast({ message: "退出空间失败", severity: NotificationSeverity.ERROR });
+            showToast({ message: localize("com_knowledge.exit_space_failed"), severity: NotificationSeverity.ERROR });
         }
     };
 
@@ -150,7 +152,7 @@ export function useSpaceActions({
     const handlePinSpace = async (spaceId: string, pinned: boolean, type: "created" | "joined") => {
         const targetList = type === "created" ? createdSpaces : joinedSpaces;
         if (pinned && targetList.filter(s => s.isPinned).length >= 5) {
-            showToast({ message: "已达置顶数量限制", severity: NotificationSeverity.INFO });
+            showToast({ message: localize("com_knowledge.pin_limit_reached"), severity: NotificationSeverity.INFO });
             return;
         }
 
@@ -166,7 +168,7 @@ export function useSpaceActions({
         try {
             await pinSpaceApi(spaceId, pinned);
             queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
-            showToast({ message: pinned ? "已置顶" : "已取消置顶", severity: NotificationSeverity.SUCCESS });
+            showToast({ message: pinned ? localize("com_knowledge.pinned") : localize("com_knowledge.unpinned"), severity: NotificationSeverity.SUCCESS });
         } catch {
             // Rollback
             const rollback = (list: KnowledgeSpace[]) => list.map(s => s.id === spaceId ? { ...s, isPinned: !pinned } : s);
@@ -175,7 +177,7 @@ export function useSpaceActions({
                 const space = targetList.find(s => s.id === spaceId);
                 if (space) onSpaceSelect({ ...space, isPinned: !pinned });
             }
-            showToast({ message: "操作失败", severity: NotificationSeverity.ERROR });
+            showToast({ message: localize("com_knowledge.operation_failed"), severity: NotificationSeverity.ERROR });
         }
     };
 

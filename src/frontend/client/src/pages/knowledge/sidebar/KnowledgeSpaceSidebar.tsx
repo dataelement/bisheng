@@ -13,6 +13,7 @@ import { Button } from "~/components/ui/Button";
 import KnowledgeSpaceItem from "./KnowledgeSpaceItem";
 import { SectionHeader } from "./SectionHeader";
 import { useSpaceActions } from "../hooks/useSpaceActions";
+import { useLocalize } from "~/hooks";
 
 interface KnowledgeSpaceSidebarProps {
     activeSpaceId?: string;
@@ -26,8 +27,8 @@ interface KnowledgeSpaceSidebarProps {
 // Sort cycle: update_time → name → update_time
 const SORT_CYCLE = [SortType.UPDATE_TIME, SortType.NAME];
 
-function getSortLabel(sort: SortType) {
-    return sort === SortType.NAME ? "名称" : "最近更新";
+function getSortLabel(sort: SortType, localize: any) {
+    return sort === SortType.NAME ? localize("com_knowledge.name") : localize("com_knowledge.recently_updated");
 }
 
 export function KnowledgeSpaceSidebar({
@@ -38,7 +39,8 @@ export function KnowledgeSpaceSidebar({
     onManageMembers,
     onKnowledgeSquare,
 }: KnowledgeSpaceSidebarProps) {
-    const [collapsed, setCollapsed] = useState(false);
+    const localize = useLocalize();
+  const [collapsed, setCollapsed] = useState(false);
     const [createdCollapsed, setCreatedCollapsed] = useState(false);
     const [joinedCollapsed, setJoinedCollapsed] = useState(false);
     const [createdSortBy, setCreatedSortBy] = useState<SortType>(SortType.UPDATE_TIME);
@@ -113,18 +115,16 @@ export function KnowledgeSpaceSidebar({
             {/* Top actions */}
             <div className="border-b border-[#e5e6eb] space-y-4 pb-4">
                 <div className="px-2 flex justify-between items-center text-[14px] font-medium">
-                    <span className="text-[#1d2129]">知识空间</span>
+                    <span className="text-[#1d2129]">{localize("com_knowledge.knowledge_space")}</span>
                     <Button size="icon" variant="ghost" className="w-5 h-5 text-[#86909c]" onClick={() => setCollapsed(true)}>
                         <PanelRightOpenIcon className="size-3.5" />
                     </Button>
                 </div>
                 <div className="flex items-center gap-3">
                     <Button variant="secondary" onClick={onCreateSpace} className="flex-1 h-8 text-[13px] bg-[#F2F3F5] hover:bg-[#E5E6EB] border-none gap-1">
-                        <Plus className="size-4" />创建
-                    </Button>
+                        <Plus className="size-4" />{localize("com_knowledge.create")}</Button>
                     <Button variant="secondary" onClick={() => onKnowledgeSquare?.()} className="flex-1 h-8 text-[13px] bg-[#F2F3F5] hover:bg-[#E5E6EB] border-none gap-1">
-                        <LayoutGridIcon className="size-4" />前往广场
-                    </Button>
+                        <LayoutGridIcon className="size-4" />{localize("com_knowledge.go_to_square")}</Button>
                 </div>
             </div>
 
@@ -132,10 +132,10 @@ export function KnowledgeSpaceSidebar({
                 {/* My created */}
                 <div className="pt-4">
                     <SectionHeader
-                        title="我创建的"
+                        title={localize("com_knowledge.created_by_me")}
                         collapsed={createdCollapsed}
                         onToggle={() => setCreatedCollapsed(!createdCollapsed)}
-                        sortText={getSortLabel(createdSortBy)}
+                        sortText={getSortLabel(createdSortBy, localize)}
                         onSort={() => toggleSort("created")}
                     />
                     {!createdCollapsed && (
@@ -155,7 +155,7 @@ export function KnowledgeSpaceSidebar({
                                     onManageMembers={onManageMembers}
                                 />
                             ))}
-                            {!createdSpaces.length && <div className="py-6 text-center text-sm text-[#818181]">暂无数据</div>}
+                            {!createdSpaces.length && <div className="py-6 text-center text-sm text-[#818181]">{localize("com_knowledge.no_data")}</div>}
                         </div>
                     )}
                 </div>
@@ -163,10 +163,10 @@ export function KnowledgeSpaceSidebar({
                 {/* Joined */}
                 <div className="py-4">
                     <SectionHeader
-                        title="我加入的"
+                        title={localize("com_knowledge.joined_by_me")}
                         collapsed={joinedCollapsed}
                         onToggle={() => setJoinedCollapsed(!joinedCollapsed)}
-                        sortText={getSortLabel(joinedSortBy)}
+                        sortText={getSortLabel(joinedSortBy, localize)}
                         onSort={() => toggleSort("joined")}
                     />
                     {!joinedCollapsed && (
@@ -186,7 +186,7 @@ export function KnowledgeSpaceSidebar({
                                     onManageMembers={onManageMembers}
                                 />
                             ))}
-                            {!joinedSpaces.length && <div className="py-6 text-center text-sm text-[#818181]">暂无数据</div>}
+                            {!joinedSpaces.length && <div className="py-6 text-center text-sm text-[#818181]">{localize("com_knowledge.no_data")}</div>}
                         </div>
                     )}
                 </div>

@@ -22,6 +22,7 @@ import useFolderChat from "~/hooks/useFolderChat";
 import type { FolderChatTag } from "~/hooks/useFolderChat";
 import { KnowledgeAiInput } from "./KnowledgeAiInput";
 import { ConversationHistory } from "./ConversationHistory";
+import { useLocalize } from "~/hooks";
 
 interface KnowledgeAiPanelProps {
     spaceId: string;
@@ -38,7 +39,8 @@ export function KnowledgeAiPanel({
     availableTags = [],
     onClose,
 }: KnowledgeAiPanelProps) {
-    const {
+    const localize = useLocalize();
+  const {
         messages,
         sessions,
         activeChatId,
@@ -54,9 +56,9 @@ export function KnowledgeAiPanel({
 
     const [showHistory, setShowHistory] = useState(false);
 
-    const welcomeText = contextLabel === "文件夹"
-        ? "基于当前文件夹问答"
-        : "基于当前知识空间问答";
+    const welcomeText = contextLabel === localize("com_knowledge.folder")
+        ? localize("com_knowledge.qa_current_folder")
+        : localize("com_knowledge.qa_current_space");
 
     const handleSend = (
         text: string,
@@ -84,8 +86,7 @@ export function KnowledgeAiPanel({
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-[#e5e6eb] shrink-0">
                 <h3 className="text-sm leading-6 font-medium text-[#1d2129]">
-                    AI 助手
-                </h3>
+                    {localize("com_knowledge.ai_assistant")}</h3>
                 <div className="flex items-center gap-1">
                     <TooltipProvider>
                         <Tooltip>
@@ -100,7 +101,7 @@ export function KnowledgeAiPanel({
                                 </Button>
                             </TooltipTrigger>
                             <TooltipContent>
-                                <p>历史会话</p>
+                                <p>{localize("com_knowledge.history_chat")}</p>
                             </TooltipContent>
                         </Tooltip>
                     </TooltipProvider>
@@ -118,7 +119,7 @@ export function KnowledgeAiPanel({
                                 </Button>
                             </TooltipTrigger>
                             <TooltipContent>
-                                <p>新建会话</p>
+                                <p>{localize("com_knowledge.create_chat")}</p>
                             </TooltipContent>
                         </Tooltip>
                     </TooltipProvider>
@@ -136,7 +137,7 @@ export function KnowledgeAiPanel({
                                 </Button>
                             </TooltipTrigger>
                             <TooltipContent>
-                                <p>关闭</p>
+                                <p>{localize("com_knowledge.close")}</p>
                             </TooltipContent>
                         </Tooltip>
                     </TooltipProvider>

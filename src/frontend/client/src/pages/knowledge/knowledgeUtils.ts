@@ -1,4 +1,5 @@
 import { FileType } from "~/api/knowledge";
+import i18next from "i18next";
 
 // ─── File upload constants ──────────────────────────────────────────
 /** Allowed file extensions for upload (shared across drag-drop, file input, and validation) */
@@ -89,11 +90,11 @@ export function formatTime(dateString: string): string {
  */
 export function validateFileForUpload(file: File): string | null {
     if (file.size > MAX_FILE_SIZE) {
-        return `文件 ${file.name} 超过 200MB 限制`;
+        return i18next.t("com_knowledge.file_exceeds_200m", { 0: file.name });
     }
     const ext = file.name.split(".").pop()?.toLowerCase();
     if (!ext || !(ALLOWED_EXTENSIONS as readonly string[]).includes(ext)) {
-        return `不支持文件 ${file.name} 的格式`;
+        return i18next.t("com_knowledge.unsupported_file_format", { 0: file.name });
     }
     return null;
 }

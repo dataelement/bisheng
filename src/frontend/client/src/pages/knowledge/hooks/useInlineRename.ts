@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useToastContext } from "~/Providers";
+import { useLocalize } from "~/hooks";
 
 interface UseInlineRenameOptions {
     /** Initial file/folder name */
@@ -30,6 +31,7 @@ export function useInlineRename({
     onValidateName,
     onCancelCreate,
 }: UseInlineRenameOptions) {
+    const localize = useLocalize();
     const [isRenaming, setIsRenaming] = useState(isCreating);
     const [renameValue, setRenameValue] = useState(fileName);
     const inputRef = useRef<HTMLInputElement>(null);
@@ -54,7 +56,7 @@ export function useInlineRename({
 
         // Creating mode: name must not be empty
         if (isCreating && !trimmed) {
-            showToast({ message: "文件夹名称不能为空", status: "error", severity: "error" } as any);
+            showToast({ message: localize("com_knowledge.folder_name_empty"), status: "error", severity: "error" } as any);
             inputRef.current?.focus();
             return;
         }

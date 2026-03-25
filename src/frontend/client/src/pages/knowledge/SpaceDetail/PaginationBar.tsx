@@ -7,6 +7,7 @@ import {
     PaginationItem,
     PaginationLink,
 } from "~/components/ui/Pagination";
+import { useLocalize } from "~/hooks";
 
 interface PaginationBarProps {
     currentPage: number;
@@ -17,7 +18,8 @@ interface PaginationBarProps {
 
 /** Reusable pagination footer for file lists */
 export function PaginationBar({ currentPage, pageSize, total, onPageChange }: PaginationBarProps) {
-    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    const localize = useLocalize();
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
     const getPageNumbers = (): (number | "ellipsis")[] => {
         const pages: (number | "ellipsis")[] = [];
@@ -40,8 +42,8 @@ export function PaginationBar({ currentPage, pageSize, total, onPageChange }: Pa
     return (
         <div className="flex items-center gap-4 text-sm text-[#4e5969]">
             <div className="flex items-center gap-1">
-                <span>共 <span className="text-[#165dff]">{total}</span> 条数据，</span>
-                <span>每页 {pageSize} 条</span>
+                <span>{localize("com_knowledge.total_prefix")}<span className="text-[#165dff]">{total}</span> {localize("com_knowledge.items_comma")}</span>
+                <span>{localize("com_knowledge.per_page")}{pageSize} {localize("com_knowledge.items_suffix")}</span>
             </div>
             <Pagination className="mx-0 w-auto">
                 <PaginationContent>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useLocalize } from "~/hooks";
 
 interface TextViewerProps {
     fileUrl: string;
@@ -6,7 +7,8 @@ interface TextViewerProps {
 }
 
 export function TextViewer({ fileUrl, zoomLevel }: TextViewerProps) {
-    const [content, setContent] = useState("");
+    const localize = useLocalize();
+  const [content, setContent] = useState("");
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -15,12 +17,12 @@ export function TextViewer({ fileUrl, zoomLevel }: TextViewerProps) {
             try {
                 setLoading(true);
                 const response = await fetch(fileUrl);
-                if (!response.ok) throw new Error(`加载失败: ${response.status}`);
+                if (!response.ok) throw new Error(localize("com_knowledge.failure_status", { 0: response.status }));
                 const text = await response.text();
                 setContent(text);
                 setError(null);
             } catch (err: any) {
-                setError(err.message || "无法加载文件");
+                setError(err.message || localize("com_knowledge.load_file_failed"));
             } finally {
                 setLoading(false);
             }
@@ -31,8 +33,7 @@ export function TextViewer({ fileUrl, zoomLevel }: TextViewerProps) {
     if (loading) {
         return (
             <div className="flex-1 flex items-center justify-center text-[#86909c]">
-                加载中...
-            </div>
+                {localize("com_knowledge.loading")}</div>
         );
     }
 

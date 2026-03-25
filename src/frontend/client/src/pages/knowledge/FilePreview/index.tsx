@@ -16,6 +16,7 @@ import { MarkdownViewer } from "./viewers/MarkdownViewer";
 import { PdfViewer } from "./viewers/PdfViewer";
 import { TextViewer } from "./viewers/TextViewer";
 import { XlsxViewer } from "./viewers/XlsxViewer";
+import { useLocalize } from "~/hooks";
 
 export interface FilePreviewProps {
     /** File display name (with extension) */
@@ -34,7 +35,8 @@ export default function FilePreview({
     fileUrl,
     actions,
 }: FilePreviewProps) {
-    const viewerType = getViewerType(fileType);
+    const localize = useLocalize();
+  const viewerType = getViewerType(fileType);
     const hasSidebar = supportsSidebar(viewerType);
     const hasPagination = supportsPagination(viewerType);
     const hasZoom = supportsZoom(viewerType);
@@ -66,7 +68,7 @@ export default function FilePreview({
             })
             .catch((e) => {
                 console.error("Failed to load PDF:", e);
-                setError("无法加载 PDF 文件");
+                setError(localize("com_knowledge.load_pdf_failed"));
             });
     }, [fileUrl, viewerType]);
 
@@ -115,13 +117,12 @@ export default function FilePreview({
                 <div className="flex-1 flex items-center justify-center bg-[#fbfbfb]">
                     <div className="flex flex-col items-center gap-4 text-[#86909c]">
                         <div className="text-5xl">📄</div>
-                        <p className="text-lg">该文件格式（.{fileType}）暂不支持在线预览</p>
+                        <p className="text-lg">{localize("com_knowledge.unsupported_format_prefix")}{fileType}{localize("com_knowledge.unsupported_format_suffix")}</p>
                         <button
                             onClick={handleDownload}
                             className="px-4 py-2 bg-primary text-white rounded-md text-sm hover:bg-primary/90 transition-colors"
                         >
-                            下载文件
-                        </button>
+                            {localize("com_knowledge.download_file")}</button>
                     </div>
                 </div>
             </div>

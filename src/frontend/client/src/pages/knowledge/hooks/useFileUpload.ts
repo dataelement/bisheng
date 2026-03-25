@@ -16,6 +16,7 @@ import {
 import { NotificationSeverity } from "~/common";
 import { useToastContext } from "~/Providers";
 import { getFileTypeFromName, MAX_FOLDER_DEPTH } from "../knowledgeUtils";
+import { useLocalize } from "~/hooks";
 
 interface UseFileUploadOptions {
     activeSpace: KnowledgeSpace | null;
@@ -40,6 +41,7 @@ export function useFileUpload({
     loadFiles,
     currentPage,
 }: UseFileUploadOptions) {
+    const localize = useLocalize();
     const [uploadingFiles, setUploadingFiles] = useState<KnowledgeFile[]>([]);
     const [creatingFolder, setCreatingFolder] = useState<KnowledgeFile | null>(null);
 
@@ -49,7 +51,7 @@ export function useFileUpload({
     const handleUploadFile = useCallback(
         async (fileList?: FileList | File[]) => {
             if (!activeSpace || !fileList || fileList.length === 0) {
-                showToast({ message: "上传文件功能开发中", severity: NotificationSeverity.INFO });
+                showToast({ message: localize("com_knowledge.upload_feature_dev"), severity: NotificationSeverity.INFO });
                 return;
             }
 
@@ -71,7 +73,7 @@ export function useFileUpload({
             }));
             setUploadingFiles(prev => [...placeholders, ...prev]);
 
-            showToast({ message: `已开始处理 ${fileArray.length} 个文件`, severity: NotificationSeverity.SUCCESS });
+            showToast({ message: localize("com_knowledge.processing_files", { 0: fileArray.length }), severity: NotificationSeverity.SUCCESS });
 
             // Upload each file and collect server paths
             const uploadedPaths: string[] = [];
@@ -80,7 +82,7 @@ export function useFileUpload({
                     const res = await uploadFileToServerApi(activeSpace.id, file);
                     uploadedPaths.push(res.file_path);
                 } catch {
-                    showToast({ message: `文件 ${file.name} 上传失败`, severity: NotificationSeverity.ERROR });
+                    showToast({ message: localize("com_knowledge.file_upload_failed", { 0: file.name }), severity: NotificationSeverity.ERROR });
                 }
             }
 
@@ -100,7 +102,7 @@ export function useFileUpload({
                 // Refresh the file list to reflect new entries
                 loadFiles(currentPage);
             } catch {
-                showToast({ message: "文件注册到知识空间失败", severity: NotificationSeverity.ERROR });
+                showToast({ message: localize("com_knowledge.file_register_failed"), severity: NotificationSeverity.ERROR });
             }
         },
         [activeSpace, currentFolderId, currentPage, loadFiles, showToast]
@@ -109,7 +111,7 @@ export function useFileUpload({
     // ─── Folder creation ─────────────────────────────────────────────────
     const handleCreateFolder = useCallback(() => {
         if (currentPath.length >= MAX_FOLDER_DEPTH) {
-            showToast({ message: `已达文件夹层级上限 ${MAX_FOLDER_DEPTH} 级`, severity: NotificationSeverity.WARNING } as any);
+            showToast({ message: localize("com_knowledge.max_folder_depth_reached", { 0: MAX_FOLDER_DEPTH }), severity: NotificationSeverity.WARNING } as any);
             return;
         }
 
@@ -120,10 +122,10 @@ export function useFileUpload({
 
         const newFolder: KnowledgeFile = {
             id: `temp_folder_${Date.now()}`,
-            name: `未命名文件夹_${randomStr}`,
+            name: localize("com_knowledge.unnamed_folder_random", { 0: randomStr }),
             type: FileType.FOLDER,
             tags: [],
-            path: `未命名文件夹_${randomStr}`,
+            path: localize("com_knowledge.unnamed_folder_random", { 0: randomStr }),
             parentId: currentFolderId,
             spaceId: activeSpace?.id || "",
             createdAt: new Date().toISOString(),
@@ -154,9 +156,9 @@ export function useFileUpload({
                     });
                     setFiles(prev => [created, ...prev]);
                     setCreatingFolder(null);
-                    showToast({ message: "文件夹新建成功", severity: NotificationSeverity.SUCCESS } as any);
+                    showToast({ message: localize("com_knowledge.folder_create_success"), severity: NotificationSeverity.SUCCESS } as any);
                 } catch {
-                    showToast({ message: "新建文件夹失败", severity: NotificationSeverity.ERROR });
+                    showToast({ message: localize("com_knowledge.create_folder_failed"), severity: NotificationSeverity.ERROR });
                 }
                 return;
             }
@@ -172,9 +174,9 @@ export function useFileUpload({
                     await renameFileApi(activeSpace.id, fileId, newName);
                 }
                 setFiles(prev => prev.map(f => f.id === fileId ? { ...f, name: newName } : f));
-                showToast({ message: "重命名成功", severity: NotificationSeverity.SUCCESS } as any);
+                showToast({ message: localize("com_knowledge.rename_success"), severity: NotificationSeverity.SUCCESS } as any);
             } catch {
-                showToast({ message: "重命名失败", severity: NotificationSeverity.ERROR });
+                showToast({ message: localize("com_knowledge.rename_failed"), severity: NotificationSeverity.ERROR });
             }
         },
         [activeSpace, creatingFolder, currentFolderId, files, setFiles, showToast]
@@ -201,9 +203,9 @@ export function useFileUpload({
                     await deleteFileApi(activeSpace.id, fileId);
                 }
                 setFiles(prev => prev.filter(f => f.id !== fileId));
-                showToast({ message: "已删除", severity: NotificationSeverity.SUCCESS });
+                showToast({ message: localize("com_knowledge.deleted"), severity: NotificationSeverity.SUCCESS });
             } catch {
-                showToast({ message: "删除失败", severity: NotificationSeverity.ERROR });
+                showToast({ message: localize("com_knowledge.delete_failed"), severity: NotificationSeverity.ERROR });
             }
         },
         [activeSpace, currentPage, files, setFiles, loadFiles, showToast]

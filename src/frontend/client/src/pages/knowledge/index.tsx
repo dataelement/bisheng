@@ -24,9 +24,11 @@ import KnowledgeSquare from "./KnowledgeSquare";
 import { useFileManager } from "./hooks/useFileManager";
 import { useFileUpload } from "./hooks/useFileUpload";
 import { useAiSplitPane } from "./hooks/useAiSplitPane";
+import { useLocalize } from "~/hooks";
 
 export default function Knowledge() {
-    const MAX_USER_SPACES = 30;
+    const localize = useLocalize();
+  const MAX_USER_SPACES = 30;
     const [activeSpace, setActiveSpace] = useState<KnowledgeSpace | null>(null);
     const [showCreateDrawer, setShowCreateDrawer] = useState(false);
     const [editingSpace, setEditingSpace] = useState<KnowledgeSpace | null>(null);
@@ -107,7 +109,7 @@ export default function Knowledge() {
                 const mineSpaces = await getMineSpacesApi();
                 if (mineSpaces.length >= MAX_USER_SPACES) {
                     showToast({
-                        message: "您已达到创建知识空间的上限",
+                        message: localize("com_knowledge.create_space_limit_reached"),
                         severity: NotificationSeverity.WARNING,
                     });
                     return;
@@ -156,7 +158,7 @@ export default function Knowledge() {
                 });
                 if (activeSpace?.id === updated.id) setActiveSpace(updated);
                 queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
-                showToast({ message: "空间已更新", severity: NotificationSeverity.SUCCESS });
+                showToast({ message: localize("com_knowledge.space_updated"), severity: NotificationSeverity.SUCCESS });
             } else {
                 // ── Create mode ──
                 const newSpace = await createSpaceApi({
@@ -167,11 +169,11 @@ export default function Knowledge() {
                 });
                 setActiveSpace(newSpace);
                 queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces", "mine"] });
-                showToast({ message: "知识空间创建成功", severity: NotificationSeverity.SUCCESS });
+                showToast({ message: localize("com_knowledge.space_create_success"), severity: NotificationSeverity.SUCCESS });
             }
         } catch {
             showToast({
-                message: editingSpace ? "更新空间失败" : "创建知识空间失败",
+                message: editingSpace ? localize("com_knowledge.update_space_failed") : localize("com_knowledge.create_space_failed"),
                 severity: NotificationSeverity.ERROR
             });
         }
@@ -183,7 +185,7 @@ export default function Knowledge() {
     };
 
     const locationKey = fileManager.currentFolderId || activeSpace?.id || "";
-    const contextLabel = fileManager.currentFolderId ? "文件夹" : "知识空间";
+    const contextLabel = fileManager.currentFolderId ? localize("com_knowledge.folder") : localize("com_knowledge.knowledge_space");
 
     // Knowledge square view
     if (showKnowledgeSquare) {
@@ -191,11 +193,11 @@ export default function Knowledge() {
             <div className="relative h-full flex">
                 <KnowledgeSquare
                     onBack={() => setShowKnowledgeSquare(false)}
-                    title="探索知识广场"
-                    subtitle="您可以在这里探索更多的知识空间"
-                    searchPlaceholder="输入知识空间名称或描述进行搜索"
-                    emptyText="未找到匹配知识空间"
-                    joinToastPrefix="已申请加入知识空间："
+                    title={localize("com_knowledge.explore_square")}
+                    subtitle={localize("com_knowledge.explore_more_spaces")}
+                    searchPlaceholder={localize("com_knowledge.search_space_placeholder")}
+                    emptyText={localize("com_knowledge.no_matched_space")}
+                    joinToastPrefix={localize("com_knowledge.applied_to_join_space")}
                     onPreviewSpace={(id) => {
                         setSquarePreviewSpaceId(id);
                         setSquarePreviewDrawerOpen(true);
@@ -222,13 +224,13 @@ export default function Knowledge() {
                         {dragError ? (
                             <p className="text-xl font-medium text-red-500 mb-2">{dragError}</p>
                         ) : (
-                            <p className="text-xl font-medium text-[#161616] mb-2">松手即可上传文件至此处</p>
+                            <p className="text-xl font-medium text-[#161616] mb-2">{localize("com_knowledge.drop_to_upload")}</p>
                         )}
                         <div className="text-center text-xs text-gray-400 leading-5">
-                            <p>支持的文件格式为：</p>
-                            <p>pdf(含扫描件)、txt、docx、ppt、pptx、md、html、xls、xlsx、csv、doc、png、jpg、jpeg、bmp</p>
-                            <p>每个文件最大支持200mb</p>
-                            <p>单次最多上传50个</p>
+                            <p>{localize("com_knowledge.supported_formats")}</p>
+                            <p>{localize("com_knowledge.format_list")}</p>
+                            <p>{localize("com_knowledge.max_file_size_200m")}</p>
+                            <p>{localize("com_knowledge.max_upload_50_short")}</p>
                         </div>
                     </div>
                 </div>
@@ -267,11 +269,11 @@ export default function Knowledge() {
                             onNavigateFolder={fileManager.handleNavigateFolder}
                             onUploadFile={fileUpload.handleUploadFile}
                             onCreateFolder={fileUpload.handleCreateFolder}
-                            onDownloadFile={() => showToast({ message: "开始下载", severity: NotificationSeverity.SUCCESS })}
+                            onDownloadFile={() => showToast({ message: localize("com_knowledge.start_download"), severity: NotificationSeverity.SUCCESS })}
                             onRenameFile={fileUpload.handleRenameFile}
                             onDeleteFile={fileUpload.handleDeleteFile}
                             onEditTags={fileUpload.handleEditTags}
-                            onRetryFile={() => showToast({ message: "重试功能开发中", severity: NotificationSeverity.INFO })}
+                            onRetryFile={() => showToast({ message: localize("com_knowledge.retry_feature_dev"), severity: NotificationSeverity.INFO })}
                             currentPath={fileManager.currentPath}
                             onDragStateChange={handleDragStateChange}
                             uploadingFiles={fileUpload.uploadingFiles}
@@ -314,13 +316,11 @@ export default function Knowledge() {
                         alt="empty"
                     />
                     <p className="text-[14px] leading-6 text-[#4E5969]">
-                        无相关内容，请
-                        <span
+                        {localize("com_knowledge.no_related_content_please")}<span
                             className="ml-1.5 cursor-pointer text-[#165DFF] transition-colors hover:text-[#4080FF] active:text-[#0E42D2]"
                             onClick={handleCreateSpace}
                         >
-                            创建知识空间
-                        </span>
+                            {localize("com_knowledge.create_knowledge_space")}</span>
                     </p>
                 </div>
             )}

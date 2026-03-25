@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
+import { useLocalize } from "~/hooks";
 
 interface MarkdownViewerProps {
     fileUrl: string;
@@ -9,7 +10,8 @@ interface MarkdownViewerProps {
 }
 
 export function MarkdownViewer({ fileUrl, zoomLevel }: MarkdownViewerProps) {
-    const [content, setContent] = useState("");
+    const localize = useLocalize();
+  const [content, setContent] = useState("");
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -18,12 +20,12 @@ export function MarkdownViewer({ fileUrl, zoomLevel }: MarkdownViewerProps) {
             try {
                 setLoading(true);
                 const response = await fetch(fileUrl);
-                if (!response.ok) throw new Error(`加载失败: ${response.status}`);
+                if (!response.ok) throw new Error(localize("com_knowledge.failure_status", { 0: response.status }));
                 const text = await response.text();
                 setContent(text);
                 setError(null);
             } catch (err: any) {
-                setError(err.message || "无法加载文件");
+                setError(err.message || localize("com_knowledge.load_file_failed"));
             } finally {
                 setLoading(false);
             }
@@ -34,8 +36,7 @@ export function MarkdownViewer({ fileUrl, zoomLevel }: MarkdownViewerProps) {
     if (loading) {
         return (
             <div className="flex-1 flex items-center justify-center text-[#86909c]">
-                加载中...
-            </div>
+                {localize("com_knowledge.loading")}</div>
         );
     }
 

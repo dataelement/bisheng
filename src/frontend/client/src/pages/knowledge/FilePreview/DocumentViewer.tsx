@@ -1,5 +1,6 @@
 import * as pdfjsLib from "pdfjs-dist";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useLocalize } from "~/hooks";
 
 interface DocumentViewerProps {
     pdfDoc: pdfjsLib.PDFDocumentProxy | null;
@@ -20,7 +21,8 @@ export function DocumentViewer({
     targetPage,
     onCurrentPageChange,
 }: DocumentViewerProps) {
-    const scrollContainerRef = useRef<HTMLDivElement>(null);
+    const localize = useLocalize();
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
     const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
     const [loading, setLoading] = useState(true);
     // 标记 targetPage 跳转是否进行中，避免 observer 回环
@@ -124,7 +126,7 @@ export function DocumentViewer({
             <div className="flex-1 flex items-center justify-center text-[#86909c]">
                 <div className="flex flex-col items-center gap-2">
                     <div className="animate-spin size-8 border-2 border-[#165dff] border-t-transparent rounded-full" />
-                    <span className="text-sm">加载中...</span>
+                    <span className="text-sm">{localize("com_knowledge.loading")}</span>
                 </div>
             </div>
         );

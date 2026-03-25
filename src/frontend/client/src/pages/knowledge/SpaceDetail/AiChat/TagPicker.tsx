@@ -5,6 +5,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { cn } from "~/utils";
+import { useLocalize } from "~/hooks";
 
 interface TagPickerProps {
     tags: string[];
@@ -14,7 +15,8 @@ interface TagPickerProps {
 }
 
 export function TagPicker({ tags, searchText, onSelect, onClose }: TagPickerProps) {
-    const [activeIndex, setActiveIndex] = useState(0);
+    const localize = useLocalize();
+  const [activeIndex, setActiveIndex] = useState(0);
     const containerRef = useRef<HTMLDivElement>(null);
 
     // Filter tags by search text
@@ -55,7 +57,7 @@ export function TagPicker({ tags, searchText, onSelect, onClose }: TagPickerProp
                 ref={containerRef}
                 className="absolute bottom-full left-0 right-0 mb-1 bg-white border border-[#e5e6eb] rounded-lg shadow-lg p-3 z-50"
             >
-                <p className="text-sm text-[#86909c] text-center">暂无匹配标签</p>
+                <p className="text-sm text-[#86909c] text-center">{localize("com_knowledge.no_matched_tags")}</p>
             </div>
         );
     }
@@ -66,7 +68,7 @@ export function TagPicker({ tags, searchText, onSelect, onClose }: TagPickerProp
             className="absolute bottom-full left-0 right-0 mb-1 bg-white border border-[#e5e6eb] rounded-lg shadow-lg z-50 max-h-[200px] overflow-y-auto"
         >
             <div className="p-1.5">
-                <p className="text-xs text-[#86909c] px-2 py-1 mb-1">选择标签筛选回答范围</p>
+                <p className="text-xs text-[#86909c] px-2 py-1 mb-1">{localize("com_knowledge.select_tags_to_filter")}</p>
                 {filtered.map((tag, i) => (
                     <button
                         key={tag}

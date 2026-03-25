@@ -1,5 +1,6 @@
 import React from "react";
 import { useSelectionPath } from "./useSelectionPath";
+import { useLocalize } from "~/hooks";
 
 interface SelectionPathBreadcrumbProps {
     spaceId: string;
@@ -18,10 +19,11 @@ export function SelectionPathBreadcrumb({
     selectedFiles,
     displayFiles,
 }: SelectionPathBreadcrumbProps) {
-    const { commonPath, isLoading } = useSelectionPath(spaceId, spaceName, selectedFiles, displayFiles);
+    const localize = useLocalize();
+  const { commonPath, isLoading } = useSelectionPath(spaceId, spaceName, selectedFiles, displayFiles);
 
     if (isLoading) {
-        return <span className="text-xs text-[#86909c]">加载路径中...</span>;
+        return <span className="text-xs text-[#86909c]">{localize("com_knowledge.loading_path")}</span>;
     }
 
     if (commonPath.length === 0) {

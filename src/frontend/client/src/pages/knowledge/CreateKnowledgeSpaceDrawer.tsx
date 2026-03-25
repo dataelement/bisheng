@@ -97,7 +97,7 @@ export function CreateKnowledgeSpaceDrawer({
     const handleConfirm = () => {
         if (!name.trim()) {
             showToast({
-                message: localize("knowledge_space_name_empty") || "知识空间名称不能为空",
+                message: localize("knowledge_space_name_empty") || localize("com_knowledge.space_name_empty"),
                 severity: NotificationSeverity.WARNING
             });
             return;
@@ -121,7 +121,7 @@ export function CreateKnowledgeSpaceDrawer({
             <SheetContent side="right" className="min-w-[1000px] p-0 bg-white">
                 <SheetHeader className="px-8 pt-7 pb-4 border-b border-[#E5E6EB]">
                     <SheetTitle className="text-[20px] font-medium text-[#1D2129] leading-none">
-                        {mode === "edit" ? localize("com_subscription.edit_knowledge_space") || "编辑知识空间" : localize("com_subscription.create_konwledge_space")}
+                        {mode === "edit" ? localize("com_subscription.edit_knowledge_space") || localize("com_knowledge.edit_space") : localize("com_subscription.create_konwledge_space")}
                     </SheetTitle>
                 </SheetHeader>
 
@@ -173,7 +173,7 @@ export function CreateKnowledgeSpaceDrawer({
                                             const v = e.currentTarget.value;
                                             if (v.length > MAX_SPACE_NAME) {
                                                 showToast({
-                                                    message: localize("com_subscription.max_knowledge_space_name") || "最多输入 20个字符",
+                                                    message: localize("com_subscription.max_knowledge_space_name") || localize("com_knowledge.max_20_chars"),
                                                     severity: NotificationSeverity.WARNING
                                                 });
                                                 setName(v.slice(0, MAX_SPACE_NAME));
@@ -187,7 +187,7 @@ export function CreateKnowledgeSpaceDrawer({
                                             }
                                             if (v.length > MAX_SPACE_NAME) {
                                                 showToast({
-                                                    message: localize("com_subscription.max_knowledge_space_name") || "最多输入 20个字符",
+                                                    message: localize("com_subscription.max_knowledge_space_name") || localize("com_knowledge.max_20_chars"),
                                                     severity: NotificationSeverity.WARNING
                                                 });
                                                 setName(v.slice(0, MAX_SPACE_NAME));
@@ -220,7 +220,7 @@ export function CreateKnowledgeSpaceDrawer({
                                             const v = e.currentTarget.value;
                                             if (v.length > MAX_SPACE_DESC) {
                                                 showToast({
-                                                    message: localize("com_subscription.max_knowledge_space_desc") || "最多输入200个字符",
+                                                    message: localize("com_subscription.max_knowledge_space_desc") || localize("com_knowledge.max_200_chars"),
                                                     severity: NotificationSeverity.WARNING
                                                 });
                                                 setDescription(v.slice(0, MAX_SPACE_DESC));
@@ -234,7 +234,7 @@ export function CreateKnowledgeSpaceDrawer({
                                             }
                                             if (v.length > MAX_SPACE_DESC) {
                                                 showToast({
-                                                    message: localize("com_subscription.max_knowledge_space_desc") || "最多输入200个字符",
+                                                    message: localize("com_subscription.max_knowledge_space_desc") || localize("com_knowledge.max_200_chars"),
                                                     severity: NotificationSeverity.WARNING
                                                 });
                                                 setDescription(v.slice(0, MAX_SPACE_DESC));
@@ -273,7 +273,7 @@ export function CreateKnowledgeSpaceDrawer({
                                         {
                                             value: "public",
                                             label: localize("publice"),
-                                            desc: localize("com_subscription.anyone_can_subscribe") || "任何人可直接订阅，无需审核"
+                                            desc: localize("com_subscription.anyone_can_subscribe") || localize("com_knowledge.direct_subscribe_desc")
                                         }
                                     ].map((opt) => (
                                         <label
@@ -304,10 +304,8 @@ export function CreateKnowledgeSpaceDrawer({
                                 <div className="space-y-3">
                                     <Label className="text-[14px] text-[#1D2129]">
                                         <span className="text-[#F53F3F]">*</span>
-                                        发布到广场
-                                        <span className="ml-2 text-[12px] text-[#86909C]">
-                                            发布后该知识空间会展示在广场，他人可以搜索或查看
-                                        </span>
+                                        {localize("com_knowledge.publish_to_square")}<span className="ml-2 text-[12px] text-[#86909C]">
+                                            {localize("com_knowledge.publish_desc")}</span>
                                     </Label>
                                     <RadioGroup.Root
                                         value={publishToSquare}
@@ -321,7 +319,7 @@ export function CreateKnowledgeSpaceDrawer({
                                             >
                                                 <RadioGroup.Indicator className="h-1.5 w-1.5 rounded-full bg-white" />
                                             </RadioGroup.Item>
-                                            <span className="text-[14px] text-[#1D2129]">是</span>
+                                            <span className="text-[14px] text-[#1D2129]">{localize("com_knowledge.yes")}</span>
                                         </label>
                                         <label className="flex items-center gap-2 cursor-pointer">
                                             <RadioGroup.Item
@@ -330,7 +328,7 @@ export function CreateKnowledgeSpaceDrawer({
                                             >
                                                 <RadioGroup.Indicator className="h-1.5 w-1.5 rounded-full bg-white" />
                                             </RadioGroup.Item>
-                                            <span className="text-[14px] text-[#1D2129]">否</span>
+                                            <span className="text-[14px] text-[#1D2129]">{localize("com_knowledge.no")}</span>
                                         </label>
                                     </RadioGroup.Root>
                                 </div>
@@ -346,13 +344,12 @@ export function CreateKnowledgeSpaceDrawer({
                             className="h-9 border border-[#E5E6EB] bg-white text-[#4E5969]"
                             onClick={() => onOpenChange(false)}
                         >
-                            取消
-                        </Button>
+                            {localize("com_knowledge.cancel")}</Button>
                         <Button
                             className="h-9 bg-[#165DFF] hover:bg-[#4080FF] text-white"
                             onClick={handleConfirm}
                         >
-                            {mode === "edit" ? "保存" : "确认创建"}
+                            {mode === "edit" ? localize("com_knowledge.save") : localize("com_knowledge.confirm_create")}
                         </Button>
                     </div>
                 )}

@@ -5,6 +5,7 @@
 import { HistoryIcon, MessageSquareIcon, Trash2Icon, XIcon } from "lucide-react";
 import { Button } from "~/components";
 import type { FolderSession } from "~/api/chatApi";
+import { useLocalize } from "~/hooks";
 
 interface ConversationHistoryProps {
     sessions: FolderSession[];
@@ -22,7 +23,8 @@ export function ConversationHistory({
     onClose,
 }: ConversationHistoryProps) {
     // Format date for display
-    const formatDate = (dateStr: string) => {
+    const localize = useLocalize();
+  const formatDate = (dateStr: string) => {
         const d = new Date(dateStr);
         const now = new Date();
         const isToday = d.toDateString() === now.toDateString();
@@ -38,7 +40,7 @@ export function ConversationHistory({
             <div className="flex items-center justify-between px-4 py-3 border-b border-[#e5e6eb] shrink-0">
                 <div className="flex items-center gap-2">
                     <HistoryIcon className="size-4 text-[#4e5969]" />
-                    <h3 className="text-sm font-medium text-[#1d2129]">历史会话</h3>
+                    <h3 className="text-sm font-medium text-[#1d2129]">{localize("com_knowledge.history_chat")}</h3>
                 </div>
                 <Button
                     variant="ghost"
@@ -55,7 +57,7 @@ export function ConversationHistory({
                 {sessions.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-full text-center px-6 gap-2">
                         <MessageSquareIcon className="size-10 text-[#c9cdd4]" />
-                        <p className="text-sm text-[#86909c]">暂无历史会话</p>
+                        <p className="text-sm text-[#86909c]">{localize("com_knowledge.no_history_chat")}</p>
                     </div>
                 ) : (
                     <div className="p-2 space-y-1">
@@ -71,7 +73,7 @@ export function ConversationHistory({
                             >
                                 <div className="flex-1 min-w-0">
                                     <p className="text-sm font-medium truncate">
-                                        {session.flow_name || "新的对话"}
+                                        {session.flow_name || localize("com_knowledge.new_chat")}
                                     </p>
                                     <p className="text-xs text-[#86909c] mt-0.5">
                                         {formatDate(session.update_time || session.create_time)}

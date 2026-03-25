@@ -12,6 +12,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { SendIcon } from "~/components/svg";
 import { TagPicker } from "./TagPicker";
 import type { FolderChatTag } from "~/hooks/useFolderChat";
+import { useLocalize } from "~/hooks";
 
 interface KnowledgeAiInputProps {
     availableTags: { id: number; name: string }[];
@@ -31,7 +32,8 @@ export function KnowledgeAiInput({
     onSend,
     onStop,
 }: KnowledgeAiInputProps) {
-    const textareaRef = useRef<HTMLTextAreaElement>(null);
+    const localize = useLocalize();
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
     const [inputText, setInputText] = useState("");
     const [selectedTag, setSelectedTag] = useState<FolderChatTag | null>(null);
     const [showPicker, setShowPicker] = useState(false);
@@ -187,7 +189,7 @@ export function KnowledgeAiInput({
                             isComposingRef.current = false;
                         }}
                         disabled={disabled}
-                        placeholder="请输入你的问题，输入 # 可指定标签回答..."
+                        placeholder={localize("com_knowledge.ai_input_placeholder")}
                         rows={1}
                         className="w-full bg-transparent text-sm outline-none resize-none max-h-48 overflow-y-auto pr-6"
                         style={{
