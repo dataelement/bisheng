@@ -43,6 +43,13 @@ function Sidebar() {
   const localize = useLocalize();
   const [langcode, setLangcode] = useRecoilState(store.lang);
 
+  // Backend returns `web_menu` but we map it into front-end user as `plugins`.
+  const plugins: string[] | null = Array.isArray((user as any)?.plugins)
+    ? ((user as any)?.plugins as string[])
+    : null;
+  const showSubscriptionTab = plugins ? plugins.includes("subscription") : true;
+  const showKnowledgeSpaceTab = plugins ? plugins.includes("knowledge_space") : true;
+
   // --- 高亮逻辑定义 ---
   const links = useMemo(() => [
     {
@@ -65,7 +72,11 @@ function Sidebar() {
       icon: <BookOpenIcon />,
       isActive: pathname.startsWith('/knowledge')
     },
-  ], [pathname]);
+  ].filter((l) => {
+    if (l.to === "/channel") return showSubscriptionTab;
+    if (l.to === "/knowledge") return showKnowledgeSpaceTab;
+    return true;
+  }), [pathname, showSubscriptionTab, showKnowledgeSpaceTab]);
 
   const changeLang = useCallback((value: string) => {
     let userLang = value;

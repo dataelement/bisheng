@@ -557,7 +557,7 @@ export default function EditRole({ id, name, groupId, knowledgeSpaceFileLimit, o
     const allMenuPermissions = [...menuPermissionsToSave, ...(form.useWorkbenchMenu || [])];
 
     await Promise.all([
-      updateRolePermissionsApi({ role_id: roleIdLocal, access_id: form.useSkills as any, type: 2 as any }),
+      // updateRolePermissionsApi({ role_id: roleIdLocal, access_id: form.useSkills as any, type: 2 as any }),//技能模块删除
       updateRolePermissionsApi({ role_id: roleIdLocal, access_id: form.useLibs as any, type: 1 as any }),
       updateRolePermissionsApi({ role_id: roleIdLocal, access_id: form.useFlows as any, type: 9 as any }),
       updateRolePermissionsApi({ role_id: roleIdLocal, access_id: form.useTools as any, type: 7 as any }),
