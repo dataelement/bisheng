@@ -8,6 +8,8 @@ import {
     getSpaceInfoApi,
     createSpaceApi,
     updateSpaceApi,
+    getSpaceTagsApi,
+    type SpaceTag,
 } from "~/api/knowledge";
 import { NotificationSeverity } from "~/common";
 import { KnowledgeSpaceMemberDialog } from "~/components/KnowledgeSpaceMemberDialog";
@@ -57,6 +59,18 @@ export default function Knowledge() {
 
     // ─── AI split-pane ──────────────────────────────────────────────────
     const aiPane = useAiSplitPane();
+
+    // ─── Space tags for AI chat ─────────────────────────────────────────
+    const [spaceTags, setSpaceTags] = useState<SpaceTag[]>([]);
+    useEffect(() => {
+        if (!activeSpace?.id) {
+            setSpaceTags([]);
+            return;
+        }
+        getSpaceTagsApi(String(activeSpace.id))
+            .then(setSpaceTags)
+            .catch(() => setSpaceTags([]));
+    }, [activeSpace?.id]);
 
     // Open preview drawer when URL has a spaceId param
     useEffect(() => {
@@ -264,11 +278,10 @@ export default function Knowledge() {
                     {aiPane.showAiAssistant && (
                         <div className="flex-1 h-full min-w-[360px] bg-white border-l border-[#e5e6eb]">
                             <KnowledgeAiPanel
-                                spaceId={activeSpace.id}
+                                spaceId={String(activeSpace.id)}
                                 folderId={fileManager.currentFolderId}
-                                locationKey={locationKey}
                                 contextLabel={contextLabel}
-                                availableTags={[]}
+                                availableTags={spaceTags}
                                 onClose={() => aiPane.setShowAiAssistant(false)}
                             />
                         </div>

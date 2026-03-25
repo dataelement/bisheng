@@ -1,15 +1,15 @@
 /**
  * KnowledgeAiPanel — AI assistant panel for knowledge space.
- * Reuses useAiChat hook + AiChatMessages. Extended with:
+ * Uses useFolderChat for server-backed session management.
+ *
+ * Features:
  * - Dynamic welcome text based on context (space vs folder)
- * - Session memory per location via useKnowledgeAiSession
+ * - Server-backed session list with create/switch/delete
  * - History sidebar toggle
- * - New session action
  * - Tag filter support via KnowledgeAiInput
  */
 import { HistoryIcon, PlusIcon, XIcon } from "lucide-react";
-import { useEffect, useState } from "react";
-import { useRecoilState } from "recoil";
+import { useState } from "react";
 import { Button } from "~/components";
 import {
     Tooltip,
@@ -17,90 +17,66 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from "~/components/ui/Tooltip2";
-import { useGetBsConfig } from "~/hooks/queries/data-provider";
-import store from "~/store";
 import AiChatMessages from "~/components/Chat/AiChatMessages";
-import useAiChat from "~/hooks/useAiChat";
-import { useKnowledgeAiSession } from "~/hooks/useKnowledgeAiSession";
+import useFolderChat from "~/hooks/useFolderChat";
+import type { FolderChatTag } from "~/hooks/useFolderChat";
 import { KnowledgeAiInput } from "./KnowledgeAiInput";
 import { ConversationHistory } from "./ConversationHistory";
 
 interface KnowledgeAiPanelProps {
     spaceId: string;
     folderId?: string;
-    locationKey: string;
     contextLabel: string; // "知识空间" | "文件夹"
-    availableTags?: string[];
+    availableTags?: { id: number; name: string }[];
     onClose: () => void;
 }
 
 export function KnowledgeAiPanel({
     spaceId,
     folderId,
-    locationKey,
     contextLabel,
     availableTags = [],
     onClose,
 }: KnowledgeAiPanelProps) {
-    // Session management
-    const {
-        conversationId: sessionConvoId,
-        setConversationId,
-        clearSession,
-        history,
-        addToHistory,
-        loadConversation,
-    } = useKnowledgeAiSession(locationKey);
-
     const {
         messages,
-        conversationId: activeConvoId,
-        title: chatTitle,
+        sessions,
+        activeChatId,
         isLoading,
         isStreaming,
         sendMessage,
         stopGenerating,
-        clearConversation,
+        createSession,
+        switchSession,
+        deleteSession,
         regenerate,
-    } = useAiChat(sessionConvoId);
+    } = useFolderChat(spaceId, folderId);
 
-    const { data: bsConfig } = useGetBsConfig();
-    const [chatModel, setChatModel] = useRecoilState(store.chatModel);
     const [showHistory, setShowHistory] = useState(false);
 
     const welcomeText = contextLabel === "文件夹"
         ? "基于当前文件夹问答"
         : "基于当前知识空间问答";
 
-    // Persist conversation ID when useAiChat creates a new one
-    useEffect(() => {
-        if (activeConvoId && activeConvoId !== "new" && activeConvoId !== sessionConvoId) {
-            setConversationId(activeConvoId);
-            addToHistory({
-                id: activeConvoId,
-                title: chatTitle || "新的对话",
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
-            });
-        }
-    }, [activeConvoId, sessionConvoId, chatTitle, setConversationId, addToHistory]);
-
-    const handleSend = (text: string, files?: any[] | null, tags?: string[]) => {
-        // Tags can be used for RAG filtering in the future
-        if (tags && tags.length > 0) {
-            console.log("[KnowledgeAi] Sending with tag filters:", tags);
-        }
-        sendMessage(text, files);
+    const handleSend = (
+        text: string,
+        files?: any[] | null,
+        tag?: FolderChatTag
+    ) => {
+        sendMessage(text, files, tag);
     };
 
-    const handleNewChat = () => {
-        clearConversation();
-        clearSession();
+    const handleNewChat = async () => {
+        await createSession();
     };
 
-    const handleHistorySelect = (id: string) => {
-        loadConversation(id);
+    const handleHistorySelect = (chatId: string) => {
+        switchSession(chatId);
         setShowHistory(false);
+    };
+
+    const handleDeleteSession = (chatId: string) => {
+        deleteSession(chatId);
     };
 
     return (
@@ -168,7 +144,7 @@ export function KnowledgeAiPanel({
             </div>
 
             {/* Messages Area */}
-            {messages.length === 0 && sessionConvoId === "new" ? (
+            {messages.length === 0 && !activeChatId ? (
                 // Welcome screen
                 <div className="flex-1 flex flex-col items-center justify-center gap-4 text-center px-6">
                     <img
@@ -181,11 +157,13 @@ export function KnowledgeAiPanel({
             ) : (
                 <AiChatMessages
                     messages={messages}
-                    conversationId={activeConvoId}
-                    title={chatTitle}
-                    isLoading={isLoading && sessionConvoId !== "new"}
+                    conversationId={activeChatId}
+                    title=""
+                    isLoading={isLoading}
                     isStreaming={isStreaming}
                     presetQuestions={[]}
+                    hideShare
+                    flatMode
                     onPresetClick={() => { }}
                     onRegenerate={regenerate}
                 />
@@ -195,27 +173,17 @@ export function KnowledgeAiPanel({
             <KnowledgeAiInput
                 availableTags={availableTags}
                 isStreaming={isStreaming}
-                disabled={!bsConfig?.models?.length}
-                bsConfig={bsConfig}
-                chatModel={chatModel}
-                onChatModelChange={(val) => {
-                    const model = bsConfig?.models?.find((m: any) => m.id === val);
-                    setChatModel({
-                        id: Number(val),
-                        name: model?.displayName || "",
-                    });
-                }}
                 onSend={handleSend}
                 onStop={stopGenerating}
-                onNewChat={handleNewChat}
             />
 
             {/* History sidebar overlay */}
             {showHistory && (
                 <ConversationHistory
-                    history={history}
-                    activeConversationId={activeConvoId}
+                    sessions={sessions}
+                    activeChatId={activeChatId}
                     onSelect={handleHistorySelect}
+                    onDelete={handleDeleteSession}
                     onClose={() => setShowHistory(false)}
                 />
             )}

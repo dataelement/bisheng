@@ -132,6 +132,7 @@ export default function FilePreviewPage() {
                         features={{ tools: false, modelSelect: false, knowledgeBase: false, fileUpload: false }}
                         onClose={() => setShowAiAssistant(false)}
                         noBorder
+                        fileChat={spaceId && fileId ? { spaceId, fileId } : undefined}
                     />
                 </div>
             )}

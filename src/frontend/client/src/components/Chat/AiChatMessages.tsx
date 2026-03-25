@@ -22,6 +22,8 @@ interface AiChatMessagesProps {
     shareToken?: string;
     /** When true, hides the share button in the header */
     hideShare?: boolean;
+    /** When true, renders messages as a flat list without tree/sibling navigation */
+    flatMode?: boolean;
     onPresetClick?: (question: string) => void;
     onRegenerate?: (parentMessageId: string) => void;
 }
@@ -107,6 +109,7 @@ export default function AiChatMessages({
     presetQuestions = [],
     shareToken = '',
     hideShare = false,
+    flatMode = false,
     onPresetClick,
     onRegenerate,
 }: AiChatMessagesProps) {
@@ -116,10 +119,8 @@ export default function AiChatMessages({
     // Track whether user has manually scrolled up
     const isUserScrolledUp = useRef(false);
 
-    // Build message tree from flat array
-    const tree = useMemo(() => buildMessageTree(messages), [messages]);
-
-    console.log('tree :>> ', tree);
+    // Build message tree from flat array (skipped in flat mode)
+    const tree = useMemo(() => (flatMode ? [] : buildMessageTree(messages)), [messages, flatMode]);
 
     // Check if user is near bottom
     const checkNearBottom = () => {
@@ -222,14 +223,36 @@ export default function AiChatMessages({
                 onScroll={handleScroll}
             >
                 <div className="flex flex-col py-2 max-w-[768px] mx-auto">
-                    {tree.length > 0 && (
-                        <MessageTreeNode
-                            siblings={tree}
-                            isStreaming={isStreaming}
-                            totalMessages={messages.length}
-                            currentIndex={0}
-                            onRegenerate={onRegenerate}
-                        />
+                    {flatMode ? (
+                        /* Flat mode: render messages as a simple list */
+                        messages.map((message, idx) => {
+                            const isLast = idx === messages.length - 1;
+                            const isLastBot = isLast && !message.isCreatedByUser;
+                            return (
+                                <AiMessageBubble
+                                    key={message.messageId}
+                                    message={message}
+                                    isLatest={isLastBot}
+                                    isStreaming={isStreaming && isLastBot}
+                                    onRegenerate={
+                                        !message.isCreatedByUser && isLastBot && !isStreaming
+                                            ? () => onRegenerate?.(message.parentMessageId)
+                                            : undefined
+                                    }
+                                />
+                            );
+                        })
+                    ) : (
+                        /* Tree mode: render messages as tree with sibling navigation */
+                        tree.length > 0 && (
+                            <MessageTreeNode
+                                siblings={tree}
+                                isStreaming={isStreaming}
+                                totalMessages={messages.length}
+                                currentIndex={0}
+                                onRegenerate={onRegenerate}
+                            />
+                        )
                     )}
                     <div ref={endRef} className="h-0 shrink-0" />
                 </div>

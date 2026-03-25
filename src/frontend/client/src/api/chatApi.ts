@@ -1,11 +1,7 @@
 /**
  * Direct API calls for the AI chat system.
  */
-import axios from "axios";
-
-const http = axios.create({
-    baseURL: import.meta.env.BASE_URL,
-});
+import http from "~/api/request";
 
 // --- Endpoints ---
 const API = {
@@ -83,7 +79,7 @@ export async function getMessages(
         return [];
     }
     const res = await http.get(API.messages(conversationId));
-    return res.data?.data ?? res.data ?? [];
+    return res?.data ?? res ?? [];
 }
 
 /** Abort an active SSE stream */
@@ -116,7 +112,7 @@ export function getChannelSSEUrl(): string {
 /** Fetch platform config (models, features, etc.) */
 export async function getBsConfig(): Promise<BsConfig> {
     const res = await http.get(API.bsConfig());
-    return res.data?.data ?? res.data;
+    return res?.data ?? res;
 }
 
 /** Build a message tree from a flat message array */
@@ -159,11 +155,190 @@ export async function getChannelChatHistory(
 ): Promise<ChatMessage[]> {
     if (!articleDocId) return [];
     const res = await http.get(`/api/v1/channel/chat/messages/${articleDocId}`);
-    return res.data?.data ?? res.data ?? [];
+    return res?.data ?? res ?? [];
 }
 
 /** Clear channel article chat history */
 export async function clearChannelChat(articleDocId: string): Promise<void> {
     await http.delete(`/api/v1/channel/chat/messages/${articleDocId}`);
+}
+
+// =====================================================================
+// Shared Stream-Format Types & Parser
+// (Used by channel, file, and folder chat — the "new" data structure)
+// =====================================================================
+
+/** Raw history item from stream-format endpoints (file/folder/channel) */
+export interface StreamHistoryItem {
+    id: number;
+    is_bot: boolean;
+    message: string; // JSON string: {"content": "...", "reasoning_content": "..."} or {"query": "...", "tags": [...]}
+    category: string; // "question" | "answer"
+    type: string;
+    flow_id: string;
+    chat_id: string;
+    user_id: number;
+    user_name: string;
+    flow_name: string;
+    create_time: string;
+    update_time: string;
+    sender: string;
+    [key: string]: any;
+}
+
+/** Parse a stream-format history item → ChatMessage */
+export function parseStreamHistoryItem(raw: StreamHistoryItem): ChatMessage {
+    let displayText = "";
+    try {
+        const parsed = JSON.parse(raw.message);
+        if (raw.is_bot) {
+            // Bot messages: { content, reasoning_content }
+            const reasoning = parsed.reasoning_content || "";
+            const content = parsed.content || "";
+            displayText = reasoning
+                ? `:::thinking\n${reasoning}\n:::\n${content}`
+                : content;
+        } else {
+            // User messages: { query, tags? }
+            displayText = parsed.query || parsed.text || raw.message;
+        }
+    } catch {
+        displayText = raw.message || "";
+    }
+
+    return {
+        messageId: String(raw.id),
+        parentMessageId: "",
+        conversationId: raw.chat_id || "",
+        sender: raw.is_bot ? "AI" : "User",
+        text: displayText,
+        isCreatedByUser: !raw.is_bot,
+        createdAt: raw.create_time,
+        error: false,
+        flow_name: raw.flow_name,
+    };
+}
+
+// =====================================================================
+// Knowledge Space — Single File Chat
+// =====================================================================
+
+/** Get the full SSE URL for single-file chat */
+export function getFileChatSSEUrl(
+    spaceId: string | number,
+    fileId: string | number
+): string {
+    const base = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
+    return `${base}/api/v1/knowledge/space/${spaceId}/chat/file/${fileId}`;
+}
+
+/** Fetch single-file chat history (POST endpoint) */
+export async function getFileChatHistory(
+    spaceId: string | number,
+    fileId: string | number
+): Promise<ChatMessage[]> {
+    if (!spaceId || !fileId) return [];
+    const res = await http.get(
+        `/api/v1/knowledge/space/${spaceId}/chat/file/${fileId}/history`
+    );
+    const items: StreamHistoryItem[] = res?.data ?? [];
+    // Backend returns newest-first; reverse for chronological order
+    return items.reverse().map(parseStreamHistoryItem);
+}
+
+/** Delete single-file chat history */
+export async function clearFileChatHistory(
+    spaceId: string | number,
+    fileId: string | number
+): Promise<void> {
+    await http.delete(
+        `/api/v1/knowledge/space/${spaceId}/chat/file/${fileId}/history`
+    );
+}
+
+// =====================================================================
+// Knowledge Space — Folder / Space Chat
+// =====================================================================
+
+/** Folder session record returned by the sessions API */
+export interface FolderSession {
+    chat_id: string;
+    flow_id: string;
+    flow_name: string;
+    create_time: string;
+    update_time: string;
+    [key: string]: any;
+}
+
+/** Get the SSE URL for folder/space chat */
+export function getFolderChatSSEUrl(spaceId: string | number): string {
+    const base = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
+    return `${base}/api/v1/knowledge/space/${spaceId}/chat/folder`;
+}
+
+/** Fetch folder/space session list */
+export async function getFolderSessions(
+    spaceId: string | number,
+    folderId?: string | number
+): Promise<FolderSession[]> {
+    const params: Record<string, any> = {};
+    if (folderId != null && folderId !== "") params.folder_id = folderId;
+    const res = await http.get(
+        `/api/v1/knowledge/space/${spaceId}/chat/folder/session`,
+        { params }
+    );
+    return res?.data ?? [];
+}
+
+/** Create a new folder/space chat session, returns session data (contains chat_id) */
+export async function createFolderSession(
+    spaceId: string | number,
+    folderId?: number
+): Promise<FolderSession> {
+    const body: Record<string, any> = {};
+    if (folderId != null) body.folder_id = folderId;
+    const res = await http.post(
+        `/api/v1/knowledge/space/${spaceId}/chat/folder/session`,
+        body
+    );
+    return res?.data;
+}
+
+/** Delete a folder/space chat session */
+export async function deleteFolderSession(
+    spaceId: string | number,
+    chatId: string,
+    folderId?: number
+): Promise<void> {
+    const body: Record<string, any> = { chat_id: chatId };
+    if (folderId != null) body.folder_id = folderId;
+    await http.deleteWithOptions(
+        `/api/v1/knowledge/space/${spaceId}/chat/folder/session`,
+        { data: body }
+    );
+}
+
+/** Fetch folder/space chat history for a specific session */
+export async function getFolderChatHistory(
+    spaceId: string | number,
+    params: {
+        folderId?: string | number;
+        chatId?: string;
+        pageSize?: number;
+    }
+): Promise<ChatMessage[]> {
+    const queryParams: Record<string, any> = {};
+    if (params.folderId != null && params.folderId !== "")
+        queryParams.folder_id = params.folderId;
+    if (params.chatId) queryParams.chat_id = params.chatId;
+    if (params.pageSize) queryParams.page_size = params.pageSize;
+
+    const res = await http.get(
+        `/api/v1/knowledge/space/${spaceId}/chat/folder/history`,
+        { params: queryParams }
+    );
+    const items: StreamHistoryItem[] = res?.data ?? [];
+    // Backend returns newest-first; reverse for chronological order
+    return items.reverse().map(parseStreamHistoryItem);
 }
 
