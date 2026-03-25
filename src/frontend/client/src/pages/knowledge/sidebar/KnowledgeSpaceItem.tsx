@@ -53,9 +53,9 @@ export default function KnowledgeSpaceItem({
         const newName = e.target.value.trim();
         setIsEditing(false);
         if (!newName) return
-        if (newName.length > 10) {
+        if (newName.length > 20) {
             return showToast({
-                message: "最多输入 10 个字符",
+                message: "最多输入 20 个字符",
                 severity: NotificationSeverity.ERROR
             });
         }

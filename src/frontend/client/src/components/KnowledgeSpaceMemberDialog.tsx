@@ -150,7 +150,7 @@ export function KnowledgeSpaceMemberDialog({
         if (m.role === "admin" || m.role === "creator") return;
         if (adminCount >= MAX_ADMINS) {
             showToast({
-                message: localize("exceeded_admin_limit") || "已超出管理员上限",
+                message: localize("com_subscription.exceeded_admin_limit") || "已超出管理员上限",
                 severity: NotificationSeverity.WARNING
             });
             return;
@@ -185,10 +185,10 @@ export function KnowledgeSpaceMemberDialog({
         try {
             await removeSpaceMemberApi(space.id, m.user_id);
             await fetchMembers();
-            showToast({
-                message: localize("remove_success") || "已移除成员",
-                severity: NotificationSeverity.SUCCESS
-            });
+            // showToast({
+            //     message: localize("remove_success") || "已移除成员",
+            //     severity: NotificationSeverity.SUCCESS
+            // });
         } catch {
             showToast({
                 message: localize("remove_failed") || "移除失败，请稍后重试",
@@ -300,8 +300,15 @@ export function KnowledgeSpaceMemberDialog({
                                     {localize("loading") || "加载中..."}
                                 </div>
                             ) : pagedMembers.length === 0 ? (
-                                <div className="h-full flex items-center justify-center text-[13px] text-[#86909C]">
-                                    {localize("com_subscription.nofound_mathcing_member")}
+                                <div className="h-full flex flex-col items-center justify-center py-8 text-center">
+                                    <img
+                                        className="size-[120px] mb-2 object-contain opacity-90"
+                                        src={`${__APP_ENV__.BASE_URL}/assets/channel/empty.png`}
+                                        alt="empty"
+                                    />
+                                    <p className="text-[13px] text-[#86909C]">
+                                        {localize("com_subscription.nofound_mathcing_member")}
+                                    </p>
                                 </div>
                             ) : (
                                 pagedMembers.map((m) => (

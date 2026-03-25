@@ -1365,7 +1365,7 @@
     "no_data_available": "暂无数据",
     "no_source_collected": "暂时没有收录该信源，试试在上方输入框中输入正确名称或完整的网址，进行检索或添加吧。未收录的公众号需要输入该公众号文章链接网址来获取。",
     "nofound_matching_channel": "未找到匹配频道",
-    "nofound_mathcing_member": "未匹配到相关成员",
+    "nofound_mathcing_member": "未搜索到相关用户",
     "only_filter_criteria": "只订阅信息源中符合过滤条件的内容",
     "parsed_articles": "该网站的文章列表:",
     "premission_settings": "权限设置",
