@@ -412,6 +412,16 @@ async def chat_single_file_history(
     return resp_200(response)
 
 
+@router.delete('/{space_id}/chat/file/{file_id}/history')
+async def clear_single_file_history(
+        space_id: int,
+        file_id: int,
+        svc: KnowledgeSpaceChatService = Depends(get_knowledge_space_chat_service),
+):
+    response = await svc.clear_file_history(space_id, file_id, 0)
+    return resp_200(response)
+
+
 @router.get('/{space_id}/chat/folder/session')
 async def get_chat_folder_session(
         space_id: int,
@@ -452,6 +462,17 @@ async def get_chat_folder_history(
         svc: KnowledgeSpaceChatService = Depends(get_knowledge_space_chat_service),
 ):
     result = await svc.get_chat_folder_history(space_id, folder_id, chat_id, page_size)
+    return resp_200(result)
+
+
+@router.delete('/{space_id}/chat/folder/history')
+async def get_chat_folder_history(
+        space_id: int,
+        folder_id: int = Query(default=0, description="folder id"),
+        chat_id: str = Query(..., description='Chat ID'),
+        svc: KnowledgeSpaceChatService = Depends(get_knowledge_space_chat_service),
+):
+    result = await svc.delete_chat_folder_history(space_id, folder_id, chat_id)
     return resp_200(result)
 
 

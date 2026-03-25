@@ -184,6 +184,18 @@ class KnowledgeSpaceChatService:
         session = session[0]
         return await ChatSessionService.get_chat_history(session.chat_id, session.flow_id, page_size=page_size)
 
+    async def clear_file_history(self, knowledge_id: int, file_id: int) -> bool:
+        flow_id = self.generate_flow_id_for_file(knowledge_id, file_id)
+        session = await MessageSessionDao.afilter_session(flow_ids=[flow_id],
+                                                          flow_type=[FlowType.KNOLEDGE_SPACE.value],
+                                                          user_ids=[self.login_user.user_id],
+                                                          include_delete=False)
+        if not session:
+            return True
+        session = session[0]
+        await ChatMessageDao.adelete_by_user_chat_id(chat_id=session.chat_id, user_id=self.login_user.user_id)
+        return True
+
     async def get_chat_folder_session(self, space_id: int, folder_id: int) -> List[MessageSession]:
         """ Query sessions for a specific folder_id """
 
@@ -230,6 +242,19 @@ class KnowledgeSpaceChatService:
             -> List[ChatMessageHistoryResponse]:
         flow_id = self.generate_flow_id_for_folder(space_id, folder_id)
         return await ChatSessionService.get_chat_history(chat_id, flow_id, page_size=page_size)
+
+    async def delete_chat_folder_history(self, space_id: int, folder_id: int, chat_id: str) -> bool:
+        flow_id = self.generate_flow_id_for_folder(space_id, folder_id)
+        session = await MessageSessionDao.afilter_session(chat_ids=[chat_id],
+                                                          flow_ids=[flow_id],
+                                                          flow_type=[FlowType.KNOLEDGE_SPACE.value],
+                                                          user_ids=[self.login_user.user_id],
+                                                          include_delete=False)
+        if not session:
+            return True
+        session = session[0]
+        await ChatMessageDao.adelete_by_user_chat_id(chat_id=session.chat_id, user_id=self.login_user.user_id)
+        return True
 
     async def chat_folder(self, knowledge_id: int, folder_id: int, chat_id: str, query: str,
                           tags: Optional[List[Dict]] = None) -> AsyncIterator[ChatResponse]:
