@@ -290,6 +290,7 @@ class KnowledgeSpaceChatService:
         if tags:
             tag_file_ids = await TagDao.aget_resources_by_tags([one.get("id") for one in tags],
                                                                resource_type=ResourceTypeEnum.SPACE_FILE)
+            tag_file_ids = [int(one.resource_id) for one in tag_file_ids]
             file_ids = list(set(file_ids) & set(tag_file_ids))
 
         milvus_vector = await KnowledgeRag.init_knowledge_milvus_vectorstore(self.login_user.user_id, knowledge=space)

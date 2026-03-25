@@ -1,6 +1,7 @@
 from typing import Any, Optional, List
 
 from fastapi import APIRouter, Depends, Body, Query
+from loguru import logger
 from starlette.responses import StreamingResponse
 
 from bisheng.common.errcode import BaseErrorCode
@@ -396,6 +397,7 @@ async def chat_single_file(
         except BaseErrorCode as e:
             yield e.to_sse_event_instance_str()
         except Exception as e:
+            logger.exception("chat_file error")
             yield ServerError(exception=e).to_sse_event_instance_str()
 
     return StreamingResponse(event_stream(), media_type='text/event-stream')
@@ -489,6 +491,7 @@ async def chat_folder(
         except BaseErrorCode as e:
             yield e.to_sse_event_instance_str()
         except Exception as e:
+            logger.exception("chat_folder error")
             yield ServerError(exception=e).to_sse_event_instance_str()
 
     return StreamingResponse(event_stream(), media_type='text/event-stream')
