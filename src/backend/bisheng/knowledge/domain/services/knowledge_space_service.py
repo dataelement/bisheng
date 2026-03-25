@@ -27,7 +27,7 @@ from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao, KnowledgeTypeEnum, AuthTypeEnum, \
     KnowledgeRead
 from bisheng.knowledge.domain.models.knowledge_file import (
-    KnowledgeFile, KnowledgeFileDao, KnowledgeFileStatus, FileType
+    KnowledgeFile, KnowledgeFileDao, KnowledgeFileStatus, FileType, FileSource
 )
 from bisheng.knowledge.domain.models.knowledge_space_file import SpaceFileDao
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
@@ -760,7 +760,10 @@ class KnowledgeSpaceService(BaseService):
             knowledge_id: int,
             file_path: List[str],
             parent_id: Optional[int] = None,
+            file_source: FileSource = None,
     ) -> List[KnowledgeFile]:
+        if file_source is None:
+            file_source = FileSource.SPACE_UPLOAD
         await self._require_write_permission(knowledge_id)
 
         db_knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
@@ -789,7 +792,7 @@ class KnowledgeSpaceService(BaseService):
             for one in roles:
                 default_file_size_limit = max(default_file_size_limit, one.knowledge_space_file_limit)
         default_file_size_limit = default_file_size_limit * 1024 * 1024 * 1024
-        current_total_file_size = await SpaceFileDao.get_total_file_size(db_knowledge.id)
+        current_total_file_size = await SpaceFileDao.get_user_total_file_size(self.login_user.user_id)
 
         file_split_rule = FileProcessBase(knowledge_id=knowledge_id)
         process_files = []
@@ -804,7 +807,8 @@ class KnowledgeSpaceService(BaseService):
                                                             excel_rule=ExcelRule()
                                                         ), split_rule=file_split_rule.model_dump(),
                                                         file_kwargs={"level": level,
-                                                                     "file_level_path": file_level_path})
+                                                                     "file_level_path": file_level_path,
+                                                                     "file_source": file_source.value})
             if db_file.status != KnowledgeFileStatus.FAILED.value:
                 # Get a preview cache of this filekey
                 cache_key = KnowledgeUtils.get_preview_cache_key(
