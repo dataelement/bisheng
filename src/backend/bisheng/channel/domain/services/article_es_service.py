@@ -487,7 +487,7 @@ class ArticleEsService:
                 "post_tags": ["</em>"],
                 "fields": {
                     "title": {"number_of_fragments": 0, "highlight_query": highlight_query},
-                    "content": {"fragment_size": 200, "number_of_fragments": 3, "highlight_query": highlight_query},
+                    "content": {"fragment_size": 200, "number_of_fragments": 3, "highlight_query": highlight_query, "max_analyzed_offset": 999999},
                 },
             }
 
