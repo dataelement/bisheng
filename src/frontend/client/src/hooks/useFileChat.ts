@@ -1,24 +1,22 @@
 /**
- * Channel article chat hook — sends questions in the context of a specific article.
- * Uses the stream-format SSE endpoint (shared with file/folder chat).
+ * Knowledge space single-file chat hook.
+ * Sends user queries in the context of a specific file within a knowledge space.
+ * Uses useStreamChatSSE for streaming (shared with channel/folder chat).
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { v4 } from "uuid";
 import type { ChatMessage } from "~/api/chatApi";
-import {
-    getChannelSSEUrl,
-    getChannelChatHistory,
-    clearChannelChat,
-} from "~/api/chatApi";
+import { getFileChatSSEUrl, getFileChatHistory, clearFileChatHistory } from "~/api/chatApi";
 import useStreamChatSSE, {
     type StreamChatSSESubmission,
 } from "~/hooks/useStreamChatSSE";
 
 /**
- * Hook for channel article AI chat.
- * @param articleDocId - ES article document ID; empty string disables the hook.
+ * Hook for single-file Q&A chat in a knowledge space.
+ * @param spaceId - Knowledge space ID; empty string disables the hook.
+ * @param fileId  - File ID within the space; empty string disables the hook.
  */
-export default function useChannelChat(articleDocId: string) {
+export default function useFileChat(spaceId: string, fileId: string) {
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [isStreaming, setIsStreaming] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
@@ -28,45 +26,39 @@ export default function useChannelChat(articleDocId: string) {
     const messagesRef = useRef<ChatMessage[]>([]);
     messagesRef.current = messages;
 
+    const enabled = !!spaceId && !!fileId;
+
     // SSE lifecycle
     const { abort: abortSSE } = useStreamChatSSE(sseSubmission);
 
-    // --- Load chat history on mount or when articleDocId changes ---
+    // --- Load chat history on mount or when params change ---
     useEffect(() => {
-        if (!articleDocId) return;
+        if (!enabled) return;
         setIsLoading(true);
-        getChannelChatHistory(articleDocId)
-            .then((msgs) => {
-                setMessages(msgs);
-            })
-            .catch((err) => {
-                console.error("[ChannelChat] Failed to load history:", err);
-            })
-            .finally(() => {
-                setIsLoading(false);
-            });
-    }, [articleDocId]);
+        getFileChatHistory(spaceId, fileId)
+            .then((msgs) => setMessages(msgs))
+            .catch((err) =>
+                console.error("[FileChat] Failed to load history:", err)
+            )
+            .finally(() => setIsLoading(false));
+    }, [spaceId, fileId, enabled]);
 
-    // --- Helper: build SSE submission for stream-format ---
+    // --- Helper: build SSE submission ---
     const buildSubmission = useCallback(
         (
             payload: Record<string, any>,
             responseMessageId: string
         ): StreamChatSSESubmission => ({
-            sseUrl: getChannelSSEUrl(),
+            sseUrl: getFileChatSSEUrl(spaceId, fileId),
             payload,
-            onStart: () => {
-                setIsStreaming(true);
-            },
+            onStart: () => setIsStreaming(true),
             onMessage: (fullText) => {
                 setMessages((prev) => {
                     const msgs = [...prev];
                     const idx = msgs.findIndex(
                         (m) => m.messageId === responseMessageId
                     );
-                    if (idx >= 0) {
-                        msgs[idx] = { ...msgs[idx], text: fullText };
-                    }
+                    if (idx >= 0) msgs[idx] = { ...msgs[idx], text: fullText };
                     return msgs;
                 });
             },
@@ -76,9 +68,7 @@ export default function useChannelChat(articleDocId: string) {
                     const idx = msgs.findIndex(
                         (m) => m.messageId === responseMessageId
                     );
-                    if (idx >= 0) {
-                        msgs[idx] = { ...msgs[idx], text: fullText };
-                    }
+                    if (idx >= 0) msgs[idx] = { ...msgs[idx], text: fullText };
                     return msgs;
                 });
             },
@@ -103,13 +93,13 @@ export default function useChannelChat(articleDocId: string) {
                 setSseSubmission(null);
             },
         }),
-        []
+        [spaceId, fileId]
     );
 
     // --- Send a message ---
     const sendMessage = useCallback(
         (text: string, _files?: any[] | null) => {
-            if (!text.trim() || isStreaming || !articleDocId) return;
+            if (!text.trim() || isStreaming || !enabled) return;
 
             const userMessageId = v4();
             const userMessage: ChatMessage = {
@@ -134,15 +124,11 @@ export default function useChannelChat(articleDocId: string) {
             };
 
             setMessages((prev) => [...prev, userMessage, initialResponse]);
-
-            const payload = {
-                article_doc_id: articleDocId,
-                text: text.trim(),
-            };
-
-            setSseSubmission(buildSubmission(payload, responseMessageId));
+            setSseSubmission(
+                buildSubmission({ query: text.trim() }, responseMessageId)
+            );
         },
-        [articleDocId, isStreaming, buildSubmission]
+        [isStreaming, enabled, buildSubmission]
     );
 
     // --- Stop generating ---
@@ -156,17 +142,17 @@ export default function useChannelChat(articleDocId: string) {
     const clearConversation = useCallback(() => {
         stopGenerating();
         setMessages([]);
-        if (articleDocId) {
-            clearChannelChat(articleDocId).catch((err) => {
-                console.error("[ChannelChat] Failed to clear history:", err);
-            });
+        if (enabled) {
+            clearFileChatHistory(spaceId, fileId).catch((err) =>
+                console.error("[FileChat] Failed to clear history:", err)
+            );
         }
-    }, [stopGenerating, articleDocId]);
+    }, [stopGenerating, enabled, spaceId, fileId]);
 
     // --- Regenerate (resend last user message) ---
     const regenerate = useCallback(
         (parentMessageId: string) => {
-            if (isStreaming || !articleDocId) return;
+            if (isStreaming || !enabled) return;
 
             const parentMsg = messagesRef.current.find(
                 (m) => m.messageId === parentMessageId
@@ -185,15 +171,14 @@ export default function useChannelChat(articleDocId: string) {
             };
 
             setMessages((prev) => [...prev, newResponse]);
-
-            const payload = {
-                article_doc_id: articleDocId,
-                text: parentMsg.text?.trim() || "",
-            };
-
-            setSseSubmission(buildSubmission(payload, newResponseId));
+            setSseSubmission(
+                buildSubmission(
+                    { query: parentMsg.text?.trim() || "" },
+                    newResponseId
+                )
+            );
         },
-        [articleDocId, isStreaming, buildSubmission]
+        [isStreaming, enabled, buildSubmission]
     );
 
     return {
