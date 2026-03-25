@@ -23,7 +23,7 @@ from bisheng.api.services.workstation import (WorkstationConversation,
                                               WorkstationMessage, WorkStationService)
 from bisheng.api.v1.schema.chat_schema import APIChatCompletion, SSEResponse, delta
 from bisheng.api.v1.schemas import FrequentlyUsedChat, LinsightConfig, SubscriptionConfig, KnowledgeSpaceConfig
-from bisheng.api.v1.schemas import WorkstationConfig, resp_200, ExcelRule, UnifiedResponseModel, UsedAppPin
+from bisheng.api.v1.schemas import WorkstationConfig, resp_200, ExcelRule, UnifiedResponseModel, UsedAppPin, ChatList
 from bisheng.chat.utils import SourceType, process_source_document
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
@@ -42,6 +42,7 @@ from bisheng.core.prompts.manager import get_prompt_manager
 from bisheng.database.models.flow import FlowType, FlowDao, FlowStatus
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.role_access import AccessType
+from bisheng.database.models.tag import TagDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.database.models.user_link import UserLinkDao
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
@@ -810,13 +811,15 @@ async def get_used_apps(
 
     apps.sort(key=sort_key)
 
-    # Step 5: Add extra fields (is_pinned, last_used_time, etc.)
+    # Step 5: Get tags and add extra fields (is_pinned, last_used_time, etc.)
+    resource_tag_dict = TagDao.get_tags_by_resource(None, flow_ids)
     result = []
     for app in apps:
         app_id = app['id']
         app['is_pinned'] = app_id in pinned_flow_ids
         app['last_used_time'] = last_used_time_map.get(app_id)
         app['logo'] = WorkFlowService.get_logo_share_link(app.get('logo'))
+        app['tags'] = resource_tag_dict.get(app_id, [])
         result.append(app)
 
     # Step 6: Pagination
@@ -888,3 +891,54 @@ async def unpin_used_app(
     )
 
     return resp_200(message='Unpinned successfully')
+
+
+@router.get('/app/conversations', summary='Get conversations for a specific app', response_model=UnifiedResponseModel)
+async def get_app_conversations(
+        flow_id: str,
+        page: int = 1,
+        limit: int = 10,
+        login_user: UserPayload = Depends(UserPayload.get_login_user)
+):
+    """
+    Query the current user's conversation records for a specific app.
+    Returns a list of sessions sorted by update_time descending, with latest message preview.
+    """
+    sessions = await MessageSessionDao.afilter_session(
+        flow_ids=[flow_id],
+        user_ids=[login_user.user_id],
+        page=page,
+        limit=limit,
+        include_delete=False,
+    )
+
+    if not sessions:
+        return resp_200(data={'list': [], 'total': 0})
+
+    # Get total count for pagination
+    total = await MessageSessionDao.filter_session_count(
+        flow_ids=[flow_id],
+        user_ids=[login_user.user_id],
+        include_delete=False,
+    )
+
+    # Get latest message for each session
+    chat_ids = [one.chat_id for one in sessions]
+    latest_messages = ChatMessageDao.get_latest_message_by_chat_ids(chat_ids)
+    latest_messages = {one.chat_id: one for one in latest_messages}
+
+    result = [
+        ChatList(
+            chat_id=one.chat_id,
+            flow_id=one.flow_id,
+            flow_name=one.flow_name,
+            flow_type=one.flow_type,
+            logo=WorkFlowService.get_logo_share_link(one.flow_logo) if one.flow_logo else '',
+            latest_message=latest_messages.get(one.chat_id, None),
+            create_time=one.create_time,
+            update_time=one.update_time,
+        ) for one in sessions
+    ]
+
+    return resp_200(data={'list': result, 'total': total})
+
