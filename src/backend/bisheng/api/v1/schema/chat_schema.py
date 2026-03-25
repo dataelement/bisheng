@@ -44,12 +44,21 @@ class APIAddQAParam(BaseModel):
 class UseKnowledgeBaseParam(BaseModel):
     personal_knowledge_enabled: Optional[bool] = False
     organization_knowledge_ids: Optional[List[int]] = []
+    knowledge_space_ids: Optional[List[int]] = []
 
     @field_validator('organization_knowledge_ids', mode='before')
     @classmethod
     def convert_organization_knowledge_ids(cls, v: Any):
-        if len(v) > 20:
-            raise ValueError('Can only be used up to20organization knowledge base')
+        if len(v) > 50:
+            raise ValueError('Can only be used up to 50 organization knowledge base')
+
+        return v
+
+    @field_validator('knowledge_space_ids', mode='before')
+    @classmethod
+    def convert_knowledge_space_ids(cls, v: Any):
+        if len(v) > 50:
+            raise ValueError('Can only be used up to 50 knowledge space')
 
         return v
 
