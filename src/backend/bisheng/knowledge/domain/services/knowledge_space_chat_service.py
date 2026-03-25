@@ -5,7 +5,7 @@ from typing import List, Optional, AsyncIterator, Tuple, Dict, Any
 from fastapi import Request
 from langchain_core.documents import Document
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
+from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage, AIMessage
 
 from bisheng.api.services.workstation import WorkStationService
 from bisheng.api.v1.schema.chat_schema import ChatMessageHistoryResponse
@@ -125,6 +125,12 @@ class KnowledgeSpaceChatService:
             inputs = [SystemMessage(content=prompt_obj.prompt.system), HumanMessage(content=prompt_obj.prompt.user)]
         answer = ""
         reasoning_content = ""
+        history = await self.get_history(chat_id=session.chat_id, limit=4)
+        if history:
+            history.append(inputs[1])
+            history.insert(0, inputs[0])
+            inputs = history
+
         async for one in llm.astream(inputs):
             yield ChatResponse(
                 category=MessageCategory.STREAM,
@@ -333,9 +339,10 @@ class KnowledgeSpaceChatService:
         res = await ChatMessageDao.aget_messages_by_chat_id(chat_id, ["question", "answer"], limit=limit)
         messages = []
         for one in res:
-            if one.category == "question":
+            if one.category == MessageCategory.QUESTION:
                 content = json.loads(one.message).get("query")
                 messages.append(HumanMessage(content=content))
             else:
-                messages.append(HumanMessage(content=one.message))
+                answer = json.loads(one.message).get("content")
+                messages.append(AIMessage(content=answer))
         return messages
