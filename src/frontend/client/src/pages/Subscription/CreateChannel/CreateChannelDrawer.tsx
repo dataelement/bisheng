@@ -468,6 +468,23 @@ export function CreateChannelDrawer({
                                                 onNameChange={(n) =>
                                                     form.handleSubChannelNameChange(sub.id, n)
                                                 }
+                                                onNameCommitted={(n) => {
+                                                    const normalized = n.trim().toLowerCase();
+                                                    if (!normalized) return;
+                                                    const duplicate = form.subChannels.some(
+                                                        (s) =>
+                                                            s.id !== sub.id &&
+                                                            s.name.trim().toLowerCase() === normalized
+                                                    );
+                                                    if (!duplicate) return;
+                                                    showToast({
+                                                        message:
+                                                            localize(
+                                                                "com_subscription.sub_channel_name_duplicate"
+                                                            ) || "子频道名称已存在，请更换",
+                                                        severity: NotificationSeverity.WARNING,
+                                                    });
+                                                }}
                                                 onRemove={() => form.handleRemoveSubChannel(sub.id)}
                                                 onToggleCollapse={() =>
                                                     form.handleSubChannelToggleCollapse(sub.id)

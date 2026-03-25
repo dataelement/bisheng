@@ -18,6 +18,11 @@ interface SubChannelBlockProps {
     openInEditMode?: boolean;
     onEditModeOpened?: () => void;
     onNameChange: (name: string) => void;
+    /**
+     * Triggered when user finishes editing the name (blur / Enter).
+     * Use it for validations that should not run on every keystroke.
+     */
+    onNameCommitted?: (name: string) => void;
     onRemove: () => void;
     onToggleCollapse: () => void;
     onGroupsChange: (groups: FilterGroup[]) => void;
@@ -31,6 +36,7 @@ export function SubChannelBlock({
     openInEditMode = false,
     onEditModeOpened,
     onNameChange,
+    onNameCommitted,
     onRemove,
     onToggleCollapse,
     onGroupsChange,
@@ -58,16 +64,18 @@ export function SubChannelBlock({
             return;
         }
         onNameChange(v);
+        onNameCommitted?.(v);
         setIsEditing(false);
     };
 
     const handleNameChange = (val: string) => {
-        if (val.length > MAX_CHANNEL_NAME) {
-            onOverLimit?.();
-            setEditVal(val.slice(0, MAX_CHANNEL_NAME));
-        } else {
-            setEditVal(val);
-        }
+        const next = val.length > MAX_CHANNEL_NAME ? val.slice(0, MAX_CHANNEL_NAME) : val;
+        if (val.length > MAX_CHANNEL_NAME) onOverLimit?.();
+
+        // Sync immediately so parent state is always up to date when user clicks submit
+        // (blur might not have fired yet depending on click timing).
+        setEditVal(next);
+        onNameChange(next);
     };
 
     return (

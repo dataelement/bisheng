@@ -1,5 +1,5 @@
 import { Database } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as RadioGroup from "@radix-ui/react-radio-group";
 import { NotificationSeverity } from "~/common";
 import { useToastContext } from "~/Providers";
@@ -53,8 +53,11 @@ export function CreateKnowledgeSpaceDrawer({
     const [name, setName] = useState("");
     const [description, setDescription] = useState("");
     const [joinPolicy, setJoinPolicy] = useState<JoinPolicy>("review");
-    const [publishToSquare, setPublishToSquare] = useState<PublishToSquare>("no");
+    const [publishToSquare, setPublishToSquare] = useState<PublishToSquare>("yes");
     const [showSuccess, setShowSuccess] = useState(false);
+    /** Skip max-length enforcement while IME is composing (e.g. Chinese pinyin), so intermediate input is not mistaken as overflow. */
+    const nameComposingRef = useRef(false);
+    const descComposingRef = useRef(false);
 
     const needPublishOption = useMemo(
         () => joinPolicy === "review" || joinPolicy === "public",
@@ -65,7 +68,7 @@ export function CreateKnowledgeSpaceDrawer({
         setName("");
         setDescription("");
         setJoinPolicy("review");
-        setPublishToSquare("no");
+        setPublishToSquare("yes");
         setShowSuccess(false);
     };
 
@@ -162,8 +165,26 @@ export function CreateKnowledgeSpaceDrawer({
                                 <div className="relative flex items-center gap-2">
                                     <Input
                                         value={name}
+                                        onCompositionStart={() => {
+                                            nameComposingRef.current = true;
+                                        }}
+                                        onCompositionEnd={(e) => {
+                                            nameComposingRef.current = false;
+                                            const v = e.currentTarget.value;
+                                            if (v.length > MAX_SPACE_NAME) {
+                                                showToast({
+                                                    message: localize("com_subscription.max_knowledge_space_name") || "最多输入 20个字符",
+                                                    severity: NotificationSeverity.WARNING
+                                                });
+                                                setName(v.slice(0, MAX_SPACE_NAME));
+                                            }
+                                        }}
                                         onChange={(e) => {
                                             const v = e.target.value;
+                                            if (nameComposingRef.current) {
+                                                setName(v);
+                                                return;
+                                            }
                                             if (v.length > MAX_SPACE_NAME) {
                                                 showToast({
                                                     message: localize("com_subscription.max_knowledge_space_name") || "最多输入 20个字符",
@@ -191,8 +212,26 @@ export function CreateKnowledgeSpaceDrawer({
                                 <div>
                                     <Textarea
                                         value={description}
+                                        onCompositionStart={() => {
+                                            descComposingRef.current = true;
+                                        }}
+                                        onCompositionEnd={(e) => {
+                                            descComposingRef.current = false;
+                                            const v = e.currentTarget.value;
+                                            if (v.length > MAX_SPACE_DESC) {
+                                                showToast({
+                                                    message: localize("com_subscription.max_knowledge_space_desc") || "最多输入200个字符",
+                                                    severity: NotificationSeverity.WARNING
+                                                });
+                                                setDescription(v.slice(0, MAX_SPACE_DESC));
+                                            }
+                                        }}
                                         onChange={(e) => {
                                             const v = e.target.value;
+                                            if (descComposingRef.current) {
+                                                setDescription(v);
+                                                return;
+                                            }
                                             if (v.length > MAX_SPACE_DESC) {
                                                 showToast({
                                                     message: localize("com_subscription.max_knowledge_space_desc") || "最多输入200个字符",
@@ -234,7 +273,7 @@ export function CreateKnowledgeSpaceDrawer({
                                         {
                                             value: "public",
                                             label: localize("publice"),
-                                            desc: localize("com_subscription.anyone_can_subscribe") || "任何人可直接订阅,无需审核"
+                                            desc: localize("com_subscription.anyone_can_subscribe") || "任何人可直接订阅，无需审核"
                                         }
                                     ].map((opt) => (
                                         <label
@@ -267,7 +306,7 @@ export function CreateKnowledgeSpaceDrawer({
                                         <span className="text-[#F53F3F]">*</span>
                                         发布到广场
                                         <span className="ml-2 text-[12px] text-[#86909C]">
-                                            发布后该知识空间会展示在广场，他人可以搜索查看
+                                            发布后该知识空间会展示在广场，他人可以搜索或查看
                                         </span>
                                     </Label>
                                     <RadioGroup.Root

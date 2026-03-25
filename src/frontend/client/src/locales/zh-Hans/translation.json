@@ -1283,6 +1283,7 @@
     "source_not_indexed_try_full_url": "暂时没有收录该信源，试试在上方输入框中输入完整的网址，进行检索或添加",
     "sub_channel_name": "子频道名称",
     "sub_channel_name_cannot_be_empty": "子频道名称不能为空",
+    "sub_channel_name_duplicate": "子频道名称已存在，请更换",
     "submit_manual_crawl_request": "提交人工爬取需求",
     "subscribe": "订阅",
     "subscribe_application_sent": "已发送订阅申请，审批通过即可订阅。",
@@ -1316,7 +1317,7 @@
     "add_official_account": "可添加公众号和网页作为该频道的信息源",
     "add_source": "添加到信源",
     "add_sub_channel": "增加子频道",
-    "anyone_can_subscribe": "任何人可直接订阅,无需审核",
+    "anyone_can_subscribe": "任何人可直接订阅，无需审核",
     "applied_join_channel": "已申请加入频道:",
     "apply_sent": "已发送订阅申请，审批通过即可订阅。",
     "approval_required": "需审核",
@@ -1388,6 +1389,7 @@
     "remove": "移除",
     "subscriber": "订阅用户",
     "create": "创建",
-    "edit_knowledge_space": "编辑知识空间"
+    "edit_knowledge_space": "编辑知识空间",
+    "knowledge_space_name_empty": "知识空间名称不能为空"
   }
 }
