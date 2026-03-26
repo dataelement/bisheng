@@ -4,7 +4,7 @@ from typing import List
 from langchain_core.documents import Document
 
 from bisheng.knowledge.rag.pipeline.loader.base import BaseBishengLoader
-from bisheng.knowledge.rag.pipeline.loader.utils.libreoffice_converter import convert_ppt_to_pptx
+from bisheng.knowledge.rag.pipeline.loader.utils.libreoffice_converter import convert_ppt_to_pptx, convert_ppt_to_pdf
 from bisheng.knowledge.rag.pipeline.loader.utils.md_from_pptx import handler as pptx_handler
 from bisheng.knowledge.rag.pipeline.loader.utils.md_post_processing import post_processing
 
@@ -32,6 +32,10 @@ class BishengPptLoader(BaseBishengLoader):
         if not os.path.exists(md_file_path):
             raise Exception(f"convert {self.file_extension} to md error, please check backend log")
         post_processing(md_file_path, self.retain_images)
+
+        pdf_file_path = convert_ppt_to_pdf(input_file)
+        if os.path.exists(local_image_dir):
+            self.preview_file_path = pdf_file_path
 
         with open(md_file_path, "r", encoding="utf-8") as f:
             content = f.read()
