@@ -201,7 +201,7 @@ class ChatMessageDao(MessageBase):
             statement = select(ChatMessage).where(ChatMessage.chat_id == chat_id)
             if category_list:
                 statement = statement.where(ChatMessage.category.in_(category_list))
-            statement = statement.limit(limit).order_by(ChatMessage.create_time.asc())
+            statement = statement.limit(limit).order_by(ChatMessage.create_time.desc())
             return session.exec(statement).all()
 
     @classmethod

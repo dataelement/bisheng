@@ -7,7 +7,7 @@ import logging
 from typing import Optional
 
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage
 
 from bisheng.core.prompts.manager import get_prompt_manager, get_prompt_manager_sync
 
@@ -18,9 +18,9 @@ DEFAULT_TITLE = "New Conversation"
 
 
 async def generate_conversation_title_async(
-    question: str,
-    llm: BaseChatModel,
-    answer: Optional[str] = None,
+        question: str,
+        llm: BaseChatModel,
+        answer: Optional[str] = None,
 ) -> str:
     """Generate a conversation title asynchronously.
 
@@ -37,14 +37,11 @@ async def generate_conversation_title_async(
         prompt_obj = prompt_loader.render_prompt(
             "gen_title",
             "conversation_title",
-            QUESTION=question or "",
-            ANSWER=answer or "",
+            human=question or "",
+            assistant=answer or "",
         )
 
-        messages = [
-            SystemMessage(content=prompt_obj.prompt.system),
-            HumanMessage(content=prompt_obj.prompt.user),
-        ]
+        messages = [HumanMessage(content=prompt_obj.prompt)]
 
         response = await llm.ainvoke(messages)
         title = response.content.strip() if response.content else ""
@@ -56,9 +53,9 @@ async def generate_conversation_title_async(
 
 
 def generate_conversation_title_sync(
-    question: str,
-    llm: BaseChatModel,
-    answer: Optional[str] = None,
+        question: str,
+        llm: BaseChatModel,
+        answer: Optional[str] = None,
 ) -> str:
     """Generate a conversation title synchronously.
 
@@ -75,14 +72,11 @@ def generate_conversation_title_sync(
         prompt_obj = prompt_loader.render_prompt(
             "gen_title",
             "conversation_title",
-            QUESTION=question or "",
-            ANSWER=answer or "",
+            human=question or "",
+            assistant=answer or "",
         )
 
-        messages = [
-            SystemMessage(content=prompt_obj.prompt.system),
-            HumanMessage(content=prompt_obj.prompt.user),
-        ]
+        messages = [HumanMessage(content=prompt_obj.prompt)]
 
         response = llm.invoke(messages)
         title = response.content.strip() if response.content else ""

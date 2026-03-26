@@ -367,7 +367,7 @@ class WorkstationMessage(BaseModel):
             sender=message.sender,
             text=message.message,
             files=files,
-            flow_name=message_session_model.flow_name if message_session_model else None,
+            flow_name=message_session_model.name if message_session_model else None,
             source=message.source
         )
 
@@ -388,7 +388,7 @@ class WorkstationConversation(BaseModel):
             createdAt=session.create_time,
             updateAt=session.update_time,
             model=None,
-            title=session.flow_name,
+            title=session.name,
         )
 
     @field_validator('user', mode='before')
