@@ -1,10 +1,28 @@
 knowledges: # 知识库相关配置
+  loader_provider: "etl4lm" # 文档解析模型提供商，支持etl4lm、mineru、paddle_ocr三种选项，默认为etl4lm
   etl4lm:
     # 文档解析模型服务配置，包括OCR、版式分析、表格识别、公式识别等
     url: ""  # http://192.168.106.12:8180/v1/etl4llm/predict
     timeout: 600
     # OCR SDK服务地址，默认为空则使用ETL4LM自带的轻量OCR模型（速度快，对于困难场景效果一般），若填写OCR SDK服务地址则使用高精度的OCR模型。
     ocr_sdk_url: ""
+  mineru:
+    # 文档地址 https://opendatalab.github.io/MinerU/zh/reference/output_files/#_15
+    url: "http://192.168.106.20:8033/file_parse"
+    timeout: 60
+    headers:
+      x-api-key: "11"
+    request_kwargs:
+      backend: "pipeline"
+  paddle_ocr:
+    # 文档地址 https://ai.baidu.com/ai-doc/AISTUDIO/Cmkz2m0ma
+    url: "https://xxx.aistudio-app.com/layout-parsing"
+    auth_token: ''
+    timeout: 60
+    headers:
+      x-api-key: "11"
+    request_kwargs:
+      useChartRecognition: false
 
 llm_request:
   # 控制技能 LLM 组件模型访问的超时配置, 以下是默认值

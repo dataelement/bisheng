@@ -2,6 +2,7 @@ import base64
 import json
 import os
 import re
+from html.parser import HTMLParser
 from typing import List, Dict, Any, Tuple
 from uuid import uuid4
 
@@ -12,6 +13,95 @@ from loguru import logger
 from bisheng.common.errcode.knowledge import KnowledgeFileEmptyError
 from bisheng.knowledge.rag.pipeline.loader.base import BaseBishengLoader
 from bisheng.knowledge.rag.pipeline.types import TextBbox
+
+
+class TableParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.grid = {}
+        self.current_r = 0
+        self.current_c = 0
+        self.in_cell = False
+        self.cell_content = []
+        self.rowspan = 1
+        self.colspan = 1
+
+    def handle_starttag(self, tag, attrs):
+        if tag == 'tr':
+            self.current_c = 0
+            while self.grid.get(self.current_r, {}).get(self.current_c) is not None:
+                self.current_c += 1
+        elif tag in ('td', 'th'):
+            self.in_cell = True
+            self.cell_content = []
+            attr_dict = dict(attrs)
+            try:
+                self.rowspan = int(attr_dict.get('rowspan', 1))
+            except ValueError:
+                self.rowspan = 1
+            try:
+                self.colspan = int(attr_dict.get('colspan', 1))
+            except ValueError:
+                self.colspan = 1
+
+            while self.grid.get(self.current_r, {}).get(self.current_c) is not None:
+                self.current_c += 1
+
+    def handle_endtag(self, tag):
+        if tag in ('td', 'th'):
+            self.in_cell = False
+            text = "".join(self.cell_content).strip().replace('\n', ' ')
+
+            for r in range(self.current_r, self.current_r + self.rowspan):
+                if r not in self.grid:
+                    self.grid[r] = {}
+                for c in range(self.current_c, self.current_c + self.colspan):
+                    self.grid[r][c] = text
+
+            self.current_c += self.colspan
+
+        elif tag == 'tr':
+            self.current_r += 1
+
+    def handle_data(self, data):
+        data = data.replace('\n', ' ')
+        if self.in_cell:
+            self.cell_content.append(data)
+
+
+def html_table_to_md(html_str):
+    if not html_str or not isinstance(html_str, str):
+        return ""
+    if "<tr>" not in html_str.lower():
+        return html_str
+
+    parser = TableParser()
+    parser.feed(html_str)
+
+    if not parser.grid:
+        return html_str
+
+    max_r = max(parser.grid.keys()) if parser.grid else -1
+    max_c = max(max(cols.keys()) for cols in parser.grid.values() if cols) if parser.grid else -1
+    if max_r < 0 or max_c < 0:
+        return html_str
+
+    md_lines = []
+    for r in range(max_r + 1):
+        row = parser.grid.get(r, {})
+        line = "|"
+        for c in range(max_c + 1):
+            cell_text = row.get(c, "")
+            line += f" {cell_text} |"
+        md_lines.append(line)
+
+        if r == 0:
+            sep = "|"
+            for c in range(max_c + 1):
+                sep += " --- |"
+            md_lines.append(sep)
+
+    return "\n".join(md_lines)
 
 
 class MineruLoader(BaseBishengLoader):
@@ -88,6 +178,7 @@ class MineruLoader(BaseBishengLoader):
             data: Dict[str, Any] = {
                 "return_md": False,
                 "return_content_list": True,
+                "return_middle_json": True,
                 "formula_enable": True,
                 "table_enable": True,
                 "return_images": True,
@@ -106,13 +197,18 @@ class MineruLoader(BaseBishengLoader):
         # 获取第一个结果（通常只有一个文件）
         first_result = next(iter(results.values()))
         conten_list = first_result.get("content_list", "")
+        middle_json = first_result.get("middle_json", "")
         images_data = first_result.get("images", {})
-        if not conten_list:
+        pdf_info = None
+        if not conten_list and not pdf_info:
             raise KnowledgeFileEmptyError()
-        conten_list = json.loads(conten_list)
-
+        if conten_list:
+            conten_list = json.loads(conten_list) if isinstance(conten_list, str) else conten_list
+        if middle_json:
+            middle_json = json.loads(middle_json) if isinstance(middle_json, str) else middle_json
+            pdf_info = middle_json.get("pdf_info")
         logger.info(
-            f"Successfully extracted from MinerU: md_content length={len(conten_list)}, images count={len(images_data)}")
+            f"Successfully extracted from MinerU: has_pdf_info={bool(pdf_info)}, md_content length={len(conten_list) if conten_list else 0}, images count={len(images_data)}")
 
         # 生成文档 ID
         doc_id = str(uuid4())
@@ -120,7 +216,10 @@ class MineruLoader(BaseBishengLoader):
         # 存储图片到 MinIO 并获取路径映射
         image_path_mapping = self._store_images_to_local(images_data, doc_id)
 
-        content, metadata = self.merge_conten_list(conten_list)
+        if pdf_info:
+            content, metadata = self.merge_pdf_info(pdf_info)
+        else:
+            content, metadata = self.merge_conten_list(conten_list)
 
         # 替换 Markdown 中的图片链接
         if image_path_mapping:
@@ -146,6 +245,8 @@ class MineruLoader(BaseBishengLoader):
                 table_content = one.get("table_content")
                 if not table_content:
                     continue
+                if "<tr>" in table_content.lower():
+                    table_content = html_table_to_md(table_content)
                 table_footnote = "\n".join(one.get("table_footnote", []))
                 text = f"\n\n{table_content}\n{table_footnote}\n\n"
             else:
@@ -165,6 +266,89 @@ class MineruLoader(BaseBishengLoader):
             indexes.append([start_index, start_index + len(text)])
             types.append(text_type)
             start_index += len(text)
+        return content, {
+            "bboxes": bboxes,
+            "pages": pages,
+            "indexes": indexes,
+            "types": types,
+        }
+
+    def merge_pdf_info(self, pdf_info) -> Tuple[str, Dict]:
+        self.bbox_list = []
+        content = ""
+
+        bboxes = []
+        indexes = []
+        pages = []
+        types = []
+
+        start_index = 0
+
+        for page_num, page in enumerate(pdf_info):
+            page_idx = page.get("page_idx", page_num)
+            for block in page.get("preproc_blocks", []):
+                text_type = block.get("type", "text")
+                bbox = block.get("bbox", [])
+
+                text = ""
+                if text_type in ("text", "title"):
+                    for line in block.get("lines", []):
+                        for span in line.get("spans", []):
+                            content_str = span.get("content", "")
+                            if span.get("type") == "inline_equation":
+                                content_str = f"${content_str}$"
+                            text += content_str
+                        text += "\n"
+                elif text_type == "image":
+                    img_path = block.get("image_path") or block.get("img_path")
+                    if not img_path:
+                        for line in block.get("lines", []):
+                            for span in line.get("spans", []):
+                                if "image_path" in span:
+                                    img_path = span["image_path"]
+                                    break
+                    if img_path:
+                        text = f"![image]({img_path})\n"
+                elif text_type == "table":
+                    html_str = ""
+                    for line in block.get("lines", []):
+                        for span in line.get("spans", []):
+                            if span.get("type") == "table" and span.get("html"):
+                                html_str = span.get("html")
+                                break
+                        if html_str: break
+                    if not html_str:
+                        for sub_block in block.get("blocks", []):
+                            for line in sub_block.get("lines", []):
+                                for span in line.get("spans", []):
+                                    if span.get("type") == "table" and span.get("html"):
+                                        html_str = span.get("html")
+                                        break
+                                if html_str: break
+                            if html_str: break
+
+                    if html_str:
+                        md_table = html_table_to_md(html_str)
+                        text = f"\n\n{md_table}\n\n"
+
+                if not text:
+                    continue
+
+                content += text
+
+                self.bbox_list.append(TextBbox(
+                    text=text,
+                    type=text_type,
+                    page=page_idx,
+                    part_id=str(len(self.bbox_list)),
+                    bbox=bbox,
+                ))
+                pages.append(page_idx)
+                bboxes.append(bbox)
+                indexes.append([start_index, start_index + len(text)])
+                types.append(text_type)
+                start_index += len(text)
+
         return content, {
             "bboxes": bboxes,
             "pages": pages,
