@@ -102,6 +102,6 @@ class ChatMessageHistoryResponse(ChatMessageQuery):
                                message_session: MessageSession):
         return [
             cls.model_validate(obj).model_copy(
-                update={"user_name": user_model.user_name, "flow_name": message_session.flow_name}) for obj in
-            chat_messages
+                update={"user_name": user_model.user_name, "flow_name": message_session.flow_name,
+                        "name": message_session.name}) for obj in chat_messages
         ]

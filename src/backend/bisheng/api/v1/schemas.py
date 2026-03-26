@@ -113,7 +113,7 @@ class AddChatMessages(BaseModel):
 
 class ChatList(BaseModel):
     """Chat message list."""
-
+    name: str = None
     flow_name: str = None
     flow_description: str = None
     flow_id: str = None

@@ -152,6 +152,7 @@ class LinsightWorkbenchImpl:
             message_session = MessageSession(
                 chat_id=chat_id,
                 flow_id=ApplicationTypeEnum.LINSIGHT.value,
+                name='New Chat',
                 flow_name='New Chat',
                 flow_type=FlowType.LINSIGHT.value,
                 user_id=login_user.user_id
@@ -317,8 +318,7 @@ class LinsightWorkbenchImpl:
         """Update session title"""
         session = await MessageSessionDao.async_get_one(chat_id)
         if session:
-            session.flow_name = title
-            await MessageSessionDao.async_insert_one(session)
+            await MessageSessionDao.update_session_name(chat_id, title)
 
     @classmethod
     async def get_linsight_session_version_list(cls, session_id: str) -> List[LinsightSessionVersion]:

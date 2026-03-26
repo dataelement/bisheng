@@ -1,3 +1,4 @@
+import asyncio
 import json
 from datetime import datetime
 from typing import List, Optional, AsyncIterator, Tuple, Dict, Any
@@ -15,6 +16,7 @@ from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.channel import KnowledgeSpaceLLMNotConfiguredError
 from bisheng.common.errcode.http_error import NotFoundError
+from bisheng.common.utils.title_generator import generate_conversation_title_async
 from bisheng.core.prompts.manager import get_prompt_manager
 from bisheng.database.constants import MessageCategory
 from bisheng.database.models.flow import FlowType
@@ -176,6 +178,28 @@ class KnowledgeSpaceChatService:
                 is_bot=True,
             )
         ])
+        if not session.flow_name:
+            asyncio.create_task(self.generate_conversation(
+                user_id=self.login_user.user_id,
+                chat_id=session.chat_id,
+                question=query,
+                answer=answer,
+            ))
+
+    @staticmethod
+    async def generate_conversation(user_id: int, chat_id: str, question: str, answer: str = None):
+        llm_conf = await LLMService.get_workbench_llm()
+        if not llm_conf or not llm_conf.chat_title_llm or not llm_conf.chat_title_llm.id:
+            return
+        llm = await LLMService.get_bisheng_llm(
+            model_id=llm_conf.chat_title_llm.id,
+            app_id=ApplicationTypeEnum.DAILY_CHAT.value,
+            app_name='knowledge_sapce_chat_title',
+            app_type=ApplicationTypeEnum.DAILY_CHAT,
+            user_id=user_id
+        )
+        title = await generate_conversation_title_async(question=question, llm=llm, answer=answer)
+        await MessageSessionDao.update_session_name(chat_id, title)
 
     async def single_file_history(self, knowledge_id: int, file_id: int, page_size: int = 20) \
             -> List[ChatMessageHistoryResponse]:
@@ -228,7 +252,7 @@ class KnowledgeSpaceChatService:
             chat_id=generate_uuid(),
             flow_id=flow_id,
             flow_type=FlowType.KNOLEDGE_SPACE.value,
-            flow_name=flow_name,
+            flow_name=f"Knowledge Space Dir: {flow_name}",
             user_id=self.login_user.user_id,
         ))
         return session

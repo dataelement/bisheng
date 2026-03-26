@@ -59,7 +59,8 @@ class PasswordConf(BaseModel):
 
 class SystemLoginMethod(BaseModel):
     """ System Login Method Config """
-    bisheng_pro: bool = Field(default=False, description='Whether it is a commercial version, Verify Configuredlicense')
+    bisheng_pro: bool = Field(default=False, description='Whether it is a commercial version')
+    dashboard_pro: bool = Field(default=False, description='Whether dashboard is a commercial version')
     admin_username: Optional[str] = Field(default=None, description='Admin username registered via web')
     allow_multi_login: bool = Field(default=True, description='Whether to allow multi-sign-on')
 

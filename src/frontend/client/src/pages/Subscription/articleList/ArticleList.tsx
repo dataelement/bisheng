@@ -1,5 +1,5 @@
 import { useLocalize } from "~/hooks";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
     Info,
     SquareArrowOutUpLeftIcon
@@ -78,6 +78,7 @@ export function ArticleList({ channel, selectedArticleId, onArticleSelect }: Art
     const [selectedSources, setSelectedSources] = useState<string[]>([]);
     const searchQuery = useDebounce(searchKey, 500);
     const { showToast } = useToastContext();
+    const queryClient = useQueryClient();
 
 
     // Fetch channel detail for the tooltip; isLoading drives the page-level loading state
@@ -166,9 +167,27 @@ export function ArticleList({ channel, selectedArticleId, onArticleSelect }: Art
             setArticles(prev =>
                 prev.map(a => a.id === article.id ? { ...a, isRead: true } : a)
             );
+            // Optimistically decrement unread badge in sidebar channel cache
+            const decrementUnread = (old: Channel[] | undefined) => {
+                if (!old) return old;
+                return old.map(c =>
+                    c.id === channel.id && c.unreadCount > 0
+                        ? { ...c, unreadCount: c.unreadCount - 1 }
+                        : c
+                );
+            };
+            // Update all cached query variants for both created and subscribed lists
+            queryClient.setQueriesData<Channel[]>(
+                { queryKey: ["channels", "created"] },
+                decrementUnread
+            );
+            queryClient.setQueriesData<Channel[]>(
+                { queryKey: ["channels", "subscribed"] },
+                decrementUnread
+            );
         }
         onArticleSelect(article);
-    }, [onArticleSelect]);
+    }, [onArticleSelect, channel.id, queryClient]);
 
     const handleSourcesChange = (newValue: string[]) => {
         setSelectedSources(newValue);

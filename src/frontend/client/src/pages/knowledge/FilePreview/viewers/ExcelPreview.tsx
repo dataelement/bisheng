@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import XlsxPopulate from 'xlsx-populate/browser/xlsx-populate';
 import { LoadingIcon } from "~/components/ui/icon/Loading";
 
-const ExcelPreview = ({ filePath }) => {
+const ExcelPreview = ({ filePath, fileExt: fileExtProp }: { filePath: string; fileExt?: string }) => {
     const t = useMemo((str) => () => str, [])
 
     // ---------------------- State Management ----------------------
@@ -33,7 +33,8 @@ const ExcelPreview = ({ filePath }) => {
         return "";
     };
     // ---------------------- File Type Detection ----------------------
-    const fileExt = getFileExtension(filePath);
+    // Prefer fileExt prop (from parent); fallback to URL-based extraction
+    const fileExt = fileExtProp || getFileExtension(filePath);
     const isCSV = fileExt === "csv";
     const isExcel = ["xlsx", "xls"].includes(fileExt);
     const isXLSX = fileExt === "xlsx"; // 用于图片提取

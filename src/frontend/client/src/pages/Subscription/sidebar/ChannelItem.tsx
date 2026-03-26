@@ -148,7 +148,7 @@ export default function ChannelItem({
                                 <span className="text-[14px] text-[#1d2129]">{localize("com_subscription.channel_settings")}</span>
                             </DropdownMenuItem>
                         )}
-                        {channel.role === ChannelRole.CREATOR && (
+                        {[ChannelRole.CREATOR, ChannelRole.ADMIN].includes(channel.role) && (
                             <DropdownMenuItem
                                 className="py-2 px-0 cursor-pointer focus:bg-[#f2f3f5]"
                                 onClick={() => onManageMembers(channel)}

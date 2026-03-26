@@ -1,3 +1,4 @@
+import asyncio
 import json
 import time
 from queue import Queue
@@ -20,11 +21,13 @@ from bisheng.common.errcode.assistant import (AssistantDeletedError, AssistantNo
 from bisheng.common.schemas.telemetry.event_data_schema import NewMessageSessionEventData, ApplicationProcessEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
+from bisheng.common.utils.title_generator import generate_conversation_title_async
 from bisheng.core.logger import trace_id_var
 from bisheng.database.models.assistant import AssistantDao, AssistantStatus
 from bisheng.database.models.flow import FlowType
 from bisheng.database.models.message import ChatMessageDao, ChatMessage as ChatMessageModel
 from bisheng.database.models.session import MessageSession, MessageSessionDao
+from bisheng.llm.domain import LLMService
 from bisheng.utils import get_request_ip
 from bisheng.utils.threadpool import thread_pool
 from bisheng_langchain.gpts.message_types import LiberalToolMessage
@@ -48,6 +51,7 @@ class ChatClient:
         self.gpts_agent: AssistantAgent | None = None
         self.gpts_async_callback = None
         self.chat_history = []
+        self.new_session = None
         # Incoming when talking to the model Full Historical Dialogue Round Count
         self.latest_history_num = 10
         self.gpts_conf = settings.get_from_db('gpts')
@@ -113,7 +117,7 @@ class ChatClient:
         })
         if not self.chat_id:
             # debugMode does not need to save history
-            return
+            return None
         is_bot = 0 if msg_type == 'human' else 1
         msg = ChatMessageDao.insert_one(ChatMessageModel(
             is_bot=is_bot,
@@ -129,7 +133,7 @@ class ChatClient:
         ))
         # Log Audit Logs, Is New Session
         if len(self.chat_history) <= 1:
-            MessageSessionDao.insert_one(MessageSession(
+            self.new_session = MessageSessionDao.insert_one(MessageSession(
                 chat_id=self.chat_id,
                 flow_id=self.client_id,
                 flow_name=self.db_assistant.name,
@@ -147,8 +151,7 @@ class ChatClient:
                                                   source="platform",
                                                   app_name=self.db_assistant.name,
                                                   app_type=ApplicationTypeEnum.ASSISTANT
-                                              )
-                                              )
+                                              ))
             AuditLogService.create_chat_assistant(self.login_user, get_request_ip(self.request), self.client_id)
         return msg
 
@@ -217,6 +220,7 @@ class ChatClient:
             res = ChatMessageDao.get_messages_by_chat_id(self.chat_id,
                                                          ['question', 'answer', 'tool_call', 'tool_result'],
                                                          self.latest_history_num * 4)
+            res.reverse()
             for one in res:
                 self.chat_history.append({
                     'message': one.message,
@@ -333,9 +337,9 @@ class ChatClient:
             new_history = result[len(chat_history):-1]
             for one in new_history:
                 if isinstance(one, AIMessage):
-                    _ = await self.add_message('bot', one.json(), 'tool_call')
+                    _ = await self.add_message('bot', one.model_dump_json(), 'tool_call')
                 elif isinstance(one, LiberalToolMessage) or isinstance(one, ToolMessage):
-                    _ = await self.add_message('bot', one.json(), 'tool_result')
+                    _ = await self.add_message('bot', one.model_dump_json(), 'tool_result')
                 else:
                     logger.warning("unexpected message type")
 
@@ -358,6 +362,8 @@ class ChatClient:
             logger.info(f'gptsAgentOver assistant_id:{self.client_id} chat_id:{self.chat_id} question:{input_msg}')
             logger.info(f'gptsAgentOver assistant_id:{self.client_id} chat_id:{self.chat_id} answer:{answer}')
 
+            asyncio.create_task(self.generate_session_title(input_msg, answer))
+
         except BaseErrorCode as e:
             logger.exception('handle gpts message error: ')
             await self.send_response('system', 'start', '')
@@ -369,3 +375,24 @@ class ChatClient:
             await e.websocket_close_message(websocket=self.websocket, close_ws=False)
         finally:
             await self.send_response('processing', 'close', '')
+
+    async def generate_session_title(self, question: str, answer: str = None):
+        if not self.new_session:
+            return
+        if self.new_session.name:
+            return
+        self.new_session.name = "New Chat"
+
+        llm_conf = await LLMService.get_workbench_llm()
+        if not llm_conf or not llm_conf.chat_title_llm or not llm_conf.chat_title_llm.id:
+            return
+        llm = await LLMService.get_bisheng_llm(
+            model_id=llm_conf.chat_title_llm.id,
+            app_id=ApplicationTypeEnum.DAILY_CHAT.value,
+            app_name='assistant_chat_title',
+            app_type=ApplicationTypeEnum.DAILY_CHAT,
+            user_id=self.user_id
+        )
+        title = await generate_conversation_title_async(question=question, llm=llm, answer=answer)
+        await MessageSessionDao.update_session_name(self.new_session.chat_id, title)
+        self.new_session.name = title
