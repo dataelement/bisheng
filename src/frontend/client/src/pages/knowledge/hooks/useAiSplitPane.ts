@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
+import { useLocalize } from "~/hooks";
 
 const AI_MIN_LEFT = 480;
 const AI_MIN_RIGHT = 360;
@@ -10,6 +11,7 @@ const AI_MIN_RIGHT = 360;
  * Extracted from the root Knowledge component.
  */
 export function useAiSplitPane() {
+    const localize = useLocalize();
     const [showAiAssistant, setShowAiAssistant] = useState(false);
     const [aiSplitWidth, setAiSplitWidth] = useState<number>(() => {
         const saved = localStorage.getItem("knowledge-ai-split-ratio");
@@ -25,7 +27,7 @@ export function useAiSplitPane() {
             if (!prev && splitContainerRef.current) {
                 const containerWidth = splitContainerRef.current.getBoundingClientRect().width;
                 if (containerWidth < AI_MIN_LEFT + AI_MIN_RIGHT) {
-                    showToast({ message: "窗口宽度不足，无法打开 AI 助手", severity: NotificationSeverity.WARNING } as any);
+                    showToast({ message: localize("com_knowledge.window_too_narrow_ai"), severity: NotificationSeverity.WARNING } as any);
                     return false;
                 }
                 if (!aiSplitWidth || aiSplitWidth <= 0) {

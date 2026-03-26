@@ -5,7 +5,7 @@ from typing import List, Optional, AsyncIterator, Tuple, Dict, Any
 from fastapi import Request
 from langchain_core.documents import Document
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
+from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage, AIMessage
 
 from bisheng.api.services.workstation import WorkStationService
 from bisheng.api.v1.schema.chat_schema import ChatMessageHistoryResponse
@@ -125,6 +125,12 @@ class KnowledgeSpaceChatService:
             inputs = [SystemMessage(content=prompt_obj.prompt.system), HumanMessage(content=prompt_obj.prompt.user)]
         answer = ""
         reasoning_content = ""
+        history = await self.get_history(chat_id=session.chat_id, limit=4)
+        if history:
+            history.append(inputs[1])
+            history.insert(0, inputs[0])
+            inputs = history
+
         async for one in llm.astream(inputs):
             yield ChatResponse(
                 category=MessageCategory.STREAM,
@@ -184,6 +190,18 @@ class KnowledgeSpaceChatService:
         session = session[0]
         return await ChatSessionService.get_chat_history(session.chat_id, session.flow_id, page_size=page_size)
 
+    async def clear_file_history(self, knowledge_id: int, file_id: int) -> bool:
+        flow_id = self.generate_flow_id_for_file(knowledge_id, file_id)
+        session = await MessageSessionDao.afilter_session(flow_ids=[flow_id],
+                                                          flow_type=[FlowType.KNOLEDGE_SPACE.value],
+                                                          user_ids=[self.login_user.user_id],
+                                                          include_delete=False)
+        if not session:
+            return True
+        session = session[0]
+        await ChatMessageDao.adelete_by_user_chat_id(chat_id=session.chat_id, user_id=self.login_user.user_id)
+        return True
+
     async def get_chat_folder_session(self, space_id: int, folder_id: int) -> List[MessageSession]:
         """ Query sessions for a specific folder_id """
 
@@ -231,6 +249,19 @@ class KnowledgeSpaceChatService:
         flow_id = self.generate_flow_id_for_folder(space_id, folder_id)
         return await ChatSessionService.get_chat_history(chat_id, flow_id, page_size=page_size)
 
+    async def delete_chat_folder_history(self, space_id: int, folder_id: int, chat_id: str) -> bool:
+        flow_id = self.generate_flow_id_for_folder(space_id, folder_id)
+        session = await MessageSessionDao.afilter_session(chat_ids=[chat_id],
+                                                          flow_ids=[flow_id],
+                                                          flow_type=[FlowType.KNOLEDGE_SPACE.value],
+                                                          user_ids=[self.login_user.user_id],
+                                                          include_delete=False)
+        if not session:
+            return True
+        session = session[0]
+        await ChatMessageDao.adelete_by_user_chat_id(chat_id=session.chat_id, user_id=self.login_user.user_id)
+        return True
+
     async def chat_folder(self, knowledge_id: int, folder_id: int, chat_id: str, query: str,
                           tags: Optional[List[Dict]] = None) -> AsyncIterator[ChatResponse]:
         """ Folder RAG query """
@@ -259,6 +290,7 @@ class KnowledgeSpaceChatService:
         if tags:
             tag_file_ids = await TagDao.aget_resources_by_tags([one.get("id") for one in tags],
                                                                resource_type=ResourceTypeEnum.SPACE_FILE)
+            tag_file_ids = [int(one.resource_id) for one in tag_file_ids]
             file_ids = list(set(file_ids) & set(tag_file_ids))
 
         milvus_vector = await KnowledgeRag.init_knowledge_milvus_vectorstore(self.login_user.user_id, knowledge=space)
@@ -308,9 +340,10 @@ class KnowledgeSpaceChatService:
         res = await ChatMessageDao.aget_messages_by_chat_id(chat_id, ["question", "answer"], limit=limit)
         messages = []
         for one in res:
-            if one.category == "question":
+            if one.category == MessageCategory.QUESTION:
                 content = json.loads(one.message).get("query")
                 messages.append(HumanMessage(content=content))
             else:
-                messages.append(HumanMessage(content=one.message))
+                answer = json.loads(one.message).get("content")
+                messages.append(AIMessage(content=answer))
         return messages

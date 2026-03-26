@@ -66,7 +66,7 @@ export default function AppCenter() {
                             <AgentCard
                                 key={agent.id}
                                 agent={agent}
-                                isPinned={false}
+                                isPinned={!!agent.is_pinned}
                                 onTogglePin={togglePin}
                                 onStartChat={continueChat}
                                 onShare={shareApp}

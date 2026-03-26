@@ -14,6 +14,7 @@ import FileIconRenderer from "./FileIcon";
 import TagGroup from "./TagGroup";
 import { useInlineRename } from "../hooks/useInlineRename";
 import { formatTime } from "../knowledgeUtils";
+import { useLocalize } from "~/hooks";
 
 interface FileCardProps {
     file: KnowledgeFile;
@@ -50,7 +51,8 @@ export function FileCard({
     disableClickNavigate = false,
     hideSelectionCheckbox = false,
 }: FileCardProps) {
-    const isCreating = !!file.isCreating;
+    const localize = useLocalize();
+  const isCreating = !!file.isCreating;
     const [hovered, setHovered] = useState(false);
 
     const isAdmin = userRole === SpaceRole.CREATOR || userRole === SpaceRole.ADMIN;
@@ -103,7 +105,7 @@ export function FileCard({
                     <div className="flex items-center flex-1 min-w-0">
                         <Circle className="size-1.5 fill-[#165dff] text-[#165dff] shrink-0 mr-1.5" />
                         <span className="truncate text-[#1d2129]">{file.name}</span>
-                        <span className="text-[#86909c] text-xs ml-1.5 shrink-0">上传中...</span>
+                        <span className="text-[#86909c] text-xs ml-1.5 shrink-0">{localize("com_knowledge.uploading")}</span>
                     </div>
                 );
             case FileStatus.PROCESSING:
@@ -112,7 +114,7 @@ export function FileCard({
                     <div className="flex items-center flex-1 min-w-0">
                         <Circle className="size-1.5 fill-[#165dff] text-[#165dff] shrink-0 mr-1.5" />
                         <span className="truncate text-[#1d2129]">{file.name}</span>
-                        <span className="text-[#86909c] text-xs ml-1.5 shrink-0">解析中...</span>
+                        <span className="text-[#86909c] text-xs ml-1.5 shrink-0">{localize("com_knowledge.parsing")}</span>
                     </div>
                 );
             case FileStatus.WAITING:
@@ -120,7 +122,7 @@ export function FileCard({
                     <div className="flex items-center flex-1 min-w-0">
                         <Circle className="size-1.5 fill-[#165dff] text-[#165dff] shrink-0 mr-1.5" />
                         <span className="truncate text-[#1d2129]">{file.name}</span>
-                        <span className="text-[#86909c] text-xs ml-1.5 shrink-0">排队中...</span>
+                        <span className="text-[#86909c] text-xs ml-1.5 shrink-0">{localize("com_knowledge.queueing")}</span>
                     </div>
                 );
             case FileStatus.FAILED:
@@ -193,20 +195,19 @@ export function FileCard({
                                     e.stopPropagation();
                                     onDownload();
                                 }}>
-                                    <span>下载</span>
+                                    <span>{localize("com_knowledge.download")}</span>
                                 </DropdownMenuItem>
 
                                 {/* 如果是管理员，显示后续管理操作 */}
                                 {isAdmin && (
                                     <>
-                                        {!isFolder && <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEditTags(); }}>编辑标签</DropdownMenuItem>}
+                                        {!isFolder && <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEditTags(); }}>{localize("com_knowledge.edit_tags")}</DropdownMenuItem>}
                                         <DropdownMenuItem onClick={(e) => {
                                             e.stopPropagation();
                                             startRenaming();
-                                        }}>重命名</DropdownMenuItem>
+                                        }}>{localize("com_knowledge.rename")}</DropdownMenuItem>
                                         <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDelete(); }} className="text-[#f53f3f] focus:text-[#f53f3f]">
-                                            删除
-                                        </DropdownMenuItem>
+                                            {localize("com_knowledge.delete")}</DropdownMenuItem>
                                     </>
                                 )}
 
@@ -215,7 +216,7 @@ export function FileCard({
                                     file.status === FileStatus.FAILED ||
                                     (isFolder && file.successFileNum !== undefined && file.fileNum !== undefined && file.successFileNum < file.fileNum)
                                 ) && (
-                                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onRetry(); }}>重试</DropdownMenuItem>
+                                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onRetry(); }}>{localize("com_knowledge.retry")}</DropdownMenuItem>
                                 )}
                             </DropdownMenuContent>
                         </DropdownMenu>

@@ -7,6 +7,7 @@ import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
 import { FileCard } from "./SpaceDetail/FileCard";
 import { KnowledgeFile, KnowledgeSpace, SpaceRole, VisibilityType, getSpaceChildrenApi, getSpaceInfoApi, subscribeSpaceApi } from "~/api/knowledge";
+import { useLocalize } from "~/hooks";
 
 interface KnowledgeSpacePreviewDrawerProps {
     spaceId: string | undefined;
@@ -19,7 +20,8 @@ export function KnowledgeSpacePreviewDrawer({
     open,
     onOpenChange,
 }: KnowledgeSpacePreviewDrawerProps) {
-    const { showToast } = useToastContext();
+    const localize = useLocalize();
+  const { showToast } = useToastContext();
     const [space, setSpace] = useState<KnowledgeSpace | null>(null);
     const [status, setStatus] = useState<"none" | "joined" | "pending">("none");
     const [filesPreview, setFilesPreview] = useState<KnowledgeFile[]>([]);
@@ -50,7 +52,7 @@ export function KnowledgeSpacePreviewDrawer({
                 else setStatus("none");
             })
             .catch(() => {
-                showToast({ message: "该知识空间已失效或被删除", severity: NotificationSeverity.WARNING });
+                showToast({ message: localize("com_knowledge.space_invalid_or_deleted"), severity: NotificationSeverity.WARNING });
                 onOpenChange(false);
             });
     }, [open, spaceId]);
@@ -133,22 +135,22 @@ export function KnowledgeSpacePreviewDrawer({
                 await subscribeSpaceApi(space.id);
                 if (isPublic) {
                     setStatus("joined");
-                    showToast({ message: "成功加入", severity: NotificationSeverity.SUCCESS });
+                    showToast({ message: localize("com_knowledge.join_success"), severity: NotificationSeverity.SUCCESS });
                 } else {
                     setStatus("pending");
-                    showToast({ message: "已发送订阅申请，审批通过即可订阅。", severity: NotificationSeverity.SUCCESS });
+                    showToast({ message: localize("com_knowledge.subscribe_apply_sent"), severity: NotificationSeverity.SUCCESS });
                 }
             } catch {
-                showToast({ message: "操作失败，请稍后重试", severity: NotificationSeverity.ERROR });
+                showToast({ message: localize("com_knowledge.operation_failed_retry"), severity: NotificationSeverity.ERROR });
             }
         })();
     };
 
     const getButtonConfig = () => {
-        if (status === "joined") return { label: "已订阅", variant: "secondary" as const, disabled: true };
-        if (status === "pending") return { label: "申请中", variant: "secondary" as const, disabled: true };
-        if (isPublic) return { label: "订阅", variant: "default" as const, disabled: false };
-        return { label: "申请", variant: "outline" as const, disabled: false };
+        if (status === "joined") return { label: localize("com_knowledge.subscribed"), variant: "secondary" as const, disabled: true };
+        if (status === "pending") return { label: localize("com_knowledge.applying"), variant: "secondary" as const, disabled: true };
+        if (isPublic) return { label: localize("com_knowledge.subscribe"), variant: "default" as const, disabled: false };
+        return { label: localize("com_knowledge.apply"), variant: "outline" as const, disabled: false };
     };
 
     const btn = getButtonConfig();
@@ -161,7 +163,7 @@ export function KnowledgeSpacePreviewDrawer({
             >
                 <button
                     type="button"
-                    aria-label="收起抽屉"
+                    aria-label={localize("com_knowledge.collapse_drawer")}
                     onClick={() => onOpenChange(false)}
                     className="absolute left-1 top-1/2 -translate-y-1/2 h-16 w-6 bg-white text-[#C9CDD4] hover:text-[#B6BBC5] flex items-center justify-center z-20"
                 >
@@ -195,8 +197,8 @@ export function KnowledgeSpacePreviewDrawer({
 
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center text-sm text-[#86909c]">
-                                    <span className="mr-3">{space.fileCount ?? 0} 篇内容</span>
-                                    <span>{space.memberCount ?? 0} 用户</span>
+                                    <span className="mr-3">{space.fileCount ?? 0} {localize("com_knowledge.articles_count")}</span>
+                                    <span>{space.memberCount ?? 0} {localize("com_knowledge.users_count")}</span>
                                 </div>
                                 <Button
                                     variant={btn.variant}
@@ -231,8 +233,7 @@ export function KnowledgeSpacePreviewDrawer({
                                             className="text-[#165DFF] hover:underline"
                                             onClick={() => goToParentDepth(0)}
                                         >
-                                            全部文件
-                                        </button>
+                                            {localize("com_knowledge.all_files")}</button>
                                         {parentNameStack.map((name, idx) => {
                                             const depth = idx + 1;
                                             return (
@@ -252,8 +253,7 @@ export function KnowledgeSpacePreviewDrawer({
                                     </div>
                                     {filesPreview.length === 0 ? (
                                         <div className="flex items-center justify-center h-64 text-[#86909c] text-sm">
-                                            暂无文件
-                                        </div>
+                                            {localize("com_knowledge.no_files")}</div>
                                     ) : (
                                         <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 xl:grid-cols-3">
                                             {filesPreview.map((f) => (
@@ -281,14 +281,12 @@ export function KnowledgeSpacePreviewDrawer({
 
                                     {loadingChildrenMore && (
                                         <div className="py-3 text-center text-[12px] text-[#C9CDD4]">
-                                            加载中...
-                                        </div>
+                                            {localize("com_knowledge.loading")}</div>
                                     )}
 
                                     {!loadingChildrenMore && filesPreview.length > 0 && filesPreview.length >= childrenTotal && (
                                         <div className="py-3 text-center text-[12px] text-[#C9CDD4]">
-                                            没有更多内容了
-                                        </div>
+                                            {localize("com_knowledge.no_more_content")}</div>
                                     )}
                                 </div>
                             ) : (
@@ -299,8 +297,7 @@ export function KnowledgeSpacePreviewDrawer({
                                         alt="Locked"
                                     />
                                     <div className="text-[#1d2129] text-[14px]">
-                                        该知识空间内容需申请通过后方可查看
-                                    </div>
+                                        {localize("com_knowledge.space_view_requires_approval")}</div>
                                 </div>
                             )}
                         </div>

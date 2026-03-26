@@ -33,7 +33,7 @@ export function useAppCenter() {
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- API untyped
       const res: any = await getFrequently(1, 50);
-      setRecentApps(res.data || []);
+      setRecentApps(res.data?.list || []);
     } finally {
       setLoading(false);
     }
@@ -44,31 +44,23 @@ export function useAppCenter() {
     async (app: AppItem) => {
       const shouldPin = !app.is_pinned;
       try {
-        await pinAppApi(app.flow_type, app.id, shouldPin);
+        await pinAppApi(app.id, shouldPin);
         // Refresh the list to get updated pin state from backend
         await fetchApps();
       } catch {
-        showToast?.({  message: shouldPin ? '置顶失败' : '取消置顶失败', severity: NotificationSeverity.ERROR });
+        showToast?.({ message: shouldPin ? '置顶失败' : '取消置顶失败', severity: NotificationSeverity.ERROR });
       }
     },
     [fetchApps, showToast],
   );
 
-  /** Navigate to the most recent conversation for an app.
-   *  When no conversation exists, create a new one and toast the user.
-   */
+  /** Navigate into an app — always create a new conversation */
   const continueChat = useCallback(
     (app: AppItem) => {
-      if (app.last_chat_id) {
-        navigate(`/app/${app.last_chat_id}/${app.id}/${app.flow_type}`);
-      } else {
-        // No history — create new conversation and notify
-        showToast?.({ message: '历史会话已删除', severity: NotificationSeverity.ERROR });
-        const chatId = generateUUID(32);
-        navigate(`/app/${chatId}/${app.id}/${app.flow_type}`, { state: { emptyHistory: true } });
-      }
+      const chatId = generateUUID(32);
+      navigate(`/app/${chatId}/${app.id}/${app.flow_type}`);
     },
-    [navigate, showToast],
+    [navigate],
   );
 
   /** Create a new conversation and navigate */

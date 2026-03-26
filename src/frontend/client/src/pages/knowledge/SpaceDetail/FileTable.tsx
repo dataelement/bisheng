@@ -32,6 +32,7 @@ import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { SortType, SortDirection, FileStatus, FileType, KnowledgeFile } from "~/api/knowledge";
 import { formatBytes } from "~/utils";
 import { useInlineRename } from "../hooks/useInlineRename";
+import { useLocalize } from "~/hooks";
 
 // ============================================================
 // 列定义：key、最小宽度、初始宽度
@@ -147,14 +148,15 @@ function useScrollShadow(scrollRef: React.RefObject<HTMLDivElement | null>) {
 // 辅助组件：状态标签渲染
 // ============================================================
 const StatusBadge = ({ status }: { status: FileStatus }) => {
-    const config: Record<string, { label: string; color: string; bg: string; dot: string }> = {
-        [FileStatus.SUCCESS]: { label: "成功", color: "text-[#00b42a]", bg: "bg-[#e8ffea]", dot: "bg-[#00b42a]" },
-        [FileStatus.PROCESSING]: { label: "解析中", color: "text-[#165dff]", bg: "bg-[#e8f3ff]", dot: "bg-[#165dff]" },
-        [FileStatus.WAITING]: { label: "排队中", color: "text-[#165dff]", bg: "bg-[#e8f3ff]", dot: "bg-[#165dff]" },
-        [FileStatus.REBUILDING]: { label: "重建中", color: "text-[#165dff]", bg: "bg-[#e8f3ff]", dot: "bg-[#165dff]" },
-        [FileStatus.UPLOADING]: { label: "上传中", color: "text-[#165dff]", bg: "bg-[#e8f3ff]", dot: "bg-[#165dff]" },
-        [FileStatus.FAILED]: { label: "失败", color: "text-[#f53f3f]", bg: "bg-[#fff2f0]", dot: "bg-[#f53f3f]" },
-        [FileStatus.TIMEOUT]: { label: "超时", color: "text-[#f53f3f]", bg: "bg-[#fff2f0]", dot: "bg-[#f53f3f]" },
+    const localize = useLocalize();
+  const config: Record<string, { label: string; color: string; bg: string; dot: string }> = {
+        [FileStatus.SUCCESS]: { label: localize("com_knowledge.success"), color: "text-[#00b42a]", bg: "bg-[#e8ffea]", dot: "bg-[#00b42a]" },
+        [FileStatus.PROCESSING]: { label: localize("com_knowledge.parsing_status"), color: "text-[#165dff]", bg: "bg-[#e8f3ff]", dot: "bg-[#165dff]" },
+        [FileStatus.WAITING]: { label: localize("com_knowledge.queueing_status"), color: "text-[#165dff]", bg: "bg-[#e8f3ff]", dot: "bg-[#165dff]" },
+        [FileStatus.REBUILDING]: { label: localize("com_knowledge.rebuilding_status"), color: "text-[#165dff]", bg: "bg-[#e8f3ff]", dot: "bg-[#165dff]" },
+        [FileStatus.UPLOADING]: { label: localize("com_knowledge.uploading_status"), color: "text-[#165dff]", bg: "bg-[#e8f3ff]", dot: "bg-[#165dff]" },
+        [FileStatus.FAILED]: { label: localize("com_knowledge.fail"), color: "text-[#f53f3f]", bg: "bg-[#fff2f0]", dot: "bg-[#f53f3f]" },
+        [FileStatus.TIMEOUT]: { label: localize("com_knowledge.timeout"), color: "text-[#f53f3f]", bg: "bg-[#fff2f0]", dot: "bg-[#f53f3f]" },
     };
     const item = config[status] || config[FileStatus.WAITING];
     return (
@@ -271,6 +273,7 @@ function FileTableHeader({
     onSort: (sortBy: SortType) => void;
     isAdmin: boolean;
 }) {
+    const localize = useLocalize();
     const currentSort = { key: sortBy, direction: sortDirection };
 
     const handleSort = (key: string) => {
@@ -299,8 +302,7 @@ function FileTableHeader({
                     stickyLeft={columnWidths.checkbox}
                     showShadow={showLeftShadow}
                 >
-                    文件名
-                </SortableHeader>
+                    {localize("com_knowledge.file_name")}</SortableHeader>
 
                 {/* 文件大小 */}
                 <SortableHeader
@@ -311,8 +313,7 @@ function FileTableHeader({
                     columnKey="size"
                     onResizeStart={onResizeStart}
                 >
-                    文件大小
-                </SortableHeader>
+                    {localize("com_knowledge.file_size")}</SortableHeader>
 
                 {/* 标签 — 不排序 */}
                 <TableHead
@@ -320,8 +321,7 @@ function FileTableHeader({
                     style={{ width: columnWidths.tags, minWidth: columnWidths.tags, maxWidth: columnWidths.tags }}
                 >
                     <div className="flex items-center gap-1.5 border-l pl-3">
-                        标签
-                    </div>
+                        {localize("com_knowledge.tag")}</div>
                     <ResizeHandle columnKey="tags" onResizeStart={onResizeStart} />
                 </TableHead>
 
@@ -334,8 +334,7 @@ function FileTableHeader({
                     columnKey="updateTime"
                     onResizeStart={onResizeStart}
                 >
-                    更新时间
-                </SortableHeader>
+                    {localize("com_knowledge.update_time")}</SortableHeader>
 
                 {/* 状态 — 不排序, only visible to admins */}
                 {isAdmin && (
@@ -344,8 +343,7 @@ function FileTableHeader({
                         style={{ width: columnWidths.status, minWidth: columnWidths.status, maxWidth: columnWidths.status }}
                     >
                         <div className="flex items-center gap-1.5 border-l pl-3">
-                            状态
-                        </div>
+                            {localize("com_knowledge.status")}</div>
                         <ResizeHandle columnKey="status" onResizeStart={onResizeStart} />
                     </TableHead>
                 )}
@@ -356,8 +354,7 @@ function FileTableHeader({
                     style={{ width: columnWidths.actions, minWidth: columnWidths.actions, maxWidth: columnWidths.actions }}
                 >
                     <div className="flex items-center gap-1.5 border-l pl-3">
-                        操作
-                    </div>
+                        {localize("com_knowledge.operation")}</div>
                 </TableHead>
             </TableRow>
         </TableHeader>
@@ -487,6 +484,7 @@ function FileRow({
     columnWidths: Record<ColumnKey, number>;
     showLeftShadow: boolean;
 }) {
+    const localize = useLocalize();
     const isFolder = file.type === FileType.FOLDER;
     const isCreating = !!file.isCreating;
     const rowBg = isSelected ? "bg-primary/10" : "bg-white";
@@ -655,33 +653,27 @@ function FileRow({
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-32">
                             <DropdownMenuItem onClick={onDownload}>
-                                <Download className="size-4 mr-2" />下载
-                            </DropdownMenuItem>
+                                <Download className="size-4 mr-2" />{localize("com_knowledge.download")}</DropdownMenuItem>
                             {isAdmin && (
                                 <>
                                     {!isFolder && (
                                         <DropdownMenuItem onClick={onEditTags}>
-                                            <Tag className="size-4 mr-2" />编辑标签
-                                        </DropdownMenuItem>
+                                            <Tag className="size-4 mr-2" />{localize("com_knowledge.edit_tags")}</DropdownMenuItem>
                                     )}
                                     <DropdownMenuItem onClick={() => startRenaming()}>
-                                        <Edit className="size-4 mr-2" />重命名
-                                    </DropdownMenuItem>
+                                        <Edit className="size-4 mr-2" />{localize("com_knowledge.rename")}</DropdownMenuItem>
                                     {/* Retry for failed files */}
                                     {!isFolder && file.status === FileStatus.FAILED && (
                                         <DropdownMenuItem onClick={onRetry}>
-                                            <RefreshCw className="size-4 mr-2" />重试
-                                        </DropdownMenuItem>
+                                            <RefreshCw className="size-4 mr-2" />{localize("com_knowledge.retry")}</DropdownMenuItem>
                                     )}
                                     {/* Retry for folders with partial failures */}
                                     {isFolder && file.successFileNum !== undefined && file.fileNum !== undefined && file.successFileNum < file.fileNum && (
                                         <DropdownMenuItem onClick={onRetry}>
-                                            <RefreshCw className="size-4 mr-2" />重试
-                                        </DropdownMenuItem>
+                                            <RefreshCw className="size-4 mr-2" />{localize("com_knowledge.retry")}</DropdownMenuItem>
                                     )}
                                     <DropdownMenuItem onClick={onDelete} className="text-[#f53f3f] focus:text-[#f53f3f] focus:bg-[#fff2f0]">
-                                        <Trash2 className="size-4 mr-2" />删除
-                                    </DropdownMenuItem>
+                                        <Trash2 className="size-4 mr-2" />{localize("com_knowledge.delete")}</DropdownMenuItem>
                                 </>
                             )}
                         </DropdownMenuContent>

@@ -2,11 +2,12 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional, List
 
-from sqlalchemy import Column, CHAR, Enum as SQLEnum, DateTime, text, Boolean, delete, func
+from sqlalchemy import Column, CHAR, Enum as SQLEnum, DateTime, text, Boolean, delete, func, case
 from sqlmodel import Field, select, update, col
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_async_db_session
+from bisheng.user.domain.models.user import User
 
 
 class BusinessTypeEnum(str, Enum):
@@ -84,29 +85,29 @@ class SpaceChannelMemberDao:
             cls, space_id: int, user_ids: Optional[List[int]] = None, page: int = 1, page_size: int = 20
     ) -> List[SpaceChannelMember]:
         """ Async: Paginate active members for a space, creators and admins first """
-        from sqlalchemy import case
-        statement = select(SpaceChannelMember).where(
+        role_order = case(
+            (SpaceChannelMember.user_role == UserRoleEnum.CREATOR, 0),
+            (SpaceChannelMember.user_role == UserRoleEnum.ADMIN, 1),
+            else_=2
+        )
+
+        query = select(SpaceChannelMember).join(
+            User, SpaceChannelMember.user_id == User.user_id
+        ).where(
             SpaceChannelMember.business_id == str(space_id),
             SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
             SpaceChannelMember.status == True
         )
+
         if user_ids is not None:
-            if not user_ids:
-                return []
-            statement = statement.where(SpaceChannelMember.user_id.in_(user_ids))
+            query = query.where(col(SpaceChannelMember.user_id).in_(user_ids))
 
-        role_order = case(
-            (SpaceChannelMember.user_role == UserRoleEnum.CREATOR, 1),
-            (SpaceChannelMember.user_role == UserRoleEnum.ADMIN, 2),
-            else_=3
-        )
-        statement = statement.order_by(role_order, SpaceChannelMember.user_id.asc())
-
-        offset = (page - 1) * page_size
-        statement = statement.offset(offset).limit(page_size)
+        # Order by role (creator > admin > member) then by username alphabetically
+        query = query.order_by(role_order, User.user_name.asc())
+        query = query.offset((page - 1) * page_size).limit(page_size)
 
         async with get_async_db_session() as session:
-            result = await session.exec(statement)
+            result = await session.exec(query)
             return result.all()
 
     @classmethod

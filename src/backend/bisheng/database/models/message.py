@@ -262,6 +262,18 @@ class ChatMessageDao(MessageBase):
         return True
 
     @classmethod
+    async def adelete_by_user_chat_id(cls, user_id: int, chat_id: str):
+        if user_id is None or chat_id is None:
+            logger.info('delete_param_error user_id={} chat_id={}', user_id, chat_id)
+            return False
+        statement = delete(ChatMessage).where(ChatMessage.chat_id == chat_id,
+                                              ChatMessage.user_id == user_id)
+        async with get_async_db_session() as session:
+            await session.exec(statement)
+            await session.commit()
+            return True
+
+    @classmethod
     def delete_by_message_id(cls, user_id: int, message_id: str):
         if user_id is None or message_id is None:
             logger.info('delete_param_error user_id={} chat_id={}', user_id, message_id)

@@ -30,6 +30,7 @@ import { Button } from "~/components/ui/Button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
 import { ShareOutlineIcon, AiChatIcon } from "~/components/icons";
 import { useToastContext } from "~/Providers";
+import { useLocalize } from "~/hooks";
 
 interface KnowledgeSpaceHeaderProps {
     space: KnowledgeSpace;
@@ -88,7 +89,8 @@ export function KnowledgeSpaceHeader({
     onToggleAiAssistant,
     isAiAssistantOpen
 }: KnowledgeSpaceHeaderProps) {
-    const isAdmin = space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
+    const localize = useLocalize();
+  const isAdmin = space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
     const { showToast } = useToastContext();
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -101,20 +103,20 @@ export function KnowledgeSpaceHeader({
             const filesList = Array.from(e.target.files);
 
             if (filesList.length > 50) {
-                showToast({ message: "单次最多允许上传 50 个文件", status: "error" });
+                showToast({ message: localize("com_knowledge.max_upload_50"), status: "error" });
                 if (fileInputRef.current) fileInputRef.current.value = "";
                 return;
             }
 
             for (let f of filesList) {
                 if (f.size > 200 * 1024 * 1024) {
-                    showToast({ message: `文件 ${f.name} 超过 200MB 限制`, status: "error" });
+                    showToast({ message: localize("com_knowledge.file_exceeds_200m", { 0: f.name }), status: "error" });
                     if (fileInputRef.current) fileInputRef.current.value = "";
                     return;
                 }
                 const ext = f.name.split('.').pop()?.toLowerCase();
                 if (!ext || !['pdf', 'txt', 'docx', 'ppt', 'pptx', 'md', 'html', 'xls', 'xlsx', 'csv', 'doc', 'png', 'jpg', 'jpeg', 'bmp'].includes(ext)) {
-                    showToast({ message: `不支持文件 ${f.name} 的格式`, status: "error" });
+                    showToast({ message: localize("com_knowledge.unsupported_file_format", { 0: f.name }), status: "error" });
                     if (fileInputRef.current) fileInputRef.current.value = "";
                     return;
                 }
@@ -130,16 +132,16 @@ export function KnowledgeSpaceHeader({
             const base = window.location.origin + (__APP_ENV__.BASE_URL || "");
             const normalizedBase = base.endsWith("/") ? base.slice(0, -1) : base;
             const shareLink = `${normalizedBase}/knowledge/share/${space.id}`;
-            const shareText = `欢迎加入知识空间【${space.name}】 ，点击链接：${shareLink} 一键订阅。`;
+            const shareText = localize("com_knowledge.welcome_join_space_link", { 0: space.name, 1: shareLink });
             copyText(shareText)
                 .then(() => {
-                    showToast({ message: "分享链接已复制到粘贴板", status: "success" });
+                    showToast({ message: localize("com_knowledge.share_link_copied"), status: "success" });
                 })
                 .catch(() => {
-                    showToast({ message: "复制失败，请重试", status: "error" });
+                    showToast({ message: localize("com_knowledge.copy_failed_retry"), status: "error" });
                 });
         } catch {
-            showToast({ message: "复制失败，请重试", status: "error" });
+            showToast({ message: localize("com_knowledge.copy_failed_retry"), status: "error" });
         }
     };
     // Debug log removed during refactoring
@@ -168,16 +170,16 @@ export function KnowledgeSpaceHeader({
                                 </TooltipTrigger>
                                 <TooltipContent noArrow className="bg-white shadow-md px-3 py-2 max-w-md w-64 z-[999] relative">
                                     <div className="space-y-1.5 text-gray-800 text-sm">
-                                        <div><span className="text-gray-400">空间描述：</span>
+                                        <div><span className="text-gray-400">{localize("com_knowledge.space_desc_label")}</span>
                                             <p>{space.description || "-"}</p>
                                         </div>
-                                        <div><span className="text-gray-400">创建人：</span>
+                                        <div><span className="text-gray-400">{localize("com_knowledge.creator_label")}</span>
                                             <p>{space.creator}</p>
                                         </div>
-                                        <div><span className="text-gray-400">加入人数：</span>
+                                        <div><span className="text-gray-400">{localize("com_knowledge.joined_count_label")}</span>
                                             <p>{space.memberCount || 0}</p>
                                         </div>
-                                        <div><span className="text-gray-400">文件总数：</span>
+                                        <div><span className="text-gray-400">{localize("com_knowledge.total_files_label")}</span>
                                             <p>{space.totalFileCount || 0}</p>
                                         </div>
                                     </div>
@@ -245,8 +247,7 @@ export function KnowledgeSpaceHeader({
                         onClick={onToggleAiAssistant}
                     >
                         <AiChatIcon className="size-3.5" stroke={isSearching ? "#c9cdd4" : "#335CFF"} />
-                        AI 助手
-                    </Button>
+                        {localize("com_knowledge.ai_assistant")}</Button>
 
                     <Button
                         variant="ghost"
@@ -254,8 +255,7 @@ export function KnowledgeSpaceHeader({
                         onClick={handleShare}
                     >
                         <ShareOutlineIcon className="size-4 text-gray-800" />
-                        分享
-                    </Button>
+                        {localize("com_knowledge.share")}</Button>
                 </div>
             </div>
 
@@ -307,49 +307,42 @@ export function KnowledgeSpaceHeader({
                                         </Button>
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent align="start">
-                                        <div className="px-2 py-1.5 text-xs font-medium text-[#86909c]">状态</div>
+                                        <div className="px-2 py-1.5 text-xs font-medium text-[#86909c]">{localize("com_knowledge.status")}</div>
                                         <DropdownMenuCheckboxItem
                                             checked={statusFilter.includes(FileStatus.UPLOADING)}
                                             onCheckedChange={(checked) => onFilterStatus(FileStatus.UPLOADING, checked)}
                                         >
-                                            上传中
-                                        </DropdownMenuCheckboxItem>
+                                            {localize("com_knowledge.uploading_status")}</DropdownMenuCheckboxItem>
                                         <DropdownMenuCheckboxItem
                                             checked={statusFilter.includes(FileStatus.WAITING)}
                                             onCheckedChange={(checked) => onFilterStatus(FileStatus.WAITING, checked)}
                                         >
-                                            排队中
-                                        </DropdownMenuCheckboxItem>
+                                            {localize("com_knowledge.queueing_status")}</DropdownMenuCheckboxItem>
                                         <DropdownMenuCheckboxItem
                                             checked={statusFilter.includes(FileStatus.PROCESSING)}
                                             onCheckedChange={(checked) => onFilterStatus(FileStatus.PROCESSING, checked)}
                                         >
-                                            解析中
-                                        </DropdownMenuCheckboxItem>
+                                            {localize("com_knowledge.parsing_status")}</DropdownMenuCheckboxItem>
                                         <DropdownMenuCheckboxItem
                                             checked={statusFilter.includes(FileStatus.REBUILDING)}
                                             onCheckedChange={(checked) => onFilterStatus(FileStatus.REBUILDING, checked)}
                                         >
-                                            重建中
-                                        </DropdownMenuCheckboxItem>
+                                            {localize("com_knowledge.rebuilding_status")}</DropdownMenuCheckboxItem>
                                         <DropdownMenuCheckboxItem
                                             checked={statusFilter.includes(FileStatus.SUCCESS)}
                                             onCheckedChange={(checked) => onFilterStatus(FileStatus.SUCCESS, checked)}
                                         >
-                                            成功
-                                        </DropdownMenuCheckboxItem>
+                                            {localize("com_knowledge.success")}</DropdownMenuCheckboxItem>
                                         <DropdownMenuCheckboxItem
                                             checked={statusFilter.includes(FileStatus.FAILED)}
                                             onCheckedChange={(checked) => onFilterStatus(FileStatus.FAILED, checked)}
                                         >
-                                            失败
-                                        </DropdownMenuCheckboxItem>
+                                            {localize("com_knowledge.fail")}</DropdownMenuCheckboxItem>
                                         <DropdownMenuCheckboxItem
                                             checked={statusFilter.includes(FileStatus.TIMEOUT)}
                                             onCheckedChange={(checked) => onFilterStatus(FileStatus.TIMEOUT, checked)}
                                         >
-                                            超时
-                                        </DropdownMenuCheckboxItem>
+                                            {localize("com_knowledge.timeout")}</DropdownMenuCheckboxItem>
                                     </DropdownMenuContent>
                                 </DropdownMenu>
 
@@ -360,18 +353,18 @@ export function KnowledgeSpaceHeader({
                                         </Button>
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent align="start">
-                                        <div className="px-2 py-1.5 text-xs font-medium text-[#86909c]">排序字段</div>
+                                        <div className="px-2 py-1.5 text-xs font-medium text-[#86909c]">{localize("com_knowledge.sort_field")}</div>
                                         <DropdownMenuItem onClick={() => onSort(SortType.NAME)}>
-                                            按名称 {sortBy === SortType.NAME && (sortDirection === SortDirection.ASC ? "↑" : "↓")}
+                                            {localize("com_knowledge.sort_by_name")}{sortBy === SortType.NAME && (sortDirection === SortDirection.ASC ? "↑" : "↓")}
                                         </DropdownMenuItem>
                                         <DropdownMenuItem onClick={() => onSort(SortType.TYPE)}>
-                                            按类型 {sortBy === SortType.TYPE && (sortDirection === SortDirection.ASC ? "↑" : "↓")}
+                                            {localize("com_knowledge.sort_by_type")}{sortBy === SortType.TYPE && (sortDirection === SortDirection.ASC ? "↑" : "↓")}
                                         </DropdownMenuItem>
                                         <DropdownMenuItem onClick={() => onSort(SortType.SIZE)}>
-                                            按大小 {sortBy === SortType.SIZE && (sortDirection === SortDirection.ASC ? "↑" : "↓")}
+                                            {localize("com_knowledge.sort_by_size")}{sortBy === SortType.SIZE && (sortDirection === SortDirection.ASC ? "↑" : "↓")}
                                         </DropdownMenuItem>
                                         <DropdownMenuItem onClick={() => onSort(SortType.UPDATE_TIME)}>
-                                            按时间 {sortBy === SortType.UPDATE_TIME && (sortDirection === SortDirection.ASC ? "↑" : "↓")}
+                                            {localize("com_knowledge.sort_by_time")}{sortBy === SortType.UPDATE_TIME && (sortDirection === SortDirection.ASC ? "↑" : "↓")}
                                         </DropdownMenuItem>
                                     </DropdownMenuContent>
                                 </DropdownMenu>
@@ -391,30 +384,26 @@ export function KnowledgeSpaceHeader({
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
                                         <Button size="sm" variant="outline" className="h-8 font-normal rounded-md border-[#e5e6eb] text-[#4e5969]" disabled={isSearching}>
-                                            批量操作 <ChevronDown className="size-4 ml-1" />
+                                            {localize("com_knowledge.batch_operation")}<ChevronDown className="size-4 ml-1" />
                                         </Button>
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent align="end">
                                         <DropdownMenuItem onClick={onBatchDownload} className="cursor-pointer">
                                             <Download className="size-4 mr-2" />
-                                            批量下载
-                                        </DropdownMenuItem>
+                                            {localize("com_knowledge.batch_download")}</DropdownMenuItem>
                                         {!hasFoldersSelected && (
                                             <DropdownMenuItem onClick={onBatchTag} className="cursor-pointer">
                                                 <Tag className="size-4 mr-2" />
-                                                批量添加标签
-                                            </DropdownMenuItem>
+                                                {localize("com_knowledge.batch_add_tags")}</DropdownMenuItem>
                                         )}
                                         {hasFailedFiles && (
                                             <DropdownMenuItem onClick={onBatchRetry} className="cursor-pointer">
                                                 <RotateCcw className="size-4 mr-2" />
-                                                批量重试
-                                            </DropdownMenuItem>
+                                                {localize("com_knowledge.batch_retry")}</DropdownMenuItem>
                                         )}
                                         <DropdownMenuItem onClick={onBatchDelete} className="cursor-pointer text-[#f53f3f] focus:text-[#f53f3f]">
                                             <Trash2 className="size-4 mr-2" />
-                                            批量删除
-                                        </DropdownMenuItem>
+                                            {localize("com_knowledge.batch_delete")}</DropdownMenuItem>
                                     </DropdownMenuContent>
                                 </DropdownMenu>
                             </>
@@ -422,18 +411,16 @@ export function KnowledgeSpaceHeader({
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                                 <Button size="sm" className="h-8 font-normal rounded-md" disabled={isSearching}>
-                                    新增 <ChevronDown className="size-4 ml-1" />
+                                    {localize("com_knowledge.add_new")}<ChevronDown className="size-4 ml-1" />
                                 </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                                 <DropdownMenuItem onClick={onCreateFolder} className="cursor-pointer">
                                     <FolderPlus className="size-4 mr-2" />
-                                    新建文件夹
-                                </DropdownMenuItem>
+                                    {localize("com_knowledge.new_folder")}</DropdownMenuItem>
                                 <DropdownMenuItem onClick={handleUploadClick} className="cursor-pointer">
                                     <Upload className="size-4 mr-2" />
-                                    上传文件
-                                </DropdownMenuItem>
+                                    {localize("com_knowledge.upload_file")}</DropdownMenuItem>
                             </DropdownMenuContent>
                         </DropdownMenu>
                     </div>

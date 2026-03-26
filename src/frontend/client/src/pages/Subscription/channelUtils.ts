@@ -28,6 +28,19 @@ export function validateCreateChannelForm(
         if (err) return err;
     }
     if (data.createSubChannel) {
+        // Sub-channel names must be unique (case-insensitive).
+        // Trim then compare by lowercase to avoid " A " vs "a" being treated as different.
+        const seen = new Set<string>();
+        for (const sub of data.subChannels) {
+            const v = sub.name.trim();
+            if (!v) continue; // handled by empty-name validation below
+            const key = v.toLowerCase();
+            if (seen.has(key)) {
+                return localize("com_subscription.sub_channel_name_duplicate") || "子频道名称不能重复";
+            }
+            seen.add(key);
+        }
+
         for (const sub of data.subChannels) {
             if (!sub.name.trim()) {
                 return localize("com_subscription.cannot_subchannel_name");

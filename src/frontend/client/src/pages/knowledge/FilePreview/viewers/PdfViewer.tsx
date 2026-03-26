@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from "react";
 import type * as pdfjsLib from "pdfjs-dist";
+import { useLocalize } from "~/hooks";
 
 interface PdfViewerProps {
     pdfDoc: pdfjsLib.PDFDocumentProxy | null;
@@ -14,7 +15,8 @@ export function PdfViewer({
     targetPage,
     onCurrentPageChange,
 }: PdfViewerProps) {
-    const scrollContainerRef = useRef<HTMLDivElement>(null);
+    const localize = useLocalize();
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
     const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
     const canvasRefs = useRef<Map<number, HTMLCanvasElement>>(new Map());
     const renderingPages = useRef<Set<number>>(new Set());
@@ -95,8 +97,7 @@ export function PdfViewer({
     if (!pdfDoc) {
         return (
             <div className="flex-1 flex items-center justify-center text-[#86909c]">
-                加载中...
-            </div>
+                {localize("com_knowledge.loading")}</div>
         );
     }
 

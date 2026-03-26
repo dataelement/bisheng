@@ -240,17 +240,15 @@ class WorkStationService(BaseService):
                 # Call the Knowledge Base service to get the Knowledge Block if there is an Organizational Knowledge Base
                 knowledge_ids.extend(use_knowledge_param.organization_knowledge_ids)
 
-            if use_knowledge_param.personal_knowledge_enabled:
-                # If Personal Knowledge Base is enabled, add Personal Knowledge BaseID
-                personal_knowledge = await KnowledgeDao.aget_user_knowledge(login_user.user_id,
-                                                                            knowledge_type=KnowledgeTypeEnum.PRIVATE)
-                if personal_knowledge:
-                    knowledge_ids.append(personal_knowledge[0].id)
-
             knowledge_vector_list = await KnowledgeRag.get_multi_knowledge_vectorstore(
                 invoke_user_id=login_user.user_id,
                 knowledge_ids=knowledge_ids,
                 user_name=login_user.user_name)
+
+            knowledge_space_list = await KnowledgeRag.get_multi_knowledge_vectorstore(invoke_user_id=login_user.user_id,
+                                                                                      knowledge_ids=use_knowledge_param.knowledge_space_ids,
+                                                                                      check_auth=False)
+            knowledge_vector_list.update(knowledge_space_list)
 
             all_milvus, all_milvus_filter = [], []
             all_es, all_es_filter = [], []

@@ -1,5 +1,6 @@
 import { FileText, Minus, Plus, Search, X, XCircle } from "lucide-react";
 import { useState, useEffect } from "react";
+import { NotificationSeverity } from "~/common";
 import { Button } from "~/components/ui/Button";
 import { Checkbox } from "~/components/ui/Checkbox";
 import { Input } from "~/components/ui/Input";
@@ -7,7 +8,7 @@ import { truncateName, type InformationSource } from "~/api/channels";
 import { cn } from "~/utils";
 import { useLocalize } from "~/hooks";
 import { useSourceManager } from "../hooks/useSourceManager";
-import { useConfirm } from "~/Providers";
+import { useConfirm, useToastContext } from "~/Providers";
 import {
     AlertDialog,
     AlertDialogAction,
@@ -41,6 +42,7 @@ export function AddSourceDropdown({
     const localize = useLocalize();
     const mgr = useSourceManager(sources, onSourcesChange, expanded, onExpandChange);
     const confirm = useConfirm();
+    const { showToast } = useToastContext();
     const [inputValue, setInputValue] = useState("");
 
     // 同步输入框展示值与已提交的搜索关键字（清空时）
@@ -242,6 +244,14 @@ export function AddSourceDropdown({
                                     </Button>
                                     <Button
                                         onClick={() => {
+                                            // 前置校验：避免已满 50 个信源后仍打开爬取预览弹窗
+                                            if (mgr.pendingSources.length >= MAX_SOURCES) {
+                                                showToast({
+                                                    message: "已达频道 50 个信源上限，无法再爬取",
+                                                    severity: NotificationSeverity.WARNING,
+                                                });
+                                                return;
+                                            }
                                             onRequestCrawl(mgr.searchKeyword.trim());
                                         }}
                                         className="h-9 min-w-[74px] bg-[#165DFF] hover:bg-[#4080FF]"

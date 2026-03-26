@@ -139,6 +139,10 @@ class ChannelService:
                         exec_time = datetime.now() + timedelta(hours=1)
                         sync_information_article.apply_async(args=(one.id,), eta=exec_time)
 
+        # Update latest_article_update_time for the new channel
+        if channel_model.source_list:
+            await self.update_channels_latest_article_time([channel_model])
+
         return channel_model
 
     async def get_my_channels(self, query_data: MyChannelQueryRequest,

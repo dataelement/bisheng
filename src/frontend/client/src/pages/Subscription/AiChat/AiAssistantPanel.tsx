@@ -1,9 +1,10 @@
 import { useLocalize } from "~/hooks";
 /**
  * AI Assistant Panel — complete chat interface.
- * Supports two modes:
+ * Supports three modes:
  *   - Workstation mode (default): uses useAiChat with full payload
- *   - Channel article mode: when articleDocId is provided, uses useChannelChat with simplified payload
+ *   - Channel article mode: when articleDocId is provided, uses useChannelChat
+ *   - File chat mode: when fileChat is provided, uses useFileChat
  */
 import { BrushCleaningIcon, ChevronsRightIcon } from "lucide-react";
 import { useState } from "react";
@@ -22,6 +23,7 @@ import AiChatInput from "~/components/Chat/AiChatInput";
 import AiChatMessages from "~/components/Chat/AiChatMessages";
 import useAiChat from "~/hooks/useAiChat";
 import useChannelChat from "~/hooks/useChannelChat";
+import useFileChat from "~/hooks/useFileChat";
 import { useConfirm } from "~/Providers";
 
 interface AiAssistantPanelProps {
@@ -32,6 +34,8 @@ interface AiAssistantPanelProps {
     noBorder?: boolean;
     /** ES article document ID — when provided, switches to channel chat mode */
     articleDocId?: string;
+    /** Knowledge space file chat — when provided, switches to file chat mode */
+    fileChat?: { spaceId: string; fileId: string };
 }
 
 /**
@@ -43,17 +47,30 @@ export function AiAssistantPanel({
     features,
     noBorder,
     articleDocId,
+    fileChat,
 }: AiAssistantPanelProps) {
     const localize = useLocalize();
 
-    // Determine chat mode based on articleDocId
-    const isChannelMode = !!articleDocId;
+    // Determine chat mode: fileChat > channel > workstation
+    const isFileChatMode = !!fileChat;
+    const isChannelMode = !isFileChatMode && !!articleDocId;
+    const isSimpleMode = isFileChatMode || isChannelMode;
 
-    // Both hooks are always called (React hooks rules), but only one is active
-    const workstationChat = useAiChat(isChannelMode ? "new" : conversationId);
-    const channelChat = useChannelChat(isChannelMode ? articleDocId : "");
+    // All three hooks always called (React hooks rules); only the active one runs
+    const workstationChat = useAiChat(isSimpleMode ? "new" : conversationId);
+    const channelChat = useChannelChat(isChannelMode ? articleDocId! : "");
+    const fileChatHook = useFileChat(
+        isFileChatMode ? fileChat!.spaceId : "",
+        isFileChatMode ? fileChat!.fileId : ""
+    );
 
     // Pick the active chat based on mode
+    const activeChat = isFileChatMode
+        ? fileChatHook
+        : isChannelMode
+            ? channelChat
+            : workstationChat;
+
     const {
         messages,
         conversationId: activeConvoId,
@@ -64,7 +81,7 @@ export function AiAssistantPanel({
         stopGenerating,
         clearConversation,
         regenerate,
-    } = isChannelMode ? channelChat : workstationChat;
+    } = activeChat;
 
     const { data: bsConfig } = useGetBsConfig();
     const [chatModel, setChatModel] = useRecoilState(store.chatModel);
@@ -131,10 +148,11 @@ export function AiAssistantPanel({
                 messages={messages}
                 conversationId={activeConvoId}
                 title={chatTitle}
-                isLoading={isChannelMode ? isLoading : (isLoading && conversationId !== "new")}
+                isLoading={isSimpleMode ? isLoading : (isLoading && conversationId !== "new")}
                 isStreaming={isStreaming}
                 presetQuestions={presetQuestions}
-                hideShare={isChannelMode}
+                hideShare={isSimpleMode}
+                flatMode={isSimpleMode}
                 onPresetClick={(q) => setInputText(q)}
                 onRegenerate={regenerate}
             />
@@ -143,12 +161,12 @@ export function AiAssistantPanel({
             <AiChatInput
                 size="mini"
                 features={features}
-                disabled={isChannelMode ? false : !bsConfig?.models?.length}
+                disabled={isSimpleMode ? false : !bsConfig?.models?.length}
                 placeholder={localize("com_subscription.input_question_placeholder")}
                 isStreaming={isStreaming}
-                modelOptions={isChannelMode ? undefined : bsConfig?.models}
-                modelValue={isChannelMode ? undefined : chatModel.id}
-                onModelChange={isChannelMode ? undefined : (val) => {
+                modelOptions={isSimpleMode ? undefined : bsConfig?.models}
+                modelValue={isSimpleMode ? undefined : chatModel.id}
+                onModelChange={isSimpleMode ? undefined : (val) => {
                     const model = bsConfig?.models?.find((m) => m.id === val);
                     setChatModel({
                         id: Number(val),
@@ -159,11 +177,11 @@ export function AiAssistantPanel({
                 onStop={stopGenerating}
                 value={inputText}
                 onChange={setInputText}
-                bsConfig={isChannelMode ? undefined : bsConfig}
-                selectedOrgKbs={isChannelMode ? [] : selectedOrgKbs}
-                onSelectedOrgKbsChange={isChannelMode ? undefined : setSelectedOrgKbs}
-                searchType={isChannelMode ? undefined : searchType}
-                onSearchTypeChange={isChannelMode ? undefined : setSearchType}
+                bsConfig={isSimpleMode ? undefined : bsConfig}
+                selectedOrgKbs={isSimpleMode ? [] : selectedOrgKbs}
+                onSelectedOrgKbsChange={isSimpleMode ? undefined : setSelectedOrgKbs}
+                searchType={isSimpleMode ? undefined : searchType}
+                onSearchTypeChange={isSimpleMode ? undefined : setSearchType}
             />
         </div>
     );

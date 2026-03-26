@@ -1,5 +1,6 @@
 import * as mammoth from "mammoth";
 import { useEffect, useRef, useState } from "react";
+import { useLocalize } from "~/hooks";
 
 interface DocxViewerProps {
     fileUrl: string;
@@ -7,7 +8,8 @@ interface DocxViewerProps {
 }
 
 export function DocxViewer({ fileUrl, zoomLevel }: DocxViewerProps) {
-    const [htmlContent, setHtmlContent] = useState("");
+    const localize = useLocalize();
+  const [htmlContent, setHtmlContent] = useState("");
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -17,13 +19,13 @@ export function DocxViewer({ fileUrl, zoomLevel }: DocxViewerProps) {
             try {
                 setLoading(true);
                 const response = await fetch(fileUrl);
-                if (!response.ok) throw new Error(`加载失败: ${response.status}`);
+                if (!response.ok) throw new Error(localize("com_knowledge.failure_status", { 0: response.status }));
                 const arrayBuffer = await response.arrayBuffer();
                 const result = await mammoth.convertToHtml({ arrayBuffer });
                 setHtmlContent(result.value);
                 setError(null);
             } catch (err: any) {
-                setError(err.message || "无法加载文档");
+                setError(err.message || localize("com_knowledge.load_doc_failed"));
             } finally {
                 setLoading(false);
             }
@@ -34,8 +36,7 @@ export function DocxViewer({ fileUrl, zoomLevel }: DocxViewerProps) {
     if (loading) {
         return (
             <div className="flex-1 flex items-center justify-center text-[#86909c]">
-                文档加载中...
-            </div>
+                {localize("com_knowledge.doc_loading")}</div>
         );
     }
 

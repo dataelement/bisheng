@@ -6,15 +6,10 @@ import bisect
 import copy
 import logging
 import re
-from abc import ABC, abstractmethod
 from collections import Counter
-from dataclasses import dataclass
-from enum import Enum
-from typing import (AbstractSet, Any, Callable, Collection, Dict, Iterable, List, Literal, Optional,
-                    Sequence, Tuple, Type, TypedDict, TypeVar, Union, cast)
+from typing import (Any, Iterable, List, Optional)
 
 from langchain.docstore.document import Document
-from langchain.schema import BaseDocumentTransformer
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
 logger = logging.getLogger(__name__)
@@ -35,7 +30,7 @@ def _split_text_with_regex(
                     splits += _splits[-1:]
                 splits = [_splits[0]] + splits
             else:
-                splits = [_splits[i-1] + _splits[i] for i in range(1, len(_splits), 2)]
+                splits = [_splits[i - 1] + _splits[i] for i in range(1, len(_splits), 2)]
                 splits = splits + [_splits[-1]]
         else:
             splits = re.split(separator, text)
@@ -168,10 +163,10 @@ class ElemCharacterTextSplitter(RecursiveCharacterTextSplitter):
         documents = []
         for i, text in enumerate(texts):
             index = -1
-            indexes = metadatas[i].get('indexes', [])
-            pages = metadatas[i].get('pages', [])
-            types = metadatas[i].get('types', [])
-            bboxes = metadatas[i].get('bboxes', [])
+            indexes = metadatas[i].pop('indexes', [])
+            pages = metadatas[i].pop('pages', [])
+            types = metadatas[i].pop('types', [])
+            bboxes = metadatas[i].pop('bboxes', [])
             searcher = IntervalSearch(indexes)
             split_texts = self.split_text(text)
             for chunk in split_texts:

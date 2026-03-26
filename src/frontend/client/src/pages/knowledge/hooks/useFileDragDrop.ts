@@ -5,6 +5,7 @@ import {
     MAX_FILE_SIZE,
     ALLOWED_EXTENSIONS,
 } from "../knowledgeUtils";
+import { useLocalize } from "~/hooks";
 
 interface UseFileDragDropOptions {
     onDragStateChange?: (isDragging: boolean, error?: string | null) => void;
@@ -16,17 +17,18 @@ interface UseFileDragDropOptions {
  * Extracted from SpaceDetail/index.tsx.
  */
 export function useFileDragDrop({ onDragStateChange, onUploadFile }: UseFileDragDropOptions) {
+    const localize = useLocalize();
     const dragCounter = useRef(0);
 
     const validateDragItems = useCallback((items: DataTransferItemList): string | null => {
-        if (items.length > MAX_UPLOAD_COUNT) return `单次最多允许上传 ${MAX_UPLOAD_COUNT} 个文件`;
+        if (items.length > MAX_UPLOAD_COUNT) return localize("com_knowledge.max_upload_count", { 0: MAX_UPLOAD_COUNT });
 
         for (let i = 0; i < items.length; i++) {
             const item = items[i];
             if (item.kind === "file") {
                 const type = item.type.toLowerCase();
                 if (type && !(ALLOWED_MIME_TYPES as readonly string[]).includes(type)) {
-                    return `包含不支持的文件格式 (${type || "未知格式"})`;
+                    return `包含不支持的文件格式 (${type || localize("com_knowledge.unknown_format")})`;
                 }
             }
         }
@@ -79,20 +81,20 @@ export function useFileDragDrop({ onDragStateChange, onUploadFile }: UseFileDrag
             if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
                 const filesList = Array.from(e.dataTransfer.files);
                 if (filesList.length > MAX_UPLOAD_COUNT) {
-                    onDragStateChange?.(true, `单次最多允许上传 ${MAX_UPLOAD_COUNT} 个文件`);
+                    onDragStateChange?.(true, localize("com_knowledge.max_upload_count", { 0: MAX_UPLOAD_COUNT }));
                     onDragStateChange?.(false);
                     return;
                 }
 
                 for (const f of filesList) {
                     if (f.size > MAX_FILE_SIZE) {
-                        onDragStateChange?.(true, `文件 ${f.name} 超过 200MB 限制`);
+                        onDragStateChange?.(true, localize("com_knowledge.file_exceeds_200m", { 0: f.name }));
                         setTimeout(() => onDragStateChange?.(false), 2000);
                         return;
                     }
                     const ext = f.name.split(".").pop()?.toLowerCase();
                     if (!ext || !(ALLOWED_EXTENSIONS as readonly string[]).includes(ext)) {
-                        onDragStateChange?.(true, `不支持文件 ${f.name} 的格式`);
+                        onDragStateChange?.(true, localize("com_knowledge.unsupported_file_format", { 0: f.name }));
                         onDragStateChange?.(false);
                         return;
                     }

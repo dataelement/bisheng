@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useRecoilState, useRecoilValue } from 'recoil';
 import { NotificationSeverity } from '~/common';
@@ -22,6 +22,8 @@ export function useAppSidebar() {
   const navigate = useNavigate();
   const { fid: flowId, type: flowType, conversationId } = useParams();
   const { showToast } = useToastContext();
+  const showToastRef = useRef(showToast);
+  showToastRef.current = showToast;
 
   const currentApp = useRecoilValue(currentAppInfoState);
   const [conversations, setConversations] = useRecoilState(appConversationsState);
@@ -35,17 +37,24 @@ export function useAppSidebar() {
     setLoading(true);
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- API untyped
-      const res: any = await getAppConversationsApi(flowId);
+      const res: any = await getAppConversationsApi(flowId, 1, 100);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- API response shape varies
-      const list: AppConversation[] = (res.data || []).map((item: any) => ({
-        id: item.chat_id || item.id,
-        title: item.name || item.title || '新对话',
-        flowId: item.flow_id || flowId,
-        flowType: Number(item.flow_type || flowType),
-        updatedAt: item.update_time || item.updatedAt || '',
-        createdAt: item.create_time || item.createdAt || '',
-      }));
+      const list: AppConversation[] = (res.data?.list || []).map((item: any) => {
+        return {
+          id: item.chat_id,
+          title: item.flow_name || '新对话',
+          flowId: item.flow_id || flowId,
+          flowType: Number(item.flow_type || flowType),
+          updatedAt: item.update_time || '',
+          createdAt: item.create_time || '',
+        };
+      });
       setConversations(list);
+
+      // Notify when no conversation history exists for this app
+      if (list.length === 0) {
+        showToastRef.current?.({ message: '历史会话已删除', severity: NotificationSeverity.ERROR });
+      }
     } catch {
       console.error('Failed to fetch app conversations');
     } finally {

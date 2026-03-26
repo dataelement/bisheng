@@ -264,3 +264,5 @@ docker/office/bisheng/*.gz
 
 CLAUDE.md
 !src/backend/bisheng/telemetry_search/**/*.pyc
+
+docs

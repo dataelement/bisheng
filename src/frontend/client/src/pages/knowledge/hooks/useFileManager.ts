@@ -13,6 +13,7 @@ import {
 import { NotificationSeverity } from "~/common";
 import { useToastContext } from "~/Providers";
 import { SearchParams } from "../SpaceDetail/CompoundSearchInput";
+import { useLocalize } from "~/hooks";
 
 interface UseFileManagerOptions {
     activeSpace: KnowledgeSpace | null;
@@ -23,6 +24,7 @@ interface UseFileManagerOptions {
  * Extracted from the root Knowledge component.
  */
 export function useFileManager({ activeSpace }: UseFileManagerOptions) {
+    const localize = useLocalize();
     const [files, setFiles] = useState<KnowledgeFile[]>([]);
     const [currentPage, setCurrentPage] = useState(1);
     const [pageSize] = useState(20);
@@ -75,7 +77,7 @@ export function useFileManager({ activeSpace }: UseFileManagerOptions) {
                 setTotal(res.total);
                 setCurrentPage(page);
             } catch {
-                showToast({ message: "加载文件列表失败", severity: NotificationSeverity.ERROR });
+                showToast({ message: localize("com_knowledge.load_file_list_failed"), severity: NotificationSeverity.ERROR });
             } finally {
                 setLoading(false);
             }

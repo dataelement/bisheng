@@ -59,7 +59,7 @@ export function AppSwitcherDropdown() {
             <input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="搜索知识库名称"
+              placeholder="搜索应用名称"
               className="flex-1 bg-transparent border-none outline-none text-[13px] text-[#212121] placeholder:text-[#a9aeb8]"
               autoFocus
             />

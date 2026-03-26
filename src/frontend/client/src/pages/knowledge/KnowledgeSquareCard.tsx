@@ -28,13 +28,13 @@ export default function KnowledgeSquareCard({
     const getButtonConfig = () => {
         switch (status) {
             case "joined":
-                return { text: localize("subscribed") || "已加入", variant: "secondary" as const, disabled: true };
+                return { text: localize("subscribed") || localize("com_knowledge.joined"), variant: "secondary" as const, disabled: true };
             case "pending":
-                return { text: localize("pending") || "申请中", variant: "secondary" as const, disabled: true };
+                return { text: localize("pending") || localize("com_knowledge.applying"), variant: "secondary" as const, disabled: true };
             default: {
                 const isPrivate = space.visibility !== VisibilityType.PUBLIC;
                 return {
-                    text: isPrivate ? localize("request") || "申请" : localize("subscribe") || "加入",
+                    text: isPrivate ? localize("request") || localize("com_knowledge.apply") : localize("subscribe") || localize("com_knowledge.join"),
                     variant: "outline" as const,
                     disabled: false,
                 };
@@ -85,7 +85,7 @@ export default function KnowledgeSquareCard({
                     className="text-[12px] text-[#86909C] line-clamp-2 leading-[18px] truncate mb-3"
                     title={space.description}
                 >
-                    {space.description || "暂无简介"}
+                    {space.description || localize("com_knowledge.no_description")}
                 </p>
 
                 <div className="flex items-center gap-2.5 text-[12px] text-[#86909C]">
@@ -99,11 +99,11 @@ export default function KnowledgeSquareCard({
                     </div>
 
                     <span>
-                        {space.fileCount} {localize("com_subscription.articles") || "篇内容"}
+                        {space.fileCount} {localize("com_subscription.articles") || localize("com_knowledge.articles_count")}
                     </span>
                     <span>
                         {space.memberCount}
-                        {localize("com_ui_subscription") ? localize("com_ui_subscription") : " 用户"}
+                        {localize("com_ui_subscription") ? localize("com_ui_subscription") : localize("com_knowledge.users_count")}
                     </span>
                 </div>
             </CardContent>

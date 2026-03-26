@@ -43,11 +43,11 @@ export default function KnowledgeSquare({
     const scrollRef = useRef<HTMLDivElement | null>(null);
     const PAGE_SIZE = 20;
 
-    const tTitle = title || "探索知识广场";
-    const tSubtitle = subtitle || "您可以在这里探索更多的知识空间";
-    const tSearchPlaceholder = searchPlaceholder || "输入知识空间名称或描述进行搜索";
-    const tEmptyText = emptyText || "未找到匹配知识空间";
-    const tJoinPrefix = joinToastPrefix || "已申请加入知识空间：";
+    const tTitle = title || localize("com_knowledge.explore_square");
+    const tSubtitle = subtitle || localize("com_knowledge.explore_more_spaces");
+    const tSearchPlaceholder = searchPlaceholder || localize("com_knowledge.search_space_placeholder");
+    const tEmptyText = emptyText || localize("com_knowledge.no_matched_space");
+    const tJoinPrefix = joinToastPrefix || localize("com_knowledge.applied_to_join_space");
 
     const visibleSpaces = useMemo(() => {
         const q = searchQuery.trim().toLowerCase();
@@ -86,7 +86,7 @@ export default function KnowledgeSquare({
         const next = e.target.value ?? "";
         if (next.length > 40) {
             showToast({
-                message: localize("maximum_character") || "最多输入 40 个字符",
+                message: localize("maximum_character") || localize("com_knowledge.max_40_chars"),
                 severity: NotificationSeverity.WARNING,
             });
             setSearchQuery(next.slice(0, 40));
@@ -140,14 +140,14 @@ export default function KnowledgeSquare({
         try {
             await subscribeSpaceApi(space.id);
             if (nextStatus === "joined") {
-                showToast({ message: "成功加入", severity: NotificationSeverity.SUCCESS });
+                showToast({ message: localize("com_knowledge.join_success"), severity: NotificationSeverity.SUCCESS });
             } else {
                 showToast({ message: `${tJoinPrefix}${space.name}`, severity: NotificationSeverity.SUCCESS });
             }
         } catch {
             // rollback
             setSpaces(prevSpaces);
-            showToast({ message: "操作失败，请稍后重试", severity: NotificationSeverity.ERROR });
+            showToast({ message: localize("com_knowledge.operation_failed_retry"), severity: NotificationSeverity.ERROR });
         } finally {
             setJoiningId(null);
         }
@@ -197,7 +197,7 @@ export default function KnowledgeSquare({
 
                 <div className="max-w-[1032px] mx-auto px-4 py-4">
                     {loading && spaces.length === 0 ? (
-                        <div className="flex items-center justify-center h-64 text-[#86909C]">加载中...</div>
+                        <div className="flex items-center justify-center h-64 text-[#86909C]">{localize("com_knowledge.loading")}</div>
                     ) : spaceRows.length === 0 ? (
                         <div className="flex flex-col items-center justify-center h-64 text-[#86909c]">
                             <img
@@ -232,7 +232,7 @@ export default function KnowledgeSquare({
                             ))}
 
                             <div className="h-10 flex items-center justify-center text-[12px] text-[#C9CDD4]">
-                                {loadingMore ? "加载中..." : !hasMorePage ? "没有更多内容了" : ""}
+                                {loadingMore ? localize("com_knowledge.loading") : !hasMorePage ? localize("com_knowledge.no_more_content") : ""}
                             </div>
                         </div>
                     )}

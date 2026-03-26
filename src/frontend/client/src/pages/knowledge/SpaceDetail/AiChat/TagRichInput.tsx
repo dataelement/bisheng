@@ -13,6 +13,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { cn, removeFocusRings } from "~/utils";
 import { TagPicker } from "./TagPicker";
+import { useLocalize } from "~/hooks";
 
 interface TagRichInputProps {
     availableTags: string[];
@@ -85,12 +86,14 @@ function placeCursorAfter(node: Node) {
 
 export function TagRichInput({
     availableTags,
-    placeholder = "请输入你的问题，输入 # 可指定标签回答...",
+    placeholder,
     disabled = false,
     onSend,
     className,
 }: TagRichInputProps) {
-    const editorRef = useRef<HTMLDivElement>(null);
+    const localize = useLocalize();
+    const actualPlaceholder = placeholder || localize("com_knowledge.ai_input_placeholder");
+  const editorRef = useRef<HTMLDivElement>(null);
     const [showPicker, setShowPicker] = useState(false);
     const [pickerSearch, setPickerSearch] = useState("");
     const [isEmpty, setIsEmpty] = useState(true);
@@ -291,7 +294,7 @@ export function TagRichInput({
                 {/* Placeholder */}
                 {isEmpty && (
                     <div className="absolute top-3 left-4 text-sm text-black/50 pointer-events-none select-none">
-                        {placeholder}
+                        {actualPlaceholder}
                     </div>
                 )}
             </div>

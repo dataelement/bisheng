@@ -2,19 +2,20 @@ import {
     FolderPlus,
     Upload
 } from "lucide-react";
-import React, { useState } from "react";
-import { FileStatus, FileType, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceRole, batchDownloadApi, batchDeleteApi, batchRetryApi } from "~/api/knowledge";
-import { SearchParams } from "./CompoundSearchInput";
+import { useState } from "react";
+import { FileStatus, FileType, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceRole, batchDeleteApi, batchDownloadApi, batchRetryApi } from "~/api/knowledge";
 import { Button } from "~/components/ui/Button";
 import { useConfirm, useToastContext } from "~/Providers";
+import { useFileDragDrop } from "../hooks/useFileDragDrop";
+import { triggerUrlDownload } from "../knowledgeUtils";
+import { SearchParams } from "./CompoundSearchInput";
 import { EditTagsModal } from "./EditTagsModal";
 import { FileCard } from "./FileCard";
 import { FileTable } from "./FileTable";
 import { KnowledgeSpaceHeader } from "./KnowledgeSpaceHeader";
 import { PaginationBar } from "./PaginationBar";
 import { SelectionPathBreadcrumb } from "./SelectionPathBreadcrumb";
-import { useFileDragDrop } from "../hooks/useFileDragDrop";
-import { triggerUrlDownload } from "../knowledgeUtils";
+import { useLocalize } from "~/hooks";
 
 interface KnowledgeSpaceContentProps {
     space: KnowledgeSpace;
@@ -71,7 +72,8 @@ export function KnowledgeSpaceContent({
     onToggleAiAssistant,
     isAiAssistantOpen
 }: KnowledgeSpaceContentProps) {
-    const displayFiles = [
+    const localize = useLocalize();
+  const displayFiles = [
         ...(creatingFolder ? [creatingFolder] : []),
         ...uploadingFiles,
         ...files
@@ -157,10 +159,10 @@ export function KnowledgeSpaceContent({
                 file_ids: fileIds.length ? fileIds : undefined,
                 folder_ids: folderIds.length ? folderIds : undefined,
             });
-            if (!url) { showToast({ message: "下载链接获取失败", status: "error" }); return; }
+            if (!url) { showToast({ message: localize("com_knowledge.get_download_link_failed"), status: "error" }); return; }
             triggerUrlDownload(url, `download_${Date.now()}.zip`);
         } catch {
-            showToast({ message: "下载失败", status: "error" });
+            showToast({ message: localize("com_knowledge.download_failed"), status: "error" });
         }
     };
 
@@ -177,16 +179,16 @@ export function KnowledgeSpaceContent({
                 file_ids: isFolder ? undefined : [id],
                 folder_ids: isFolder ? [id] : undefined,
             });
-            if (!url) { showToast({ message: "下载链接获取失败", status: "error" }); return; }
+            if (!url) { showToast({ message: localize("com_knowledge.get_download_link_failed"), status: "error" }); return; }
             triggerUrlDownload(url, file?.name);
         } catch {
-            showToast({ message: "下载失败", status: "error" });
+            showToast({ message: localize("com_knowledge.download_failed"), status: "error" });
         }
     };
 
     const handlePreviewFile = (fileId: string) => {
         const file = displayFiles.find(f => f.id === fileId);
-        const fileName = file?.name || "未知文件";
+        const fileName = file?.name || localize("com_knowledge.unknown_file");
         const fileType = file?.type || "";
         const url = `${__APP_ENV__.BASE_URL}/knowledge/file/${fileId}?name=${encodeURIComponent(fileName)}&type=${encodeURIComponent(fileType)}&spaceId=${encodeURIComponent(space.id)}`;
         window.open(url, '_blank');
@@ -204,9 +206,9 @@ export function KnowledgeSpaceContent({
             return;
         }
         const confirmed = await confirm({
-            description: "当前标签尚未保存，确认关闭吗？",
-            cancelText: "取消",
-            confirmText: "确认关闭"
+            description: localize("com_knowledge.unsaved_tags_confirm_close"),
+            cancelText: localize("com_knowledge.cancel"),
+            confirmText: localize("com_knowledge.confirm_close")
         });
         if (confirmed) {
             setEditingTagsFileId(null);
@@ -225,10 +227,10 @@ export function KnowledgeSpaceContent({
 
     const handleBatchDelete = async () => {
         const confirmed = await confirm({
-            title: `确认删除选中的 ${selectedFiles.size} 项内容吗？`,
-            description: "包含的文件夹及其子文件也将被一并删除，且不可恢复。",
-            cancelText: "取消",
-            confirmText: "删除",
+            title: localize("com_knowledge.confirm_delete_selected_items", { 0: selectedFiles.size }),
+            description: localize("com_knowledge.delete_folder_warning"),
+            cancelText: localize("com_knowledge.cancel"),
+            confirmText: localize("com_knowledge.delete"),
             variant: "destructive"
         });
 
@@ -244,11 +246,11 @@ export function KnowledgeSpaceContent({
                 folder_ids: folderIds.length ? folderIds : undefined,
             });
             setSelectedFiles(new Set());
-            showToast({ message: "批量删除成功", status: "success" });
+            showToast({ message: localize("com_knowledge.batch_delete_success"), status: "success" });
             // Notify parent to refresh the list
             onDeleteFile("");
         } catch {
-            showToast({ message: "批量删除失败", status: "error" });
+            showToast({ message: localize("com_knowledge.batch_delete_failed"), status: "error" });
         }
     };
 
@@ -259,10 +261,10 @@ export function KnowledgeSpaceContent({
         const isFolder = file.type === FileType.FOLDER;
 
         const confirmed = await confirm({
-            title: isFolder ? `确认删除文件夹 "${file.name}" 吗？` : "确认删除当前文件吗？",
-            description: isFolder ? "此操作将永久删除该文件夹及其目录下的所有文件，无法撤销。" : undefined,
-            cancelText: "取消",
-            confirmText: "删除",
+            title: isFolder ? `确认删除文件夹 "${file.name}" 吗？` : localize("com_knowledge.confirm_delete_file"),
+            description: isFolder ? localize("com_knowledge.delete_folder_permanent_warning") : undefined,
+            cancelText: localize("com_knowledge.cancel"),
+            confirmText: localize("com_knowledge.delete"),
             variant: "destructive"
         });
 
@@ -284,38 +286,38 @@ export function KnowledgeSpaceContent({
 
         try {
             await batchRetryApi(space.id, retryIds);
-            showToast({ message: "已开始批量重试", status: "success" });
+            showToast({ message: localize("com_knowledge.batch_retry_started"), status: "success" });
             setSelectedFiles(new Set());
             // Refresh list
             onDeleteFile("");
         } catch {
-            showToast({ message: "批量重试失败", status: "error" });
+            showToast({ message: localize("com_knowledge.batch_retry_failed"), status: "error" });
         }
     };
 
     const handleSingleRetry = async (fileId: string) => {
         try {
             await batchRetryApi(space.id, [Number(fileId)]);
-            showToast({ message: "已开始重试", status: "success" });
+            showToast({ message: localize("com_knowledge.retry_started"), status: "success" });
             // Refresh list
             onDeleteFile("");
         } catch {
-            showToast({ message: "重试失败", status: "error" });
+            showToast({ message: localize("com_knowledge.retry_failed"), status: "error" });
         }
     };
 
     const validateFileName = (name: string, isFolder: boolean, currentId: string, isCreating: boolean) => {
         const trimmed = name.trim();
         if (!trimmed) {
-            return isFolder && isCreating ? "文件夹名称不能为空" : "名称不能为空";
+            return isFolder && isCreating ? localize("com_knowledge.folder_name_empty") : localize("com_knowledge.name_empty");
         }
         if (trimmed.length > 50) {
-            return "名称不能超过 50 个字符";
+            return localize("com_knowledge.name_max_50");
         }
 
         const duplicate = displayFiles.some(f => f.name === trimmed && f.id !== currentId && (isFolder ? f.type === FileType.FOLDER : f.type !== FileType.FOLDER));
         if (duplicate) {
-            return isFolder ? "名称不能与已有文件夹相同" : "名称不能与已有文件相同";
+            return isFolder ? localize("com_knowledge.name_duplicate_folder") : localize("com_knowledge.name_duplicate_file");
         }
         return null;
     };
@@ -366,18 +368,16 @@ export function KnowledgeSpaceContent({
                     <div className="flex flex-col items-center justify-center h-full text-center">
                         <div className="text-6xl mb-4">📁</div>
                         <p className="text-[#86909c] mb-4">
-                            {searchQuery ? "未找到匹配的文件" : "此位置暂无文件"}
+                            {searchQuery ? localize("com_knowledge.no_matched_file") : localize("com_knowledge.no_file_here")}
                         </p>
                         {isAdmin && !searchQuery && (
                             <div className="flex gap-2">
                                 <Button onClick={() => onUploadFile()}>
                                     <Upload className="size-4 mr-1" />
-                                    上传文件
-                                </Button>
+                                    {localize("com_knowledge.upload_file")}</Button>
                                 <Button onClick={onCreateFolder} variant="outline">
                                     <FolderPlus className="size-4 mr-1" />
-                                    新建文件夹
-                                </Button>
+                                    {localize("com_knowledge.new_folder")}</Button>
                             </div>
                         )}
                     </div>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useLocalize } from "~/hooks";
 
 interface HtmlViewerProps {
     fileUrl: string;
@@ -6,7 +7,8 @@ interface HtmlViewerProps {
 }
 
 export function HtmlViewer({ fileUrl, zoomLevel }: HtmlViewerProps) {
-    const [htmlContent, setHtmlContent] = useState<string | null>(null);
+    const localize = useLocalize();
+  const [htmlContent, setHtmlContent] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -15,12 +17,12 @@ export function HtmlViewer({ fileUrl, zoomLevel }: HtmlViewerProps) {
             try {
                 setLoading(true);
                 const response = await fetch(fileUrl);
-                if (!response.ok) throw new Error(`加载失败: ${response.status}`);
+                if (!response.ok) throw new Error(localize("com_knowledge.failure_status", { 0: response.status }));
                 const text = await response.text();
                 setHtmlContent(text);
                 setError(null);
             } catch (err: any) {
-                setError(err.message || "无法加载 HTML 文件");
+                setError(err.message || localize("com_knowledge.load_html_failed"));
             } finally {
                 setLoading(false);
             }
@@ -31,8 +33,7 @@ export function HtmlViewer({ fileUrl, zoomLevel }: HtmlViewerProps) {
     if (loading) {
         return (
             <div className="flex-1 flex items-center justify-center text-[#86909c]">
-                加载中...
-            </div>
+                {localize("com_knowledge.loading")}</div>
         );
     }
 
@@ -54,7 +55,7 @@ export function HtmlViewer({ fileUrl, zoomLevel }: HtmlViewerProps) {
             <div className="w-full h-full">
                 <iframe
                     srcDoc={htmlContent || ""}
-                    title="HTML 预览"
+                    title={localize("com_knowledge.html_preview")}
                     sandbox="allow-same-origin"
                     className="w-full h-full border-none bg-white"
                     style={{

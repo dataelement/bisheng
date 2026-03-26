@@ -427,14 +427,9 @@ def get_session_list(page: Optional[int] = Query(default=1, ge=1, le=1000),
                      limit: Optional[int] = Query(default=10, ge=1, le=100),
                      login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
-    Get session list grouped by time dimension.
-    Only shows daily chat (WORKSTATION) and linsight sessions, sorted by update_time descending.
-    Groups: today, yesterday, last 7 days, last 30 days, years
+    Get session list sorted by update_time descending.
+    Only shows daily chat (WORKSTATION) and linsight sessions.
     """
-    from datetime import date, timedelta
-    from collections import OrderedDict
-    from bisheng.api.v1.schemas import ChatListGroup
-
     # Define allowed flow types: WORKSTATION(15) and LINSIGHT(20)
     allowed_flow_types = [FlowType.WORKSTATION.value, FlowType.LINSIGHT.value]
 
@@ -460,8 +455,7 @@ def get_session_list(page: Optional[int] = Query(default=1, ge=1, le=1000),
     )
     latest_messages = {one.chat_id: one for one in latest_messages}
 
-    # Build ChatList objects
-    # For WORKSTATION and LINSIGHT, logo is stored in flow_logo field
+    # Build ChatList objects (already sorted by update_time descending from query)
     chat_sessions = [
         ChatList(
             chat_id=one.chat_id,
@@ -475,57 +469,7 @@ def get_session_list(page: Optional[int] = Query(default=1, ge=1, le=1000),
         ) for one in res
     ]
 
-    # Group by time dimension
-    today = date.today()
-    yesterday = today - timedelta(days=1)
-    last_7_days_start = today - timedelta(days=7)
-    last_30_days_start = today - timedelta(days=30)
-
-    # Define group structure with order
-    groups = OrderedDict()
-    groups['today'] = ChatListGroup(group_name='今天', group_key='today', sessions=[])
-    groups['yesterday'] = ChatListGroup(group_name='昨天', group_key='yesterday', sessions=[])
-    groups['last_7_days'] = ChatListGroup(group_name='七天内', group_key='last_7_days', sessions=[])
-    groups['last_30_days'] = ChatListGroup(group_name='30天内', group_key='last_30_days', sessions=[])
-
-    # Track years dynamically
-    year_groups = OrderedDict()
-
-    for session in chat_sessions:
-        session_date = session.update_time.date() if session.update_time else session.create_time.date()
-
-        if session_date == today:
-            groups['today'].sessions.append(session)
-        elif session_date == yesterday:
-            groups['yesterday'].sessions.append(session)
-        elif session_date >= last_7_days_start:
-            groups['last_7_days'].sessions.append(session)
-        elif session_date >= last_30_days_start:
-            groups['last_30_days'].sessions.append(session)
-        else:
-            # Group by year
-            year = session_date.year
-            year_key = f'year_{year}'
-            if year_key not in year_groups:
-                year_groups[year_key] = ChatListGroup(
-                    group_name=str(year),
-                    group_key=year_key,
-                    sessions=[]
-                )
-            year_groups[year_key].sessions.append(session)
-
-    # Build final result: ordered groups + year groups (descending by year)
-    result = []
-    for group in groups.values():
-        if group.sessions:
-            result.append(group)
-
-    # Add year groups in descending order
-    for year_key in sorted(year_groups.keys(), key=lambda x: int(x.split('_')[1]), reverse=True):
-        if year_groups[year_key].sessions:
-            result.append(year_groups[year_key])
-
-    return resp_200(result)
+    return resp_200(chat_sessions)
 
 
 # Access to online workflows and assistants

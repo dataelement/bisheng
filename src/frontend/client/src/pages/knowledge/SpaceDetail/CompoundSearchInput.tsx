@@ -8,6 +8,7 @@ import {
 } from '~/components/ui/DropdownMenu';
 import { cn } from '~/utils';
 import { SpaceTag, getSpaceTagsApi } from '~/api/knowledge';
+import { useLocalize } from "~/hooks";
 
 export interface SearchParams {
     scope: 'current' | 'all';
@@ -23,7 +24,8 @@ export interface CompoundSearchInputProps {
 }
 
 export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, className }: CompoundSearchInputProps) {
-    const [scope, setScope] = useState<'current' | 'all'>('current');
+    const localize = useLocalize();
+  const [scope, setScope] = useState<'current' | 'all'>('current');
     const [selectedTags, setSelectedTags] = useState<SpaceTag[]>([]);
     const [keyword, setKeyword] = useState('');
     const [isFocused, setIsFocused] = useState(false);
@@ -99,7 +101,7 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
         onSearch?.({ scope: isRoot ? 'all' : scope, tagIds: [], keyword: '' });
     };
 
-    const scopeLabel = scope === 'current' ? '当前位置' : '当前知识空间';
+    const scopeLabel = scope === 'current' ? localize("com_knowledge.current_location") : localize("com_knowledge.current_space");
 
     return (
         <div ref={containerRef} className={cn("relative w-full", className)}>
@@ -125,8 +127,8 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
                             </button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="start" className="min-w-[120px]">
-                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setScope('current'); inputRef.current?.focus(); }}>当前位置</DropdownMenuItem>
-                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setScope('all'); inputRef.current?.focus(); }}>当前知识空间</DropdownMenuItem>
+                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setScope('current'); inputRef.current?.focus(); }}>{localize("com_knowledge.current_location")}</DropdownMenuItem>
+                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setScope('all'); inputRef.current?.focus(); }}>{localize("com_knowledge.current_space")}</DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
                 )}
@@ -152,7 +154,7 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
                     onChange={(e) => setKeyword(e.target.value)}
                     onKeyDown={handleKeyDown}
                     maxLength={100}
-                    placeholder={selectedTags.length === 0 ? "在当前知识空间进行搜索" : ""}
+                    placeholder={selectedTags.length === 0 ? localize("com_knowledge.search_in_current_space") : ""}
                     className="flex-1 min-w-[50px] bg-transparent outline-none text-[13px] text-[#1d2129] placeholder:text-[#86909c] h-[22px]"
                     onFocus={() => setIsFocused(true)}
                 />
@@ -175,10 +177,10 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
             {/* Dropdown Panel — space tags */}
             {isFocused && (
                 <div className="absolute top-full left-0 mt-1 min-w-[320px] max-w-full bg-white border border-[#e5e6eb] shadow-[0_4px_10px_rgba(0,0,0,0.1)] rounded-md z-50 p-3">
-                    <div className="text-sm font-medium text-gray-800 mb-2">已有标签</div>
+                    <div className="text-sm font-medium text-gray-800 mb-2">{localize("com_knowledge.existing_tags")}</div>
                     <div className="flex flex-wrap gap-2">
                         {spaceTags.length === 0 && (
-                            <span className="text-sm text-[#86909c]">暂无标签</span>
+                            <span className="text-sm text-[#86909c]">{localize("com_knowledge.no_tags")}</span>
                         )}
                         {spaceTags.map((tag) => {
                             const isSelected = selectedTags.some((t) => t.id === tag.id);

@@ -1,6 +1,7 @@
 from typing import Any, Optional, List
 
 from fastapi import APIRouter, Depends, Body, Query
+from loguru import logger
 from starlette.responses import StreamingResponse
 
 from bisheng.common.errcode import BaseErrorCode
@@ -396,12 +397,13 @@ async def chat_single_file(
         except BaseErrorCode as e:
             yield e.to_sse_event_instance_str()
         except Exception as e:
+            logger.exception("chat_file error")
             yield ServerError(exception=e).to_sse_event_instance_str()
 
     return StreamingResponse(event_stream(), media_type='text/event-stream')
 
 
-@router.post('/{space_id}/chat/file/{file_id}/history')
+@router.get('/{space_id}/chat/file/{file_id}/history')
 async def chat_single_file_history(
         space_id: int,
         file_id: int,
@@ -409,6 +411,16 @@ async def chat_single_file_history(
         svc: KnowledgeSpaceChatService = Depends(get_knowledge_space_chat_service),
 ) -> Any:
     response = await svc.single_file_history(space_id, file_id, page_size)
+    return resp_200(response)
+
+
+@router.delete('/{space_id}/chat/file/{file_id}/history')
+async def clear_single_file_history(
+        space_id: int,
+        file_id: int,
+        svc: KnowledgeSpaceChatService = Depends(get_knowledge_space_chat_service),
+):
+    response = await svc.clear_file_history(space_id, file_id)
     return resp_200(response)
 
 
@@ -455,6 +467,17 @@ async def get_chat_folder_history(
     return resp_200(result)
 
 
+@router.delete('/{space_id}/chat/folder/history')
+async def get_chat_folder_history(
+        space_id: int,
+        folder_id: int = Query(default=0, description="folder id"),
+        chat_id: str = Query(..., description='Chat ID'),
+        svc: KnowledgeSpaceChatService = Depends(get_knowledge_space_chat_service),
+):
+    result = await svc.delete_chat_folder_history(space_id, folder_id, chat_id)
+    return resp_200(result)
+
+
 @router.post('/{space_id}/chat/folder')
 async def chat_folder(
         space_id: int,
@@ -468,6 +491,7 @@ async def chat_folder(
         except BaseErrorCode as e:
             yield e.to_sse_event_instance_str()
         except Exception as e:
+            logger.exception("chat_folder error")
             yield ServerError(exception=e).to_sse_event_instance_str()
 
     return StreamingResponse(event_stream(), media_type='text/event-stream')
