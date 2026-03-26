@@ -7,7 +7,7 @@ const EXT_MAP: Record<string, ViewerType> = {
     pdf: "pdf",
     // Word
     docx: "docx",
-    doc: "unsupported", // mammoth 不支持 .doc
+    doc: "docx",
     // Excel
     xls: "xlsx",
     xlsx: "xlsx",

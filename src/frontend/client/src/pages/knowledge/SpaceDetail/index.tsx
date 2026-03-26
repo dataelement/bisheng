@@ -1,10 +1,5 @@
-import {
-    FolderPlus,
-    Upload
-} from "lucide-react";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { FileStatus, FileType, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceRole, batchDeleteApi, batchDownloadApi, batchRetryApi } from "~/api/knowledge";
-import { Button } from "~/components/ui/Button";
 import { useConfirm, useToastContext } from "~/Providers";
 import { useFileDragDrop } from "../hooks/useFileDragDrop";
 import { triggerUrlDownload } from "../knowledgeUtils";
@@ -102,6 +97,42 @@ export function KnowledgeSpaceContent({
     const { showToast } = useToastContext();
     const confirm = useConfirm();
 
+    // ─── File Upload Trigger ─────────────────────────────────────────────
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const triggerUpload = () => {
+        fileInputRef.current?.click();
+    };
+
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files.length > 0) {
+            const filesList = Array.from(e.target.files);
+
+            if (filesList.length > 50) {
+                showToast({ message: localize("com_knowledge.max_upload_50"), status: "error" });
+                if (fileInputRef.current) fileInputRef.current.value = "";
+                return;
+            }
+
+            for (let f of filesList) {
+                if (f.size > 200 * 1024 * 1024) {
+                    showToast({ message: localize("com_knowledge.file_exceeds_200m", { 0: f.name }), status: "error" });
+                    if (fileInputRef.current) fileInputRef.current.value = "";
+                    return;
+                }
+                const ext = f.name.split('.').pop()?.toLowerCase();
+                if (!ext || !['pdf', 'txt', 'docx', 'ppt', 'pptx', 'md', 'html', 'xls', 'xlsx', 'csv', 'doc', 'png', 'jpg', 'jpeg', 'bmp'].includes(ext)) {
+                    showToast({ message: localize("com_knowledge.unsupported_file_format", { 0: f.name }), status: "error" });
+                    if (fileInputRef.current) fileInputRef.current.value = "";
+                    return;
+                }
+            }
+
+            onUploadFile(filesList);
+            if (fileInputRef.current) fileInputRef.current.value = "";
+        }
+    };
+
     // ─── Drag and drop ──────────────────────────────────────────────────
     const { handleDragEnter, handleDragLeave, handleDragOver, handleDrop } = useFileDragDrop({
         onDragStateChange,
@@ -189,8 +220,9 @@ export function KnowledgeSpaceContent({
     const handlePreviewFile = (fileId: string) => {
         const file = displayFiles.find(f => f.id === fileId);
         const fileName = file?.name || localize("com_knowledge.unknown_file");
-        const fileType = file?.type || "";
-        const url = `${__APP_ENV__.BASE_URL}/knowledge/file/${fileId}?name=${encodeURIComponent(fileName)}&type=${encodeURIComponent(fileType)}&spaceId=${encodeURIComponent(space.id)}`;
+        // Use extension from filename for preview viewer dispatch instead of API type field
+        const ext = fileName.split('.').pop()?.toLowerCase() || "";
+        const url = `${__APP_ENV__.BASE_URL}/knowledge/file/${fileId}?name=${encodeURIComponent(fileName)}&type=${encodeURIComponent(ext)}&spaceId=${encodeURIComponent(space.id)}`;
         window.open(url, '_blank');
     };
 
@@ -333,6 +365,15 @@ export function KnowledgeSpaceContent({
             onDragOver={handleDragOver}
             onDrop={handleDrop}
         >
+            {/* Hidden File Input */}
+            <input
+                type="file"
+                multiple
+                className="hidden"
+                ref={fileInputRef}
+                onChange={handleFileChange}
+                accept=".pdf,.txt,.docx,.ppt,.pptx,.md,.html,.xls,.xlsx,.csv,.doc,.png,.jpg,.jpeg,.bmp"
+            />
             {/* Header */}
             <KnowledgeSpaceHeader
                 space={space}
@@ -349,7 +390,7 @@ export function KnowledgeSpaceContent({
                 sortDirection={sortDirection}
                 onSort={handleSort}
                 onCreateFolder={onCreateFolder}
-                onUploadFile={onUploadFile}
+                onTriggerUpload={triggerUpload}
                 selectedCount={selectedFiles.size}
                 hasFoldersSelected={hasFoldersSelected}
                 hasFailedFiles={hasFailedFiles}
@@ -365,21 +406,23 @@ export function KnowledgeSpaceContent({
             {/* Content Container (Scrollable) */}
             <div className="flex-1 min-w-0 min-h-0 flex flex-col">
                 {displayFiles.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-full text-center">
-                        <div className="text-6xl mb-4">📁</div>
-                        <p className="text-[#86909c] mb-4">
-                            {searchQuery ? localize("com_knowledge.no_matched_file") : localize("com_knowledge.no_file_here")}
+                    <div className="flex flex-1 flex-col items-center justify-center py-10 text-center h-full">
+                        <img
+                            className="size-[120px] mb-4 object-contain opacity-90"
+                            src={`${__APP_ENV__.BASE_URL}/assets/channel/empty.png`}
+                            alt="empty"
+                        />
+                        <p className="text-[14px] leading-6 text-[#4E5969]">
+                            {searchQuery ? localize("com_knowledge.no_matched_file") : localize("com_knowledge.no_file_here_please")}
+                            {isAdmin && !searchQuery && (
+                                <span
+                                    className="cursor-pointer text-[#165DFF] transition-colors hover:text-[#4080FF] active:text-[#0E42D2]"
+                                    onClick={triggerUpload}
+                                >
+                                    {localize("com_knowledge.upload_file")}
+                                </span>
+                            )}
                         </p>
-                        {isAdmin && !searchQuery && (
-                            <div className="flex gap-2">
-                                <Button onClick={() => onUploadFile()}>
-                                    <Upload className="size-4 mr-1" />
-                                    {localize("com_knowledge.upload_file")}</Button>
-                                <Button onClick={onCreateFolder} variant="outline">
-                                    <FolderPlus className="size-4 mr-1" />
-                                    {localize("com_knowledge.new_folder")}</Button>
-                            </div>
-                        )}
                     </div>
                 ) : viewMode === "card" ? (
                     <div className="flex-1 overflow-y-auto">

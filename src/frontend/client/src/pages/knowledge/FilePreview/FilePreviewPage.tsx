@@ -22,7 +22,9 @@ export default function FilePreviewPage() {
   const { fileId } = useParams<{ fileId: string }>();
     const [searchParams] = useSearchParams();
     const fileName = searchParams.get("name") || localize("com_knowledge.unknown_file");
-    const fileType = searchParams.get("type") || "pdf";
+    // Prefer URL param; fallback to extension extracted from filename
+    const rawType = searchParams.get("type") || "";
+    const fileType = rawType || fileName.split('.').pop()?.toLowerCase() || "pdf";
     const spaceId = searchParams.get("spaceId") || "";
 
     // Fetch real preview URL via API

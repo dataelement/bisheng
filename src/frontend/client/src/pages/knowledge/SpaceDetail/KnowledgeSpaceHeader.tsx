@@ -1,4 +1,3 @@
-import { useState, useRef } from "react";
 import {
     LayoutGrid,
     List,
@@ -47,7 +46,7 @@ interface KnowledgeSpaceHeaderProps {
     sortDirection: SortDirection;
     onSort: (sortBy: SortType) => void;
     onCreateFolder: () => void;
-    onUploadFile: (files?: FileList | File[]) => void;
+    onTriggerUpload: () => void;
 
     // Batch Operation Props
     selectedCount: number;
@@ -77,7 +76,7 @@ export function KnowledgeSpaceHeader({
     sortDirection,
     onSort,
     onCreateFolder,
-    onUploadFile,
+    onTriggerUpload,
     selectedCount,
     hasFoldersSelected,
     hasFailedFiles,
@@ -90,42 +89,8 @@ export function KnowledgeSpaceHeader({
     isAiAssistantOpen
 }: KnowledgeSpaceHeaderProps) {
     const localize = useLocalize();
-  const isAdmin = space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
+    const isAdmin = space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
     const { showToast } = useToastContext();
-    const fileInputRef = useRef<HTMLInputElement>(null);
-
-    const handleUploadClick = () => {
-        fileInputRef.current?.click();
-    };
-
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files && e.target.files.length > 0) {
-            const filesList = Array.from(e.target.files);
-
-            if (filesList.length > 50) {
-                showToast({ message: localize("com_knowledge.max_upload_50"), status: "error" });
-                if (fileInputRef.current) fileInputRef.current.value = "";
-                return;
-            }
-
-            for (let f of filesList) {
-                if (f.size > 200 * 1024 * 1024) {
-                    showToast({ message: localize("com_knowledge.file_exceeds_200m", { 0: f.name }), status: "error" });
-                    if (fileInputRef.current) fileInputRef.current.value = "";
-                    return;
-                }
-                const ext = f.name.split('.').pop()?.toLowerCase();
-                if (!ext || !['pdf', 'txt', 'docx', 'ppt', 'pptx', 'md', 'html', 'xls', 'xlsx', 'csv', 'doc', 'png', 'jpg', 'jpeg', 'bmp'].includes(ext)) {
-                    showToast({ message: localize("com_knowledge.unsupported_file_format", { 0: f.name }), status: "error" });
-                    if (fileInputRef.current) fileInputRef.current.value = "";
-                    return;
-                }
-            }
-
-            onUploadFile(filesList);
-            if (fileInputRef.current) fileInputRef.current.value = "";
-        }
-    };
 
     const handleShare = () => {
         try {
@@ -148,15 +113,6 @@ export function KnowledgeSpaceHeader({
 
     return (
         <div className="pt-5 space-y-4">
-            {/* Hidden File Input */}
-            <input
-                type="file"
-                multiple
-                className="hidden"
-                ref={fileInputRef}
-                onChange={handleFileChange}
-                accept=".pdf,.txt,.docx,.ppt,.pptx,.md,.html,.xls,.xlsx,.csv,.doc,.png,.jpg,.jpeg,.bmp"
-            />
             {/* 面包屑 / Title */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 {/* 左侧：标题与信息 / 面包屑 */}
@@ -418,7 +374,7 @@ export function KnowledgeSpaceHeader({
                                 <DropdownMenuItem onClick={onCreateFolder} className="cursor-pointer">
                                     <FolderPlus className="size-4 mr-2" />
                                     {localize("com_knowledge.new_folder")}</DropdownMenuItem>
-                                <DropdownMenuItem onClick={handleUploadClick} className="cursor-pointer">
+                                <DropdownMenuItem onClick={onTriggerUpload} className="cursor-pointer">
                                     <Upload className="size-4 mr-2" />
                                     {localize("com_knowledge.upload_file")}</DropdownMenuItem>
                             </DropdownMenuContent>

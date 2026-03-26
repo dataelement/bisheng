@@ -159,7 +159,7 @@ export default function FilePreview({
             case "docx":
                 return <DocxViewer fileUrl={fileUrl} zoomLevel={zoomLevel} />;
             case "xlsx":
-                return <XlsxViewer fileUrl={fileUrl} />;
+                return <XlsxViewer fileUrl={fileUrl} fileExt={fileType} />;
             case "markdown":
                 return <MarkdownViewer fileUrl={fileUrl} zoomLevel={zoomLevel} />;
             case "html":

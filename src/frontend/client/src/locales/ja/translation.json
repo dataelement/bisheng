@@ -1311,6 +1311,7 @@
     "no_data": "データなし",
     "no_description": "説明なし",
     "no_file_here": "ここにはファイルがありません",
+    "no_file_here_please": "ここにはファイルがありません、",
     "no_files": "ファイルはありません",
     "no_history_chat": "履歴セッションはありません",
     "no_matched_file": "一致するファイルが見つかりません",
