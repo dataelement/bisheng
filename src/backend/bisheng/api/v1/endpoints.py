@@ -1,37 +1,21 @@
 import copy
-import json
 import time
-from typing import Annotated, List, Optional, Union
-from uuid import UUID
+from typing import List
 
 import yaml
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Request, UploadFile
 from loguru import logger
 
-from bisheng.api.v1.schemas import (ProcessResponse, UploadFileResponse,
+from bisheng.api.v1.schemas import (UploadFileResponse,
                                     resp_200)
-from bisheng.chat.utils import judge_source, process_source_document
-from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.common.errcode.server import SystemConfigEmptyError, SystemConfigInvalidError, UploadFileEmptyError, \
     UploadFileExtError
 from bisheng.common.models.config import Config, ConfigDao, ConfigKeyEnum
-from bisheng.common.schemas.telemetry.event_data_schema import NewMessageSessionEventData, ApplicationAliveEventData, \
-    ApplicationProcessEventData
-from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings as bisheng_settings
 from bisheng.core.cache.redis_manager import get_redis_client_sync
 from bisheng.core.cache.utils import save_uploaded_file, upload_file_to_minio
-from bisheng.core.logger import trace_id_var
-from bisheng.database.models.flow import FlowDao, FlowType
-from bisheng.database.models.message import ChatMessage, ChatMessageDao
-from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.interface.types import get_all_types_dict
-from bisheng.open_endpoints.domain.utils import get_default_operator_async
-from bisheng.processing.process import process_graph_cached, process_tweaks
-from bisheng.services.deps import get_session_service, get_task_service
-from bisheng.services.task.service import TaskService
 from bisheng.utils import generate_uuid
 from bisheng.utils import get_request_ip
 
@@ -92,6 +76,7 @@ def get_env():
     # add env dict from settings
     env.update(bisheng_settings.get_from_db('env') or {})
     env['pro'] = bisheng_settings.get_system_login_method().bisheng_pro
+    env['dashboard_pro'] = bisheng_settings.get_system_login_method().dashboard_pro
     env['version'] = __version__
     env['enable_etl4lm'] = bool(etl_for_lm_url)
 
@@ -152,7 +137,6 @@ async def update_web_config(request: Request,
         web_conf.value = value
     ConfigDao.insert_config(web_conf)
     return resp_200(data={'value': web_conf.value})
-
 
 
 async def _upload_file(file: UploadFile, object_name_prefix: str, file_supports: List[str] = None,
