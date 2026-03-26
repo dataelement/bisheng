@@ -288,19 +288,15 @@ class ArticleEsService:
     def _normalize_rule_groups(
             self,
             filter_rules: Optional[List[Dict[str, Any]]],
-            rules_relation: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
-        """Normalize filter rules into a list of top-level rule groups."""
+        """Normalize filter rules into a list of top-level rule groups.
+        Only supports ChannelFilterRules group format: {"relation": "and"/"or", "rules": [...]}
+        """
         if not filter_rules:
             return []
 
-        if all(isinstance(item, dict) and self._is_rule_group(item) for item in filter_rules):
-            return filter_rules
-
-        return [{
-            "relation": rules_relation or "or",
-            "rules": filter_rules,
-        }]
+        # Only accept group format
+        return [item for item in filter_rules if isinstance(item, dict) and self._is_rule_group(item)]
 
     def _build_rule_group_query(self, rule_group: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Build ES query for a top-level ChannelFilterRules group."""
@@ -353,7 +349,6 @@ class ArticleEsService:
             source_ids: Optional[List[str]] = None,
             filter_rules: Optional[List[Dict[str, Any]]] = None,
             include_article_ids: Optional[List[str]] = None,
-            rules_relation: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         """Build count query, returns None if result is definitively 0"""
         must_clauses = []
@@ -371,7 +366,7 @@ class ArticleEsService:
             filter_clauses.append({"terms": {"_id": include_article_ids}})
 
         if filter_rules:
-            rule_groups = self._normalize_rule_groups(filter_rules, rules_relation)
+            rule_groups = self._normalize_rule_groups(filter_rules)
             group_queries = []
             for group in rule_groups:
                 group_query = self._build_rule_group_query(group)
@@ -407,13 +402,11 @@ class ArticleEsService:
             source_ids: Optional[List[str]] = None,
             filter_rules: Optional[List[Dict[str, Any]]] = None,
             include_article_ids: Optional[List[str]] = None,
-            rules_relation: Optional[str] = None,
     ) -> int:
         """
         Count articles, supports source filtering, filter rules, and article ID list inclusion.
-        rules_relation: 'and' or 'or', controls how top-level rules are combined.
         """
-        query = self._build_count_query(source_ids, filter_rules, include_article_ids, rules_relation)
+        query = self._build_count_query(source_ids, filter_rules, include_article_ids)
         if query is None:
             return 0
 
@@ -431,7 +424,6 @@ class ArticleEsService:
         - source_ids
         - filter_rules
         - include_article_ids
-        - rules_relation
         """
         if not requests:
             return []
@@ -439,13 +431,12 @@ class ArticleEsService:
         client = await self._get_client()
         body = []
         zero_indices = set()
-        
+
         for i, req in enumerate(requests):
             query = self._build_count_query(
                 source_ids=req.get("source_ids"),
                 filter_rules=req.get("filter_rules"),
                 include_article_ids=req.get("include_article_ids"),
-                rules_relation=req.get("rules_relation"),
             )
             if query is None:
                 zero_indices.add(i)
@@ -472,7 +463,6 @@ class ArticleEsService:
             source_ids: Optional[List[str]] = None,
             keyword: Optional[str] = None,
             filter_rules: Optional[List[Dict[str, Any]]] = None,
-            rules_relation: Optional[str] = None,
             page: int = 1,
             page_size: int = 20,
             exclude_article_ids: Optional[List[str]] = None,
@@ -483,8 +473,7 @@ class ArticleEsService:
         Args:
             source_ids: Source ID list filter
             keyword: Search keyword (matches title, content, source ID)
-            filter_rules: Channel filter rules list (supports SingleRule and MultiRule)
-            rules_relation: 'and' or 'or', controls how top-level rules are combined
+            filter_rules: Channel filter rules list (supports SingleRule and MultiRule groups)
             page: Page number (starts from 1)
             page_size: Page size
             exclude_article_ids: List of article IDs to exclude
@@ -526,7 +515,7 @@ class ArticleEsService:
 
         # 3. Channel filter rules
         if filter_rules:
-            rule_groups = self._normalize_rule_groups(filter_rules, rules_relation)
+            rule_groups = self._normalize_rule_groups(filter_rules)
             group_queries = []
             for group in rule_groups:
                 group_query = self._build_rule_group_query(group)
