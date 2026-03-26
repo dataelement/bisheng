@@ -52,13 +52,26 @@ jobs:
     needs: [ build_pyc ]
     runs-on: ubuntu-latest
     steps:
+      - name: Determine Target Branch
+        id: extract_branch
+        run: |
+          if [[ "${{ github.ref_type }}" == "tag" && "${{ github.ref_name }}" == build.* ]]; then
+            VERSION="${{ github.ref_name }}"
+            VERSION="${VERSION#build.}"
+            TARGET_BRANCH="feat/${VERSION}"
+          else
+            TARGET_BRANCH="feat/2.4.0"
+          fi
+          echo "target_branch=$TARGET_BRANCH" >> $GITHUB_OUTPUT
+          echo "Determined target branch: $TARGET_BRANCH"
+
       - name: Checkout SSO Project
         uses: actions/checkout@v4
         with:
           repository: dataelement/bisheng
           token: ${{ secrets.CROSS_REPO_TOKEN }}
           # 使用 ref 指定分支，而不是 base
-          ref: feat/2.3.0
+          ref: ${{ steps.extract_branch.outputs.target_branch }}
           path: bisheng
           # 确保拉取完整的历史以便正确提交
           fetch-depth: 0
@@ -93,5 +106,5 @@ jobs:
             echo "No changes to commit"
           else
             git commit -m "chore: update telemetry_search build artifacts [skip ci]"
-            git push origin feat/2.3.0
+            git push origin ${{ steps.extract_branch.outputs.target_branch }}
           fi
