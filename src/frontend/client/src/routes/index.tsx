@@ -18,7 +18,7 @@ import Sop from '@/components/Sop';
 import MainLayout from '@/Layouts/MainLayout';
 import Page404 from '@/pages/Page404';
 import { AliveScope } from 'react-activation';
-import Subscription from '~/pages/subscription';
+import Subscription from '~/pages/Subscription';
 import AppRoot from './AppRoot';
 import Root from './Root';
 import Knowledge from '~/pages/knowledge';
