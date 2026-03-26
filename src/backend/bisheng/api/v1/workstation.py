@@ -42,8 +42,8 @@ from bisheng.core.prompts.manager import get_prompt_manager
 from bisheng.database.models.flow import FlowType, FlowDao, FlowStatus
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.role_access import AccessType
-from bisheng.database.models.tag import TagDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
+from bisheng.database.models.tag import TagDao
 from bisheng.database.models.user_link import UserLinkDao
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.llm.domain import LLMService
@@ -362,8 +362,7 @@ async def genTitle(human: str, assistant: str, llm: BaseChatModel, conversationI
     await redis_client.aset(f'workstation_title_{conversationId}', title)
     session = await MessageSessionDao.async_get_one(conversationId)
     if session:
-        session.flow_name = title[:200]
-        session = await MessageSessionDao.async_insert_one(session)
+        await MessageSessionDao.update_session_name(chat_id=session.chat_id, name=title)
         # Audit log
         await AuditLogService.create_chat_message(user=login_user, ip_address=get_request_ip(request), message=session)
 
@@ -424,8 +423,7 @@ async def _initialize_chat(data: APIChatCompletion, login_user: UserPayload):
         await MessageSessionDao.async_insert_one(
             MessageSession(
                 chat_id=conversationId,
-                flow_id='',
-                flow_name='New Chat',
+                name='New Chat',
                 flow_type=FlowType.WORKSTATION.value,
                 user_id=login_user.user_id,
             ))
@@ -696,7 +694,7 @@ async def chat_completions(
             yield server_error.to_sse_event_instance_str()
 
         # Send final message and generate title if needed
-        yield await final_message(conversation, conversation.flow_name, message, final_content_for_db,
+        yield await final_message(conversation, conversation.name, message, final_content_for_db,
                                   error, model_info.displayName, source_document)
 
         if is_new_conv:
@@ -929,6 +927,7 @@ async def get_app_conversations(
 
     result = [
         ChatList(
+            name=one.name,
             chat_id=one.chat_id,
             flow_id=one.flow_id,
             flow_name=one.flow_name,
@@ -941,4 +940,3 @@ async def get_app_conversations(
     ]
 
     return resp_200(data={'list': result, 'total': total})
-

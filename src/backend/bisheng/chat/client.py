@@ -147,8 +147,7 @@ class ChatClient:
                                                   source="platform",
                                                   app_name=self.db_assistant.name,
                                                   app_type=ApplicationTypeEnum.ASSISTANT
-                                              )
-                                              )
+                                              ))
             AuditLogService.create_chat_assistant(self.login_user, get_request_ip(self.request), self.client_id)
         return msg
 
@@ -369,3 +368,6 @@ class ChatClient:
             await e.websocket_close_message(websocket=self.websocket, close_ws=False)
         finally:
             await self.send_response('processing', 'close', '')
+
+    async def generate_session_title(self):
+        pass

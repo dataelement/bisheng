@@ -3,7 +3,7 @@ from enum import Enum
 from typing import Optional, List
 
 from sqlalchemy import JSON
-from sqlmodel import Field, Column, DateTime, text, select, func, update
+from sqlmodel import Field, Column, DateTime, text, select, func, update, col
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session, get_async_db_session
@@ -18,9 +18,10 @@ class SensitiveStatus(Enum):
 class MessageSessionBase(SQLModelSerializable):
     """ Conversation table """
     chat_id: str = Field(default=None, primary_key=True, description='Session UniqueID')
-    flow_id: str = Field(index=True, description='Apply UniqueID')
+    name: Optional[str] = Field(default="", description='SessionName')
+    flow_id: str = Field(default="", index=True, description='Apply UniqueID')
     flow_type: int = Field(description='App type. Skills, assistants, workflows')
-    flow_name: str = Field(index=True, description='Application name')
+    flow_name: str = Field(default="", index=True, description='Application name')
     flow_description: Optional[str] = Field(default=None, description='App Description')
     flow_logo: Optional[str] = Field(default=None, description='Applicationslogo')
     user_id: int = Field(index=True, description='User who created the sessionID')
@@ -290,6 +291,15 @@ class MessageSessionDao(MessageSessionBase):
         with get_sync_db_session() as session:
             session.exec(statement)
             session.commit()
+
+    @classmethod
+    async def update_session_name(cls, chat_id: str, name: str):
+        statement = update(MessageSession).where(col(MessageSession.chat_id) == chat_id).values(
+            name=name
+        )
+        async with get_async_db_session() as session:
+            await session.exec(statement)
+            await session.commit()
 
     @classmethod
     async def get_user_used_apps(cls, user_id: int, flow_types: List[int] = None) -> List[tuple]:

@@ -471,8 +471,7 @@ class RedisCallback(BaseCallback):
                                                      source=self.source,
                                                      app_name=db_workflow.name,
                                                      app_type=ApplicationTypeEnum.WORKFLOW
-                                                 )
-                                                 )
+                                                 ))
 
             self.create_session = True
 

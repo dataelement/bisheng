@@ -18,9 +18,9 @@ DEFAULT_TITLE = "New Conversation"
 
 
 async def generate_conversation_title_async(
-    question: str,
-    llm: BaseChatModel,
-    answer: Optional[str] = None,
+        question: str,
+        llm: BaseChatModel,
+        answer: Optional[str] = None,
 ) -> str:
     """Generate a conversation title asynchronously.
 
@@ -56,9 +56,9 @@ async def generate_conversation_title_async(
 
 
 def generate_conversation_title_sync(
-    question: str,
-    llm: BaseChatModel,
-    answer: Optional[str] = None,
+        question: str,
+        llm: BaseChatModel,
+        answer: Optional[str] = None,
 ) -> str:
     """Generate a conversation title synchronously.
 

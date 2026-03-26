@@ -1,6 +1,5 @@
 import json
-from typing import List, Optional, Union
-from uuid import uuid4
+from typing import Optional, Union
 
 from fastapi import APIRouter, Body, Query, Request
 from fastapi.params import Depends
@@ -124,7 +123,7 @@ def get_app_chat_list(*,
             flow_name=one.flow_name,
             flow_type=one.flow_type,
             user_id=one.user_id,
-            user_name=one.user_id,
+            user_name=str(one.user_id),
             create_time=one.create_time,
             like_count=one.like,
             dislike_count=one.dislike,
@@ -176,38 +175,11 @@ async def get_chat_info(chat_id: str = Query(..., description='Session Uniqueidï
 
 
 @router.post('/chat/conversation/rename')
-def rename(conversationId: str = Body(..., description='Sessionsid', embed=True),
-           name: str = Body(..., description='Session name', embed=True),
-           login_user: UserPayload = Depends(UserPayload.get_login_user)):
-    conversation = MessageSessionDao.get_one(conversationId)
-    conversation.flow_name = name
-    MessageSessionDao.insert_one(conversation)
+async def rename(conversationId: str = Body(..., description='Sessionsid', embed=True),
+                 name: str = Body(..., description='Session name', embed=True),
+                 login_user: UserPayload = Depends(UserPayload.get_login_user)):
+    await MessageSessionDao.update_session_name(conversationId, name)
     return resp_200()
-
-
-@router.post('/chat/conversation/copy')
-def copy(conversationId: str = Body(..., description='Sessionsid', embed=True), ):
-    conversation = MessageSessionDao.get_one(conversationId)
-    conversation.chat_id = uuid4().hex
-    conversation = MessageSessionDao.insert_one(conversation)
-
-    # RecordTelemetryJournal
-    telemetry_service.log_event_sync(user_id=conversation.user_id,
-                                     event_type=BaseTelemetryTypeEnum.NEW_MESSAGE_SESSION,
-                                     trace_id=trace_id_var.get(),
-                                     event_data=NewMessageSessionEventData(
-                                         session_id=conversation.chat_id,
-                                         app_id=conversation.flow_id,
-                                         source="platform",
-                                         app_name=conversation.flow_name,
-                                         app_type=get_session_app_type(conversation.flow_type)
-                                     ))
-    msg_list = ChatMessageDao.get_messages_by_chat_id(conversationId)
-    if msg_list:
-        for msg in msg_list:
-            msg.chat_id = conversation.chat_id
-            msg.id = None
-            ChatMessageDao.insert_one(msg)
 
 
 @router.delete('/chat/{chat_id}', status_code=200)
@@ -321,7 +293,7 @@ def add_chat_messages(*,
                                              event_type=BaseTelemetryTypeEnum.NEW_MESSAGE_SESSION,
                                              trace_id=trace_id_var.get(),
                                              event_data=NewMessageSessionEventData(
-                                                 session_id=session_info.session_id,
+                                                 session_id=session_info.chat_id,
                                                  app_id=flow_id,
                                                  source="platform",
                                                  app_name=session_info.flow_name,
