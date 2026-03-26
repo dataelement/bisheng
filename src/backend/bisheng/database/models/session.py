@@ -302,6 +302,15 @@ class MessageSessionDao(MessageSessionBase):
             await session.commit()
 
     @classmethod
+    def update_session_name_sync(cls, chat_id: str, name: str):
+        statement = update(MessageSession).where(col(MessageSession.chat_id) == chat_id).values(
+            name=name
+        )
+        with get_sync_db_session() as session:
+            session.exec(statement)
+            session.commit()
+
+    @classmethod
     async def get_user_used_apps(cls, user_id: int, flow_types: List[int] = None) -> List[tuple]:
         """
         Query the list of apps used by the user.

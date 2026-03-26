@@ -661,6 +661,12 @@ class LLMService:
         return WorkbenchModelConfig(**ret)
 
     @classmethod
+    def get_workbench_llm_sync(cls) -> WorkbenchModelConfig:
+        config = ConfigDao.get_config(ConfigKeyEnum.LINSIGHT_LLM)
+        ret = json.loads(config.value) if config else {}
+        return WorkbenchModelConfig(**ret)
+
+    @classmethod
     async def invoke_workbench_asr(cls, login_user: UserPayload, file: UploadFile) -> str:
         """ Call the workbench'sasrModels Convert Voice to Text """
         if not file:
