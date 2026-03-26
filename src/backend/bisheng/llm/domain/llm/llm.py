@@ -15,7 +15,7 @@ from typing_extensions import Self
 from bisheng.common.errcode.server import NoLlmModelConfigError, LlmModelConfigDeletedError, LlmProviderDeletedError, \
     LlmModelTypeError, LlmModelOfflineError, InitLlmError
 from bisheng.core.ai import ChatOllama, ChatOpenAI, ChatOpenAICompatible, \
-    AzureChatOpenAI, ChatZhipuAI, MiniMaxChat, ChatAnthropic, MoonshotChat
+    AzureChatOpenAI, ChatZhipuAI, ChatAnthropic, MoonshotChat
 from bisheng.core.ai.llm.custom_chat_deepseek import CustomChatDeepSeek
 from bisheng.core.ai.llm.custom_chat_tongyi import CustomChatTongYi
 from bisheng.llm.domain.const import LLMModelType, LLMServerType
@@ -126,19 +126,6 @@ def _get_qwen_params(params: dict, server_config: dict, model_config: dict) -> d
     return user_kwargs
 
 
-def _get_minimax_params(params: dict, server_config: dict, model_config: dict) -> dict:
-    params['minimax_api_key'] = server_config.get('openai_api_key')
-    params['base_url'] = server_config.get('openai_api_base').rstrip('/')
-    if 'max_tokens' not in params:
-        params['max_tokens'] = 2048
-    if '/chat/completions' not in params['base_url']:
-        params['base_url'] = f"{params['base_url']}/chat/completions"
-
-    user_kwargs = _get_user_kwargs(model_config)
-    user_kwargs.update(params)
-    return user_kwargs
-
-
 def _get_anthropic_params(params: dict, server_config: dict, model_config: dict) -> dict:
     params.update(server_config)
 
@@ -182,7 +169,7 @@ _llm_node_type: Dict = {
     LLMServerType.QWEN.value: {'client': CustomChatTongYi, 'params_handler': _get_qwen_params},
     LLMServerType.QIAN_FAN.value: {'client': ChatOpenAICompatible, 'params_handler': _get_openai_params},
     LLMServerType.ZHIPU.value: {'client': ChatZhipuAI, 'params_handler': _get_zhipu_params},
-    LLMServerType.MINIMAX.value: {'client': MiniMaxChat, 'params_handler': _get_minimax_params},
+    LLMServerType.MINIMAX.value: {'client': ChatOpenAICompatible, 'params_handler': _get_openai_params},
     LLMServerType.ANTHROPIC.value: {'client': ChatAnthropic, 'params_handler': _get_anthropic_params},
     LLMServerType.DEEPSEEK.value: {'client': CustomChatDeepSeek, 'params_handler': _get_deepseek_params},
     LLMServerType.SPARK.value: {'client': ChatOpenAICompatible, 'params_handler': _get_spark_params},
