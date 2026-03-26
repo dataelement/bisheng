@@ -5,7 +5,7 @@ Encapsulates all operations on ES article index: index, bulk index, get, update,
 All methods are async, using get_es_connection to obtain AsyncElasticsearch client.
 """
 import logging
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple
 
 from elasticsearch import AsyncElasticsearch, helpers as es_helpers
 
@@ -221,11 +221,139 @@ class ArticleEsService:
     #  Search & Count
     # ──────────────────────────────────────────
 
+    def _build_rule_query(self, rule: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+        """Build ES query for a single rule. Handles both SingleRule and MultiRule.
+        Returns (query, rule_type) where rule_type is 'include', 'exclude', or None for MultiRule.
+        """
+        rule_type = rule.get("type", "single")
+        keywords = rule.get("keywords")
+        nested_rules = rule.get("rules")
+
+        if rule_type == "multi" or nested_rules is not None:
+            # MultiRule: build queries for nested SingleRules, combine with internal relation
+            internal_relation = rule.get("relation", "or")
+            include_queries = []
+            exclude_queries = []
+
+            for sub_rule in nested_rules:
+                sub_query, sub_rule_type = self._build_rule_query(sub_rule)
+                if sub_query is None:
+                    continue
+                if sub_rule_type == "include":
+                    include_queries.append(sub_query)
+                elif sub_rule_type == "exclude":
+                    exclude_queries.append(sub_query)
+
+            # Build combined query using internal relation
+            must_clauses = []
+            must_not_clauses = []
+
+            if include_queries:
+                if internal_relation == "and":
+                    must_clauses.append({"bool": {"must": include_queries}})
+                else:
+                    must_clauses.append({"bool": {"should": include_queries, "minimum_should_match": 1}})
+
+            if exclude_queries:
+                if internal_relation == "and":
+                    must_not_clauses.append({"bool": {"must": exclude_queries}})
+                else:
+                    must_not_clauses.append({"bool": {"should": exclude_queries, "minimum_should_match": 1}})
+
+            bool_query = {}
+            if must_clauses:
+                bool_query["must"] = must_clauses
+            if must_not_clauses:
+                bool_query["must_not"] = must_not_clauses
+
+            if bool_query:
+                return {"bool": bool_query}, None
+            else:
+                return None, None
+        else:
+            # SingleRule
+            if not keywords:
+                return None, None
+            keyword_queries = []
+            for kw in keywords:
+                keyword_queries.append({"match_phrase": {"title": {"query": kw}}})
+                keyword_queries.append({"match_phrase": {"content": {"query": kw}}})
+            return {"bool": {"should": keyword_queries, "minimum_should_match": 1}}, rule.get("rule_type")
+
+    @staticmethod
+    def _is_rule_group(item: Dict[str, Any]) -> bool:
+        """Check whether the item uses ChannelFilterRules group structure."""
+        return "type" not in item and "relation" in item and "rules" in item
+
+    def _normalize_rule_groups(
+            self,
+            filter_rules: Optional[List[Dict[str, Any]]],
+            rules_relation: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """Normalize filter rules into a list of top-level rule groups."""
+        if not filter_rules:
+            return []
+
+        if all(isinstance(item, dict) and self._is_rule_group(item) for item in filter_rules):
+            return filter_rules
+
+        return [{
+            "relation": rules_relation or "or",
+            "rules": filter_rules,
+        }]
+
+    def _build_rule_group_query(self, rule_group: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Build ES query for a top-level ChannelFilterRules group."""
+        relation = rule_group.get("relation", "or")
+        rules = rule_group.get("rules") or []
+
+        include_queries = []
+        exclude_queries = []
+
+        for rule in rules:
+            rule_query, rule_type = self._build_rule_query(rule)
+            if rule_query is None:
+                continue
+
+            if rule_type == "include":
+                include_queries.append(rule_query)
+            elif rule_type == "exclude":
+                exclude_queries.append(rule_query)
+            else:
+                include_queries.append(rule_query)
+
+        must_clauses = []
+        must_not_clauses = []
+
+        if include_queries:
+            if relation == "and":
+                must_clauses.append({"bool": {"must": include_queries}})
+            else:
+                must_clauses.append({"bool": {"should": include_queries, "minimum_should_match": 1}})
+
+        if exclude_queries:
+            if relation == "and":
+                must_not_clauses.append({"bool": {"must": exclude_queries}})
+            else:
+                must_not_clauses.append({"bool": {"should": exclude_queries, "minimum_should_match": 1}})
+
+        bool_query: Dict[str, Any] = {}
+        if must_clauses:
+            bool_query["must"] = must_clauses
+        if must_not_clauses:
+            bool_query["must_not"] = must_not_clauses
+
+        if not bool_query:
+            return None
+
+        return {"bool": bool_query}
+
     def _build_count_query(
             self,
             source_ids: Optional[List[str]] = None,
             filter_rules: Optional[List[Dict[str, Any]]] = None,
             include_article_ids: Optional[List[str]] = None,
+            rules_relation: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         """Build count query, returns None if result is definitively 0"""
         must_clauses = []
@@ -243,44 +371,23 @@ class ArticleEsService:
             filter_clauses.append({"terms": {"_id": include_article_ids}})
 
         if filter_rules:
-            # relation controls the relationship between rules, taken from the first rule
-            relation = filter_rules[0].get("relation", "or") if filter_rules else "or"
+            rule_groups = self._normalize_rule_groups(filter_rules, rules_relation)
+            group_queries = []
+            for group in rule_groups:
+                group_query = self._build_rule_group_query(group)
+                if group_query is not None:
+                    group_queries.append(group_query)
 
-            include_queries = []
-            exclude_queries = []
-
-            for rule in filter_rules:
-                rule_type = rule.get("rule_type")
-                keywords = rule.get("keywords", [])
-
-                if not keywords:
-                    continue
-
-                # Keywords within a single rule are always OR
-                keyword_queries = []
-                for kw in keywords:
-                    keyword_queries.append({"match_phrase": {"title": {"query": kw}}})
-                    keyword_queries.append({"match_phrase": {"content": {"query": kw}}})
-
-                rule_query = {"bool": {"should": keyword_queries, "minimum_should_match": 1}}
-
-                if rule_type == "include":
-                    include_queries.append(rule_query)
-                elif rule_type == "exclude":
-                    exclude_queries.append(rule_query)
-
-            # Combine multiple rules by relation
-            if include_queries:
-                if relation == "and":
-                    must_clauses.append({"bool": {"must": include_queries}})
+            if group_queries:
+                if len(group_queries) == 1:
+                    must_clauses.append(group_queries[0])
                 else:
-                    must_clauses.append({"bool": {"should": include_queries, "minimum_should_match": 1}})
-
-            if exclude_queries:
-                if relation == "and":
-                    must_not_clauses.append({"bool": {"must": exclude_queries}})
-                else:
-                    must_not_clauses.append({"bool": {"should": exclude_queries, "minimum_should_match": 1}})
+                    must_clauses.append({
+                        "bool": {
+                            "should": group_queries,
+                            "minimum_should_match": 1,
+                        }
+                    })
 
         bool_query: Dict[str, Any] = {}
         if must_clauses:
@@ -300,11 +407,13 @@ class ArticleEsService:
             source_ids: Optional[List[str]] = None,
             filter_rules: Optional[List[Dict[str, Any]]] = None,
             include_article_ids: Optional[List[str]] = None,
+            rules_relation: Optional[str] = None,
     ) -> int:
         """
         Count articles, supports source filtering, filter rules, and article ID list inclusion.
+        rules_relation: 'and' or 'or', controls how top-level rules are combined.
         """
-        query = self._build_count_query(source_ids, filter_rules, include_article_ids)
+        query = self._build_count_query(source_ids, filter_rules, include_article_ids, rules_relation)
         if query is None:
             return 0
 
@@ -322,6 +431,7 @@ class ArticleEsService:
         - source_ids
         - filter_rules
         - include_article_ids
+        - rules_relation
         """
         if not requests:
             return []
@@ -334,7 +444,8 @@ class ArticleEsService:
             query = self._build_count_query(
                 source_ids=req.get("source_ids"),
                 filter_rules=req.get("filter_rules"),
-                include_article_ids=req.get("include_article_ids")
+                include_article_ids=req.get("include_article_ids"),
+                rules_relation=req.get("rules_relation"),
             )
             if query is None:
                 zero_indices.add(i)
@@ -361,6 +472,7 @@ class ArticleEsService:
             source_ids: Optional[List[str]] = None,
             keyword: Optional[str] = None,
             filter_rules: Optional[List[Dict[str, Any]]] = None,
+            rules_relation: Optional[str] = None,
             page: int = 1,
             page_size: int = 20,
             exclude_article_ids: Optional[List[str]] = None,
@@ -371,10 +483,8 @@ class ArticleEsService:
         Args:
             source_ids: Source ID list filter
             keyword: Search keyword (matches title, content, source ID)
-            filter_rules: Channel filter rules list
-                          Each rule format: {"rule_type": "include"/"exclude", "keywords": [...]}
-                          The "relation" field (from the first rule) controls AND/OR between multiple rules.
-                          Keywords within a single rule are always OR (match any keyword).
+            filter_rules: Channel filter rules list (supports SingleRule and MultiRule)
+            rules_relation: 'and' or 'or', controls how top-level rules are combined
             page: Page number (starts from 1)
             page_size: Page size
             exclude_article_ids: List of article IDs to exclude
@@ -416,44 +526,23 @@ class ArticleEsService:
 
         # 3. Channel filter rules
         if filter_rules:
-            # relation controls the relationship between rules, taken from the first rule
-            relation = filter_rules[0].get("relation", "or") if filter_rules else "or"
+            rule_groups = self._normalize_rule_groups(filter_rules, rules_relation)
+            group_queries = []
+            for group in rule_groups:
+                group_query = self._build_rule_group_query(group)
+                if group_query is not None:
+                    group_queries.append(group_query)
 
-            include_queries = []
-            exclude_queries = []
-
-            for rule in filter_rules:
-                rule_type = rule.get("rule_type")
-                keywords = rule.get("keywords", [])
-
-                if not keywords:
-                    continue
-
-                # Keywords within a single rule are always OR
-                keyword_queries = []
-                for kw in keywords:
-                    keyword_queries.append({"match_phrase": {"title": {"query": kw}}})
-                    keyword_queries.append({"match_phrase": {"content": {"query": kw}}})
-
-                rule_query = {"bool": {"should": keyword_queries, "minimum_should_match": 1}}
-
-                if rule_type == "include":
-                    include_queries.append(rule_query)
-                elif rule_type == "exclude":
-                    exclude_queries.append(rule_query)
-
-            # Combine multiple rules by relation
-            if include_queries:
-                if relation == "and":
-                    must_clauses.append({"bool": {"must": include_queries}})
+            if group_queries:
+                if len(group_queries) == 1:
+                    must_clauses.append(group_queries[0])
                 else:
-                    must_clauses.append({"bool": {"should": include_queries, "minimum_should_match": 1}})
-
-            if exclude_queries:
-                if relation == "and":
-                    must_not_clauses.append({"bool": {"must": exclude_queries}})
-                else:
-                    must_not_clauses.append({"bool": {"should": exclude_queries, "minimum_should_match": 1}})
+                    must_clauses.append({
+                        "bool": {
+                            "should": group_queries,
+                            "minimum_should_match": 1,
+                        }
+                    })
 
         # Assemble complete query
         bool_query: Dict[str, Any] = {}

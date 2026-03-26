@@ -35,6 +35,7 @@ from bisheng.common.schemas.telemetry.event_data_schema import NewMessageSession
     ApplicationProcessEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings as bisheng_settings
+from bisheng.common.utils.title_generator import generate_conversation_title_async
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.cache.utils import save_download_file, save_uploaded_file, async_file_download
 from bisheng.core.logger import trace_id_var
@@ -314,20 +315,12 @@ async def gen_title(conversationId: str = Body(..., description='', embed=True),
     Generate Title
     """
     # Get session messages
-    redis_key = f'workstation_title_{conversationId}'
-    redis_client = await get_redis_client()
 
-    title = await redis_client.aget(redis_key)
-    if not title:
-        await asyncio.sleep(5)
-        # If the title already exists, go straight back to
-        title = await redis_client.aget(redis_key)
-    if title:
-        # If the title already exists, go straight back to
-        await redis_client.adelete(redis_key)
-        return resp_200({'title': title})
-    else:
-        return resp_200({'title': 'New Chat'})
+    await asyncio.sleep(5)  # Simulate delay for testing streaming response
+
+    messages = await MessageSessionDao.async_get_one(conversationId)
+
+    return resp_200(data={'title': messages.flow_name if messages else 'New Chat'})
 
 
 @router.get('/messages/{conversationId}')
@@ -353,13 +346,12 @@ async def genTitle(human: str, assistant: str, llm: BaseChatModel, conversationI
     """
     Generate Title
     """
-    convo = f'||>User:\n"{human}"\n ||>Response:\n"{assistant}"'
-    prompt = f'Please generate {titleInstruction} \n{convo} \n||>Title:'
-    logger.info(f'convo: {convo}')
-    res = await llm.ainvoke(prompt)
-    title = res.content
-    redis_client = await get_redis_client()
-    await redis_client.aset(f'workstation_title_{conversationId}', title)
+
+    title = await generate_conversation_title_async(
+        question=human,
+        answer=assistant,
+        llm=llm
+    )
     session = await MessageSessionDao.async_get_one(conversationId)
     if session:
         await MessageSessionDao.update_session_name(chat_id=session.chat_id, name=title)
