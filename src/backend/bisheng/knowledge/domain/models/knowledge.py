@@ -265,7 +265,10 @@ class KnowledgeDao(KnowledgeBase):
         elif sort_by == "update_time":
             statement = statement.order_by(Knowledge.update_time.desc())
         elif sort_by == "name":
-            statement = statement.order_by(text('CONVERT(name USING gbk) ASC'))
+            statement = statement.order_by(
+                text('CASE WHEN name REGEXP "^[a-zA-Z]" THEN 0 ELSE 1 END'),
+                text('CONVERT(name USING gbk) ASC'),
+            )
         async with get_async_db_session() as session:
             return (await session.exec(statement)).all()
 
@@ -460,7 +463,10 @@ class KnowledgeDao(KnowledgeBase):
         elif sort_by == "update_time":
             statement = statement.order_by(Knowledge.update_time.desc())
         elif sort_by == "name":
-            statement = statement.order_by(text('CONVERT(name USING gbk) ASC'))
+            statement = statement.order_by(
+                text('CASE WHEN name REGEXP "^[a-zA-Z]" THEN 0 ELSE 1 END'),
+                text('CONVERT(name USING gbk) ASC'),
+            )
         async with get_async_db_session() as session:
             return (await session.exec(statement)).all()
 
