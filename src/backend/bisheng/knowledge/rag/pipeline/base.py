@@ -17,8 +17,8 @@ class BasePipeline(ABC):
                  vector_store: List[VectorStore] = None,
                  **kwargs):
         self.loader = loader
-        self.transformers = transformers
-        self.vector_store = vector_store
+        self.transformers = transformers or []
+        self.vector_store = vector_store or []
 
     @staticmethod
     def _make_result(stage: PipelineStage = PipelineStage.INGEST, docs: List[Document] = None,

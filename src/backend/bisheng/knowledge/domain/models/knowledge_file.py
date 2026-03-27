@@ -36,6 +36,8 @@ class ParseType(Enum):
     # 1.3.0After the enumeration, the previous belongs to the file parsed on the version
     ETL4LM = 'etl4lm'  # etl4lmService Insights, includingpdfLayout Analysis for
     UN_ETL4LM = 'un_etl4lm'  # Nonetl4lmService parsing, nobboxContent, only source files andmdDoc.
+    MINERU = 'mineru'
+    PADDLE_OCR = 'paddle_ocr'
 
 
 class FileSource(Enum):

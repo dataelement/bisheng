@@ -39,10 +39,8 @@ class AbstractTransformer(BaseDocumentTransformer):
     Use LLM to extract the abstract of the document, and add it to the metadata of the document.
     """
 
-    def __init__(self, invoke_user_id: int, preview_cache_key: str = None, file_metadata: Dict = None,
-                 knowledge_file=None) -> None:
+    def __init__(self, invoke_user_id: int, file_metadata: Dict = None, knowledge_file=None) -> None:
         self.invoke_user_id = invoke_user_id
-        self.preview_cache_key = preview_cache_key
         self.file_metadata = file_metadata or {}
         self.max_chunk_content = 7000
         self.knowledge_file = knowledge_file

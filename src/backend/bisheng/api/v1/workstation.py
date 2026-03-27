@@ -23,7 +23,7 @@ from bisheng.api.services.workstation import (WorkstationConversation,
                                               WorkstationMessage, WorkStationService)
 from bisheng.api.v1.schema.chat_schema import APIChatCompletion, SSEResponse, delta
 from bisheng.api.v1.schemas import FrequentlyUsedChat, LinsightConfig, SubscriptionConfig, KnowledgeSpaceConfig
-from bisheng.api.v1.schemas import WorkstationConfig, resp_200, ExcelRule, UnifiedResponseModel, UsedAppPin, ChatList
+from bisheng.api.v1.schemas import WorkstationConfig, resp_200, UnifiedResponseModel, UsedAppPin, ChatList
 from bisheng.chat.utils import SourceType, process_source_document
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
@@ -36,7 +36,6 @@ from bisheng.common.schemas.telemetry.event_data_schema import NewMessageSession
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings as bisheng_settings
 from bisheng.common.utils.title_generator import generate_conversation_title_async
-from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.cache.utils import save_download_file, save_uploaded_file, async_file_download
 from bisheng.core.logger import trace_id_var
 from bisheng.core.prompts.manager import get_prompt_manager
@@ -385,17 +384,28 @@ async def getFileContent(filepath_local: str, file_name, invoke_user_id: int):
     """
     Get file contents
     """
-    raw_texts, _, _, _ = await knowledge_imp.async_read_chunk_text(
-        invoke_user_id,
-        filepath_local,
-        file_name,
-        ['\n\n', '\n'],
-        ['after', 'after'],
-        1000,
-        0,
-        excel_rule=ExcelRule(),
-        no_summary=True
+    from bisheng.knowledge.rag.temp_file_pipeline import TempFilePipeline
+    from bisheng.api.v1.schemas import FileProcessBase
+    from bisheng.common.errcode.knowledge import KnowledgeFileNotSupportedError
+
+    file_rule = FileProcessBase(
+        knowledge_id=0,
+        separator=['\n\n', '\n'],
+        separator_rule=['after', 'after'],
+        chunk_size=1000,
+        chunk_overlap=0,
     )
+    pipeline = TempFilePipeline(
+        invoke_user_id=invoke_user_id,
+        local_file_path=filepath_local,
+        file_name=file_name,
+        file_rule=file_rule,
+    )
+    try:
+        result = await pipeline.arun()
+        raw_texts = [doc.page_content for doc in result.documents]
+    except KnowledgeFileNotSupportedError:
+        raw_texts = []
     return knowledge_imp.KnowledgeUtils.chunk2promt(''.join(raw_texts), {'source': file_name})
 
 

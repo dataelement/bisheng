@@ -16,7 +16,6 @@ from bisheng.api.services.knowledge_imp import (
     decide_vectorstores,
     delete_knowledge_file_vectors,
     process_file_task,
-    async_read_chunk_text,
 )
 from bisheng.api.v1.schema.knowledge import KnowledgeFileResp
 from bisheng.api.v1.schemas import (
@@ -814,29 +813,44 @@ class KnowledgeService(KnowledgeUtils):
         file_ext = file_name.split(".")[-1].lower()
         file_name = cls.get_upload_file_original_name(file_name)
 
-        # Split text
-        texts, metadatas, parse_type, partitions = await async_read_chunk_text(
-            login_user.user_id,
-            filepath,
-            file_name,
-            req_data.separator,
-            req_data.separator_rule,
-            req_data.chunk_size,
-            req_data.chunk_overlap,
+        # Split text using PreviewFilePipeline
+        from bisheng.knowledge.rag.preview_file_pipeline import PreviewFilePipeline
+        from bisheng.api.v1.schemas import FileProcessBase
+
+        file_rule = FileProcessBase(
             knowledge_id=req_data.knowledge_id,
+            separator=req_data.separator,
+            separator_rule=req_data.separator_rule,
+            chunk_size=req_data.chunk_size,
+            chunk_overlap=req_data.chunk_overlap,
             force_ocr=req_data.force_ocr,
             enable_formula=req_data.enable_formula,
             filter_page_header_footer=req_data.filter_page_header_footer,
             retain_images=req_data.retain_images,
             excel_rule=excel_rule,
-            no_summary=True,
         )
+        pipeline = PreviewFilePipeline(
+            invoke_user_id=login_user.user_id,
+            local_file_path=filepath,
+            file_name=file_name,
+            file_rule=file_rule,
+        )
+        result = await pipeline.arun()
+        if not result.documents:
+            raise ValueError("File resolution is empty")
+
+        parse_type = type(pipeline.loader).__name__ if pipeline.loader else "local"
+        partitions = None
+
+        texts = [doc.page_content for doc in result.documents]
+        metadatas = [doc.metadata for doc in result.documents]
+
         if len(texts) == 0:
             raise ValueError("File resolution is empty")
         res = []
         cache_map = {}
         for index, val in enumerate(texts):
-            metadata_dict = metadatas[index].model_dump()
+            metadata_dict = metadatas[index] if isinstance(metadatas[index], dict) else metadatas[index].model_dump()
             cache_map[index] = {"text": val, "metadata": metadata_dict}
             res.append(FileChunk(text=val, metadata=metadata_dict))
 
