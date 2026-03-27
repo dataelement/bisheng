@@ -43,8 +43,8 @@ export function ArticleDetail({ article, loading = false, screenFull = false, sh
     <html>
       <head>
         <style>
-          html{scrollbar-width: none;}
-          body { font-family: sans-serif; line-height: 1.6; color: #333; padding: 20px; scroll-behavior: smooth; }
+          html{scrollbar-width: none; background: #fff !important;}
+          body { font-family: sans-serif; line-height: 1.6; color: #333; padding: 20px; scroll-behavior: smooth; background: #fff !important; }
           img { max-width: 100%; cursor: zoom-in; }
         </style>
       </head>
@@ -123,7 +123,8 @@ export function ArticleDetail({ article, loading = false, screenFull = false, sh
             {/* Top Toolbar */}
             <div className="border-b border-black pb-4">
                 <div className="flex items-start justify-between">
-                    <h2 className={`font-semibold leading-relaxed flex-1 font-[serif] ${aiAssistantOpen ? 'pl-10' : ''}`}>
+                    <h2 className={`font-semibold leading-relaxed flex-1 ${aiAssistantOpen ? 'pl-10' : ''}`}
+                        style={{ fontFamily: '"Source Han Serif SC", "Noto Serif SC", serif' }}>
                         {article.title}
                     </h2>
                 </div>

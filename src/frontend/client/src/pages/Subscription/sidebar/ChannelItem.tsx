@@ -1,6 +1,5 @@
 import { useLocalize } from "~/hooks";
 import {
-    BlendIcon,
     MoreHorizontal,
     Pin,
     PinOff,
@@ -19,6 +18,10 @@ import {
 } from "~/components/ui/DropdownMenu";
 import { useConfirm, useToastContext } from "~/Providers";
 import ClosedIcon from "~/components/ui/icon/ClosedIcon";
+
+const CHANNEL_ICON_DEFAULT = `${__APP_ENV__.BASE_URL}/assets/channel/application.svg`;
+const CHANNEL_ICON_ACTIVE = `${__APP_ENV__.BASE_URL}/assets/channel/appeffect.svg`;
+const CHANNEL_PIN_ICON = `${__APP_ENV__.BASE_URL}/assets/channel/pin.svg`;
 
 interface ChannelItemProps {
     channel: Channel;
@@ -68,7 +71,7 @@ export default function ChannelItem({
 
     return (
         <div
-            className={`group flex items-center justify-between h-8 px-3 py-1.5 rounded-lg cursor-pointer transition-all border ${isActive
+            className={`group flex items-center justify-between h-8 px-3 py-1.5 rounded-lg cursor-pointer transition-all duration-[350ms] ease-in-out border ${isActive
                 ? "bg-[#E6EDFC] border-primary shadow-sm"
                 : "border-transparent hover:bg-[#F7F7F7]"
                 }`}
@@ -77,7 +80,11 @@ export default function ChannelItem({
             <div className="flex items-center gap-1 flex-1 min-w-0">
                 {/* 左侧图标保持不变 */}
                 <div className={`flex-shrink-0 flex items-center justify-center size-5 rounded-md ${isActive ? "bg-white border border-[#165dff]/20 shadow-sm" : ""}`}>
-                    <BlendIcon className={`size-3.5 ${isActive ? "text-[#165dff]" : "text-[#86909c]"}`} />
+                    <img
+                        src={isActive ? CHANNEL_ICON_ACTIVE : CHANNEL_ICON_DEFAULT}
+                        alt=""
+                        className="size-3.5"
+                    />
                 </div>
 
                 {isEditing ? (
@@ -99,7 +106,7 @@ export default function ChannelItem({
                             {channel.name}
                         </span>
                         {channel.isPinned && (
-                            <Pin className="size-3 text-[#5773B4] flex-shrink-0 rotate-45" fill="#AEC9FF" />
+                            <img src={CHANNEL_PIN_ICON} alt="" className="w-[14px] h-[14px] flex-shrink-0" />
                         )}
                     </div>
                 )}
@@ -136,7 +143,7 @@ export default function ChannelItem({
                     <DropdownMenuContent
                         align="end"
                         sideOffset={8}
-                        className="w-40 px-4 py-3 rounded-lg"
+                        className="w-40 px-4 py-3 rounded-lg border-none shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]"
                         onClick={(e) => e.stopPropagation()}
                     >
                         {type === "created" && (
@@ -144,7 +151,7 @@ export default function ChannelItem({
                                 className="py-2 px-0 cursor-pointer focus:bg-[#f2f3f5]"
                                 onClick={() => onChannelSettings(channel)}
                             >
-                                <Settings className="size-4 mr-2 text-[#4e5969]" />
+                                <Settings className="size-4 mr-2 text-[#999999]" />
                                 <span className="text-[14px] text-[#1d2129]">{localize("com_subscription.channel_settings")}</span>
                             </DropdownMenuItem>
                         )}
@@ -153,7 +160,7 @@ export default function ChannelItem({
                                 className="py-2 px-0 cursor-pointer focus:bg-[#f2f3f5]"
                                 onClick={() => onManageMembers(channel)}
                             >
-                                <Users className="size-4 mr-2 text-[#4e5969]" />
+                                <Users className="size-4 mr-2 text-[#999999]" />
                                 <span className="text-[14px] text-[#1d2129]">{localize("com_subscription.member_management")}</span>
                             </DropdownMenuItem>
                         )}
@@ -162,9 +169,9 @@ export default function ChannelItem({
                             className="py-2 px-0 cursor-pointer focus:bg-[#f2f3f5]"
                         >
                             {channel.isPinned ? (
-                                <><PinOff className="size-4 mr-2 text-[#4e5969]" /><span className="text-[14px] text-[#1d2129]">{localize("com_subscription.unpin")}</span></>
+                                <><PinOff className="size-4 mr-2 text-[#999999]" /><span className="text-[14px] text-[#1d2129]">{localize("com_subscription.unpin")}</span></>
                             ) : (
-                                <><Pin className="size-4 mr-2 text-[#4e5969]" /><span className="text-[14px] text-[#1d2129]">{localize("com_subscription.pin_channel")}</span></>
+                                <><Pin className="size-4 mr-2 text-[#999999]" /><span className="text-[14px] text-[#1d2129]">{localize("com_subscription.pin_channel")}</span></>
                             )}
                         </DropdownMenuItem>
                         <div className="h-px bg-[#f2f3f5] mx-2 my-1" />
@@ -184,7 +191,7 @@ export default function ChannelItem({
                             }}
                             className="py-2 px-0 cursor-pointer focus:bg-[#f2f3f5]"
                         >
-                            <ClosedIcon className="size-4 mr-2 text-[#4e5969]" />
+                            <ClosedIcon className="size-4 mr-2 text-[#999999]" />
                             <span className="text-[14px] text-[#1d2129]">{type === "created" ? localize("com_subscription.dissolve_channel") : localize("com_subscription.unsubscribe")}</span>
                         </DropdownMenuItem>
                     </DropdownMenuContent>

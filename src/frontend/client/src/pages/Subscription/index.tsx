@@ -2,6 +2,7 @@ import { useLocalize } from "~/hooks";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { useUnactivate } from "react-activation";
 import {
     Article,
     Channel,
@@ -43,6 +44,7 @@ export default function Subscription() {
     // Track whether fullscreen was entered via AI assistant button (not fullscreen button)
     const enteredFullscreenViaAiRef = useRef(false);
     const [previewDrawerOpen, setPreviewDrawerOpen] = useState(false);
+    const [channelSquareRefreshKey, setChannelSquareRefreshKey] = useState(0);
     const [memberDialogOpen, setMemberDialogOpen] = useState(false);
     const [memberDialogSpace, setMemberDialogSpace] = useState<KnowledgeSpace | null>(null);
     const [channelMemberOpen, setChannelMemberOpen] = useState(false);
@@ -61,7 +63,7 @@ export default function Subscription() {
                 await queryClient.prefetchQuery({
                     queryKey: ["channelPreviewDetail", previewChannelId],
                     queryFn: () => getChannelDetailApi(previewChannelId),
-                    staleTime: 30_000,
+                    staleTime: 0,
                 });
                 await queryClient.prefetchQuery({
                     queryKey: ["channelPreviewArticles", previewChannelId],
@@ -71,7 +73,7 @@ export default function Subscription() {
                             page: 1,
                             pageSize: 10,
                         }),
-                    staleTime: 30_000,
+                    staleTime: 0,
                 });
                 if (cancelled) return;
                 setPreviewDrawerOpen(true);
@@ -97,12 +99,23 @@ export default function Subscription() {
         }
     }, [location.search]);
 
+    // KeepAlive: when leaving /channel, component is "deactivated" (effects may not run).
+    // Reset square view so switching back lands on default channel page.
+    useUnactivate(() => {
+        setShowChannelSquare(false);
+    });
+
     const handlePreviewDrawerClose = (open: boolean) => {
         setPreviewDrawerOpen(open);
         if (!open) {
             navigate("/channel", { replace: true });
+            if (showChannelSquare) {
+                setChannelSquareRefreshKey((k) => k + 1);
+            }
         }
     };
+
+    const bumpChannelSquareList = () => setChannelSquareRefreshKey((k) => k + 1);
 
     // Channel count is reported by ChannelSidebar via callback; ref avoids unnecessary re-renders
     const createdChannelCountRef = useRef(0);
@@ -174,6 +187,7 @@ export default function Subscription() {
         <div className="relative h-full flex">
             {showChannelSquare ? (
                 <ChannelSquare
+                    refreshKey={channelSquareRefreshKey}
                     onBack={() => {
                         setShowChannelSquare(false);
                         navigate("/channel", { replace: true });
@@ -196,8 +210,7 @@ export default function Subscription() {
                             setChannelMemberOpen(true);
                         }}
                         onChannelSettings={(channel) => {
-                            // 打开抽屉 + 用详情接口回显
-                            setShowCreateChannelDrawer(true);
+                            // 用详情接口回显后再打开抽屉，避免抽屉先打开、详情后到导致表单被二次 init 覆盖用户刚输入的内容
                             setEditingChannel(null);
                             (async () => {
                                 try {
@@ -207,6 +220,8 @@ export default function Subscription() {
                                 } catch {
                                     // 如果详情接口失败，至少保证能用列表里的基础字段编辑名称
                                     setEditingChannel(channel);
+                                } finally {
+                                    setShowCreateChannelDrawer(true);
                                 }
                             })();
                         }}
@@ -231,7 +246,7 @@ export default function Subscription() {
                                 alt="empty"
                             />
                             <p className="text-[14px] leading-6 text-[#4E5969]">{localize("com_subscription.no_related_content_please")}<span
-                                    className="ml-1.5 cursor-pointer text-[#165DFF] transition-colors hover:text-[#4080FF] active:text-[#0E42D2]"
+                                    className="ml-1.5 cursor-pointer text-[#165DFF] underline decoration-dashed underline-offset-4 transition-colors hover:text-[#4080FF] active:text-[#0E42D2]"
                                     onClick={handleCreateChannel}
                                 >{localize("com_subscription.create_channel")}</span>
                             </p>
@@ -332,6 +347,7 @@ export default function Subscription() {
                 channelId={previewChannelId}
                 open={previewDrawerOpen}
                 onOpenChange={handlePreviewDrawerClose}
+                onSubscriptionChanged={bumpChannelSquareList}
                 onNavigateToChannel={(channelId) => {
                     // Find the channel from cached lists and auto-select it
                     const allChannels = [

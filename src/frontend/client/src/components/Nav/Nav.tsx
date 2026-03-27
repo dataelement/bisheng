@@ -1,6 +1,7 @@
 import type { ConversationListResponse } from '~/types/chat';
 import { PermissionTypes, Permissions } from '~/types/chat';
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { PanelLeftOpen } from 'lucide-react';
 import { useSearchContext } from '~/Providers';
 import { Conversations } from '~/components/Conversations';
 import { Spinner } from '~/components/svg';
@@ -15,7 +16,6 @@ import {
 } from '~/hooks';
 import { cn } from '~/utils';
 import AccountSettings from './AccountSettings';
-import NavToggle from './NavToggle';
 import NewChat from './NewChat';
 
 const Nav = ({
@@ -32,7 +32,6 @@ const Nav = ({
   const [isHovering, setIsHovering] = useState(false);
   const isSmallScreen = useMediaQuery('(max-width: 768px)');
   const [newUser, setNewUser] = useLocalStorage('newUser', true);
-  const [isToggleHovering, setIsToggleHovering] = useState(false);
 
   const hasAccessToBookmarks = useHasAccess({
     permissionType: PermissionTypes.BOOKMARKS,
@@ -129,7 +128,7 @@ const Nav = ({
             <div
               className={cn(
                 'flex h-full min-h-0 flex-col transition-opacity',
-                isToggleHovering && !isSmallScreen ? 'opacity-50' : 'opacity-100',
+                'opacity-100',
               )}
             >
               <div
@@ -144,8 +143,9 @@ const Nav = ({
                 >
                   {/* 新建 */}
                   <NewChat
-                    toggleNav={itemToggleNav}
+                    toggleNav={toggleNavVisible}
                     isSmallScreen={isSmallScreen}
+                    showToggleButton
                   />
                   <div
                     className={cn(
@@ -174,14 +174,20 @@ const Nav = ({
           </div>
         </div>
       </div>
-      {/* 展开 */}
-      <NavToggle
-        isHovering={isToggleHovering}
-        setIsHovering={setIsToggleHovering}
-        onToggle={toggleNavVisible}
-        navVisible={navVisible}
-        className="fixed left-0 top-1/2 z-40 hidden md:flex"
-      />
+      {/* Desktop collapsed rail: match channel sidebar style */}
+      {!navVisible && !isSmallScreen && (
+        <div className="w-12 h-full bg-white flex flex-col items-center justify-end pb-4">
+          <button
+            type="button"
+            onClick={toggleNavVisible}
+            className="w-5 h-5 rounded-md flex items-center justify-center hover:bg-slate-100 text-[#1d2129]"
+            aria-label={localize('com_nav_open_sidebar')}
+            title={localize('com_nav_open_sidebar')}
+          >
+            <PanelLeftOpen className="size-3.5" />
+          </button>
+        </div>
+      )}
       {isSmallScreen && (
         <div
           id="mobile-nav-mask-toggle"

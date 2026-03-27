@@ -121,11 +121,7 @@ export interface ChannelDetailResponse {
     subscriber_count: number;
     subscription_status:string;
     article_count: number;
-    filter_rules?: Array<{
-        rules: Array<{ rule_type: string; keywords: string[]; relation: string }>;
-        channel_type: "main" | "sub";
-        name?: string;
-    }>;
+    filter_rules?: ManagerChannelFilterRule[];
     source_infos?: Array<{
         id: string;
         source_name?: string;
@@ -347,19 +343,30 @@ export interface ManagerSource {
     business_type: ChannelBusinessType;
 }
 
-// 单条筛选规则
-export interface ManagerChannelRuleItem {
-    rule_type?: string;        // 规则类型，例如 include / exclude 等
+// 单条筛选规则（叶子节点）
+export interface ManagerChannelSingleRule {
+    type?: "single";
+    rule_type?: string;        // include / exclude
     keywords?: string[];       // 关键词列表
-    relation?: string;         // and / or，规则内部关系
 }
+
+// 规则组（最多两层时作为内层容器；类型允许递归以兼容后端返回）
+export interface ManagerChannelMultiRule {
+    type?: "multi";
+    relation?: string;               // and / or
+    rules?: ManagerChannelRuleNode[]; // 子规则列表
+}
+
+export type ManagerChannelRuleNode =
+    | ManagerChannelSingleRule
+    | ManagerChannelMultiRule;
 
 // 一组条件 + 关系
 export interface ManagerChannelFilterRule {
-    rules?: ManagerChannelRuleItem[];
-    relation?: string;         // 预留（目前后端示例不用）
+    rules?: ManagerChannelRuleNode[];
+    relation?: string;         // 顶层关系（and / or）
     channel_type?: "main" | "sub"; // 频道类型：主频道 / 子频道
-    name?: string;                 // 分组名称（例如子频道名称）
+    name?: string | null;          // 分组名称（例如子频道名称）
 }
 
 // 创建频道（manager）接口入参

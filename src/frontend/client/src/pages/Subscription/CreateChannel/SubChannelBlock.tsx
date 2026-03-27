@@ -1,9 +1,10 @@
 import { useLocalize } from "~/hooks";
-import { ChevronDown, ChevronRight, Pencil } from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { FilterConditionEditor, type FilterGroup, type FilterRelation } from "./FilterConditionEditor";
 
 const MAX_CHANNEL_NAME = 10;
+const EDIT_ICON_SRC = `${__APP_ENV__.BASE_URL}/assets/channel/edit.svg`;
 
 export interface SubChannelData {
     id: string;
@@ -80,11 +81,11 @@ export function SubChannelBlock({
 
     return (
         <div className="border border-t-[#E5E6EB] overflow-hidden">
-            <div className="flex items-center justify-between gap-2 px-3 py-2 bg-[#F7F8FA]">
+            <div className="h-12 flex items-center justify-between gap-2 px-3 bg-[#F7F8FA]">
                 <button
                     type="button"
                     onClick={onToggleCollapse}
-                    className="p-1 text-[#86909C] hover:text-[#4E5969] flex-shrink-0"
+                    className="w-6 h-6 flex items-center justify-center text-[#86909C] hover:text-[#4E5969] flex-shrink-0"
                 >
                     {data.collapsed ? (
                         <ChevronRight className="size-4" />
@@ -99,19 +100,23 @@ export function SubChannelBlock({
                         onChange={(e) => handleNameChange(e.target.value)}
                         onBlur={handleSave}
                         onKeyDown={(e) => e.key === "Enter" && handleSave()}
-                        className="flex-1 min-w-0 px-2 py-1 text-[14px] border border-[#E5E6EB] rounded focus:outline-none focus:ring-1 focus:ring-[#165DFF]"
+                        className="h-[26px] flex-1 min-w-0 px-2 text-[14px] border border-[#E5E6EB] rounded focus:outline-none focus:ring-1 focus:ring-[#165DFF]"
                         placeholder={localize("com_subscription.sub_channel_name")}
                     />
                 ) : (
                     <div
-                        className="flex-1 flex items-center gap-1 cursor-pointer group min-w-0"
+                        className="h-[26px] flex-1 flex items-center gap-1 cursor-pointer group min-w-0"
                         onClick={() => {
                             setEditVal(data.name);
                             setIsEditing(true);
                         }}
                     >
                         <span className="text-[14px] text-[#1D2129] truncate">{data.name}</span>
-                        <Pencil className="size-3.5 text-[#86909C] opacity-0 group-hover:opacity-100 flex-shrink-0" />
+                        <img
+                            src={EDIT_ICON_SRC}
+                            alt=""
+                            className="w-4 h-4 opacity-0 group-hover:opacity-100 flex-shrink-0"
+                        />
                     </div>
                 )}
                 <button

@@ -23,6 +23,7 @@ import { copyText } from "~/utils";
 import { ArticleCard } from "./ArticleCard";
 import { MultiSourceSelect } from "./MultiSourceSelect";
 import { SearchInput } from "./SearchInput";
+import { ShareOutlineIcon } from "~/components/icons/ShareOutlineIcon";
 
 interface ArticleListProps {
     channel: Channel;
@@ -76,6 +77,8 @@ export function ArticleList({ channel, selectedArticleId, onArticleSelect }: Art
     const [searchKey, setSearchQuery] = useState("");
     const [onlyUnread, setOnlyUnread] = useState(false);
     const [selectedSources, setSelectedSources] = useState<string[]>([]);
+    const [isListScrolling, setIsListScrolling] = useState(false);
+    const listScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const searchQuery = useDebounce(searchKey, 500);
     const { showToast } = useToastContext();
     const queryClient = useQueryClient();
@@ -197,6 +200,12 @@ export function ArticleList({ channel, selectedArticleId, onArticleSelect }: Art
         setOnlyUnread(!onlyUnread);
     };
 
+    const handleListScroll = () => {
+        setIsListScrolling(true);
+        if (listScrollTimerRef.current) clearTimeout(listScrollTimerRef.current);
+        listScrollTimerRef.current = setTimeout(() => setIsListScrolling(false), 500);
+    };
+
     // 处理子频道切换（改为 name 模式）
     const handleSubChannelChange = (subChannelName: string) => {
         localStorage.setItem(`selectedSubChannelName-${channel.id}`, subChannelName === "all" ? "" : subChannelName);
@@ -235,7 +244,7 @@ export function ArticleList({ channel, selectedArticleId, onArticleSelect }: Art
                             <TooltipTrigger>
                                 <Info className="size-4 text-[#86909c]" />
                             </TooltipTrigger>
-                            <TooltipContent noArrow className="bg-white shadow-md px-3 py-2 max-w-md">
+                            <TooltipContent noArrow className="bg-white shadow-md px-3 py-2 max-w-md w-[240px]">
                                 <div className="space-y-1.5 text-gray-800 text-sm">
                                     <div><span className="text-gray-400">{localize("com_subscription.channel_description_colon")}</span>
                                         <p>{channelDetail?.description || channel.description || "-"}</p>
@@ -265,7 +274,7 @@ export function ArticleList({ channel, selectedArticleId, onArticleSelect }: Art
                         variant="outline"
                         className="h-8 px-4 text-[14px] rounded-md font-normal"
                     >
-                        <SquareArrowOutUpLeftIcon className="size-3.5" />{localize("com_subscription.share")}</Button>}
+                        <ShareOutlineIcon className="size-3.5" />{localize("com_subscription.share")}</Button>}
                 </div>
 
                 {/* 第二行：子频道 Tabs 与 工具栏 (搜索/筛选) */}
@@ -323,14 +332,27 @@ export function ArticleList({ channel, selectedArticleId, onArticleSelect }: Art
             </div>
 
             {/* Article list area */}
-            <div className="flex-1 overflow-y-auto noscrollbar">
+            <div
+                className="flex-1 overflow-y-auto scroll-on-scroll"
+                onScroll={handleListScroll}
+                data-scrolling={isListScrolling ? "true" : "false"}
+            >
                 {/* Show loading spinner while channel detail or initial article list is loading */}
                 {(isChannelDetailLoading || (loading && articles.length === 0)) ? (
                     <div className="flex flex-col items-center justify-center h-64 gap-3 text-[#86909c]">
                         <LoadingIcon className="size-16 text-primary" />
                     </div>
                 ) : articles.length === 0 ? (
-                    <div className="flex items-center justify-center h-64 text-[#86909c] text-sm">{localize("com_subscription.no_results")}</div>
+                    <div className="flex items-center justify-center h-64 text-sm">
+                        {(searchQuery || selectedSources.length > 0 || onlyUnread) ? (
+                            <span className="text-[#86909c]">{localize("com_subscription.no_results")}</span>
+                        ) : (
+                            <span className="text-[#4E5969]">
+                                此位置暂无文件，请
+                                <span className="ml-1.5 text-[#165DFF]">上传文件</span>
+                            </span>
+                        )}
+                    </div>
                 ) : (
                     <InfiniteScroll
                         loadMore={() => loadArticles(currentPage + 1)}

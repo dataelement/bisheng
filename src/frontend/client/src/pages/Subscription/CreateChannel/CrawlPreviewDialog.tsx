@@ -1,4 +1,4 @@
-import { FileText, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import {
     Dialog,
@@ -31,6 +31,7 @@ interface CrawlPreviewDialogProps {
 }
 
 type CrawlStatus = "loading" | "success" | "error" | "singlePageWarning";
+const EXTERNAL_LINK_ICON_SRC = `${__APP_ENV__.BASE_URL}/assets/channel/right-small-up.svg`;
 
 export function CrawlPreviewDialog({
     open,
@@ -46,6 +47,10 @@ export function CrawlPreviewDialog({
     const [errorCode, setErrorCode] = useState<number | null>(null);
     const [feedbackTips, setFeedbackTips] = useState<string>(localize("com_subscription.send_crawl_requirement_to_email"));
     const [feedbackDialogOpen, setFeedbackDialogOpen] = useState(false);
+    const [isMainScrolling, setIsMainScrolling] = useState(false);
+    const mainScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const [isArticlesScrolling, setIsArticlesScrolling] = useState(false);
+    const articlesScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const requestIdRef = useRef(0);
 
     useEffect(() => {
@@ -187,27 +192,39 @@ export function CrawlPreviewDialog({
 
     if (!open) return null;
 
+    const handleMainScroll = () => {
+        setIsMainScrolling(true);
+        if (mainScrollTimerRef.current) clearTimeout(mainScrollTimerRef.current);
+        mainScrollTimerRef.current = setTimeout(() => setIsMainScrolling(false), 500);
+    };
+
+    const handleArticlesScroll = () => {
+        setIsArticlesScrolling(true);
+        if (articlesScrollTimerRef.current) clearTimeout(articlesScrollTimerRef.current);
+        articlesScrollTimerRef.current = setTimeout(() => setIsArticlesScrolling(false), 500);
+    };
+
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="w-[600px] max-w-[600px] flex flex-col bg-white text-[14px]">
+            <DialogContent className="w-[600px] h-[600px] max-w-[600px] flex flex-col bg-white text-[14px] [&>button]:hidden">
                 <DialogHeader>
                     <DialogTitle className="text-[16px] font-medium">
                         {localize("com_subscription.confirm_crawled_content")}
                     </DialogTitle>
                 </DialogHeader>
 
-                <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-4 flex-1 min-h-0">
                     <div>
                         <Input
                             value={url}
                             readOnly
                             disabled
-                            className="h-10 text-[14px] bg-[#F7F8FA] text-[#86909C] border-[#E5E6EB]"
+                            className="h-8 text-[14px] bg-[#F7F8FA] text-[#86909C] border-[#E5E6EB]"
                         />
                     </div>
 
                     {status === "loading" && (
-                        <div className="flex flex-col items-center justify-center py-12 gap-4">
+                        <div className="flex-1 flex flex-col items-center justify-center py-12 gap-4">
                             <img
                                 src={`${__APP_ENV__.BASE_URL}/assets/channel/loading.svg`}
                                 alt=""
@@ -220,8 +237,12 @@ export function CrawlPreviewDialog({
                     )}
 
                     {status === "success" && previewData && (
-                        <div className="space-y-4">
-                            <div className="flex items-center gap-3 p-3 rounded-lg bg-[#F7F8FA]">
+                        <div
+                            className="space-y-4 flex-1 min-h-0 overflow-y-auto scroll-on-scroll"
+                            onScroll={handleMainScroll}
+                            data-scrolling={isMainScrolling ? "true" : "false"}
+                        >
+                            <div className="flex items-center gap-3 p-3 rounded-lg">
                                 <Avatar className="w-10 h-10 border border-[#E5E6EB]">
                                     {previewData.icon ? <AvatarImage src={previewData.icon} alt={previewData.name} /> : null}
                                     <AvatarName name={previewData.name} className="text-xs" />
@@ -241,20 +262,30 @@ export function CrawlPreviewDialog({
                                 </div>
                             </div>
                             {previewData.articles && previewData.articles.length > 0 && (
-                                <div>
-                                    <p className="text-[12px] mb-2">
+                                <div className="rounded border border-[#E5E6EB] p-3">
+                                    <p className="text-[14px] font-medium text-[#212121] mb-2">
                                         {localize("com_subscription.parsed_articles")}
                                     </p>
-                                    <div className="max-h-[200px] overflow-y-auto space-y-2">
+                                    <div
+                                        className="max-h-[200px] overflow-y-auto space-y-2 scroll-on-scroll"
+                                        onScroll={handleArticlesScroll}
+                                        data-scrolling={isArticlesScrolling ? "true" : "false"}
+                                    >
                                         {previewData.articles.map((a, i) => (
                                             <a
                                                 key={i}
                                                 href={a.url}
                                                 target="_blank"
                                                 rel="noopener noreferrer"
-                                                className="block text-[13px] text-[#165DFF] hover:underline truncate"
+                                                className="group/item flex items-center text-[13px] text-[#165DFF] hover:text-[#335CFF] truncate"
                                             >
-                                                {a.title}
+                                                <span className="mr-2 text-[10px] text-[#C9CDD4] leading-none flex-shrink-0">●</span>
+                                                <span className="truncate">{a.title}</span>
+                                                <img
+                                                    src={EXTERNAL_LINK_ICON_SRC}
+                                                    alt=""
+                                                    className="ml-1 w-4 h-4 opacity-0 group-hover/item:opacity-100 transition-opacity flex-shrink-0"
+                                                />
                                             </a>
                                         ))}
                                     </div>
@@ -264,49 +295,32 @@ export function CrawlPreviewDialog({
                     )}
 
                     {(status === "error" || status === "singlePageWarning") && (
-                        <>
-                            <div className="rounded border border-[#E5E6EB]  min-h-[270px] px-6 py-8 flex flex-col justify-between">
-                                <div className="flex-1 flex flex-col items-center justify-center text-center">
-                                    <img
-                                        src={`${__APP_ENV__.BASE_URL}/assets/channel/book.svg`}
-                                        alt=""
-                                        className="w-[100px] h-[100px] mb-5"
-                                    />
-                                    <p className="text-[14px] text-[#4E5969] leading-6">
-                                        {status === "singlePageWarning"
-                                            ? <>{localize("com_subscription.detected_as")}<span className="font-medium text-[#1D2129]">{localize("com_subscription.single_article_or_non_list_page")}</span>{localize("com_subscription.please_enter_valid_list_page_url")}</>
-                                            : errorCode === 13004
-                                                ? localize("com_subscription.crawl_failed_due_to_permissions")
-                                                : localize("com_subscription.parse_failed_retry_or_submit")}
-                                    </p>
-                                </div>
-
+                        <div className="flex-1 rounded border border-[#E5E6EB] min-h-[270px] px-6 py-8 flex flex-col justify-between">
+                            <div className="flex-1 flex flex-col items-center justify-center text-center">
+                                <img
+                                    src={`${__APP_ENV__.BASE_URL}/assets/channel/book.svg`}
+                                    alt=""
+                                    className="w-[100px] h-[100px] mb-5"
+                                />
+                                <p className="text-[14px] text-[#4E5969] leading-6">
+                                    {status === "singlePageWarning"
+                                        ? <>{localize("com_subscription.detected_as")}<span className="font-medium text-[#1D2129]">{localize("com_subscription.single_article_or_non_list_page")}</span>{localize("com_subscription.please_enter_valid_list_page_url")}</>
+                                        : errorCode === 13004
+                                            ? localize("com_subscription.crawl_failed_due_to_permissions")
+                                            : localize("com_subscription.parse_failed_retry_or_submit")}
+                                </p>
                             </div>
-                            <div className=" flex items-center justify-between">
-                                <button
-                                    type="button"
-                                    className="text-[12px] text-[#165DFF] underline underline-offset-2"
-                                    onClick={() => setFeedbackDialogOpen(true)}
-                                >{localize("com_subscription.unsatisfied_with_crawl_submit_request")}</button>
-                                <Button
-                                    variant="secondary"
-                                    onClick={handleCancel}
-                                    className="h-8 px-4 border border-[#E5E6EB] bg-white text-[#4E5969]"
-                                >
-                                    {localize("cancel")}
-                                </Button>
-                            </div>
-                        </>
+                        </div>
                     )}
                 </div>
 
                 {/* 底部操作：爬取中也展示两按钮，添加到信源置灰 */}
-                {(status === "loading" || status === "success") && (
-                    <div className="flex items-center justify-between gap-3 pt-4 border-t border-[#E5E6EB]">
-                        {status === "success" ? (
+                {(status === "loading" || status === "success" || status === "error" || status === "singlePageWarning") && (
+                    <div className="flex items-center justify-between gap-3 pt-4 border-t border-[#E5E6EB] mt-auto">
+                        {(status === "success" || status === "error" || status === "singlePageWarning") ? (
                             <button
                                 type="button"
-                                className="text-[12px] text-[#165DFF] underline underline-offset-2"
+                                className="text-[14px] text-[#999999]"
                                 onClick={() => setFeedbackDialogOpen(true)}
                             >{localize("com_subscription.unsatisfied_with_crawl_submit_request")}</button>
                         ) : (
@@ -316,18 +330,20 @@ export function CrawlPreviewDialog({
                             <Button
                                 variant="secondary"
                                 onClick={handleCancel}
-                                className="bg-[#F2F3F5]  hover:bg-[#E5E6EB] border-none text-[#4E5969]"
+                                className="h-8 rounded-[6px] px-4 inline-flex items-center justify-center leading-none text-[14px] font-normal border border-[#E5E6EB] bg-white text-[#4E5969] hover:bg-[#F7F8FA]"
                             >
                                 {localize("cancel")}
                             </Button>
-                            <Button
-                                onClick={handleAddSource}
-                                disabled={status !== "success" || adding}
-                                className="bg-[#165DFF] ml-2 hover:bg-[#4080FF] text-white disabled:opacity-50 flex items-center gap-2"
-                            >
-                                {adding && <Loader2 className="size-4 animate-spin" />}
-                                {localize("com_subscription.add_source")}
-                            </Button>
+                            {(status === "loading" || status === "success") && (
+                                <Button
+                                    onClick={handleAddSource}
+                                    disabled={status !== "success" || adding}
+                                    className="h-8 rounded-[6px] px-4 inline-flex items-center justify-center leading-none text-[14px] font-normal bg-[#165DFF] ml-2 hover:bg-[#4080FF] border border-[#165DFF] text-white disabled:opacity-50 gap-2"
+                                >
+                                    {adding && <Loader2 className="size-4 animate-spin" />}
+                                    {localize("com_subscription.add_source")}
+                                </Button>
+                            )}
                         </div>
 
                     </div>
@@ -344,7 +360,7 @@ export function CrawlPreviewDialog({
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                        <AlertDialogAction className="bg-[#165DFF] hover:bg-[#4080FF]">{localize("com_subscription.ok")}</AlertDialogAction>
+                        <AlertDialogAction className="h-8 rounded-[6px] px-4 inline-flex items-center justify-center leading-none bg-[#165DFF] hover:bg-[#4080FF]">{localize("com_subscription.ok")}</AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>

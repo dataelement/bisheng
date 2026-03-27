@@ -1523,6 +1523,7 @@
     "single_article_or_non_list_page": "単一記事または非リストページ",
     "source_not_indexed_try_full_url": "この情報源はまだインデックスされていません。上の入力欄に完全なURLを入力して検索または追加をお試しください。",
     "sub_channel_name": "サブチャンネル名",
+    "sub_channel_name_default": "サブ{{index}}",
     "sub_channel_name_cannot_be_empty": "サブチャンネル名を空にすることはできません",
     "sub_channel_name_duplicate": "サブチャンネル名はすでに存在します。別の名前にしてください",
     "submit_manual_crawl_request": "手動クロールリクエストを送信",

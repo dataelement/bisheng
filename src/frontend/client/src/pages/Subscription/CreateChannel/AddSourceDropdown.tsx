@@ -1,5 +1,5 @@
-import { FileText, Minus, Plus, Search, X, XCircle } from "lucide-react";
-import { useState, useEffect } from "react";
+import { Minus, Plus, Search, X, XCircle } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
 import { NotificationSeverity } from "~/common";
 import { Button } from "~/components/ui/Button";
 import { Checkbox } from "~/components/ui/Checkbox";
@@ -21,6 +21,7 @@ import {
 
 const MAX_SOURCES = 50;
 const MAX_NAME_DISPLAY = 20;
+const EXTERNAL_LINK_ICON_SRC = `${__APP_ENV__.BASE_URL}/assets/channel/right-small-up.svg`;
 
 interface AddSourceDropdownProps {
     sources: InformationSource[];
@@ -44,6 +45,10 @@ export function AddSourceDropdown({
     const confirm = useConfirm();
     const { showToast } = useToastContext();
     const [inputValue, setInputValue] = useState("");
+    const [isCollapsedListScrolling, setIsCollapsedListScrolling] = useState(false);
+    const collapsedListScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const [isExpandedListScrolling, setIsExpandedListScrolling] = useState(false);
+    const expandedListScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // 同步输入框展示值与已提交的搜索关键字（清空时）
     useEffect(() => {
@@ -60,18 +65,43 @@ export function AddSourceDropdown({
     }, [resetToken]);
 
     const displayList = mgr.filteredSources;
+    const handleCollapsedListScroll = () => {
+        setIsCollapsedListScrolling(true);
+        if (collapsedListScrollTimerRef.current) {
+            clearTimeout(collapsedListScrollTimerRef.current);
+        }
+        collapsedListScrollTimerRef.current = setTimeout(() => {
+            setIsCollapsedListScrolling(false);
+        }, 500);
+    };
+    const handleExpandedListScroll = (e: any) => {
+        setIsExpandedListScrolling(true);
+        if (expandedListScrollTimerRef.current) {
+            clearTimeout(expandedListScrollTimerRef.current);
+        }
+        expandedListScrollTimerRef.current = setTimeout(() => {
+            setIsExpandedListScrolling(false);
+        }, 500);
+
+        if (mgr.viewMode !== "list") return;
+        const el = e.currentTarget;
+        const nearBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 24;
+        if (nearBottom) {
+            mgr.loadMoreSources();
+        }
+    };
     return (
         <div className="relative">
             {/* 没点击时：触发区+已选列表 同一灰色整体 */}
             {!expanded && (
                 <div
-                    className="rounded-lg border border-[#E5E6EB] bg-[#F7F8FA] overflow-hidden"
+                    className="rounded-lg border border-[#E5E6EB] bg-[#F7F8FA] overflow-hidden max-h-[480px] flex flex-col"
                     role="button"
                     tabIndex={0}
                     onClick={() => onExpandChange(true)}
                     onKeyDown={(e) => e.key === "Enter" && onExpandChange(true)}
                 >
-                    <div className="flex items-center gap-2 px-4 py-3">
+                    <div className="flex items-center gap-2 px-4 py-3 flex-shrink-0">
                         <Plus className="size-4 flex-shrink-0 text-[#86909C]" />
                         <span className="flex-1 text-[14px] text-[#86909C] text-left">{localize("com_subscription.add_official_accounts_and_webpages")}</span>
                         <span className="flex-shrink-0 text-[12px] text-[#86909C]">
@@ -79,11 +109,18 @@ export function AddSourceDropdown({
                         </span>
                     </div>
                     {sources.length > 0 && (
-                        <div className="border-t border-[#E5E6EB] bg-white">
-                            {[...sources].reverse().map((s) => (
+                        <div
+                            className="border-t border-[#E5E6EB] bg-[#F7F8FA] overflow-y-auto scroll-on-scroll"
+                            onScroll={handleCollapsedListScroll}
+                            data-scrolling={isCollapsedListScrolling ? "true" : "false"}
+                        >
+                            {[...sources].reverse().map((s, idx, arr) => (
                                 <div
                                     key={s.id}
-                                    className="flex items-center gap-3 py-2 px-4 hover:bg-[#FAFAFA]"
+                                    className={cn(
+                                        "flex items-center gap-3 py-2 px-4 hover:bg-[#EEEFF1]",
+                                        idx < arr.length - 1 && "border-b border-dashed border-[#D9D9D9]"
+                                    )}
                                     onClick={(e) => e.stopPropagation()}
                                 >
                                     <div className="w-8 h-8 rounded-full bg-[#E5E6EB] flex-shrink-0 overflow-hidden">
@@ -96,10 +133,40 @@ export function AddSourceDropdown({
                                         )}
                                     </div>
                                     <span className="flex-1 text-[14px] text-[#1D2129] truncate">
-                                        {truncateName(s.name)}
                                         <span
                                             className={cn(
-                                                "text-[11px] px-0.5 rounded flex-shrink-0 ml-2",
+                                                "inline-flex items-center max-w-full align-middle",
+                                                s.type === "website" && s.url && "group/link text-[#1D2129] hover:text-[#165DFF] transition-colors"
+                                            )}
+                                            onClick={
+                                                s.type === "website" && s.url
+                                                    ? (e) => {
+                                                        e.stopPropagation();
+                                                        window.open(s.url, "_blank");
+                                                    }
+                                                    : undefined
+                                            }
+                                        >
+                                            <span
+                                                className={cn(
+                                                    "truncate",
+                                                    s.type === "website" && s.url && "hover:underline"
+                                                )}
+                                            >
+                                                {truncateName(s.name)}
+                                            </span>
+                                            {s.type === "website" && s.url && (
+                                                <img
+                                                    src={EXTERNAL_LINK_ICON_SRC}
+                                                    alt=""
+                                                    className="ml-0.5 w-4 h-4 opacity-0 group-hover/link:opacity-100 transition-opacity flex-shrink-0"
+                                                />
+                                            )}
+                                        </span>
+                                        <span
+                                            className={cn(
+                                                "text-[11px] px-0.5 rounded flex-shrink-0 ml-4",
+                                                s.type !== "official_account" && "-ml-0",
                                                 " border text-[#165DFF] border-[#165DFF]"  // 统一的白底蓝框蓝字
                                             )}
                                         >
@@ -139,9 +206,9 @@ export function AddSourceDropdown({
             {/* 添加时：输入框+Tab+列表 同一整体，高 z-index 浮动，实时搜索 */}
             {expanded && (
                 <div className="absolute left-0 right-0 top-0 z-[100] rounded-lg border border-[#E5E6EB] bg-white shadow-[0_4px_16px_rgba(0,0,0,0.12)] overflow-hidden min-w-[400px]">
-                    <div className="flex items-center gap-2 pb-2">
+                    <div className="flex items-center gap-2 pb-0 mb-2 border-b border-[#E5E6EB]">
                         <div className="relative flex-1 rounded-lg m-1">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#86909C]" />
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#999999]" />
                             <Input
                                 value={inputValue}
                                 onChange={(e) => setInputValue(e.target.value)}
@@ -161,7 +228,7 @@ export function AddSourceDropdown({
                                         setInputValue("");
                                         mgr.handleClearSearch();
                                     }}
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#86909C] hover:text-[#4E5969]"
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#999999] hover:text-[#4E5969]"
                                 >
                                     <X className="size-4" />
                                 </button>
@@ -199,17 +266,11 @@ export function AddSourceDropdown({
                     )}
                     <div
                         className={cn(
-                            "overflow-y-auto hide-scrollbar",
+                            "overflow-y-auto scroll-on-scroll",
                             mgr.viewMode === "list" ? "max-h-[420px]" : "h-[520px]"
                         )}
-                        onScroll={(e) => {
-                            if (mgr.viewMode !== "list") return;
-                            const el = e.currentTarget;
-                            const nearBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 24;
-                            if (nearBottom) {
-                                mgr.loadMoreSources();
-                            }
-                        }}
+                        onScroll={handleExpandedListScroll}
+                        data-scrolling={isExpandedListScrolling ? "true" : "false"}
                     >
                         {mgr.viewMode === "noResultNonUrl" && (
                             <div className="h-[432px] flex flex-col items-center justify-center text-center">
@@ -220,7 +281,7 @@ export function AddSourceDropdown({
                                         className="w-[120px] h-[120px] mb-5"
                                     />
                                 </div>
-                                <p className="text-[14px] leading-6 text-[#4E5969]">
+                                <p className="text-[14px] leading-6 text-[#4E5969] whitespace-pre-line">
                                     {localize("com_subscription.no_source_collected") ||
                                         localize("com_subscription.source_not_indexed_try_full_url")}
                                 </p>
@@ -228,8 +289,12 @@ export function AddSourceDropdown({
                         )}
                         {mgr.viewMode === "noResultUrl" && (
                             <div className="h-[432px] flex flex-col items-center justify-center text-center">
-                                <div className="mb-4 rounded-full border border-dashed border-[#165DFF] p-3">
-                                    <FileText className="size-8 text-[#165DFF]" strokeWidth={1.6} />
+                                <div className="mb-4">
+                                    <img
+                                        src={`${__APP_ENV__.BASE_URL}/assets/channel/empty.png`}
+                                        alt=""
+                                        className="w-[120px] h-[120px]"
+                                    />
                                 </div>
                                 <p className="text-[14px] text-[#4E5969] mb-5">
                                     {localize("com_subscription.website_not_indexed") || localize("com_subscription.website_not_in_database_crawl")}
@@ -238,7 +303,7 @@ export function AddSourceDropdown({
                                     <Button
                                         variant="secondary"
                                         onClick={mgr.handleClearSearch}
-                                        className="h-9 min-w-[74px] border border-[#E5E6EB] bg-white text-[#4E5969]"
+                                        className="h-8 rounded-[6px] min-w-[74px] inline-flex items-center justify-center leading-none border border-[#E5E6EB] bg-white text-[#4E5969]"
                                     >
                                         {localize("com_subscription.do_not_crawl")}
                                     </Button>
@@ -254,7 +319,7 @@ export function AddSourceDropdown({
                                             }
                                             onRequestCrawl(mgr.searchKeyword.trim());
                                         }}
-                                        className="h-9 min-w-[74px] bg-[#165DFF] hover:bg-[#4080FF]"
+                                        className="h-8 rounded-[6px] min-w-[74px] inline-flex items-center justify-center leading-none bg-[#165DFF] hover:bg-[#4080FF]"
                                     >
                                         {localize("com_subscription.confirm_crawl")}
                                     </Button>
@@ -276,7 +341,7 @@ export function AddSourceDropdown({
                                 <Button
                                     variant="secondary"
                                     onClick={mgr.handleClearSearch}
-                                    className="h-9 min-w-[84px] border border-[#E5E6EB] bg-white text-[#4E5969]"
+                                    className="h-8 rounded-[6px] min-w-[84px] inline-flex items-center justify-center leading-none border border-[#E5E6EB] bg-white text-[#4E5969]"
                                 >
                                     {localize("com_subscription.do_not_add")}
                                 </Button>
@@ -287,7 +352,7 @@ export function AddSourceDropdown({
                                 {displayList.length === 0 ? (
                                     <div className="p-8 text-center text-[14px] text-[#86909C]">{localize("com_subscription.no_data")}</div>
                                 ) : (
-                                    <div className="divide-y divide-[#E5E6EB]">
+                                    <div className="">
                                         {displayList.map((source) => {
                                             const sel = mgr.selectedIds.has(source.id);
                                             const dis = !sel && mgr.isAtLimit;
@@ -301,7 +366,7 @@ export function AddSourceDropdown({
                                                         sel && "bg-[#E8F3FF]"
                                                     )}
                                                 >
-                                                    <div className="w-9 h-9 rounded-full bg-[#F2F3F5] overflow-hidden flex-shrink-0">
+                                                    <div className="w-6 h-6 rounded-full bg-[#F2F3F5] overflow-hidden flex-shrink-0">
                                                         {source.avatar ? (
                                                             <img src={source.avatar} alt="" className="w-full h-full object-cover" />
                                                         ) : (
@@ -313,8 +378,8 @@ export function AddSourceDropdown({
                                                     <span className="flex-1 text-[14px] text-[#1D2129] truncate">
                                                         <span
                                                             className={cn(
-                                                                "truncate inline-block max-w-full align-middle",
-                                                                source.type === "website" && source.url && "hover:underline cursor-pointer"
+                                                                "inline-flex items-center max-w-full align-middle",
+                                                                source.type === "website" && source.url && "group/link cursor-pointer text-[#1D2129] hover:text-[#165DFF] transition-colors"
                                                             )}
                                                             onClick={
                                                                 source.type === "website" && source.url
@@ -325,7 +390,21 @@ export function AddSourceDropdown({
                                                                     : undefined
                                                             }
                                                         >
-                                                            {truncateName(source.name, MAX_NAME_DISPLAY)}
+                                                            <span
+                                                                className={cn(
+                                                                    "truncate inline-block max-w-full",
+                                                                    source.type === "website" && source.url && "hover:underline"
+                                                                )}
+                                                            >
+                                                                {truncateName(source.name, MAX_NAME_DISPLAY)}
+                                                            </span>
+                                                            {source.type === "website" && source.url && (
+                                                                <img
+                                                                    src={EXTERNAL_LINK_ICON_SRC}
+                                                                    alt=""
+                                                                    className="ml-0.5 w-4 h-4 opacity-0 group-hover/link:opacity-100 transition-opacity flex-shrink-0"
+                                                                />
+                                                            )}
                                                         </span>
                                                         {mgr.isSearchMode && (
                                                             <span
@@ -359,7 +438,7 @@ export function AddSourceDropdown({
                         )}
                     </div>
                     {mgr.viewMode === "list" && (
-                        <div className="flex justify-between items-center px-4 py-3 border-t border-[#E5E6EB] bg-[#FAFAFA]">
+                        <div className="flex justify-between items-center px-4 py-3 border-t border-[#E5E6EB] ">
                             <span className="text-[12px] text-[#86909C]">{localize("com_subscription.total_channel_sources")}{mgr.pendingSources.length}/{MAX_SOURCES}
                             </span>
                             <div className="flex gap-2">
@@ -375,7 +454,7 @@ export function AddSourceDropdown({
                                         if (!confirmed) return;
                                         mgr.handleCancel();
                                     }}
-                                    className="bg-white border border-[#E5E6EB]"
+                                    className="bg-white border h-8 rounded-[6px] inline-flex items-center justify-center leading-none border-[#E5E6EB]"
                                 >
                                     {localize("cancel")}
                                 </Button>
@@ -383,7 +462,7 @@ export function AddSourceDropdown({
                                     size="sm"
                                     onClick={mgr.handleConfirm}
                                     disabled={mgr.pendingSources.length === 0}
-                                    className="bg-[#165DFF] disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="bg-[#165DFF] h-8 rounded-[6px] inline-flex items-center justify-center leading-none disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     {localize("com_subscription.confirm_add")}
                                 </Button>
@@ -426,7 +505,7 @@ export function AddSourceDropdown({
                     <div className="px-6 pb-4 flex justify-end">
                         <AlertDialogAction
                             onClick={() => mgr.setWechatAddError(false)}
-                            className="h-8 px-6 rounded-md border border-[#E5E6EB] bg-white text-[14px] text-[#4E5969] hover:bg-[#F7F8FA]"
+                            className="h-8 px-6 rounded-[6px] inline-flex items-center justify-center leading-none border border-[#E5E6EB] bg-white text-[14px] text-[#4E5969] hover:bg-[#F7F8FA]"
                         >{localize("com_subscription.cancel")}</AlertDialogAction>
                     </div>
                 </AlertDialogContent>
