@@ -32,6 +32,7 @@ import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { SortType, SortDirection, FileStatus, FileType, KnowledgeFile } from "~/api/knowledge";
 import { formatBytes } from "~/utils";
 import { useInlineRename } from "../hooks/useInlineRename";
+import { formatTime } from "../knowledgeUtils";
 import { useLocalize } from "~/hooks";
 
 // ============================================================
@@ -524,7 +525,7 @@ function FileRow({
             (isFolder && file.successFileNum !== undefined && file.fileNum !== undefined && file.successFileNum < file.fileNum)
         )
     );
-    const showMoreMenu = isAdmin || hasRetryOption;
+    const showMoreMenu = isAdmin;
 
     return (
         <TableRow className={cn(
@@ -559,7 +560,9 @@ function FileRow({
                     <div className="bg-white rounded-sm size-5 flex items-center justify-center flex-shrink-0">
                         {isFolder
                             ? <FolderIcon className="size-4" />
-                            : (file.thumbnail ? <FileImageIcon className="size-4" /> : <FileUserIcon className="size-4" />)
+                            : (['png', 'jpg', 'jpeg', 'bmp', 'gif', 'webp'].includes(file.name.split('.').pop()?.toLowerCase() || "")
+                                ? <FileImageIcon className="size-4" />
+                                : <FileUserIcon className="size-4" />)
                         }
                     </div>
                     {isRenaming ? (
@@ -645,7 +648,7 @@ function FileRow({
                 className="text-[#86909c] text-sm whitespace-nowrap py-3"
                 style={{ width: columnWidths.updateTime, minWidth: columnWidths.updateTime, maxWidth: columnWidths.updateTime }}
             >
-                <span className="truncate block">{file.updatedAt}</span>
+                <span className="truncate block">{formatTime(file.updatedAt)}</span>
             </TableCell>
 
             {/* 状态 — only visible to admins */}
