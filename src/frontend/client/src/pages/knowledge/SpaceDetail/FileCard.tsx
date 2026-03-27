@@ -52,7 +52,7 @@ export function FileCard({
     hideSelectionCheckbox = false,
 }: FileCardProps) {
     const localize = useLocalize();
-  const isCreating = !!file.isCreating;
+    const isCreating = !!file.isCreating;
     const [hovered, setHovered] = useState(false);
 
     const isAdmin = userRole === SpaceRole.CREATOR || userRole === SpaceRole.ADMIN;
@@ -216,8 +216,8 @@ export function FileCard({
                                     file.status === FileStatus.FAILED ||
                                     (isFolder && file.successFileNum !== undefined && file.fileNum !== undefined && file.successFileNum < file.fileNum)
                                 ) && (
-                                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onRetry(); }}>{localize("com_knowledge.retry")}</DropdownMenuItem>
-                                )}
+                                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onRetry(); }}>{localize("com_knowledge.retry")}</DropdownMenuItem>
+                                    )}
                             </DropdownMenuContent>
                         </DropdownMenu>
                     </div>
@@ -235,7 +235,7 @@ export function FileCard({
                         <div className="flex items-center flex-1 min-w-0">
                             {isAdmin && isFolder && file.fileNum != null && (
                                 <div className="text-sm font-medium leading-none">
-                                    <span className="text-[#86909c]">{file.successFileNum ?? 0}</span>
+                                    <span className="text-emerald-500 font-semibold">{file.successFileNum ?? 0}</span>
                                     <span className="text-[#86909c]">/{file.fileNum}</span>
                                 </div>
                             )}

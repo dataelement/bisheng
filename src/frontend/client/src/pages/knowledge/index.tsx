@@ -28,7 +28,7 @@ import { useLocalize } from "~/hooks";
 
 export default function Knowledge() {
     const localize = useLocalize();
-  const MAX_USER_SPACES = 30;
+    const MAX_USER_SPACES = 30;
     const [activeSpace, setActiveSpace] = useState<KnowledgeSpace | null>(null);
     const [showCreateDrawer, setShowCreateDrawer] = useState(false);
     const [editingSpace, setEditingSpace] = useState<KnowledgeSpace | null>(null);

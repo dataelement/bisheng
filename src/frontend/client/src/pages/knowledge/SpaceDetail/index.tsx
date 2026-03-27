@@ -68,7 +68,7 @@ export function KnowledgeSpaceContent({
     isAiAssistantOpen
 }: KnowledgeSpaceContentProps) {
     const localize = useLocalize();
-  const displayFiles = [
+    const displayFiles = [
         ...(creatingFolder ? [creatingFolder] : []),
         ...uploadingFiles,
         ...files

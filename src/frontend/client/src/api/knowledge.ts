@@ -560,7 +560,7 @@ export async function createSpaceApi(data: {
     is_released?: boolean;
 }): Promise<KnowledgeSpace> {
     const res = await request.post(`/api/v1/knowledge/space`, data) as ApiResponse<RawKnowledgeSpace>;
-    return mapSpace(res.data);
+    return mapSpace({ ...res.data, user_role: SpaceRole.CREATOR });
 }
 
 /**

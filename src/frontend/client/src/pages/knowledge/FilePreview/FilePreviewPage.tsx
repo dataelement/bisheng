@@ -19,7 +19,7 @@ const AI_MIN_RIGHT = 360;
 
 export default function FilePreviewPage() {
     const localize = useLocalize();
-  const { fileId } = useParams<{ fileId: string }>();
+    const { fileId } = useParams<{ fileId: string }>();
     const [searchParams] = useSearchParams();
     const fileName = searchParams.get("name") || localize("com_knowledge.unknown_file");
     // Prefer URL param; fallback to extension extracted from filename

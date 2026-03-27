@@ -40,6 +40,7 @@ import { useLocalize } from "~/hooks";
 const COLUMN_CONFIG = {
     checkbox: { minWidth: 48, initialWidth: 48 },
     name: { minWidth: 140, initialWidth: 280 },
+    fileType: { minWidth: 80, initialWidth: 100 },
     size: { minWidth: 80, initialWidth: 120 },
     tags: { minWidth: 140, initialWidth: 200 },
     updateTime: { minWidth: 140, initialWidth: 180 },
@@ -149,7 +150,7 @@ function useScrollShadow(scrollRef: React.RefObject<HTMLDivElement | null>) {
 // ============================================================
 const StatusBadge = ({ status }: { status: FileStatus }) => {
     const localize = useLocalize();
-  const config: Record<string, { label: string; color: string; bg: string; dot: string }> = {
+    const config: Record<string, { label: string; color: string; bg: string; dot: string }> = {
         [FileStatus.SUCCESS]: { label: localize("com_knowledge.success"), color: "text-[#00b42a]", bg: "bg-[#e8ffea]", dot: "bg-[#00b42a]" },
         [FileStatus.PROCESSING]: { label: localize("com_knowledge.parsing_status"), color: "text-[#165dff]", bg: "bg-[#e8f3ff]", dot: "bg-[#165dff]" },
         [FileStatus.WAITING]: { label: localize("com_knowledge.queueing_status"), color: "text-[#165dff]", bg: "bg-[#e8f3ff]", dot: "bg-[#165dff]" },
@@ -304,6 +305,17 @@ function FileTableHeader({
                 >
                     {localize("com_knowledge.file_name")}</SortableHeader>
 
+                {/* 文件类型 */}
+                <SortableHeader
+                    sortKey={SortType.TYPE}
+                    currentSort={currentSort}
+                    onSort={handleSort}
+                    width={columnWidths.fileType}
+                    columnKey="fileType"
+                    onResizeStart={onResizeStart}
+                >
+                    {localize("com_knowledge.type")}</SortableHeader>
+
                 {/* 文件大小 */}
                 <SortableHeader
                     sortKey={SortType.SIZE}
@@ -425,7 +437,7 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                                 onRetry={() => onRetry?.(file.id)}
                                 onNavigateFolder={() => onNavigateFolder?.(file.id)}
                                 onPreview={() => onPreview?.(file.id)}
-                                onValidateName={(newName) => onValidateName?.(newName, file.type === 'FOLDER', file.id, !!file.isCreating)}
+                                onValidateName={(newName) => onValidateName?.(newName, file.type === FileType.FOLDER, file.id, !!file.isCreating)}
                                 onCancelCreate={onCancelCreate}
                                 columnWidths={columnWidths}
                                 showLeftShadow={showLeftShadow}
@@ -573,6 +585,16 @@ function FileRow({
                 <StickyColumnShadow show={showLeftShadow} />
             </TableCell>
 
+            {/* 类型 */}
+            <TableCell
+                className="text-[#86909c] text-sm py-3"
+                style={{ width: columnWidths.fileType, minWidth: columnWidths.fileType, maxWidth: columnWidths.fileType }}
+            >
+                <span className="truncate block">
+                    {isFolder ? localize("com_knowledge.folder") : (file.name.split('.').pop()?.toLowerCase() || "--")}
+                </span>
+            </TableCell>
+
             {/* 大小 */}
             <TableCell
                 className="text-[#86909c] text-sm py-3"
@@ -626,11 +648,10 @@ function FileRow({
                 >
                     {isFolder
                         ? (
-                            <span className={`text-sm ${
-                                file.successFileNum !== undefined && file.fileNum !== undefined && file.successFileNum < file.fileNum
+                            <span className={`text-sm ${file.successFileNum !== undefined && file.fileNum !== undefined && file.successFileNum < file.fileNum
                                     ? 'text-[#f53f3f]'
                                     : 'text-[#86909c]'
-                            }`}>
+                                }`}>
                                 {file.successFileNum ?? 0}/{file.fileNum ?? 0}
                             </span>
                         )
