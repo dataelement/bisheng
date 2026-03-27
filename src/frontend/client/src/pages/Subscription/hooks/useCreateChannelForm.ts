@@ -1,5 +1,5 @@
 import { useLocalize } from "~/hooks";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import type { Channel, InformationSource } from "~/api/channels";
 import { listManagerSourcesApi } from "~/api/channels";
 import type { FilterGroup, FilterRelation } from "../CreateChannel/FilterConditionEditor";
@@ -16,8 +16,88 @@ function nanoid() {
     return generateUUID(8);
 }
 
+function parseRuleGroupsFromFilterRule(ruleEntry: any): { groups: FilterGroup[]; topRelation: FilterRelation } {
+    const topRelation: FilterRelation = ruleEntry?.relation === "or" ? "or" : "and";
+    const topRules = Array.isArray(ruleEntry?.rules) ? ruleEntry.rules : [];
+
+    // New shape: relation + rules(type=single|multi)
+    if (
+        ruleEntry?.relation ||
+        topRules.some((r: any) => r?.type === "single" || r?.type === "multi" || Array.isArray(r?.rules))
+    ) {
+        const groups: FilterGroup[] = topRules.flatMap((r: any) => {
+            // multi rule => one group with inner relation
+            if (r?.type === "multi" || Array.isArray(r?.rules)) {
+                const relation: FilterRelation = r?.relation === "or" ? "or" : "and";
+                const conditions = (r.rules || [])
+                    .filter((x: any) => x && typeof x === "object" && (x?.type === "single" || !Array.isArray(x?.rules)))
+                    .map((leaf: any) => ({
+                        id: nanoid(),
+                        include: leaf?.rule_type !== "exclude",
+                        keywords: Array.isArray(leaf?.keywords) ? leaf.keywords.join(";") : ""
+                    }));
+                return conditions.length
+                    ? [{ id: nanoid(), relation, conditions }]
+                    : [];
+            }
+
+            // single rule => one group with one condition (inherits top relation semantically)
+            if (r && typeof r === "object" && (r?.type === "single" || !Array.isArray(r?.rules))) {
+                return [{
+                    id: nanoid(),
+                    relation: topRelation,
+                    conditions: [{
+                        id: nanoid(),
+                        include: r?.rule_type !== "exclude",
+                        keywords: Array.isArray(r?.keywords) ? r.keywords.join(";") : ""
+                    }]
+                }];
+            }
+            return [];
+        });
+
+        return { groups, topRelation };
+    }
+
+    // Old shape fallback: each entry itself is one group, relation stored on leaf items
+    const relation: FilterRelation = topRules[0]?.relation === "or" ? "or" : "and";
+    const conditions = topRules.map((r: any) => ({
+        id: nanoid(),
+        include: r?.rule_type !== "exclude",
+        keywords: Array.isArray(r?.keywords) ? r.keywords.join(";") : ""
+    }));
+    return {
+        groups: conditions.length ? [{ id: nanoid(), relation, conditions }] : [],
+        topRelation: relation
+    };
+}
+
+function escapeRegExp(s: string) {
+    return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Highest numeric suffix among names that match the localized default pattern (e.g. 子频道名称12). */
+function maxDefaultSubChannelIndex(
+    subs: SubChannelData[],
+    localize: (key: string, opts?: Record<string, unknown>) => string
+): number {
+    const marker = 900001;
+    const template = localize("com_subscription.sub_channel_name_default", { index: marker });
+    const markerStr = String(marker);
+    if (!template.includes(markerStr)) return 0;
+    const prefix = template.split(markerStr)[0] ?? "";
+    const re = new RegExp(`^${escapeRegExp(prefix)}(\\d+)$`);
+    let max = 0;
+    for (const s of subs) {
+        const m = s.name.trim().match(re);
+        if (m) max = Math.max(max, parseInt(m[1], 10));
+    }
+    return max;
+}
+
 export function useCreateChannelForm() {
     const localize = useLocalize();
+    const subChannelNameSeqRef = useRef(0);
     // Form fields
     const [sources, setSources] = useState<InformationSource[]>([]);
     const [channelName, setChannelName] = useState("");
@@ -53,6 +133,7 @@ export function useCreateChannelForm() {
         setTopFilterRelation("and");
         setCreateSubChannel(false);
         setSubChannels([]);
+        subChannelNameSeqRef.current = 0;
         setLastAddedSubChannelId(null);
         setShowAddSourcePanel(false);
         setShowCancelConfirm(false);
@@ -90,22 +171,10 @@ export function useCreateChannelForm() {
 
         if (mainRules.length > 0) {
             setContentFilter(true);
-            const groups: FilterGroup[] = mainRules.map((g: any) => {
-                const rules = Array.isArray(g.rules) ? g.rules : [];
-                const relation: FilterRelation =
-                    (rules[0]?.relation === "or" ? "or" : "and") as FilterRelation;
-                return {
-                    id: nanoid(),
-                    relation,
-                    conditions: rules.map((r: any) => ({
-                        id: nanoid(),
-                        include: r.rule_type !== "exclude",
-                        keywords: Array.isArray(r.keywords) ? r.keywords.join(";") : ""
-                    }))
-                };
-            });
+            const parsedMain = mainRules.map((g: any) => parseRuleGroupsFromFilterRule(g));
+            const groups: FilterGroup[] = parsedMain.flatMap((x) => x.groups);
             setFilterGroups(groups);
-            setTopFilterRelation(groups[0]?.relation ?? "and");
+            setTopFilterRelation(parsedMain[0]?.topRelation ?? "and");
             setContentFilterCollapsed(false);
         } else {
             setContentFilter(false);
@@ -133,36 +202,26 @@ export function useCreateChannelForm() {
 
             const nextSubChannels: SubChannelData[] = [];
             for (const [name, groupList] of groupedByName.entries()) {
-                const groups: FilterGroup[] = groupList.map((g: any) => {
-                    const rules = Array.isArray(g.rules) ? g.rules : [];
-                    const relation: FilterRelation =
-                        (rules[0]?.relation === "or" ? "or" : "and") as FilterRelation;
-                    return {
-                        id: nanoid(),
-                        relation,
-                        conditions: rules.map((r: any) => ({
-                            id: nanoid(),
-                            include: r.rule_type !== "exclude",
-                            keywords: Array.isArray(r.keywords) ? r.keywords.join(";") : ""
-                        }))
-                    };
-                });
+                const parsedSub = groupList.map((g: any) => parseRuleGroupsFromFilterRule(g));
+                const groups: FilterGroup[] = parsedSub.flatMap((x) => x.groups);
 
                 nextSubChannels.push({
                     id: nanoid(),
                     name,
                     collapsed: false,
                     groups,
-                    topRelation: groups[0]?.relation ?? "and"
+                    topRelation: parsedSub[0]?.topRelation ?? "and"
                 });
             }
 
             setSubChannels(nextSubChannels);
+            subChannelNameSeqRef.current = maxDefaultSubChannelIndex(nextSubChannels, localize);
         } else {
             setCreateSubChannel(false);
             setSubChannels([]);
+            subChannelNameSeqRef.current = 0;
         }
-    }, []);
+    }, [localize]);
 
     const loadSourcesByIds = useCallback(async (ids: string[]) => {
         if (!ids || ids.length === 0) {
@@ -194,12 +253,14 @@ export function useCreateChannelForm() {
     // Sub-channel handlers
     const handleAddSubChannel = () => {
         if (subChannels.length >= MAX_SUB_CHANNELS) return;
+        subChannelNameSeqRef.current += 1;
+        const index = subChannelNameSeqRef.current;
         const id = nanoid();
         setSubChannels([
             ...subChannels,
             {
                 id,
-                name: localize("com_subscription.sub_channel_name"),
+                name: localize("com_subscription.sub_channel_name_default", { index }),
                 collapsed: false,
                 groups: [{ id: nanoid(), relation: "and", conditions: [{ id: nanoid(), include: true, keywords: "" }] }],
                 topRelation: "and"

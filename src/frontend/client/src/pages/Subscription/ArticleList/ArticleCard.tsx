@@ -19,7 +19,6 @@ interface ArticleCardProps {
 
 export function ArticleCard({ article, onSelect, isSelected, searchQuery }: ArticleCardProps) {
     const localize = useLocalize();
-    const [hovered, setHovered] = useState(false);
     const [showKnowledgeModal, setShowKnowledgeModal] = useState(false);
     const { handleShare } = useArticleShare();
     const { showToast } = useToastContext();
@@ -52,8 +51,6 @@ export function ArticleCard({ article, onSelect, isSelected, searchQuery }: Arti
         <div
             className={`group cursor-pointer relative py-5 flex gap-6 transition-opacity border-b border-dashed border-gray-200 last:border-none`}
             onClick={() => onSelect(article)}
-            onMouseEnter={() => setHovered(true)}
-            onMouseLeave={() => setHovered(false)}
         >
             {/* 1. 左侧封面图 - 移动到左边，并调整比例 */}
             {article.coverImage && (
@@ -70,7 +67,7 @@ export function ArticleCard({ article, onSelect, isSelected, searchQuery }: Arti
             <div className="flex-1 min-w-0 flex flex-col justify-between">
                 <div>
                     {/* 标题 - 搜索时使用 highlight HTML，非搜索时纯文本 */}
-                    <h3 className={`font-bold line-clamp-1 [&_em]:not-italic [&_em]:bg-[#FFBF00]/20 [&_em]:font-bold ${isSelected && 'text-primary'} ${article.isRead ? "text-gray-400" : "text-gray-800"
+                    <h3 className={`font-bold line-clamp-1 [&_em]:not-italic [&_em]:bg-[#FFBF00]/20 [&_em]:font-medium ${isSelected ? 'text-primary' : 'group-hover:text-primary'} ${article.isRead ? "text-[#989898]" : "text-gray-800"
                         }`}>
                         {highlightTitle
                             ? <span dangerouslySetInnerHTML={{ __html: highlightTitle }} />
@@ -79,7 +76,11 @@ export function ArticleCard({ article, onSelect, isSelected, searchQuery }: Arti
 
                     {/* 正文预览 - 增加蓝色引号 */}
                     <div className="relative pt-4 pl-3">
-                        <span className="absolute left-0 top-1 text-primary text-3xl font-serif mt-[-2px]">"</span>
+                        <img
+                            className="absolute left-0 top-1 mt-[-2px] h-5 w-5"
+                            src={`${__APP_ENV__.BASE_URL}/assets/channel/quote.svg`}
+                            alt="quote"
+                        />
                         <p className={`text-sm line-clamp-1 [&_em]:not-italic [&_em]:bg-[#FFBF00]/20 [&_em]:font-bold ${article.isRead ? "text-gray-400" : "text-gray-500"
                             }`}>
                             {highlightContent
@@ -105,7 +106,7 @@ export function ArticleCard({ article, onSelect, isSelected, searchQuery }: Arti
                     </div>
 
                     {/* 4. Hover 操作按钮 - 按照截图移动到右下角 */}
-                    <div className={`absolute right-0 flex items-center gap-3 animate-in fade-in slide-in-from-right-1 transition-opacity ${hovered ? "opacity-100" : "opacity-0"}`}>
+                    <div className="absolute right-0 flex items-center gap-3 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity">
                         <button
                             onClick={(e) => {
                                 e.stopPropagation();

@@ -1,6 +1,6 @@
 import { ChevronDown, ChevronRight, PlusSquare } from "lucide-react";
 import * as RadioGroup from "@radix-ui/react-radio-group";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useConfirm, useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
 import {
@@ -83,9 +83,37 @@ export function CreateChannelDrawer({
     const confirm = useConfirm();
     const [isComposingName, setIsComposingName] = useState(false);
     const [isComposingDesc, setIsComposingDesc] = useState(false);
+    const initedChannelIdRef = useRef<string | null>(null);
+
+    const isCreateFormPristine = () => {
+        // 仅用于“创建频道”场景：未做任何修改时，关闭不需要二次确认
+        return (
+            !isEditMode &&
+            form.sources.length === 0 &&
+            !form.channelName.trim() &&
+            !form.channelDesc.trim() &&
+            form.visibility === "review" &&
+            form.publishToSquare === "yes" &&
+            !form.contentFilter &&
+            form.filterGroups.length === 0 &&
+            form.topFilterRelation === "and" &&
+            !form.createSubChannel &&
+            form.subChannels.length === 0
+        );
+    };
+    const [isBodyScrolling, setIsBodyScrolling] = useState(false);
+    const bodyScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     useEffect(() => {
+        if (!open) {
+            initedChannelIdRef.current = null;
+            return;
+        }
         if (open && editingChannel) {
+            // Only init once per open+channel to avoid late async updates overriding user's edits.
+            if (initedChannelIdRef.current === editingChannel.id) return;
+            initedChannelIdRef.current = editingChannel.id;
+
             // 使用统一表单初始化逻辑（名称 / 简介 / 权限 / 是否发布 / filter_rules）
             form.initFromChannel(editingChannel);
 
@@ -131,6 +159,11 @@ export function CreateChannelDrawer({
                 onOpenChange(false);
                 return;
             }
+            if (isCreateFormPristine()) {
+                form.resetForm();
+                onOpenChange(false);
+                return;
+            }
             const confirmed = await confirm({
                 description: localize("com_subscription.unsaved_tab_confirm_close"),
                 cancelText: localize("com_subscription.continue_editing"),
@@ -139,10 +172,17 @@ export function CreateChannelDrawer({
             if (!confirmed) return;
             form.resetForm();
             onOpenChange(false);
-        } else {
-            form.resetForm();
-            onOpenChange(nextOpen);
         }
+    };
+
+    const handleBodyScroll = () => {
+        setIsBodyScrolling(true);
+        if (bodyScrollTimerRef.current) {
+            clearTimeout(bodyScrollTimerRef.current);
+        }
+        bodyScrollTimerRef.current = setTimeout(() => {
+            setIsBodyScrolling(false);
+        }, 500);
     };
 
     return (
@@ -177,11 +217,15 @@ export function CreateChannelDrawer({
                             }}
                         />
                     ) : (
-                        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+                        <div
+                            className="flex-1 overflow-y-auto scroll-on-scroll px-6 py-5 space-y-5"
+                            onScroll={handleBodyScroll}
+                            data-scrolling={isBodyScrolling ? "true" : "false"}
+                        >
                             {/* 添加信息源 */}
                             <div className="space-y-2">
                                 <Label className="text-[14px] text-[#1D2129]">
-                                    <span className="text-[#F53F3F]">*</span>
+                                    <span className="text-[#F53F3F] mr-1">*</span>
                                     {localize("com_subscription.add_information_source")}
                                 </Label>
                                 <AddSourceDropdown
@@ -200,7 +244,7 @@ export function CreateChannelDrawer({
                             {/* 频道名称 */}
                             <div className="space-y-2">
                                 <Label className="text-[14px] text-[#1D2129]">
-                                    <span className="text-[#F53F3F]">*</span>
+                                    <span className="text-[#F53F3F] mr-1">*</span>
                                     {localize("com_subscription.channel_name")}
                                 </Label>
                                 <div className="relative flex gap-2 items-center">
@@ -238,7 +282,7 @@ export function CreateChannelDrawer({
                                             }
                                         }}
                                         placeholder={localize("com_subscription.enter_channel_name")}
-                                        className="flex-1 h-10 text-[14px] border-[#E5E6EB]"
+                                        className="flex-1 h-8 text-[14px] border-[#E5E6EB]"
                                     />
                                     <span className="absolute right-4 flex-shrink-0 text-[12px] text-[#86909C]">
                                         {form.channelName.length}/{MAX_CHANNEL_NAME}
@@ -286,7 +330,7 @@ export function CreateChannelDrawer({
                                             }
                                         }}
                                         placeholder={localize("com_subscription.enter_channel_description")}
-                                        className="min-h-[80px] text-[14px] border-[#E5E6EB] pr-14"
+                                        className="min-h-[80px] text-[14px] bg-white border-[#E5E6EB] pr-14"
                                     />
                                 </div>
                             </div>
@@ -294,7 +338,7 @@ export function CreateChannelDrawer({
                             {/* 可见方式 */}
                             <div className="space-y-3">
                                 <Label className="text-[14px] text-[#1D2129]">
-                                    <span className="text-[#F53F3F]">*</span>
+                                    <span className="text-[#F53F3F] mr-1">*</span>
                                     {localize("com_subscription.premission_settings")}
                                 </Label>
                                 <RadioGroup.Root
@@ -334,7 +378,7 @@ export function CreateChannelDrawer({
                                                 <span className="text-[14px] text-[#1D2129]">
                                                     {opt.label}
                                                 </span>
-                                                <p className="text-[12px] text-[#86909C] mt-0.5 ml-2">
+                                                <p className="text-[15px] text-[#86909C] mt-0.5 ml-2">
                                                     {opt.desc}
                                                 </p>
                                             </div>
@@ -347,7 +391,7 @@ export function CreateChannelDrawer({
                             {form.visibility !== "private" && (
                                 <div className="space-y-3">
                                     <Label className="text-[14px] text-[#1D2129]">
-                                        <span className="text-[#F53F3F]">*</span>
+                                        <span className="text-[#F53F3F] mr-1">*</span>
                                         {localize("com_subscription.is_publish_plaza")}
                                         <span className="ml-2 text-[12px] text-[#86909C]">{localize("com_subscription.publish_to_square_description")}</span>
                                     </Label>
@@ -517,7 +561,7 @@ export function CreateChannelDrawer({
                                             <button
                                                 type="button"
                                                 onClick={form.handleAddSubChannel}
-                                                className="flex w-full items-center gap-3 px-4 py-2.5 text-[14px] border border-[#E5E6EB] bg-[#F7F8FA] transition-colors"
+                                                className="flex w-full h-8 rounded-[6px] items-center gap-3 px-4 text-[14px] leading-none border border-[#E5E6EB] bg-[#F7F8FA] transition-colors"
                                             >
                                                 <PlusSquare className="size-4 text-[#86909C]" />
                                                 <span>{localize("com_subscription.add_sub_channel")}</span>
@@ -535,7 +579,7 @@ export function CreateChannelDrawer({
                             <Button
                                 variant="secondary"
                                 onClick={() => handleClose(false)}
-                                className="h-9 px-5 bg-[#F2F3F5] hover:bg-[#E5E6EB] border-none text-[14px] text-[#4E5969]"
+                                className="h-8 rounded-[6px] px-5 inline-flex items-center justify-center leading-none bg-[#F2F3F5] hover:bg-[#E5E6EB] border-none text-[14px] text-[#4E5969]"
                             >
                                 {localize("cancel")}
                             </Button>
@@ -592,7 +636,7 @@ export function CreateChannelDrawer({
                                         form.setSubmitting(false);
                                     }
                                 }}
-                                className="h-9 px-5 bg-[#165DFF] hover:bg-[#4080FF] text-white border-none text-[14px] disabled:opacity-50"
+                                className="h-8 rounded-[6px] px-5 inline-flex items-center justify-center leading-none bg-[#165DFF] hover:bg-[#4080FF] text-white border-none text-[14px] disabled:opacity-50"
                             >
                                 {isEditMode
                                     ? form.submitting ? localize("com_subscription.saving") : localize("com_subscription.save")
@@ -619,8 +663,6 @@ export function CreateChannelDrawer({
                     form.setCrawlDialogOpen(false);
                     // 添加成功后回到「添加信息源」面板，并展示选中状态
                     form.setShowAddSourcePanel(true);
-                    // 同时清空搜索输入框状态
-                    form.setSourceSearchResetToken((t) => t + 1);
                 }}
             />
         </>

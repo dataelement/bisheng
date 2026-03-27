@@ -1,9 +1,9 @@
 from typing import Optional, List
 
-from sqlalchemy import func, or_, text
+from sqlalchemy import func, or_, text, update
 from sqlmodel import select, col
 
-from bisheng.core.database import get_async_db_session
+from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao, KnowledgeFile, KnowledgeFileStatus, \
     FileType, FileSource
 
@@ -207,3 +207,25 @@ class SpaceFileDao(KnowledgeFileDao):
         )
         async with get_async_db_session() as session:
             return await session.scalar(statement) or 0
+
+    @classmethod
+    async def update_records_update_time(cls, ids: List[int]):
+        if not ids:
+            return
+        statement = update(KnowledgeFile).where(
+            col(KnowledgeFile.id).in_(ids),
+        ).values(update_time=text("NOW()"))
+        async with get_async_db_session() as session:
+            await session.execute(statement)
+            await session.commit()
+
+    @classmethod
+    def update_records_update_time_sync(cls, ids: List[int]):
+        if not ids:
+            return
+        statement = update(KnowledgeFile).where(
+            col(KnowledgeFile.id).in_(ids),
+        ).values(update_time=text("NOW()"))
+        with get_sync_db_session() as session:
+            session.execute(statement)
+            session.commit()

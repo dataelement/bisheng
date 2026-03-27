@@ -40,6 +40,8 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
     const requestHoverTimersRef = useRef<Record<string, number>>({});
     const autoReadTimersRef = useRef<Record<string, number>>({});
     const observersRef = useRef<Record<string, IntersectionObserver>>({});
+    const [isScrolling, setIsScrolling] = useState(false);
+    const scrollHideTimerRef = useRef<number | null>(null);
 
     const isVisuallyUnread = (n: MessageItem) => !n.is_read;
     const isKnowledgeSpaceApprovalActionCode = (actionCode?: string) =>
@@ -363,7 +365,7 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
         return (
             <div
                 key={id}
-                className="flex items-start gap-3 px-6 py-6 border-b border-[#F2F3F5] hover:bg-[#f7f8fa] transition-colors relative"
+                className="flex items-start gap-3 px-6 py-4 border-b border-[#F2F3F5] hover:bg-[#f7f8fa] transition-colors relative"
                 onMouseEnter={onRowMouseEnter}
                 onMouseLeave={onRowMouseLeave}
                 ref={(node) => {
@@ -401,7 +403,7 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                 }}
             >
                 {/* 头像 */}
-                <Avatar className="size-9 flex-shrink-0">
+                <Avatar className="size-9 flex-shrink-0 self-center">
                     {userAvatar ? <AvatarImage src={userAvatar} alt={userName} /> : null}
                     <AvatarName name={userName} className="text-xs" />
                 </Avatar>
@@ -409,7 +411,8 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                 {/* 消息内容 */}
                 <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2">
-                        <div className={`text-[14px] ${textColor} flex items-center min-w-0 whitespace-nowrap`}>
+                        {/* 左侧文本：在与头像同高度的行里垂直居中 */}
+                        <div className={`text-[14px] ${textColor} flex items-center min-w-0 whitespace-nowrap min-h-9`}>
                             <TooltipAnchor
                                 description={userGroup ? `${userName} - ${userGroup}` : userName}
                                 side="top"
@@ -440,18 +443,30 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                             </span>
                         </div>
 
-                        {/* 时间（notify 类型不展示） */}
-                        {!isNotifyMessage && (
-                            <span className="text-[12px] text-[#86909c] whitespace-nowrap flex-shrink-0">
-                                {new Date(createdAt).toLocaleString("zh-CN", {
-                                    year: "numeric",
-                                    month: "2-digit",
-                                    day: "2-digit",
-                                    hour: "2-digit",
-                                    minute: "2-digit"
-                                })}
-                            </span>
-                        )}
+                        {/* 时间（notify 类型不展示）；hover 时同位置替换成“删除消息”按钮 */}
+                        <div className="flex-shrink-0 whitespace-nowrap self-start">
+                            {isHovered && showDeleteMessage ? (
+                                <button
+                                    type="button"
+                                    onClick={() => handleDelete(id)}
+                                    className="flex items-center gap-1 px-3 py-1 text-[12px] text-[#4e5969] bg-white border border-[#e5e6eb] rounded hover:text-[#f53f3f] hover:border-[#f53f3f] transition-colors"
+                                    title="删除消息"
+                                >
+                                    <Trash2 className="size-3" />
+                                    删除消息
+                                </button>
+                            ) : !isNotifyMessage ? (
+                                <span className="text-[14px] text-[#999999]">
+                                    {new Date(createdAt).toLocaleString("zh-CN", {
+                                        year: "numeric",
+                                        month: "2-digit",
+                                        day: "2-digit",
+                                        hour: "2-digit",
+                                        minute: "2-digit"
+                                    })}
+                                </span>
+                            ) : null}
+                        </div>
                     </div>
 
                     {/* 审批按钮/结果（请求类） */}
@@ -479,7 +494,7 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                             </button>
                         </div>
                     ) : isApproved && !isSelfApplicationDecision && !isNotifyMessage ? (
-                        <div className="absolute right-6 bottom-4">
+                        <div className="absolute right-6 bottom-1">
                             {isApprovedStatus(approvalStatus) ? (
                                 <button
                                     type="button"
@@ -503,8 +518,8 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                     ) : null}
                 </div>
 
-                {/* 删除按钮（Hover 显示） */}
-                {(isSelfApplicationDecision || isNotifyMessage || (isHovered && showDeleteMessage)) && (
+                {/* 删除按钮（始终显示的类型：notify / 自己申请的结果） */}
+                {(isSelfApplicationDecision || isNotifyMessage) && (
                     <button
                         onClick={() => handleDelete(id)}
                         className={`absolute right-6 flex items-center gap-1 px-3 py-1 text-[12px] text-[#4e5969] bg-white border border-[#e5e6eb] rounded hover:text-[#f53f3f] hover:border-[#f53f3f] transition-colors ${(isSelfApplicationDecision || isNotifyMessage) ? "top-1/2 -translate-y-1/2" : "top-4"}`}
@@ -607,9 +622,19 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                         <TabsContent value="all" className="h-full p-0 m-0">
                             <div
                                 ref={listRef}
-                                className="h-[560px] overflow-y-auto"
+                                className="h-[560px] overflow-y-auto scroll-on-scroll"
+                                data-scrolling={isScrolling ? "true" : "false"}
                                 onScroll={(e) => {
                                     const el = e.currentTarget;
+                                    // Show scrollbar while scrolling, then hide shortly after.
+                                    setIsScrolling(true);
+                                    if (scrollHideTimerRef.current) {
+                                        window.clearTimeout(scrollHideTimerRef.current);
+                                    }
+                                    scrollHideTimerRef.current = window.setTimeout(() => {
+                                        setIsScrolling(false);
+                                    }, 700);
+
                                     if (loadingMore || loading || !hasMore) return;
                                     const threshold = 80;
                                     if (el.scrollTop + el.clientHeight >= el.scrollHeight - threshold) {
@@ -643,9 +668,18 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                         <TabsContent value="request" className="h-full p-0 m-0">
                             <div
                                 ref={listRef}
-                                className="h-[560px] overflow-y-auto"
+                                className="h-[560px] overflow-y-auto scroll-on-scroll"
+                                data-scrolling={isScrolling ? "true" : "false"}
                                 onScroll={(e) => {
                                     const el = e.currentTarget;
+                                    setIsScrolling(true);
+                                    if (scrollHideTimerRef.current) {
+                                        window.clearTimeout(scrollHideTimerRef.current);
+                                    }
+                                    scrollHideTimerRef.current = window.setTimeout(() => {
+                                        setIsScrolling(false);
+                                    }, 700);
+
                                     if (loadingMore || loading || !hasMore) return;
                                     const threshold = 80;
                                     if (el.scrollTop + el.clientHeight >= el.scrollHeight - threshold) {
@@ -663,7 +697,7 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                                         {/* 待审批 */}
                                         {requestGroups.pending.length > 0 && (
                                             <div>
-                                                <div className="px-6 py-2 text-[12px] text-[#86909c] font-medium">
+                                                <div className="px-6 py-2 bg-[#f7f8fa] text-[12px] text-[#86909c] font-medium">
                                                     待审批
                                                 </div>
                                                 {requestGroups.pending.map(renderNotificationItem)}

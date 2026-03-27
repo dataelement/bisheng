@@ -68,9 +68,9 @@ export default function KnowledgeSquareCard({
                         className={cn(
                             "h-6 px-2.5 text-[12px] rounded-md flex-shrink-0 ml-2 border",
                             buttonConfig.variant === "secondary" &&
-                                "bg-[#F7F8FA] hover:bg-[#F2F3F5] text-[#86909C] border-[#E5E6EB]",
+                            "bg-[#F7F8FA] hover:bg-[#F2F3F5] text-[#86909C] border-[#E5E6EB]",
                             buttonConfig.variant === "outline" &&
-                                "text-[#4E5969] border-[#E5E6EB] hover:text-[#165DFF] hover:border-[#165DFF]"
+                            "text-[#4E5969] border-[#E5E6EB] hover:text-[#165DFF] hover:border-[#165DFF]"
                         )}
                         onClick={(e) => {
                             e.stopPropagation();
@@ -103,7 +103,7 @@ export default function KnowledgeSquareCard({
                     </span>
                     <span>
                         {space.memberCount}
-                        {localize("com_ui_subscription") ? localize("com_ui_subscription") : localize("com_knowledge.users_count")}
+                        {localize("com_knowledge.users_count")}
                     </span>
                 </div>
             </CardContent>

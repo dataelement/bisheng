@@ -1,5 +1,5 @@
 import { useLocalize } from "~/hooks";
-import { Minus, Plus, RefreshCcw } from "lucide-react";
+import { RefreshCcw } from "lucide-react";
 import TextareaAutosize from "react-textarea-autosize";
 import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
@@ -8,6 +8,8 @@ import { generateUUID } from "~/utils";
 
 const MAX_KEYWORDS_LEN = 200;
 const MAX_CONDITIONS_TOTAL = 20;
+const PLUS_ICON_SRC = `${__APP_ENV__.BASE_URL}/assets/channel/plus.svg`;
+const MINUS_ICON_SRC = `${__APP_ENV__.BASE_URL}/assets/channel/minus.svg`;
 
 export type FilterRelation = "and" | "or";
 
@@ -197,10 +199,10 @@ export function FilterConditionEditor({
                 <button
                     type="button"
                     onClick={addRootCondition}
-                    className="flex items-center justify-center p-1.5 rounded border border-[#E5E6EB] text-[#86909C] hover:border-[#165DFF] hover:text-[#165DFF] transition-colors w-8"
+                    className="flex items-center justify-center p-1.5 text-[#86909C] transition-colors w-8"
                     title={localize("com_subscription.add_condition")}
                 >
-                    <Plus className="size-4" />
+                    <img src={PLUS_ICON_SRC} alt="" className="w-4 h-4" />
                 </button>
             </div>
         );
@@ -230,10 +232,10 @@ export function FilterConditionEditor({
                         </span>
                         <RefreshCcw className="absolute size-3.5 opacity-0 group-hover/btn:opacity-100 transition-opacity pointer-events-none" />
                     </button>
-                    {/* 竖线延伸至最下方加号，底横线指向加号 */}
-                    <div className="absolute left-9 top-6 bottom-2 w-px border-l border-dashed border-[#C9CDD4]" />
-                    <div className="absolute left-9 top-6 w-3 h-px border-t border-dashed border-[#C9CDD4]" />
-                    <div className="absolute left-9 bottom-2 w-4 h-px border-t border-dashed border-[#C9CDD4]" />
+                    {/* 第一层连接线：实线+12px圆角，上下短横线等宽 */}
+                    <div className="absolute left-9 top-6 bottom-2 w-px bg-[#C9CDD4] rounded-[12px]" />
+                    <div className="absolute left-9 top-6 w-4 h-px bg-[#C9CDD4] rounded-[12px]" />
+                    <div className="absolute left-9 bottom-2 w-4 h-px bg-[#C9CDD4] rounded-[12px]" />
                 </>
             )}
 
@@ -268,20 +270,18 @@ export function FilterConditionEditor({
                                     </span>
                                     <RefreshCcw className="absolute size-3.5 opacity-0 group-hover/btn:opacity-100 transition-opacity pointer-events-none" />
                                 </button>
-                                {/* 竖线从组内第一条顶部到底部横线（横线下方是 + 行） */}
-                                <div className="absolute left-9 top-4 bottom-4 w-px border-l border-dashed border-[#C9CDD4]" />
-                                {/* 顶部小横线包住第一条条件 */}
-                                <div className="absolute left-9 top-4 w-3 h-px border-t border-dashed border-[#C9CDD4]" />
-                                {/* 底部小横线指向底部的 + 号（与 + 位于同一行上方） */}
-                                <div className="absolute left-9 bottom-3 w-3 h-px border-t border-dashed border-[#C9CDD4]" />
+                                {/* 第二层连接线：实线+12px圆角，上下短横线等宽 */}
+                                <div className="absolute left-9 top-4 bottom-3 w-px bg-[#C9CDD4] rounded-[12px]" />
+                                <div className="absolute left-9 top-4 w-4 h-px bg-[#C9CDD4] rounded-[12px]" />
+                                <div className="absolute left-9 bottom-3 w-4 h-px bg-[#C9CDD4] rounded-[12px]" />
                                 {!atTotalLimit && (
                                     <button
                                         type="button"
                                         onClick={() => addConditionInGroup(groupIndex)}
-                                        className="absolute left-14 bottom-1 flex items-center justify-center w-4 h-4 rounded border border-[#165DFF] text-[#86909C] bg-white hover:border-[#165DFF] hover:text-[#165DFF] transition-colors"
+                                        className="absolute left-14 bottom-1 flex items-center justify-center w-4 h-4 text-[#86909C] bg-white transition-colors"
                                         title={localize("com_subscription.add_condition_under_current_relation")}
                                     >
-                                        <Plus className="size-3.5 text-[#165DFF]" />
+                                        <img src={PLUS_ICON_SRC} alt="" className="w-4 h-4" />
                                     </button>
                                 )}
                             </>
@@ -308,8 +308,9 @@ export function FilterConditionEditor({
                                             className={cn(
                                                 "px-1 py-1 text-[13px] transition-colors max-h-[26px]",
                                                 cond.include
-                                                    ? "bg-[#E8F3FF] text-[#165DFF]"
-                                                    : "bg-[#F8F8F8] text-[#4E5969] hover:bg-[#F2F3F5]"
+                                                    ? "bg-[#E8F3FF] text-[#335CFF]"
+
+                                                    : "bg-[#F8F8F8] text-[#818181] hover:bg-[#F2F3F5]"
                                             )}
                                         >{localize("com_subscription.includes")}</button>
                                         <button
@@ -322,8 +323,8 @@ export function FilterConditionEditor({
                                             className={cn(
                                                 "px-1 py-1 text-[13px] transition-colors max-h-[26px]",
                                                 !cond.include
-                                                    ? "bg-[#E8F3FF] text-[#165DFF]"
-                                                    : "bg-[#F8F8F8] text-[#4E5969] hover:bg-[#F2F3F5]"
+                                                    ? "bg-[#E8F3FF] text-[#335CFF]"
+                                                    : "bg-[#F8F8F8] text-[#818181] hover:bg-[#F2F3F5]"
                                             )}
                                         >{localize("com_subscription.excludes")}</button>
                                     </div>
@@ -342,7 +343,7 @@ export function FilterConditionEditor({
                                             minRows={1}
                                             maxRows={4}
                                             placeholder={localize("com_subscription.input_keywords_semicolon_separated")}
-                                            className="w-full px-3 py-1.5 text-[14px] rounded-lg border border-[#E5E6EB] focus:outline-none focus:ring-2 focus:ring-[#165DFF]/30 focus:border-[#165DFF] resize-none leading-[22px]"
+                                            className="w-full px-3 py-1 text-[14px] text-[#999999] rounded-lg border border-[#E5E6EB] focus:outline-none focus:ring-2 focus:ring-[#165DFF]/30 focus:border-[#165DFF] resize-none leading-[22px]"
                                         />
                                     </div>
 
@@ -353,32 +354,32 @@ export function FilterConditionEditor({
                                             <button
                                                 type="button"
                                                 onClick={() => addConditionInGroup(groupIndex)}
-                                                className="p-[0.5px] rounded border border-[#165DFF] text-[#86909C] hover:border-[#165DFF] hover:text-[#165DFF] transition-colors"
+                                                className="w-4 h-4 flex items-center justify-center text-[#86909C] transition-colors flex-shrink-0"
                                                 title={localize("com_subscription.add_condition_under_current_relation")}
                                             >
-                                                <Plus className="size-3.5 text-[#165DFF]" />
+                                                <img src={PLUS_ICON_SRC} alt="" className="w-4 h-4" />
                                             </button>
                                         )}
                                         {!(
                                             disableFirstConditionDelete &&
                                             groupIndex === 0 &&
                                             condIndex === 0 &&
-                                            group.conditions.length === 1
+                                            total === 1
                                         ) && (
-                                            <button
-                                                type="button"
-                                                onClick={() =>
-                                                    removeConditionInGroup(
-                                                        groupIndex,
-                                                        condIndex
-                                                    )
-                                                }
-                                                className="p-[1px] rounded border border-[#E5E6EB] text-[#86909C] hover:text-[#F53F3F] transition-colors"
-                                                title={localize("com_subscription.delete_this_condition")}
-                                            >
-                                                <Minus className="size-3.5" />
-                                            </button>
-                                        )}
+                                                <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                        removeConditionInGroup(
+                                                            groupIndex,
+                                                            condIndex
+                                                        )
+                                                    }
+                                                    className="w-4 h-4 flex items-center justify-center text-[#86909C] hover:text-[#F53F3F] transition-colors flex-shrink-0"
+                                                    title={localize("com_subscription.delete_this_condition")}
+                                                >
+                                                    <img src={MINUS_ICON_SRC} alt="" className="w-4 h-4" />
+                                                </button>
+                                            )}
                                     </div>
                                 </div>
                             ))}
@@ -393,10 +394,10 @@ export function FilterConditionEditor({
                     <button
                         type="button"
                         onClick={addRootCondition}
-                        className="flex items-center justify-center w-4 h-4 rounded-[4px] border border-[#165DFF] text-[#165DFF]  hover:text-white transition-colors"
+                        className="flex items-center justify-center w-4 h-4 text-[#165DFF] transition-colors"
                         title={localize("com_subscription.add_condition")}
                     >
-                        <Plus className="size-3.5 text-[#165DFF]" />
+                        <img src={PLUS_ICON_SRC} alt="" className="w-4 h-4" />
                     </button>
                 </div>
             )}
