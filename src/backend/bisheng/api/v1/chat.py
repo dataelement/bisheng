@@ -6,7 +6,6 @@ from fastapi.params import Depends
 from loguru import logger
 
 from bisheng.api.services.audit_log import AuditLogService
-from bisheng.api.services.base import BaseService
 from bisheng.api.services.chat_imp import comment_answer
 from bisheng.api.services.workflow import WorkFlowService
 from bisheng.api.v1.schema.base_schema import PageList
@@ -20,6 +19,7 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError, ServerError
 from bisheng.common.schemas.telemetry.event_data_schema import NewMessageSessionEventData, DeleteMessageSessionEventData
 from bisheng.common.services import telemetry_service
+from bisheng.common.services.base import BaseService
 from bisheng.core.logger import trace_id_var
 from bisheng.database.models.assistant import AssistantDao
 from bisheng.database.models.flow import FlowDao, FlowStatus, FlowType

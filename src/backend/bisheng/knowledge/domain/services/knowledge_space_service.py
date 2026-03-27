@@ -5,7 +5,6 @@ from typing import List, Optional, Dict, TYPE_CHECKING
 
 from fastapi import Request
 
-from bisheng.api.services.base import BaseService
 from bisheng.api.v1.schemas import KnowledgeFileOne, FileProcessBase, ExcelRule
 from bisheng.common.dependencies.user_deps import UserPayload  # noqa: F401 – kept for type hints
 from bisheng.common.errcode.http_error import NotFoundError
@@ -34,6 +33,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     KnowledgeSpaceInfoResp, SpaceMemberResponse, SpaceMemberPageResponse,
     UpdateSpaceMemberRoleRequest, RemoveSpaceMemberRequest
 )
+from bisheng.knowledge.domain.services.knowledge_base import KnowledegBaseService
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.llm.domain import LLMService
@@ -52,7 +52,7 @@ _MAX_SUBSCRIBE_PER_USER = 50
 SPACE_ADMIN_ASSIGNMENT_MESSAGE = "assigned_knowledge_space_admin"
 
 
-class KnowledgeSpaceService(BaseService):
+class KnowledgeSpaceService(KnowledegBaseService):
     """ Service for Knowledge Space operations.
     Instance-based; each method receives login_user as an argument.
     All business logic is async; DB access is delegated to DAO classes.
@@ -828,6 +828,7 @@ class KnowledgeSpaceService(BaseService):
     async def rename_file(
             self, file_id: int, new_name: str
     ) -> KnowledgeFile:
+        from bisheng.worker.knowledge.rebuild_knowledge_worker import rebuild_knowledge_file_chunk
         file_record = await KnowledgeFileDao.query_by_id(file_id)
         if not file_record or file_record.file_type != 1:
             raise SpaceFileNotFoundError()
@@ -846,8 +847,7 @@ class KnowledgeSpaceService(BaseService):
         updated_file = await KnowledgeFileDao.async_update(file_record)
 
         if updated_file.status == KnowledgeFileStatus.SUCCESS.value:
-            # TODO: Rebuild chunks metadata and update vector store
-            pass
+            rebuild_knowledge_file_chunk.delay(file_id=file_id)
 
         return updated_file
 
