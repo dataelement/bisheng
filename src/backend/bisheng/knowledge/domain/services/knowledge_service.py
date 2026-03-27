@@ -1054,6 +1054,7 @@ class KnowledgeService(KnowledgeUtils):
         req_data["knowledge_id"] = knowledge.id
 
         minio_client = get_minio_storage_sync()
+        file_level_path = set()
 
         for file in db_files:
             input_file = id2input.get(file.id)
@@ -1077,6 +1078,7 @@ class KnowledgeService(KnowledgeUtils):
             file.status = KnowledgeFileStatus.WAITING.value  # Parsing
             file.updater_id = login_user.user_id
             file.updater_name = login_user.user_name
+            file_level_path.add(file.file_level_path)
 
             file = KnowledgeFileDao.update(file)
             res.append([file, file_preview_cache_key])
@@ -1085,6 +1087,8 @@ class KnowledgeService(KnowledgeUtils):
             file_worker.retry_knowledge_file_celery.delay(one_file[0].id, one_file[1], None)
             tmp.append(one_file[0])
         cls.upload_knowledge_file_hook(request, login_user, knowledge, tmp)
+        for one in file_level_path:
+            cls.update_folder_update_time_sync(one)
         return []
 
     @classmethod

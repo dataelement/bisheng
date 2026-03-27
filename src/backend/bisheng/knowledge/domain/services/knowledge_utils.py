@@ -6,6 +6,7 @@ from langchain_core.language_models import BaseChatModel
 
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.core.cache.redis_manager import get_redis_client, get_redis_client_sync
+from bisheng.knowledge.domain.models.knowledge_space_file import SpaceFileDao
 from bisheng.llm.domain import LLMService
 from bisheng.llm.domain.schemas import KnowledgeLLMConfig
 from bisheng.utils import md5_hash
@@ -164,3 +165,19 @@ class KnowledgeUtils:
             app_name=ApplicationTypeEnum.KNOWLEDGE_BASE.value,
             app_type=ApplicationTypeEnum.KNOWLEDGE_BASE,
             user_id=invoke_user_id), knowledge_llm
+
+    @staticmethod
+    async def update_folder_update_time(file_level_path: str) -> None:
+        if not file_level_path:
+            return
+        folder_ids = file_level_path.split("/")
+        folder_ids = [int(one) for one in folder_ids if one]
+        await SpaceFileDao.update_records_update_time(folder_ids)
+
+    @staticmethod
+    def update_folder_update_time_sync(file_level_path: str) -> None:
+        if not file_level_path:
+            return
+        folder_ids = file_level_path.split("/")
+        folder_ids = [int(one) for one in folder_ids if one]
+        SpaceFileDao.update_records_update_time_sync(folder_ids)

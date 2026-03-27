@@ -33,7 +33,6 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     KnowledgeSpaceInfoResp, SpaceMemberResponse, SpaceMemberPageResponse,
     UpdateSpaceMemberRoleRequest, RemoveSpaceMemberRequest
 )
-from bisheng.knowledge.domain.services.knowledge_base import KnowledegBaseService
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.llm.domain import LLMService
@@ -52,7 +51,7 @@ _MAX_SUBSCRIBE_PER_USER = 50
 SPACE_ADMIN_ASSIGNMENT_MESSAGE = "assigned_knowledge_space_admin"
 
 
-class KnowledgeSpaceService(KnowledegBaseService):
+class KnowledgeSpaceService(KnowledgeUtils):
     """ Service for Knowledge Space operations.
     Instance-based; each method receives login_user as an argument.
     All business logic is async; DB access is delegated to DAO classes.
@@ -730,6 +729,9 @@ class KnowledgeSpaceService(KnowledegBaseService):
 
         if file_ids:
             delete_knowledge_file_celery.delay(file_ids=file_ids, knowledge_id=folder.knowledge_id, clear_minio=True)
+
+        await self.update_folder_update_time(folder.file_level_path)
+
         await KnowledgeFileDao.adelete_batch(file_ids + floder_ids)
 
     async def get_folder_file_parent(self, space_id: int, file_id: int) -> List[Dict]:
@@ -811,7 +813,7 @@ class KnowledgeSpaceService(KnowledegBaseService):
                                                                      "file_source": file_source.value})
             if db_file.status != KnowledgeFileStatus.FAILED.value:
                 # Get a preview cache of this filekey
-                cache_key = KnowledgeUtils.get_preview_cache_key(
+                cache_key = self.get_preview_cache_key(
                     knowledge_id, one
                 )
                 preview_cache_keys.append(cache_key)
@@ -823,6 +825,7 @@ class KnowledgeSpaceService(KnowledegBaseService):
                 failed_files.append(failed_file_info)
         for index, one in enumerate(process_files):
             file_worker.parse_knowledge_file_celery.delay(one.id, preview_cache_keys[index])
+        await self.update_folder_update_time(file_level_path)
         return failed_files + process_files
 
     async def rename_file(
@@ -848,7 +851,7 @@ class KnowledgeSpaceService(KnowledegBaseService):
 
         if updated_file.status == KnowledgeFileStatus.SUCCESS.value:
             rebuild_knowledge_file_chunk.delay(file_id=file_id)
-
+        await self.update_folder_update_time(file_record.file_level_path)
         return updated_file
 
     async def delete_file(self, file_id: int):
@@ -862,6 +865,7 @@ class KnowledgeSpaceService(KnowledegBaseService):
 
         await KnowledgeFileDao.adelete_batch([file_id])
         delete_knowledge_file_celery.delay(file_ids=[file_id], knowledge_id=file_record.knowledge_id, clear_minio=True)
+        await self.update_folder_update_time(file_record.file_level_path)
 
     async def get_file_preview(self, file_id: int) -> dict:
         file_record = await KnowledgeFileDao.query_by_id(file_id)
