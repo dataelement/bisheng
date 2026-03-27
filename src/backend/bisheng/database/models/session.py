@@ -73,7 +73,7 @@ class MessageSessionDao(MessageSessionBase):
     @classmethod
     async def delete_session(cls, chat_id: str):
         statement = update(MessageSession).where(MessageSession.chat_id == chat_id).values(is_delete=True)
-        with get_async_db_session() as session:
+        async with get_async_db_session() as session:
             await session.exec(statement)
             await session.commit()
 
