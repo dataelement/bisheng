@@ -40,14 +40,23 @@ export function useInlineRename({
     // Auto-focus input and select text when entering rename mode
     useEffect(() => {
         if (isRenaming && inputRef.current) {
-            inputRef.current.focus();
-            // Select text before extension for files, or select all for folders
-            const dotIndex = fileName.lastIndexOf(".");
-            if (dotIndex > 0 && !isFolder) {
-                inputRef.current.setSelectionRange(0, dotIndex);
-            } else {
-                inputRef.current.select();
-            }
+            const input = inputRef.current;
+            // Focus MUST be synchronous to immediately capture focus and prevent onBlur
+            // from being accidentally triggered by surrounding UI interactions (like Radix dropdown).
+            input.focus();
+            
+            // Text selection is delayed to ensure the browser doesn't clear it immediately after focus
+            const timerId = setTimeout(() => {
+                // Select text before extension for files, or select all for folders
+                const dotIndex = fileName.lastIndexOf(".");
+                if (dotIndex > 0 && !isFolder) {
+                    input.setSelectionRange(0, dotIndex);
+                } else {
+                    input.select();
+                }
+            }, 10);
+            
+            return () => clearTimeout(timerId);
         }
     }, [isRenaming, isFolder, fileName]);
 

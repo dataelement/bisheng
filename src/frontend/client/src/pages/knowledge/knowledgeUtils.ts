@@ -81,7 +81,8 @@ export function formatTime(dateString: string): string {
     const now = new Date();
     const isToday = date.toDateString() === now.toDateString();
 
-    return isToday ? `${HH}:${min}` : `${yyyy}-${mm}-${dd}`;
+    const todayStr = i18next.t("com_ui_date_today");
+    return isToday ? `${todayStr} ${HH}:${min}` : `${yyyy}-${mm}-${dd} ${HH}:${min}`;
 }
 
 /**

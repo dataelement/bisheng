@@ -1,4 +1,4 @@
-import { Circle, MoreVertical, X } from "lucide-react";
+import { Circle, Download, MoreVertical, X } from "lucide-react";
 import { useState } from "react";
 import { FileStatus, FileType, KnowledgeFile, SpaceRole } from "~/api/knowledge";
 import { Button, Checkbox } from "~/components";
@@ -52,7 +52,7 @@ export function FileCard({
     hideSelectionCheckbox = false,
 }: FileCardProps) {
     const localize = useLocalize();
-  const isCreating = !!file.isCreating;
+    const isCreating = !!file.isCreating;
     const [hovered, setHovered] = useState(false);
 
     const isAdmin = userRole === SpaceRole.CREATOR || userRole === SpaceRole.ADMIN;
@@ -153,6 +153,14 @@ export function FileCard({
         onPreview?.(file.id);
     };
 
+    const hasRetryOption = Boolean(
+        onRetry && (
+            file.status === FileStatus.FAILED ||
+            (isFolder && file.successFileNum !== undefined && file.fileNum !== undefined && file.successFileNum < file.fileNum)
+        )
+    );
+    const showMoreMenu = isAdmin;
+
     return (
         <Card
             className={cn(
@@ -176,50 +184,60 @@ export function FileCard({
                         </div>
                     )}
 
-                    <div className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button
-                                    variant="outline"
-                                    size="icon"
-                                    className="w-5 h-5 rounded-md"
-                                    onClick={(e) => e.stopPropagation()}
-                                >
-                                    <MoreVertical className="size-4 text-[#4e5969] group-hover:text-[#1d2129]" />
-                                </Button>
-                            </DropdownMenuTrigger>
+                    <div className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+                        {!isFolder && !showMoreMenu && (
+                            <Button
+                                variant="outline"
+                                size="icon"
+                                className="w-5 h-5 rounded-md hover:bg-gray-100 shrink-0"
+                                onClick={(e) => { e.stopPropagation(); onDownload(); }}
+                                title={localize("com_knowledge.download")}
+                            >
+                                <Download className="size-3.5 text-[#4e5969] group-hover:text-[#1d2129]" />
+                            </Button>
+                        )}
+                        {showMoreMenu && (
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button
+                                        variant="outline"
+                                        size="icon"
+                                        className="w-5 h-5 rounded-md shrink-0"
+                                        onClick={(e) => e.stopPropagation()}
+                                    >
+                                        <MoreVertical className="size-4 text-[#4e5969] group-hover:text-[#1d2129]" />
+                                    </Button>
+                                </DropdownMenuTrigger>
 
-                            <DropdownMenuContent align="end" className="min-w-[120px]" onClick={(e) => e.stopPropagation()}>
-                                {/* 下载功能现在移到了列表第一项 */}
-                                <DropdownMenuItem onClick={(e) => {
-                                    e.stopPropagation();
-                                    onDownload();
-                                }}>
-                                    <span>{localize("com_knowledge.download")}</span>
-                                </DropdownMenuItem>
+                                <DropdownMenuContent align="end" className="min-w-[120px]" onClick={(e) => e.stopPropagation()}>
 
-                                {/* 如果是管理员，显示后续管理操作 */}
-                                {isAdmin && (
-                                    <>
-                                        {!isFolder && <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEditTags(); }}>{localize("com_knowledge.edit_tags")}</DropdownMenuItem>}
-                                        <DropdownMenuItem onClick={(e) => {
-                                            e.stopPropagation();
-                                            startRenaming();
-                                        }}>{localize("com_knowledge.rename")}</DropdownMenuItem>
-                                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDelete(); }} className="text-[#f53f3f] focus:text-[#f53f3f]">
-                                            {localize("com_knowledge.delete")}</DropdownMenuItem>
-                                    </>
-                                )}
+                                    {/* 当有更多菜单时，下载按钮收起在下拉列表内展示 */}
+                                    {!isFolder && (
+                                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDownload(); }}>
+                                            {localize("com_knowledge.download")}
+                                        </DropdownMenuItem>
+                                    )}
 
-                                {/* Retry for failed files or folders with partial failures */}
-                                {onRetry && (
-                                    file.status === FileStatus.FAILED ||
-                                    (isFolder && file.successFileNum !== undefined && file.fileNum !== undefined && file.successFileNum < file.fileNum)
-                                ) && (
-                                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onRetry(); }}>{localize("com_knowledge.retry")}</DropdownMenuItem>
-                                )}
-                            </DropdownMenuContent>
-                        </DropdownMenu>
+                                    {/* 如果是管理员，显示后续管理操作 */}
+                                    {isAdmin && (
+                                        <>
+                                            {!isFolder && <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEditTags(); }}>{localize("com_knowledge.edit_tags")}</DropdownMenuItem>}
+                                            <DropdownMenuItem onClick={(e) => {
+                                                e.stopPropagation();
+                                                startRenaming();
+                                            }}>{localize("com_knowledge.rename")}</DropdownMenuItem>
+                                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDelete(); }} className="text-[#f53f3f] focus:text-[#f53f3f]">
+                                                {localize("com_knowledge.delete")}</DropdownMenuItem>
+                                        </>
+                                    )}
+
+                                    {/* Retry for failed files or folders with partial failures */}
+                                    {hasRetryOption && (
+                                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onRetry?.(); }}>{localize("com_knowledge.retry")}</DropdownMenuItem>
+                                    )}
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                        )}
                     </div>
                 </div>
 
@@ -235,7 +253,7 @@ export function FileCard({
                         <div className="flex items-center flex-1 min-w-0">
                             {isAdmin && isFolder && file.fileNum != null && (
                                 <div className="text-sm font-medium leading-none">
-                                    <span className="text-[#86909c]">{file.successFileNum ?? 0}</span>
+                                    <span className="text-emerald-500 font-semibold">{file.successFileNum ?? 0}</span>
                                     <span className="text-[#86909c]">/{file.fileNum}</span>
                                 </div>
                             )}

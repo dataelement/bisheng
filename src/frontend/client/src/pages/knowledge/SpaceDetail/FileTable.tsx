@@ -32,6 +32,7 @@ import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { SortType, SortDirection, FileStatus, FileType, KnowledgeFile } from "~/api/knowledge";
 import { formatBytes } from "~/utils";
 import { useInlineRename } from "../hooks/useInlineRename";
+import { formatTime } from "../knowledgeUtils";
 import { useLocalize } from "~/hooks";
 
 // ============================================================
@@ -40,6 +41,7 @@ import { useLocalize } from "~/hooks";
 const COLUMN_CONFIG = {
     checkbox: { minWidth: 48, initialWidth: 48 },
     name: { minWidth: 140, initialWidth: 280 },
+    fileType: { minWidth: 80, initialWidth: 100 },
     size: { minWidth: 80, initialWidth: 120 },
     tags: { minWidth: 140, initialWidth: 200 },
     updateTime: { minWidth: 140, initialWidth: 180 },
@@ -149,7 +151,7 @@ function useScrollShadow(scrollRef: React.RefObject<HTMLDivElement | null>) {
 // ============================================================
 const StatusBadge = ({ status }: { status: FileStatus }) => {
     const localize = useLocalize();
-  const config: Record<string, { label: string; color: string; bg: string; dot: string }> = {
+    const config: Record<string, { label: string; color: string; bg: string; dot: string }> = {
         [FileStatus.SUCCESS]: { label: localize("com_knowledge.success"), color: "text-[#00b42a]", bg: "bg-[#e8ffea]", dot: "bg-[#00b42a]" },
         [FileStatus.PROCESSING]: { label: localize("com_knowledge.parsing_status"), color: "text-[#165dff]", bg: "bg-[#e8f3ff]", dot: "bg-[#165dff]" },
         [FileStatus.WAITING]: { label: localize("com_knowledge.queueing_status"), color: "text-[#165dff]", bg: "bg-[#e8f3ff]", dot: "bg-[#165dff]" },
@@ -304,6 +306,17 @@ function FileTableHeader({
                 >
                     {localize("com_knowledge.file_name")}</SortableHeader>
 
+                {/* 文件类型 */}
+                <SortableHeader
+                    sortKey={SortType.TYPE}
+                    currentSort={currentSort}
+                    onSort={handleSort}
+                    width={columnWidths.fileType}
+                    columnKey="fileType"
+                    onResizeStart={onResizeStart}
+                >
+                    {localize("com_knowledge.type")}</SortableHeader>
+
                 {/* 文件大小 */}
                 <SortableHeader
                     sortKey={SortType.SIZE}
@@ -425,7 +438,7 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                                 onRetry={() => onRetry?.(file.id)}
                                 onNavigateFolder={() => onNavigateFolder?.(file.id)}
                                 onPreview={() => onPreview?.(file.id)}
-                                onValidateName={(newName) => onValidateName?.(newName, file.type === 'FOLDER', file.id, !!file.isCreating)}
+                                onValidateName={(newName) => onValidateName?.(newName, file.type === FileType.FOLDER, file.id, !!file.isCreating)}
                                 onCancelCreate={onCancelCreate}
                                 columnWidths={columnWidths}
                                 showLeftShadow={showLeftShadow}
@@ -487,7 +500,7 @@ function FileRow({
     const localize = useLocalize();
     const isFolder = file.type === FileType.FOLDER;
     const isCreating = !!file.isCreating;
-    const rowBg = isSelected ? "bg-primary/10" : "bg-white";
+    const rowBg = isSelected ? "bg-[#E6EDFC] group-hover:bg-[#F8F8F8]" : "bg-white group-hover:bg-[#f7f8fa]";
 
     const {
         isRenaming,
@@ -506,10 +519,18 @@ function FileRow({
         onCancelCreate,
     });
 
+    const hasRetryOption = Boolean(
+        (
+            file.status === FileStatus.FAILED ||
+            (isFolder && file.successFileNum !== undefined && file.fileNum !== undefined && file.successFileNum < file.fileNum)
+        )
+    );
+    const showMoreMenu = isAdmin;
+
     return (
         <TableRow className={cn(
             "group border-b-[#e5e6eb] transition-colors",
-            isSelected ? "bg-primary/10 hover:bg-primary/10" : "hover:bg-[#f7f8fa]"
+            isSelected ? "bg-[#E6EDFC] hover:bg-[#F8F8F8]" : "hover:bg-[#f7f8fa]"
         )}>
             {/* 复选框 — 左侧固定 */}
             <TableCell
@@ -539,7 +560,9 @@ function FileRow({
                     <div className="bg-white rounded-sm size-5 flex items-center justify-center flex-shrink-0">
                         {isFolder
                             ? <FolderIcon className="size-4" />
-                            : (file.thumbnail ? <FileImageIcon className="size-4" /> : <FileUserIcon className="size-4" />)
+                            : (['png', 'jpg', 'jpeg', 'bmp', 'gif', 'webp'].includes(file.name.split('.').pop()?.toLowerCase() || "")
+                                ? <FileImageIcon className="size-4" />
+                                : <FileUserIcon className="size-4" />)
                         }
                     </div>
                     {isRenaming ? (
@@ -571,6 +594,16 @@ function FileRow({
                 </div>
                 {/* 固定列右侧阴影 */}
                 <StickyColumnShadow show={showLeftShadow} />
+            </TableCell>
+
+            {/* 类型 */}
+            <TableCell
+                className="text-[#86909c] text-sm py-3"
+                style={{ width: columnWidths.fileType, minWidth: columnWidths.fileType, maxWidth: columnWidths.fileType }}
+            >
+                <span className="truncate block">
+                    {isFolder ? localize("com_knowledge.folder") : (file.name.split('.').pop()?.toLowerCase() || "--")}
+                </span>
             </TableCell>
 
             {/* 大小 */}
@@ -615,7 +648,7 @@ function FileRow({
                 className="text-[#86909c] text-sm whitespace-nowrap py-3"
                 style={{ width: columnWidths.updateTime, minWidth: columnWidths.updateTime, maxWidth: columnWidths.updateTime }}
             >
-                <span className="truncate block">{file.updatedAt}</span>
+                <span className="truncate block">{formatTime(file.updatedAt)}</span>
             </TableCell>
 
             {/* 状态 — only visible to admins */}
@@ -626,11 +659,10 @@ function FileRow({
                 >
                     {isFolder
                         ? (
-                            <span className={`text-sm ${
-                                file.successFileNum !== undefined && file.fileNum !== undefined && file.successFileNum < file.fileNum
-                                    ? 'text-[#f53f3f]'
-                                    : 'text-[#86909c]'
-                            }`}>
+                            <span className={`text-sm ${file.successFileNum !== undefined && file.fileNum !== undefined && file.successFileNum < file.fileNum
+                                ? 'text-[#f53f3f]'
+                                : 'text-[#86909c]'
+                                }`}>
                                 {file.successFileNum ?? 0}/{file.fileNum ?? 0}
                             </span>
                         )
@@ -644,40 +676,50 @@ function FileRow({
                 className="text-right pr-4 py-3"
                 style={{ width: columnWidths.actions, minWidth: columnWidths.actions, maxWidth: columnWidths.actions }}
             >
-                <div className="invisible group-hover:visible flex justify-end">
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <button className="size-7 flex items-center justify-center hover:bg-[#e5e6eb] rounded-md text-[#4e5969] transition-colors">
-                                <MoreVertical className="size-4" />
-                            </button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-32">
-                            <DropdownMenuItem onClick={onDownload}>
-                                <Download className="size-4 mr-2" />{localize("com_knowledge.download")}</DropdownMenuItem>
-                            {isAdmin && (
-                                <>
-                                    {!isFolder && (
-                                        <DropdownMenuItem onClick={onEditTags}>
-                                            <Tag className="size-4 mr-2" />{localize("com_knowledge.edit_tags")}</DropdownMenuItem>
-                                    )}
-                                    <DropdownMenuItem onClick={() => startRenaming()}>
-                                        <Edit className="size-4 mr-2" />{localize("com_knowledge.rename")}</DropdownMenuItem>
-                                    {/* Retry for failed files */}
-                                    {!isFolder && file.status === FileStatus.FAILED && (
-                                        <DropdownMenuItem onClick={onRetry}>
-                                            <RefreshCw className="size-4 mr-2" />{localize("com_knowledge.retry")}</DropdownMenuItem>
-                                    )}
-                                    {/* Retry for folders with partial failures */}
-                                    {isFolder && file.successFileNum !== undefined && file.fileNum !== undefined && file.successFileNum < file.fileNum && (
-                                        <DropdownMenuItem onClick={onRetry}>
-                                            <RefreshCw className="size-4 mr-2" />{localize("com_knowledge.retry")}</DropdownMenuItem>
-                                    )}
-                                    <DropdownMenuItem onClick={onDelete} className="text-[#f53f3f] focus:text-[#f53f3f] focus:bg-[#fff2f0]">
-                                        <Trash2 className="size-4 mr-2" />{localize("com_knowledge.delete")}</DropdownMenuItem>
-                                </>
-                            )}
-                        </DropdownMenuContent>
-                    </DropdownMenu>
+                <div className="invisible group-hover:visible flex justify-end items-center gap-1">
+                    {!isFolder && (
+                        <button
+                            className="size-7 shrink-0 flex items-center justify-center hover:bg-[#e5e6eb] rounded-md text-[#4e5969] transition-colors"
+                            onClick={(e) => { e.stopPropagation(); onDownload(); }}
+                            title={localize("com_knowledge.download")}
+                        >
+                            <Download className="size-4" />
+                        </button>
+                    )}
+                    {showMoreMenu && (
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <button className="size-7 min-w-7 flex items-center justify-center hover:bg-[#e5e6eb] rounded-md text-[#4e5969] transition-colors">
+                                    <MoreVertical className="size-4" />
+                                </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-32">
+                                {isAdmin && (
+                                    <>
+                                        {!isFolder && (
+                                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEditTags(); }}>
+                                                <Tag className="size-4 mr-2" />{localize("com_knowledge.edit_tags")}
+                                            </DropdownMenuItem>
+                                        )}
+                                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); startRenaming(); }}>
+                                            <Edit className="size-4 mr-2" />{localize("com_knowledge.rename")}
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                            className="text-[#f53f3f] focus:text-[#f53f3f] focus:bg-[#fff2f0]"
+                                            onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                                        >
+                                            <Trash2 className="size-4 mr-2" />{localize("com_knowledge.delete")}
+                                        </DropdownMenuItem>
+                                    </>
+                                )}
+                                {hasRetryOption && (
+                                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onRetry?.(); }}>
+                                        <RefreshCw className="size-4 mr-2" />{localize("com_knowledge.retry")}
+                                    </DropdownMenuItem>
+                                )}
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    )}
                 </div>
             </TableCell>
         </TableRow>

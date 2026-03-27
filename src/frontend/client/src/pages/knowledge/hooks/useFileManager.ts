@@ -167,6 +167,7 @@ export function useFileManager({ activeSpace }: UseFileManagerOptions) {
         currentPage,
         pageSize,
         total,
+        setTotal,
         loading,
         searchQuery,
         searchTagIds,

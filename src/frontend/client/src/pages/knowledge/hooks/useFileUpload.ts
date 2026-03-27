@@ -24,6 +24,7 @@ interface UseFileUploadOptions {
     currentPath: Array<{ id?: string; name: string }>;
     files: KnowledgeFile[];
     setFiles: React.Dispatch<React.SetStateAction<KnowledgeFile[]>>;
+    setTotal: React.Dispatch<React.SetStateAction<number>>;
     loadFiles: (page?: number) => Promise<void>;
     currentPage: number;
 }
@@ -38,6 +39,7 @@ export function useFileUpload({
     currentPath,
     files,
     setFiles,
+    setTotal,
     loadFiles,
     currentPage,
 }: UseFileUploadOptions) {
@@ -86,12 +88,13 @@ export function useFileUpload({
                 }
             }
 
-            // Remove all placeholder entries
-            setUploadingFiles(prev =>
-                prev.filter(f => !placeholders.some(p => p.id === f.id))
-            );
-
-            if (uploadedPaths.length === 0) return;
+            // If all uploads failed, clear placeholders immediately and bail out
+            if (uploadedPaths.length === 0) {
+                setUploadingFiles(prev =>
+                    prev.filter(f => !placeholders.some(p => p.id === f.id))
+                );
+                return;
+            }
 
             // Register uploaded files into the space
             try {
@@ -99,10 +102,16 @@ export function useFileUpload({
                     file_path: uploadedPaths,
                     parent_id: currentFolderId ? Number(currentFolderId) : null,
                 });
-                // Refresh the file list to reflect new entries
-                loadFiles(currentPage);
+                // Wait for refreshed list data to arrive BEFORE clearing placeholders,
+                // so there is no visual gap where the list appears empty.
+                await loadFiles(currentPage);
             } catch {
                 showToast({ message: localize("com_knowledge.file_register_failed"), severity: NotificationSeverity.ERROR });
+            } finally {
+                // Clear placeholders AFTER list data has been updated
+                setUploadingFiles(prev =>
+                    prev.filter(f => !placeholders.some(p => p.id === f.id))
+                );
             }
         },
         [activeSpace, currentFolderId, currentPage, loadFiles, showToast]
@@ -155,8 +164,8 @@ export function useFileUpload({
                         parent_id: currentFolderId || null,
                     });
                     setFiles(prev => [created, ...prev]);
+                    setTotal(prev => prev + 1);
                     setCreatingFolder(null);
-                    showToast({ message: localize("com_knowledge.folder_create_success"), severity: NotificationSeverity.SUCCESS } as any);
                 } catch {
                     showToast({ message: localize("com_knowledge.create_folder_failed"), severity: NotificationSeverity.ERROR });
                 }

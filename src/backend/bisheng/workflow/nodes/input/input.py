@@ -9,7 +9,6 @@ from json_repair import json_repair
 from langchain_core.messages import SystemMessage, HumanMessage
 from loguru import logger
 
-from bisheng.api.services.knowledge_imp import read_chunk_text
 from bisheng.api.v1.schemas import FileProcessBase
 from bisheng.chat.types import IgnoreException
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
@@ -238,12 +237,24 @@ class InputNode(BaseNode):
         metadatas = []
         try:
             file_rule = FileProcessBase(knowledge_id=0)
-            texts, metadatas, _, _ = read_chunk_text(self.user_id, filepath, file_name, file_rule.separator,
-                                                     file_rule.separator_rule,
-                                                     file_rule.chunk_size, 0, None,
-                                                     file_rule.retain_images, file_rule.enable_formula,
-                                                     file_rule.force_ocr,
-                                                     file_rule.filter_page_header_footer, file_rule.excel_rule)
+            from bisheng.knowledge.rag.temp_file_pipeline import TempFilePipeline
+            from bisheng.knowledge.rag.pipeline.types import PipelineConfig
+
+            pipeline = TempFilePipeline(
+                invoke_user_id=self.user_id,
+                local_file_path=filepath,
+                file_name=file_name,
+                file_rule=file_rule
+            )
+            result = pipeline.run(PipelineConfig())
+
+            for doc in result.documents:
+                texts.append(doc.page_content)
+                metadata_dict = doc.metadata.copy() if isinstance(doc.metadata, dict) else getattr(doc.metadata,
+                                                                                                   "model_dump",
+                                                                                                   lambda: {})()
+                metadatas.append(metadata_dict)
+
         except KnowledgeFileNotSupportedError as e:
             logger.warning('input node file type is not support')
             pass
@@ -328,9 +339,8 @@ class InputNode(BaseNode):
             new_metadata = []
             # A file corresponding to the same variable, placed in a file_id mile
             for one in metadatas:
-                metadata = one.model_dump()
-                metadata.update(all_metadata[-1])
-                new_metadata.append(metadata)
+                one.update(all_metadata[-1])
+                new_metadata.append(one)
 
             # Uploaded to milvus And es
             logger.debug(f'workflow_add_vectordb file={key} file_name={file_name} file_id={file_id}')

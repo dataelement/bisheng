@@ -28,7 +28,7 @@ import { useLocalize } from "~/hooks";
 
 export default function Knowledge() {
     const localize = useLocalize();
-  const MAX_USER_SPACES = 30;
+    const MAX_USER_SPACES = 30;
     const [activeSpace, setActiveSpace] = useState<KnowledgeSpace | null>(null);
     const [showCreateDrawer, setShowCreateDrawer] = useState(false);
     const [editingSpace, setEditingSpace] = useState<KnowledgeSpace | null>(null);
@@ -49,13 +49,13 @@ export default function Knowledge() {
     // ─── File management (list, pagination, search, sort, navigation) ────
     const fileManager = useFileManager({ activeSpace });
 
-    // ─── File upload & CRUD operations ──────────────────────────────────
     const fileUpload = useFileUpload({
         activeSpace,
         currentFolderId: fileManager.currentFolderId,
         currentPath: fileManager.currentPath,
         files: fileManager.files,
         setFiles: fileManager.setFiles,
+        setTotal: fileManager.setTotal,
         loadFiles: fileManager.loadFiles,
         currentPage: fileManager.currentPage,
     });

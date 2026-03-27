@@ -12,7 +12,7 @@ from fastapi import UploadFile
 from langchain_core.tools import BaseTool
 from loguru import logger
 
-from bisheng.api.services.knowledge_imp import decide_vectorstores, async_read_chunk_text
+from bisheng.api.services.knowledge_imp import decide_vectorstores
 from bisheng.api.services.workstation import WorkStationService
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
@@ -790,16 +790,25 @@ class LinsightWorkbenchImpl:
         """
         # Read file contents
         try:
-            texts, _, parse_type, _ = await async_read_chunk_text(
-                invoke_user_id=invoke_user_id,
-                input_file=file_path,
-                file_name=original_filename,
+            from bisheng.knowledge.rag.temp_file_pipeline import TempFilePipeline
+            from bisheng.api.v1.schemas import FileProcessBase
+
+            file_rule = FileProcessBase(
+                knowledge_id=0,
                 separator=['\n\n', '\n'],
                 separator_rule=['after', 'after'],
                 chunk_size=1000,
                 chunk_overlap=100,
-                no_summary=True
             )
+            pipeline = TempFilePipeline(
+                invoke_user_id=invoke_user_id,
+                local_file_path=file_path,
+                file_name=original_filename,
+                file_rule=file_rule,
+            )
+            result = await pipeline.arun()
+            texts = [doc.page_content for doc in result.documents]
+            parse_type = type(pipeline.loader).__name__ if pipeline.loader else "local"
 
             # BuatmarkdownContents
             markdown_content = "\n".join(texts)
