@@ -67,9 +67,9 @@ class PaddleOcrLoader(BaseBishengLoader):
         return {
             "file": b64_data,
             "fileType": self._detect_file_type,
-            "useDocOrientationClassify": True,
-            "useDocUnwarping": True,
-            "useChartRecognition": True,
+            "useDocOrientationClassify": False,
+            "useDocUnwarping": False,
+            "useChartRecognition": False,
             **self.request_kwargs
         }
 
