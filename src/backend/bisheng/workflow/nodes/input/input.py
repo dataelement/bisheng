@@ -296,6 +296,10 @@ class InputNode(BaseNode):
                 "document_name": file_name,
                 "knowledge_id": self.workflow_id,
                 "upload_time": int(time.time()),
+                "update_time": int(time.time()),
+                "uploader": "",
+                "updater": "",
+                "user_metadata": {},
                 "bbox": '',  # Temporary files cannot be traced because the source files are not persisted
             })
 
