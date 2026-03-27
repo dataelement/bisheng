@@ -1,12 +1,11 @@
 import { useLocalize } from "~/hooks";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-    LayoutGridIcon,
     PanelLeftOpenIcon,
     PanelRightOpenIcon,
     Plus
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
     Channel,
     SortType,
@@ -16,6 +15,8 @@ import { Button } from "~/components/ui/Button";
 import ChannelItem from "./ChannelItem";
 import { SectionHeader } from "./SectionHeader";
 import { useChannelActions } from "../hooks/useChannelActions";
+
+const CHANNEL_SQUARE_ICON = `${__APP_ENV__.BASE_URL}/assets/channel/blocksArrows.svg`;
 
 interface ChannelSidebarProps {
     activeChannelId?: string;
@@ -43,6 +44,8 @@ export function ChannelSidebar({
     const [subscribedCollapsed, setSubscribedCollapsed] = useState(false);
     const [createdSortBy, setCreatedSortBy] = useState<SortType>(SortType.RECENT_UPDATE);
     const [subscribedSortBy, setSubscribedSortBy] = useState<SortType>(SortType.RECENT_UPDATE);
+    const [isListScrolling, setIsListScrolling] = useState(false);
+    const listScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const queryClient = useQueryClient();
 
@@ -111,96 +114,126 @@ export function ChannelSidebar({
         }
     };
 
-    if (collapsed) {
-        return (
-            <div className="w-12 h-full bg-white flex items-start justify-center pt-[22px]">
-                <Button size="icon" variant="ghost" className="w-5 h-5" onClick={() => setCollapsed(false)}>
-                    <PanelLeftOpenIcon className="size-3.5" />
-                </Button>
-            </div>
-        );
-    }
+    const handleListScroll = () => {
+        setIsListScrolling(true);
+        if (listScrollTimerRef.current) clearTimeout(listScrollTimerRef.current);
+        listScrollTimerRef.current = setTimeout(() => setIsListScrolling(false), 500);
+    };
 
     return (
-        <div className="w-60 min-w-60 h-full bg-white border-r border-[#e5e6eb] flex flex-col px-3 py-5">
+        <div
+            className={[
+                "h-full bg-white border-r border-[#e5e6eb] flex flex-col overflow-hidden flex-shrink-0",
+                "transition-[width] duration-[350ms] ease-in-out",
+                collapsed ? "w-12" : "w-60",
+            ].join(" ")}
+        >
             {/* 顶部操作区 */}
-            <div className="border-b border-[#e5e6eb] space-y-4 pb-4">
-                <div className="px-2 flex justify-between items-center text-[14px] font-medium">
-                    <span>{localize("com_subscription.subscribe")}</span>
-                    <Button size="icon" variant="ghost" className="w-5 h-5 text-[#86909c]" onClick={() => setCollapsed(true)}>
-                        <PanelRightOpenIcon className="size-3.5" />
-                    </Button>
-                </div>
-                <div className="flex items-center gap-3">
-                    <Button variant="secondary" onClick={onCreateChannel} className="flex-1 h-8 text-[13px] bg-[#F2F3F5] hover:bg-[#E5E6EB] border-none gap-1">
-                        <Plus className="size-4" />{localize("com_subscription.create")}
-                    </Button>
-                    <Button variant="secondary" onClick={onChannelSquare} className="flex-1 h-8 text-[13px] bg-[#F2F3F5] hover:bg-[#E5E6EB] border-none gap-1">
-                        <LayoutGridIcon className="size-4" />{localize("com_subscription.go_to_square")}</Button>
+            <div className={collapsed ? "px-0 py-5" : "px-3 py-5"}>
+                <div className={collapsed ? "flex items-center justify-center" : "border-b border-[#e5e6eb] space-y-4 pb-4"}>
+                    <div className={collapsed ? "flex items-center justify-center" : "px-2 flex justify-between items-center text-[14px] font-medium"}>
+                        {!collapsed && <span>{localize("com_subscription.subscribe")}</span>}
+                        <Button
+                            size="icon"
+                            variant="ghost"
+                            className={collapsed ? "w-5 h-5" : "w-5 h-5 text-[#86909c]"}
+                            onClick={() => setCollapsed((v) => !v)}
+                        >
+                            {collapsed ? (
+                                <PanelLeftOpenIcon className="size-3.5" />
+                            ) : (
+                                <PanelRightOpenIcon className="size-3.5" />
+                            )}
+                        </Button>
+                    </div>
+                    {!collapsed && (
+                        <div className="flex items-center gap-3">
+                            <Button variant="secondary" onClick={onCreateChannel} className="flex-1 h-8 text-[13px] bg-[#F2F3F5] hover:bg-[#E5E6EB] border-none gap-1">
+                                <Plus className="size-4" />{localize("com_subscription.create")}
+                            </Button>
+                            <Button variant="secondary" onClick={onChannelSquare} className="flex-1 h-8 text-[13px] bg-[#F2F3F5] hover:bg-[#E5E6EB] border-none gap-1">
+                                <img src={CHANNEL_SQUARE_ICON} alt="" className="size-4" />
+                                {localize("com_subscription.go_to_square")}
+                            </Button>
+                        </div>
+                    )}
                 </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto custom-scrollbar">
-                {/* 我创建的 */}
-                <div className="pt-4">
-                    <SectionHeader
-                        title={localize("com_subscription.created_by_me")}
-                        collapsed={createdCollapsed}
-                        onToggle={() => setCreatedCollapsed(!createdCollapsed)}
-                        sortText={getSortText(createdSortBy)}
-                        onSort={() => toggleSort("created")}
-                    />
-                    {!createdCollapsed && (
-                        <div className="space-y-1">
-                            {createdChannels.map(c => (
-                                <ChannelItem
-                                    key={c.id}
-                                    channel={c}
-                                    type="created"
-                                    isActive={c.id === activeChannelId}
-                                    onSelect={onChannelSelect}
-                                    onUpdate={handleUpdateChannel}
-                                    onDelete={handleDeleteChannel}
-                                    onUnsubscribe={handleUnsubscribeChannel}
-                                    onPin={handlePinChannel}
-                                    onManageMembers={onManageMembers}
-                                    onChannelSettings={onChannelSettings}
-                                />
-                            ))}
-                            {!createdChannels.length && <div className="py-6 text-center text-sm text-[#818181]">{localize("com_subscription.no_data")}</div>}
-                        </div>
-                    )}
-                </div>
+            {/* 列表区（折叠时隐藏内容，但保持容器以产生宽度过渡） */}
+            <div
+                className={[
+                    "flex-1 min-h-0",
+                    collapsed ? "opacity-0 pointer-events-none" : "opacity-100",
+                    "transition-opacity duration-[350ms] ease-in-out",
+                ].join(" ")}
+            >
+                <div
+                    className="h-full overflow-y-auto scroll-on-scroll px-3 pb-5"
+                    onScroll={handleListScroll}
+                    data-scrolling={isListScrolling ? "true" : "false"}
+                >
+                    {/* 我创建的 */}
+                    <div className="pt-0">
+                        <SectionHeader
+                            title={localize("com_subscription.created_by_me")}
+                            collapsed={createdCollapsed}
+                            onToggle={() => setCreatedCollapsed(!createdCollapsed)}
+                            sortText={getSortText(createdSortBy)}
+                            onSort={() => toggleSort("created")}
+                        />
+                        {!createdCollapsed && (
+                            <div className="space-y-1">
+                                {createdChannels.map(c => (
+                                    <ChannelItem
+                                        key={c.id}
+                                        channel={c}
+                                        type="created"
+                                        isActive={c.id === activeChannelId}
+                                        onSelect={onChannelSelect}
+                                        onUpdate={handleUpdateChannel}
+                                        onDelete={handleDeleteChannel}
+                                        onUnsubscribe={handleUnsubscribeChannel}
+                                        onPin={handlePinChannel}
+                                        onManageMembers={onManageMembers}
+                                        onChannelSettings={onChannelSettings}
+                                    />
+                                ))}
+                                {!createdChannels.length && <div className="py-6 text-center text-sm text-[#818181]">{localize("com_subscription.no_data")}</div>}
+                            </div>
+                        )}
+                    </div>
 
-                {/* 我关注的 */}
-                <div className="py-4">
-                    <SectionHeader
-                        title={localize("com_subscription.followed_by_me")}
-                        collapsed={subscribedCollapsed}
-                        onToggle={() => setSubscribedCollapsed(!subscribedCollapsed)}
-                        sortText={getSortText(subscribedSortBy)}
-                        onSort={() => toggleSort("subscribed")}
-                    />
-                    {!subscribedCollapsed && (
-                        <div className="space-y-1">
-                            {subscribedChannels.map(c => (
-                                <ChannelItem
-                                    key={c.id}
-                                    channel={c}
-                                    type="subscribed"
-                                    isActive={c.id === activeChannelId}
-                                    onSelect={onChannelSelect}
-                                    onUpdate={handleUpdateChannel}
-                                    onDelete={handleDeleteChannel}
-                                    onUnsubscribe={handleUnsubscribeChannel}
-                                    onPin={handlePinChannel}
-                                    onManageMembers={onManageMembers}
-                                    onChannelSettings={onChannelSettings}
-                                />
-                            ))}
-                            {!subscribedChannels.length && <div className="py-6 text-center text-sm text-[#818181]">{localize("com_subscription.no_data")}</div>}
-                        </div>
-                    )}
+                    {/* 我关注的 */}
+                    <div className="py-4">
+                        <SectionHeader
+                            title={localize("com_subscription.followed_by_me")}
+                            collapsed={subscribedCollapsed}
+                            onToggle={() => setSubscribedCollapsed(!subscribedCollapsed)}
+                            sortText={getSortText(subscribedSortBy)}
+                            onSort={() => toggleSort("subscribed")}
+                        />
+                        {!subscribedCollapsed && (
+                            <div className="space-y-1">
+                                {subscribedChannels.map(c => (
+                                    <ChannelItem
+                                        key={c.id}
+                                        channel={c}
+                                        type="subscribed"
+                                        isActive={c.id === activeChannelId}
+                                        onSelect={onChannelSelect}
+                                        onUpdate={handleUpdateChannel}
+                                        onDelete={handleDeleteChannel}
+                                        onUnsubscribe={handleUnsubscribeChannel}
+                                        onPin={handlePinChannel}
+                                        onManageMembers={onManageMembers}
+                                        onChannelSettings={onChannelSettings}
+                                    />
+                                ))}
+                                {!subscribedChannels.length && <div className="py-6 text-center text-sm text-[#818181]">{localize("com_subscription.no_data")}</div>}
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
         </div>

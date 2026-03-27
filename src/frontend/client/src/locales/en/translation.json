@@ -1603,6 +1603,7 @@
     "single_article_or_non_list_page": "single article or non-list page",
     "source_not_indexed_try_full_url": "This source is not indexed yet. Try entering the full URL above to search or add.",
     "sub_channel_name": "Sub-channel Name",
+    "sub_channel_name_default": "Sub {{index}}",
     "sub_channel_name_cannot_be_empty": "Sub-channel name cannot be empty",
     "sub_channel_name_duplicate": "Sub-channel name already exists, please change it",
     "submit_manual_crawl_request": "Submit manual crawl request",

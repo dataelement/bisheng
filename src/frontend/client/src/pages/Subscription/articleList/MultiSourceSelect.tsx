@@ -34,6 +34,8 @@ export function MultiSourceSelect({
 }: MultiSourceSelectProps) {
     const localize = useLocalize();
     const [open, setOpen] = React.useState(false);
+    const [isMenuScrolling, setIsMenuScrolling] = React.useState(false);
+    const menuScrollTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // 处理单个项的点击
     const handleToggleItem = (id: string) => {
@@ -73,13 +75,19 @@ export function MultiSourceSelect({
         );
     };
 
+    const handleMenuScroll = () => {
+        setIsMenuScrolling(true);
+        if (menuScrollTimerRef.current) clearTimeout(menuScrollTimerRef.current);
+        menuScrollTimerRef.current = setTimeout(() => setIsMenuScrolling(false), 500);
+    };
+
     return (
         <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
                 <Button
                     variant="outline"
                     className={cn(
-                        "w-auto min-w-[160px] h-9 justify-between px-3",
+                        "w-auto min-w-[160px] h-9 justify-between px-3 font-normal",
                         className
                     )}
                 >
@@ -87,7 +95,12 @@ export function MultiSourceSelect({
                     <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-[180px] max-h-80 overflow-y-auto p-0 bg-white rounded-lg" align="start">
+            <PopoverContent
+                className="w-[180px] max-h-80 overflow-y-auto scroll-on-scroll p-0 bg-white rounded-lg"
+                align="start"
+                onScroll={handleMenuScroll}
+                data-scrolling={isMenuScrolling ? "true" : "false"}
+            >
                 <div className="p-3">
                     {/* 全部信息源 选项 */}
                     <div

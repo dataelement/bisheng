@@ -34,11 +34,13 @@ interface ChannelPreviewDrawerProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     onNavigateToChannel?: (channelId: string) => void;
+    /** Called after subscribe / apply succeeds so the channel square list can refetch. */
+    onSubscriptionChanged?: () => void;
 }
 
 type SubscribeStatus = "none" | "subscribed" | "pending";
 
-export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onNavigateToChannel }: ChannelPreviewDrawerProps) {
+export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onNavigateToChannel, onSubscriptionChanged }: ChannelPreviewDrawerProps) {
     const localize = useLocalize();
     const navigate = useNavigate();
     const { showToast } = useToastContext();
@@ -50,6 +52,8 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onNavigate
     const [currentPage, setCurrentPage] = useState(1);
     const [hasMore, setHasMore] = useState(false);
     const [loadingMore, setLoadingMore] = useState(false);
+    const [isBodyScrolling, setIsBodyScrolling] = useState(false);
+    const bodyScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // 切换频道/关闭抽屉时，重置本地订阅交互态，避免状态串到下一条频道
     useEffect(() => {
@@ -76,7 +80,8 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onNavigate
             return res;
         },
         enabled: !!channelId && open,
-        staleTime: 30_000,
+        staleTime: 0,
+        refetchOnMount: "always",
     });
 
     // Fetch article list
@@ -98,7 +103,8 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onNavigate
             return res;
         },
         enabled: !!channelId && open,
-        staleTime: 30_000,
+        staleTime: 0,
+        refetchOnMount: "always",
     });
 
     const isLoading = isDetailLoading || isArticlesLoading;
@@ -174,6 +180,9 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onNavigate
             // Refresh background channel lists (sidebar uses ["channels","subscribed",sort])
             queryClient.invalidateQueries({ queryKey: ["channels", "subscribed"] });
             queryClient.invalidateQueries({ queryKey: ["channels"] });
+            queryClient.invalidateQueries({ queryKey: ["channelPreviewDetail", channelId] });
+            queryClient.invalidateQueries({ queryKey: ["channelPreviewArticles", channelId] });
+            onSubscriptionChanged?.();
         } catch (e: any) {
             const msg =
                 e?.response?.data?.status_message ||
@@ -226,6 +235,12 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onNavigate
         channelDetail?.visibility === "review" &&
         !isCreatorView &&
         effectiveSubscribeStatus !== "subscribed";
+
+    const handleBodyScroll = () => {
+        setIsBodyScrolling(true);
+        if (bodyScrollTimerRef.current) clearTimeout(bodyScrollTimerRef.current);
+        bodyScrollTimerRef.current = setTimeout(() => setIsBodyScrolling(false), 500);
+    };
 
     // Handle error — channel not found, inaccessible, or articles cannot be loaded
     useEffect(() => {
@@ -329,7 +344,11 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onNavigate
                         </SheetHeader>
 
                         {/* Article List / Pending Message */}
-                        <div className="flex-1 overflow-y-auto px-6">
+                        <div
+                            className="flex-1 overflow-y-auto scroll-on-scroll px-6"
+                            onScroll={handleBodyScroll}
+                            data-scrolling={isBodyScrolling ? "true" : "false"}
+                        >
                             {hideArticles ? (
                                 <div className="flex flex-col items-center justify-center h-full min-h-[400px]">
                                     <img

@@ -316,14 +316,16 @@ export function KnowledgeSpaceMemberDialog({
                                         key={m.user_id}
                                         className="h-10 px-1 flex items-center gap-2.5 border-b border-[#F2F3F5] last:border-0"
                                     >
-                                        <div className="size-6 rounded-full bg-[#C9CDD4] text-white text-[11px] flex items-center justify-center">
-                                            {getInitials(m.user_name)}
-                                        </div>
-                                        <div
-                                            title={m.user_name}
-                                            className="w-[220px] text-[13px] text-[#1D2129] truncate"
-                                        >
-                                            {truncateText(m.user_name, MAX_NAME_LEN)}
+                                        <div className="w-[200px] min-w-[200px] flex items-center gap-2.5">
+                                            <div className="size-6 rounded-full bg-[#C9CDD4] text-white text-[11px] flex items-center justify-center">
+                                                {getInitials(m.user_name)}
+                                            </div>
+                                            <div
+                                                title={m.user_name}
+                                                className="flex-1 min-w-0 text-[13px] text-[#1D2129] truncate"
+                                            >
+                                                {truncateText(m.user_name, MAX_NAME_LEN)}
+                                            </div>
                                         </div>
                                         <div
                                             className="flex-1 min-w-0 text-[12px] text-[#86909C] truncate"

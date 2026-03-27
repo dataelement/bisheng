@@ -417,8 +417,15 @@ function mapRawFile(raw: RawKnowledgeFile): KnowledgeFile {
  */
 export async function getMineSpacesApi(params?: {
     order_by?: string;
+    sort_by?: string;
 }): Promise<KnowledgeSpace[]> {
-    const res = await request.get<ApiResponse<RawKnowledgeSpace[]>>(`/api/v1/knowledge/space/mine`, { params });
+    const effectiveSort = params?.sort_by ?? params?.order_by;
+    const res = await request.get<ApiResponse<RawKnowledgeSpace[]>>(`/api/v1/knowledge/space/mine`, {
+        params: {
+            ...params,
+            sort_by: effectiveSort,
+        },
+    });
     return (res?.data || []).map(mapSpace);
 }
 
@@ -427,8 +434,15 @@ export async function getMineSpacesApi(params?: {
  */
 export async function getJoinedSpacesApi(params?: {
     order_by?: string;
+    sort_by?: string;
 }): Promise<KnowledgeSpace[]> {
-    const res = await request.get<ApiResponse<RawKnowledgeSpace[]>>(`/api/v1/knowledge/space/joined`, { params });
+    const effectiveSort = params?.sort_by ?? params?.order_by;
+    const res = await request.get<ApiResponse<RawKnowledgeSpace[]>>(`/api/v1/knowledge/space/joined`, {
+        params: {
+            ...params,
+            sort_by: effectiveSort,
+        },
+    });
     return (res?.data || []).map(mapSpace);
 }
 
@@ -437,10 +451,17 @@ export async function getJoinedSpacesApi(params?: {
  */
 export async function getSquareSpacesApi(params?: {
     order_by?: string;
+    sort_by?: string;
     page?: number;
     page_size?: number;
 }): Promise<{ data: KnowledgeSpace[]; total: number }> {
-    const res = await request.get<ApiResponse<any>>(`/api/v1/knowledge/space/square`, { params });
+    const effectiveSort = params?.sort_by ?? params?.order_by;
+    const res = await request.get<ApiResponse<any>>(`/api/v1/knowledge/space/square`, {
+        params: {
+            ...params,
+            sort_by: effectiveSort,
+        },
+    });
     const payload = res?.data ?? {};
 
     // Backend currently returns:

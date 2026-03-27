@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { Search, PanelLeftClose, Plus } from 'lucide-react';
+import { Search, PanelRightOpen, Plus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useRecoilValue } from 'recoil';
 import { icons } from '~/components/Chat/Menus/Endpoints/Icons';
@@ -66,11 +66,13 @@ export default function NewChat({
   toggleNav,
   subHeaders,
   isSmallScreen,
+  showToggleButton = true,
 }: {
   index?: number;
   toggleNav: () => void;
   subHeaders?: React.ReactNode;
   isSmallScreen: boolean;
+  showToggleButton?: boolean;
 }) {
   const queryClient = useQueryClient();
   /** Note: this component needs an explicit index passed if using more than one */
@@ -87,7 +89,10 @@ export default function NewChat({
       event.preventDefault();
       newConvo();
       navigate('/c/new');
-      toggleNav();
+      // Keep auto-collapse behavior only on small screens.
+      if (isSmallScreen) {
+        toggleNav();
+      }
       queryClient.setQueryData<TMessage[]>(
         [QueryKeys.messages, conversation?.conversationId ?? Constants.NEW_CONVO],
         [],
@@ -100,15 +105,17 @@ export default function NewChat({
       <div className="" style={{ transform: 'none' }}>
         <div className="mb-4 flex items-center justify-between">
           <p className="font-medium text-[#212121] text-[14px]">首页</p>
-          <div className="cursor-pointer rounded-md p-1 hover:bg-slate-100" onClick={toggleNav}>
-            <PanelLeftClose className="size-5 text-gray-500" />
-          </div>
+          {showToggleButton ? (
+            <div className="cursor-pointer rounded-md p-1 hover:bg-slate-100" onClick={toggleNav}>
+              <PanelRightOpen className="size-4 text-[#86909c]" />
+            </div>
+          ) : null}
         </div>
         <div className='flex gap-1 w-full'>
           {/* 新建btn */}
           <Button
             variant="outline"
-            className="w-full flex items-center justify-center gap-[8px] border border-[#e3e3e3] rounded-[6px] px-[12px] py-[6px] h-auto shadow-none text-[#212121] font-normal"
+            className="w-full flex items-center justify-center gap-[8px] border border-[#e3e3e3] rounded-[6px] px-[12px] py-[5px] h-auto shadow-none text-[#212121] font-normal"
             aria-label={localize('com_ui_new_chat')}
             onClick={() => {
               document.getElementById("create-convo-btn")?.click();

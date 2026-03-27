@@ -38,6 +38,7 @@ interface KnowledgeSpaceContentProps {
     onCancelCreateFolder?: () => void;
     onToggleAiAssistant?: () => void;
     isAiAssistantOpen?: boolean;
+    onCreateSpace?: () => void;
 }
 
 export function KnowledgeSpaceContent({
@@ -65,7 +66,8 @@ export function KnowledgeSpaceContent({
     creatingFolder,
     onCancelCreateFolder,
     onToggleAiAssistant,
-    isAiAssistantOpen
+    isAiAssistantOpen,
+    onCreateSpace,
 }: KnowledgeSpaceContentProps) {
     const localize = useLocalize();
     const displayFiles = [

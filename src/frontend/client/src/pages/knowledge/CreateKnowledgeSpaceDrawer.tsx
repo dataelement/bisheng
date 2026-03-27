@@ -97,7 +97,7 @@ export function CreateKnowledgeSpaceDrawer({
     const handleConfirm = () => {
         if (!name.trim()) {
             showToast({
-                message: localize("knowledge_space_name_empty") || localize("com_knowledge.space_name_empty"),
+                message: localize("com_subscription.knowledge_space_name_empty") || localize("com_knowledge.space_name_empty"),
                 severity: NotificationSeverity.WARNING
             });
             return;
@@ -290,7 +290,7 @@ export function CreateKnowledgeSpaceDrawer({
                                                 <span className="text-[14px] text-[#1D2129]">
                                                     {opt.label}
                                                 </span>
-                                                <p className="text-[12px] text-[#86909C] mt-0.5 ml-2">
+                                                <p className="text-[14px] text-[#999999] mt-0.5 ml-2">
                                                     {opt.desc}
                                                 </p>
                                             </div>
@@ -304,7 +304,7 @@ export function CreateKnowledgeSpaceDrawer({
                                 <div className="space-y-3">
                                     <Label className="text-[14px] text-[#1D2129]">
                                         <span className="text-[#F53F3F]">*</span>
-                                        {localize("com_knowledge.publish_to_square")}<span className="ml-2 text-[12px] text-[#86909C]">
+                                        {localize("com_knowledge.publish_to_square")}<span className="ml-2 text-[14px] text-[#999999]">
                                             {localize("com_knowledge.publish_desc")}</span>
                                     </Label>
                                     <RadioGroup.Root

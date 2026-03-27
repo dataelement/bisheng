@@ -1,9 +1,9 @@
 from typing import Optional, List
 
-from sqlalchemy import func, or_, text
+from sqlalchemy import func, or_, text, update
 from sqlmodel import select, col
 
-from bisheng.core.database import get_async_db_session
+from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao, KnowledgeFile, KnowledgeFileStatus, \
     FileType, FileSource
 
@@ -111,10 +111,44 @@ class SpaceFileDao(KnowledgeFileDao):
             .limit(page_size)
         )
         if order_field and order_sort:
-            statement = statement.order_by(text(f"{order_field} {order_sort}"))
+            statement = statement.order_by(text(cls.order_field_text(order_field, order_sort)))
         async with get_async_db_session() as session:
             result = await session.exec(statement)
             return result.all()
+
+    @staticmethod
+    def order_field_text(order_field: str, order_sort: str) -> str:
+        order_sort = order_sort.upper()
+        order_text = ""
+
+        if order_field == "file_type":
+            # pdf>docx>doc>>xlsx>xls>csv>pptx>ppt>jpg>png>jpeg>bmp>md>txt>html
+            order_text += f"""
+            file_type {order_sort},
+            CASE LOWER(SUBSTRING_INDEX(file_name, '.', -1))
+                WHEN 'pdf' THEN 1
+                WHEN 'docx' THEN 2
+                WHEN 'doc' THEN 3
+                WHEN 'xlsx' THEN 4
+                WHEN 'xls' THEN 5
+                WHEN 'csv' THEN 6
+                WHEN 'pptx' THEN 7
+                WHEN 'ppt' THEN 8
+                WHEN 'jpg' THEN 9
+                WHEN 'jpeg' THEN 10
+                WHEN 'png' THEN 11
+                WHEN 'bpm' THEN 12
+                WHEN 'md' THEN 13
+                WHEN 'txt' THEN 14
+                WHEN 'html' THEN 15
+                ELSE 999
+            END {order_sort}
+            """
+        else:
+            order_text += f"{order_field} {order_sort}"
+        if order_field != "update_time":
+            order_text += ", update_time desc"
+        return order_text
 
     @classmethod
     async def async_count_children(
@@ -173,3 +207,25 @@ class SpaceFileDao(KnowledgeFileDao):
         )
         async with get_async_db_session() as session:
             return await session.scalar(statement) or 0
+
+    @classmethod
+    async def update_records_update_time(cls, ids: List[int]):
+        if not ids:
+            return
+        statement = update(KnowledgeFile).where(
+            col(KnowledgeFile.id).in_(ids),
+        ).values(update_time=text("NOW()"))
+        async with get_async_db_session() as session:
+            await session.execute(statement)
+            await session.commit()
+
+    @classmethod
+    def update_records_update_time_sync(cls, ids: List[int]):
+        if not ids:
+            return
+        statement = update(KnowledgeFile).where(
+            col(KnowledgeFile.id).in_(ids),
+        ).values(update_time=text("NOW()"))
+        with get_sync_db_session() as session:
+            session.execute(statement)
+            session.commit()
