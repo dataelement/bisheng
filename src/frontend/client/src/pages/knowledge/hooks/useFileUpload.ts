@@ -24,6 +24,7 @@ interface UseFileUploadOptions {
     currentPath: Array<{ id?: string; name: string }>;
     files: KnowledgeFile[];
     setFiles: React.Dispatch<React.SetStateAction<KnowledgeFile[]>>;
+    setTotal: React.Dispatch<React.SetStateAction<number>>;
     loadFiles: (page?: number) => Promise<void>;
     currentPage: number;
 }
@@ -38,6 +39,7 @@ export function useFileUpload({
     currentPath,
     files,
     setFiles,
+    setTotal,
     loadFiles,
     currentPage,
 }: UseFileUploadOptions) {
@@ -162,6 +164,7 @@ export function useFileUpload({
                         parent_id: currentFolderId || null,
                     });
                     setFiles(prev => [created, ...prev]);
+                    setTotal(prev => prev + 1);
                     setCreatingFolder(null);
                 } catch {
                     showToast({ message: localize("com_knowledge.create_folder_failed"), severity: NotificationSeverity.ERROR });

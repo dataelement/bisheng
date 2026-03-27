@@ -49,13 +49,13 @@ export default function Knowledge() {
     // ─── File management (list, pagination, search, sort, navigation) ────
     const fileManager = useFileManager({ activeSpace });
 
-    // ─── File upload & CRUD operations ──────────────────────────────────
     const fileUpload = useFileUpload({
         activeSpace,
         currentFolderId: fileManager.currentFolderId,
         currentPath: fileManager.currentPath,
         files: fileManager.files,
         setFiles: fileManager.setFiles,
+        setTotal: fileManager.setTotal,
         loadFiles: fileManager.loadFiles,
         currentPage: fileManager.currentPage,
     });
