@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
+import { useUnactivate } from "react-activation";
 import {
     KnowledgeSpace,
     SpaceRole,
     VisibilityType,
+    SortType,
     getSpaceInfoApi,
     getMineSpacesApi,
     createSpaceApi,
@@ -45,6 +47,13 @@ export default function Knowledge() {
     const [previewDrawerOpen, setPreviewDrawerOpen] = useState(false);
     const [squarePreviewSpaceId, setSquarePreviewSpaceId] = useState<string | undefined>();
     const [squarePreviewDrawerOpen, setSquarePreviewDrawerOpen] = useState(false);
+
+    // KeepAlive: when leaving /knowledge, reset square view so switching back lands on default page.
+    useUnactivate(() => {
+        setShowKnowledgeSquare(false);
+        setSquarePreviewDrawerOpen(false);
+        setSquarePreviewSpaceId(undefined);
+    });
 
     // ─── File management (list, pagination, search, sort, navigation) ────
     const fileManager = useFileManager({ activeSpace });
@@ -106,8 +115,16 @@ export default function Knowledge() {
     const handleCreateSpace = () => {
         (async () => {
             try {
+                // Prefer cached "mine created" count (sidebar uses react-query) to avoid backend eventual consistency
+                // causing an off-by-one where the 31st is allowed and only the 32nd is blocked.
+                const cachedUpdate = queryClient.getQueryData<KnowledgeSpace[]>(["knowledgeSpaces", "mine", SortType.UPDATE_TIME]);
+                const cachedName = queryClient.getQueryData<KnowledgeSpace[]>(["knowledgeSpaces", "mine", SortType.NAME]);
+                const cachedCountMax = Math.max(cachedUpdate?.length ?? 0, cachedName?.length ?? 0);
+
                 const mineSpaces = await getMineSpacesApi();
-                if (mineSpaces.length >= MAX_USER_SPACES) {
+                const effectiveCount = Math.max(mineSpaces.length, cachedCountMax);
+
+                if (effectiveCount >= MAX_USER_SPACES) {
                     showToast({
                         message: localize("com_knowledge.create_space_limit_reached"),
                         severity: NotificationSeverity.WARNING,
@@ -119,6 +136,19 @@ export default function Knowledge() {
             } catch {
                 // 如果校验接口失败，为避免阻塞用户操作，仍允许打开创建抽屉
                 // （可根据需要改成硬拦截）
+                // Fall back to cached count when possible; otherwise keep the original behavior.
+                const cachedUpdate = queryClient.getQueryData<KnowledgeSpace[]>(["knowledgeSpaces", "mine", SortType.UPDATE_TIME]);
+                const cachedName = queryClient.getQueryData<KnowledgeSpace[]>(["knowledgeSpaces", "mine", SortType.NAME]);
+                const cachedCountMax = Math.max(cachedUpdate?.length ?? 0, cachedName?.length ?? 0);
+
+                if (cachedCountMax >= MAX_USER_SPACES) {
+                    showToast({
+                        message: localize("com_knowledge.create_space_limit_reached"),
+                        severity: NotificationSeverity.WARNING,
+                    });
+                    return;
+                }
+
                 setEditingSpace(null);
                 setShowCreateDrawer(true);
             }
@@ -168,6 +198,21 @@ export default function Knowledge() {
                     is_released,
                 });
                 setActiveSpace(newSpace);
+
+                // Optimistically update cached "mine created" lists so subsequent "create limit check"
+                // doesn't rely on backend propagation timing.
+                const createdKeys: Array<[string, string, SortType]> = [
+                    ["knowledgeSpaces", "mine", SortType.UPDATE_TIME],
+                    ["knowledgeSpaces", "mine", SortType.NAME],
+                ];
+                for (const key of createdKeys) {
+                    queryClient.setQueryData<KnowledgeSpace[]>(key, (prev) => {
+                        if (!prev) return [newSpace];
+                        if (prev.some((s) => s.id === newSpace.id)) return prev;
+                        return [newSpace, ...prev];
+                    });
+                }
+
                 queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces", "mine"] });
                 showToast({ message: localize("com_knowledge.space_create_success"), severity: NotificationSeverity.SUCCESS });
             }
@@ -281,6 +326,7 @@ export default function Knowledge() {
                             onCancelCreateFolder={fileUpload.handleCancelCreateFolder}
                             onToggleAiAssistant={aiPane.handleToggleAiAssistant}
                             isAiAssistantOpen={aiPane.showAiAssistant}
+                            onCreateSpace={handleCreateSpace}
                         />
                     </div>
 
@@ -317,7 +363,7 @@ export default function Knowledge() {
                     />
                     <p className="text-[14px] leading-6 text-[#4E5969]">
                         {localize("com_knowledge.no_related_content_please")}<span
-                            className="ml-1.5 cursor-pointer text-[#165DFF] transition-colors hover:text-[#4080FF] active:text-[#0E42D2]"
+                            className="ml-1.5 cursor-pointer text-[#165DFF] underline decoration-dashed underline-offset-4 transition-colors hover:text-[#4080FF] active:text-[#0E42D2]"
                             onClick={handleCreateSpace}
                         >
                             {localize("com_knowledge.create_knowledge_space")}</span>

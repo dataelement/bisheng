@@ -1,7 +1,8 @@
 import {
     type CreateManagerChannelPayload,
     type ManagerChannelFilterRule,
-    type ManagerChannelRuleItem
+    type ManagerChannelRuleNode,
+    type ManagerChannelSingleRule
 } from "~/api/channels";
 import { type KnowledgeSpace, SpaceRole, VisibilityType } from "~/api/knowledge";
 import type { CreateChannelFormData } from "./CreateChannel/CreateChannelDrawer";
@@ -59,54 +60,50 @@ export function validateCreateChannelForm(
 export function buildFilterRules(data: CreateChannelFormData): ManagerChannelFilterRule[] {
     const rules: ManagerChannelFilterRule[] = [];
 
-    // Main channel content filter
+    const toSingleRule = (cond: { include: boolean; keywords: string }): ManagerChannelSingleRule => ({
+        type: "single",
+        rule_type: cond.include ? "include" : "exclude",
+        keywords:
+            cond.keywords
+                ?.split(/[;；]/)
+                .map((k: string) => k.trim())
+                .filter(Boolean) || []
+    });
+
+    const toRuleNodes = (
+        groups: Array<{ relation: "and" | "or"; conditions: Array<{ include: boolean; keywords: string }> }>
+    ): ManagerChannelRuleNode[] => {
+        return groups.map((group) => {
+            const singles = group.conditions.map(toSingleRule);
+            if (singles.length <= 1) return singles[0];
+            return {
+                type: "multi",
+                relation: group.relation,
+                rules: singles
+            };
+        }).filter(Boolean) as ManagerChannelRuleNode[];
+    };
+
+    // Main channel content filter: two-layer shape
     if (data.contentFilter && data.filterGroups.length) {
-        for (const group of data.filterGroups) {
-            const groupRules: ManagerChannelRuleItem[] = group.conditions.map((cond) => {
-                const keywords =
-                    cond.keywords
-                        ?.split(/[;；]/)
-                        .map((k: string) => k.trim())
-                        .filter(Boolean) || [];
-                return {
-                    rule_type: cond.include ? "include" : "exclude",
-                    keywords,
-                    // Persist top-level relation selected in UI.
-                    relation: data.topFilterRelation
-                };
-            });
-            rules.push({
-                rules: groupRules,
-                channel_type: "main",
-                name: "main"
-            });
-        }
+        rules.push({
+            channel_type: "main",
+            name: null,
+            relation: data.topFilterRelation,
+            rules: toRuleNodes(data.filterGroups)
+        });
     }
 
-    // Sub-channel filters
+    // Sub-channel filters: two-layer shape
     if (data.createSubChannel && data.subChannels.length) {
         for (const sub of data.subChannels) {
             if (!sub.groups || !sub.groups.length) continue;
-            for (const group of sub.groups) {
-                const groupRules: ManagerChannelRuleItem[] = group.conditions.map((cond) => {
-                    const keywords =
-                        cond.keywords
-                            ?.split(/[;；]/)
-                            .map((k: string) => k.trim())
-                            .filter(Boolean) || [];
-                    return {
-                        rule_type: cond.include ? "include" : "exclude",
-                        keywords,
-                        // Persist each sub-channel's top-level relation.
-                        relation: sub.topRelation
-                    };
-                });
-                rules.push({
-                    rules: groupRules,
-                    channel_type: "sub",
-                    name: sub.name || "sub"
-                });
-            }
+            rules.push({
+                channel_type: "sub",
+                name: sub.name || "sub",
+                relation: sub.topRelation,
+                rules: toRuleNodes(sub.groups)
+            });
         }
     }
 

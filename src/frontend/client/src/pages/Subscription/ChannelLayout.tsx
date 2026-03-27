@@ -80,7 +80,7 @@ export function ChannelLayout({ channel, onFullScreen }: ChannelLayoutProps) {
             {selectedArticle && (
                 <div
                     onMouseDown={startResizing}
-                    className={`group relative w-[1px] cursor-col-resize bg-[#f2f3f5] transition-all hover:w-1 hover:bg-primary active:w-1 active:bg-primary`}
+                    className={`group relative w-[1px] cursor-col-resize bg-[#f2f3f5] transition-all hover:bg-primary  active:bg-primary`}
                 >
                     {/* Expand click area */}
                     <div className="absolute inset-y-0 -left-1 -right-1 z-10" />

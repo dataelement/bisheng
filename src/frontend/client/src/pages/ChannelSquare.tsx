@@ -37,6 +37,8 @@ interface ChannelSquareProps {
   /** Override the subscribe API (default: subscribeManagerChannelApi) */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   subscribeApi?: (id: string) => Promise<any>;
+  /** Bump to force a full reload of the square list (e.g. after subscribe in preview drawer). */
+  refreshKey?: number;
 }
 
 export default function ChannelSquare({
@@ -49,6 +51,7 @@ export default function ChannelSquare({
   onPreviewChannel,
   fetchApi,
   subscribeApi,
+  refreshKey = 0,
 }: ChannelSquareProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [loadingMore, setLoadingMore] = useState(false);
@@ -105,6 +108,8 @@ export default function ChannelSquare({
             severity: NotificationSeverity.SUCCESS
           });
         }
+        // 与服务端对齐订阅态（含需审核频道的 pending），避免仅乐观更新与接口不一致
+        load(1);
       } catch (e: any) {
         // 失败时回滚状态
         setAllChannels((prev) =>
@@ -194,10 +199,10 @@ export default function ChannelSquare({
     [searchQuery]
   );
 
-  // 根据搜索词加载频道广场数据
+  // 根据搜索词 / 外部刷新信号加载频道广场数据
   useEffect(() => {
     load(1);
-  }, [searchQuery, load]);
+  }, [searchQuery, load, refreshKey]);
 
   const filteredChannels = searchQuery
     ? allChannels.filter(

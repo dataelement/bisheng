@@ -81,10 +81,10 @@ export function UserPopMenu() {
                 <DropdownMenuContent
                     side="right"
                     align="end"
-                    className="w-[240px] ml-3 p-2 rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.08)] bg-white border-[#f0f0f0]"
+                    className="w-[200px] ml-3 p-2 rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.08)] bg-white border-[#f0f0f0]"
                 >
                     {/* 1. 用户头部信息 */}
-                    <div className="flex items-center gap-3 px-3 py-3">
+                    <div className="flex items-center gap-3 px-3 py-1">
                         <Avatar className="size-10 border border-gray-100" onClick={handleAccountInfoClick}>
                             {avatarUrl ? (
                                 <AvatarImage src={avatarUrl} alt="User" />
@@ -105,15 +105,15 @@ export function UserPopMenu() {
 
                     {/* 3. 消息提醒 (保留逻辑) */}
                     <DropdownMenuItem
-                        className="group flex items-center justify-between px-3 py-3 cursor-pointer rounded-xl hover:bg-gray-50 focus:bg-gray-50 outline-none"
+                        className="group flex items-center justify-between px-3 py-1.5 cursor-pointer rounded-xl hover:bg-gray-50 focus:bg-gray-50 outline-none"
                         onClick={handleNotificationsClick}
                     >
                         <div className="flex items-center gap-3">
                             <Bell className="size-[18px] text-gray-600" />
-                            <span className="text-[15px] text-gray-700">消息提醒</span>
+                            <span className="text-[14px] text-gray-700">消息提醒</span>
                         </div>
                         {unreadCount > 0 && (
-                            <span className="bg-[#f53f3f] text-white text-[11px] font-medium px-2 py-0.5 rounded-full min-w-[24px] text-center">
+                            <span className="bg-[#f53f3f] text-white text-[16px] font-medium px-2.5 -py-1 rounded-full min-w-[24px] text-center">
                                 {displayUnreadCount}
                             </span>
                         )}
@@ -121,10 +121,10 @@ export function UserPopMenu() {
 
                     {/* 4. 语言切换 */}
                     <DropdownMenuSub>
-                        <DropdownMenuSubTrigger className="flex items-center justify-between px-3 py-3 cursor-pointer rounded-xl hover:bg-gray-50 focus:bg-gray-50 outline-none">
+                        <DropdownMenuSubTrigger className="flex items-center justify-between px-3 py-1.5 cursor-pointer rounded-xl hover:bg-gray-50 focus:bg-gray-50 outline-none">
                             <div className="flex items-center gap-3">
                                 <Globe className="size-[18px] text-gray-600" />
-                                <span className="text-[15px] text-gray-700">{localize('com_nav_language')}</span>
+                                <span className="text-[14px] text-gray-700">{localize('com_nav_language')}</span>
                             </div>
                         </DropdownMenuSubTrigger>
                         <DropdownMenuSubContent className="rounded-xl border-gray-100 shadow-lg ml-2">
@@ -146,10 +146,10 @@ export function UserPopMenu() {
                     {/* 5. 退出登录 */}
                     <DropdownMenuItem
                         onClick={logout}
-                        className="group flex items-center gap-3 px-3 py-3 cursor-pointer rounded-xl hover:bg-red-50 focus:bg-red-50 outline-none text-[#f53f3f] mt-1 transition-colors"
+                        className="group flex items-center gap-3 px-3 py-1.5 cursor-pointer rounded-xl hover:bg-red-50 focus:bg-red-50 outline-none mt-1 transition-colors !text-[#f53f3f] hover:!text-[#f53f3f] focus:!text-[#f53f3f]"
                     >
                         <LogOut className="size-[18px]" />
-                        <span className="text-[15px] font-medium">{localize('com_nav_log_out')}</span>
+                        <span className="text-[14px] font-medium">{localize('com_nav_log_out')}</span>
                     </DropdownMenuItem>
                 </DropdownMenuContent>
             </DropdownMenu>

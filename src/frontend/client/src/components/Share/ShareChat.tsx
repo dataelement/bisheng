@@ -5,6 +5,7 @@ import { getShareLinkApi } from "~/api";
 import { useLocalize } from "~/hooks";
 import { copyText } from "~/utils";
 import { Button, Dialog, DialogContent, DialogHeader, DialogTitle, Input } from "../ui";
+import { ShareOutlineIcon } from "../icons/ShareOutlineIcon";
 
 interface ShareDialogProps {
     type: 'linsight_session' | 'workbench_chat' | 'workflow' | 'skill' | 'assistant'
@@ -50,7 +51,7 @@ export default function ShareChat({ type, chatId, flowId, versionId }: ShareDial
 
     return <div>
         <Button variant="ghost" className="h-[28px] w-[28px] p-0 text-[#212121] hover:bg-gray-100" onClick={() => setIsOpen(true)}>
-            <ExternalLinkIcon size={16} />
+            <ShareOutlineIcon className="size-4 text-gray-800" />
         </Button>
 
         <Dialog open={isOpen} onOpenChange={setIsOpen}>

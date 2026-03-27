@@ -1485,6 +1485,31 @@ button {
   background-color: transparent;
 }
 
+/* Show scrollbar only while actively scrolling (used by NotificationsDialog) */
+.scroll-on-scroll {
+  scrollbar-width: none; /* Firefox */
+}
+.scroll-on-scroll::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+.scroll-on-scroll::-webkit-scrollbar-thumb {
+  background-color: transparent;
+}
+.scroll-on-scroll[data-scrolling='true'] {
+  scrollbar-width: thin; /* Firefox */
+}
+.scroll-on-scroll[data-scrolling='true']::-webkit-scrollbar {
+  width: 0.5rem;
+  height: 0.5rem;
+}
+.scroll-on-scroll[data-scrolling='true']::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.1);
+}
+.dark .scroll-on-scroll[data-scrolling='true']::-webkit-scrollbar-thumb {
+  background-color: hsla(0, 0%, 100%, 0.1);
+}
+
 body,
 html {
   height: 100%;

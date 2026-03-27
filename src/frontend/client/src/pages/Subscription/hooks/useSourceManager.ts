@@ -322,7 +322,6 @@ export function useSourceManager(
                     if (wechatRequestTokenRef.current !== token) return;
                     // Clear controller for this run
                     wechatAbortRef.current = null;
-                    setSearchKeyword("");
                     processingWechatRef.current = "";
                 }
             })();
