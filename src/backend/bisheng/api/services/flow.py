@@ -1,12 +1,11 @@
 import asyncio
 import copy
-from typing import List, Dict, AsyncGenerator, Optional, Union
+from typing import List, Dict, AsyncGenerator, Union
 
 from fastapi import Request
 from loguru import logger
 
 from bisheng.api.services.audit_log import AuditLogService
-from bisheng.api.services.base import BaseService
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200, FlowVersionCreate, FlowCompareReq, resp_500, \
     StreamData
 from bisheng.chat.utils import process_node_data
@@ -16,6 +15,7 @@ from bisheng.common.errcode.flow import NotFoundVersionError, CurVersionDelError
     WorkFlowOnlineEditError
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
 from bisheng.common.services import telemetry_service
+from bisheng.common.services.base import BaseService
 from bisheng.core.logger import trace_id_var
 from bisheng.database.models.flow import FlowDao, FlowStatus, Flow, FlowType
 from bisheng.database.models.flow_version import FlowVersionDao, FlowVersionRead, FlowVersion

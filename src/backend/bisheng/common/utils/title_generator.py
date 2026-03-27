@@ -14,7 +14,7 @@ from bisheng.core.prompts.manager import get_prompt_manager, get_prompt_manager_
 logger = logging.getLogger(__name__)
 
 # Default title when LLM fails or returns empty
-DEFAULT_TITLE = "New Conversation"
+DEFAULT_TITLE = "New Chat"
 
 
 async def generate_conversation_title_async(

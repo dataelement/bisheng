@@ -623,7 +623,7 @@ class LLMService:
                 # Update Personal Knowledge Base
                 # 1.Upgrading alltypeare2(Private Repository)right of privacyknowledgeStatus and Model
                 private_knowledges = await KnowledgeDao.aget_all_knowledge(
-                    knowledge_type=KnowledgeTypeEnum.PRIVATE
+                    knowledge_type=KnowledgeTypeEnum.SPACE
                 )
 
                 updated_count = 0

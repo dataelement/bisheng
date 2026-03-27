@@ -7,7 +7,6 @@ from loguru import logger
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.assistant_base import AssistantUtils
 from bisheng.api.services.audit_log import AuditLogService
-from bisheng.api.services.base import BaseService
 from bisheng.api.v1.schemas import (AssistantInfo, AssistantSimpleInfo, AssistantUpdateReq,
                                     StreamData)
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
@@ -17,6 +16,7 @@ from bisheng.common.errcode.assistant import (AssistantInitError, AssistantNameR
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.schemas.telemetry.event_data_schema import NewApplicationEventData
 from bisheng.common.services import telemetry_service
+from bisheng.common.services.base import BaseService
 from bisheng.core.cache import InMemoryCache
 from bisheng.core.logger import trace_id_var
 from bisheng.database.models.assistant import (Assistant, AssistantDao, AssistantLinkDao,

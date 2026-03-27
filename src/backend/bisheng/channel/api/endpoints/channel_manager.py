@@ -226,7 +226,7 @@ async def remove_member(
 @router.get("/articles")
 async def search_channel_articles(
         channel_id: str = Query(..., description='Channel ID'),
-        keyword: Optional[str] = Query(None, description='Search keyword (title, content, publisher)'),
+        keyword: Optional[str] = Query(None, description='Search keyword (title, content, source ID)'),
         source_ids: Optional[str] = Query(None, description='Specified source ID list, comma separated'),
         sub_channel_name: Optional[str] = Query(None, description='Sub-channel name'),
         page: int = Query(1, ge=1, description='Page number, default 1'),

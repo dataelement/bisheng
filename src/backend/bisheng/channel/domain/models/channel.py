@@ -1,9 +1,9 @@
 import uuid
 from datetime import datetime
 from enum import Enum
-from typing import List, Dict, Optional, Literal
+from typing import List, Dict, Optional, Literal, Union, Annotated
 
-from anthropic import BaseModel
+from pydantic import BaseModel, Field as PydanticField, model_validator
 from sqlalchemy import CHAR, Column, VARCHAR, JSON, Enum as SQLEnum, DateTime, Boolean, text, Text
 from sqlmodel import Field
 
@@ -20,20 +20,37 @@ class ChannelVisibilityEnum(str, Enum):
     REVIEW = "review"
 
 
-class ChannelRule(BaseModel):
-    """Channel Filter Rule Model"""
+# 单一Rule
+class SingleRule(BaseModel):
+    """Single Rule Model"""
 
-    rule_type: Literal['include', 'exclude'] = Field(..., description='Rule Type: include or exclude')
-    keywords: List[str] = Field(..., description='List of keywords for filtering')
-    relation: Literal['and', 'or'] = Field(..., description='Relationship between keywords: and or or')
+    type: Literal['single'] = 'single'
+    rule_type: Literal['include', 'exclude'] = PydanticField(..., description='Rule Type: include or exclude')
+    keywords: List[str] = PydanticField(..., description='List of keywords for the rule')
+
+
+# 多Rule组合
+class MultiRule(BaseModel):
+    """Multi Rule Model"""
+
+    type: Literal['multi'] = 'multi'
+    relation: Literal['and', 'or'] = PydanticField(..., description='Relationship between rules: and or or')
+    rules: List[SingleRule] = PydanticField(..., description='List of filter rules')
 
 
 class ChannelFilterRules(BaseModel):
     """Channel Filter Rules Model"""
 
-    rules: List[ChannelRule] = Field(..., description='List of filter rules')
-    channel_type: Literal['main', 'sub'] = Field(..., description='Channel type: main or sub')
-    name: Optional[str] = Field(None, description='Filter name, required for sub channel')
+    relation: Literal['and', 'or'] = PydanticField(..., description='Relationship between rules: and or or')
+    rules: List[Annotated[Union[SingleRule, MultiRule], PydanticField(discriminator='type')]] = PydanticField(..., description='List of filter rules')
+    channel_type: Literal['main', 'sub'] = PydanticField(..., description='Channel type: main or sub')
+    name: Optional[str] = PydanticField(None, description='Filter name, required for sub channel')
+
+    @model_validator(mode='after')
+    def validate_sub_channel_name(self) -> 'ChannelFilterRules':
+        if self.channel_type == 'sub' and not self.name:
+            raise ValueError('Sub channel filter rules require a name')
+        return self
 
 
 class Channel(SQLModelSerializable, table=True):

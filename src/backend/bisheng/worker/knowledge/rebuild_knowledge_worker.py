@@ -5,9 +5,12 @@ from loguru import logger
 from bisheng.api.services.knowledge_imp import (
     decide_vectorstores
 )
+from bisheng.common.errcode import BaseErrorCode
+from bisheng.common.errcode.http_error import ServerError
 from bisheng.common.errcode.knowledge import KnowledgeFileFailedError
 from bisheng.core.logger import trace_id_var
 from bisheng.interface.embeddings.custom import FakeEmbedding
+from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao, KnowledgeState
 from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFile,
@@ -248,3 +251,115 @@ def _process_single_file(file, es_client, index_name, vector_client):
     except Exception as add_error:
         logger.error(f"[DEBUG] vector_client.add_textsCall failed: {str(add_error)}")
         raise add_error
+
+
+def get_all_es_chunks(es_client, index_name, query):
+    result = es_client.search(index=index_name,
+                              body=query,
+                              size=5000,
+                              scroll="1m")
+    res = []
+
+    def handle_hits(hits):
+        for hit in hits:
+            res.append(hit)
+
+    handle_hits(result.get("hits", {}).get("hits", []))
+    scroll_id = result.get('_scroll_id')
+    while scroll_id:
+        result = es_client.scroll(scroll_id=scroll_id, scroll='1m')
+        tmp_hits = result.get('hits', {}).get('hits', [])
+        if not tmp_hits:
+            break
+        handle_hits(tmp_hits)
+        scroll_id = result.get('_scroll_id')
+    if scroll_id:
+        es_client.clear_scroll(scroll_id=scroll_id)
+    return res
+
+
+@bisheng_celery.task(acks_late=True)
+def rebuild_knowledge_file_chunk(file_id: int):
+    trace_id_var.set(f"rebuild_knowledge_file_chunk_{file_id}")
+    logger.info(f"start rebuild_knowledge_file_chunk file_id={file_id}")
+    db_file = KnowledgeFileDao.query_by_id_sync(file_id)
+    if not db_file:
+        logger.warning(f"No knowledge file found for file_id={file_id}")
+        return
+    try:
+        _rebuild_knowledge_file_chunk(db_file)
+    except BaseErrorCode as e:
+        KnowledgeFileDao.update_file_status([db_file.id], KnowledgeFileStatus.FAILED, e.to_json_str())
+    except Exception as e:
+        logger.exception(f"Failed to rebuild knowledge file chunk: {str(e)}")
+        KnowledgeFileDao.update_file_status([db_file.id], KnowledgeFileStatus.FAILED,
+                                            ServerError(exception=e).to_json_str())
+
+
+def _rebuild_knowledge_file_chunk(db_file: KnowledgeFile):
+    db_knowledge = KnowledgeDao.query_by_id(db_file.knowledge_id)
+    milvus_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(db_file.user_id, knowledge=db_knowledge)
+    es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(db_knowledge)
+
+    index_name = db_knowledge.index_name or db_knowledge.collection_name
+    query = {
+        "query": {
+            "match": {
+                "metadata.document_id": db_file.id
+            }
+        }
+    }
+
+    chunks = get_all_es_chunks(es_client.client, index_name, query)
+    if not chunks:
+        logger.warning(f"No chunks found for")
+        return
+
+    logger.info(f"Found {len(chunks)} chunks in ES for file_id={db_file.id}")
+
+    from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
+
+    texts = []
+    metadatas = []
+    pks_to_delete = []
+
+    for chunk in chunks:
+        source = chunk["_source"]
+        old_text = source.get("text", "")
+        metadata = source.get("metadata", {})
+
+        pk = metadata.pop("pk", None)
+        if pk is not None:
+            pks_to_delete.append(pk)
+
+        # extract raw chunk
+        raw_chunk = KnowledgeUtils.split_chunk_metadata(old_text)
+
+        # update metadata
+        metadata["document_name"] = db_file.file_name
+        metadata["abstract"] = db_file.abstract
+        metadata["updater"] = db_file.updater_name
+        metadata["update_time"] = int(db_file.update_time.timestamp())
+
+        # re-concatenate
+        new_text = KnowledgeUtils.aggregate_chunk_metadata(raw_chunk, metadata)
+
+        texts.append(new_text)
+        metadatas.append(metadata)
+
+    # Delete old data from ES
+    es_client.client.delete_by_query(index=index_name, body=query)
+
+    # Delete old data from Milvus
+    if pks_to_delete and hasattr(milvus_client, "col") and milvus_client.col:
+        try:
+            milvus_client.col.delete(f"pk in {pks_to_delete}")
+        except Exception as e:
+            logger.warning(f"Failed to delete old pk(s) from Milvus: {str(e)}")
+
+    # Re-insert into Milvus and ES
+    logger.info(f"Re-inserting {len(texts)} chunks for file_id={db_file.id} into vector stores")
+    milvus_client.add_texts(texts=texts, metadatas=metadatas)
+    es_client.add_texts(texts=texts, metadatas=metadatas)
+
+    logger.info(f"rebuild_knowledge_file_chunk completed successfully for file_id={db_file.id}")

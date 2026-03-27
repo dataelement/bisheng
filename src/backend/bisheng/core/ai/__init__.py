@@ -1,5 +1,5 @@
 from langchain_anthropic import ChatAnthropic
-from langchain_community.chat_models import ChatTongyi, ChatZhipuAI, MiniMaxChat, MoonshotChat
+from langchain_community.chat_models import ChatTongyi, ChatZhipuAI, MoonshotChat
 from langchain_community.document_compressors import DashScopeRerank
 from langchain_community.embeddings import DashScopeEmbeddings
 from langchain_deepseek import ChatDeepSeek
@@ -30,7 +30,6 @@ __all__ = [
     'AzureChatOpenAI',
     'ChatTongyi',
     'ChatZhipuAI',
-    'MiniMaxChat',
     'ChatAnthropic',
     'ChatDeepSeek',
     'MoonshotChat',

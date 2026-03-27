@@ -9,13 +9,13 @@ from loguru import logger
 from openai import BaseModel
 from pydantic import field_validator
 
-from bisheng.api.services.base import BaseService
 from bisheng.api.v1.schema.chat_schema import UseKnowledgeBaseParam
 from bisheng.api.v1.schemas import KnowledgeFileOne, KnowledgeFileProcess, WorkstationConfig, LinsightConfig, \
     SubscriptionConfig, KnowledgeSpaceConfig
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.server import EmbeddingModelStatusError
 from bisheng.common.models.config import Config, ConfigDao, ConfigKeyEnum
+from bisheng.common.services.base import BaseService
 from bisheng.core.vectorstore.multi_retriever import MultiRetriever
 from bisheng.database.constants import MessageCategory
 from bisheng.database.models.message import ChatMessage, ChatMessageDao

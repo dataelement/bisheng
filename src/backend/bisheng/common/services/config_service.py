@@ -202,6 +202,7 @@ class ConfigService(Settings):
         all_config = self.get_all_config()
         tmp = SystemLoginMethod(**all_config.get('system_login_method', {}))
         tmp.bisheng_pro = os.getenv('BISHENG_PRO') == 'true'
+        tmp.dashboard_pro = os.getenv('BISHENG_DASHBOARD_PRO') == 'true'
         return tmp
 
     async def aget_system_login_method(self) -> SystemLoginMethod:
@@ -209,6 +210,7 @@ class ConfigService(Settings):
         all_config = await self.aget_all_config()
         tmp = SystemLoginMethod(**all_config.get('system_login_method', {}))
         tmp.bisheng_pro = os.getenv('BISHENG_PRO') == 'true'
+        tmp.dashboard_pro = os.getenv('BISHENG_DASHBOARD_PRO') == 'true'
         return tmp
 
     def get_workflow_conf(self) -> WorkflowConf:

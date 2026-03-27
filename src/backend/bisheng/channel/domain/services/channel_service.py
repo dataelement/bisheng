@@ -225,18 +225,12 @@ class ChannelService:
 
     async def _calculate_unread_count(self, channel: Channel, all_read_ids: List[str]) -> int:
         """Calculate the exact number of unread articles for a given channel."""
-        # 1. Parse filter rules, using only the main channel rules
-        filter_rules_raw: List[Dict[str, Any]] = channel.filter_rules or []
-        main_rules: List[Dict[str, Any]] = []
-        for fr in filter_rules_raw:
-            channel_type = fr.get("channel_type", "main")
-            if channel_type == "main":
-                main_rules.extend(fr.get("rules", []))
+        main_rule_groups = self._extract_filter_rule_groups(channel, channel_type="main")
 
         # 2. Get total number of articles for this channel
         total_count = await self.article_es_service.count_articles(
             source_ids=channel.source_list,
-            filter_rules=main_rules if main_rules else None
+            filter_rules=main_rule_groups if main_rule_groups else None,
         )
 
         if total_count == 0:
@@ -257,7 +251,7 @@ class ChannelService:
             tasks.append(
                 self.article_es_service.count_articles(
                     source_ids=channel.source_list,
-                    filter_rules=main_rules if main_rules else None,
+                    filter_rules=main_rule_groups if main_rule_groups else None,
                     include_article_ids=chunked_ids
                 )
             )
@@ -571,35 +565,10 @@ class ChannelService:
         batch_requests = []
         for row in rows:
             channel = row[0]
-            filter_rules_raw = channel.filter_rules or []
-            main_rules = []
-            for fr in filter_rules_raw:
-                if isinstance(fr, dict):
-                    channel_type = fr.get("channel_type", "main")
-                    rules = fr.get("rules", [])
-                    name = fr.get("name")
-                else:
-                    channel_type = getattr(fr, "channel_type", "main")
-                    rules = getattr(fr, "rules", [])
-                    name = getattr(fr, "name", None)
-
-                rules_dicts = []
-                for r in rules:
-                    if isinstance(r, dict):
-                        rules_dicts.append(r)
-                    elif hasattr(r, "model_dump"):
-                        rules_dicts.append(r.model_dump(exclude_unset=True))
-                    elif hasattr(r, "__dict__"):
-                        rules_dicts.append(r.__dict__)
-                    else:
-                        rules_dicts.append(r)
-
-                if not (channel_type == "sub" and name):
-                    main_rules.extend(rules_dicts)
-
+            main_rule_groups = self._extract_filter_rule_groups(channel, channel_type="main")
             batch_requests.append({
                 "source_ids": channel.source_list or [],
-                "filter_rules": main_rules if main_rules else None,
+                "filter_rules": main_rule_groups if main_rule_groups else None,
                 "include_article_ids": None
             })
 
@@ -936,33 +905,11 @@ class ChannelService:
         subscriber_count = await self.space_channel_member_repository.count_channel_members(channel_id=channel_id)
 
         # 5. Get Article Count
-        filter_rules_raw: List[Dict[str, Any]] = channel.filter_rules or []
-        main_rules: List[Dict[str, Any]] = []
-        for fr in filter_rules_raw:
-            if isinstance(fr, dict):
-                channel_type = fr.get("channel_type", "main")
-                rules = fr.get("rules", [])
-            else:
-                channel_type = getattr(fr, "channel_type", "main")
-                rules = getattr(fr, "rules", [])
-
-            rules_dicts = []
-            for r in rules:
-                if isinstance(r, dict):
-                    rules_dicts.append(r)
-                elif hasattr(r, "model_dump"):
-                    rules_dicts.append(r.model_dump(exclude_unset=True))
-                elif hasattr(r, "__dict__"):
-                    rules_dicts.append(r.__dict__)
-                else:
-                    rules_dicts.append(r)
-
-            if channel_type == "main" or not channel_type:  # Fallback or main
-                main_rules.extend(rules_dicts)
+        main_rule_groups = self._extract_filter_rule_groups(channel, channel_type="main")
 
         article_count = await self.article_es_service.count_articles(
             source_ids=channel.source_list,
-            filter_rules=main_rules if main_rules else None
+            filter_rules=main_rule_groups if main_rule_groups else None,
         )
 
         # Complete info source list
@@ -1093,7 +1040,7 @@ class ChannelService:
 
         Args:
             channel_id: Channel ID
-            keyword: Search keyword (title, content, publisher)
+            keyword: Search keyword (title, content, source ID)
             source_ids: Info source ID list specified by frontend (must be a subset of channel source_list)
             sub_channel_name: Sub-channel name, if specified use the corresponding sub-channel's filter rules
             page: Page number
@@ -1119,29 +1066,23 @@ class ChannelService:
                 return ArticleSearchPageResponse(data=[], total=0, page=page, page_size=page_size)
         else:
             effective_source_ids = channel_source_ids
+        if not effective_source_ids:
+            return ArticleSearchPageResponse(data=[], total=0, page=page, page_size=page_size)
 
         # 3. Parse filter rules
-        filter_rules_raw: List[Dict[str, Any]] = channel.filter_rules or []
+        main_rule_groups = self._extract_filter_rule_groups(channel, channel_type="main")
+        sub_rule_groups = []
+        if sub_channel_name:
+            sub_rule_groups = self._extract_filter_rule_groups(
+                channel,
+                channel_type="sub",
+                sub_channel_name=sub_channel_name,
+            )
 
-        # Parse filter rules, distinguish between main channel and sub-channels
-        main_rules: List[Dict[str, Any]] = []
-        sub_channel_rules: Dict[str, List[Dict[str, Any]]] = {}
-
-        for fr in filter_rules_raw:
-            channel_type = fr.get("channel_type", "main")
-            rules = fr.get("rules", [])
-            name = fr.get("name")
-
-            if channel_type == "sub" and name:
-                sub_channel_rules.setdefault(name, []).extend(rules)
-            else:
-                main_rules.extend(rules)
-
-        # Determine which set of rules to use
-        if sub_channel_name and sub_channel_name in sub_channel_rules:
-            effective_rules = sub_channel_rules[sub_channel_name]
+        if sub_rule_groups:
+            effective_rule_groups = sub_rule_groups
         else:
-            effective_rules = main_rules
+            effective_rule_groups = main_rule_groups
 
         # 4. Get read article ID list
         read_article_ids = []
@@ -1156,7 +1097,7 @@ class ChannelService:
         article_search_response = await self.article_es_service.search_articles(
             source_ids=effective_source_ids,
             keyword=keyword,
-            filter_rules=effective_rules if effective_rules else None,
+            filter_rules=effective_rule_groups if effective_rule_groups else None,
             page=page,
             page_size=page_size,
             exclude_article_ids=exclude_article_ids
@@ -1229,17 +1170,40 @@ class ChannelService:
     # ──────────────────────────────────────────
 
     @staticmethod
-    def _extract_main_filter_rules(channel: Channel) -> List[Dict[str, Any]]:
-        """Extract main channel filter rules from channel configuration."""
+    def _extract_filter_rule_groups(
+            channel: Channel,
+            channel_type: str = "main",
+            sub_channel_name: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """Extract filter rule groups while preserving top-level grouping semantics."""
         filter_rules_raw = channel.filter_rules or []
-        main_rules: List[Dict[str, Any]] = []
+        matched_groups: List[Dict[str, Any]] = []
+        legacy_main_rules: List[Dict[str, Any]] = []
 
         for filter_rule in filter_rules_raw:
-            channel_type = filter_rule.get("channel_type", "main")
-            if channel_type == "main":
-                main_rules.extend(filter_rule.get("rules", []))
+            if filter_rule.get("type") in {"single", "multi"}:
+                if channel_type == "main":
+                    legacy_main_rules.append(filter_rule)
+                continue
 
-        return main_rules
+            current_channel_type = filter_rule.get("channel_type", "main")
+            if current_channel_type != channel_type:
+                continue
+
+            if channel_type == "sub":
+                if not sub_channel_name or filter_rule.get("name") != sub_channel_name:
+                    continue
+
+            matched_groups.append(filter_rule)
+
+        if legacy_main_rules and channel_type == "main":
+            matched_groups.append({
+                "relation": "or",
+                "rules": legacy_main_rules,
+                "channel_type": "main",
+            })
+
+        return matched_groups
 
     @staticmethod
     def _normalize_datetime(value: Optional[datetime]) -> Optional[datetime]:
@@ -1255,9 +1219,10 @@ class ChannelService:
         from bisheng.channel.domain.es.article_index import ARTICLE_INDEX_NAME
         from bisheng.core.search.elasticsearch.manager import get_es_connection
 
+        main_rule_groups = self._extract_filter_rule_groups(channel, channel_type="main")
         query = self.article_es_service._build_count_query(
             source_ids=channel.source_list or [],
-            filter_rules=self._extract_main_filter_rules(channel) or None,
+            filter_rules=main_rule_groups or None,
         )
         if query is None:
             return None
@@ -1339,9 +1304,10 @@ class ChannelService:
             for channel in channels:
                 try:
                     # Get latest article create_time
+                    main_rule_groups = ChannelService._extract_filter_rule_groups(channel, channel_type="main")
                     query = article_service._build_count_query(
                         source_ids=channel.source_list or [],
-                        filter_rules=ChannelService._extract_main_filter_rules(channel) or None,
+                        filter_rules=main_rule_groups or None,
                     )
                     if query is None:
                         # No valid query (empty source_list or no filter rules), clear the time
