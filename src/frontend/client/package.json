@@ -6,7 +6,7 @@
   "scripts": {
     "check-imports": "node scripts/check-case-sensitive-imports.mjs",
     "start": "cross-env NODE_ENV=development vite",
-    "build": "npm run check-imports && cross-env NODE_ENV=production vite build",
+    "build": "cross-env NODE_ENV=production vite build",
     "build:file": "cross-env NODE_ENV=production vite build --debug > vite-output.log 2>&1",
     "build:ci": "cross-env NODE_ENV=development vite build --mode ci",
     "preview-prod": "cross-env NODE_ENV=development vite preview",

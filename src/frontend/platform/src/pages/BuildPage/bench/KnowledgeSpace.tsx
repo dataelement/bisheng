@@ -142,20 +142,19 @@ const useKnowledgeConfig = () => {
     // 初始化时从后台读取配置
     useEffect(() => {
         getKnowledgeConfigApi().then((res) => {
-            if (res && res.data) {
-                const cfg = res.data as any;
-                const systemPromptFromRes = cfg.system_prompt ?? cfg.systemPrompt;
-                const userPromptFromRes = cfg.user_prompt ?? cfg.userPrompt;
-                const maxChunkSizeFromRes = cfg.max_chunk_size ?? cfg.maxTokens;
-                setFormData((prev) => ({
-                    ...prev,
-                    systemPrompt: systemPromptFromRes || t('chatConfig.systemPrompt2'),
-                    userPrompt: userPromptFromRes ?? prev.userPrompt,
-                    maxChunkSize: typeof maxChunkSizeFromRes === 'number' ? maxChunkSizeFromRes : prev.maxChunkSize,
-                }));
-            }
+            if (!res) return;
+            const cfg = res as any;
+            const systemPromptFromRes = cfg.system_prompt ?? cfg.systemPrompt;
+            const userPromptFromRes = cfg.user_prompt ?? cfg.userPrompt;
+            const maxChunkSizeFromRes = cfg.max_chunk_size ?? cfg.maxTokens;
+            setFormData((prev) => ({
+                ...prev,
+                systemPrompt: systemPromptFromRes || t('chatConfig.systemPrompt2'),
+                userPrompt: userPromptFromRes ?? prev.userPrompt,
+                maxChunkSize: typeof maxChunkSizeFromRes === 'number' ? maxChunkSizeFromRes : prev.maxChunkSize,
+            }));
         });
-    }, [t]);
+    }, []);
 
     const { toast } = useToast();
     const { reloadConfig } = useContext(locationContext);

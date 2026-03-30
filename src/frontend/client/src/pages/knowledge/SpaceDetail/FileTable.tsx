@@ -214,7 +214,7 @@ const SortableHeader = ({
 }: {
     children: React.ReactNode;
     sortKey: string;
-    currentSort: { key: string; direction: string };
+    currentSort: { key?: string; direction?: string };
     onSort: (key: string) => void;
     width: number;
     columnKey: ColumnKey;
@@ -266,14 +266,20 @@ function FileTableHeader({
     sortDirection,
     onSort,
     isAdmin,
+    isAllSelected,
+    isIndeterminate,
+    onSelectAll,
 }: {
     columnWidths: Record<ColumnKey, number>;
     onResizeStart: (key: ColumnKey, e: React.MouseEvent) => void;
     showLeftShadow: boolean;
-    sortBy: SortType;
-    sortDirection: SortDirection;
+    sortBy: SortType | undefined;
+    sortDirection: SortDirection | undefined;
     onSort: (sortBy: SortType) => void;
     isAdmin: boolean;
+    isAllSelected: boolean;
+    isIndeterminate: boolean;
+    onSelectAll: () => void;
 }) {
     const localize = useLocalize();
     const currentSort = { key: sortBy, direction: sortDirection };
@@ -287,10 +293,14 @@ function FileTableHeader({
             <TableRow className="hover:bg-transparent border-none">
                 {/* 复选框列 — 左侧固定 */}
                 <TableHead
-                    className="text-center p-0 sticky left-0 z-20 bg-[#f7f8fa]"
+                    className="text-center p-0 sticky left-0 z-20 bg-[#f7f8fa] flex items-center justify-center"
                     style={{ width: columnWidths.checkbox, minWidth: columnWidths.checkbox, maxWidth: columnWidths.checkbox }}
                 >
-                    <Checkbox className="border-gray-400 checked:border-primary" />
+                    <Checkbox
+                        className="border-gray-400 data-[state=checked]:border-primary"
+                        checked={isIndeterminate ? "indeterminate" : isAllSelected}
+                        onCheckedChange={onSelectAll}
+                    />
                 </TableHead>
 
                 {/* 文件名 — 左侧固定 */}
@@ -381,7 +391,7 @@ function FileTableHeader({
 interface FileTableProps {
     files: KnowledgeFile[];
     selectedFiles: Set<string>;
-    handleSelectAll: () => void;
+    handleSelectAll: (isAllSelected: boolean) => void;
     handleSelectFile: (id: string, selected: boolean) => void;
     isAdmin: boolean;
     onDownload: (id: string) => void;
@@ -393,8 +403,8 @@ interface FileTableProps {
     onPreview?: (id: string) => void;
     onValidateName: (name: string, isFolder: boolean, fileId: string, isCreating: boolean) => string | null;
     onCancelCreate?: () => void;
-    sortBy: SortType;
-    sortDirection: SortDirection;
+    sortBy: SortType | undefined;
+    sortDirection: SortDirection | undefined;
     onSort: (sortBy: SortType) => void;
 }
 
@@ -402,6 +412,9 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
     const { columnWidths, onResizeStart, totalWidth } = useResizableColumns();
     const scrollRef = useRef<HTMLDivElement>(null);
     const { showLeftShadow, showRightShadow } = useScrollShadow(scrollRef);
+
+    const isAllSelected = files.length > 0 && files.every((f) => selectedFiles.has(f.id));
+    const isIndeterminate = !isAllSelected && files.some((f) => selectedFiles.has(f.id));
 
     return (
         <div className="border-t border-[#e5e6eb] relative overflow-hidden">
@@ -422,6 +435,9 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                         sortDirection={sortDirection}
                         onSort={onSort}
                         isAdmin={isAdmin}
+                        isAllSelected={isAllSelected}
+                        isIndeterminate={isIndeterminate}
+                        onSelectAll={() => handleSelectAll(isAllSelected)}
                     />
                     <TableBody>
                         {files.map((file) => (
@@ -659,11 +675,14 @@ function FileRow({
                 >
                     {isFolder
                         ? (
-                            <span className={`text-sm ${file.successFileNum !== undefined && file.fileNum !== undefined && file.successFileNum < file.fileNum
-                                ? 'text-[#f53f3f]'
-                                : 'text-[#86909c]'
-                                }`}>
-                                {file.successFileNum ?? 0}/{file.fileNum ?? 0}
+                            <span className="text-sm text-[#86909c]">
+                                <span className={file.successFileNum !== undefined && file.fileNum !== undefined && file.successFileNum < file.fileNum
+                                    ? 'text-emerald-500'
+                                    : 'text-emerald-500'
+                                }>
+                                    {file.successFileNum ?? 0}
+                                </span>
+                                /{file.fileNum ?? 0}
                             </span>
                         )
                         : <StatusBadge status={file.status} />
@@ -677,7 +696,7 @@ function FileRow({
                 style={{ width: columnWidths.actions, minWidth: columnWidths.actions, maxWidth: columnWidths.actions }}
             >
                 <div className="invisible group-hover:visible flex justify-end items-center gap-1">
-                    {!isFolder && (
+                    {(
                         <button
                             className="size-7 shrink-0 flex items-center justify-center hover:bg-[#e5e6eb] rounded-md text-[#4e5969] transition-colors"
                             onClick={(e) => { e.stopPropagation(); onDownload(); }}

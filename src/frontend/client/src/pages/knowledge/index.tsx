@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import { useUnactivate } from "react-activation";
@@ -31,6 +31,7 @@ import { useLocalize } from "~/hooks";
 export default function Knowledge() {
     const localize = useLocalize();
     const MAX_USER_SPACES = 30;
+    const previewNavTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [activeSpace, setActiveSpace] = useState<KnowledgeSpace | null>(null);
     const [showCreateDrawer, setShowCreateDrawer] = useState(false);
     const [editingSpace, setEditingSpace] = useState<KnowledgeSpace | null>(null);
@@ -396,7 +397,17 @@ export default function Knowledge() {
                 open={previewDrawerOpen}
                 onOpenChange={(open) => {
                     setPreviewDrawerOpen(open);
-                    if (!open) navigate("/knowledge", { replace: true });
+                    if (previewNavTimerRef.current) {
+                        clearTimeout(previewNavTimerRef.current);
+                        previewNavTimerRef.current = null;
+                    }
+
+                    // 给 Sheet 的 slide-out 动画留出时间，避免立刻 navigate 导致动画被中断
+                    if (!open) {
+                        previewNavTimerRef.current = setTimeout(() => {
+                            navigate("/knowledge", { replace: true });
+                        }, 400);
+                    }
                 }}
             />
         </div>

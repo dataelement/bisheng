@@ -5,6 +5,7 @@ import { currentChatState } from '~/pages/appChat/store/atoms';
 import { useAppSidebar } from '~/pages/appChat/hooks/useAppSidebar';
 import AppAvator from '~/components/Avator';
 import { AppSwitcherDropdown } from '~/pages/appChat/components/AppSwitcherDropdown';
+import { AppSidebarConvoItem } from '~/pages/appChat/components/AppSidebarConvoItem';
 import { cn } from '~/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '~/components/ui/Tooltip2';
 
@@ -24,6 +25,7 @@ export function SideNav() {
         switchConversation,
         createNewChat,
         shareApp,
+        fetchConversations,
     } = useAppSidebar();
 
     return (
@@ -110,24 +112,20 @@ export function SideNav() {
                             <div className="flex flex-col">
                                 {group.conversations.map((conv) => {
                                     const isActive = conv.id === activeConversationId;
-
                                     return (
-                                        <div
+                                        <AppSidebarConvoItem
                                             key={conv.id}
+                                            conv={conv}
+                                            isActive={isActive}
                                             onClick={() => switchConversation(conv)}
-                                            className={cn(
-                                                "group relative w-full content-stretch flex gap-[8px] items-center mb-1 px-[12px] py-[6px] rounded-lg shrink-0 transition-colors cursor-pointer",
-                                                isActive ? "bg-[#e6edfc]" : "hover:bg-[#f7f7f7]"
-                                            )}
-                                        >
-                                            <TodayItemIcon className="size-[24px] shrink-0 text-[#6B778D]" />
-
-                                            <div className="flex-1 min-w-0 flex flex-col justify-center">
-                                                <span className="text-[#212121] text-[14px] leading-[20px] font-['PingFang_SC:Regular',sans-serif] truncate">
-                                                    {conv.title}
-                                                </span>
-                                            </div>
-                                        </div>
+                                            onRenameSuccess={() => fetchConversations()}
+                                            onDeleteSuccess={() => {
+                                                fetchConversations();
+                                                if (isActive) {
+                                                    createNewChat();
+                                                }
+                                            }}
+                                        />
                                     );
                                 })}
                             </div>

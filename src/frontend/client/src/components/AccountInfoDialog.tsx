@@ -286,14 +286,19 @@ export function AccountInfoDialog({
                             <button
                                 type="button"
                                 onClick={handleAvatarClick}
-                                className="relative group rounded-full"
+                                title="更换头像"
+                                className="relative group rounded-full shrink-0 outline-none focus-visible:ring-2 focus-visible:ring-[#165dff] focus-visible:ring-offset-2"
                             >
-                                <Avatar className="size-10">
+                                <Avatar className="size-12">
                                     <AvatarImage src={currentAvatarUrl} alt={username} />
                                 </Avatar>
-                                <div className="absolute inset-0 rounded-full bg-[rgba(0,0,0,0.45)] opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-[12px] transition-opacity">
-                                    <Camera className="size-4 mr-1" />
-                                    <span>更换头像</span>
+                                <div className="absolute inset-0 rounded-full bg-[rgba(0,0,0,0.45)] opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 flex flex-col items-center justify-center gap-0.5 text-white transition-opacity px-1">
+                                    <Camera className="size-3.5 shrink-0" aria-hidden />
+                                    <span className="text-[10px] leading-tight text-center">
+                                        更换
+                                        <br />
+                                        头像
+                                    </span>
                                 </div>
                             </button>
                             <div className="flex items-center text-[14px]">

@@ -12,6 +12,9 @@ const EXT_MAP: Record<string, ViewerType> = {
     xls: "xlsx",
     xlsx: "xlsx",
     csv: "xlsx",
+    // ppt
+    ppt: "pdf",
+    pptx: "pdf",
     // Markdown
     md: "markdown",
     // HTML

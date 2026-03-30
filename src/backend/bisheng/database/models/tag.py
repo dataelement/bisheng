@@ -19,7 +19,7 @@ class TagBase(SQLModelSerializable):
     """
     Tag Form
     """
-    name: Optional[str] = Field(default=None, index=True, unique=True, description="Label Name")
+    name: Optional[str] = Field(default=None, index=True, description="Label Name")
     business_type: TagBusinessTypeEnum = Field(default=TagBusinessTypeEnum.APPLICATION,
                                                description="Business Type")
     business_id: Optional[str] = Field(default=None, sa_column=Column(String(36)), description="Business ID")

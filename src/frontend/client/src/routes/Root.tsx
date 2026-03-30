@@ -1,12 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
-import { useRecoilState } from 'recoil';
-import { getBysConfigApi } from '~/api/apps';
 import type { ContextType } from '~/common';
 import { Banner } from '~/components/Banners';
 import { MobileNav, Nav } from '~/components/Nav';
 import { useAgentsMap, useAssistantsMap, useAuthContext, useFileMap, useSearch } from '~/hooks';
-import { bishengConfState } from '~/pages/appChat/store/atoms';
 import {
   AgentsMapContext,
   AssistantsMapContext,
@@ -28,7 +25,7 @@ export default function Root() {
   const fileMap = useFileMap({ isAuthenticated });
   const search = useSearch({ isAuthenticated });
 
-  useConfig()
+
 
   if (!isAuthenticated) {
     return null;
@@ -60,16 +57,4 @@ export default function Root() {
       </SearchContext.Provider>
     </SetConvoProvider>
   );
-}
-
-
-
-const useConfig = () => {
-  const [_, setConfig] = useRecoilState(bishengConfState)
-
-  useEffect(() => {
-    getBysConfigApi().then(res => {
-      setConfig(res.data)
-    })
-  }, [])
 }

@@ -7,6 +7,7 @@ import {
     memo,
     useCallback,
     useEffect,
+    useLayoutEffect,
     useRef,
     useState,
     type KeyboardEvent,
@@ -22,7 +23,7 @@ import SpeechToTextComponent from "~/components/Voice/SpeechToText";
 import { useGetWorkbenchModelsQuery } from "~/hooks/queries/data-provider";
 import InputFiles from "~/pages/appChat/components/InputFiles";
 import { useFileDropAndPaste } from "~/pages/appChat/useFileDropAndPaste";
-import { cn, removeFocusRings } from "~/utils";
+import { checkIfScrollable, cn, removeFocusRings } from "~/utils";
 import AiModelSelect from "./AiModelSelect";
 import BooksIcon from "../ui/icon/Books";
 import BookOpen from "../ui/icon/BookOpen";
@@ -109,6 +110,46 @@ const AiChatInput = memo(
             [isControlled, onExternalChange]
         );
         const textAreaRef = useRef<HTMLTextAreaElement>(null);
+        const [isTextareaScrollable, setIsTextareaScrollable] = useState(false);
+        /** True only while user is actively scrolling — drives .scroll-on-scroll (see style.css). */
+        const [isTextareaScrolling, setIsTextareaScrolling] = useState(false);
+        const textareaScrollHideTimerRef = useRef<number | null>(null);
+
+        const updateTextareaScrollable = useCallback(() => {
+            const el = textAreaRef.current;
+            setIsTextareaScrollable(el ? checkIfScrollable(el) : false);
+        }, []);
+
+        const handleTextareaScroll = useCallback(() => {
+            if (!isTextareaScrollable) return;
+            setIsTextareaScrolling(true);
+            if (textareaScrollHideTimerRef.current) {
+                window.clearTimeout(textareaScrollHideTimerRef.current);
+            }
+            textareaScrollHideTimerRef.current = window.setTimeout(() => {
+                setIsTextareaScrolling(false);
+                textareaScrollHideTimerRef.current = null;
+            }, 700);
+        }, [isTextareaScrollable]);
+
+        useLayoutEffect(() => {
+            const id = requestAnimationFrame(() => updateTextareaScrollable());
+            return () => cancelAnimationFrame(id);
+        }, [text, updateTextareaScrollable]);
+
+        useEffect(() => {
+            if (!isTextareaScrollable) {
+                setIsTextareaScrolling(false);
+            }
+        }, [isTextareaScrollable]);
+
+        useEffect(() => {
+            return () => {
+                if (textareaScrollHideTimerRef.current) {
+                    window.clearTimeout(textareaScrollHideTimerRef.current);
+                }
+            };
+        }, []);
 
         // File upload state
         const [fileUploading, setFileUploading] = useState(false);
@@ -160,7 +201,13 @@ const AiChatInput = memo(
             if (textAreaRef.current) {
                 textAreaRef.current.style.height = "auto";
             }
-        }, [text, disabled, isStreaming, fileUploading, onSend, chatFiles]);
+            setIsTextareaScrollable(false);
+            setIsTextareaScrolling(false);
+            if (textareaScrollHideTimerRef.current) {
+                window.clearTimeout(textareaScrollHideTimerRef.current);
+                textareaScrollHideTimerRef.current = null;
+            }
+        }, [text, disabled, isStreaming, fileUploading, onSend, chatFiles, setText]);
 
         const handleKeyDown = useCallback(
             (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -272,19 +319,23 @@ const AiChatInput = memo(
                         onChange={(e) => setText(e.target.value)}
                         onKeyDown={handleKeyDown}
                         onPaste={handlePaste}
+                        onScroll={handleTextareaScroll}
+                        onHeightChange={updateTextareaScrollable}
                         disabled={disabled}
                         placeholder={placeholder || bsConfig?.inputPlaceholder}
                         tabIndex={0}
                         data-testid="ai-chat-input"
+                        data-scrolling={isTextareaScrollable && isTextareaScrolling ? "true" : "false"}
                         rows={2}
-                        style={{ height: 84, overflowY: "auto" }}
+                        style={{ height: 84, overflowY: isTextareaScrollable ? "auto" : "hidden" }}
                         className={cn(
                             "p-3 pb-0 m-0 w-full resize-none bg-transparent text-sm",
                             "placeholder-black/50 dark:placeholder-white/50",
-                            "max-h-96 pl-4 pr-6",
+                            "max-h-[240px] pl-4 pr-6 scrollbar-gutter-stable",
                             size === 'mini' ? 'min-h-0' : 'min-h-20',
                             removeFocusRings,
-                            "transition-[max-height] duration-200"
+                            "transition-[max-height] duration-200",
+                            isTextareaScrollable && "scroll-on-scroll"
                         )}
                     />
 

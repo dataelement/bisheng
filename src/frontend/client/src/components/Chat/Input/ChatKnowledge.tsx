@@ -219,7 +219,7 @@ export const ChatKnowledge = ({
 
   // Org KB data fetching (paginated via react-query)
   const { data: orgData, isFetching: orgFetching } = useGetOrgToolList({
-    page: orgPage, page_size: PAGE_SIZE, name: debouncedOrgKeyword,
+    page: orgPage, page_size: PAGE_SIZE, name: debouncedOrgKeyword, sort_by: 'name',
   });
 
   useEffect(() => {

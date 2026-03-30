@@ -25,8 +25,8 @@ export const ALLOWED_MIME_TYPES = [
 /** Accept attribute value for <input type="file"> */
 export const FILE_INPUT_ACCEPT = ALLOWED_EXTENSIONS.map(e => `.${e}`).join(",");
 
-/** Maximum single file size in bytes (200 MB) */
-export const MAX_FILE_SIZE = 200 * 1024 * 1024;
+/** Default maximum single file size in MB (used when env config is not available) */
+export const DEFAULT_MAX_FILE_SIZE_MB = 200;
 
 /** Maximum number of files per upload batch */
 export const MAX_UPLOAD_COUNT = 50;
@@ -55,11 +55,14 @@ export function getFileTypeFromName(name: string): FileType {
 }
 
 /**
- * Trigger browser download from a relative URL returned by the backend.
- * Full URL = window.location.origin + BASE_URL + relativeUrl
+ * Trigger browser download from a URL.
+ * Supports both absolute URLs (http/https) and relative paths from the backend.
+ * For relative paths: Full URL = window.location.origin + BASE_URL + relativeUrl
  */
-export function triggerUrlDownload(relativeUrl: string, filename?: string) {
-    const fullUrl = `${window.location.origin}${__APP_ENV__.BASE_URL}${relativeUrl}`;
+export function triggerUrlDownload(url: string, filename?: string) {
+    const fullUrl = /^https?:\/\//.test(url)
+        ? url
+        : `${window.location.origin}${__APP_ENV__.BASE_URL}${url}`;
     const a = document.createElement("a");
     a.href = fullUrl;
     if (filename) a.download = filename;
@@ -86,12 +89,32 @@ export function formatTime(dateString: string): string {
 }
 
 /**
+ * Card-mode compact date display.
+ * Today  → "HH:mm"
+ * Others → "YYYY-MM-DD"
+ */
+export function formatTimeCard(dateString: string): string {
+    const date = new Date(dateString);
+    const yyyy = date.getFullYear();
+    const mm = String(date.getMonth() + 1).padStart(2, "0");
+    const dd = String(date.getDate()).padStart(2, "0");
+    const HH = String(date.getHours()).padStart(2, "0");
+    const min = String(date.getMinutes()).padStart(2, "0");
+
+    const isToday = date.toDateString() === new Date().toDateString();
+    return isToday ? `${HH}:${min}` : `${yyyy}-${mm}-${dd}`;
+}
+
+/**
  * Validate a single file for upload eligibility (size + extension).
+ * @param file - File to validate
+ * @param maxSizeMB - Maximum file size in MB (from env config or default 200)
  * Returns an error message string, or null if valid.
  */
-export function validateFileForUpload(file: File): string | null {
-    if (file.size > MAX_FILE_SIZE) {
-        return i18next.t("com_knowledge.file_exceeds_200m", { 0: file.name });
+export function validateFileForUpload(file: File, maxSizeMB: number = DEFAULT_MAX_FILE_SIZE_MB): string | null {
+    const maxSizeBytes = maxSizeMB * 1024 * 1024;
+    if (file.size > maxSizeBytes) {
+        return i18next.t("com_knowledge.file_exceeds_limit", { name: file.name, size: maxSizeMB });
     }
     const ext = file.name.split(".").pop()?.toLowerCase();
     if (!ext || !(ALLOWED_EXTENSIONS as readonly string[]).includes(ext)) {

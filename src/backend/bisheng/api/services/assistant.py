@@ -113,11 +113,7 @@ class AssistantService(BaseService, AssistantUtils):
             raise AssistantNotExistsError()
         # Check if you have permission to access the information
         if not await login_user.async_access_check(assistant.user_id, assistant.id, AccessType.ASSISTANT_READ):
-
-            if (share_link is None
-                    or share_link.meta_data is None
-                    or share_link.meta_data.get("flowId") != assistant.id):
-                raise UnAuthorizedError()
+            raise UnAuthorizedError()
 
         tool_list = []
         flow_list = []

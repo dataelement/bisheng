@@ -311,27 +311,31 @@ class MessageSessionDao(MessageSessionBase):
             session.commit()
 
     @classmethod
-    async def get_user_used_apps(cls, user_id: int, flow_types: List[int] = None) -> List[tuple]:
+    async def get_user_used_apps(cls, user_id: int = None, flow_types: List[int] = None,
+                                 use_create_time: bool = False) -> List[tuple]:
         """
-        Query the list of apps used by the user.
-        Deduplicate by flow_id, keeping the record with the latest update_time.
+        Query the list of apps used by the user (or all users if user_id is None).
+        Deduplicate by flow_id, keeping the record with the latest time.
 
         Args:
-            user_id: User ID
+            user_id: User ID, or None to query across all users
             flow_types: List of flow types to filter (e.g., [FlowType.ASSISTANT.value, FlowType.WORKFLOW.value])
+            use_create_time: If True, use create_time instead of update_time
 
         Returns:
             List of tuples: [(flow_id, last_used_time, flow_type), ...]
         """
-        # Subquery: get the max update_time for each flow_id
+        # Subquery: get the max time for each flow_id
+        time_col = MessageSession.create_time if use_create_time else MessageSession.update_time
+        conditions = [MessageSession.is_delete == False]  # noqa
+        if user_id is not None:
+            conditions.append(MessageSession.user_id == user_id)
+
         subquery = select(
             MessageSession.flow_id,
-            func.max(MessageSession.update_time).label('last_used_time'),
+            func.max(time_col).label('last_used_time'),
             MessageSession.flow_type
-        ).where(
-            MessageSession.user_id == user_id,
-            MessageSession.is_delete == False  # noqa
-        )
+        ).where(*conditions)
 
         if flow_types:
             subquery = subquery.where(MessageSession.flow_type.in_(flow_types))

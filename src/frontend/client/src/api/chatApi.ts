@@ -155,7 +155,9 @@ export async function getChannelChatHistory(
 ): Promise<ChatMessage[]> {
     if (!articleDocId) return [];
     const res = await http.get(`/api/v1/channel/chat/messages/${articleDocId}`);
-    return res?.data ?? res ?? [];
+    const items: StreamHistoryItem[] = res?.data ?? [];
+    // Channel API returns oldest-first, no need to reverse
+    return items.map(parseStreamHistoryItem);
 }
 
 /** Clear channel article chat history */

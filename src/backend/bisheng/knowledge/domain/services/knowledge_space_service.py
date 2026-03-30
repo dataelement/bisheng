@@ -135,7 +135,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         return knowledge_space
 
     async def get_space_info(self, space_id: int) -> KnowledgeSpaceInfoResp:
-        space = await self._require_read_permission(space_id)
+        space = await KnowledgeDao.aquery_by_id(space_id)
 
         follower_num = await SpaceChannelMemberDao.async_count_space_members(space_id)
         total_file_num = await KnowledgeFileDao.async_count_file_by_knowledge_id(space_id)
@@ -954,7 +954,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 all_file_ids.append(file.id)
             elif file.file_type == FileType.DIR.value:
                 all_failed_files = await SpaceFileDao.get_children_by_prefix(knowledge_id=space_id,
-                                                                             prefix=file.file_level_path + f"{file.id}/",
+                                                                             prefix=file.file_level_path + f"/{file.id}/",
                                                                              file_status=KnowledgeFileStatus.FAILED)
                 for item in all_failed_files:
                     if item.status == KnowledgeFileStatus.FAILED.value and item.file_type == FileType.FILE:

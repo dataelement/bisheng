@@ -125,7 +125,11 @@ export function AiAssistantPanel({
                                     className="text-gray-400 p-0.5 group relative w-5 h-5"
                                     onClick={handleClearConversation}
                                 >
-                                    <BrushCleaningIcon className="size-full" />
+                                    <img
+                                        className="size-3.5"
+                                        src={`${__APP_ENV__.BASE_URL}/assets/channel/clear.svg`}
+                                        alt=""
+                                    />
                                 </Button>
                             </TooltipTrigger>
                             <TooltipContent>

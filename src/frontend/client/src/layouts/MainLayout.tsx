@@ -1,13 +1,15 @@
 import Cookies from 'js-cookie';
+import { getBysConfigApi } from '~/api/apps';
 import BookOpenIcon from '~/components/ui/icon/BookOpen';
 import GlobeIcon from '~/components/ui/icon/Globe';
 import HomeIcon from '~/components/ui/icon/Home';
 import LinkIcon from '~/components/ui/icon/Link';
 import MonitorIcon from '~/components/ui/icon/Monitor';
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo } from 'react';
 import KeepAlive from 'react-activation';
 import { matchPath, NavLink, useLocation, useOutlet } from 'react-router-dom';
 import { useRecoilState } from 'recoil';
+import { bishengConfState } from '~/pages/appChat/store/atoms';
 import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import { useAuthContext, useLocalize } from '~/hooks';
 import store from '~/store';
@@ -126,6 +128,14 @@ function Sidebar() {
 export default function MainLayout() {
   const { pathname } = useLocation();
   const outlet = useOutlet();
+
+  // Load env config once on mount — makes bishengConfState available to all pages
+  const [, setConfig] = useRecoilState(bishengConfState);
+  useEffect(() => {
+    getBysConfigApi().then(res => {
+      setConfig(res.data);
+    });
+  }, []);
 
   const cacheKey = useMemo(() => {
     if (/^\/(c|linsight|apps)(\/|$)/.test(pathname)) return 'home_tab';

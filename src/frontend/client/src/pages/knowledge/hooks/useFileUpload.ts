@@ -212,12 +212,13 @@ export function useFileUpload({
                     await deleteFileApi(activeSpace.id, fileId);
                 }
                 setFiles(prev => prev.filter(f => f.id !== fileId));
+                setTotal(prev => Math.max(0, prev - 1));
                 showToast({ message: localize("com_knowledge.deleted"), severity: NotificationSeverity.SUCCESS });
             } catch {
                 showToast({ message: localize("com_knowledge.delete_failed"), severity: NotificationSeverity.ERROR });
             }
         },
-        [activeSpace, currentPage, files, setFiles, loadFiles, showToast]
+        [activeSpace, currentPage, files, setFiles, loadFiles, showToast, setTotal]
     );
 
     const handleEditTags = useCallback(

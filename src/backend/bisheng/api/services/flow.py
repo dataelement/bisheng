@@ -183,9 +183,6 @@ class FlowService(BaseService):
         if not flow_info or flow_info.flow_type != FlowType.WORKFLOW.value:
             raise NotFoundError()
         if not await login_user.async_access_check(flow_info.user_id, flow_info.id, AccessType.WORKFLOW):
-            if (share_link is None
-                    or share_link.meta_data is None
-                    or share_link.meta_data.get("flowId") != flow_info.id):
                 raise UnAuthorizedError()
 
         flow_info.logo = await cls.get_logo_share_link_async(flow_info.logo)

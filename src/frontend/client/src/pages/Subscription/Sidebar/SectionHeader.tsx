@@ -17,7 +17,7 @@ export function SectionHeader({ title, collapsed, onToggle, sortText, onSort }: 
             </button>
             <button onClick={onSort} className="flex items-center gap-1 text-[12px] text-[#86909c] hover:text-[#4e5969]">
                 {sortText}
-                <ArrowLeftRightIcon className="size-3" />
+                <img src={`${__APP_ENV__.BASE_URL}/assets/channel/exchange-four.svg`} alt="" />
             </button>
         </div>
     );

@@ -21,7 +21,7 @@ export function KnowledgeSpacePreviewDrawer({
     onOpenChange,
 }: KnowledgeSpacePreviewDrawerProps) {
     const localize = useLocalize();
-  const { showToast } = useToastContext();
+    const { showToast } = useToastContext();
     const [space, setSpace] = useState<KnowledgeSpace | null>(null);
     const [status, setStatus] = useState<"none" | "joined" | "pending">("none");
     const [filesPreview, setFilesPreview] = useState<KnowledgeFile[]>([]);
@@ -121,8 +121,6 @@ export function KnowledgeSpacePreviewDrawer({
         setParentNameStack((prev) => prev.slice(0, depth));
     };
 
-    if (!open) return null;
-
     const isPublic = space?.visibility === VisibilityType.PUBLIC;
 
     const handleClickAction = () => {
@@ -147,10 +145,11 @@ export function KnowledgeSpacePreviewDrawer({
     };
 
     const getButtonConfig = () => {
+        // 仅把“订阅/申请”改成“加入”；“已订阅/申请中”保持原文案
         if (status === "joined") return { label: localize("com_knowledge.subscribed"), variant: "secondary" as const, disabled: true };
         if (status === "pending") return { label: localize("com_knowledge.applying"), variant: "secondary" as const, disabled: true };
-        if (isPublic) return { label: localize("com_knowledge.subscribe"), variant: "default" as const, disabled: false };
-        return { label: localize("com_knowledge.apply"), variant: "outline" as const, disabled: false };
+        if (isPublic) return { label: localize("com_knowledge.join"), variant: "default" as const, disabled: false };
+        return { label: localize("com_knowledge.join"), variant: "outline" as const, disabled: false };
     };
 
     const btn = getButtonConfig();
@@ -160,6 +159,7 @@ export function KnowledgeSpacePreviewDrawer({
             <SheetContent
                 side="right"
                 className="w-[1000px] sm:max-w-[1000px] p-0 px-12 flex flex-col h-full"
+                hideClose
             >
                 <button
                     type="button"

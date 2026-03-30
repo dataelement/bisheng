@@ -253,7 +253,7 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onNavigate
 
     return (
         <Sheet open={open} onOpenChange={onOpenChange}>
-            <SheetContent side="right" className="w-[1000px] sm:max-w-[1000px] p-0 px-16 flex flex-col">
+            <SheetContent side="right" className="w-[1000px] sm:max-w-[1000px] p-0 px-16 flex flex-col" hideClose>
                 <button
                     type="button"
                     aria-label="收起抽屉"

@@ -14,7 +14,7 @@ import {
     RotateCcw,
     Trash2
 } from "lucide-react";
-import { KnowledgeSpace, FileStatus, SortType, SortDirection, SpaceRole } from "~/api/knowledge";
+import { KnowledgeSpace, FileStatus, SortType, SortDirection, SpaceRole, VisibilityType } from "~/api/knowledge";
 import { cn, copyText } from "~/utils";
 import { CompoundSearchInput, SearchParams } from "./CompoundSearchInput";
 import {
@@ -42,8 +42,8 @@ interface KnowledgeSpaceHeaderProps {
     setViewMode: (mode: "card" | "list") => void;
     statusFilter: FileStatus[];
     onFilterStatus: (status: FileStatus, checked: boolean) => void;
-    sortBy: SortType;
-    sortDirection: SortDirection;
+    sortBy: SortType | undefined;
+    sortDirection: SortDirection | undefined;
     onSort: (sortBy: SortType) => void;
     onCreateFolder: () => void;
     onTriggerUpload: () => void;
@@ -90,6 +90,7 @@ export function KnowledgeSpaceHeader({
 }: KnowledgeSpaceHeaderProps) {
     const localize = useLocalize();
     const isAdmin = space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
+    const showShare = space.visibility !== VisibilityType.PRIVATE;
     const { showToast } = useToastContext();
 
     const handleShare = () => {
@@ -205,13 +206,15 @@ export function KnowledgeSpaceHeader({
                         <AiChatIcon className="size-3.5" stroke={isSearching ? "#c9cdd4" : "#335CFF"} />
                         {localize("com_knowledge.ai_assistant")}</Button>
 
-                    <Button
-                        variant="ghost"
-                        className="h-8 px-1.5 gap-1 transition-colors"
-                        onClick={handleShare}
-                    >
-                        <ShareOutlineIcon className="size-4 text-gray-800" />
-                        {localize("com_knowledge.share")}</Button>
+                    {showShare && (
+                        <Button
+                            variant="ghost"
+                            className="h-8 px-1.5 gap-1 transition-colors"
+                            onClick={handleShare}
+                        >
+                            <ShareOutlineIcon className="size-4 text-gray-800" />
+                            {localize("com_knowledge.share")}</Button>
+                    )}
                 </div>
             </div>
 
@@ -330,7 +333,7 @@ export function KnowledgeSpaceHeader({
                 </div>
 
                 {/* Actions */}
-                {isAdmin && (
+                {(isAdmin || selectedCount > 1) && (
                     <div className="flex items-center gap-2 self-end sm:self-auto shrink-0 mt-2 sm:mt-0">
                         {selectedCount > 1 && (
                             <>
@@ -347,38 +350,42 @@ export function KnowledgeSpaceHeader({
                                         <DropdownMenuItem onClick={onBatchDownload} className="cursor-pointer">
                                             <Download className="size-4 mr-2" />
                                             {localize("com_knowledge.batch_download")}</DropdownMenuItem>
-                                        {!hasFoldersSelected && (
+                                        {isAdmin && !hasFoldersSelected && (
                                             <DropdownMenuItem onClick={onBatchTag} className="cursor-pointer">
                                                 <Tag className="size-4 mr-2" />
                                                 {localize("com_knowledge.batch_add_tags")}</DropdownMenuItem>
                                         )}
-                                        {hasFailedFiles && (
+                                        {isAdmin && hasFailedFiles && (
                                             <DropdownMenuItem onClick={onBatchRetry} className="cursor-pointer">
                                                 <RotateCcw className="size-4 mr-2" />
                                                 {localize("com_knowledge.batch_retry")}</DropdownMenuItem>
                                         )}
-                                        <DropdownMenuItem onClick={onBatchDelete} className="cursor-pointer text-[#f53f3f] focus:text-[#f53f3f]">
-                                            <Trash2 className="size-4 mr-2" />
-                                            {localize("com_knowledge.batch_delete")}</DropdownMenuItem>
+                                        {isAdmin && (
+                                            <DropdownMenuItem onClick={onBatchDelete} className="cursor-pointer text-[#f53f3f] focus:text-[#f53f3f]">
+                                                <Trash2 className="size-4 mr-2" />
+                                                {localize("com_knowledge.batch_delete")}</DropdownMenuItem>
+                                        )}
                                     </DropdownMenuContent>
                                 </DropdownMenu>
                             </>
                         )}
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button size="sm" className="h-8 font-normal rounded-md" disabled={isSearching}>
-                                    {localize("com_knowledge.add_new")}<ChevronDown className="size-4 ml-1" />
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={onCreateFolder} className="cursor-pointer">
-                                    <FolderPlus className="size-4 mr-2" />
-                                    {localize("com_knowledge.new_folder")}</DropdownMenuItem>
-                                <DropdownMenuItem onClick={onTriggerUpload} className="cursor-pointer">
-                                    <Upload className="size-4 mr-2" />
-                                    {localize("com_knowledge.upload_file")}</DropdownMenuItem>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
+                        {isAdmin && (
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button size="sm" className="h-8 font-normal rounded-md" disabled={isSearching}>
+                                        {localize("com_knowledge.add_new")}<ChevronDown className="size-4 ml-1" />
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                    <DropdownMenuItem onClick={onCreateFolder} className="cursor-pointer">
+                                        <FolderPlus className="size-4 mr-2" />
+                                        {localize("com_knowledge.new_folder")}</DropdownMenuItem>
+                                    <DropdownMenuItem onClick={onTriggerUpload} className="cursor-pointer">
+                                        <Upload className="size-4 mr-2" />
+                                        {localize("com_knowledge.upload_file")}</DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                        )}
                     </div>
                 )}
             </div>
