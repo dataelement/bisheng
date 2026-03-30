@@ -32,9 +32,9 @@ export default function KnowledgeSquareCard({
             case "pending":
                 return { text: localize("pending") || localize("com_knowledge.applying"), variant: "secondary" as const, disabled: true };
             default: {
-                const isPrivate = space.visibility !== VisibilityType.PUBLIC;
                 return {
-                    text: isPrivate ? localize("request") || localize("com_knowledge.apply") : localize("subscribe") || localize("com_knowledge.join"),
+                    // “订阅/申请”动作统一展示为“加入”
+                    text: localize("com_knowledge.join"),
                     variant: "outline" as const,
                     disabled: false,
                 };

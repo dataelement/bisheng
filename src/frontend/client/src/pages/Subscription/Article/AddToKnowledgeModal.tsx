@@ -65,7 +65,7 @@ function filterTree(nodes: KnowledgeNode[], keyword: string): KnowledgeNode[] {
         const filteredChildren = filterTree(node.children ?? [], keyword);
         const matches = node.name.toLowerCase().includes(kw);
         if (matches || filteredChildren.length > 0) {
-           acc.push({ ...node, children: filteredChildren });
+            acc.push({ ...node, children: filteredChildren });
         }
         return acc;
     }, []);
@@ -189,7 +189,12 @@ function TreeNode({
 
                 {/* Icon */}
                 {node.type === "space"
-                    ? <BookCopyIcon className={`shrink-0 size-3.5 ${isSelected ? "text-primary" : "text-[#4e5969]"}`} />
+                    ?
+                    <img
+                        className="size-[14px] object-contain opacity-90"
+                        src={`${__APP_ENV__.BASE_URL}/assets/channel/notebook-one.svg`}
+                        alt="empty"
+                    />
                     : <FolderClosedIcon className={`shrink-0 size-3.5 ${isSelected ? "text-primary" : "text-[#4e5969]"}`} />
                 }
 
@@ -570,13 +575,13 @@ export function AddToKnowledgeModal({ open, onOpenChange, articleId }: AddToKnow
                         variant="outline"
                         size="sm"
                         onClick={() => handleOpenChange(false)}
-                        className="h-8 px-4 text-sm rounded-md"
+                        className="h-8 px-4 text-sm rounded-md font-normal"
                     >{localize("com_subscription.cancel")}</Button>
                     <Button
                         size="sm"
                         onClick={handleConfirm}
                         disabled={!selectedId || isConfirming}
-                        className="h-8 px-4 text-sm rounded-md"
+                        className="h-8 px-4 text-sm rounded-md font-normal"
                     >
                         {isConfirming && <Loader2 className="size-3.5 mr-1.5 animate-spin" />}{localize("com_subscription.add")}
                     </Button>

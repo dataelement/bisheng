@@ -129,9 +129,9 @@ export function KnowledgeSpaceSidebar({
                             onClick={() => setCollapsed((v) => !v)}
                         >
                             {collapsed ? (
-                                <PanelLeftOpenIcon className="size-3.5" />
+                                <PanelLeftOpenIcon className="size-5" />
                             ) : (
-                                <PanelRightOpenIcon className="size-3.5" />
+                                <PanelRightOpenIcon className="size-5" />
                             )}
                         </Button>
                     </div>

@@ -462,7 +462,13 @@ export async function getSquareSpacesApi(params?: {
             sort_by: effectiveSort,
         },
     });
-    const payload = res?.data ?? {};
+    // Compatible response variants:
+    // 1) { status_code, data: { total, page, page_size, data: [...] } }
+    // 2) { status_code, data: [...] }
+    // 3) { data: [...] }
+    // 4) [...]
+    const wrapper: any = res ?? {};
+    const payload: any = wrapper?.data ?? wrapper ?? {};
 
     // Backend currently returns:
     // { total, page, page_size, data: [ { space: RawKnowledgeSpace, is_followed, is_pending }, ... ] }
@@ -470,10 +476,12 @@ export async function getSquareSpacesApi(params?: {
         ? payload.list
         : Array.isArray(payload?.data)
             ? payload.data
-            : [];
+            : Array.isArray(payload?.data?.data)
+                ? payload.data.data
+                : [];
 
     const mapped: KnowledgeSpace[] = rawList
-        .map((item) => {
+        .map((item, index) => {
             const itemAny: any = item ?? {};
             const rawAny: any = itemAny?.space ?? itemAny;
 
@@ -481,6 +489,8 @@ export async function getSquareSpacesApi(params?: {
             const idVal =
                 rawAny?.id ??
                 rawAny?.space_id ??
+                rawAny?.knowledge_space_id ??
+                rawAny?.knowledgeSpaceId ??
                 rawAny?.knowledge_id ??
                 rawAny?.spaceId ??
                 rawAny?.knowledgeId ??
@@ -539,8 +549,10 @@ export async function getSquareSpacesApi(params?: {
             const createdAt = rawAny?.create_time ?? itemAny?.create_time ?? "";
             const updatedAt = rawAny?.update_time ?? itemAny?.update_time ?? "";
 
+            const safeId = id || `${creatorIdVal || "space"}-${nameVal || "unknown"}-${index}`;
+
             return {
-                id,
+                id: safeId,
                 name: String(nameVal ?? ""),
                 description: descriptionVal !== undefined ? String(descriptionVal) : undefined,
                 icon: iconOrAvatar,
@@ -566,7 +578,7 @@ export async function getSquareSpacesApi(params?: {
 
     return {
         data: mapped,
-        total: payload?.total ?? 0,
+        total: Number(payload?.total ?? payload?.data?.total ?? 0),
     };
 }
 
