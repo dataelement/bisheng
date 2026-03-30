@@ -89,7 +89,8 @@ class WorkFlowService(BaseService):
 
     @classmethod
     def get_all_flows(cls, user: UserPayload, name: str, status: int, tag_id: Optional[int], flow_type: Optional[int],
-                      page: int = 1, page_size: int = 10, managed: bool = False) -> (list[dict], int):
+                      page: int = 1, page_size: int = 10, managed: bool = False,
+                      skip_pagination: bool = False) -> (list[dict], int):
         """
         Get all the skills
         """
@@ -122,7 +123,7 @@ class WorkFlowService(BaseService):
             data, total = FlowDao.get_all_apps(name, status, flow_ids, flow_type, user.user_id, flow_id_extra, None,
                                                query_page, query_page_size)
         data = cls.filter_supported_apps(data)
-        if flow_type is None:
+        if flow_type is None and not skip_pagination:
             total = len(data)
             start_index = (page - 1) * page_size
             end_index = start_index + page_size

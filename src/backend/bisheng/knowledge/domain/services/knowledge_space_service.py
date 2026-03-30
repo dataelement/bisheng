@@ -135,7 +135,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         return knowledge_space
 
     async def get_space_info(self, space_id: int) -> KnowledgeSpaceInfoResp:
-        space = await self._require_read_permission(space_id)
+        space = await KnowledgeDao.aquery_by_id(space_id)
 
         follower_num = await SpaceChannelMemberDao.async_count_space_members(space_id)
         total_file_num = await KnowledgeFileDao.async_count_file_by_knowledge_id(space_id)

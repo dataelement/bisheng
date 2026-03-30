@@ -70,7 +70,7 @@ export const useGetPersonalToolList = () => {
 }
 
 // 获取组织知识库
-export const useGetOrgToolList = (query: { page, page_size?, name?}) => {
+export const useGetOrgToolList = (query: { page, page_size?, name?, sort_by?}) => {
   return useQuery({
     queryKey: ['OrgTools', query.page, query.name],
     queryFn: () => getKnowledgeInfo(query),
