@@ -343,7 +343,22 @@ export function ArticleList({ channel, selectedArticleId, onArticleSelect }: Art
                         <LoadingIcon className="size-16 text-primary" />
                     </div>
                 ) : articles.length === 0 ? (
-                    <div className="flex items-center justify-center h-64 text-[#86909c] text-sm">{localize("com_subscription.no_results")}</div>
+                    <div className="flex flex-1 flex-col items-center justify-center py-60 text-center">
+                        {(searchQuery || selectedSources.length > 0 || onlyUnread) ? (
+                            <p className="text-[14px] leading-6 text-[#86909c]">{localize("com_subscription.no_results")}</p>
+                        ) : (
+                            <>
+                                <img
+                                    className="size-[120px] mb-4 object-contain opacity-90"
+                                    src={`${__APP_ENV__.BASE_URL}/assets/channel/empty.png`}
+                                    alt="empty"
+                                />
+                                <p className="text-[14px] leading-6 text-[#4E5969]">
+                                    {localize("com_subscription.no_related_content")}
+                                </p>
+                            </>
+                        )}
+                    </div>
                 ) : (
                     <InfiniteScroll
                         loadMore={() => loadArticles(currentPage + 1)}

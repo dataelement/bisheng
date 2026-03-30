@@ -133,7 +133,7 @@ export default function ChannelSquare({
     const next = e.target.value ?? "";
     if (next.length > 40) {
       showToast({
-        message: localize("maximum_character"),
+        message: localize("com_subscription.maximum_character"),
         severity: NotificationSeverity.WARNING
       });
       setSearchQuery(next.slice(0, 40));

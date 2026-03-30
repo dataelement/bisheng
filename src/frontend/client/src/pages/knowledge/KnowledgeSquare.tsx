@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type CompositionEvent } from "react";
 import { ArrowLeft, Search } from "lucide-react";
 import { Input } from "~/components/ui/Input";
 import { Button } from "~/components/ui/Button";
@@ -41,7 +41,10 @@ export default function KnowledgeSquare({
     const [joiningId, setJoiningId] = useState<string | null>(null);
 
     const scrollRef = useRef<HTMLDivElement | null>(null);
+    const searchImeComposingRef = useRef(false);
     const PAGE_SIZE = 20;
+
+    const MAX_SEARCH_LEN = 40;
 
     const tTitle = title || localize("com_knowledge.explore_square");
     const tSubtitle = subtitle || localize("com_knowledge.explore_more_spaces");
@@ -82,17 +85,36 @@ export default function KnowledgeSquare({
         [PAGE_SIZE]
     );
 
-    const handleSearch = (e: any) => {
+    const applySearchLengthLimit = (raw: string) => {
+        if (raw.length <= MAX_SEARCH_LEN) return raw;
+        showToast({
+            message: localize("com_subscription.maximum_character") || localize("com_knowledge.max_40_chars"),
+            severity: NotificationSeverity.WARNING,
+        });
+        return raw.slice(0, MAX_SEARCH_LEN);
+    };
+
+    const handleSearch = (e: ChangeEvent<HTMLInputElement>) => {
         const next = e.target.value ?? "";
-        if (next.length > 40) {
-            showToast({
-                message: localize("maximum_character") || localize("com_knowledge.max_40_chars"),
-                severity: NotificationSeverity.WARNING,
-            });
-            setSearchQuery(next.slice(0, 40));
+        const native = e.nativeEvent;
+        const isComposing =
+            searchImeComposingRef.current ||
+            (native && "isComposing" in native && (native as InputEvent).isComposing === true);
+        if (isComposing) {
+            setSearchQuery(next);
             return;
         }
-        setSearchQuery(next);
+        setSearchQuery(applySearchLengthLimit(next));
+    };
+
+    const handleSearchCompositionStart = () => {
+        searchImeComposingRef.current = true;
+    };
+
+    const handleSearchCompositionEnd = (e: CompositionEvent<HTMLInputElement>) => {
+        searchImeComposingRef.current = false;
+        const next = e.currentTarget.value ?? "";
+        setSearchQuery(applySearchLengthLimit(next));
     };
 
     // Reload on search change to mimic channel plaza behavior
@@ -191,6 +213,8 @@ export default function KnowledgeSquare({
                         placeholder={tSearchPlaceholder}
                         value={searchQuery}
                         onChange={handleSearch}
+                        onCompositionStart={handleSearchCompositionStart}
+                        onCompositionEnd={handleSearchCompositionEnd}
                         className="pl-9 h-8 text-[12px] rounded-md bg-white border-[#E5E6EB] focus:border-[#165DFF]"
                     />
                 </div>

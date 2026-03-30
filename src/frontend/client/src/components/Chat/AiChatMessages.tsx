@@ -183,12 +183,12 @@ export default function AiChatMessages({
                                 <Button
                                     key={i}
                                     variant="ghost"
-                                    className="bg-gray-50 active:bg-[#E6EDFC] text-sm text-gray-800 px-3 py-1 rounded-lg text-left flex items-center gap-1 group w-fit"
+                                    className="bg-gray-50 hover:bg-[#E6EDFC] active:bg-[#E6EDFC] text-sm text-gray-800 hover:text-[#165DFF] px-3 py-1 rounded-lg text-left flex items-center gap-1 group w-fit transition-colors"
                                     onClick={() => onPresetClick?.(q)}
                                 >
                                     <div className="size-4 flex items-center justify-center">
-                                        <span className="w-1.5 h-1.5 rounded-full bg-primary group-active:hidden" />
-                                        <CornerDownRightIcon className="size-4 text-primary hidden group-active:block" />
+                                        <span className="w-1.5 h-1.5 rounded-full bg-primary group-hover:hidden group-active:hidden" />
+                                        <CornerDownRightIcon className="size-4 text-primary hidden group-hover:block group-active:block" />
                                     </div>
                                     {q}
                                 </Button>
