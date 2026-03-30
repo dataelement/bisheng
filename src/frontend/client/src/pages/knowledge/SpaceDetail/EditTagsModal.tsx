@@ -42,7 +42,7 @@ export function EditTagsModal({
     initialTagIds = [],
 }: EditTagsModalProps) {
     const localize = useLocalize();
-  const [spaceTags, setSpaceTags] = useState<SpaceTag[]>([]);
+    const [spaceTags, setSpaceTags] = useState<SpaceTag[]>([]);
     // IDs of tags selected for this file
     const [selectedTagIds, setSelectedTagIds] = useState<Set<number>>(new Set());
     const [inputValue, setInputValue] = useState("");
@@ -106,6 +106,11 @@ export function EditTagsModal({
             return;
         }
 
+        if (spaceTags.length >= 50) {
+            showToast({ message: localize("com_knowledge.space_tags_limit_exceeded"), status: "error" });
+            return;
+        }
+
         // Create a new tag in the space
         try {
             const newTag = await addSpaceTagApi(spaceId, trimmed);
@@ -151,7 +156,7 @@ export function EditTagsModal({
         const hasChanges = isBatchMode
             ? selectedTagIds.size > 0
             : JSON.stringify(Array.from(selectedTagIds).sort()) !==
-              JSON.stringify([...initialTagIds].sort());
+            JSON.stringify([...initialTagIds].sort());
         onClose(!hasChanges);
     };
 
@@ -202,7 +207,7 @@ export function EditTagsModal({
                                     : ""
                             }
                             className="flex-1 min-w-[120px] bg-transparent outline-none text-sm leading-[22px] text-[#212121] placeholder-[#86909c] min-h-[22px]"
-                            maxLength={8}
+                        // maxLength={8}
                         />
                         <span className="text-[14px] leading-[22px] text-[#999] absolute right-3 h-full flex items-center top-0">
                             {selectedTagIds.size}/10
@@ -224,11 +229,10 @@ export function EditTagsModal({
                                     <span
                                         key={tag.id}
                                         onClick={() => toggleTag(tag)}
-                                        className={`px-2 h-7 flex items-center justify-center text-[12px] leading-[20px] rounded-[4px] transition-colors ${
-                                            isSelected
-                                                ? "text-[#165dff] cursor-default bg-primary/10"
-                                                : "bg-[#f2f3f5] text-[#4e5969] hover:bg-[#e5e6eb] cursor-pointer"
-                                        }`}
+                                        className={`px-2 h-7 flex items-center justify-center text-[12px] leading-[20px] rounded-[4px] transition-colors ${isSelected
+                                            ? "text-[#165dff] cursor-default bg-primary/10"
+                                            : "bg-[#f2f3f5] text-[#4e5969] hover:bg-[#e5e6eb] cursor-pointer"
+                                            }`}
                                     >
                                         {tag.name}
                                     </span>

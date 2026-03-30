@@ -2,7 +2,7 @@ import { useRef, useCallback } from "react";
 import {
     ALLOWED_MIME_TYPES,
     MAX_UPLOAD_COUNT,
-    MAX_FILE_SIZE,
+    DEFAULT_MAX_FILE_SIZE_MB,
     ALLOWED_EXTENSIONS,
 } from "../knowledgeUtils";
 import { useLocalize } from "~/hooks";
@@ -10,15 +10,19 @@ import { useLocalize } from "~/hooks";
 interface UseFileDragDropOptions {
     onDragStateChange?: (isDragging: boolean, error?: string | null) => void;
     onUploadFile: (files?: FileList | File[]) => void;
+    /** Maximum single file size in MB (from env config). Falls back to DEFAULT_MAX_FILE_SIZE_MB. */
+    maxFileSizeMB?: number;
 }
 
 /**
  * Manages drag-and-drop file upload interactions.
  * Extracted from SpaceDetail/index.tsx.
  */
-export function useFileDragDrop({ onDragStateChange, onUploadFile }: UseFileDragDropOptions) {
+export function useFileDragDrop({ onDragStateChange, onUploadFile, maxFileSizeMB }: UseFileDragDropOptions) {
     const localize = useLocalize();
     const dragCounter = useRef(0);
+    const limitMB = maxFileSizeMB ?? DEFAULT_MAX_FILE_SIZE_MB;
+    const limitBytes = limitMB * 1024 * 1024;
 
     const validateDragItems = useCallback((items: DataTransferItemList): string | null => {
         if (items.length > MAX_UPLOAD_COUNT) return localize("com_knowledge.max_upload_count", { 0: MAX_UPLOAD_COUNT });
@@ -87,8 +91,8 @@ export function useFileDragDrop({ onDragStateChange, onUploadFile }: UseFileDrag
                 }
 
                 for (const f of filesList) {
-                    if (f.size > MAX_FILE_SIZE) {
-                        onDragStateChange?.(true, localize("com_knowledge.file_exceeds_200m", { 0: f.name }));
+                    if (f.size > limitBytes) {
+                        onDragStateChange?.(true, localize("com_knowledge.file_exceeds_limit", { name: f.name, size: limitMB }));
                         setTimeout(() => onDragStateChange?.(false), 2000);
                         return;
                     }
@@ -106,7 +110,7 @@ export function useFileDragDrop({ onDragStateChange, onUploadFile }: UseFileDrag
                 onDragStateChange?.(false);
             }
         },
-        [onDragStateChange, onUploadFile]
+        [onDragStateChange, onUploadFile, limitBytes, limitMB]
     );
 
     return {
@@ -116,3 +120,4 @@ export function useFileDragDrop({ onDragStateChange, onUploadFile }: UseFileDrag
         handleDrop,
     };
 }
+

@@ -1,8 +1,10 @@
-import { useState, useRef } from "react";
-import { FileStatus, FileType, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceRole, batchDeleteApi, batchDownloadApi, batchRetryApi } from "~/api/knowledge";
+import { useState, useRef, useEffect } from "react";
+import { useRecoilValue } from "recoil";
+import { FileStatus, FileType, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceRole, batchDeleteApi, batchDownloadApi, batchRetryApi, getFilePreviewApi } from "~/api/knowledge";
 import { useConfirm, useToastContext } from "~/Providers";
 import { useFileDragDrop } from "../hooks/useFileDragDrop";
-import { triggerUrlDownload } from "../knowledgeUtils";
+import { ALLOWED_EXTENSIONS, DEFAULT_MAX_FILE_SIZE_MB, triggerUrlDownload } from "../knowledgeUtils";
+import { bishengConfState } from "~/pages/appChat/store/atoms";
 import { SearchParams } from "./CompoundSearchInput";
 import { EditTagsModal } from "./EditTagsModal";
 import { FileCard } from "./FileCard";
@@ -22,7 +24,7 @@ interface KnowledgeSpaceContentProps {
     loading: boolean;
     onSearch: (params: SearchParams) => void;
     onFilterStatus: (status: FileStatus[]) => void;
-    onSort: (sortBy: SortType, direction: SortDirection) => void;
+    onSort: (sortBy: SortType | undefined, direction: SortDirection | undefined) => void;
     onNavigateFolder: (folderId?: string) => void;
     onUploadFile: (files?: FileList | File[]) => void;
     onCreateFolder: () => void;
@@ -88,16 +90,25 @@ export function KnowledgeSpaceContent({
     };
     const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
     const [statusFilter, setStatusFilter] = useState<FileStatus[]>([]);
-    const [sortBy, setSortBy] = useState<SortType>(SortType.UPDATE_TIME);
-    const [sortDirection, setSortDirection] = useState<SortDirection>(SortDirection.DESC);
+    const [sortBy, setSortBy] = useState<SortType | undefined>(undefined);
+    const [sortDirection, setSortDirection] = useState<SortDirection | undefined>(undefined);
     const [editingTagsFileId, setEditingTagsFileId] = useState<string | null>(null);
     const [isBatchTagging, setIsBatchTagging] = useState(false);
+
+    useEffect(() => {
+        setSelectedFiles(new Set());
+    }, [space.id]);
 
     const isAdmin = space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
     const isSearching = searchQuery.trim().length > 0 || searchTagIds.length > 0;
 
     const { showToast } = useToastContext();
     const confirm = useConfirm();
+
+    // Read max file size from env config (MB), fallback to default 200MB
+    const bishengConfig = useRecoilValue(bishengConfState);
+    const maxFileSizeMB = bishengConfig?.uploaded_files_maximum_size ?? DEFAULT_MAX_FILE_SIZE_MB;
+    const maxFileSizeBytes = maxFileSizeMB * 1024 * 1024;
 
     // ─── File Upload Trigger ─────────────────────────────────────────────
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -117,13 +128,13 @@ export function KnowledgeSpaceContent({
             }
 
             for (let f of filesList) {
-                if (f.size > 200 * 1024 * 1024) {
-                    showToast({ message: localize("com_knowledge.file_exceeds_200m", { 0: f.name }), status: "error" });
+                if (f.size > maxFileSizeBytes) {
+                    showToast({ message: localize("com_knowledge.file_exceeds_limit", { name: f.name, size: maxFileSizeMB }), status: "error" });
                     if (fileInputRef.current) fileInputRef.current.value = "";
                     return;
                 }
                 const ext = f.name.split('.').pop()?.toLowerCase();
-                if (!ext || !['pdf', 'txt', 'docx', 'ppt', 'pptx', 'md', 'html', 'xls', 'xlsx', 'csv', 'doc', 'png', 'jpg', 'jpeg', 'bmp'].includes(ext)) {
+                if (!ext || !(ALLOWED_EXTENSIONS as readonly string[]).includes(ext)) {
                     showToast({ message: localize("com_knowledge.unsupported_file_format", { 0: f.name }), status: "error" });
                     if (fileInputRef.current) fileInputRef.current.value = "";
                     return;
@@ -139,6 +150,7 @@ export function KnowledgeSpaceContent({
     const { handleDragEnter, handleDragLeave, handleDragOver, handleDrop } = useFileDragDrop({
         onDragStateChange,
         onUploadFile,
+        maxFileSizeMB,
     });
 
     const handleSearch = (params: SearchParams) => {
@@ -175,12 +187,14 @@ export function KnowledgeSpaceContent({
         setSelectedFiles(newSelected);
     };
 
-    const handleSelectAll = () => {
-        if (selectedFiles.size === displayFiles.length) {
-            setSelectedFiles(new Set());
+    const handleSelectAll = (isAllSelectedOnPage: boolean) => {
+        const newSelected = new Set(selectedFiles);
+        if (isAllSelectedOnPage) {
+            displayFiles.forEach(f => newSelected.delete(f.id));
         } else {
-            setSelectedFiles(new Set(displayFiles.map(f => f.id)));
+            displayFiles.forEach(f => newSelected.add(f.id));
         }
+        setSelectedFiles(newSelected);
     };
 
     const handleBatchDownload = async () => {
@@ -193,7 +207,13 @@ export function KnowledgeSpaceContent({
                 folder_ids: folderIds.length ? folderIds : undefined,
             });
             if (!url) { showToast({ message: localize("com_knowledge.get_download_link_failed"), status: "error" }); return; }
-            triggerUrlDownload(url, `download_${Date.now()}.zip`);
+            const now = new Date();
+            const dateStr = 
+                String(now.getFullYear()) + 
+                String(now.getMonth() + 1).padStart(2, '0') + 
+                String(now.getDate()).padStart(2, '0');
+            const randomStr = Math.random().toString(36).substring(2, 8).toUpperCase();
+            triggerUrlDownload(url, `${dateStr}_${randomStr}.zip`);
         } catch {
             showToast({ message: localize("com_knowledge.download_failed"), status: "error" });
         }
@@ -206,14 +226,20 @@ export function KnowledgeSpaceContent({
     const handleSingleDownload = async (fileId: string) => {
         const file = displayFiles.find(f => f.id === fileId);
         const isFolder = file?.type === FileType.FOLDER;
-        const id = Number(fileId);
         try {
-            const url = await batchDownloadApi(space.id, {
-                file_ids: isFolder ? undefined : [id],
-                folder_ids: isFolder ? [id] : undefined,
-            });
-            if (!url) { showToast({ message: localize("com_knowledge.get_download_link_failed"), status: "error" }); return; }
-            triggerUrlDownload(url, file?.name);
+            if (isFolder) {
+                // Folders must use batch download (returns zip)
+                const url = await batchDownloadApi(space.id, {
+                    folder_ids: [Number(fileId)],
+                });
+                if (!url) { showToast({ message: localize("com_knowledge.get_download_link_failed"), status: "error" }); return; }
+                triggerUrlDownload(url, `${file?.name ?? "folder"}.zip`);
+            } else {
+                // Single file: get original URL from preview API
+                const { original_url } = await getFilePreviewApi(String(space.id), fileId);
+                if (!original_url) { showToast({ message: localize("com_knowledge.get_download_link_failed"), status: "error" }); return; }
+                triggerUrlDownload(original_url, file?.name);
+            }
         } catch {
             showToast({ message: localize("com_knowledge.download_failed"), status: "error" });
         }
@@ -356,7 +382,12 @@ export function KnowledgeSpaceContent({
         return null;
     };
 
-    const hasFailedFiles = displayFiles.some(f => selectedFiles.has(f.id) && f.status === FileStatus.FAILED);
+    const hasFailedFiles = displayFiles.some(f =>
+        selectedFiles.has(f.id) && (
+            f.status === FileStatus.FAILED ||
+            (f.type === FileType.FOLDER && f.successFileNum! < f.fileNum!)
+        )
+    );
     const hasFoldersSelected = displayFiles.some(f => selectedFiles.has(f.id) && f.type === FileType.FOLDER);
 
     return (

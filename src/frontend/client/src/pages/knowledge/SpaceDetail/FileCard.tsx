@@ -13,7 +13,7 @@ import { cn } from "~/utils";
 import FileIconRenderer from "./FileIcon";
 import TagGroup from "./TagGroup";
 import { useInlineRename } from "../hooks/useInlineRename";
-import { formatTime } from "../knowledgeUtils";
+import { formatTimeCard } from "../knowledgeUtils";
 import { useLocalize } from "~/hooks";
 
 interface FileCardProps {
@@ -185,7 +185,7 @@ export function FileCard({
                     )}
 
                     <div className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
-                        {!isFolder && !showMoreMenu && (
+                        {!showMoreMenu && (
                             <Button
                                 variant="outline"
                                 size="icon"
@@ -212,11 +212,9 @@ export function FileCard({
                                 <DropdownMenuContent align="end" className="min-w-[120px]" onClick={(e) => e.stopPropagation()}>
 
                                     {/* 当有更多菜单时，下载按钮收起在下拉列表内展示 */}
-                                    {!isFolder && (
-                                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDownload(); }}>
-                                            {localize("com_knowledge.download")}
-                                        </DropdownMenuItem>
-                                    )}
+                                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDownload(); }}>
+                                        {localize("com_knowledge.download")}
+                                    </DropdownMenuItem>
 
                                     {/* 如果是管理员，显示后续管理操作 */}
                                     {isAdmin && (
@@ -261,7 +259,7 @@ export function FileCard({
                                 <TagGroup tags={file.tags} />
                             )}
                         </div>
-                        <span className="text-[#86909c] text-xs shrink-0">{formatTime(file.updatedAt)}</span>
+                        <span className="text-[#86909c] text-xs shrink-0">{formatTimeCard(file.updatedAt)}</span>
                     </div>
                 </div>
             </CardContent>
