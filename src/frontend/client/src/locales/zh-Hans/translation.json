@@ -1634,6 +1634,8 @@
     "subscriber": "订阅用户",
     "create": "创建",
     "edit_knowledge_space": "编辑知识空间",
+    "image_copied": "图片已复制到剪切板",
+    "image_copy_failed_url_copied": "图片复制失败，已复制链接",
     "knowledge_space_name_empty": "知识空间名称不能为空"
   }
 }

@@ -33,14 +33,13 @@ interface ChannelPreviewDrawerProps {
     channelId: string | undefined;
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    onNavigateToChannel?: (channelId: string) => void;
     /** Called after subscribe / apply succeeds so the channel square list can refetch. */
     onSubscriptionChanged?: () => void;
 }
 
 type SubscribeStatus = "none" | "subscribed" | "pending";
 
-export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onNavigateToChannel, onSubscriptionChanged }: ChannelPreviewDrawerProps) {
+export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscriptionChanged }: ChannelPreviewDrawerProps) {
     const localize = useLocalize();
     const navigate = useNavigate();
     const { showToast } = useToastContext();
@@ -207,19 +206,7 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onNavigate
     const isCreatorView =
         Boolean(user?.username) && Boolean(channelDetail?.creator_name) && user?.username === channelDetail?.creator_name;
 
-    // If the current user is the creator and this drawer is opened via share link,
-    // automatically navigate into the channel detail page and close the drawer.
-    const autoNavigatedRef = useRef(false);
-    useEffect(() => {
-        if (!open || !channelId || !channelDetail || !isCreatorView || autoNavigatedRef.current) return;
-        autoNavigatedRef.current = true;
-        if (onNavigateToChannel) {
-            onNavigateToChannel(channelId);
-        } else {
-            navigate("/channel", { replace: true });
-        }
-        onOpenChange(false);
-    }, [open, channelId, channelDetail, isCreatorView, onNavigateToChannel]);
+
 
     const effectiveSubscribeStatus: SubscribeStatus = (() => {
         // 优先使用本地交互态（点击订阅后的即时反馈），否则使用详情接口状态

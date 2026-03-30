@@ -128,6 +128,16 @@ function Sidebar() {
 export default function MainLayout() {
   const { pathname } = useLocation();
   const outlet = useOutlet();
+  const { user, logout, isUserLoading } = useAuthContext();
+
+  // Auth guard: redirect to login when user query finishes without a valid user.
+  // The 401 interceptor in request.ts already handles production redirect,
+  // but this serves as a definitive guard for all environments.
+  useEffect(() => {
+    if (!isUserLoading && !user) {
+      logout();
+    }
+  }, [isUserLoading, user, logout]);
 
   // Load env config once on mount — makes bishengConfState available to all pages
   const [, setConfig] = useRecoilState(bishengConfState);
@@ -137,13 +147,19 @@ export default function MainLayout() {
     });
   }, []);
 
-  const cacheKey = useMemo(() => {
+  // Don't render any page content until the user is authenticated.
+  // This prevents the flash of empty-state pages for unauthenticated visitors.
+  if (!user) {
+    return null;
+  }
+
+  const cacheKey = (() => {
     if (/^\/(c|linsight|apps)(\/|$)/.test(pathname)) return 'home_tab';
     if (/^\/(channel|app|chat\/[^/]+\/[^/]+\/[^/]+)(\/|$)/.test(pathname)) return 'app_tab';
     if (pathname.startsWith('/subscription')) return 'subscription_tab';
     if (pathname.startsWith('/knowledge')) return 'knowledge_tab';
     return 'other';
-  }, [pathname]);
+  })();
 
   return (
     <div className="flex bg-[#F9F9F9] overflow-hidden w-screen">

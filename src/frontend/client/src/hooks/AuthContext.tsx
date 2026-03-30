@@ -191,6 +191,12 @@ const AuthContextProvider = ({
     };
   }, [setUserContext, user]);
 
+  // Consider "still loading" in two cases:
+  // 1. The query hasn't completed yet (!isFetched)
+  // 2. The query succeeded with data, but the useEffect that syncs
+  //    userQuery.data → Recoil `user` atom hasn't fired yet (render gap)
+  const isUserLoading = !userQuery.isFetched || (userQuery.isSuccess && !user);
+
   // Make the provider update only when it should
   const memoedValue = useMemo(
     () => ({
@@ -205,9 +211,10 @@ const AuthContextProvider = ({
         [SystemRoles.ADMIN]: adminRole,
       },
       isAuthenticated,
+      isUserLoading,
     }),
 
-    [user, error, isAuthenticated, token, userRole, adminRole],
+    [user, error, isAuthenticated, token, userRole, adminRole, isUserLoading],
   );
 
   return <AuthContext.Provider value={memoedValue}>{children}</AuthContext.Provider>;

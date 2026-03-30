@@ -1618,6 +1618,8 @@
     "exceeded_admin_limit": "管理者の上限を超えています",
     "join": "参加",
     "joined": "参加済み",
+    "image_copied": "画像をクリップボードにコピーしました",
+    "image_copy_failed_url_copied": "画像のコピーに失敗しました。URLをコピーしました",
     "knowledge_space_name_empty": "ナレッジスペース名は必須です",
     "max_knowledge_space_desc": "最大200文字まで入力できます",
     "max_knowledge_space_name": "最大20文字まで入力できます",

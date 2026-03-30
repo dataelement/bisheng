@@ -126,6 +126,13 @@ export function getUser(): Promise<t.TUser> {
   return request.get(endpoints.user()).then(res => {
     const { user_id, user_name, create_time, update_time, role, web_menu, avatar } = res.data;
     if (role !== 'admin' && !web_menu.includes('frontend')) {
+      if (!web_menu.includes('backend')) {
+        // No frontend or backend permission — logout to avoid infinite redirect loop
+        // between the two systems.
+        logout().catch(() => { });
+        location.href = `${location.origin}${__APP_ENV__.BISHENG_HOST}`;
+        return Promise.reject(new Error('no_permission'));
+      }
       location.href = `${location.origin}${__APP_ENV__.BISHENG_HOST}?error=90002`  // workspace useErrorPrompt
     }
     return {

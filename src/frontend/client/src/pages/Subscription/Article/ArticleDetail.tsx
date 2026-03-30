@@ -10,6 +10,7 @@ import {
 
 import { useEffect, useRef, useState } from "react";
 import { Article } from "~/api/channels";
+import { NotificationSeverity } from "~/common";
 import { AddSpaceIcon, AiChatIcon, FullScreenIcon, OriginalWebIcon, ShareOutlineIcon } from "~/components/icons";
 import { useToastContext } from "~/Providers";
 import { formatTime } from "~/utils";
@@ -35,6 +36,7 @@ export function ArticleDetail({ article, loading = false, screenFull = false, sh
     const [showKnowledgeModal, setShowKnowledgeModal] = useState(false);
     const iframeRef = useRef<HTMLIFrameElement>(null);
     const { handleShare } = useArticleShare();
+    const { showToast } = useToastContext();
 
     // 使用文章的真实 HTML 内容
     const articleHtml = article.content_html || article.content || '';
@@ -51,9 +53,25 @@ export function ArticleDetail({ article, loading = false, screenFull = false, sh
       <body>
         ${articleHtml}
        <script>
-          // Image click
+          // Unwrap images from <a> tags: replace the <a> with its child <img>
+          // so clicking an image triggers the preview overlay, not a link navigation.
+          document.querySelectorAll('a').forEach(a => {
+            const img = a.querySelector('img');
+            if (img) {
+              a.replaceWith(img);
+            } else {
+              // Regular links: open in new tab
+              a.setAttribute('target', '_blank');
+              a.setAttribute('rel', 'noopener noreferrer');
+            }
+          });
+
+          // Image click → preview
           document.querySelectorAll('img').forEach(img => {
-            img.onclick = (e) => window.parent.postMessage({ type: 'IMAGE_PREVIEW', url: e.target.src }, '*');
+            img.onclick = (e) => {
+              e.stopPropagation();
+              window.parent.postMessage({ type: 'IMAGE_PREVIEW', url: e.target.src }, '*');
+            };
           });
 
           // Scroll listener: inform parent whether to show "Back to Top"
@@ -85,30 +103,89 @@ export function ArticleDetail({ article, loading = false, screenFull = false, sh
         return () => window.removeEventListener("message", handleMessage);
     }, []);
 
+    // Helper: draw the preview image onto a canvas and return a PNG blob.
+    // This bypasses CORS issues since the image is loaded via <img> with crossOrigin.
+    const getImageBlob = (): Promise<Blob> => {
+        return new Promise((resolve, reject) => {
+            if (!previewUrl) return reject(new Error('no url'));
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                canvas.width = img.naturalWidth;
+                canvas.height = img.naturalHeight;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) return reject(new Error('no canvas context'));
+                ctx.drawImage(img, 0, 0);
+                canvas.toBlob(blob => {
+                    if (blob) resolve(blob);
+                    else reject(new Error('toBlob failed'));
+                }, 'image/png');
+            };
+            img.onerror = () => reject(new Error('img load failed'));
+            img.src = previewUrl;
+        });
+    };
+
     // --- Image operation logic ---
     const handleDownload = async () => {
         if (!previewUrl) return;
-        const res = await fetch(previewUrl);
-        const blob = await res.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `image-${Date.now()}.png`;
-        a.click();
+        try {
+            const blob = await getImageBlob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `image-${Date.now()}.png`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+        } catch {
+            // Fallback: try fetch-based download
+            try {
+                const res = await fetch(previewUrl);
+                const blob = await res.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `image-${Date.now()}.png`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+            } catch {
+                window.open(previewUrl, '_blank');
+            }
+        }
     };
+
 
     const handleCopy = async () => {
         if (!previewUrl) return;
         try {
-            const data = await fetch(previewUrl);
-            const blob = await data.blob();
-            await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
-            alert("Image copied to clipboard");
-        } catch (err) {
-            console.log('err :>> ', err);
-            // Fallback: copy link only
-            await navigator.clipboard.writeText(previewUrl);
-            alert("Failed to copy image, copied link instead");
+            if (!navigator.clipboard) throw new Error('Clipboard API not available');
+            const blob = await getImageBlob();
+            await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+            showToast({ message: localize("com_subscription.image_copied"), severity: NotificationSeverity.SUCCESS });
+        } catch {
+            // Fallback: copy URL string via clipboard API or legacy execCommand
+            try {
+                if (navigator.clipboard?.writeText) {
+                    await navigator.clipboard.writeText(previewUrl);
+                } else {
+                    const ta = document.createElement('textarea');
+                    ta.value = previewUrl;
+                    ta.style.position = 'fixed';
+                    ta.style.opacity = '0';
+                    document.body.appendChild(ta);
+                    ta.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(ta);
+                }
+                showToast({ message: localize("com_subscription.image_copy_failed_url_copied"), severity: NotificationSeverity.WARNING });
+            } catch {
+                showToast({ message: localize("com_subscription.copy_failed_retry"), severity: NotificationSeverity.ERROR });
+            }
         }
     };
 

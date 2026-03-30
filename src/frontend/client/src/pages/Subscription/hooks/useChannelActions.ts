@@ -60,6 +60,7 @@ export function useChannelActions({
 
         try {
             await updateChannelApi(channel.id, { name: channel.name, description: channel.description });
+            queryClient.invalidateQueries({ queryKey: ["channelDetail", channel.id] });
             showToast({ message: localize("com_subscription.channel_updated"), severity: NotificationSeverity.SUCCESS });
         } catch (e) {
             // Rollback on failure

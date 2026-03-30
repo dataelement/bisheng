@@ -1698,6 +1698,8 @@
     "exceeded_admin_limit": "Administrator limit exceeded",
     "join": "Join",
     "joined": "Joined",
+    "image_copied": "Image copied to clipboard",
+    "image_copy_failed_url_copied": "Failed to copy image, URL copied instead",
     "knowledge_space_name_empty": "Knowledge space name cannot be empty",
     "max_knowledge_space_desc": "Maximum 200 characters",
     "max_knowledge_space_name": "Maximum 20 characters",
