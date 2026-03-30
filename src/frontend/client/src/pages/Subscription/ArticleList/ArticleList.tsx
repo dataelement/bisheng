@@ -343,16 +343,7 @@ export function ArticleList({ channel, selectedArticleId, onArticleSelect }: Art
                         <LoadingIcon className="size-16 text-primary" />
                     </div>
                 ) : articles.length === 0 ? (
-                    <div className="flex items-center justify-center h-64 text-sm">
-                        {(searchQuery || selectedSources.length > 0 || onlyUnread) ? (
-                            <span className="text-[#86909c]">{localize("com_subscription.no_results")}</span>
-                        ) : (
-                            <span className="text-[#4E5969]">
-                                此位置暂无文件，请
-                                <span className="ml-1.5 text-[#165DFF]">上传文件</span>
-                            </span>
-                        )}
-                    </div>
+                    <div className="flex items-center justify-center h-64 text-[#86909c] text-sm">{localize("com_subscription.no_results")}</div>
                 ) : (
                     <InfiniteScroll
                         loadMore={() => loadArticles(currentPage + 1)}

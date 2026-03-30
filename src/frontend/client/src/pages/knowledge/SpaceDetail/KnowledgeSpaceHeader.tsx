@@ -14,7 +14,7 @@ import {
     RotateCcw,
     Trash2
 } from "lucide-react";
-import { KnowledgeSpace, FileStatus, SortType, SortDirection, SpaceRole } from "~/api/knowledge";
+import { KnowledgeSpace, FileStatus, SortType, SortDirection, SpaceRole, VisibilityType } from "~/api/knowledge";
 import { cn, copyText } from "~/utils";
 import { CompoundSearchInput, SearchParams } from "./CompoundSearchInput";
 import {
@@ -90,6 +90,7 @@ export function KnowledgeSpaceHeader({
 }: KnowledgeSpaceHeaderProps) {
     const localize = useLocalize();
     const isAdmin = space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
+    const showShare = space.visibility !== VisibilityType.PRIVATE;
     const { showToast } = useToastContext();
 
     const handleShare = () => {
@@ -205,13 +206,15 @@ export function KnowledgeSpaceHeader({
                         <AiChatIcon className="size-3.5" stroke={isSearching ? "#c9cdd4" : "#335CFF"} />
                         {localize("com_knowledge.ai_assistant")}</Button>
 
-                    <Button
-                        variant="ghost"
-                        className="h-8 px-1.5 gap-1 transition-colors"
-                        onClick={handleShare}
-                    >
-                        <ShareOutlineIcon className="size-4 text-gray-800" />
-                        {localize("com_knowledge.share")}</Button>
+                    {showShare && (
+                        <Button
+                            variant="ghost"
+                            className="h-8 px-1.5 gap-1 transition-colors"
+                            onClick={handleShare}
+                        >
+                            <ShareOutlineIcon className="size-4 text-gray-800" />
+                            {localize("com_knowledge.share")}</Button>
+                    )}
                 </div>
             </div>
 
