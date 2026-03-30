@@ -5,6 +5,7 @@ from typing import Optional, Tuple
 from langchain_core.language_models import BaseChatModel
 
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
+from bisheng.common.services.base import BaseService
 from bisheng.core.cache.redis_manager import get_redis_client, get_redis_client_sync
 from bisheng.knowledge.domain.models.knowledge_space_file import SpaceFileDao
 from bisheng.llm.domain import LLMService
@@ -12,7 +13,7 @@ from bisheng.llm.domain.schemas import KnowledgeLLMConfig
 from bisheng.utils import md5_hash
 
 
-class KnowledgeUtils:
+class KnowledgeUtils(BaseService):
     # Used to distinguishchunkand automated production summary content  Format e.g. Filename\nDocument Summary\n--------\n chunkContents
     chunk_split = "\n----------\n"
 
