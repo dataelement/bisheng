@@ -954,7 +954,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 all_file_ids.append(file.id)
             elif file.file_type == FileType.DIR.value:
                 all_failed_files = await SpaceFileDao.get_children_by_prefix(knowledge_id=space_id,
-                                                                             prefix=file.file_level_path + f"{file.id}/",
+                                                                             prefix=file.file_level_path + f"/{file.id}/",
                                                                              file_status=KnowledgeFileStatus.FAILED)
                 for item in all_failed_files:
                     if item.status == KnowledgeFileStatus.FAILED.value and item.file_type == FileType.FILE:
