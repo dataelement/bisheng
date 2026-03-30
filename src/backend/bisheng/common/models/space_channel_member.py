@@ -162,7 +162,6 @@ class SpaceChannelMemberDao:
         statement = select(func.count()).where(
             SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
             SpaceChannelMember.business_id == str(space_id),
-            SpaceChannelMember.user_role != UserRoleEnum.CREATOR,
             SpaceChannelMember.status == True,
         )
         async with get_async_db_session() as session:
@@ -181,7 +180,6 @@ class SpaceChannelMemberDao:
             .where(
                 SpaceChannelMember.business_id.in_(space_ids),
                 SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
-                SpaceChannelMember.user_role != UserRoleEnum.CREATOR,
                 SpaceChannelMember.status == True,
             )
             .group_by(SpaceChannelMember.business_id)

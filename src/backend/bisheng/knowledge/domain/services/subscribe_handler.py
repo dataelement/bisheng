@@ -68,6 +68,8 @@ class KnowledgeSpaceSubscribeHandler(ApprovalHandler):
         if not space_info or not memory_info:
             return
 
+        await SpaceChannelMemberDao.delete_space_member(space_info.id, memory_info.user_id)
+
         await self.notify_sender(
             operator_user_id,
             [memory_info.user_id],

@@ -719,6 +719,7 @@ export const listConversations = (
   const tags = params?.tags || []; // Default to an empty array if not provided
   return request.get(endpoints.conversations(pageNumber, isArchived, tags)).then(res => {
     const list = res.data
+    console.log('list', list)
     return {
       conversations: list.map(conv => ({
         "conversationId": conv.chat_id,
@@ -732,7 +733,7 @@ export const listConversations = (
         "model": "",
         "resendFiles": true,
         "tags": [],
-        "title": conv.flow_name,
+        "title": conv.name || conv.flow_name,
         "updatedAt": conv.create_time,
         "user": conv.user_id,
         "__v": 0,

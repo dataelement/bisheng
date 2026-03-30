@@ -63,7 +63,7 @@ export function DashboardDetail({
     }, [isEditingTitle])
 
     const handleDoubleClick = () => {
-        if (appConfig.isPro && dashboard.write) {
+        if (appConfig.isDashboardPro && dashboard.write) {
             setIsEditingTitle(true)
         }
     }
@@ -157,7 +157,7 @@ export function DashboardDetail({
                                 {dashboard.title}
                             </h1>
                         )}
-                        {appConfig.isPro && <>
+                        {appConfig.isDashboardPro && <>
                             <p className="text-sm ml-4 mr-2">
                                 <span className="text-muted-foreground">{t('createdBy')}: </span>
                                 {dashboard.user_name}</p>
@@ -183,11 +183,11 @@ export function DashboardDetail({
                 <div className="flex items-center gap-2">
                     <ButtonGroup>
                         <Button variant="outline" size="sm" onClick={handleFullscreen}>{t('fullScreen')}</Button>
-                        {appConfig.isPro && dashboard.write && <Button variant="outline" size="sm" onClick={() => publish(dashboard.id, isPublished)}>{isPublished ? t('unpublish') : t('publish')}</Button>}
+                        {appConfig.isDashboardPro && dashboard.write && <Button variant="outline" size="sm" onClick={() => publish(dashboard.id, isPublished)}>{isPublished ? t('unpublish') : t('publish')}</Button>}
                         <Button variant="outline" size="sm" onClick={() => onShare(dashboard.id)}>{t('share')}</Button>
                     </ButtonGroup>
 
-                    {appConfig.isPro && <Button
+                    {appConfig.isDashboardPro && <Button
                         variant="outline"
                         className="disabled:pointer-events-auto"
                         disabled={dashboard.is_default}
@@ -196,7 +196,7 @@ export function DashboardDetail({
                         {dashboard.is_default ? t('alreadyDefault') : t('setAsDefault')}
                     </Button>}
 
-                    {appConfig.isPro && dashboard.write &&
+                    {appConfig.isDashboardPro && dashboard.write &&
                         <Tip content={isPublished ? t('editAfterUnpublish') : ""} side={"top"} styleClasses="-translate-x-12" >
                             <Button
                                 className="disabled:pointer-events-auto"

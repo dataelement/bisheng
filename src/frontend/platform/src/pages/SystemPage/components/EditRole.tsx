@@ -464,7 +464,7 @@ export default function EditRole({ id, name, groupId, knowledgeSpaceFileLimit, o
   const roleId = id === -1 ? 0 : id;
 
   const getPermissionTabs = useCallback(() => {
-    const tabs = ['menu', 'assistant', 'flow', 'skill', 'knowledge', 'tool'];
+    const tabs = ['menu', 'assistant', 'flow', 'knowledge', 'tool'];
 
     if (spacePermissions.admin) {
       const hasBoardMenuPermission = form.useMenu.includes(MenuType.BOARD);

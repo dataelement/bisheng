@@ -108,6 +108,13 @@ export function getReportFormApi(flow_id): Promise<any> {
 }
 
 /**
+ * Get JWT token for OnlyOffice editorConfig
+ */
+export function getOfficeTokenApi(editorConfig: any): Promise<{ token: string }> {
+    return axios.post(`/api/v1/report/office_token`, editorConfig)
+}
+
+/**
  * Fetches a flow from the database by ID.
  *
  * @param {number} flowId - The ID of the flow to fetch.

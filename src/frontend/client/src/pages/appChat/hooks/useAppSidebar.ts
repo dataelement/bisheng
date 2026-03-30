@@ -42,7 +42,7 @@ export function useAppSidebar() {
       const list: AppConversation[] = (res.data?.list || []).map((item: any) => {
         return {
           id: item.chat_id,
-          title: item.flow_name || '新对话',
+          title: item.name || item.flow_name || '新对话',
           flowId: item.flow_id || flowId,
           flowType: Number(item.flow_type || flowType),
           updatedAt: item.update_time || '',
