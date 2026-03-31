@@ -9,6 +9,7 @@ import { cn } from "~/utils";
 import { useLocalize } from "~/hooks";
 import { useSourceManager } from "../hooks/useSourceManager";
 import { useConfirm, useToastContext } from "~/Providers";
+import { ChannelBookIcon, ChannelLoadingIcon, ChannelRightSmallUpIcon } from "~/components/icons/channels";
 import {
     AlertDialog,
     AlertDialogAction,
@@ -21,7 +22,6 @@ import {
 
 const MAX_SOURCES = 50;
 const MAX_NAME_DISPLAY = 20;
-const EXTERNAL_LINK_ICON_SRC = `${__APP_ENV__.BASE_URL}/assets/channel/right-small-up.svg`;
 
 interface AddSourceDropdownProps {
     sources: InformationSource[];
@@ -156,11 +156,7 @@ export function AddSourceDropdown({
                                                 {truncateName(s.name)}
                                             </span>
                                             {s.type === "website" && s.url && (
-                                                <img
-                                                    src={EXTERNAL_LINK_ICON_SRC}
-                                                    alt=""
-                                                    className="ml-0.5 w-4 h-4 opacity-0 group-hover/link:opacity-100 transition-opacity flex-shrink-0"
-                                                />
+                                                <ChannelRightSmallUpIcon className="ml-0.5 w-4 h-4 opacity-0 group-hover/link:opacity-100 transition-opacity flex-shrink-0" />
                                             )}
                                         </span>
                                         <span
@@ -275,11 +271,7 @@ export function AddSourceDropdown({
                         {mgr.viewMode === "noResultNonUrl" && (
                             <div className="h-[432px] flex flex-col items-center justify-center text-center">
                                 <div className="mb-4 rounded-full p-3">
-                                    <img
-                                        src={`${__APP_ENV__.BASE_URL}/assets/channel/book.svg`}
-                                        alt=""
-                                        className="w-[120px] h-[120px] mb-5"
-                                    />
+                                    <ChannelBookIcon className="w-[120px] h-[120px] mb-5" />
                                 </div>
                                 <p className="text-[14px] leading-6 text-[#4E5969] whitespace-pre-line">
                                     {localize("com_subscription.no_source_collected") ||
@@ -329,11 +321,7 @@ export function AddSourceDropdown({
                         {mgr.viewMode === "wechatProcessing" && (
                             <div className="h-[432px] flex flex-col items-center justify-center text-center">
                                 <div className="mb-4">
-                                    <img
-                                        src={`${__APP_ENV__.BASE_URL}/assets/channel/loading.svg`}
-                                        alt=""
-                                        className="w-[120px] h-[120px]"
-                                    />
+                                    <ChannelLoadingIcon className="w-[120px] h-[120px]" />
                                 </div>
                                 <p className="text-[14px] text-[#4E5969] mb-5">
                                     {localize("com_subscription.detect_wechat_link") || localize("com_subscription.official_account_link_detected_adding")}

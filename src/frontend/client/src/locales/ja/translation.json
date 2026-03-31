@@ -1211,6 +1211,7 @@
     "create_knowledge_space": "ナレッジスペースを作成",
     "create_space_failed": "ナレッジスペースの作成に失敗しました",
     "create_space_limit_reached": "ナレッジスペース作成の上限に達しました",
+    "join_space_limit_reached_50": "知識スペースの上限50に達しました",
     "create_tag_failed": "タグの作成に失敗しました",
     "create_tag_failed_abnormal": "タグの作成に失敗しました: 異常な戻りデータ",
     "created_by_me": "私が作成",

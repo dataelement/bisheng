@@ -8,19 +8,16 @@ from langchain_core.callbacks import Callbacks
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.messages import AIMessage, HumanMessage, BaseMessage
 from langchain_core.runnables import RunnableConfig
-from langchain_core.tools import BaseTool, Tool
+from langchain_core.tools import BaseTool
 from langchain_core.utils.function_calling import format_tool_to_openai_tool
 from langgraph.prebuilt import create_react_agent
 from loguru import logger
 
 from bisheng.api.services.assistant_base import AssistantUtils
-from bisheng.api.utils import build_flow_no_yield
-from bisheng.api.v1.schemas import InputRequest
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.errcode.assistant import AssistantModelEmptyError, AssistantModelNotConfigError, \
     AssistantAutoLLMError
 from bisheng.database.models.assistant import Assistant, AssistantLink, AssistantLinkDao
-from bisheng.database.models.flow import FlowDao, FlowStatus
 from bisheng.llm.domain.services import LLMService
 from bisheng.tool.domain.services.executor import ToolExecutor
 from bisheng_langchain.gpts.assistant import ConfigurableAssistant
@@ -143,10 +140,6 @@ class AssistantAgent(AssistantUtils):
                                                         llm=self.llm,
                                                         callbacks=callbacks)
 
-        # flow + knowledge
-        flow_data = FlowDao.get_flow_by_ids([link.flow_id for link in flow_links if link.flow_id])
-        flow_id2data = {flow.id: flow for flow in flow_data}
-
         for link in flow_links:
             knowledge_id = link.knowledge_id
             if knowledge_id:
@@ -154,39 +147,6 @@ class AssistantAgent(AssistantUtils):
                                                                         callbacks=callbacks,
                                                                         **self.knowledge_retriever)
                 tools.append(knowledge_tool)
-            else:
-                tmp_flow_id = link.flow_id
-                one_flow_data = flow_id2data.get(link.flow_id)
-                tool_name = f'flow_{link.flow_id}'
-                if not one_flow_data:
-                    logger.warning('act=init_tools not find flow_id: {}', link.flow_id)
-                    continue
-                if one_flow_data.status != FlowStatus.ONLINE.value:
-                    self.offline_flows.append(tool_name)
-                    logger.warning('act=init_tools not online flow_id: {}', link.flow_id)
-                    continue
-                flow_graph_data = one_flow_data.data
-                tool_description = f'{one_flow_data.name}:{one_flow_data.description}'
-
-                try:
-                    artifacts = {}
-                    graph = await build_flow_no_yield(graph_data=flow_graph_data,
-                                                      artifacts=artifacts,
-                                                      process_file=True,
-                                                      flow_id=tmp_flow_id,
-                                                      chat_id=self.assistant.id)
-                    built_object = await graph.abuild()
-                    logger.info('act=init_flow_tool build_end')
-                    flow_tool = Tool(name=tool_name,
-                                     func=built_object,
-                                     coroutine=built_object.ainvoke,
-                                     description=tool_description,
-                                     args_schema=InputRequest,
-                                     callbacks=callbacks)
-                    tools.append(flow_tool)
-                except Exception as exc:
-                    logger.error(f'Error processing {tmp_flow_id} tweaks: {exc}')
-                    raise Exception(f'Flow Build Error: {exc}')
         self.tools = tools
 
     async def init_agent(self):

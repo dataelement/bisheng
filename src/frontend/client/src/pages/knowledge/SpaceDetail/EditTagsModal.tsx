@@ -214,11 +214,11 @@ export function EditTagsModal({
                         </span>
                     </div>
 
-                    <div className="w-full h-px bg-[#ebecf0] my-[-1px]" />
+                    {/* <div className="w-full h-px bg-[#ebecf0] my-[-1px]" /> */}
 
                     {/* Existing Space Tags */}
                     <div className="flex flex-col gap-2 pt-1">
-                        <div className="text-[12px] leading-[20px] text-[#212121]">{localize("com_knowledge.existing_tags")}</div>
+                        <div className="text-[14px] leading-[20px] font-[500] text-[#212121]">{localize("com_knowledge.existing_tags")}</div>
                         <div className="flex flex-wrap gap-1">
                             {spaceTags.length === 0 && (
                                 <span className="text-[12px] text-[#86909c]">{localize("com_knowledge.no_tags")}</span>

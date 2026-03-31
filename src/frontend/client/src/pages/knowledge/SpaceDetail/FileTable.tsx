@@ -14,7 +14,6 @@ import {
     MoreVertical,
     PencilLineIcon,
     RefreshCw,
-    SortDescIcon,
     Tag, Trash2
 } from "lucide-react";
 import {
@@ -226,7 +225,6 @@ const SortableHeader = ({
     const direction = isActive ? currentSort.direction : "asc";
     const isSticky = stickyLeft !== undefined;
     const isResizable = !NON_RESIZABLE_COLUMNS.includes(columnKey);
-
     return (
         <TableHead
             className={cn(
@@ -246,7 +244,22 @@ const SortableHeader = ({
                 <span className={cn("text-sm font-normal", isActive ? "text-[#1d2129]" : "text-[#4e5969]")}>
                     {children}
                 </span>
-                <SortDescIcon className={`size-4 group-hover:opacity-100 opacity-0 transition-opacity ${isActive ? "opacity-100 text-primary" : ""} ${direction === "asc" ? "rotate-180" : ""}`} />
+                {(() => {
+                    const arrowDir = direction === "asc" ? "up" : "down";
+                    const isActiveSort = isActive;
+                    const src = `${__APP_ENV__.BASE_URL}/assets/channel/sort-amount-${arrowDir}${
+                        isActiveSort ? "-blue" : ""
+                    }.svg`;
+                    return (
+                        <img
+                            className={`size-4 transition-opacity ${
+                                isActiveSort ? "opacity-100" : "opacity-0"
+                            } group-hover:opacity-100`}
+                            src={src}
+                            alt="sort"
+                        />
+                    );
+                })()}
             </div>
             {isResizable && <ResizeHandle columnKey={columnKey} onResizeStart={onResizeStart} />}
             {/* 固定列右侧阴影 */}
@@ -675,17 +688,16 @@ function FileRow({
                 >
                     {isFolder
                         ? (
-                            <span className="text-sm text-[#86909c]">
-                                <span className={file.successFileNum !== undefined && file.fileNum !== undefined && file.successFileNum < file.fileNum
-                                    ? 'text-emerald-500'
-                                    : 'text-emerald-500'
-                                }>
+                            <span className="text-sm whitespace-nowrap">
+                                <span className="text-emerald-500 font-medium">
                                     {file.successFileNum ?? 0}
                                 </span>
-                                /{file.fileNum ?? 0}
+                                <span className="text-[#86909c]">
+                                    /{file.fileNum ?? 0}
+                                </span>
                             </span>
                         )
-                        : <StatusBadge status={file.status} />
+                        : <StatusBadge status={file.status ?? FileStatus.WAITING} />
                     }
                 </TableCell>
             )}
@@ -723,6 +735,11 @@ function FileRow({
                                         <DropdownMenuItem onClick={(e) => { e.stopPropagation(); startRenaming(); }}>
                                             <Edit className="size-4 mr-2" />{localize("com_knowledge.rename")}
                                         </DropdownMenuItem>
+                                        {hasRetryOption && (
+                                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onRetry?.(); }}>
+                                                <RefreshCw className="size-4 mr-2" />{localize("com_knowledge.retry")}
+                                            </DropdownMenuItem>
+                                        )}
                                         <DropdownMenuItem
                                             className="text-[#f53f3f] focus:text-[#f53f3f] focus:bg-[#fff2f0]"
                                             onClick={(e) => { e.stopPropagation(); onDelete(); }}
@@ -730,11 +747,6 @@ function FileRow({
                                             <Trash2 className="size-4 mr-2" />{localize("com_knowledge.delete")}
                                         </DropdownMenuItem>
                                     </>
-                                )}
-                                {hasRetryOption && (
-                                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onRetry?.(); }}>
-                                        <RefreshCw className="size-4 mr-2" />{localize("com_knowledge.retry")}
-                                    </DropdownMenuItem>
                                 )}
                             </DropdownMenuContent>
                         </DropdownMenu>

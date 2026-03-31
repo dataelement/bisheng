@@ -29,19 +29,16 @@ async def get_message_list(
         message_service: MessageService = Depends(get_message_service),
 ):
     """Get paginated message list with optional filters."""
-    try:
-        result = await message_service.get_message_list(
-            login_user=login_user,
-            tab=tab,
-            only_unread=only_unread,
-            keyword=keyword,
-            page=page,
-            page_size=page_size,
-        )
-        return resp_200(data=result.model_dump())
-    except Exception as e:
-        logger.error(f"Failed to get message list: {e}")
-        return resp_500(message="Failed to get message list")
+
+    result = await message_service.get_message_list(
+        login_user=login_user,
+        tab=tab,
+        only_unread=only_unread,
+        keyword=keyword,
+        page=page,
+        page_size=page_size,
+    )
+    return resp_200(data=result.model_dump())
 
 
 @router.get("/unread_count")

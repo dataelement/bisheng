@@ -1,5 +1,6 @@
 import { useLocalize } from "~/hooks";
 import { Button } from "~/components/ui/Button";
+import { ChannelSuccessIcon } from "~/components/icons/channels";
 
 interface CreateChannelSuccessContentProps {
     /** 点击「查看频道」 */
@@ -17,11 +18,7 @@ export function CreateChannelSuccessContent({
     return (
         <div className="flex flex-1 flex-col items-center justify-center py-16">
             <div className="flex flex-col items-center">
-                <img
-                    src={`${__APP_ENV__.BASE_URL}/assets/channel/success.svg`}
-                    alt=""
-                    className="w-[120px] h-[120px] mb-5"
-                />
+                <ChannelSuccessIcon className="w-[120px] h-[120px] mb-5" />
                 <div className="text-[20px] font-semibold text-[#1D2129] mb-2">{localize("com_subscription.channel_create_success")}</div>
                 <div className="text-[14px] leading-6 text-[#86909C] text-center mb-10 max-w-[400px] whitespace-pre-line">{localize("com_subscription.system_push_schedule")}</div>
                 <div className="flex gap-3">

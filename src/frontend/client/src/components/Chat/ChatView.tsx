@@ -63,7 +63,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   }, [activeConvoId]); // intentionally ONLY on activeConvoId — don't add navigate/conversationId
 
   useEffect(() => {
-    window.isLinsight = isLingsi;
+    (window as any).isLinsight = isLingsi;
   }, [isLingsi]);
 
   // Reset lingsi mode when messages exist
@@ -161,7 +161,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
               /* Landing page — preserved for welcome + Lingsi mode switch */
               <Landing
                 lingsi={isLingsi}
-                lingsiEntry={bsConfig?.linsightConfig?.linsight_entry}
+                lingsiEntry={(bsConfig as any)?.linsightConfig?.linsight_entry}
                 setLingsi={setIsLingsi}
                 isNew={isNew}
               />
@@ -193,6 +193,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                 : <AiChatInput
                   disabled={!bsConfig?.models?.length || !!shareToken}
                   isStreaming={isStreaming}
+                  onScrollToBottom={() => { }}
                   modelOptions={bsConfig?.models}
                   modelValue={chatModel.id}
                   onModelChange={(val) => {

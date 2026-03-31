@@ -6,7 +6,8 @@ from typing import List
 import openpyxl
 from pymilvus import Collection
 
-from bisheng.api.services.knowledge_imp import decide_vectorstores, QA_save_knowledge, delete_vector_data
+from bisheng.api.services.knowledge_imp import QA_save_knowledge, delete_vector_data
+from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, Knowledge, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import QAKnoweldgeDao, KnowledgeFileDao, QAKnowledge, KnowledgeFile, \
     QAStatus, KnowledgeFileStatus
@@ -64,9 +65,7 @@ def get_all_knowledge_files(knowledge_id: int) -> List[KnowledgeFile]:
 
 def _get_es_chunks_data(knowledge: Knowledge, es_obj=None, source: bool = False, file_id: int = None):
     if not es_obj:
-        embedding = LLMService.get_bisheng_knowledge_embedding_sync(0, model_id=int(knowledge.model))
-        es_obj = decide_vectorstores(knowledge.index_name or knowledge.collection_name, "ElasticKeywordsSearch",
-                                     embedding)
+        es_obj = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=knowledge)
     es_client = es_obj.client
     all_chunks = []
 
@@ -105,8 +104,7 @@ def _get_es_chunks_data(knowledge: Knowledge, es_obj=None, source: bool = False,
 def _get_milvus_chunks_data(knowledge: Knowledge, milvus_obj=None, all_fields_expect_pk: bool = False,
                             file_id: int = None):
     if not milvus_obj:
-        embedding = LLMService.get_bisheng_knowledge_embedding_sync(0, model_id=int(knowledge.model))
-        milvus_obj = decide_vectorstores(knowledge.collection_name, "Milvus", embedding)
+        milvus_obj = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(invoke_user_id=0, knowledge=knowledge)
     all_milvus_chunks = []
     output_fields = ["file_id", "extra", "source", "pk"]
     if all_fields_expect_pk:
@@ -136,11 +134,13 @@ def _scan_knowledge_error_data(knowledge: Knowledge, all_file_data: List[Knowled
     if knowledge.type != KnowledgeTypeEnum.QA.value:
         judge_qa_chunk = lambda x: x.get("source")
     all_milvus_chunks_map = {
-        item["file_id"]: item for item in all_milvus_chunks if judge_qa_chunk(item)  # source Absent Explanation YesQACorrect data, otherwise it is the data of the document knowledge base
+        item["file_id"]: item for item in all_milvus_chunks if judge_qa_chunk(item)
+        # source Absent Explanation YesQACorrect data, otherwise it is the data of the document knowledge base
     }
     all_es_chunks = _get_es_chunks_data(knowledge, es_obj)
     all_es_chunks_map = {
-        item["file_id"]: item for item in all_es_chunks if judge_qa_chunk(item)  # source Absent Explanation YesQACorrect data, otherwise it is the data of the document knowledge base
+        item["file_id"]: item for item in all_es_chunks if judge_qa_chunk(item)
+        # source Absent Explanation YesQACorrect data, otherwise it is the data of the document knowledge base
     }
     no_data = []
     no_milvus_data = []
@@ -234,13 +234,7 @@ def _file_row(knowledge: Knowledge, file: KnowledgeFile | QAKnowledge, milvus_fl
 
 def _init_knowledge_obj(knowledge: Knowledge):
     try:
-        embedding = LLMService.get_bisheng_knowledge_embedding_sync(0, model_id=int(knowledge.model))
-    except Exception as e:
-        print(
-            f"!!!! skip knowledge_id: {knowledge.id}; knowledge_name: {knowledge.name} because embedding model error: {e}")
-        raise Exception(f"Skip this Knowledge Base, Reason:embeddingModel error: {e}")
-    try:
-        milvus_obj = decide_vectorstores(knowledge.collection_name, "Milvus", embedding)
+        milvus_obj = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(0, knowledge=knowledge)
         if milvus_obj.col is None:
             raise Exception("Skip this Knowledge Base, Reason:Milvus collection name not exist")
         collection_info = milvus_obj.col.schema
@@ -253,8 +247,7 @@ def _init_knowledge_obj(knowledge: Knowledge):
             f"!!!! skip knowledge_id: {knowledge.id}; knowledge_name: {knowledge.name} because milvus connection error: {e}")
         raise Exception(f"Skip this Knowledge Base, Reason:MilvusConnection Error: {e}")
     try:
-        es_obj = decide_vectorstores(knowledge.index_name or knowledge.collection_name, "ElasticKeywordsSearch",
-                                     embedding)
+        es_obj = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=knowledge)
     except Exception as e:
         print(
             f"!!!! skip knowledge_id: {knowledge.id}; knowledge_name: {knowledge.name} because es connection error: {e}")
@@ -264,7 +257,8 @@ def _init_knowledge_obj(knowledge: Knowledge):
 
 def _save_knowledge_error_data(rows: List[List[str]], file_name: str):
     header_rows = [
-        ['The knowledge base uponID', 'Library Name', 'collection_name', 'index_name', 'Knowledge Base Post Type', 'Knowledge Base Created Time', 'Knowledge Base Updated Time',
+        ['The knowledge base uponID', 'Library Name', 'collection_name', 'index_name', 'Knowledge Base Post Type',
+         'Knowledge Base Created Time', 'Knowledge Base Updated Time',
          'Knowledge Base Notes', 'Doc.ID', 'File Name',
          'Document Status',
          'File Created Time', 'File Updated Time', 'Milvuspresence or does it', 'ESpresence or does it']
@@ -363,7 +357,8 @@ def _sync_milvus_new_collection_name(knowledge: Knowledge, milvus_obj) -> bool:
     # create new collection name
     new_col = Collection(name=new_collection_name, schema=milvus_obj.col.schema, using=milvus_obj.alias,
                          consistency_level=milvus_obj.consistency_level)
-    new_milvus_obj = decide_vectorstores(new_collection_name, "Milvus", embedding)
+    milvus_obj.collection_name = new_collection_name
+    new_milvus_obj = KnowledgeRag.init_milvus_vectorstore(new_collection_name, embeddings=embedding)
 
     output_fields = [s.name for s in milvus_obj.col.schema.fields if s.name != "pk"]
 
@@ -558,7 +553,8 @@ if __name__ == '__main__':
     parser.add_argument('--mode', type=str, default="scan_all",
                         help='modalities.scan_all: Scan all Knowledge Base error data;fix_all: Fix all Knowledge Base error data;fix_one: Fixing single knowledge base error data;scan_one: Scan single KB error data')
     # Maximum number of concurrency for a single process
-    parser.add_argument('--id', type=int, default=0, help='The knowledge base uponID, parameter is required if operating a single knowledge base')
+    parser.add_argument('--id', type=int, default=0,
+                        help='The knowledge base uponID, parameter is required if operating a single knowledge base')
     args = parser.parse_args()
 
     if args.mode == "scan_all":

@@ -2,14 +2,10 @@ from typing import List
 
 from loguru import logger
 
-from bisheng.api.services.knowledge_imp import (
-    decide_vectorstores
-)
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import ServerError
 from bisheng.common.errcode.knowledge import KnowledgeFileFailedError
 from bisheng.core.logger import trace_id_var
-from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao, KnowledgeState
 from bisheng.knowledge.domain.models.knowledge_file import (
@@ -112,8 +108,7 @@ def _delete_es_files(knowledge: Knowledge, file_ids: List[int]):
     """DeleteESFile data in"""
     try:
         index_name = knowledge.index_name or knowledge.collection_name
-        embeddings = FakeEmbedding()
-        es_client = decide_vectorstores(index_name, "ElasticKeywordsSearch", embeddings)
+        es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=knowledge)
 
         if not es_client.client.indices.exists(index=index_name):
             logger.warning(f"ES index {index_name} does not exist, skipping deletion")
@@ -149,9 +144,8 @@ def _rebuild_embeddings(knowledge: Knowledge, files: List[KnowledgeFile], new_mo
 
     try:
         # DapatkanEShitting the nail on the headchunkMessage
-        index_name = knowledge.index_name or knowledge.collection_name
-        embeddings = FakeEmbedding()
-        es_client = decide_vectorstores(index_name, "ElasticKeywordsSearch", embeddings)
+        index_name = knowledge.index_name
+        es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=knowledge)
 
         # Get newembeddingModel and createMilvusClient
         logger.info(f"[DEBUG] Begin initializing newembeddingModelsmodel_id={new_model_id}")
@@ -170,7 +164,9 @@ def _rebuild_embeddings(knowledge: Knowledge, files: List[KnowledgeFile], new_mo
             # Model test failure should terminate the entire process, not continue
             raise Exception(f"EmbeddingModel not available: {str(e)}")
 
-        vector_client = decide_vectorstores(knowledge.collection_name, "Milvus", new_embeddings)
+        vector_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(invoke_user_id=invoke_user_id,
+                                                                        knowledge=knowledge,
+                                                                        embeddings=new_embeddings)
         logger.info(f"[DEBUG] Slider Created Successfully.MilvusClientcollection_name={knowledge.collection_name}")
 
         # OthersESWhether the index is present (check in advance, avoid double-checking in the loop)

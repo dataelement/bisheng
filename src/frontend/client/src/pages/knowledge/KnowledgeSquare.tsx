@@ -4,7 +4,7 @@ import { Input } from "~/components/ui/Input";
 import { Button } from "~/components/ui/Button";
 import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
-import { getSquareSpacesApi, subscribeSpaceApi, type KnowledgeSpace, VisibilityType } from "~/api/knowledge";
+import { getJoinedSpacesApi, getSquareSpacesApi, subscribeSpaceApi, type KnowledgeSpace, VisibilityType } from "~/api/knowledge";
 import { useLocalize } from "~/hooks";
 import KnowledgeSquareCard from "./KnowledgeSquareCard";
 
@@ -18,6 +18,8 @@ interface KnowledgeSquareProps {
     emptyText?: string;
     joinToastPrefix?: string;
     onPreviewSpace?: (spaceId: string) => void;
+    /** Optional status override from parent (e.g. preview drawer join) */
+    statusOverride?: Record<string, SquareSpaceStatus>;
 }
 
 export default function KnowledgeSquare({
@@ -28,7 +30,10 @@ export default function KnowledgeSquare({
     emptyText,
     joinToastPrefix,
     onPreviewSpace,
+    statusOverride,
 }: KnowledgeSquareProps) {
+    const MAX_JOINED_SPACES = 50;
+
     const { showToast } = useToastContext();
     const localize = useLocalize();
 
@@ -66,9 +71,11 @@ export default function KnowledgeSquare({
                 if (nextPage === 1) setLoading(true);
                 else setLoadingMore(true);
 
+                const keyword = searchQuery.trim();
                 const res = await getSquareSpacesApi({
                     page: nextPage,
                     page_size: PAGE_SIZE,
+                    ...(keyword ? { keyword } : {}),
                 });
 
                 const list = (res.data || []) as KnowledgeSpace[];
@@ -82,7 +89,7 @@ export default function KnowledgeSquare({
                 else setLoadingMore(false);
             }
         },
-        [PAGE_SIZE]
+        [PAGE_SIZE, searchQuery]
     );
 
     const applySearchLengthLimit = (raw: string) => {
@@ -148,6 +155,20 @@ export default function KnowledgeSquare({
         if (currentStatus !== "join") return;
         if (joiningId) return;
 
+        // Join/apply upper limit (includes followed + pending applications)
+        try {
+            const joinedSpaces = await getJoinedSpacesApi();
+            if (joinedSpaces.length >= MAX_JOINED_SPACES) {
+                showToast({
+                    message: localize("com_knowledge.join_space_limit_reached_50"),
+                    severity: NotificationSeverity.WARNING,
+                });
+                return;
+            }
+        } catch {
+            // If the limit check fails, keep the existing behavior instead of blocking.
+        }
+
         setJoiningId(space.id);
         const prevSpaces = spaces;
 
@@ -164,7 +185,7 @@ export default function KnowledgeSquare({
             if (nextStatus === "joined") {
                 showToast({ message: localize("com_knowledge.join_success"), severity: NotificationSeverity.SUCCESS });
             } else {
-                showToast({ message: `${tJoinPrefix}${space.name}`, severity: NotificationSeverity.SUCCESS });
+                showToast({ message: `${tJoinPrefix}`, severity: NotificationSeverity.SUCCESS });
             }
         } catch {
             // rollback
@@ -239,7 +260,10 @@ export default function KnowledgeSquare({
                                         <KnowledgeSquareCard
                                             key={space.id}
                                             space={space}
-                                            status={(space.squareStatus as SquareSpaceStatus) || "join"}
+                                            status={
+                                                statusOverride?.[String(space.id)] ??
+                                                ((space.squareStatus as SquareSpaceStatus) || "join")
+                                            }
                                             onPreview={() => onPreviewSpace?.(space.id)}
                                             onAction={() => handleJoin(space)}
                                         />

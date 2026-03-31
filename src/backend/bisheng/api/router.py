@@ -1,11 +1,12 @@
 # Router for base api
+from bisheng.telemetry_search.api.router import router as telemetry_search_router
 from fastapi import APIRouter
 
-from bisheng.api.v1 import (assistant_router, audit_router, chat_router, component_router,
+from bisheng.api.v1 import (assistant_router, audit_router, chat_router,
                             endpoints_router, evaluation_router,
                             group_router, mark_router,
                             report_router, tag_router,
-                            user_router, validate_router, variable_router, workflow_router,
+                            user_router, variable_router, workflow_router,
                             workstation_router, tool_router, invite_code_router, skillcenter_router, flows_router)
 from bisheng.channel.api.router import router as channel_router
 from bisheng.chat_session.api.router import router as session_router
@@ -20,15 +21,10 @@ from bisheng.open_endpoints.api.router import (assistant_router_rpc, chat_router
                                                knowledge_router_rpc, workflow_router_rpc,
                                                filelib_router_rpc)
 from bisheng.share_link.api.router import router as share_link_router
-from bisheng.linsight.api.router import router as linsight_router
-from bisheng.telemetry_search.api.router import router as telemetry_search_router
-from bisheng.channel.api.router import router as channel_router
-from bisheng.message.api.router import router as message_router
 
 router = APIRouter(prefix='/api/v1', )
 router.include_router(chat_router)
 router.include_router(endpoints_router)
-router.include_router(validate_router)
 router.include_router(knowledge_router)
 router.include_router(knowledge_space_router)
 router.include_router(server_router)
@@ -37,7 +33,6 @@ router.include_router(qa_router)
 router.include_router(variable_router)
 router.include_router(report_router)
 router.include_router(finetune_router)
-router.include_router(component_router)
 router.include_router(assistant_router)
 router.include_router(group_router)
 router.include_router(audit_router)

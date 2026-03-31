@@ -2,10 +2,9 @@ import { useLocalize } from "~/hooks";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { FilterConditionEditor, type FilterGroup, type FilterRelation } from "./FilterConditionEditor";
+import { ChannelEditIcon } from "~/components/icons/channels";
 
 const MAX_CHANNEL_NAME = 10;
-const EDIT_ICON_SRC = `${__APP_ENV__.BASE_URL}/assets/channel/edit.svg`;
-
 export interface SubChannelData {
     id: string;
     name: string;
@@ -112,11 +111,7 @@ export function SubChannelBlock({
                         }}
                     >
                         <span className="text-[14px] text-[#1D2129] truncate">{data.name}</span>
-                        <img
-                            src={EDIT_ICON_SRC}
-                            alt=""
-                            className="w-4 h-4 opacity-0 group-hover:opacity-100 flex-shrink-0"
-                        />
+                        <ChannelEditIcon className="w-4 h-4 opacity-0 group-hover:opacity-100 flex-shrink-0" />
                     </div>
                 )}
                 <button
