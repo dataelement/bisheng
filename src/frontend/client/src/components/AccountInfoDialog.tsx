@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSetRecoilState } from "recoil";
 import { X, Eye, EyeOff, Check, Camera } from "lucide-react";
-import { Avatar, AvatarImage } from "~/components/ui/avatar";
+import { Avatar, AvatarImage } from "~/components/ui/Avatar";
 import { Button } from "~/components/ui/Button";
 import { Input } from "~/components/ui/Input";
 import { Dialog, DialogContent } from "~/components/ui/Dialog";

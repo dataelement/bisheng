@@ -11,7 +11,7 @@ import {
 } from "~/api/channels";
 import { NotificationSeverity } from "~/common";
 import { InfiniteScroll } from "~/components/InfiniteScroll";
-import { Avatar, AvatarImage, AvatarName } from "~/components/ui/avatar";
+import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
 import { Button } from "~/components/ui/Button";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
 import {

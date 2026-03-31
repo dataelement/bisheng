@@ -17,7 +17,7 @@ import {
 } from "~/components/ui/AlertDialog";
 import { Button } from "~/components/ui/Button";
 import { Input } from "~/components/ui/Input";
-import { Avatar, AvatarImage, AvatarName } from "~/components/ui/avatar";
+import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
 import { useLocalize } from "~/hooks";
 import { addWebsiteSourceApi, crawlTempSourceApi, getFeedbackTips } from "~/api/channels";
 import type { InformationSource } from "~/api/channels";

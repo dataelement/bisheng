@@ -1,5 +1,5 @@
 import { Lock, BookOpen } from "lucide-react";
-import { Avatar, AvatarImage } from "~/components/ui/avatar";
+import { Avatar, AvatarImage } from "~/components/ui/Avatar";
 import { Button } from "~/components/ui/Button";
 import { Card, CardContent } from "~/components/ui/Card";
 import { cn } from "~/utils";

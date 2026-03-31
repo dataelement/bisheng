@@ -1,14 +1,14 @@
 import { useLocalize } from "~/hooks";
 import * as React from "react";
 import { ChevronDown } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Button } from "@/components/ui/Button";
+import { Checkbox } from "@/components/ui/Checkbox";
 import {
     Popover,
     PopoverContent,
     PopoverTrigger,
-} from "@/components/ui/popover";
-import { Separator } from "@/components/ui/separator";
+} from "@/components/ui/Popover";
+import { Separator } from "@/components/ui/Separator";
 import { cn } from "~/utils";
 
 // 定义选项的类型

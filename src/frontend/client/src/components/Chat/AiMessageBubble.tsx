@@ -13,7 +13,7 @@ import { memo, useCallback, useMemo, useState, useRef } from "react";
 import Thinking from "~/components/Artifacts/Thinking";
 import Markdown from "~/components/Chat/Messages/Content/Markdown";
 import SearchWebUrls from "~/components/Chat/Messages/Content/SearchWebUrls";
-import { Avatar, AvatarImage, AvatarName } from "~/components/ui/avatar";
+import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
 import { TextToSpeechButton } from "~/components/Voice/TextToSpeechButton";
 import { useGetBsConfig } from "~/hooks/queries/data-provider";
 import { useAuthContext } from "~/hooks";
