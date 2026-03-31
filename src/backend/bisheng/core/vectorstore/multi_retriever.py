@@ -19,7 +19,7 @@ class MultiRetriever(BaseRetriever):
         docs: List[tuple[Document, float]] = []
         for index, vector in enumerate(self.vectors):
             kwargs_ = self.search_kwargs[index] | kwargs
-            tmp_docs = vector.similarity_search_with_score(query, **kwargs_)
+            tmp_docs = vector.similarity_search_with_relevance_scores(query, **kwargs_)
             docs.extend(tmp_docs)
         return self.parse_doc_with_score(docs)
 
@@ -29,7 +29,7 @@ class MultiRetriever(BaseRetriever):
         tasks = []
         for index, vector in enumerate(self.vectors):
             kwargs_ = self.search_kwargs[index] | kwargs
-            tasks.append(vector.asimilarity_search_with_score(query, **kwargs_))
+            tasks.append(vector.asimilarity_search_with_relevance_scores(query, **kwargs_))
 
         results = await asyncio.gather(*tasks)
 

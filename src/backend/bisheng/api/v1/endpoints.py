@@ -15,16 +15,8 @@ from bisheng.common.models.config import Config, ConfigDao, ConfigKeyEnum
 from bisheng.common.services.config_service import settings as bisheng_settings
 from bisheng.core.cache.redis_manager import get_redis_client_sync
 from bisheng.core.cache.utils import save_uploaded_file, upload_file_to_minio
-from bisheng.interface.types import get_all_types_dict
 from bisheng.utils import generate_uuid
 from bisheng.utils import get_request_ip
-
-try:
-    from bisheng.worker import process_graph_cached_task
-except ImportError:
-
-    def process_graph_cached_task(*args, **kwargs):
-        raise NotImplementedError('Celery is not installed')
 
 # build router
 router = APIRouter(tags=['Base'])
@@ -43,13 +35,6 @@ if bisheng_settings.debug:
         snapshot.dump(f"/app/data/snapshot_{process_id}_{thread_id}_{time.time()}.prof")
 
         return resp_200()
-
-
-@router.get('/all')
-def get_all():
-    """Get all parameters"""
-    all_types = get_all_types_dict()
-    return resp_200(all_types)
 
 
 @router.get('/env')

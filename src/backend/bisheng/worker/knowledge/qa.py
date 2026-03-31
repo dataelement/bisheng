@@ -3,10 +3,11 @@ from typing import List
 from loguru import logger
 from pymilvus import Collection
 
-from bisheng.api.services.knowledge_imp import QA_save_knowledge, decide_vectorstores
+from bisheng.api.services.knowledge_imp import QA_save_knowledge
 from bisheng.common.errcode.knowledge import KnowledgeFileFailedError
+from bisheng.core.ai import FakeEmbeddings
 from bisheng.core.logger import trace_id_var
-from bisheng.interface.embeddings.custom import FakeEmbedding
+from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeState
 from bisheng.knowledge.domain.models.knowledge_file import (
     QAKnoweldgeDao, QAKnowledge, QAKnowledgeUpsert, QAStatus,
@@ -14,7 +15,6 @@ from bisheng.knowledge.domain.models.knowledge_file import (
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.llm.domain import LLMService
 from bisheng.worker.main import bisheng_celery
-from bisheng_langchain.vectorstores import Milvus, ElasticKeywordsSearch
 
 
 @bisheng_celery.task
@@ -56,14 +56,16 @@ def copy_qa_knowledge_celery(source_knowledge_id: int, target_knowledge_id: int,
             logger.info(f"No QA knowledge to copy from knowledge id {source_knowledge_id}.")
             return
 
-        source_milvus: Milvus = decide_vectorstores(source_knowledge.collection_name, "Milvus", FakeEmbedding())
+        source_milvus = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(0, knowledge=source_knowledge,
+                                                                            embedding=FakeEmbeddings())
 
         # create new collection name for target knowledge
         new_col = Collection(name=target_knowledge.collection_name, schema=source_milvus.col.schema,
                              using=source_milvus.alias,
                              consistency_level=source_milvus.consistency_level)
 
-        target_milvus: Milvus = decide_vectorstores(target_knowledge.collection_name, "Milvus", FakeEmbedding())
+        target_milvus = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(0, knowledge=target_knowledge,
+                                                                            embedding=FakeEmbeddings())
 
         # Batched SalinQAkey learning points Start from the first page
         batch_size = 100
@@ -111,10 +113,7 @@ def copy_qa_knowledge_celery(source_knowledge_id: int, target_knowledge_id: int,
                             f"to knowledge id {target_knowledge_id}.")
 
                 # es Salin
-                es_db = decide_vectorstores(
-                    target_knowledge.index_name, "ElasticKeywordsSearch", FakeEmbedding()
-                )
-
+                es_db = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=target_knowledge)
                 es_texts = []
                 es_metadatas = []
                 for vector in vectors:
@@ -175,9 +174,7 @@ def rebuild_qa_knowledge_celery(knowledge_id: int, embedding_model_id: int, invo
         # DeletemilvusCorresponding data in
         KnowledgeService.delete_knowledge_file_in_vector(knowledge=knowledge_info, del_es=False)
 
-        es_db: ElasticKeywordsSearch = decide_vectorstores(
-            knowledge_info.index_name, "ElasticKeywordsSearch", FakeEmbedding()
-        )
+        es_db = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=knowledge_info)
 
         # InquiryesAll data in Delete
         es_result = es_db.client.search(body={
@@ -199,9 +196,10 @@ def rebuild_qa_knowledge_celery(knowledge_id: int, embedding_model_id: int, invo
 
         embeddings = LLMService.get_bisheng_knowledge_embedding_sync(model_id=embedding_model_id,
                                                                      invoke_user_id=invoke_user_id)
-        milvus_db: Milvus = decide_vectorstores(
-            knowledge_info.collection_name, "Milvus", embeddings
-        )
+
+        milvus_db = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(invoke_user_id=invoke_user_id,
+                                                                        knowledge=knowledge_info,
+                                                                        embedding=embeddings)
 
         knowledge_info.state = KnowledgeState.PUBLISHED.value
 

@@ -12,7 +12,6 @@ from fastapi import UploadFile
 from langchain_core.tools import BaseTool
 from loguru import logger
 
-from bisheng.api.services.knowledge_imp import decide_vectorstores
 from bisheng.api.services.workstation import WorkStationService
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
@@ -29,7 +28,7 @@ from bisheng.core.prompts.manager import get_prompt_manager
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.flow import FlowType
 from bisheng.database.models.session import MessageSessionDao, MessageSession
-from bisheng.interface.embeddings.custom import FakeEmbedding
+from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import KnowledgeRead, KnowledgeTypeEnum
 from bisheng.linsight.domain.models.linsight_execute_task import LinsightExecuteTaskDao
 from bisheng.linsight.domain.models.linsight_session_version import LinsightSessionVersionDao, SessionVersionStatusEnum, \
@@ -852,8 +851,8 @@ class LinsightWorkbenchImpl:
                                                                      invoke_user_id=invoke_user_id)
 
         # Create Vector Store
-        vector_client = decide_vectorstores(collection_name, "Milvus", embeddings)
-        es_client = decide_vectorstores(collection_name, "ElasticKeywordsSearch", FakeEmbedding())
+        vector_client = KnowledgeRag.init_milvus_vectorstore(collection_name=collection_name, embeddings=embeddings)
+        es_client = KnowledgeRag.init_es_vectorstore(collection_name)
 
         # Adding Text to Vector Storage
         metadatas = [{"file_id": file_id} for _ in texts]

@@ -33,18 +33,20 @@ class KnowledgeRag:
 
     @classmethod
     async def init_knowledge_milvus_vectorstore(cls, invoke_user_id: int, knowledge: Knowledge = None,
-                                                knowledge_id: int = None, **kwargs) -> Milvus:
+                                                knowledge_id: int = None, embedding=None, **kwargs) -> Milvus:
         knowledge = await cls._get_knowledge(knowledge, knowledge_id)
-        embedding = await LLMService.get_bisheng_knowledge_embedding(model_id=int(knowledge.model),
-                                                                     invoke_user_id=invoke_user_id)
+        if embedding is None:
+            embedding = await LLMService.get_bisheng_knowledge_embedding(model_id=int(knowledge.model),
+                                                                         invoke_user_id=invoke_user_id)
         return cls.init_milvus_vectorstore(knowledge.collection_name, embedding, **kwargs)
 
     @classmethod
     def init_knowledge_milvus_vectorstore_sync(cls, invoke_user_id: int, knowledge: Knowledge = None,
-                                               knowledge_id: int = None, **kwargs) -> Milvus:
+                                               knowledge_id: int = None, embedding=None, **kwargs) -> Milvus:
         knowledge = cls._get_knowledge_sync(knowledge, knowledge_id)
-        embedding = LLMService.get_bisheng_knowledge_embedding_sync(model_id=int(knowledge.model),
-                                                                    invoke_user_id=invoke_user_id)
+        if embedding is None:
+            embedding = LLMService.get_bisheng_knowledge_embedding_sync(model_id=int(knowledge.model),
+                                                                        invoke_user_id=invoke_user_id)
         return cls.init_milvus_vectorstore(knowledge.collection_name, embedding, **kwargs)
 
     @classmethod

@@ -5,19 +5,15 @@ from enum import Enum
 from typing import Dict, List
 from urllib.parse import unquote, urlparse
 
-from fastapi import WebSocket
 from langchain.chains import LLMChain
 from langchain.prompts import PromptTemplate
 from langchain.schema.document import Document
 from loguru import logger
 
-from bisheng.api.v1.schemas import ChatMessage
 from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.database.models.recall_chunk import RecallChunk
-from bisheng.interface.utils import try_setting_streaming_options
 from bisheng.llm.domain.services import LLMService
-from bisheng.processing.base import get_result_and_steps
 
 
 class SourceType(Enum):
@@ -29,43 +25,6 @@ class SourceType(Enum):
     NO_PERMISSION = 2  # No permission to access traceability information
     LINK = 3  # LinkedchunkContents
     QA = 4  # HitsQAThe knowledge base upon
-
-
-async def process_graph(langchain_object,
-                        chat_inputs: ChatMessage,
-                        websocket: WebSocket,
-                        flow_id: str = None,
-                        chat_id: str = None,
-                        **kwargs):
-    langchain_object = try_setting_streaming_options(langchain_object, websocket)
-    logger.debug('Loaded langchain object')
-
-    if langchain_object is None:
-        # Raise user facing error
-        raise ValueError(
-            'There was an error loading the langchain_object. Please, check all the nodes and try again.'
-        )
-
-    # Generate result and thought
-    try:
-        if not chat_inputs.message:
-            logger.debug('No message provided')
-            raise ValueError('No message provided')
-
-        logger.debug('Generating result and thought')
-        result, intermediate_steps, source_document = await get_result_and_steps(
-            langchain_object,
-            chat_inputs.message,
-            websocket=websocket,
-            flow_id=flow_id,
-            chat_id=chat_id,
-            **kwargs)
-        logger.debug('Generated result and intermediate_steps')
-        return result, intermediate_steps, source_document
-    except Exception as e:
-        # Log stack trace
-        logger.exception(e)
-        raise e
 
 
 prompt_template = '''Analyze givenQuestionEkstrakQuestionContained inKeyWords, output list format

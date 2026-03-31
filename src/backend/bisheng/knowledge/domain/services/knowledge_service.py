@@ -13,7 +13,6 @@ from pymilvus import Collection
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.knowledge_imp import (
     KnowledgeUtils,
-    decide_vectorstores,
     delete_knowledge_file_vectors,
     process_file_task,
 )
@@ -38,6 +37,7 @@ from bisheng.common.errcode.knowledge import KnowledgeNotExistError, KnowledgeMe
     KnowledgeMetadataFieldExistError, KnowledgeMetadataFieldNotExistError, KnowledgeMetadataFieldImmutableError
 from bisheng.common.schemas.telemetry.event_data_schema import NewKnowledgeBaseEventData
 from bisheng.common.services import telemetry_service
+from bisheng.core.ai import FakeEmbeddings
 from bisheng.core.cache.redis_manager import get_redis_client_sync, get_redis_client
 from bisheng.core.cache.utils import file_download, async_file_download
 from bisheng.core.logger import trace_id_var
@@ -49,7 +49,6 @@ from bisheng.database.models.group_resource import (
 )
 from bisheng.database.models.role_access import AccessType, RoleAccessDao
 from bisheng.database.models.user_group import UserGroupDao
-from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import (
     Knowledge,
@@ -682,11 +681,9 @@ class KnowledgeService(KnowledgeUtils):
 
     @classmethod
     def delete_knowledge_file_in_vector(cls, knowledge: Knowledge, del_es: bool = True):
-        # <g id="Bold">Medical Treatment:</g>vector
-        embeddings = FakeEmbedding()
-        vector_client = decide_vectorstores(
-            knowledge.collection_name, "Milvus", embeddings
-        )
+        embeddings = FakeEmbeddings()
+        vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(invoke_user_id=0, knowledge=knowledge,
+                                                                            embedding=embeddings)
         if isinstance(vector_client.col, Collection):
             logger.info(
                 f"delete_vector col={knowledge.collection_name} knowledge_id={knowledge.id}"
@@ -695,18 +692,10 @@ class KnowledgeService(KnowledgeUtils):
                 # Singularcollection, simply delete it
                 vector_client.col.drop()
             else:
-                # partitionMode requires partition key deletion
-                pk = vector_client.col.query(
-                    expr=f'knowledge_id=="{knowledge.id}"', output_fields=["pk"]
-                )
-                vector_client.col.delete(f"pk in {[p['pk'] for p in pk]}")
-                # Judgingmilvus Are there any moreentity
-                if vector_client.col.is_empty:
-                    vector_client.col.drop()
+                raise ValueError("knowledge.collection_name must start with 'col' not support partition mode")
         if del_es:
-            # <g id="Bold">Medical Treatment:</g> es
             index_name = knowledge.index_name or knowledge.collection_name  # Compatible with older versions
-            es_client = decide_vectorstores(index_name, "ElasticKeywordsSearch", embeddings)
+            es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=knowledge)
             res = es_client.client.indices.delete(index=index_name, ignore=[400, 404])
             logger.info(f"act=delete_es index={index_name} res={res}")
 
@@ -1212,10 +1201,7 @@ class KnowledgeService(KnowledgeUtils):
             return {}
         file_title_map: Dict[str, str] = {}
         try:
-            embeddings = FakeEmbedding()
-            es_client = decide_vectorstores(
-                db_knowledge.index_name, "ElasticKeywordsSearch", embeddings
-            )
+            es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=db_knowledge)
             search_data = {
                 "size": len(files),
                 "sort": [

@@ -22,7 +22,6 @@ from bisheng.database.models.flow_version import FlowVersionDao, FlowVersionRead
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum, GroupResource
 from bisheng.database.models.role_access import AccessType
 from bisheng.database.models.user_group import UserGroupDao
-from bisheng.processing.process import process_graph_cached, process_tweaks
 from bisheng.share_link.domain.models.share_link import ShareLink
 from bisheng.utils import get_request_ip
 
@@ -183,7 +182,7 @@ class FlowService(BaseService):
         if not flow_info or flow_info.flow_type != FlowType.WORKFLOW.value:
             raise NotFoundError()
         if not await login_user.async_access_check(flow_info.user_id, flow_info.id, AccessType.WORKFLOW):
-                raise UnAuthorizedError()
+            raise UnAuthorizedError()
 
         flow_info.logo = await cls.get_logo_share_link_async(flow_info.logo)
 
@@ -280,31 +279,7 @@ class FlowService(BaseService):
     @classmethod
     async def exec_flow_node(cls, inputs: Dict, tweaks: Dict, index: int, versions: List[FlowVersion]):
         # Gantianswer
-        answer_result = {}
-        # Execute two versions of the node
-        for one in versions:
-            graph_data = process_tweaks(one.data, tweaks)
-            try:
-                result = await process_graph_cached(graph_data,
-                                                    inputs,
-                                                    session_id=None,
-                                                    history_count=10,
-                                                    flow_id=one.flow_id)
-            except Exception as e:
-                logger.exception(f"exec flow node error version_id: {one.name}")
-                answer_result[one.id] = f"{one.name}Version skill execution error: {str(e)}"
-                continue
-            if isinstance(result, dict) and 'result' in result:
-                task_result = result['result']
-            elif hasattr(result, 'result') and hasattr(result, 'session_id'):
-                task_result = result.result
-            else:
-                logger.error(f"exec flow node error version_id: {one.id}, answer: {result}")
-                task_result = {"answer": "flow exec error"}
-
-            answer_result[one.id] = list(task_result.values())[0]
-
-        return index, answer_result
+        raise ValueError("flow is not supported")
 
     @classmethod
     def create_flow_hook(cls, request: Request, login_user: UserPayload, flow_info: Flow) -> bool:

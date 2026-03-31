@@ -4,14 +4,12 @@ import os
 import re
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 import aiofiles
 import requests
-from langchain.embeddings.base import Embeddings
 from langchain.schema.document import Document
 from langchain.text_splitter import CharacterTextSplitter
-from langchain.vectorstores.base import VectorStore
 from langchain_community.document_loaders import (
     BSHTMLLoader,
     PyPDFLoader,
@@ -20,7 +18,6 @@ from langchain_community.document_loaders import (
     UnstructuredWordDocumentLoader,
 )
 from loguru import logger
-from pymilvus import Collection
 from sqlalchemy import func, or_
 from sqlmodel import select
 
@@ -31,7 +28,7 @@ from bisheng.api.services.patch_130 import (
 )
 from bisheng.api.v1.schemas import ExcelRule
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
-from bisheng.common.constants.vectorstore_metadata import KNOWLEDGE_RAG_METADATA_SCHEMA
+from bisheng.common.constants.vectorstore_metadata import KNOWLEDGE_RAG_METADATA_SCHEMA, QA_KNOWLELDGE_METADATA_SCHEMA
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.knowledge import KnowledgeSimilarError, KnowledgeFileDeleteError, KnowledgeFileEmptyError, \
     KnowledgeFileChunkMaxError, KnowledgeLLMError, KnowledgeFileDamagedError, KnowledgeFileNotSupportedError, \
@@ -39,13 +36,11 @@ from bisheng.common.errcode.knowledge import KnowledgeSimilarError, KnowledgeFil
 from bisheng.common.schemas.telemetry.event_data_schema import FileParseEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
+from bisheng.core.ai import FakeEmbeddings
 from bisheng.core.cache.utils import file_download
 from bisheng.core.database import get_sync_db_session
 from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync, get_minio_storage
-from bisheng.interface.embeddings.custom import FakeEmbedding
-from bisheng.interface.importing.utils import import_vectorstore
-from bisheng.interface.initialize.loading import instantiate_vectorstore
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import (
@@ -58,7 +53,7 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     QAKnowledgeUpsert,
     QAStatus,
 )
-from bisheng.knowledge.domain.schemas.knowledge_rag_schema import Metadata
+from bisheng.knowledge.domain.schemas.knowledge_rag_schema import Metadata, QAKnowledgeMetadata
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.knowledge.domain.utils import is_pdf_damaged
 from bisheng.knowledge.rag.knowledge_file_pipeline import KnowledgeFilePipeline
@@ -149,10 +144,9 @@ def delete_vector_files(file_ids: List[int], knowledge: Knowledge) -> bool:
     logger.info(f"delete_files file_ids={file_ids} knowledge_id={knowledge.id}")
     logger.info("start init Milvus")
     vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(0, knowledge=knowledge,
-                                                                        metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
+                                                                        embedding=FakeEmbeddings())
     logger.info("start init ES")
-    es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=knowledge,
-                                                                metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
+    es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=knowledge)
     # Automatically close purchase order aftercollectionIf it does not exist, it will not
     if vector_client.col:
         vector_client.col.delete(expr=f"document_id in {file_ids}", timeout=10)
@@ -208,39 +202,6 @@ def delete_knowledge_file_vectors(file_ids: List[int], clear_minio: bool = True)
         for file in knowledge_files:
             delete_minio_files(file)
     return True
-
-
-def decide_vectorstores(
-        collection_name: str, vector_store: str, embedding: Embeddings, knowledge_id: int = None
-) -> Union[VectorStore, Any]:
-    """ vector db if used by query, must have knowledge_id"""
-    param: dict = {"embedding": embedding}
-
-    if vector_store == "ElasticKeywordsSearch":
-        vector_config = settings.get_vectors_conf().elasticsearch.model_dump()
-        if not vector_config:
-            # No related configurations
-            raise RuntimeError("vector_stores.elasticsearch not find in config.yaml")
-        param["index_name"] = collection_name
-        if isinstance(vector_config["ssl_verify"], str):
-            vector_config["ssl_verify"] = eval(vector_config["ssl_verify"])
-
-    elif vector_store == "Milvus":
-        if knowledge_id and collection_name.startswith("partition"):
-            param["partition_key"] = knowledge_id
-        vector_config = settings.get_vectors_conf().milvus.model_dump()
-        if not vector_config:
-            # No related configurations
-            raise RuntimeError("vector_stores.milvus not find in config.yaml")
-        param["collection_name"] = collection_name
-        vector_config.pop("partition_suffix", "")
-        vector_config.pop("is_partition", "")
-    else:
-        raise RuntimeError("unknown vector store type")
-
-    param.update(vector_config)
-    class_obj = import_vectorstore(vector_store)
-    return instantiate_vectorstore(vector_store, class_object=class_obj, params=param)
 
 
 def decide_knowledge_llm(invoke_user_id: int) -> Any:
@@ -1028,14 +989,10 @@ def text_knowledge(
         db_knowledge: Knowledge, db_file: KnowledgeFile, documents: List[Document]
 ):
     """Usetext Importknowledge"""
-    embeddings = LLMService.get_bisheng_knowledge_embedding_sync(model_id=int(db_knowledge.model),
-                                                                 invoke_user_id=db_file.user_id)
-    vectore_client = decide_vectorstores(
-        db_knowledge.collection_name, "Milvus", embeddings
-    )
+    vectore_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(invoke_user_id=db_file.user_id,
+                                                                         knowledge=db_knowledge)
     logger.info("vector_init_conn_done milvus={}", db_knowledge.collection_name)
-    index_name = db_knowledge.index_name or db_knowledge.collection_name
-    es_client = decide_vectorstores(index_name, "ElasticKeywordsSearch", embeddings)
+    es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=db_knowledge)
 
     separator = "\n\n"
     chunk_size = 1000
@@ -1100,36 +1057,6 @@ def text_knowledge(
     return result
 
 
-def delete_vector(collection_name: str, partition_key: str):
-    try:
-        embeddings = FakeEmbedding()
-        vectore_client = decide_vectorstores(collection_name, 'Milvus', embeddings)
-        if isinstance(vectore_client.col, Collection):
-            if partition_key:
-                pass
-            else:
-                res = vectore_client.col.drop(timeout=1)
-                logger.info('act=delete_milvus col={} res={}', collection_name, res)
-    except Exception as e:
-        # Handle situations where a collection does not exist or where there are other errors
-        logger.warning(f'act=delete_milvus_failed col={collection_name} error={str(e)}')
-        # Even an error is considered a successful deletion as the goal is to ensure that there is no dirty data
-
-
-def delete_es(index_name: str):
-    try:
-        embeddings = FakeEmbedding()
-        esvectore_client = decide_vectorstores(index_name, 'ElasticKeywordsSearch', embeddings)
-
-        if esvectore_client:
-            res = esvectore_client.client.indices.delete(index=index_name, ignore=[400, 404])
-            logger.info(f'act=delete_es index={index_name} res={res}')
-    except Exception as e:
-        # Dealing with non-existent indexes or other errors
-        logger.warning(f'act=delete_es_failed index={index_name} error={str(e)}')
-        # Even an error is considered a successful deletion as the goal is to ensure that there is no dirty data
-
-
 def QA_save_knowledge(db_knowledge: Knowledge, QA: QAKnowledge):
     """Usetext Importknowledge"""
 
@@ -1141,29 +1068,25 @@ def QA_save_knowledge(db_knowledge: Knowledge, QA: QAKnowledge):
     extra.update({"answer": answer, "main_question": questions[0]})
     docs = [Document(page_content=question, metadata=extra) for question in questions]
     try:
-        embeddings = LLMService.get_bisheng_knowledge_embedding_sync(invoke_user_id=QA.user_id,
-                                                                     model_id=int(db_knowledge.model))
-        vector_client = decide_vectorstores(
-            db_knowledge.collection_name, "Milvus", embeddings
-        )
-        es_client = decide_vectorstores(
-            db_knowledge.index_name, "ElasticKeywordsSearch", embeddings
-        )
+        vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(invoke_user_id=QA.user_id,
+                                                                            knowledge=db_knowledge,
+                                                                            metadata_schemas=QA_KNOWLELDGE_METADATA_SCHEMA)
+        es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=db_knowledge)
         logger.info(
             f"vector_init_conn_done col={db_knowledge.collection_name} index={db_knowledge.index_name}"
         )
         # Unificationdocument
         metadata = [
-            {
-                "file_id": QA.id,
-                "knowledge_id": f"{db_knowledge.id}",
-                "page": doc.metadata.pop("page", 1),
-                "source": doc.metadata.pop("source", ""),
-                "bbox": doc.metadata.pop("bbox", ""),
-                "title": doc.metadata.pop("title", ""),
-                "chunk_index": index,
-                "extra": json.dumps(doc.metadata, ensure_ascii=False),
-            }
+            QAKnowledgeMetadata(
+                file_id=QA.id,
+                knowledge_id=f"{db_knowledge.id}",
+                page=doc.metadata.pop("page", 1),
+                source=doc.metadata.pop("source", ""),
+                bbox=doc.metadata.pop("bbox", ""),
+                title=doc.metadata.pop("title", ""),
+                chunk_index=index,
+                extra=json.dumps(doc.metadata, ensure_ascii=False),
+            ).model_dump()
             for index, doc in enumerate(docs)
         ]
         vector_client.add_texts(
@@ -1289,55 +1212,20 @@ async def list_qa_by_knowledge_id(
 
 def delete_vector_data(knowledge: Knowledge, file_ids: List[int]):
     """Delete vector data, Want to make a general purpose that can be dockedlangchainright of privacyvectorDB"""
-    # embeddings = FakeEmbedding()
-    # vectore_config_dict: dict = settings.get_knowledge().get('vectorstores')
-    # if not vectore_config_dict:
-    #     raise Exception('Vector database must be configured')
-    # elastic_index = knowledge.index_name or knowledge.collection_name
-    # vectore_client_list = [
-    #     decide_vectorstores(elastic_index, db, embeddings) if db == 'ElasticKeywordsSearch' else
-    #     decide_vectorstores(knowledge.collection_name, db, embeddings)
-    #     for db in vectore_config_dict.keys()
-    # ]
-    # logger.info('vector_init_conn_done col={} dbs={}', knowledge.collection_name,
-    #             vectore_config_dict.keys())
-
-    # for vectore_client in vectore_client_list:
-    # Inquiryvector primary key
-    embeddings = FakeEmbedding()
+    # for qa knowledge!!!
+    embeddings = FakeEmbeddings()
     collection_name = knowledge.collection_name
     # <g id="Bold">Medical Treatment:</g>vectordb
-    vectore_client = decide_vectorstores(collection_name, "Milvus", embeddings)
-    try:
-        if isinstance(vectore_client.col, Collection):
-            pk = vectore_client.col.query(
-                expr=f"file_id in {file_ids}", output_fields=["pk"], timeout=10
-            )
-        else:
-            pk = []
-    except Exception:
-        # Want to try that again?
-        logger.error("timeout_except")
-        vectore_client.close_connection(vectore_client.alias)
-        vectore_client = decide_vectorstores(collection_name, "Milvus", embeddings)
-        pk = vectore_client.col.query(
-            expr=f"file_id in {file_ids}", output_fields=["pk"], timeout=10
-        )
-    logger.info("query_milvus pk={}", pk)
-    if pk:
-        res = vectore_client.col.delete(f"pk in {[p['pk'] for p in pk]}", timeout=10)
-        logger.info(f"act=delete_vector file_id={file_ids} res={res}")
-    vectore_client.close_connection(vectore_client.alias)
+    vectore_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(0, knowledge=knowledge, embedding=embeddings)
+    res = vectore_client.col.delete(f"file_id in {file_ids}", timeout=10)
+    logger.info(f"act=delete_vector file_id={file_ids} res={res}")
 
     # elastic
-    index_name = knowledge.index_name or collection_name
-    esvectore_client = decide_vectorstores(
-        index_name, "ElasticKeywordsSearch", embeddings
-    )
+    esvectore_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=knowledge)
 
     if esvectore_client:
         res = esvectore_client.client.delete_by_query(
-            index=index_name, body={"query": {"terms": {"metadata.file_id": file_ids}}}
+            index=knowledge.index_name, body={"query": {"terms": {"metadata.file_id": file_ids}}}
         )
     logger.info(f"act=delete_es  res={res}")
     return True

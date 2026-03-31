@@ -1,9 +1,8 @@
 import json
 from typing import Any
 
-from bisheng.interface.initialize.loading import instantiate_vectorstore
-from bisheng.interface.vector_store.custom import MilvusWithPermissionCheck
-from bisheng.user.domain.models.user import UserDao
+from bisheng.core.vectorstore.multi_retriever import MultiRetriever
+from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.workflow.nodes.base import BaseNode
 from bisheng_langchain.chains.retrieval.retrieval_chain import RetrievalChain
 
@@ -15,7 +14,7 @@ class QARetrieverNode(BaseNode):
 
         # Initialize input
         self._user_question = self.node_params.get('user_question', '')
-        self._qa_knowledge_id = self.node_params.get('qa_knowledge_id', [])
+        self._qa_knowledge_id = [one.get("key") for one in self.node_params.get('qa_knowledge_id', []) if one]
         self._score = self.node_params.get('score', 0.6)
 
         # Inisialisasiretriever, Running Initialization
@@ -24,22 +23,29 @@ class QARetrieverNode(BaseNode):
     def _init_retriever(self):
         if self._retriever:
             return
-        # Vector database client initialization, currently usingMilvus, more rational use of more generic factory methods
-        params = {}
-        params['search_kwargs'] = {'k': 1, 'score_threshold': self._score}
-        params['search_type'] = 'similarity_score_threshold'
-        params['collection_name'] = self._qa_knowledge_id  # [{"key":"", "label":""}]
-        params['user_name'] = UserDao.get_user(self.user_id).user_name
-        params['_is_check_auth'] = False
-        knowledge_retriever = instantiate_vectorstore(
-            node_type='MilvusWithPermissionCheck',
-            class_object=MilvusWithPermissionCheck,
-            params=params,
+
+        knowledge_vector_list = KnowledgeRag.get_multi_knowledge_vectorstore_sync(self.user_id,
+                                                                                  knowledge_ids=self._qa_knowledge_id,
+                                                                                  check_auth=False,
+                                                                                  user_name=self.user_info.user_name,
+                                                                                  include_es=False)
+        all_milvus = []
+        all_milvus_filter = []
+        for knowledge_id, vectorstore_info in knowledge_vector_list.items():
+            milvus_vectorstore = vectorstore_info.get("milvus")
+            all_milvus.append(milvus_vectorstore)
+            all_milvus_filter.append({"k": 1, "param": {"ef": 110}, "score_threshold": self._score})
+
+        multi_milvus_retriever = MultiRetriever(
+            vectors=all_milvus,
+            search_kwargs=all_milvus_filter,
+            finally_k=100
         )
 
-        self._retriever = RetrievalChain(retriever=knowledge_retriever)
+        self._retriever = RetrievalChain(retriever=multi_milvus_retriever)
 
     def _run(self, unique_id: str):
+        self.init_user_info()
         self._init_retriever()
         question = self.get_other_node_variable(self._user_question)
         result = self._retriever.invoke({'query': question})

@@ -140,28 +140,28 @@ export default function ParameterComponent({
 
   // custom 组件 reload
   const handleReloadCustom = (code) => {
-    captureAndAlertRequestErrorHoc(reloadCustom(code)).then(res => {
-      if (res) {
-        reactFlowInstance.setNodes((nds) =>
-          nds.map((nd) => {
-            if (nd.id === data.id) {
-              let newNode = cloneDeep(nd);
-              newNode.data.node = res
-              return newNode;
-            }
-            return nd
-          })
-        )
-        // 清理线
-        setTimeout(() => {
-          const edges = cleanEdges(
-            reactFlowInstance.getNodes(),
-            reactFlowInstance.getEdges()
-          )
-          reactFlowInstance.setEdges(edges)
-        }, 60);
-      }
-    })
+    // captureAndAlertRequestErrorHoc(reloadCustom(code)).then(res => {
+    //   if (res) {
+    //     reactFlowInstance.setNodes((nds) =>
+    //       nds.map((nd) => {
+    //         if (nd.id === data.id) {
+    //           let newNode = cloneDeep(nd);
+    //           newNode.data.node = res
+    //           return newNode;
+    //         }
+    //         return nd
+    //       })
+    //     )
+    //     // 清理线
+    //     setTimeout(() => {
+    //       const edges = cleanEdges(
+    //         reactFlowInstance.getNodes(),
+    //         reactFlowInstance.getEdges()
+    //       )
+    //       reactFlowInstance.setEdges(edges)
+    //     }, 60);
+    //   }
+    // })
   }
 
   useEffect(() => {
