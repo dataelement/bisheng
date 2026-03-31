@@ -16,6 +16,11 @@ import store from '~/store';
 import { cn } from '~/utils';
 import { UserPopMenu } from './UserPopMenu';
 
+// Module-level storage for the last visited path per sidebar section.
+// Updated synchronously during MainLayout's render so that Sidebar
+// always reads the latest value in the same render cycle.
+const lastSectionPaths: Record<string, string> = {};
+
 interface SidebarItemProps {
   icon: React.ReactNode;
   to: string;
@@ -52,31 +57,35 @@ function Sidebar() {
   const showSubscriptionTab = plugins ? plugins.includes("subscription") : true;
   const showKnowledgeSpaceTab = plugins ? plugins.includes("knowledge_space") : true;
 
-  // --- 高亮逻辑定义 ---
+  // --- Sidebar link definitions with dynamic `to` for KeepAlive restoration ---
   const links = useMemo(() => [
     {
-      to: '/c/new',
+      section: 'home',
+      to: lastSectionPaths.home || '/c/new',
       icon: <HomeIcon />,
-      isActive: /^\/(c|linsight)(\/|$)/.test(pathname)
+      isActive: /^\/(c|linsight)(\/|$)/.test(pathname),
     },
     {
-      to: '/apps',
+      section: 'apps',
+      to: lastSectionPaths.apps || '/apps',
       icon: <GlobeIcon />,
-      isActive: matchPath('/app/:id/:fid/:type', pathname) !== null || pathname.startsWith('/apps')
+      isActive: matchPath('/app/:id/:fid/:type', pathname) !== null || pathname.startsWith('/apps'),
     },
     {
-      to: '/channel',
+      section: 'channel',
+      to: lastSectionPaths.channel || '/channel',
       icon: <LinkIcon />,
-      isActive: pathname.startsWith('/channel')
+      isActive: pathname.startsWith('/channel'),
     },
     {
-      to: '/knowledge',
+      section: 'knowledge',
+      to: lastSectionPaths.knowledge || '/knowledge',
       icon: <BookOpenIcon />,
-      isActive: pathname.startsWith('/knowledge')
+      isActive: pathname.startsWith('/knowledge'),
     },
   ].filter((l) => {
-    if (l.to === "/channel") return showSubscriptionTab;
-    if (l.to === "/knowledge") return showKnowledgeSpaceTab;
+    if (l.section === 'channel') return showSubscriptionTab;
+    if (l.section === 'knowledge') return showKnowledgeSpaceTab;
     return true;
   }), [pathname, showSubscriptionTab, showKnowledgeSpaceTab]);
 
@@ -99,7 +108,7 @@ function Sidebar() {
         <div className="flex flex-col gap-4 items-center">
           {links.map(link => (
             <SidebarItem
-              key={link.to}
+              key={link.section}
               to={link.to}
               icon={link.icon}
               active={link.isActive}
@@ -153,11 +162,20 @@ export default function MainLayout() {
     return null;
   }
 
+  // Track last visited path per sidebar section.
+  // Runs synchronously before Sidebar renders in the same cycle.
+  if (/^\/(c|linsight)(\/|$)/.test(pathname))       lastSectionPaths.home = pathname;
+  else if (/^\/(apps|app)(\/|$)/.test(pathname))     lastSectionPaths.apps = pathname;
+  else if (/^\/channel(\/|$)/.test(pathname))        lastSectionPaths.channel = pathname;
+  else if (pathname.startsWith('/knowledge'))          lastSectionPaths.knowledge = pathname;
+
+  // Each sidebar tab gets its own KeepAlive cache key so switching
+  // between tabs triggers cache/restore instead of re-rendering.
   const cacheKey = (() => {
-    if (/^\/(c|linsight|apps)(\/|$)/.test(pathname)) return 'home_tab';
-    if (/^\/(channel|app|chat\/[^/]+\/[^/]+\/[^/]+)(\/|$)/.test(pathname)) return 'app_tab';
-    if (pathname.startsWith('/subscription')) return 'subscription_tab';
-    if (pathname.startsWith('/knowledge')) return 'knowledge_tab';
+    if (/^\/(c|linsight)(\/|$)/.test(pathname)) return 'chat_tab';
+    if (/^\/(apps|app)(\/|$)/.test(pathname))   return 'apps_tab';
+    if (/^\/channel(\/|$)/.test(pathname))      return 'channel_tab';
+    if (pathname.startsWith('/knowledge'))        return 'knowledge_tab';
     return 'other';
   })();
 

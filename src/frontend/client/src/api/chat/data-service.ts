@@ -741,7 +741,7 @@ export const listConversations = (
         "resendFiles": true,
         "tags": [],
         "title": conv.name || conv.flow_name,
-        "updatedAt": conv.create_time,
+        "updatedAt": conv.update_time,
         "user": conv.user_id,
         "__v": 0,
         "_id": conv.chat_id,
