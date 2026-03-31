@@ -1485,6 +1485,7 @@
     "upload_failed": "Upload failed",
     "upload_feature_dev": "Upload file feature is under development",
     "upload_file": "Upload file",
+    "upload_success_count": "{{0}} file(s) uploaded successfully",
     "uploading": "Uploading...",
     "uploading_status": "Uploading",
     "users_count": "users",

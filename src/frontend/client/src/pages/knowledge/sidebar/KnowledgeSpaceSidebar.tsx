@@ -51,14 +51,14 @@ export function KnowledgeSpaceSidebar({
     const queryClient = useQueryClient();
 
     // Fetch "my created" space list — re-fetched whenever sort changes
-    const { data: createdSpaces = [] } = useQuery({
+    const { data: createdSpaces = [], isLoading: isCreatedLoading } = useQuery({
         queryKey: ["knowledgeSpaces", "mine", createdSortBy],
         queryFn: () => getMineSpacesApi({ order_by: createdSortBy }),
         placeholderData: (prev) => prev,
     });
 
     // Fetch "joined" space list
-    const { data: joinedSpaces = [] } = useQuery({
+    const { data: joinedSpaces = [], isLoading: isJoinedLoading } = useQuery({
         queryKey: ["knowledgeSpaces", "joined", joinedSortBy],
         queryFn: () => getJoinedSpacesApi({ order_by: joinedSortBy }),
         placeholderData: (prev) => prev,
@@ -82,13 +82,16 @@ export function KnowledgeSpaceSidebar({
     // Auto-select first space when no space is active (mirrors ChannelSidebar)
     useEffect(() => {
         if (!activeSpaceId) {
+            // Wait for both to finish initial loading to guarantee priorities
+            if (isCreatedLoading || isJoinedLoading) return;
+
             if (createdSpaces.length > 0) {
                 onSpaceSelect(createdSpaces[0]);
             } else if (joinedSpaces.length > 0) {
                 onSpaceSelect(joinedSpaces[0]);
             }
         }
-    }, [activeSpaceId, createdSpaces, onSpaceSelect]);
+    }, [activeSpaceId, createdSpaces, joinedSpaces, isCreatedLoading, isJoinedLoading, onSpaceSelect]);
 
     const toggleSort = (type: "created" | "joined") => {
         if (type === "created") {

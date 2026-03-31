@@ -8,36 +8,43 @@
     <link rel="icon" href="<%- baseUrl %>/assets/bisheng/favicon.ico" />
     <script src="/assets/bisheng/config.js?v=<%= Date.now() %>"></script>
     <%- aceScriptSrc %>
-    <title>loading...</title>
-    <!-- window.APP_CONFIG.baseUrl -->
-    <!-- style -->
-    <script>
-        document.title = window.BRAND_CONFIG.brandName.en
-        
-        fetch('<%- baseUrl %>/api/v1/web/config').then(function (res) {
-            return res.json()
-        }).then(function (res) {
-            console.log('res :>> ', res.data);
-            var styleStr = res.data ? res.data.value : ''
-            var style = styleStr ? JSON.parse(styleStr) : {
-                comp: {},
-                bg: ''
+        <title>loading...</title>
+        <!-- window.APP_CONFIG.baseUrl -->
+        <!-- style -->
+        <script>
+            document.title = window.BRAND_CONFIG.brandName.en
+
+            // Polyfill Object.hasOwn for browsers that do not support ES2022
+            if (!Object.hasOwn) {
+                Object.hasOwn = function (obj, prop) {
+                    return Object.prototype.hasOwnProperty.call(obj, prop);
+                };
             }
-            window.ThemeStyle = style
-            Object.keys(style.comp).forEach(key => {
-                var hsl = style.comp[key]
-                var hslStr = `${hsl.h} ${hsl.s * 100}% ${hsl.l * 100}%`
-                document.documentElement.style.setProperty(key, hslStr);
-            });
-        })
-        // 兼容历史
-        const ln = localStorage.getItem('i18nextLng')
-        if (ln === 'zh') {
-            localStorage.setItem('i18nextLng', 'zh-Hans')
-        } else if (ln === 'en') {
-            localStorage.setItem('i18nextLng', 'en-US')
-        }
-    </script>
+
+            fetch('<%- baseUrl %>/api/v1/web/config').then(function (res) {
+                return res.json()
+            }).then(function (res) {
+                console.log('res :>> ', res.data);
+                var styleStr = res.data ? res.data.value : ''
+                var style = styleStr ? JSON.parse(styleStr) : {
+                    comp: {},
+                    bg: ''
+                }
+                window.ThemeStyle = style
+                Object.keys(style.comp).forEach(key => {
+                    var hsl = style.comp[key]
+                    var hslStr = `${hsl.h} ${hsl.s * 100}% ${hsl.l * 100}%`
+                    document.documentElement.style.setProperty(key, hslStr);
+                });
+            })
+            // 兼容历史
+            const ln = localStorage.getItem('i18nextLng')
+            if (ln === 'zh') {
+                localStorage.setItem('i18nextLng', 'zh-Hans')
+            } else if (ln === 'en') {
+                localStorage.setItem('i18nextLng', 'en-US')
+            }
+        </script>
 </head>
 
 <body id='body' style="width: 100%; height:100%">

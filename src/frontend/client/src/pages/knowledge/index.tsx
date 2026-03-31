@@ -3,6 +3,15 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useUnactivate } from "react-activation";
 import {
+    Button,
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "~/components/ui";
+import {
     KnowledgeSpace,
     SpaceRole,
     VisibilityType,
@@ -244,7 +253,7 @@ export default function Knowledge() {
                     auth_type,
                     is_released,
                 });
-                if (activeSpace?.id === updated.id) setActiveSpace(updated);
+                if (activeSpace?.id === updated.id) setActiveSpace({ ...updated, role: activeSpace.role });
                 queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
                 showToast({ message: localize("com_knowledge.space_updated"), severity: NotificationSeverity.SUCCESS });
             } else {
@@ -471,6 +480,39 @@ export default function Knowledge() {
                     }
                 }}
             />
+
+            {/* Duplicate file overwrite confirmation dialog */}
+            <Dialog
+                open={fileUpload.duplicateFiles.length > 0}
+                onOpenChange={(open) => !open && fileUpload.handleDuplicateSkip()}
+            >
+                <DialogContent className="sm:max-w-[425px]" onPointerDownOutside={(e) => e.preventDefault()}>
+                    <DialogHeader>
+                        <DialogTitle>{localize("com_tools_file_detected")}</DialogTitle>
+                        <DialogDescription>
+                            {localize("com_tools_file_following")}
+                        </DialogDescription>
+                    </DialogHeader>
+                    <ul className="overflow-y-auto max-h-[300px] py-2">
+                        {fileUpload.duplicateFiles.map((entry, idx) => (
+                            <li key={idx} className="py-1 text-sm text-red-500">
+                                {entry.file.name}
+                                {entry.repeatFileName && entry.repeatFileName !== entry.file.name && (
+                                    <span className="text-gray-500">{` → ${entry.repeatFileName}`}</span>
+                                )}
+                            </li>
+                        ))}
+                    </ul>
+                    <DialogFooter>
+                        <Button variant="outline" className="h-8" onClick={fileUpload.handleDuplicateSkip}>
+                            {localize("com_tools_file_not_overwrite")}
+                        </Button>
+                        <Button className="h-8" onClick={fileUpload.handleDuplicateOverwrite}>
+                            {localize("com_tools_file_overwrite")}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

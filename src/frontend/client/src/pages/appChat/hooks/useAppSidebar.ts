@@ -31,9 +31,9 @@ export function useAppSidebar() {
 
   const [loading, setLoading] = useState(false);
 
-  /** Fetch conversation list for the current app */
-  const fetchConversations = useCallback(async () => {
-    if (!flowId) return;
+  /** Fetch conversation list for the current app and return it. */
+  const fetchConversations = useCallback(async (): Promise<AppConversation[]> => {
+    if (!flowId) return [];
     setLoading(true);
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- API untyped
@@ -51,24 +51,18 @@ export function useAppSidebar() {
       });
       setConversations(list);
 
-      // Auto-select the most recent conversation when the current
-      // conversationId doesn't match any existing conversation
-      // (e.g. freshly opened from app center with a new UUID).
-      if (list.length > 0 && conversationId && !list.some(c => c.id === conversationId)) {
-        const latest = list[0];
-        navigate(`/app/${latest.id}/${latest.flowId}/${latest.flowType}`, { replace: true });
-      }
-
       // Notify when no conversation history exists for this app
       if (list.length === 0) {
         showToastRef.current?.({ message: '历史会话已删除', severity: NotificationSeverity.ERROR });
       }
+      return list;
     } catch {
       console.error('Failed to fetch app conversations');
+      return [];
     } finally {
       setLoading(false);
     }
-  }, [flowId, flowType, conversationId, navigate, setConversations]);
+  }, [flowId, flowType, setConversations]);
 
   /** Grouped conversations by time */
   const groups: ConversationGroup[] = groupConversationsByTime(conversations);
@@ -77,8 +71,18 @@ export function useAppSidebar() {
   const createNewChat = useCallback(() => {
     if (!flowId || !flowType) return;
     const chatId = generateUUID(32);
+    // Prepend a "New Chat" placeholder so the sidebar shows it immediately
+    // and the auto-select guard won't redirect away from it.
+    setConversations((prev) => [{
+      id: chatId,
+      title: 'New Chat',
+      flowId: flowId,
+      flowType: Number(flowType),
+      updatedAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+    }, ...prev]);
     navigate(`/app/${chatId}/${flowId}/${flowType}`);
-  }, [flowId, flowType, navigate]);
+  }, [flowId, flowType, navigate, setConversations]);
 
   /** Switch to a specific conversation */
   const switchConversation = useCallback(
@@ -105,9 +109,28 @@ export function useAppSidebar() {
     }
   }, [flowId, flowType, showToast]);
 
-  // Auto-fetch on mount or flowId change
+  // Guard: auto-select runs only once per flowId (on initial mount).
+  // This prevents re-triggering when the user creates a new chat or switches conversations.
+  const hasAutoSelectedRef = useRef<string | null>(null);
+
+  // Auto-fetch on mount or flowId change, with one-time auto-select
   useEffect(() => {
-    fetchConversations();
+    fetchConversations().then((list) => {
+      // Skip if auto-select already ran for this flowId
+      if (hasAutoSelectedRef.current === flowId) return;
+      hasAutoSelectedRef.current = flowId!;
+
+      // Auto-select the most recent conversation when the current
+      // conversationId doesn't match any existing conversation
+      // (e.g. freshly opened from app center with a generated UUID).
+      if (list.length > 0 && conversationId && !list.some(c => c.id === conversationId)) {
+        const latest = list[0];
+        navigate(`/app/${latest.id}/${latest.flowId}/${latest.flowType}`, { replace: true });
+      }
+    });
+    // Only re-run when fetchConversations identity changes (i.e. flowId changes).
+    // conversationId is intentionally excluded to prevent re-fetch on every navigation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchConversations]);
 
   return {

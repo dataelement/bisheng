@@ -1404,6 +1404,7 @@
     "upload_failed": "アップロードに失敗しました",
     "upload_feature_dev": "ファイルアップロード機能は開発中です",
     "upload_file": "ファイルのアップロード",
+    "upload_success_count": "{{0}} ファイルが正常にアップロードされました",
     "uploading": "アップロード中...",
     "uploading_status": "アップロード中",
     "users_count": "ユーザー",

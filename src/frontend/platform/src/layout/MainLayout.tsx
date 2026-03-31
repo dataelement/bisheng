@@ -117,7 +117,7 @@ export default function MainLayout() {
                     </div>
                     <div className="flex items-center h-7 my-4">
                         {/* @ts-ignore */}
-                        <img className="h-7 w-7 rounded-2xl mr-4" src={__APP_ENV__.BASE_URL + '/assets/user.png'} alt="" />
+                        <img className="h-7 w-7 rounded-2xl mr-4" src={__APP_ENV__.BASE_URL + (user.avatar || '/assets/user.png')} alt="" />
                         <SelectHover
                             triagger={
                                 <span className="leading-8 text-[14px] mr-8 max-w-40 cursor-pointer text-ellipsis overflow-hidden whitespace-nowrap">

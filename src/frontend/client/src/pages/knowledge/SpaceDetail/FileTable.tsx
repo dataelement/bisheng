@@ -40,7 +40,7 @@ import { useLocalize } from "~/hooks";
 const COLUMN_CONFIG = {
     checkbox: { minWidth: 48, initialWidth: 48 },
     name: { minWidth: 140, initialWidth: 280 },
-    fileType: { minWidth: 80, initialWidth: 100 },
+    fileType: { minWidth: 100, initialWidth: 120 },
     size: { minWidth: 80, initialWidth: 120 },
     tags: { minWidth: 140, initialWidth: 200 },
     updateTime: { minWidth: 140, initialWidth: 180 },
@@ -306,14 +306,16 @@ function FileTableHeader({
             <TableRow className="hover:bg-transparent border-none">
                 {/* 复选框列 — 左侧固定 */}
                 <TableHead
-                    className="text-center p-0 sticky left-0 z-20 bg-[#f7f8fa] flex items-center justify-center"
+                    className="text-center p-0 sticky left-0 z-20 bg-[#f7f8fa]"
                     style={{ width: columnWidths.checkbox, minWidth: columnWidths.checkbox, maxWidth: columnWidths.checkbox }}
                 >
-                    <Checkbox
-                        className="border-gray-400 data-[state=checked]:border-primary"
-                        checked={isIndeterminate ? "indeterminate" : isAllSelected}
-                        onCheckedChange={onSelectAll}
-                    />
+                    <div className="flex items-center justify-center h-full">
+                        <Checkbox
+                            className="border-gray-400 data-[state=checked]:border-primary"
+                            checked={isIndeterminate ? "indeterminate" : isAllSelected}
+                            onCheckedChange={onSelectAll}
+                        />
+                    </div>
                 </TableHead>
 
                 {/* 文件名 — 左侧固定 */}
@@ -383,6 +385,9 @@ function FileTableHeader({
                         <ResizeHandle columnKey="status" onResizeStart={onResizeStart} />
                     </TableHead>
                 )}
+
+                {/* 占位空列，吸收多余由于 minWidth:100% 产生的宽度，防止所有固定宽度的列被等比例拉伸 */}
+                <TableHead className="p-0 border-none pointer-events-none" />
 
                 {/* 操作 */}
                 <TableHead
@@ -701,6 +706,9 @@ function FileRow({
                     }
                 </TableCell>
             )}
+
+            {/* 占位空列 */}
+            <TableCell className="p-0 border-none pointer-events-none" />
 
             {/* 操作 */}
             <TableCell
