@@ -19,6 +19,7 @@ from bisheng.message.domain.schemas.message_schema import (
     TabTypeEnum, MessageContentItem,
 )
 from bisheng.message.domain.services.approval_handler import ApprovalHandler
+from bisheng.database.models.user_group import UserGroupDao
 from bisheng.user.domain.models.user import UserDao
 
 logger = logging.getLogger(__name__)
@@ -114,12 +115,16 @@ class MessageService:
             users = await UserDao.aget_user_by_ids(sender_ids)
             sender_map = {u.user_id: u.user_name for u in users}
 
-        # 6. Build response
+        # 6. Batch query group names for users referenced in message content
+        content_user_ids = self._extract_content_user_ids(messages)
+        user_group_name_map = await self._build_user_group_name_map(content_user_ids)
+
+        # 7. Build response
         items = []
         for msg in messages:
             items.append(MessageItemResponse(
                 id=msg.id,
-                content=msg.content,
+                content=self._enrich_message_content_with_group_names(msg.content, user_group_name_map),
                 sender=msg.sender,
                 sender_name=sender_map.get(msg.sender),
                 message_type=msg.message_type.value,
@@ -132,6 +137,64 @@ class MessageService:
             ))
 
         return MessagePageResponse(data=items, total=total)
+
+    @staticmethod
+    def _extract_content_user_ids(messages: List[InboxMessage]) -> List[int]:
+        """Extract distinct user IDs from content items with type=user."""
+        user_ids: set[int] = set()
+        for message in messages:
+            for item in message.content or []:
+                if item.get('type') != 'user':
+                    continue
+
+                metadata = item.get('metadata') or {}
+                user_id = metadata.get('user_id')
+                if isinstance(user_id, int):
+                    user_ids.add(user_id)
+
+        return list(user_ids)
+
+    @staticmethod
+    async def _build_user_group_name_map(user_ids: List[int]) -> Dict[int, List[str]]:
+        """Build a map from user_id to the user's group names."""
+        if not user_ids:
+            return {}
+
+        user_groups_map = await UserGroupDao.aget_user_groups_batch(user_ids)
+        return {
+            user_id: [group.group_name for group in groups]
+            for user_id, groups in user_groups_map.items()
+        }
+
+    @staticmethod
+    def _enrich_message_content_with_group_names(
+            content: List[Dict[str, Any]],
+            user_group_name_map: Dict[int, List[str]],
+    ) -> List[Dict[str, Any]]:
+        """Attach group_names into metadata for content items with type=user."""
+        enriched_content = []
+        for item in content or []:
+            if item.get('type') != 'user':
+                enriched_content.append(item)
+                continue
+
+            metadata = item.get('metadata')
+            if not isinstance(metadata, dict):
+                enriched_content.append(item)
+                continue
+
+            user_id = metadata.get('user_id')
+            if not isinstance(user_id, int):
+                enriched_content.append(item)
+                continue
+
+            new_item = dict(item)
+            new_metadata = dict(metadata)
+            new_metadata['group_names'] = user_group_name_map.get(user_id, [])
+            new_item['metadata'] = new_metadata
+            enriched_content.append(new_item)
+
+        return enriched_content
 
     async def get_unread_count(self, login_user: UserPayload) -> UnreadCountResponse:
         """Get unread message counts grouped by type."""

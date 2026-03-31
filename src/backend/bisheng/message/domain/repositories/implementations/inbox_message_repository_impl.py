@@ -1,7 +1,7 @@
 import logging
 from typing import List, Optional
 
-from sqlalchemy import func, or_, JSON
+from sqlalchemy import JSON, Text, cast, func
 from sqlmodel import select, col
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -23,6 +23,11 @@ class InboxMessageRepositoryImpl(BaseRepositoryImpl[InboxMessage, int], InboxMes
         return query.where(
             func.json_contains(InboxMessage.receiver, str(user_id))
         )
+
+    def _apply_content_keyword_filter(self, query, keyword: str):
+        """Apply LIKE filter on JSON content by casting it to text."""
+        like_pattern = f'%{keyword}%'
+        return query.where(cast(InboxMessage.content, Text).like(like_pattern))
 
     async def find_messages_by_receiver(
         self,
@@ -48,11 +53,7 @@ class InboxMessageRepositoryImpl(BaseRepositoryImpl[InboxMessage, int], InboxMes
             query = query.where(InboxMessage.status == status)
 
         if keyword:
-            like_pattern = f'%{keyword}%'
-            # Search in JSON content field - use raw SQL cast for JSON search
-            query = query.where(
-                func.cast(InboxMessage.content, func.text()).like(like_pattern)
-            )
+            query = self._apply_content_keyword_filter(query, keyword)
 
         # Filter only unread messages by excluding read message IDs
         if only_unread and read_message_ids:
@@ -92,10 +93,7 @@ class InboxMessageRepositoryImpl(BaseRepositoryImpl[InboxMessage, int], InboxMes
             query = query.where(InboxMessage.status == status)
 
         if keyword:
-            like_pattern = f'%{keyword}%'
-            query = query.where(
-                func.cast(InboxMessage.content, func.text()).like(like_pattern)
-            )
+            query = self._apply_content_keyword_filter(query, keyword)
 
         if only_unread and read_message_ids:
             query = query.where(col(InboxMessage.id).notin_(read_message_ids))

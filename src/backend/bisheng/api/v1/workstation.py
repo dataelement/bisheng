@@ -319,7 +319,7 @@ async def gen_title(conversationId: str = Body(..., description='', embed=True),
 
     messages = await MessageSessionDao.async_get_one(conversationId)
 
-    return resp_200(data={'title': messages.flow_name if messages else 'New Chat'})
+    return resp_200(data={'title': messages.name if messages else 'New Chat'})
 
 
 @router.get('/messages/{conversationId}')
