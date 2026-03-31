@@ -31,9 +31,9 @@ class CreateChannelRequest(BaseModel):
 class UpdateChannelRequest(BaseModel):
     name: Optional[str] = Field(None, description='Channel Name')
     description: Optional[str] = Field(None, description='Channel Description/Brief')
-    source_list: Optional[List[str]] = Field(default_factory=list, description='Data Source List')
+    source_list: Optional[List[str]] = Field(default=None, description='Data Source List')
     visibility: Optional[ChannelVisibilityEnum] = Field(None, description='Channel Visibility')
-    filter_rules: Optional[List[ChannelFilterRules]] = Field(default_factory=list, description='Filter Conditions')
+    filter_rules: Optional[List[ChannelFilterRules]] = Field(default=None, description='Filter Conditions')
     is_released: Optional[bool] = Field(None, description='Whether the channel is released')
 
 
