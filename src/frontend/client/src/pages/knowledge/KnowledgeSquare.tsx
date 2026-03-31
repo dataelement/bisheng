@@ -4,7 +4,7 @@ import { Input } from "~/components/ui/Input";
 import { Button } from "~/components/ui/Button";
 import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
-import { getSquareSpacesApi, subscribeSpaceApi, type KnowledgeSpace, VisibilityType } from "~/api/knowledge";
+import { getJoinedSpacesApi, getSquareSpacesApi, subscribeSpaceApi, type KnowledgeSpace, VisibilityType } from "~/api/knowledge";
 import { useLocalize } from "~/hooks";
 import KnowledgeSquareCard from "./KnowledgeSquareCard";
 
@@ -32,6 +32,8 @@ export default function KnowledgeSquare({
     onPreviewSpace,
     statusOverride,
 }: KnowledgeSquareProps) {
+    const MAX_JOINED_SPACES = 50;
+
     const { showToast } = useToastContext();
     const localize = useLocalize();
 
@@ -69,9 +71,11 @@ export default function KnowledgeSquare({
                 if (nextPage === 1) setLoading(true);
                 else setLoadingMore(true);
 
+                const keyword = searchQuery.trim();
                 const res = await getSquareSpacesApi({
                     page: nextPage,
                     page_size: PAGE_SIZE,
+                    ...(keyword ? { keyword } : {}),
                 });
 
                 const list = (res.data || []) as KnowledgeSpace[];
@@ -85,7 +89,7 @@ export default function KnowledgeSquare({
                 else setLoadingMore(false);
             }
         },
-        [PAGE_SIZE]
+        [PAGE_SIZE, searchQuery]
     );
 
     const applySearchLengthLimit = (raw: string) => {
@@ -150,6 +154,20 @@ export default function KnowledgeSquare({
         const currentStatus = (space.squareStatus as SquareSpaceStatus) || "join";
         if (currentStatus !== "join") return;
         if (joiningId) return;
+
+        // Join/apply upper limit (includes followed + pending applications)
+        try {
+            const joinedSpaces = await getJoinedSpacesApi();
+            if (joinedSpaces.length >= MAX_JOINED_SPACES) {
+                showToast({
+                    message: localize("com_knowledge.join_space_limit_reached_50"),
+                    severity: NotificationSeverity.WARNING,
+                });
+                return;
+            }
+        } catch {
+            // If the limit check fails, keep the existing behavior instead of blocking.
+        }
 
         setJoiningId(space.id);
         const prevSpaces = spaces;

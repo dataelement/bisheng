@@ -14,6 +14,7 @@ import {
     addArticleToKnowledgeApi,
     FileType,
 } from "~/api/knowledge";
+import { ChannelNotebookOneIcon } from "~/components/icons/channels";
 
 // ─── Types ─────────────────────────────────────────────────────────────
 
@@ -190,11 +191,7 @@ function TreeNode({
                 {/* Icon */}
                 {node.type === "space"
                     ?
-                    <img
-                        className="size-[14px] object-contain opacity-90"
-                        src={`${__APP_ENV__.BASE_URL}/assets/channel/notebook-one.svg`}
-                        alt="empty"
-                    />
+                    <ChannelNotebookOneIcon className="size-[14px] object-contain opacity-90" />
                     : <FolderClosedIcon className={`shrink-0 size-3.5 ${isSelected ? "text-primary" : "text-[#4e5969]"}`} />
                 }
 
@@ -494,7 +491,7 @@ export function AddToKnowledgeModal({ open, onOpenChange, articleId }: AddToKnow
 
     return (
         <Dialog open={open} onOpenChange={handleOpenChange}>
-            <DialogContent className="w-[600px] max-w-[90vw] p-0 gap-0 overflow-hidden rounded-xl" close={false}>
+            <DialogContent className="w-[600px] max-w-[90vw] p-0 gap-0 overflow-hidden rounded-xl">
                 {/* Header */}
                 <DialogHeader className="px-6 pt-3 pb-3">
                     <DialogTitle className="font-semibold text-gray-800 leading-6">{localize("com_subscription.add_to_knowledge_space")}</DialogTitle>

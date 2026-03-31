@@ -25,6 +25,7 @@ import useAiChat from "~/hooks/useAiChat";
 import useChannelChat from "~/hooks/useChannelChat";
 import useFileChat from "~/hooks/useFileChat";
 import { useConfirm } from "~/Providers";
+import { ChannelClearIcon } from "~/components/icons/channels";
 
 interface AiAssistantPanelProps {
     onClose: () => void;
@@ -125,11 +126,7 @@ export function AiAssistantPanel({
                                     className="text-gray-400 p-0.5 group relative w-5 h-5"
                                     onClick={handleClearConversation}
                                 >
-                                    <img
-                                        className="size-3.5"
-                                        src={`${__APP_ENV__.BASE_URL}/assets/channel/clear.svg`}
-                                        alt=""
-                                    />
+                                    <ChannelClearIcon className="size-3.5" />
                                 </Button>
                             </TooltipTrigger>
                             <TooltipContent>
@@ -168,6 +165,7 @@ export function AiAssistantPanel({
                 disabled={isSimpleMode ? false : !bsConfig?.models?.length}
                 placeholder={localize("com_subscription.input_question_placeholder")}
                 isStreaming={isStreaming}
+                onScrollToBottom={() => { }}
                 modelOptions={isSimpleMode ? undefined : bsConfig?.models}
                 modelValue={isSimpleMode ? undefined : chatModel.id}
                 onModelChange={isSimpleMode ? undefined : (val) => {

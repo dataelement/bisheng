@@ -96,7 +96,10 @@ export interface KnowledgeSpace {
     isFollowed?: boolean;
     isPending?: boolean;
     // join | joined | pending
-    squareStatus?: "join" | "joined" | "pending" | "rejected";
+    squareStatus?: "join" | "joined" | "pending";
+
+    /** Optional subscription status (e.g. "subscribed") from detail APIs */
+    subscriptionStatus?: string;
 }
 
 /** Space tag entity used by tagging UI */
@@ -251,6 +254,8 @@ function mapSpace(raw: RawKnowledgeSpace): KnowledgeSpace {
         isReleased: raw.is_released ?? false,
         isPending: raw.is_pending ?? false,
         isFollowed: raw.is_followed ?? false,
+        // Some detail endpoints may carry subscription_status; keep it if present.
+        subscriptionStatus: (raw as any).subscription_status,
     };
 }
 
@@ -454,6 +459,7 @@ export async function getSquareSpacesApi(params?: {
     sort_by?: string;
     page?: number;
     page_size?: number;
+    keyword?: string;
 }): Promise<{ data: KnowledgeSpace[]; total: number }> {
     const effectiveSort = params?.sort_by ?? params?.order_by;
     const res = await request.get<ApiResponse<any>>(`/api/v1/knowledge/space/square`, {
@@ -624,10 +630,18 @@ export async function updateSpaceApi(
  */
 export async function getSpaceInfoApi(space_id: string): Promise<KnowledgeSpace> {
     if (!space_id) throw new Error("space_id is required");
-    const res = await request.get<ApiResponse<RawKnowledgeSpace>>(
+    const res: any = await request.get<ApiResponse<RawKnowledgeSpace>>(
         `/api/v1/knowledge/space/${space_id}/info`
     );
-    return mapSpace(res.data);
+    const statusCode = res?.status_code ?? res?.code;
+    if (statusCode && statusCode !== 200) {
+        throw new Error(res?.status_message || res?.message || "getSpaceInfoApi failed");
+    }
+    const raw = res?.data;
+    if (!raw || raw?.id === undefined || raw?.id === null) {
+        throw new Error("getSpaceInfoApi: missing data");
+    }
+    return mapSpace(raw);
 }
 
 /**

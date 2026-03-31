@@ -1,4 +1,5 @@
 import { ArrowLeftRightIcon, ChevronDown } from "lucide-react";
+import { ChannelExchangeFourIcon } from "~/components/icons/channels";
 
 interface SectionHeaderProps {
     title: string;
@@ -17,7 +18,7 @@ export function SectionHeader({ title, collapsed, onToggle, sortText, onSort }: 
             </button>
             <button onClick={onSort} className="flex items-center gap-1 text-[12px] text-[#86909c] hover:text-[#4e5969]">
                 {sortText}
-                <img src={`${__APP_ENV__.BASE_URL}/assets/channel/exchange-four.svg`} alt="" />
+                <ChannelExchangeFourIcon className="w-4 h-4" />
             </button>
         </div>
     );

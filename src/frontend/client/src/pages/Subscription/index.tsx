@@ -83,6 +83,17 @@ export default function Subscription() {
 
                 if (cancelled) return;
 
+                // Share link guard: if the channel has become private (or otherwise inaccessible),
+                // show toast and redirect to channel square.
+                if (detail?.visibility === "private") {
+                    showToast({
+                        message: localize("com_subscription.channel_invalid_or_inaccessible"),
+                        severity: NotificationSeverity.WARNING,
+                    });
+                    navigate("/channel?square=1", { replace: true });
+                    return;
+                }
+
                 // If the current user is the channel creator, skip the preview drawer
                 // and navigate directly to the channel detail view.
                 const isCreator =

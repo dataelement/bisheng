@@ -6,7 +6,16 @@ import { Button } from "~/components/ui/Button";
 import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
 import { FileCard } from "./SpaceDetail/FileCard";
-import { KnowledgeFile, KnowledgeSpace, SpaceRole, VisibilityType, getSpaceChildrenApi, getSpaceInfoApi, subscribeSpaceApi } from "~/api/knowledge";
+import {
+    KnowledgeFile,
+    KnowledgeSpace,
+    SpaceRole,
+    VisibilityType,
+    getJoinedSpacesApi,
+    getSpaceChildrenApi,
+    getSpaceInfoApi,
+    subscribeSpaceApi
+} from "~/api/knowledge";
 import { useLocalize } from "~/hooks";
 
 interface KnowledgeSpacePreviewDrawerProps {
@@ -25,8 +34,11 @@ export function KnowledgeSpacePreviewDrawer({
 }: KnowledgeSpacePreviewDrawerProps) {
     const localize = useLocalize();
     const { showToast } = useToastContext();
+    const MAX_JOINED_SPACES = 50;
+
     const [space, setSpace] = useState<KnowledgeSpace | null>(null);
     const [status, setStatus] = useState<"none" | "joined" | "pending">("none");
+    const [subscribing, setSubscribing] = useState(false);
     const [filesPreview, setFilesPreview] = useState<KnowledgeFile[]>([]);
     const [childrenPage, setChildrenPage] = useState(1);
     const [childrenTotal, setChildrenTotal] = useState(0);
@@ -67,11 +79,9 @@ export function KnowledgeSpacePreviewDrawer({
             });
     }, [open, spaceId]);
 
-    // Load file preview list for public spaces
+    // Load file preview list for spaces that are visible to the current user
     useEffect(() => {
-        if (!space) return;
-
-        if (space.visibility !== VisibilityType.PUBLIC) {
+        if (!space || !canViewFiles) {
             setFilesPreview([]);
             setChildrenTotal(0);
             setChildrenPage(1);
@@ -101,8 +111,7 @@ export function KnowledgeSpacePreviewDrawer({
     }, [space?.id, space?.visibility, currentParentId]);
 
     const loadMoreChildren = async () => {
-        if (!space) return;
-        if (space.visibility !== VisibilityType.PUBLIC) return;
+        if (!space || !canViewFiles) return;
         if (loadingChildrenMore) return;
         if (filesPreview.length >= childrenTotal) return;
 
@@ -132,14 +141,34 @@ export function KnowledgeSpacePreviewDrawer({
     };
 
     const isPublic = space?.visibility === VisibilityType.PUBLIC;
+    const canViewFiles =
+        !!space &&
+        (space.visibility === VisibilityType.PUBLIC ||
+            (space.visibility === VisibilityType.APPROVAL && space.subscriptionStatus === "subscribed"));
 
     const handleClickAction = () => {
         if (!space) return;
 
         if (status === "joined" || status === "pending") return;
+        if (subscribing) return;
 
         (async () => {
+            setSubscribing(true);
             try {
+                // Join/apply upper limit (includes followed + pending applications)
+                try {
+                    const joinedSpaces = await getJoinedSpacesApi();
+                    if (joinedSpaces.length >= MAX_JOINED_SPACES) {
+                        showToast({
+                            message: localize("com_knowledge.join_space_limit_reached_50"),
+                            severity: NotificationSeverity.WARNING,
+                        });
+                        return;
+                    }
+                } catch {
+                    // If the limit check fails, fall back to existing behavior.
+                }
+
                 await subscribeSpaceApi(space.id);
                 if (isPublic) {
                     setStatus("joined");
@@ -153,6 +182,9 @@ export function KnowledgeSpacePreviewDrawer({
             } catch {
                 showToast({ message: localize("com_knowledge.operation_failed_retry"), severity: NotificationSeverity.ERROR });
             }
+            finally {
+                setSubscribing(false);
+            }
         })();
     };
 
@@ -160,8 +192,8 @@ export function KnowledgeSpacePreviewDrawer({
         // 仅把“订阅/申请”改成“加入”；“已订阅/申请中”保持原文案
         if (status === "joined") return { label: localize("com_knowledge.subscribed"), variant: "secondary" as const, disabled: true };
         if (status === "pending") return { label: localize("com_knowledge.applying"), variant: "secondary" as const, disabled: true };
-        if (isPublic) return { label: localize("com_knowledge.join"), variant: "default" as const, disabled: false };
-        return { label: localize("com_knowledge.join"), variant: "outline" as const, disabled: false };
+        if (isPublic) return { label: localize("com_knowledge.join"), variant: "default" as const, disabled: subscribing };
+        return { label: localize("com_knowledge.join"), variant: "outline" as const, disabled: subscribing };
     };
 
     const btn = getButtonConfig();
@@ -237,7 +269,7 @@ export function KnowledgeSpacePreviewDrawer({
                                 }
                             }}
                         >
-                            {isPublic ? (
+                            {canViewFiles ? (
                                 <div className="space-y-2">
                                     <div className="mb-1 text-sm text-[#4E5969] flex items-center gap-2 flex-wrap">
                                         <button
@@ -301,7 +333,7 @@ export function KnowledgeSpacePreviewDrawer({
                                             {localize("com_knowledge.no_more_content")}</div>
                                     )}
                                 </div>
-                            ) : (
+                            ) : space?.visibility === VisibilityType.APPROVAL ? (
                                 <div className="flex flex-col items-center justify-center h-full min-h-[360px]">
                                     <img
                                         className="size-[140px] object-contain mb-4"
@@ -309,9 +341,10 @@ export function KnowledgeSpacePreviewDrawer({
                                         alt="Locked"
                                     />
                                     <div className="text-[#1d2129] text-[14px]">
-                                        {localize("com_knowledge.space_view_requires_approval")}</div>
+                                        {localize("com_knowledge.space_view_requires_approval")}
+                                    </div>
                                 </div>
-                            )}
+                            ) : null}
                         </div>
                     </>
                 )}

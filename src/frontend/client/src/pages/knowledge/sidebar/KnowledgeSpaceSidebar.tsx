@@ -13,8 +13,7 @@ import KnowledgeSpaceItem from "./KnowledgeSpaceItem";
 import { SectionHeader } from "./SectionHeader";
 import { useSpaceActions } from "../hooks/useSpaceActions";
 import { useLocalize } from "~/hooks";
-
-const KNOWLEDGE_SQUARE_ICON = `${__APP_ENV__.BASE_URL}/assets/channel/blocksArrows.svg`;
+import { ChannelBlocksArrowsIcon } from "~/components/icons/channels";
 
 interface KnowledgeSpaceSidebarProps {
     activeSpaceId?: string;
@@ -142,7 +141,7 @@ export function KnowledgeSpaceSidebar({
                                 {localize("com_knowledge.create")}
                             </Button>
                             <Button variant="secondary" onClick={() => onKnowledgeSquare?.()} className="flex-1 h-8 text-[13px] text-[#212121] bg-[#F7F7F7] hover:bg-[#E5E6EB] border-none gap-1">
-                                <img src={KNOWLEDGE_SQUARE_ICON} alt="" className="size-4" />
+                                <ChannelBlocksArrowsIcon className="size-4" />
                                 {localize("com_knowledge.go_to_square")}
                             </Button>
                         </div>

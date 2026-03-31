@@ -5,11 +5,10 @@ import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
 import cn from "~/utils/cn";
 import { generateUUID } from "~/utils";
+import { ChannelMinusIcon, ChannelPlusIcon } from "~/components/icons/channels";
 
 const MAX_KEYWORDS_LEN = 200;
 const MAX_CONDITIONS_TOTAL = 20;
-const PLUS_ICON_SRC = `${__APP_ENV__.BASE_URL}/assets/channel/plus.svg`;
-const MINUS_ICON_SRC = `${__APP_ENV__.BASE_URL}/assets/channel/minus.svg`;
 
 export type FilterRelation = "and" | "or";
 
@@ -202,7 +201,7 @@ export function FilterConditionEditor({
                     className="flex items-center justify-center p-1.5 text-[#86909C] transition-colors w-8"
                     title={localize("com_subscription.add_condition")}
                 >
-                    <img src={PLUS_ICON_SRC} alt="" className="w-4 h-4" />
+                    <ChannelPlusIcon className="w-4 h-4" />
                 </button>
             </div>
         );
@@ -281,7 +280,7 @@ export function FilterConditionEditor({
                                         className="absolute left-14 bottom-1 flex items-center justify-center w-4 h-4 text-[#86909C] bg-white transition-colors"
                                         title={localize("com_subscription.add_condition_under_current_relation")}
                                     >
-                                        <img src={PLUS_ICON_SRC} alt="" className="w-4 h-4" />
+                                        <ChannelPlusIcon className="w-4 h-4" />
                                     </button>
                                 )}
                             </>
@@ -357,7 +356,7 @@ export function FilterConditionEditor({
                                                 className="w-4 h-4 flex items-center justify-center text-[#86909C] transition-colors flex-shrink-0"
                                                 title={localize("com_subscription.add_condition_under_current_relation")}
                                             >
-                                                <img src={PLUS_ICON_SRC} alt="" className="w-4 h-4" />
+                                                <ChannelPlusIcon className="w-4 h-4" />
                                             </button>
                                         )}
                                         {!(
@@ -377,7 +376,7 @@ export function FilterConditionEditor({
                                                     className="w-4 h-4 flex items-center justify-center text-[#86909C] hover:text-[#F53F3F] transition-colors flex-shrink-0"
                                                     title={localize("com_subscription.delete_this_condition")}
                                                 >
-                                                    <img src={MINUS_ICON_SRC} alt="" className="w-4 h-4" />
+                                                    <ChannelMinusIcon className="w-4 h-4" />
                                                 </button>
                                             )}
                                     </div>
@@ -397,7 +396,7 @@ export function FilterConditionEditor({
                         className="flex items-center justify-center w-4 h-4 text-[#165DFF] transition-colors"
                         title={localize("com_subscription.add_condition")}
                     >
-                        <img src={PLUS_ICON_SRC} alt="" className="w-4 h-4" />
+                        <ChannelPlusIcon className="w-4 h-4" />
                     </button>
                 </div>
             )}

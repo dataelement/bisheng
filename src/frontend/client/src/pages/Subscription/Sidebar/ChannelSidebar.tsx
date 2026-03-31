@@ -12,11 +12,10 @@ import {
     getChannelsApi,
 } from "~/api/channels";
 import { Button } from "~/components/ui/Button";
+import { ChannelBlocksArrowsIcon } from "~/components/icons/channels";
 import ChannelItem from "./ChannelItem";
 import { SectionHeader } from "./SectionHeader";
 import { useChannelActions } from "../hooks/useChannelActions";
-
-const CHANNEL_SQUARE_ICON = `${__APP_ENV__.BASE_URL}/assets/channel/blocksArrows.svg`;
 
 interface ChannelSidebarProps {
     activeChannelId?: string;
@@ -152,7 +151,7 @@ export function ChannelSidebar({
                                 <Plus className="size-4" />{localize("com_subscription.create")}
                             </Button>
                             <Button variant="secondary" onClick={onChannelSquare} className="flex-1 h-8 text-[13px] bg-[#F2F3F5] hover:bg-[#E5E6EB] border-none gap-1">
-                                <img src={CHANNEL_SQUARE_ICON} alt="" className="size-4" />
+                                <ChannelBlocksArrowsIcon className="size-4" />
                                 {localize("com_subscription.go_to_square")}
                             </Button>
                         </div>
@@ -238,4 +237,4 @@ export function ChannelSidebar({
             </div>
         </div>
     );
-}
+};

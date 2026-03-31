@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useUnactivate } from "react-activation";
 import {
     KnowledgeSpace,
@@ -43,6 +43,7 @@ export default function Knowledge() {
 
     const { showToast } = useToastContext();
     const navigate = useNavigate();
+    const location = useLocation();
     const queryClient = useQueryClient();
     const { spaceId: previewSpaceId } = useParams<{ spaceId?: string }>();
     const [previewDrawerOpen, setPreviewDrawerOpen] = useState(false);
@@ -91,6 +92,61 @@ export default function Knowledge() {
         if (previewSpaceId) {
             setPreviewDrawerOpen(true);
         }
+    }, [previewSpaceId]);
+
+    // If navigation requests the knowledge square (e.g. via share-link error), open it.
+    useEffect(() => {
+        const params = new URLSearchParams(location.search);
+        if (params.get("square") === "1") {
+            setShowKnowledgeSquare(true);
+        }
+    }, [location.search]);
+
+    // Share link guard: if /knowledge/share/:spaceId points to an invalid/private space,
+    // or a space whose join policy changed (approval -> public), show toast and redirect to square.
+    useEffect(() => {
+        if (!previewSpaceId) return;
+        let cancelled = false;
+        (async () => {
+            try {
+                const info = await getSpaceInfoApi(previewSpaceId);
+                if (cancelled) return;
+
+                // If the space is now private/inaccessible, treat as invalid for share links.
+                if (info.visibility === VisibilityType.PRIVATE) {
+                    showToast({
+                        message: localize("com_knowledge.space_invalid_or_deleted"),
+                        severity: NotificationSeverity.WARNING,
+                    });
+                    setPreviewDrawerOpen(false);
+                    navigate("/knowledge?square=1", { replace: true });
+                    return;
+                }
+
+                // Space changed from approval to public while user had a pending application.
+                // Product expectation: toast + redirect to square page.
+                if (info.visibility === VisibilityType.PUBLIC && info.isPending) {
+                    showToast({
+                        message: localize("com_knowledge.space_became_public_go_square"),
+                        severity: NotificationSeverity.WARNING,
+                    });
+                    setPreviewDrawerOpen(false);
+                    navigate("/knowledge?square=1", { replace: true });
+                    return;
+                }
+            } catch {
+                if (cancelled) return;
+                showToast({
+                    message: localize("com_knowledge.space_invalid_or_deleted"),
+                    severity: NotificationSeverity.WARNING,
+                });
+                setPreviewDrawerOpen(false);
+                navigate("/knowledge?square=1", { replace: true });
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
     }, [previewSpaceId]);
 
     // ─── Space actions ──────────────────────────────────────────────────

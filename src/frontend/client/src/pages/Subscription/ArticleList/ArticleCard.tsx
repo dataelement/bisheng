@@ -9,6 +9,7 @@ import { NotificationSeverity } from "~/common";
 import { copyText } from "~/utils";
 import { AddSpaceIcon, ShareOutlineIcon } from "~/components/icons";
 import { AddToKnowledgeModal } from "../Article/AddToKnowledgeModal";
+import { ChannelQuoteIcon } from "~/components/icons/channels";
 
 interface ArticleCardProps {
     article: Article;
@@ -76,11 +77,7 @@ export function ArticleCard({ article, onSelect, isSelected, searchQuery }: Arti
 
                     {/* 正文预览 - 增加蓝色引号 */}
                     <div className="relative pt-4 pl-3">
-                        <img
-                            className="absolute left-0 top-1 mt-[-2px] h-5 w-5"
-                            src={`${__APP_ENV__.BASE_URL}/assets/channel/quote.svg`}
-                            alt="quote"
-                        />
+                        <ChannelQuoteIcon className="absolute left-0 top-1 mt-[-2px] h-5 w-5" />
                         <p className={`text-sm line-clamp-1 [&_em]:not-italic [&_em]:bg-[#FFBF00]/20 [&_em]:font-bold ${article.isRead ? "text-gray-400" : "text-gray-500"
                             }`}>
                             {highlightContent

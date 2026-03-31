@@ -18,10 +18,11 @@ import {
 } from "~/components/ui/DropdownMenu";
 import { useConfirm, useToastContext } from "~/Providers";
 import ClosedIcon from "~/components/ui/icon/ClosedIcon";
-
-const CHANNEL_ICON_DEFAULT = `${__APP_ENV__.BASE_URL}/assets/channel/application.svg`;
-const CHANNEL_ICON_ACTIVE = `${__APP_ENV__.BASE_URL}/assets/channel/appeffect.svg`;
-const CHANNEL_PIN_ICON = `${__APP_ENV__.BASE_URL}/assets/channel/pin.svg`;
+import {
+    ChannelApplicationIcon,
+    ChannelAppeffectIcon,
+    ChannelPinIcon,
+} from "~/components/icons/channels";
 
 interface ChannelItemProps {
     channel: Channel;
@@ -80,11 +81,11 @@ export default function ChannelItem({
             <div className="flex items-center gap-1 flex-1 min-w-0">
                 {/* 左侧图标保持不变 */}
                 <div className={`flex-shrink-0 flex items-center justify-center size-5 rounded-md ${isActive ? "bg-white border border-[#165dff]/20 shadow-sm" : ""}`}>
-                    <img
-                        src={isActive ? CHANNEL_ICON_ACTIVE : CHANNEL_ICON_DEFAULT}
-                        alt=""
-                        className="size-3.5"
-                    />
+                    {isActive ? (
+                        <ChannelAppeffectIcon className="size-3.5" />
+                    ) : (
+                        <ChannelApplicationIcon className="size-3.5" />
+                    )}
                 </div>
 
                 {isEditing ? (
@@ -106,7 +107,7 @@ export default function ChannelItem({
                             {channel.name}
                         </span>
                         {channel.isPinned && (
-                            <img src={CHANNEL_PIN_ICON} alt="" className="w-[14px] h-[14px] flex-shrink-0" />
+                            <ChannelPinIcon className="w-[14px] h-[14px] flex-shrink-0" />
                         )}
                     </div>
                 )}

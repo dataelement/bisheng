@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { X, Search, Trash2, Check, XIcon } from "lucide-react";
+import { Search, Trash2, Check, XIcon } from "lucide-react";
 import { Dialog, DialogContent } from "~/components/ui/Dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "~/components/ui/Tabs";
 import { Button } from "~/components/ui/Button";
@@ -18,10 +18,21 @@ import {
 import { useNavigate } from "react-router-dom";
 import { cn } from "~/utils";
 
-
 interface NotificationsDialogProps {
     open?: boolean;
     onOpenChange?: (open: boolean) => void;
+}
+
+const PAGE_SIZE = 20;
+
+function formatTimeZhCN(createdAt: string) {
+    return new Date(createdAt).toLocaleString("zh-CN", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+    });
 }
 
 export function NotificationsDialog({ open = false, onOpenChange }: NotificationsDialogProps) {
@@ -29,6 +40,7 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
     const [notifications, setNotifications] = useState<MessageItem[]>([]);
     const [searchQuery, setSearchQuery] = useState("");
     const [onlyUnread, setOnlyUnread] = useState(false);
+    const isReadAllSelected = !onlyUnread;
     const [showSearch, setShowSearch] = useState(false);
     const [hasSearched, setHasSearched] = useState(false);
     const searchInputRef = useRef<HTMLInputElement | null>(null);
@@ -69,7 +81,6 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
         actionCode === "approved_knowledge_space" ||
         actionCode === "rejected_knowledge_space";
 
-    // 统计未读数量
     const unreadCounts = useMemo(() => {
         const allUnread = notifications.filter(isVisuallyUnread).length;
         const requestUnread = notifications.filter(
@@ -80,7 +91,6 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
 
     const formatBadge = (n: number) => (n > 99 ? "99+" : String(n));
 
-    // 加载消息列表
     const loadNotifications = async (nextPage: number, append: boolean) => {
         setLoading(true);
         try {
@@ -90,11 +100,11 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                 only_unread: onlyUnread,
                 keyword: searchQuery || undefined,
                 page: nextPage,
-                page_size: 20,
+                page_size: PAGE_SIZE,
             });
 
             setNotifications(prev => append ? [...prev, ...data] : data);
-            setHasMore((nextPage * 20) < total);
+            setHasMore((nextPage * PAGE_SIZE) < total);
             setPage(nextPage);
         } catch (error) {
             console.error("Failed to load notifications:", error);
@@ -103,7 +113,6 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
         }
     };
 
-    // 初始加载和条件变化时重新加载
     useEffect(() => {
         if (open) {
             setPage(1);
@@ -112,7 +121,6 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
         }
     }, [open, activeTab, onlyUnread, searchQuery]);
 
-    // 清理 timers/observers
     useEffect(() => {
         if (!open) return;
         return () => {
@@ -125,76 +133,49 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
         };
     }, [open]);
 
-    // 过滤和排序消息
     const filteredNotifications = useMemo(() => {
         let filtered = notifications;
-
-        // 按时间倒序排列
         filtered = [...filtered].sort((a, b) =>
             new Date(b.create_time).getTime() - new Date(a.create_time).getTime()
         );
-
-        // 仅看未读：只显示黑色字体的消息
         if (onlyUnread) {
             filtered = filtered.filter(isVisuallyUnread);
         }
-
         return filtered;
     }, [notifications, onlyUnread]);
 
-    // 请求类消息分组
     const requestGroups = useMemo(() => {
         if (activeTab !== "request") return { pending: [], approved: [] };
-
         const pending = filteredNotifications.filter(
             n => isApprovalMessageType(n.message_type, n.action_code) && isPendingApprovalStatus(n.status)
         );
         const approved = filteredNotifications.filter(
             n => isApprovalMessageType(n.message_type, n.action_code) && !isPendingApprovalStatus(n.status)
         );
-
         return { pending, approved };
     }, [activeTab, filteredNotifications]);
 
-    // 全部已读
     const handleMarkAllAsRead = async () => {
         try {
             await markAllMessageReadApi();
             setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
-            showToast({
-                message: "已全部标记为已读",
-                severity: NotificationSeverity.SUCCESS
-            });
-        } catch (error) {
-            showToast({
-                message: "操作失败",
-                severity: NotificationSeverity.INFO
-            });
+            showToast({ message: "已全部标记为已读", severity: NotificationSeverity.SUCCESS });
+        } catch {
+            showToast({ message: "操作失败", severity: NotificationSeverity.INFO });
         }
     };
 
-    // 删除消息
     const handleDelete = async (id: string) => {
         try {
             await deleteMessageApi(Number(id));
             setNotifications(prev => prev.filter(n => String(n.id) !== id));
-            showToast({
-                message: "消息已删除",
-                severity: NotificationSeverity.SUCCESS
-            });
-        } catch (error) {
-            showToast({
-                message: "删除失败",
-                severity: NotificationSeverity.INFO
-            });
+            showToast({ message: "消息已删除", severity: NotificationSeverity.SUCCESS });
+        } catch {
+            showToast({ message: "删除失败", severity: NotificationSeverity.INFO });
         }
     };
 
-    // 审批操作
-    const handleApproval = async (
-        notificationId: string,
-        status: "approved" | "rejected"
-    ) => {
+    const handleApproval = async (notificationId: string, status: "approved" | "rejected") => {
         try {
             await approveMessageApi({
                 message_id: Number(notificationId),
@@ -208,16 +189,9 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                         : n
                 )
             );
-
-            showToast({
-                message: "操作成功",
-                severity: NotificationSeverity.SUCCESS
-            });
-        } catch (error) {
-            showToast({
-                message: "操作失败",
-                severity: NotificationSeverity.INFO
-            });
+            showToast({ message: "操作成功", severity: NotificationSeverity.SUCCESS });
+        } catch {
+            showToast({ message: "操作失败", severity: NotificationSeverity.INFO });
         }
     };
 
@@ -225,14 +199,12 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
         const parts = Array.isArray(notification.content) ? notification.content : [];
         const businessUrlPart = parts.find((c: any) => c?.type === "business_url") as any;
 
-        // Prefer business_url.content, e.g. "--测试一下" -> "测试一下"
         const rawBusinessName = typeof businessUrlPart?.content === "string" ? businessUrlPart.content.trim() : "";
         if (rawBusinessName) {
             const cleaned = rawBusinessName.replace(/^[-—\s]+/, "").trim();
             if (cleaned) return cleaned;
         }
 
-        // Prefer explicit business/title part in content payload
         const businessPart = parts.find((c: any) =>
             c?.type === "business" ||
             c?.type === "business_name" ||
@@ -240,6 +212,7 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
             c?.type === "title"
         ) as any;
         if (businessPart?.content) return String(businessPart.content);
+
         const data = businessUrlPart?.metadata?.data || {};
         const fromMeta =
             data?.business_name ??
@@ -247,7 +220,6 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
             data?.space_name ??
             data?.name;
         if (fromMeta) return String(fromMeta);
-
         return "";
     };
 
@@ -259,17 +231,14 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
         return notification.action_code || "";
     };
 
-    // 获取消息文本
     const getNotificationText = (notification: MessageItem) => {
-        const userName = notification.sender_name || "系统";
         const targetName = getTargetName(notification);
-        // Prefer backend content[{type:"system_text"}].content as message enum
         const actionCode = getSystemTextCode(notification);
         const textByActionCode: Record<string, string> = {
             request_channel: `申请订阅你的频道——${targetName}`,
             request_knowledge_space: `申请加入你的知识空间——${targetName}`,
-            approved_channel: `同意了你的订阅频道申请——${targetName}`,
-            rejected_channel: `拒绝了你的订阅频道申请——${targetName}`,
+            approved_channel: `同意了你订阅频道申请——${targetName}`,
+            rejected_channel: `拒绝了你订阅频道申请——${targetName}`,
             approved_knowledge_space: `同意了你加入知识空间申请——${targetName}`,
             rejected_knowledge_space: `拒绝了你加入知识空间申请——${targetName}`,
             assigned_knowledge_space_admin: `将你添加为知识空间的管理员——${targetName}`,
@@ -280,10 +249,9 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
         const showApproval =
             isApprovalMessageType(notification.message_type, notification.action_code) &&
             isPendingApprovalStatus(notification.status);
-        return { text, userName, targetName, showApproval };
+        return { text, targetName, showApproval };
     };
 
-    // Parse target info from business_url content part.
     const getNotificationTarget = (notification: MessageItem): { targetType: "channel" | "space"; targetId: string } | null => {
         const part = notification.content?.find((c) => c.type === "business_url");
         const meta = part?.metadata as any;
@@ -292,7 +260,6 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
         if (businessType === "channel_id" && data?.channel_id) {
             return { targetType: "channel", targetId: String(data.channel_id) };
         }
-        // Some backends return business_type as "channel" + business_id
         if (businessType === "channel") {
             const channelId = data?.channel_id ?? data?.business_id ?? (notification as any)?.business_id;
             if (channelId !== undefined && channelId !== null && String(channelId) !== "") {
@@ -302,14 +269,12 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
         if (businessType === "space_id" && data?.space_id) {
             return { targetType: "space", targetId: String(data.space_id) };
         }
-        // Some backends return business_type as "space" + business_id
         if (businessType === "space") {
             const spaceId = data?.space_id ?? data?.business_id ?? (notification as any)?.business_id;
             if (spaceId !== undefined && spaceId !== null && String(spaceId) !== "") {
                 return { targetType: "space", targetId: String(spaceId) };
             }
         }
-        // New enum variant from backend: knowledge_space_Id
         if (businessType === "knowledge_space_Id" || businessType === "knowledge_space_id") {
             const knowledgeSpaceId = data?.knowledge_space_Id ?? data?.knowledge_space_id ?? data?.space_id;
             if (knowledgeSpaceId !== undefined && knowledgeSpaceId !== null && String(knowledgeSpaceId) !== "") {
@@ -319,7 +284,11 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
         return null;
     };
 
-    // 渲染消息项
+    const markOneAsRead = (nid: string) => {
+        markMessageReadApi([Number(nid)]).catch(() => { });
+        setNotifications(prev => prev.map(n => String(n.id) === nid ? { ...n, is_read: true } : n));
+    };
+
     const renderNotificationItem = (notification: MessageItem) => {
         const id = String(notification.id);
         const userName = notification.sender_name;
@@ -335,19 +304,17 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
         const isApproved = isApprovedStatus(approvalStatus) || isRejectedStatus(approvalStatus);
         const isSelfApplicationDecision = isSelfApplicationDecisionActionCode(notification.action_code);
         const isNotifyMessage = isNotifyMessageType(notification.message_type);
+
         const showDeleteOnHover =
             !showApproval &&
             !isApprovalMessageType(notification.message_type, notification.action_code) &&
             (isApproved || isDecisionActionCode(notification.action_code));
-        const textColor = !isVisuallyUnread(notification) || isApproved ? "text-[#989898]" : "text-[#1d2129]";
 
-        const markOneAsRead = (nid: string) => {
-            markMessageReadApi([Number(nid)]).catch(() => { });
-            setNotifications(prev => prev.map(n => String(n.id) === nid ? { ...n, is_read: true } : n));
-        };
+        const textColor = !isVisuallyUnread(notification) || isApproved ? "text-[#989898]" : "text-[#1d2129]";
 
         const onRowMouseEnter = () => {
             setHoveredId(id);
+            // 请求类：hover 0.5s 才已读（滚动不触发）
             if (isApprovalMessageType(notification.message_type, notification.action_code) && !notification.is_read) {
                 window.clearTimeout(requestHoverTimersRef.current[id]);
                 requestHoverTimersRef.current[id] = window.setTimeout(() => {
@@ -362,17 +329,48 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
             delete requestHoverTimersRef.current[id];
         };
 
-        // notify / self-decision: always show delete; hover on completed items: show delete
-        const alwaysShowDelete = isSelfApplicationDecision || isNotifyMessage;
-        const showDeleteBtn = alwaysShowDelete || (isHovered && showDeleteOnHover);
+        const rightSlot = (() => {
+            // 通知类：未 hover 显示时间，hover 显示删除按钮（居中）
+            if (isNotifyMessage) {
+                if (!isHovered) return <span className="text-[14px] text-[#999999]">{formatTimeZhCN(createdAt)}</span>;
+                return (
+                    <button
+                        type="button"
+                        onClick={() => handleDelete(id)}
+                        className="flex items-center gap-1 px-3 py-1 text-[12px] text-[#4e5969] bg-white border border-[#e5e6eb] rounded hover:text-[#f53f3f] hover:border-[#f53f3f] transition-colors"
+                        title="删除消息"
+                    >
+                        <Trash2 className="size-3" />
+                        删除消息
+                    </button>
+                );
+            }
+
+            // 其它类型：hover 且满足条件时显示删除按钮，否则显示时间
+            if (isHovered && showDeleteOnHover && !isSelfApplicationDecision) {
+                return (
+                    <button
+                        type="button"
+                        onClick={() => handleDelete(id)}
+                        className="flex items-center gap-1 px-3 py-1 text-[12px] text-[#4e5969] bg-white border border-[#e5e6eb] rounded hover:text-[#f53f3f] hover:border-[#f53f3f] transition-colors"
+                        title="删除消息"
+                    >
+                        <Trash2 className="size-3" />
+                        删除消息
+                    </button>
+                );
+            }
+            return <span className="text-[14px] text-[#999999]">{formatTimeZhCN(createdAt)}</span>;
+        })();
 
         return (
             <div
                 key={id}
-                className="flex flex-col gap-2 px-3 py-6 hover:bg-[#f7f8fa] transition-colors duration-[350ms] ease-in-out"
+                className="relative px-6 py-4 border-b border-[#F2F3F5] hover:bg-[#f7f8fa] transition-colors"
                 onMouseEnter={onRowMouseEnter}
                 onMouseLeave={onRowMouseLeave}
                 ref={(node) => {
+                    // 通知类：进入可视区域停留>0.5s 自动已读
                     if (!node) return;
                     if (notification.message_type !== "notification") return;
                     if (notification.is_read) return;
@@ -403,145 +401,124 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                     observersRef.current[id] = obs;
                 }}
             >
-                {/* Row 1: Avatar + message text + right slot — all vertically centered on one line */}
-                <div className="flex items-center gap-3">
+                <div className="flex items-start gap-3">
                     <Avatar className="size-9 flex-shrink-0">
                         {userAvatar ? <AvatarImage src={userAvatar} alt={userName} /> : null}
                         <AvatarName name={userName} className="text-xs" />
                     </Avatar>
 
-                    {/* Message text */}
-                    <div className={`flex-1 min-w-0 text-[14px] ${textColor} flex items-center gap-1 flex-wrap`}>
-                        <TooltipAnchor
-                            description={userGroup ? `${userName} - ${userGroup}` : userName}
-                            side="top"
-                        >
-                            <span className="font-medium cursor-pointer hover:text-[#165dff] shrink-0">
-                                @{userName}
-                            </span>
-                        </TooltipAnchor>
-                        <span className="min-w-0">
-                            {textPrefix}
-                            {canSplitTarget && (
-                                <span
-                                    className="font-medium cursor-pointer hover:text-[#165dff]"
-                                    onClick={() => {
-                                        const target = getNotificationTarget(notification);
-                                        if (!target) return;
-                                        if (target.targetType === "channel") {
-                                            navigate(`/channel/share/${target.targetId}`);
-                                        } else {
-                                            navigate(`/knowledge/share/${target.targetId}`);
-                                        }
-                                    }}
-                                >
-                                    {targetName}
+                    <div className="flex-1 min-w-0">
+                        <div className="flex items-center min-w-0 whitespace-nowrap min-h-9 text-[14px]">
+                            <TooltipAnchor
+                                description={userGroup ? `${userName} - ${userGroup}` : userName}
+                                side="top"
+                            >
+                                <span className={cn("font-medium cursor-pointer hover:text-[#165dff] shrink-0", textColor)}>
+                                    @{userName}
                                 </span>
-                            )}
-                        </span>
+                            </TooltipAnchor>
+                            <span className="mx-1 shrink-0"> </span>
+                            <span className={cn("min-w-0 overflow-hidden text-ellipsis whitespace-nowrap", textColor)}>
+                                {textPrefix}
+                                {canSplitTarget && (
+                                    <span
+                                        className="font-medium cursor-pointer hover:text-[#165dff]"
+                                        onClick={() => {
+                                            const target = getNotificationTarget(notification);
+                                            if (!target) return;
+                                            if (target.targetType === "channel") {
+                                                navigate(`/channel/share/${target.targetId}`);
+                                            } else {
+                                                navigate(`/knowledge/share/${target.targetId}`);
+                                            }
+                                        }}
+                                    >
+                                        {targetName}
+                                    </span>
+                                )}
+                            </span>
+                        </div>
+
+                        {showApproval ? (
+                            <div className="mt-2 flex items-center justify-end gap-2">
+                                <button
+                                    onClick={() => {
+                                        if (!notification.is_read) markOneAsRead(id);
+                                        handleApproval(id, "rejected");
+                                    }}
+                                    className="flex items-center gap-1 px-3 py-1 text-[12px] text-[#f53f3f] border border-[#F2F3F5] bg-white hover:bg-[#fff2f0] rounded transition-colors"
+                                >
+                                    <XIcon className="size-3" />
+                                    拒绝
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        if (!notification.is_read) markOneAsRead(id);
+                                        handleApproval(id, "approved");
+                                    }}
+                                    className="flex items-center gap-1 px-3 py-1 text-[12px] text-[#00b42a] border border-[#F2F3F5] bg-white hover:bg-[#e8ffea] rounded transition-colors"
+                                >
+                                    <Check className="size-3" />
+                                    接受
+                                </button>
+                            </div>
+                        ) : null}
                     </div>
 
-                    {/* Right slot: fixed h-7 — timestamp by default, delete button on hover */}
-                    <div className="flex-shrink-0 h-7 flex items-center whitespace-nowrap">
-                        {isHovered ? (
-                            <button
-                                type="button"
-                                onClick={() => handleDelete(id)}
-                                className="appearance-none h-7 px-3 inline-flex items-center gap-1.5 text-[14px] text-[#4e5969] bg-white border border-[#e5e6eb] rounded-[6px] hover:text-[#f53f3f] hover:border-[#f53f3f] transition-colors active:translate-y-0"
-                            >
-                                <Trash2 className="size-4" />
-                                删除消息
-                            </button>
-                        ) : (
-                            <span className="text-[14px] text-[#999999]">
-                                {new Date(createdAt).toLocaleString("zh-CN", {
-                                    year: "numeric",
-                                    month: "2-digit",
-                                    day: "2-digit",
-                                    hour: "2-digit",
-                                    minute: "2-digit"
-                                })}
-                            </span>
-                        )}
+                    <div className={cn("flex-shrink-0 whitespace-nowrap", isNotifyMessage ? "self-center" : "self-start")}>
+                        {rightSlot}
                     </div>
                 </div>
 
-                {/* Row 2: approval buttons or status — sits below Row 1, right-aligned */}
-                {showApproval ? (
-                    <div className="flex items-center justify-end gap-2">
-                        <button
-                            type="button"
-                            onClick={() => {
-                                if (!notification.is_read) markOneAsRead(id);
-                                handleApproval(id, "rejected");
-                            }}
-                            className="appearance-none h-7 px-3 inline-flex items-center gap-1.5 text-[14px] text-[#f53f3f] border border-[#F2F3F5] bg-white hover:bg-[#fff2f0] rounded-[6px] transition-colors active:translate-y-0"
-                        >
-                            <XIcon className="size-4" />
-                            拒绝
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => {
-                                if (!notification.is_read) markOneAsRead(id);
-                                handleApproval(id, "approved");
-                            }}
-                            className="appearance-none h-7 px-3 inline-flex items-center gap-1.5 text-[14px] text-[#00b42a] border border-[#F2F3F5] bg-white hover:bg-[#e8ffea] rounded-[6px] transition-colors active:translate-y-0"
-                        >
-                            <Check className="size-4" />
-                            接受
-                        </button>
-                    </div>
-                ) : isApproved && !isSelfApplicationDecision && !isNotifyMessage ? (
-                    <div className="flex justify-end">
-                        {isApprovedStatus(approvalStatus) ? (
-                            <button
-                                type="button"
-                                disabled
-                                className="h-7 px-3 inline-flex items-center gap-1.5 text-[14px] text-[#86909C] border border-[#E5E6EB] bg-[#F7F8FA] rounded-[6px] cursor-default"
-                            >
-                                <Check className="size-4" />
-                                已接受
-                            </button>
-                        ) : (
-                            <button
-                                type="button"
-                                disabled
-                                className="h-7 px-3 inline-flex items-center gap-1.5 text-[14px] text-[#86909C] border border-[#E5E6EB] bg-[#F7F8FA] rounded-[6px] cursor-default"
-                            >
-                                <XIcon className="size-4" />
-                                已拒绝
-                            </button>
-                        )}
-                    </div>
-                ) : null}
+                {/* 自己申请结果：固定展示删除按钮（中间） */}
+                {isSelfApplicationDecision && (
+                    <button
+                        onClick={() => handleDelete(id)}
+                        className="absolute right-6 top-1/2 -translate-y-1/2 flex items-center gap-1 px-3 py-1 text-[12px] text-[#4e5969] bg-white border border-[#e5e6eb] rounded hover:text-[#f53f3f] hover:border-[#f53f3f] transition-colors"
+                        title="删除消息"
+                    >
+                        <Trash2 className="size-3" />
+                        删除消息
+                    </button>
+                )}
             </div>
         );
     };
 
+    const handleListScroll = (el: HTMLDivElement) => {
+        setIsScrolling(true);
+        if (scrollHideTimerRef.current) window.clearTimeout(scrollHideTimerRef.current);
+        scrollHideTimerRef.current = window.setTimeout(() => setIsScrolling(false), 700);
+
+        if (loadingMore || loading || !hasMore) return;
+        const threshold = 80;
+        if (el.scrollTop + el.clientHeight >= el.scrollHeight - threshold) {
+            setLoadingMore(true);
+            loadNotifications(page + 1, true).finally(() => setLoadingMore(false));
+        }
+    };
+
+    const listEmpty = !loading && filteredNotifications.length === 0;
+    const requestEmpty =
+        !loading && requestGroups.pending.length === 0 && requestGroups.approved.length === 0;
+
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="w-[calc(100vw-80px)] max-w-[800px] h-[80vh] max-h-[800px] p-0 gap-0 rounded-2xl shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
-                {/* Single flex container: owns all layout, prevents DialogContent grid gap from interfering */}
                 <div className="flex flex-col h-full overflow-hidden rounded-2xl">
-                    {/* Header: exactly 48px, vertically centered */}
                     <div className="flex items-center justify-between h-12 px-6 flex-shrink-0">
                         <h2 className="text-[16px] font-semibold text-[#1d2129]">消息提醒</h2>
                     </div>
 
-                    {/* Tabs: fills remaining height via flex-1 */}
-                    <Tabs
-                        value={activeTab}
-                        onValueChange={(v) => setActiveTab(v as "all" | "request")}
-                        className="flex-1 flex flex-col min-h-0"
-                    >
-                        {/* Tab bar row */}
-                        <div className="px-6 py-3 flex-shrink-0">
+                    <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "all" | "request")}>
+                        <div className="px-6 pt-4 pb-0">
                             <div className="flex items-center justify-between">
                                 <TabsList className="bg-transparent p-0 gap-2">
                                     <TabsTrigger
                                         value="all"
-                                        className="appearance-none relative min-w-0 h-8 px-4 py-[5px] leading-none rounded-lg text-[14px] border border-transparent shadow-none transition-colors active:translate-y-0 data-[state=active]:gap-2 data-[state=active]:font-medium data-[state=active]:bg-[#E6EDFC] data-[state=active]:border-[#024DE3] data-[state=active]:text-[#024DE3] data-[state=active]:shadow-none data-[state=active]:[backdrop-filter:blur(4px)] data-[state=inactive]:gap-1 data-[state=inactive]:font-normal data-[state=inactive]:text-[#4E5969]"
+                                        className="relative !w-[60px] !min-w-[60px] !h-8 !px-0 !py-0 !rounded-[8px] flex items-center justify-center text-[14px] border border-transparent
+                                        data-[state=active]:bg-[#E6EDFC] data-[state=active]:border-[#E6EDFC] data-[state=active]:text-[#024DE3]
+                                        data-[state=inactive]:text-[#4E5969] data-[state=inactive]:bg-transparent"
                                     >
                                         全部
                                         {unreadCounts.all > 0 && (
@@ -552,7 +529,9 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                                     </TabsTrigger>
                                     <TabsTrigger
                                         value="request"
-                                        className="appearance-none relative min-w-0 h-8 px-4 py-[5px] leading-none rounded-lg text-[14px] border border-transparent shadow-none transition-colors active:translate-y-0 data-[state=active]:gap-2 data-[state=active]:font-medium data-[state=active]:bg-[#E6EDFC] data-[state=active]:border-[#024DE3] data-[state=active]:text-[#024DE3] data-[state=active]:shadow-none data-[state=active]:[backdrop-filter:blur(4px)] data-[state=inactive]:gap-1 data-[state=inactive]:font-normal data-[state=inactive]:text-[#4E5969]"
+                                        className="relative !w-[60px] !min-w-[60px] !h-8 !px-0 !py-0 !rounded-[8px] flex items-center justify-center text-[14px] border border-transparent
+                                        data-[state=active]:bg-[#E6EDFC] data-[state=active]:border-[#E6EDFC] data-[state=active]:text-[#024DE3]
+                                        data-[state=inactive]:text-[#4E5969] data-[state=inactive]:bg-transparent"
                                     >
                                         审批
                                         {unreadCounts.request > 0 && (
@@ -563,9 +542,7 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                                     </TabsTrigger>
                                 </TabsList>
 
-                                {/* Toolbar */}
                                 <div className="flex items-center gap-3">
-                                    {/* Expandable search */}
                                     <div
                                         className={[
                                             "flex items-center h-8 rounded-lg border bg-white overflow-hidden",
@@ -582,10 +559,12 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                                         }}
                                         title={showSearch ? undefined : "搜索"}
                                     >
-                                        <div className={[
-                                            "flex items-center justify-center px-[7px] h-full shrink-0 transition-colors duration-[350ms] ease-in-out",
-                                            showSearch ? "text-[#024DE3]" : "text-[#86909C]",
-                                        ].join(" ")}>
+                                        <div
+                                            className={[
+                                                "flex items-center justify-center px-[7px] h-full shrink-0 transition-colors duration-[350ms] ease-in-out",
+                                                showSearch ? "text-[#024DE3]" : "text-[#86909C]",
+                                            ].join(" ")}
+                                        >
                                             <Search className="size-4" />
                                         </div>
                                         <input
@@ -595,9 +574,7 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                                             value={searchQuery}
                                             onChange={(e) => setSearchQuery(e.target.value)}
                                             onKeyDown={(e) => {
-                                                if (e.key === "Enter" && searchQuery.trim()) {
-                                                    setHasSearched(true);
-                                                }
+                                                if (e.key === "Enter" && searchQuery.trim()) setHasSearched(true);
                                             }}
                                             onBlur={() => {
                                                 if (!searchQuery.trim() || !hasSearched) {
@@ -619,59 +596,46 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                                     <Button
                                         type="button"
                                         variant="outline"
-                                        onClick={() => setOnlyUnread(v => !v)}
+                                        onClick={() => setOnlyUnread((v) => !v)}
                                         className={
                                             onlyUnread
-                                                ? "h-8 px-3 py-0 text-[14px] font-normal leading-none rounded-[6px] border border-[#335CFF] bg-[rgba(51,92,255,0.2)] text-[#335CFF] [backdrop-filter:blur(4px)] hover:bg-[rgba(51,92,255,0.28)] hover:text-[#2236D9] active:translate-y-0"
-                                                : "h-8 px-3 py-0 text-[14px] font-normal leading-none rounded-[6px] text-[#4e5969] border-[#e5e6eb] hover:bg-[#f7f8fa] active:translate-y-0"
+                                                ? "!w-[88px] !h-8 !px-0 text-[14px] !rounded-[8px] bg-[#E6EDFC] border-[#E6EDFC] text-[#024DE3] hover:bg-[#E6EDFC] flex items-center justify-center"
+                                                : "!w-[88px] !h-8 !px-0 text-[14px] !rounded-[8px] bg-white border-[#e5e6eb] text-[#4e5969] hover:bg-[#f7f8fa] flex items-center justify-center"
                                         }
                                     >
                                         仅看未读
                                     </Button>
 
                                     <Button
-                                        onClick={handleMarkAllAsRead}
+                                        onClick={() => {
+                                            setOnlyUnread(false);
+                                            handleMarkAllAsRead();
+                                        }}
                                         variant="outline"
-                                        className="h-8 px-3 py-0 text-[14px] font-normal leading-none rounded-[6px] bg-[#F8F8F8] border-transparent text-[#4e5969] [backdrop-filter:blur(4px)] hover:bg-[#f0f0f0] active:translate-y-0"
+                                        className={
+                                            isReadAllSelected
+                                                ? "!w-[88px] !h-8 !px-0 text-[14px] !rounded-[8px] bg-[#E6EDFC] border-[#E6EDFC] text-[#024DE3] hover:bg-[#E6EDFC] flex items-center justify-center"
+                                                : "!w-[88px] !h-8 !px-0 text-[14px] !rounded-[8px] bg-white border-[#e5e6eb] text-[#4e5969] hover:bg-[#f7f8fa] flex items-center justify-center"
+                                        }
                                     >
-                                        已读全部
+                                        全部已读
                                     </Button>
                                 </div>
                             </div>
                         </div>
 
-                        {/* Message list: fills remaining height */}
                         <div className="flex-1 overflow-hidden min-h-0">
                             <TabsContent forceMount value="all" className="h-full p-0 m-0 data-[state=inactive]:hidden">
                                 <div
                                     ref={listRef}
-                                    className="h-full overflow-y-auto scroll-on-scroll px-6 py-3"
+                                    className="h-full overflow-y-auto scroll-on-scroll"
                                     data-scrolling={isScrolling ? "true" : "false"}
-                                    onScroll={(e) => {
-                                        const el = e.currentTarget;
-                                        setIsScrolling(true);
-                                        if (scrollHideTimerRef.current) {
-                                            window.clearTimeout(scrollHideTimerRef.current);
-                                        }
-                                        scrollHideTimerRef.current = window.setTimeout(() => {
-                                            setIsScrolling(false);
-                                        }, 700);
-                                        if (loadingMore || loading || !hasMore) return;
-                                        const threshold = 80;
-                                        if (el.scrollTop + el.clientHeight >= el.scrollHeight - threshold) {
-                                            setLoadingMore(true);
-                                            loadNotifications(page + 1, true).finally(() => setLoadingMore(false));
-                                        }
-                                    }}
+                                    onScroll={(e) => handleListScroll(e.currentTarget)}
                                 >
                                     {loading ? (
-                                        <div className="flex items-center justify-center h-full text-[#86909c]">
-                                            加载中...
-                                        </div>
-                                    ) : filteredNotifications.length === 0 ? (
-                                        <div className="flex items-center justify-center h-full text-[#86909c]">
-                                            暂无消息
-                                        </div>
+                                        <div className="flex items-center justify-center h-full text-[#86909c]">加载中...</div>
+                                    ) : listEmpty ? (
+                                        <div className="flex items-center justify-center h-full text-[#86909c]">暂无消息</div>
                                     ) : (
                                         <>
                                             <div className="divide-y divide-[#F2F3F5]">
@@ -691,57 +655,33 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                             <TabsContent forceMount value="request" className="h-full p-0 m-0 data-[state=inactive]:hidden">
                                 <div
                                     ref={listRef}
-                                    className="h-full overflow-y-auto scroll-on-scroll px-6 py-3"
+                                    className="h-full overflow-y-auto scroll-on-scroll"
                                     data-scrolling={isScrolling ? "true" : "false"}
-                                    onScroll={(e) => {
-                                        const el = e.currentTarget;
-                                        setIsScrolling(true);
-                                        if (scrollHideTimerRef.current) {
-                                            window.clearTimeout(scrollHideTimerRef.current);
-                                        }
-                                        scrollHideTimerRef.current = window.setTimeout(() => {
-                                            setIsScrolling(false);
-                                        }, 700);
-                                        if (loadingMore || loading || !hasMore) return;
-                                        const threshold = 80;
-                                        if (el.scrollTop + el.clientHeight >= el.scrollHeight - threshold) {
-                                            setLoadingMore(true);
-                                            loadNotifications(page + 1, true).finally(() => setLoadingMore(false));
-                                        }
-                                    }}
+                                    onScroll={(e) => handleListScroll(e.currentTarget)}
                                 >
                                     {loading ? (
-                                        <div className="flex items-center justify-center h-full text-[#86909c]">
-                                            加载中...
-                                        </div>
+                                        <div className="flex items-center justify-center h-full text-[#86909c]">加载中...</div>
+                                    ) : requestEmpty ? (
+                                        <div className="flex items-center justify-center h-full text-[#86909c]">暂无请求</div>
                                     ) : (
                                         <>
-                                            {/* 待审批 */}
                                             {requestGroups.pending.length > 0 && (
                                                 <div className="mb-3">
-                                                    <div className="text-[14px] leading-[22px] text-[#999] font-normal mb-2">待审批</div>
+                                                    <div className="px-6 py-2 text-[12px] text-[#86909c] font-medium">待审批</div>
                                                     <div className="divide-y divide-[#F2F3F5]">
                                                         {requestGroups.pending.map(renderNotificationItem)}
                                                     </div>
                                                 </div>
                                             )}
 
-                                            {/* 已完成 */}
                                             {requestGroups.approved.length > 0 && (
-                                                <div>
-                                                    <div className="text-[14px] leading-[22px] text-[#999] font-normal mb-2">已完成</div>
+                                                <div className="mt-2">
+                                                    <div className="px-6 py-2 text-[12px] text-[#86909c] font-medium">已审批</div>
                                                     <div className="divide-y divide-[#F2F3F5]">
                                                         {requestGroups.approved.map(renderNotificationItem)}
                                                     </div>
                                                 </div>
                                             )}
-
-                                            {requestGroups.pending.length === 0 && requestGroups.approved.length === 0 && (
-                                                <div className="flex items-center justify-center h-full text-[#86909c]">
-                                                    暂无请求
-                                                </div>
-                                            )}
-
                                             {loadingMore && (
                                                 <div className="py-3 text-center text-[12px] text-[#86909c]">加载中...</div>
                                             )}

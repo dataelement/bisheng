@@ -14,7 +14,6 @@ import {
     MoreVertical,
     PencilLineIcon,
     RefreshCw,
-    SortDescIcon,
     Tag, Trash2
 } from "lucide-react";
 import {
@@ -226,7 +225,6 @@ const SortableHeader = ({
     const direction = isActive ? currentSort.direction : "asc";
     const isSticky = stickyLeft !== undefined;
     const isResizable = !NON_RESIZABLE_COLUMNS.includes(columnKey);
-
     return (
         <TableHead
             className={cn(
@@ -246,7 +244,22 @@ const SortableHeader = ({
                 <span className={cn("text-sm font-normal", isActive ? "text-[#1d2129]" : "text-[#4e5969]")}>
                     {children}
                 </span>
-                <SortDescIcon className={`size-4 group-hover:opacity-100 opacity-0 transition-opacity ${isActive ? "opacity-100 text-primary" : ""} ${direction === "asc" ? "rotate-180" : ""}`} />
+                {(() => {
+                    const arrowDir = direction === "asc" ? "up" : "down";
+                    const isActiveSort = isActive;
+                    const src = `${__APP_ENV__.BASE_URL}/assets/channel/sort-amount-${arrowDir}${
+                        isActiveSort ? "-blue" : ""
+                    }.svg`;
+                    return (
+                        <img
+                            className={`size-4 transition-opacity ${
+                                isActiveSort ? "opacity-100" : "opacity-0"
+                            } group-hover:opacity-100`}
+                            src={src}
+                            alt="sort"
+                        />
+                    );
+                })()}
             </div>
             {isResizable && <ResizeHandle columnKey={columnKey} onResizeStart={onResizeStart} />}
             {/* 固定列右侧阴影 */}

@@ -21,6 +21,7 @@ import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
 import { useLocalize } from "~/hooks";
 import { addWebsiteSourceApi, crawlTempSourceApi, getFeedbackTips } from "~/api/channels";
 import type { InformationSource } from "~/api/channels";
+import { ChannelBookIcon, ChannelLoadingIcon, ChannelRightSmallUpIcon } from "~/components/icons/channels";
 
 interface CrawlPreviewDialogProps {
     open: boolean;
@@ -31,7 +32,6 @@ interface CrawlPreviewDialogProps {
 }
 
 type CrawlStatus = "loading" | "success" | "error" | "singlePageWarning";
-const EXTERNAL_LINK_ICON_SRC = `${__APP_ENV__.BASE_URL}/assets/channel/right-small-up.svg`;
 
 export function CrawlPreviewDialog({
     open,
@@ -225,11 +225,7 @@ export function CrawlPreviewDialog({
 
                     {status === "loading" && (
                         <div className="flex-1 flex flex-col items-center justify-center py-12 gap-4">
-                            <img
-                                src={`${__APP_ENV__.BASE_URL}/assets/channel/loading.svg`}
-                                alt=""
-                                className="w-[100px] h-[100px]"
-                            />
+                            <ChannelLoadingIcon className="w-[100px] h-[100px]" />
                             <p className="text-[14px] text-[#4E5969]">
                                 {localize("com_subscription.crawling_waiting") || localize("com_subscription.crawling_please_wait")}
                             </p>
@@ -281,11 +277,7 @@ export function CrawlPreviewDialog({
                                             >
                                                 <span className="mr-2 text-[10px] text-[#C9CDD4] leading-none flex-shrink-0">●</span>
                                                 <span className="truncate">{a.title}</span>
-                                                <img
-                                                    src={EXTERNAL_LINK_ICON_SRC}
-                                                    alt=""
-                                                    className="ml-1 w-4 h-4 opacity-0 group-hover/item:opacity-100 transition-opacity flex-shrink-0"
-                                                />
+                                                <ChannelRightSmallUpIcon className="ml-1 w-4 h-4 opacity-0 group-hover/item:opacity-100 transition-opacity flex-shrink-0" />
                                             </a>
                                         ))}
                                     </div>
@@ -297,11 +289,7 @@ export function CrawlPreviewDialog({
                     {(status === "error" || status === "singlePageWarning") && (
                         <div className="flex-1 rounded border border-[#E5E6EB] min-h-[270px] px-6 py-8 flex flex-col justify-between">
                             <div className="flex-1 flex flex-col items-center justify-center text-center">
-                                <img
-                                    src={`${__APP_ENV__.BASE_URL}/assets/channel/book.svg`}
-                                    alt=""
-                                    className="w-[100px] h-[100px] mb-5"
-                                />
+                                <ChannelBookIcon className="w-[100px] h-[100px] mb-5" />
                                 <p className="text-[14px] text-[#4E5969] leading-6">
                                     {status === "singlePageWarning"
                                         ? <>{localize("com_subscription.detected_as")}<span className="font-medium text-[#1D2129]">{localize("com_subscription.single_article_or_non_list_page")}</span>{localize("com_subscription.please_enter_valid_list_page_url")}</>
