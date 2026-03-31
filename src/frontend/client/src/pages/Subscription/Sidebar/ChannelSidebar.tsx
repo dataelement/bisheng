@@ -49,13 +49,13 @@ export function ChannelSidebar({
 
     const queryClient = useQueryClient();
 
-    const { data: createdChannels = [] } = useQuery({
+    const { data: createdChannels = [], isFetched: createdFetched } = useQuery({
         queryKey: ["channels", "created", createdSortBy],
         queryFn: () => getChannelsApi({ type: "created", sortBy: createdSortBy }),
         placeholderData: (prev) => prev,
     });
 
-    const { data: subscribedChannels = [] } = useQuery({
+    const { data: subscribedChannels = [], isFetched: subscribedFetched } = useQuery({
         queryKey: ["channels", "subscribed", subscribedSortBy],
         queryFn: () => getChannelsApi({ type: "subscribed", sortBy: subscribedSortBy }),
         placeholderData: (prev) => prev,
@@ -76,16 +76,16 @@ export function ChannelSidebar({
         onChannelSelect,
     });
 
-    // Default select first channel
+    // Default select first channel — wait until both queries have completed
     useEffect(() => {
-        if (!activeChannelId) {
+        if (!activeChannelId && createdFetched && subscribedFetched) {
             if (createdChannels.length > 0) {
                 onChannelSelect(createdChannels[0]);
             } else if (subscribedChannels.length > 0) {
                 onChannelSelect(subscribedChannels[0]);
             }
         }
-    }, [activeChannelId, createdChannels, onChannelSelect]);
+    }, [activeChannelId, createdChannels, subscribedChannels, createdFetched, subscribedFetched, onChannelSelect]);
 
     // Notify parent of created channel count changes
     useEffect(() => {

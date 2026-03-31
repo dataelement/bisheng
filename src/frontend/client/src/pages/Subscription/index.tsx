@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useUnactivate } from "react-activation";
+import { useAuthContext } from "~/hooks/AuthContext";
 import {
     Article,
     Channel,
@@ -31,6 +32,7 @@ const MAX_USER_CHANNELS = 10;
 
 export default function Subscription() {
     const localize = useLocalize();
+    const { user } = useAuthContext();
     const { channelId: previewChannelId } = useParams<{ channelId?: string }>();
     const navigate = useNavigate();
     const location = useLocation();
@@ -55,16 +57,41 @@ export default function Subscription() {
 
     // Open preview drawer when channelId route param is present.
     // Prefetch data first to avoid showing a blank loading sheet (esp. private/dissolved channels).
+    // If the current user is the channel creator, skip the drawer and navigate directly.
+    // Wait for user to be loaded so we can reliably check ownership.
     useEffect(() => {
-        if (!previewChannelId) return;
+        if (!previewChannelId || !user) return;
         let cancelled = false;
         (async () => {
             try {
-                await queryClient.prefetchQuery({
+                const detail: any = await queryClient.fetchQuery({
                     queryKey: ["channelPreviewDetail", previewChannelId],
                     queryFn: () => getChannelDetailApi(previewChannelId),
                     staleTime: 0,
                 });
+
+                if (cancelled) return;
+
+                // If the current user is the channel creator, skip the preview drawer
+                // and navigate directly to the channel detail view.
+                const isCreator =
+                    Boolean(user?.username) &&
+                    Boolean(detail?.creator_name) &&
+                    user?.username === detail?.creator_name;
+
+                if (isCreator) {
+                    // Try to find the channel in cached lists and auto-select it
+                    const allChannels = [
+                        ...(queryClient.getQueryData<Channel[]>(["channels", "created", SortType.RECENT_UPDATE]) || []),
+                    ];
+                    const found = allChannels.find(c => c.id === previewChannelId);
+                    if (found) {
+                        setActiveChannel(found);
+                    }
+                    navigate("/channel", { replace: true });
+                    return;
+                }
+
                 await queryClient.prefetchQuery({
                     queryKey: ["channelPreviewArticles", previewChannelId],
                     queryFn: () =>
@@ -89,7 +116,7 @@ export default function Subscription() {
         return () => {
             cancelled = true;
         };
-    }, [previewChannelId]);
+    }, [previewChannelId, user]);
 
     // If navigation requests the channel square (e.g. via share-link error), open it.
     useEffect(() => {
@@ -246,9 +273,9 @@ export default function Subscription() {
                                 alt="empty"
                             />
                             <p className="text-[14px] leading-6 text-[#4E5969]">{localize("com_subscription.no_related_content_please")}<span
-                                    className="ml-1.5 cursor-pointer text-[#165DFF] underline decoration-dashed underline-offset-4 transition-colors hover:text-[#4080FF] active:text-[#0E42D2]"
-                                    onClick={handleCreateChannel}
-                                >{localize("com_subscription.create_channel")}</span>
+                                className="ml-1.5 cursor-pointer text-[#165DFF] underline decoration-dashed underline-offset-4 transition-colors hover:text-[#4080FF] active:text-[#0E42D2]"
+                                onClick={handleCreateChannel}
+                            >{localize("com_subscription.create_channel")}</span>
                             </p>
                         </div>
                     )}
@@ -348,18 +375,6 @@ export default function Subscription() {
                 open={previewDrawerOpen}
                 onOpenChange={handlePreviewDrawerClose}
                 onSubscriptionChanged={bumpChannelSquareList}
-                onNavigateToChannel={(channelId) => {
-                    // Find the channel from cached lists and auto-select it
-                    const allChannels = [
-                        ...(queryClient.getQueryData<Channel[]>(["channels", "created", SortType.RECENT_UPDATE]) || []),
-                        // ...(queryClient.getQueryData<Channel[]>(["channels", "subscribed", SortType.RECENT_UPDATE]) || []),
-                    ];
-                    const found = allChannels.find(c => c.id === channelId);
-                    if (found) {
-                        setActiveChannel(found);
-                    }
-                    navigate("/channel", { replace: true });
-                }}
             />
         </div>
     );

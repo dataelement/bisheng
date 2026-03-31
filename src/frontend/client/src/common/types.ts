@@ -397,6 +397,7 @@ export type TAuthContext = {
   user: t.TUser | undefined;
   token: string | undefined;
   isAuthenticated: boolean;
+  isUserLoading: boolean;
   error: string | undefined;
   login: (data: t.TLoginUser) => void;
   logout: () => void;

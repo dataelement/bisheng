@@ -231,7 +231,7 @@ export function ArticleList({ channel, selectedArticleId, onArticleSelect }: Art
             return a.name.localeCompare(b.name, 'zh-CN');
         });
 
-    console.log('channelDetail :>> ', channelDetail);
+
     return (
         <div className="flex-1 px-4 h-full flex flex-col max-w-[1000px] mx-auto">
             {/* header */}
@@ -239,7 +239,7 @@ export function ArticleList({ channel, selectedArticleId, onArticleSelect }: Art
                 {/* 第一行：频道名称、信息、分享 */}
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1">
-                        <h1 className="">{channel.name}</h1>
+                        <h1 className="">{channelDetail?.name || channel.name}</h1>
                         <Tooltip>
                             <TooltipTrigger>
                                 <Info className="size-4 text-[#86909c]" />
