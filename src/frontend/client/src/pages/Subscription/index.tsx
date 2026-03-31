@@ -64,10 +64,21 @@ export default function Subscription() {
         let cancelled = false;
         (async () => {
             try {
+                // Use validating queryFns that mirror ChannelPreviewDrawer's
+                // own queries — throw on business-level error status_code so
+                // react-query treats them as real failures and we never open
+                // the drawer for dissolved / inaccessible channels.
                 const detail: any = await queryClient.fetchQuery({
                     queryKey: ["channelPreviewDetail", previewChannelId],
-                    queryFn: () => getChannelDetailApi(previewChannelId),
+                    queryFn: async () => {
+                        const res: any = await getChannelDetailApi(previewChannelId);
+                        if ((res?.status_code && res.status_code !== 200) || !res?.id) {
+                            throw new Error("channel_invalid");
+                        }
+                        return res;
+                    },
                     staleTime: 0,
+                    retry: false,
                 });
 
                 if (cancelled) return;
@@ -92,15 +103,23 @@ export default function Subscription() {
                     return;
                 }
 
-                await queryClient.prefetchQuery({
+                // Use fetchQuery (not prefetchQuery) so errors propagate to
+                // the catch block instead of being silently swallowed.
+                await queryClient.fetchQuery({
                     queryKey: ["channelPreviewArticles", previewChannelId],
-                    queryFn: () =>
-                        getArticlesApi({
+                    queryFn: async () => {
+                        const res: any = await getArticlesApi({
                             channelId: previewChannelId,
                             page: 1,
                             pageSize: 10,
-                        }),
+                        });
+                        if (res?.status_code && res.status_code !== 200) {
+                            throw new Error("articles_load_failed");
+                        }
+                        return res;
+                    },
                     staleTime: 0,
+                    retry: false,
                 });
                 if (cancelled) return;
                 setPreviewDrawerOpen(true);

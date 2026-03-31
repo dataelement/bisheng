@@ -1,5 +1,6 @@
 import asyncio
 import tempfile
+from datetime import datetime
 from pathlib import Path
 from typing import List, Optional, Dict, TYPE_CHECKING
 
@@ -12,12 +13,16 @@ from bisheng.common.errcode.knowledge_space import (
     SpaceLimitError, SpaceNotFoundError,
     SpaceFolderNotFoundError, SpaceFolderDepthError, SpaceFolderDuplicateError,
     SpaceFileNotFoundError, SpaceFileExtensionError, SpaceFileNameDuplicateError,
-    SpaceSubscribePrivateError, SpaceAlreadySubscribedError, SpaceSubscribeLimitError,
+    SpaceSubscribePrivateError, SpaceSubscribeLimitError,
     SpacePermissionDeniedError, SpaceTagExistsError, SpaceFileSizeLimitError,
 )
 from bisheng.common.errcode.llm import WorkbenchEmbeddingError
 from bisheng.common.models.space_channel_member import (
-    SpaceChannelMember, SpaceChannelMemberDao, BusinessTypeEnum, UserRoleEnum
+    SpaceChannelMember,
+    SpaceChannelMemberDao,
+    BusinessTypeEnum,
+    UserRoleEnum,
+    MembershipStatusEnum,
 )
 from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.role import RoleDao
@@ -31,7 +36,7 @@ from bisheng.knowledge.domain.models.knowledge_file import (
 from bisheng.knowledge.domain.models.knowledge_space_file import SpaceFileDao
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     KnowledgeSpaceInfoResp, SpaceMemberResponse, SpaceMemberPageResponse,
-    UpdateSpaceMemberRoleRequest, RemoveSpaceMemberRequest
+    UpdateSpaceMemberRoleRequest, RemoveSpaceMemberRequest, SpaceSubscriptionStatusEnum
 )
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
@@ -66,6 +71,47 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
     # Roles with write access to a space
     _WRITE_ROLES = {UserRoleEnum.CREATOR, UserRoleEnum.ADMIN}
+
+    @staticmethod
+    def _resolve_subscription_status(
+            membership: Optional[SpaceChannelMember],
+    ) -> SpaceSubscriptionStatusEnum:
+        if membership is None:
+            return SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED
+        if membership.is_active:
+            return SpaceSubscriptionStatusEnum.SUBSCRIBED
+        if membership.is_pending:
+            return SpaceSubscriptionStatusEnum.PENDING
+        if membership.is_recently_rejected():
+            return SpaceSubscriptionStatusEnum.REJECTED
+        return SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED
+
+    @staticmethod
+    def _resolve_subscription_status_from_fields(
+            status: Optional[str],
+            update_time: Optional[datetime],
+    ) -> SpaceSubscriptionStatusEnum:
+        """Resolve subscription status from raw DB fields (from SQL JOIN result)."""
+        if status is None:
+            return SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED
+        if status == MembershipStatusEnum.ACTIVE:
+            return SpaceSubscriptionStatusEnum.SUBSCRIBED
+        if status == MembershipStatusEnum.PENDING:
+            return SpaceSubscriptionStatusEnum.PENDING
+        if status == MembershipStatusEnum.REJECTED:
+            from bisheng.common.models.space_channel_member import REJECTED_STATUS_DISPLAY_WINDOW
+            if update_time and update_time >= datetime.now() - REJECTED_STATUS_DISPLAY_WINDOW:
+                return SpaceSubscriptionStatusEnum.REJECTED
+        return SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED
+
+    @staticmethod
+    def _apply_subscription_flags(
+            result: KnowledgeSpaceInfoResp,
+            subscription_status: SpaceSubscriptionStatusEnum,
+    ) -> None:
+        result.subscription_status = subscription_status
+        result.is_followed = subscription_status == SpaceSubscriptionStatusEnum.SUBSCRIBED
+        result.is_pending = subscription_status == SpaceSubscriptionStatusEnum.PENDING
 
     async def _require_write_permission(self, space_id: int) -> UserRoleEnum:
         """
@@ -129,6 +175,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             business_type=BusinessTypeEnum.SPACE,
             user_id=self.login_user.user_id,
             user_role=UserRoleEnum.CREATOR,
+            status=MembershipStatusEnum.ACTIVE,
         )
         await SpaceChannelMemberDao.async_insert_member(member)
 
@@ -146,14 +193,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
         else:
             result.user_name = self.login_user.user_name
 
-        result.is_followed = True
+        self._apply_subscription_flags(result, SpaceSubscriptionStatusEnum.SUBSCRIBED)
         if space.user_id != self.login_user.user_id:
             member_info = await SpaceChannelMemberDao.async_find_member(space_id=space.id,
                                                                         user_id=self.login_user.user_id)
-            if not member_info:
-                result.is_followed = False
-            else:
-                result.is_pending = member_info.status == False
+            self._apply_subscription_flags(result, self._resolve_subscription_status(member_info))
 
         result.follower_num = follower_num
         result.file_num = total_file_num
@@ -208,6 +252,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         # When switching to PRIVATE, remove all non-creator members
         if old_auth_type != AuthTypeEnum.PRIVATE and auth_type == AuthTypeEnum.PRIVATE:
             await SpaceChannelMemberDao.async_delete_non_creator_members(space_id)
+        elif old_auth_type == AuthTypeEnum.APPROVAL and auth_type == AuthTypeEnum.PUBLIC:
+            await SpaceChannelMemberDao.async_delete_rejected_members(space_id)
 
         return space
 
@@ -228,10 +274,22 @@ class KnowledgeSpaceService(KnowledgeUtils):
             spcae_config = space_members.get(str(one.id))
             if spcae_config and spcae_config.is_pinned:
                 pinned_res.append(
-                    KnowledgeSpaceInfoResp(**one.model_dump(), is_pinned=True, user_role=UserRoleEnum.CREATOR))
+                    KnowledgeSpaceInfoResp(
+                        **one.model_dump(),
+                        is_pinned=True,
+                        user_role=UserRoleEnum.CREATOR,
+                        subscription_status=SpaceSubscriptionStatusEnum.SUBSCRIBED,
+                        is_followed=True,
+                    ))
             else:
                 not_pinned_res.append(
-                    KnowledgeSpaceInfoResp(**one.model_dump(), is_pinned=False, user_role=UserRoleEnum.CREATOR))
+                    KnowledgeSpaceInfoResp(
+                        **one.model_dump(),
+                        is_pinned=False,
+                        user_role=UserRoleEnum.CREATOR,
+                        subscription_status=SpaceSubscriptionStatusEnum.SUBSCRIBED,
+                        is_followed=True,
+                    ))
         return pinned_res + not_pinned_res
 
     async def get_my_followed_spaces(
@@ -258,10 +316,22 @@ class KnowledgeSpaceService(KnowledgeUtils):
             member_conf = members_map[one.id]
             if member_conf.is_pinned:
                 pinned_spaces.append(
-                    KnowledgeSpaceInfoResp(**one.model_dump(), is_pinned=True, user_role=member_conf.user_role))
+                    KnowledgeSpaceInfoResp(
+                        **one.model_dump(),
+                        is_pinned=True,
+                        user_role=member_conf.user_role,
+                        subscription_status=SpaceSubscriptionStatusEnum.SUBSCRIBED,
+                        is_followed=True,
+                    ))
             else:
                 normal_spaces.append(
-                    KnowledgeSpaceInfoResp(**one.model_dump(), is_pinned=False, user_role=member_conf.user_role))
+                    KnowledgeSpaceInfoResp(
+                        **one.model_dump(),
+                        is_pinned=False,
+                        user_role=member_conf.user_role,
+                        subscription_status=SpaceSubscriptionStatusEnum.SUBSCRIBED,
+                        is_followed=True,
+                    ))
 
         return pinned_spaces + normal_spaces
 
@@ -269,64 +339,74 @@ class KnowledgeSpaceService(KnowledgeUtils):
         return await SpaceChannelMemberDao.pin_space_id(space_id, self.login_user.user_id, is_pinned)
 
     async def get_knowledge_square(
-            self, keyword: str = None, order_by: str = 'update_time', page: int = 1, page_size: int = 20
+            self, keyword: str = None, page: int = 1, page_size: int = 20
     ) -> dict:
         """
         Return PUBLIC/APPROVAL spaces for the Knowledge Square with pagination, sorted by:
         1. Not-joined first (easier to explore)
         2. Already-joined or pending last
-        3. Within each group: sorted by update_time DESC (or caller's order_by)
-        Returns: {"total": int, "page": int, "page_size": int, "data": List[dict]}
+        3. Within each group: sorted by update_time DESC
+        Sorting and pagination are handled at the SQL level for efficiency.
+        Returns: {"total": int, "page": int, "page_size": int, "data": List[KnowledgeSpaceInfoResp]}
         """
-        spaces = await KnowledgeDao.async_get_public_spaces(keyword=keyword, order_by=order_by)
-        if not spaces:
-            return {"total": 0, "page": page, "page_size": page_size, "data": []}
-
-        space_ids_str = [str(s.id) for s in spaces]
-        space_ids_int = [s.id for s in spaces]
-        creator_ids = list({s.user_id for s in spaces if s.user_id})
-
-        # Batch fetch: current-user memberships, creator user info, file counts, subscriber counts
-        all_members, creator_users, success_file_map, subscriber_map = await asyncio.gather(
-            SpaceChannelMemberDao.async_get_all_members_for_spaces(
-                self.login_user.user_id, space_ids_str
+        # 1. SQL-level paginated query with multi-table JOIN
+        rows, total = await asyncio.gather(
+            KnowledgeDao.async_get_public_spaces_paginated(
+                user_id=self.login_user.user_id,
+                keyword=keyword,
+                page=page,
+                page_size=page_size,
             ),
-            UserDao.aget_user_by_ids(creator_ids) if creator_ids else asyncio.coroutine(lambda: [])(),
-            KnowledgeFileDao.async_count_success_files_batch(space_ids_int),
-            SpaceChannelMemberDao.async_count_members_batch(space_ids_str),
+            KnowledgeDao.async_count_public_spaces(keyword=keyword),
         )
 
-        joined_ids = {m.business_id for m in all_members}
-        pending_ids = {m.business_id for m in all_members if not m.status}
+        if not rows:
+            return {"total": 0, "page": page, "page_size": page_size, "data": []}
+
+        # 2. Collect current page space IDs and creator IDs for enrichment
+        space_ids_int = [row[0].id for row in rows]
+        space_ids_str = [str(sid) for sid in space_ids_int]
+        creator_ids = list({row[0].user_id for row in rows if row[0].user_id})
+
+        # 3. Batch fetch creator info and file counts for the current page only
+        creator_users, success_file_map = await asyncio.gather(
+            UserDao.aget_user_by_ids(creator_ids) if creator_ids else asyncio.coroutine(lambda: [])(),
+            KnowledgeFileDao.async_count_success_files_batch(space_ids_int),
+        )
         user_map = {u.user_id: u for u in (creator_users or [])}
 
-        not_joined: list = []
-        already_joined: list = []
-        for s in spaces:
-            sid = str(s.id)
-            creator = user_map.get(s.user_id)
+        # 4. Build response items
+        result_list: list = []
+        for row in rows:
+            space = row[0]
+            user_subscription_status = row[1]
+            user_subscription_update_time = row[2]
+            subscriber_count = row[3]
 
-            (already_joined if sid in joined_ids else not_joined).append(
+            sid = str(space.id)
+            creator = user_map.get(space.user_id)
+
+            subscription_status = self._resolve_subscription_status_from_fields(
+                user_subscription_status, user_subscription_update_time,
+            )
+
+            result_list.append(
                 KnowledgeSpaceInfoResp(
-                    **s.model_dump(),
+                    **space.model_dump(),
                     **{
-                        "space": s,
-                        "is_followed": sid in joined_ids and sid not in pending_ids,
-                        "is_pending": sid in pending_ids,
-                        "user_name": creator.user_name if creator else str(s.user_id),
+                        "space": space,
+                        "is_followed": subscription_status == SpaceSubscriptionStatusEnum.SUBSCRIBED,
+                        "is_pending": subscription_status == SpaceSubscriptionStatusEnum.PENDING,
+                        "subscription_status": subscription_status,
+                        "user_name": creator.user_name if creator else str(space.user_id),
                         "avatar": creator.avatar if creator else None,
-                        "file_num": success_file_map.get(s.id, 0),
-                        "follower_num": subscriber_map.get(sid, 0),
+                        "file_num": success_file_map.get(space.id, 0),
+                        "follower_num": subscriber_count,
                     }
                 )
             )
 
-        sorted_list = not_joined + already_joined
-        total = len(sorted_list)
-        start = (page - 1) * page_size
-        paged = sorted_list[start: start + page_size]
-
-        return {"total": total, "page": page, "page_size": page_size, "data": paged}
+        return {"total": total, "page": page, "page_size": page_size, "data": result_list}
 
     # ──────────────────────────── Members ─────────────────────────────────────
 
@@ -395,7 +475,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         target_membership = await SpaceChannelMemberDao.async_find_member(
             space_id=req.space_id, user_id=req.user_id
         )
-        if not target_membership or not target_membership.status:
+        if not target_membership or not target_membership.is_active:
             raise ValueError("The target user is not a member of this space")
 
         # 3. Modifying the creator's role is not allowed
@@ -455,7 +535,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         target_membership = await SpaceChannelMemberDao.async_find_member(
             space_id=req.space_id, user_id=req.user_id
         )
-        if not target_membership or not target_membership.status:
+        if not target_membership or not target_membership.is_active:
             raise ValueError("The target user is not a member of this space")
 
         # 4. Removing the creator is not allowed
@@ -1133,28 +1213,55 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if space.auth_type == AuthTypeEnum.PRIVATE:
             raise SpaceSubscribePrivateError()
 
-        existing = await SpaceChannelMemberDao.async_find_member(space_id, self.login_user.user_id)
-        if existing is not None:
-            raise SpaceAlreadySubscribedError()
-
-        count = await SpaceChannelMemberDao.async_count_user_space_subscriptions(self.login_user.user_id)
-        if count >= _MAX_SUBSCRIBE_PER_USER:
-            raise SpaceSubscribeLimitError()
-
-        is_active = space.auth_type == AuthTypeEnum.PUBLIC
-        member = SpaceChannelMember(
-            business_id=str(space_id),
-            business_type=BusinessTypeEnum.SPACE,
-            user_id=self.login_user.user_id,
-            user_role=UserRoleEnum.MEMBER,
-            status=is_active,
+        target_status = (
+            MembershipStatusEnum.ACTIVE
+            if space.auth_type == AuthTypeEnum.PUBLIC
+            else MembershipStatusEnum.PENDING
         )
 
-        await SpaceChannelMemberDao.async_insert_member(member)
-        await self._send_subscription_notification(space)
+        existing = await SpaceChannelMemberDao.async_find_member(space_id, self.login_user.user_id)
+        if existing is not None:
+            if existing.user_role != UserRoleEnum.MEMBER:
+                return {
+                    "status": "subscribed",
+                    "space_id": space_id,
+                }
+            if existing.status == MembershipStatusEnum.ACTIVE:
+                return {
+                    "status": "subscribed",
+                    "space_id": space_id,
+                }
+            if existing.status == MembershipStatusEnum.PENDING and target_status == MembershipStatusEnum.PENDING:
+                return {
+                    "status": "pending",
+                    "space_id": space_id,
+                }
+
+        if not existing or existing.status == MembershipStatusEnum.REJECTED:
+            count = await SpaceChannelMemberDao.async_count_user_space_subscriptions(self.login_user.user_id)
+            if count >= _MAX_SUBSCRIBE_PER_USER:
+                raise SpaceSubscribeLimitError()
+
+        previous_status = existing.status if existing else None
+        if existing:
+            existing.status = target_status
+            existing = await SpaceChannelMemberDao.update(existing)
+            member = existing
+        else:
+            member = SpaceChannelMember(
+                business_id=str(space_id),
+                business_type=BusinessTypeEnum.SPACE,
+                user_id=self.login_user.user_id,
+                user_role=UserRoleEnum.MEMBER,
+                status=target_status,
+            )
+            await SpaceChannelMemberDao.async_insert_member(member)
+
+        if previous_status != MembershipStatusEnum.PENDING:
+            await self._send_subscription_notification(space)
 
         return {
-            "status": "subscribed" if is_active else "pending",
+            "status": "subscribed" if member.status == MembershipStatusEnum.ACTIVE else "pending",
             "space_id": space_id,
         }
 

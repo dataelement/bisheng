@@ -1,7 +1,7 @@
 import { Bell, Globe, LogOut, ChevronRight, User, Check } from "lucide-react";
 import { useState } from "react";
 import { useRecoilState } from "recoil";
-import { Avatar, AvatarImage, AvatarName } from "~/components/ui/avatar";
+import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
 import {
     DropdownMenu,
     DropdownMenuContent,

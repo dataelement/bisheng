@@ -275,4 +275,4 @@ class BishengInformationClient(object):
                 msg=f"Failed to get information articles: {response.status_code} - {response.text}")
         return InformationArticlesResponse(information=result.get("data", {}).get("information"),
                                            articles=result.get("data", {}).get("articles", []),
-                                           total=result.get("data", {}).get("totalCount", 0))
+                                           total=result.get("totalCount", 0))

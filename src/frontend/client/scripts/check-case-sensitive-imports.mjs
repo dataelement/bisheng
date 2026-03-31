@@ -53,7 +53,8 @@ for (const f of gitFiles) {
 }
 
 // ── 2. Scan source files for relative imports ───────────────────────
-const importRegex = /(?:from\s+['"]|require\s*\(\s*['"])(\.\.?\/[^'"]+)['"]/g;
+// Match relative imports (./  ../) AND alias imports (@/  ~/)
+const importRegex = /(?:from\s+['"]|require\s*\(\s*['"])((?:\.\.?|[~@])\/[^'"]+)['\"]/g;
 
 const sourceFiles = gitFiles.filter(
   (f) => f.startsWith('src/') && /\.(ts|tsx|js|jsx)$/.test(f)
@@ -71,10 +72,16 @@ for (const relFile of sourceFiles) {
   let match;
   importRegex.lastIndex = 0;
   while ((match = importRegex.exec(content)) !== null) {
-    const rawImport = match[1]; // e.g. "./ArticleList/ArticleCard"
+    const rawImport = match[1]; // e.g. "./ArticleList/ArticleCard" or "@/layouts/MainLayout"
 
     // Resolve to a path relative to ROOT
-    const resolved = path.posix.normalize(path.posix.join(fileDir, rawImport));
+    let resolved;
+    if (rawImport.startsWith('@/') || rawImport.startsWith('~/')) {
+      // Alias imports: @/ and ~/ both map to src/
+      resolved = 'src/' + rawImport.slice(2);
+    } else {
+      resolved = path.posix.normalize(path.posix.join(fileDir, rawImport));
+    }
     const resolvedParts = resolved.split('/');
 
     // Check each DIRECTORY segment of the import path

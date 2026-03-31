@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import List, Optional, Tuple, Any
 
 from sqlalchemy import case, func, or_
@@ -6,7 +7,12 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.channel.domain.models.channel import Channel, ChannelVisibilityEnum
 from bisheng.channel.domain.repositories.interfaces.channel_repository import ChannelRepository
-from bisheng.common.models.space_channel_member import SpaceChannelMember, BusinessTypeEnum
+from bisheng.common.models.space_channel_member import (
+    SpaceChannelMember,
+    BusinessTypeEnum,
+    MembershipStatusEnum,
+    REJECTED_STATUS_DISPLAY_WINDOW,
+)
 from bisheng.common.repositories.implementations.base_repository_impl import BaseRepositoryImpl
 
 
@@ -30,10 +36,13 @@ class ChannelRepositoryImpl(BaseRepositoryImpl[Channel, str], ChannelRepository)
         Find released channels for the channel square with subscription status and subscriber count.
         Uses multi-table LEFT JOIN:
         - LEFT JOIN space_channel_member for current user's subscription status
-        - LEFT JOIN subquery for subscriber count (status=True)
-        Returns list of tuples: (Channel, user_subscription_status, subscriber_count)
+        - LEFT JOIN subquery for subscriber count (status=ACTIVE)
+        Returns list of tuples:
+        (Channel, user_subscription_status, user_subscription_update_time, subscriber_count)
         """
-        # Subquery: count subscribers (status=True) per channel
+        rejection_cutoff = datetime.now() - REJECTED_STATUS_DISPLAY_WINDOW
+
+        # Subquery: count subscribers (status=ACTIVE) per channel
         subscriber_subq = (
             select(
                 SpaceChannelMember.business_id,
@@ -41,7 +50,7 @@ class ChannelRepositoryImpl(BaseRepositoryImpl[Channel, str], ChannelRepository)
             )
             .where(
                 SpaceChannelMember.business_type == BusinessTypeEnum.CHANNEL,
-                SpaceChannelMember.status == True
+                SpaceChannelMember.status == MembershipStatusEnum.ACTIVE
             )
             .group_by(SpaceChannelMember.business_id)
             .subquery()
@@ -52,6 +61,7 @@ class ChannelRepositoryImpl(BaseRepositoryImpl[Channel, str], ChannelRepository)
             select(
                 Channel,
                 SpaceChannelMember.status.label('user_subscription_status'),
+                SpaceChannelMember.update_time.label('user_subscription_update_time'),
                 func.coalesce(subscriber_subq.c.subscriber_count, 0).label('subscriber_count')
             )
             .outerjoin(
@@ -80,10 +90,13 @@ class ChannelRepositoryImpl(BaseRepositoryImpl[Channel, str], ChannelRepository)
                 )
             )
 
-        # Sorting: unsubscribed/unapplied first (status IS NULL → 0), subscribed/applied last (→ 1)
-        # Within same group, sort by update_time desc (fallback to create_time if NULL)
         subscription_order = case(
             (SpaceChannelMember.status.is_(None), 0),
+            (
+                (SpaceChannelMember.status == MembershipStatusEnum.REJECTED)
+                & (SpaceChannelMember.update_time < rejection_cutoff),
+                0,
+            ),
             else_=1
         )
         query = query.order_by(

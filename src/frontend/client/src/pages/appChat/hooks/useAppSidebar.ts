@@ -51,6 +51,14 @@ export function useAppSidebar() {
       });
       setConversations(list);
 
+      // Auto-select the most recent conversation when the current
+      // conversationId doesn't match any existing conversation
+      // (e.g. freshly opened from app center with a new UUID).
+      if (list.length > 0 && conversationId && !list.some(c => c.id === conversationId)) {
+        const latest = list[0];
+        navigate(`/app/${latest.id}/${latest.flowId}/${latest.flowType}`, { replace: true });
+      }
+
       // Notify when no conversation history exists for this app
       if (list.length === 0) {
         showToastRef.current?.({ message: '历史会话已删除', severity: NotificationSeverity.ERROR });
@@ -60,7 +68,7 @@ export function useAppSidebar() {
     } finally {
       setLoading(false);
     }
-  }, [flowId, flowType, setConversations]);
+  }, [flowId, flowType, conversationId, navigate, setConversations]);
 
   /** Grouped conversations by time */
   const groups: ConversationGroup[] = groupConversationsByTime(conversations);

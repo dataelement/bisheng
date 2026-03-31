@@ -4,7 +4,12 @@ from sqlalchemy import case, func
 from sqlmodel import select, col
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from bisheng.common.models.space_channel_member import SpaceChannelMember, BusinessTypeEnum, UserRoleEnum
+from bisheng.common.models.space_channel_member import (
+    SpaceChannelMember,
+    BusinessTypeEnum,
+    UserRoleEnum,
+    MembershipStatusEnum,
+)
 from bisheng.common.repositories.implementations.base_repository_impl import BaseRepositoryImpl
 from bisheng.common.repositories.interfaces.space_channel_member_repository import SpaceChannelMemberRepository
 from bisheng.user.domain.models.user import User
@@ -17,7 +22,7 @@ class SpaceChannelMemberRepositoryImpl(BaseRepositoryImpl[SpaceChannelMember, in
         super().__init__(session, SpaceChannelMember)
 
     async def add_member(self, business_id: str, business_type: BusinessTypeEnum, user_id: int, role: UserRoleEnum,
-                         status: bool = True) -> SpaceChannelMember:
+                         status: MembershipStatusEnum = MembershipStatusEnum.ACTIVE) -> SpaceChannelMember:
         """Add a member to a space or channel."""
         new_member = SpaceChannelMember(
             business_id=business_id,
@@ -30,12 +35,15 @@ class SpaceChannelMemberRepositoryImpl(BaseRepositoryImpl[SpaceChannelMember, in
         return new_member
 
     async def find_channel_memberships(self, user_id: int, roles: List[UserRoleEnum],
-                                       status: bool = True) -> List[SpaceChannelMember]:
+                                       statuses: Optional[List[MembershipStatusEnum]] = None) -> List[SpaceChannelMember]:
         """Get all channel memberships for a user filtered by roles and status."""
+        if statuses is None:
+            statuses = [MembershipStatusEnum.ACTIVE]
+
         query = select(SpaceChannelMember).where(
             SpaceChannelMember.user_id == user_id,
             SpaceChannelMember.business_type == BusinessTypeEnum.CHANNEL,
-            SpaceChannelMember.status == status,
+            col(SpaceChannelMember.status).in_(statuses),
             col(SpaceChannelMember.user_role).in_(roles)
         )
         result = await self.session.exec(query)
@@ -74,7 +82,7 @@ class SpaceChannelMemberRepositoryImpl(BaseRepositoryImpl[SpaceChannelMember, in
         ).where(
             SpaceChannelMember.business_id == channel_id,
             SpaceChannelMember.business_type == BusinessTypeEnum.CHANNEL,
-            SpaceChannelMember.status == True
+            SpaceChannelMember.status == MembershipStatusEnum.ACTIVE
         )
 
         if user_ids is not None:
@@ -93,7 +101,7 @@ class SpaceChannelMemberRepositoryImpl(BaseRepositoryImpl[SpaceChannelMember, in
         query = select(func.count()).select_from(SpaceChannelMember).where(
             SpaceChannelMember.business_id == channel_id,
             SpaceChannelMember.business_type == BusinessTypeEnum.CHANNEL,
-            SpaceChannelMember.status == True
+            SpaceChannelMember.status == MembershipStatusEnum.ACTIVE
         )
 
         if user_ids is not None:
@@ -108,7 +116,7 @@ class SpaceChannelMemberRepositoryImpl(BaseRepositoryImpl[SpaceChannelMember, in
             SpaceChannelMember.business_id == channel_id,
             SpaceChannelMember.business_type == BusinessTypeEnum.CHANNEL,
             SpaceChannelMember.user_role == role,
-            SpaceChannelMember.status == True
+            SpaceChannelMember.status == MembershipStatusEnum.ACTIVE
         )
         result = await self.session.exec(query)
         return list(result.all())
@@ -127,6 +135,20 @@ class SpaceChannelMemberRepositoryImpl(BaseRepositoryImpl[SpaceChannelMember, in
         await self.session.exec(query)
         await self.session.commit()
 
+    async def remove_rejected_members(self, channel_id: str) -> None:
+        """Remove all rejected members from a channel."""
+        from sqlmodel import delete
+        query = (
+            delete(SpaceChannelMember)
+            .where(
+                SpaceChannelMember.business_id == channel_id,
+                SpaceChannelMember.business_type == BusinessTypeEnum.CHANNEL,
+                SpaceChannelMember.status == MembershipStatusEnum.REJECTED,
+            )
+        )
+        await self.session.exec(query)
+        await self.session.commit()
+
     async def activate_pending_members(self, channel_id: str) -> int:
         """Activate all pending members of a channel (set status to True).
 
@@ -138,9 +160,9 @@ class SpaceChannelMemberRepositoryImpl(BaseRepositoryImpl[SpaceChannelMember, in
             .where(
                 SpaceChannelMember.business_id == channel_id,
                 SpaceChannelMember.business_type == BusinessTypeEnum.CHANNEL,
-                SpaceChannelMember.status == False
+                SpaceChannelMember.status == MembershipStatusEnum.PENDING
             )
-            .values(status=True)
+            .values(status=MembershipStatusEnum.ACTIVE)
         )
         result = await self.session.exec(query)
         await self.session.commit()

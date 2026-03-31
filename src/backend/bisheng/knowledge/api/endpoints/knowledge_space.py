@@ -107,13 +107,12 @@ async def get_my_followed_spaces(
 
 @router.get('/square')
 async def get_knowledge_square(
-        order_by: str = 'update_time',
         page: int = 1,
         page_size: int = 20,
         keyword: str = None,
         svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
-    result = await svc.get_knowledge_square(keyword, order_by, page, page_size)
+    result = await svc.get_knowledge_square(keyword, page, page_size)
     return resp_200(result)
 
 

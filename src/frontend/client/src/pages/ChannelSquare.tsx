@@ -8,7 +8,7 @@ import { NotificationSeverity } from "~/common";
 import { getChannelSquareApi, subscribeManagerChannelApi } from "~/api/channels";
 import { useLocalize } from "~/hooks";
 
-type SquareStatus = "join" | "joined" | "pending" | "private";
+type SquareStatus = "join" | "joined" | "pending" | "private" | "rejected";
 
 interface SquareChannel {
   id: string;
@@ -176,9 +176,10 @@ export default function ChannelSquare({
               visibility: item.visibility as "public" | "private" | "review" | undefined,
               status: (() => {
                 const subStatus = String(item.subscription_status ?? "");
-                // 后端约定：not_subscribed=订阅，subscribed=已订阅，pending=申请中
+                // 后端约定：not_subscribed=订阅，subscribed=已订阅，pending=申请中，rejected=已驳回
                 if (subStatus === "subscribed") return "joined";
                 if (subStatus === "pending") return "pending";
+                if (subStatus === "rejected") return "rejected";
                 if (subStatus === "not_subscribed") return "join";
                 return (item.status as SquareStatus) || "join";
               })(),

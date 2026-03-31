@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import Enum
 from typing import Optional, List
 
@@ -21,6 +21,15 @@ class UserRoleEnum(str, Enum):
     MEMBER = 'member'
 
 
+class MembershipStatusEnum(str, Enum):
+    ACTIVE = 'ACTIVE'
+    PENDING = 'PENDING'
+    REJECTED = 'REJECTED'
+
+
+REJECTED_STATUS_DISPLAY_WINDOW = timedelta(hours=24)
+
+
 class SpaceChannelMember(SQLModelSerializable, table=True):
     __tablename__ = 'space_channel_member'
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -31,7 +40,15 @@ class SpaceChannelMember(SQLModelSerializable, table=True):
     user_id: int = Field(..., description='User ID', nullable=False)
     user_role: UserRoleEnum = Field(..., description='User Role',
                                     sa_column=Column(SQLEnum(UserRoleEnum), nullable=False))
-    status: bool = Field(default=True, description='Membership Status', sa_type=Boolean, nullable=False)
+    status: MembershipStatusEnum = Field(
+        default=MembershipStatusEnum.ACTIVE,
+        description='Membership Status',
+        sa_column=Column(
+            SQLEnum(MembershipStatusEnum, name='space_channel_member_status_enum'),
+            nullable=False,
+            server_default=text("'ACTIVE'"),
+        ),
+    )
     is_pinned: bool = Field(default=False, description='Whether the channel is pinned to top',
                             sa_column=Column(Boolean, nullable=False, server_default=text('0')))
 
@@ -40,6 +57,25 @@ class SpaceChannelMember(SQLModelSerializable, table=True):
 
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=True, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+
+    @property
+    def is_active(self) -> bool:
+        return self.status == MembershipStatusEnum.ACTIVE
+
+    @property
+    def is_pending(self) -> bool:
+        return self.status == MembershipStatusEnum.PENDING
+
+    @property
+    def is_rejected(self) -> bool:
+        return self.status == MembershipStatusEnum.REJECTED
+
+    def is_recently_rejected(self, now: Optional[datetime] = None) -> bool:
+        if not self.is_rejected or self.update_time is None:
+            return False
+
+        reference_time = now or datetime.now()
+        return self.update_time >= reference_time - REJECTED_STATUS_DISPLAY_WINDOW
 
 
 class SpaceChannelMemberDao:
@@ -96,7 +132,7 @@ class SpaceChannelMemberDao:
         ).where(
             SpaceChannelMember.business_id == str(space_id),
             SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
-            SpaceChannelMember.status == True
+            SpaceChannelMember.status == MembershipStatusEnum.ACTIVE
         )
 
         if user_ids is not None:
@@ -119,7 +155,7 @@ class SpaceChannelMemberDao:
         statement = select(func.count()).where(
             SpaceChannelMember.business_id == str(space_id),
             SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
-            SpaceChannelMember.status == True
+            SpaceChannelMember.status == MembershipStatusEnum.ACTIVE
         )
         if user_ids is not None:
             if not user_ids:
@@ -137,7 +173,7 @@ class SpaceChannelMemberDao:
             SpaceChannelMember.business_id == str(space_id),
             SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
             SpaceChannelMember.user_id == user_id,
-            SpaceChannelMember.status == True,
+            SpaceChannelMember.status == MembershipStatusEnum.ACTIVE,
         )
         async with get_async_db_session() as session:
             result = await session.exec(statement)
@@ -152,6 +188,10 @@ class SpaceChannelMemberDao:
             SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
             SpaceChannelMember.user_id == user_id,
             SpaceChannelMember.user_role != UserRoleEnum.CREATOR,
+            SpaceChannelMember.status.in_([
+                MembershipStatusEnum.ACTIVE,
+                MembershipStatusEnum.PENDING,
+            ]),
         )
         async with get_async_db_session() as session:
             return await session.scalar(statement)
@@ -162,7 +202,7 @@ class SpaceChannelMemberDao:
         statement = select(func.count()).where(
             SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
             SpaceChannelMember.business_id == str(space_id),
-            SpaceChannelMember.status == True,
+            SpaceChannelMember.status == MembershipStatusEnum.ACTIVE,
         )
         async with get_async_db_session() as session:
             return await session.scalar(statement)
@@ -180,7 +220,7 @@ class SpaceChannelMemberDao:
             .where(
                 SpaceChannelMember.business_id.in_(space_ids),
                 SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
-                SpaceChannelMember.status == True,
+                SpaceChannelMember.status == MembershipStatusEnum.ACTIVE,
             )
             .group_by(SpaceChannelMember.business_id)
         )
@@ -190,7 +230,8 @@ class SpaceChannelMemberDao:
 
     @classmethod
     async def async_get_members_by_space(cls, space_id: int, order_by: str = 'user_id',
-                                         user_roles: List[UserRoleEnum] = None, status: bool = True) -> List[
+                                         user_roles: List[UserRoleEnum] = None,
+                                         status: MembershipStatusEnum = MembershipStatusEnum.ACTIVE) -> List[
         SpaceChannelMember]:
         """ Async: Get all active members of a space """
 
@@ -217,7 +258,7 @@ class SpaceChannelMemberDao:
         statement = select(SpaceChannelMember.business_id).where(
             SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
             SpaceChannelMember.user_id == user_id,
-            SpaceChannelMember.status == True,
+            SpaceChannelMember.status == MembershipStatusEnum.ACTIVE,
             SpaceChannelMember.user_role != UserRoleEnum.CREATOR
         )
         async with get_async_db_session() as session:
@@ -236,7 +277,7 @@ class SpaceChannelMemberDao:
             .where(
                 SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
                 SpaceChannelMember.user_id == user_id,
-                SpaceChannelMember.status == True,
+                SpaceChannelMember.status == MembershipStatusEnum.ACTIVE,
                 SpaceChannelMember.user_role != UserRoleEnum.CREATOR,
             )
             .order_by(
@@ -259,7 +300,7 @@ class SpaceChannelMemberDao:
             SpaceChannelMember.business_id.in_(space_ids),
             SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
             SpaceChannelMember.user_id == user_id,
-            SpaceChannelMember.status == True,
+            SpaceChannelMember.status == MembershipStatusEnum.ACTIVE,
             SpaceChannelMember.user_role != UserRoleEnum.CREATOR
         )
         async with get_async_db_session() as session:
@@ -299,12 +340,26 @@ class SpaceChannelMemberDao:
             await session.commit()
 
     @classmethod
+    async def async_delete_rejected_members(cls, space_id: int):
+        """Async: Remove all rejected members from a space."""
+
+        async with get_async_db_session() as session:
+            await session.exec(
+                delete(SpaceChannelMember).where(
+                    SpaceChannelMember.business_id == str(space_id),
+                    SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
+                    SpaceChannelMember.status == MembershipStatusEnum.REJECTED,
+                )
+            )
+            await session.commit()
+
+    @classmethod
     async def pin_space_id(cls, space_id: int, user_id=int, is_pinned: bool = True) -> bool:
         statement = update(SpaceChannelMember).where(
             col(SpaceChannelMember.business_id) == str(space_id),
             col(SpaceChannelMember.business_type) == BusinessTypeEnum.SPACE,
             col(SpaceChannelMember.user_id) == user_id,
-            col(SpaceChannelMember.status) == True).values(is_pinned=is_pinned)
+            col(SpaceChannelMember.status) == MembershipStatusEnum.ACTIVE).values(is_pinned=is_pinned)
         async with get_async_db_session() as session:
             await session.execute(statement)
             await session.commit()

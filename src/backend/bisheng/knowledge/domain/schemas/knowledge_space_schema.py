@@ -1,9 +1,17 @@
+from enum import Enum
 from typing import Optional, List, Dict, Literal
 
 from pydantic import BaseModel, Field
 
 from bisheng.common.models.space_channel_member import UserRoleEnum
 from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum, KnowledgeBase
+
+
+class SpaceSubscriptionStatusEnum(str, Enum):
+    SUBSCRIBED = "subscribed"
+    PENDING = "pending"
+    REJECTED = "rejected"
+    NOT_SUBSCRIBED = "not_subscribed"
 
 
 class KnowledgeSpaceCreateReq(BaseModel):
@@ -23,6 +31,10 @@ class KnowledgeSpaceInfoResp(KnowledgeBase):
     file_num: int = Field(1, description="Total File Number")
     is_followed: bool = Field(default=False, description="Knowledge Space followed by current user or not")
     is_pending: bool = Field(default=False, description="Knowledge Space pending or not")
+    subscription_status: SpaceSubscriptionStatusEnum = Field(
+        default=SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED,
+        description="Current user subscription status",
+    )
     user_role: Optional[UserRoleEnum] = Field(default=None, description="Knowledge Space user role")
 
 

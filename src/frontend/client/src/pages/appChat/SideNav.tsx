@@ -100,7 +100,7 @@ export function SideNav() {
             {/* Conversation list */}
             <div className="flex-1 overflow-y-auto pb-[20px] flex flex-col">
                 {groups.length === 0 ? (
-                    <div className="text-center text-gray-400 text-sm py-10">暂无对话记录</div>
+                    <div className="text-center text-gray-400 text-sm py-10">还没有任何历史对话</div>
                 ) : (
                     groups.map((group, groupIdx) => (
                         <div key={groupIdx} className="flex flex-col">

@@ -1069,6 +1069,7 @@
   "private": "Private",
   "publice": "Public",
   "remove": "Remove",
+  "rejected": "Rejected",
   "request": "Request",
   "sourceFromQaLibrary": "This answer is sourced from the existing Q&A library.",
   "subscribe": "Subscribe",

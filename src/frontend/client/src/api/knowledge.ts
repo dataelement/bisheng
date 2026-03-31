@@ -96,7 +96,7 @@ export interface KnowledgeSpace {
     isFollowed?: boolean;
     isPending?: boolean;
     // join | joined | pending
-    squareStatus?: "join" | "joined" | "pending";
+    squareStatus?: "join" | "joined" | "pending" | "rejected";
 }
 
 /** Space tag entity used by tagging UI */
@@ -534,11 +534,16 @@ export async function getSquareSpacesApi(params?: {
             const authTypeVal = rawAny?.auth_type ?? itemAny?.auth_type ?? rawAny?.authType ?? itemAny?.authType;
             const visibility = (authTypeVal as VisibilityType) || VisibilityType.PRIVATE;
 
-            // status rules in square: first is_pending, then is_followed
-            const isPending = Boolean(itemAny?.is_pending ?? rawAny?.is_pending);
-            const isFollowed = Boolean(itemAny?.is_followed ?? rawAny?.is_followed);
+            // status from subscription_status enum
+            const subscriptionStatus = String(itemAny?.subscription_status ?? rawAny?.subscription_status ?? "");
             const isReleased = Boolean(rawAny?.is_released ?? itemAny?.is_released);
-            const squareStatus: "join" | "joined" | "pending" = isPending ? "pending" : isFollowed ? "joined" : "join";
+            const isFollowed = subscriptionStatus === "subscribed";
+            const isPending = subscriptionStatus === "pending";
+            const squareStatus: "join" | "joined" | "pending" | "rejected" =
+                subscriptionStatus === "subscribed" ? "joined"
+                : subscriptionStatus === "pending" ? "pending"
+                : subscriptionStatus === "rejected" ? "rejected"
+                : "join";
 
             const fileNum = itemAny?.file_num ?? rawAny?.file_num ?? rawAny?.fileNum ?? itemAny?.fileNum ?? 0;
             const followerNum =

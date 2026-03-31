@@ -15,7 +15,7 @@ import LoginLayout from './Layouts/Login';
 import RouteErrorBoundary from './RouteErrorBoundary';
 // import ShareRoute from './ShareRoute';
 import Sop from '@/components/Sop';
-import MainLayout from '@/Layouts/MainLayout';
+import MainLayout from '@/layouts/MainLayout';
 import Page404 from '@/pages/Page404';
 import { AliveScope } from 'react-activation';
 import Subscription from '~/pages/Subscription';
