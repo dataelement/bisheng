@@ -248,7 +248,7 @@ export function FileCard({
 
                     {/* 底部信息 (标签、数量和时间) */}
                     <div className="flex items-center justify-between mt-1 min-w-0 gap-2">
-                        <div className="flex items-center flex-1 min-w-0">
+                        <div className="flex items-center flex-1 min-w-0 min-h-[24px]">
                             {isAdmin && isFolder && file.fileNum != null && (
                                 <div className="text-sm font-medium leading-none">
                                     <span className="text-emerald-500 font-semibold">{file.successFileNum ?? 0}</span>

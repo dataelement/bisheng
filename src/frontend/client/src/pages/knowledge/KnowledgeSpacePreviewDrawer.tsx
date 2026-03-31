@@ -13,12 +13,15 @@ interface KnowledgeSpacePreviewDrawerProps {
     spaceId: string | undefined;
     open: boolean;
     onOpenChange: (open: boolean) => void;
+    /** Notify parent to sync square card status */
+    onSquareStatusChange?: (spaceId: string, status: "join" | "joined" | "pending") => void;
 }
 
 export function KnowledgeSpacePreviewDrawer({
     spaceId,
     open,
     onOpenChange,
+    onSquareStatusChange,
 }: KnowledgeSpacePreviewDrawerProps) {
     const localize = useLocalize();
     const { showToast } = useToastContext();
@@ -47,9 +50,16 @@ export function KnowledgeSpacePreviewDrawer({
         getSpaceInfoApi(spaceId)
             .then(info => {
                 setSpace(info);
-                if (info.isPending) setStatus("pending");
-                else if (info.isFollowed) setStatus("joined");
-                else setStatus("none");
+                if (info.isPending) {
+                    setStatus("pending");
+                    onSquareStatusChange?.(String(info.id), "pending");
+                } else if (info.isFollowed) {
+                    setStatus("joined");
+                    onSquareStatusChange?.(String(info.id), "joined");
+                } else {
+                    setStatus("none");
+                    onSquareStatusChange?.(String(info.id), "join");
+                }
             })
             .catch(() => {
                 showToast({ message: localize("com_knowledge.space_invalid_or_deleted"), severity: NotificationSeverity.WARNING });
@@ -133,9 +143,11 @@ export function KnowledgeSpacePreviewDrawer({
                 await subscribeSpaceApi(space.id);
                 if (isPublic) {
                     setStatus("joined");
+                    onSquareStatusChange?.(String(space.id), "joined");
                     showToast({ message: localize("com_knowledge.join_success"), severity: NotificationSeverity.SUCCESS });
                 } else {
                     setStatus("pending");
+                    onSquareStatusChange?.(String(space.id), "pending");
                     showToast({ message: localize("com_knowledge.subscribe_apply_sent"), severity: NotificationSeverity.SUCCESS });
                 }
             } catch {

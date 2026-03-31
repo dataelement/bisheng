@@ -48,6 +48,7 @@ export default function Knowledge() {
     const [previewDrawerOpen, setPreviewDrawerOpen] = useState(false);
     const [squarePreviewSpaceId, setSquarePreviewSpaceId] = useState<string | undefined>();
     const [squarePreviewDrawerOpen, setSquarePreviewDrawerOpen] = useState(false);
+    const [squareStatusOverride, setSquareStatusOverride] = useState<Record<string, "join" | "joined" | "pending">>({});
 
     // KeepAlive: when leaving /knowledge, reset square view so switching back lands on default page.
     useUnactivate(() => {
@@ -248,6 +249,7 @@ export default function Knowledge() {
                         setSquarePreviewSpaceId(id);
                         setSquarePreviewDrawerOpen(true);
                     }}
+                    statusOverride={squareStatusOverride}
                 />
                 <KnowledgeSpacePreviewDrawer
                     spaceId={squarePreviewSpaceId}
@@ -255,6 +257,9 @@ export default function Knowledge() {
                     onOpenChange={(open) => {
                         setSquarePreviewDrawerOpen(open);
                         if (!open) setSquarePreviewSpaceId(undefined);
+                    }}
+                    onSquareStatusChange={(id, status) => {
+                        setSquareStatusOverride((prev) => ({ ...prev, [String(id)]: status }));
                     }}
                 />
             </div>

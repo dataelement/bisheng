@@ -18,6 +18,8 @@ interface KnowledgeSquareProps {
     emptyText?: string;
     joinToastPrefix?: string;
     onPreviewSpace?: (spaceId: string) => void;
+    /** Optional status override from parent (e.g. preview drawer join) */
+    statusOverride?: Record<string, SquareSpaceStatus>;
 }
 
 export default function KnowledgeSquare({
@@ -28,6 +30,7 @@ export default function KnowledgeSquare({
     emptyText,
     joinToastPrefix,
     onPreviewSpace,
+    statusOverride,
 }: KnowledgeSquareProps) {
     const { showToast } = useToastContext();
     const localize = useLocalize();
@@ -164,7 +167,7 @@ export default function KnowledgeSquare({
             if (nextStatus === "joined") {
                 showToast({ message: localize("com_knowledge.join_success"), severity: NotificationSeverity.SUCCESS });
             } else {
-                showToast({ message: `${tJoinPrefix}${space.name}`, severity: NotificationSeverity.SUCCESS });
+                showToast({ message: `${tJoinPrefix}`, severity: NotificationSeverity.SUCCESS });
             }
         } catch {
             // rollback
@@ -239,7 +242,10 @@ export default function KnowledgeSquare({
                                         <KnowledgeSquareCard
                                             key={space.id}
                                             space={space}
-                                            status={(space.squareStatus as SquareSpaceStatus) || "join"}
+                                            status={
+                                                statusOverride?.[String(space.id)] ??
+                                                ((space.squareStatus as SquareSpaceStatus) || "join")
+                                            }
                                             onPreview={() => onPreviewSpace?.(space.id)}
                                             onAction={() => handleJoin(space)}
                                         />

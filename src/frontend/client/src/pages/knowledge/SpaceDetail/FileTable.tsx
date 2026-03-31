@@ -675,17 +675,16 @@ function FileRow({
                 >
                     {isFolder
                         ? (
-                            <span className="text-sm text-[#86909c]">
-                                <span className={file.successFileNum !== undefined && file.fileNum !== undefined && file.successFileNum < file.fileNum
-                                    ? 'text-emerald-500'
-                                    : 'text-emerald-500'
-                                }>
+                            <span className="text-sm whitespace-nowrap">
+                                <span className="text-emerald-500 font-medium">
                                     {file.successFileNum ?? 0}
                                 </span>
-                                /{file.fileNum ?? 0}
+                                <span className="text-[#86909c]">
+                                    /{file.fileNum ?? 0}
+                                </span>
                             </span>
                         )
-                        : <StatusBadge status={file.status} />
+                        : <StatusBadge status={file.status ?? FileStatus.WAITING} />
                     }
                 </TableCell>
             )}
@@ -723,6 +722,11 @@ function FileRow({
                                         <DropdownMenuItem onClick={(e) => { e.stopPropagation(); startRenaming(); }}>
                                             <Edit className="size-4 mr-2" />{localize("com_knowledge.rename")}
                                         </DropdownMenuItem>
+                                        {hasRetryOption && (
+                                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onRetry?.(); }}>
+                                                <RefreshCw className="size-4 mr-2" />{localize("com_knowledge.retry")}
+                                            </DropdownMenuItem>
+                                        )}
                                         <DropdownMenuItem
                                             className="text-[#f53f3f] focus:text-[#f53f3f] focus:bg-[#fff2f0]"
                                             onClick={(e) => { e.stopPropagation(); onDelete(); }}
@@ -730,11 +734,6 @@ function FileRow({
                                             <Trash2 className="size-4 mr-2" />{localize("com_knowledge.delete")}
                                         </DropdownMenuItem>
                                     </>
-                                )}
-                                {hasRetryOption && (
-                                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onRetry?.(); }}>
-                                        <RefreshCw className="size-4 mr-2" />{localize("com_knowledge.retry")}
-                                    </DropdownMenuItem>
                                 )}
                             </DropdownMenuContent>
                         </DropdownMenu>
