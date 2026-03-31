@@ -1,9 +1,15 @@
 import os
+import subprocess
 from pathlib import Path
 from uuid import uuid4
 
 import pypandoc
 from loguru import logger
+
+if os.environ.get('BISHNEG_DOCX_MD_TIMEOUT'):
+    CONVERT_TIMEOUT_SECONDS = int(os.environ.get('BISHNEG_DOCX_MD_TIMEOUT'))
+else:
+    CONVERT_TIMEOUT_SECONDS = 300
 
 from bisheng.knowledge.rag.pipeline.loader.utils.libreoffice_converter import convert_doc_to_docx
 
@@ -61,21 +67,32 @@ def convert_doc_to_md_pandoc_high_quality(
     # For example: if output_md_path Yes  "output/document.md" Dan image_dir_name Yes  "images",
     # Images will be stored in "output/images/" Under the directory, the link would be "images/image1.png"
 
-    try:
-        pypandoc.convert_file(
-            source_file=str(doc_path),
-            to=pandoc_format_to,
-            outputfile=str(output_md_path),
-            extra_args=extra_args,
-        )
-        logger.debug(f"Pandoc Conversion Complete: {output_md_path}")
+    # Build the pandoc command directly so we can kill the process on timeout
+    cmd = [
+              pandoc_path,
+              str(doc_path),
+              "-t", pandoc_format_to,
+              "-o", str(output_md_path),
+          ] + extra_args
 
-    except RuntimeError as e:  # Pandoc Often thrown when an error is not found or executed RuntimeError
-        if "Unknown option --atx-headers" in str(e):
-            logger.debug(
-                "   error message '--atx-headers' The option is unknown, which usually means your Pandoc Older version."
-            )
-    except Exception as e:  # Other potential errors
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    try:
+        _, stderr = proc.communicate(timeout=CONVERT_TIMEOUT_SECONDS)
+        if proc.returncode != 0:
+            err_msg = stderr.decode(errors="replace").strip()
+            logger.debug(f"Pandoc exited with code {proc.returncode}: {err_msg}")
+        else:
+            logger.debug(f"Pandoc Conversion Complete: {output_md_path}")
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.communicate()  # drain pipes after kill
+        logger.error(
+            f"Convert File {doc_path} timed out after {CONVERT_TIMEOUT_SECONDS} seconds, pandoc process killed."
+        )
+        raise TimeoutError(
+            f"Docx to Markdown conversion timed out after {CONVERT_TIMEOUT_SECONDS} seconds"
+        )
+    except Exception as e:
         logger.debug(f"Convert File {doc_path} An unknown error occurred while: {e}")
 
     # If the conversion fails, try todocxConvert to StandarddocxTry Again
