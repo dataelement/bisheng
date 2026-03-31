@@ -1,6 +1,10 @@
 from typing import Callable, List, Awaitable, Tuple, Any
 
-from bisheng.common.models.space_channel_member import SpaceChannelMemberDao, SpaceChannelMember
+from bisheng.common.models.space_channel_member import (
+    SpaceChannelMemberDao,
+    SpaceChannelMember,
+    MembershipStatusEnum,
+)
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, Knowledge
 from bisheng.message.domain.models.inbox_message import InboxMessage
 from bisheng.message.domain.schemas.message_schema import MessageContentItem, UserContentItem, BusinessContentItem
@@ -27,7 +31,7 @@ class KnowledgeSpaceSubscribeHandler(ApprovalHandler):
             return None, None, None
 
         memory_info = await SpaceChannelMemberDao.async_find_member(space_info.id, applicant_user_id)
-        if not memory_info or memory_info.status:
+        if not memory_info or memory_info.status != MembershipStatusEnum.PENDING:
             return None, None, None
 
         operator_user_info = await UserDao.aget_user(operator_user_id)
@@ -39,7 +43,7 @@ class KnowledgeSpaceSubscribeHandler(ApprovalHandler):
         if not space_info or not memory_info:
             return
 
-        memory_info.status = True
+        memory_info.status = MembershipStatusEnum.ACTIVE
         await SpaceChannelMemberDao.update(memory_info)
 
         await self.notify_sender(
@@ -68,7 +72,8 @@ class KnowledgeSpaceSubscribeHandler(ApprovalHandler):
         if not space_info or not memory_info:
             return
 
-        await SpaceChannelMemberDao.delete_space_member(space_info.id, memory_info.user_id)
+        memory_info.status = MembershipStatusEnum.REJECTED
+        await SpaceChannelMemberDao.update(memory_info)
 
         await self.notify_sender(
             operator_user_id,

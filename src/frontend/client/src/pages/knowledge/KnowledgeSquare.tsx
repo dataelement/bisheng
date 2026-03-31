@@ -8,7 +8,7 @@ import { getSquareSpacesApi, subscribeSpaceApi, type KnowledgeSpace, VisibilityT
 import { useLocalize } from "~/hooks";
 import KnowledgeSquareCard from "./KnowledgeSquareCard";
 
-type SquareSpaceStatus = "join" | "joined" | "pending";
+type SquareSpaceStatus = "join" | "joined" | "pending" | "rejected";
 
 interface KnowledgeSquareProps {
     onBack?: () => void;

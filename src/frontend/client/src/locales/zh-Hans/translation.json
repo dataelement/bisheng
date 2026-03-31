@@ -986,6 +986,7 @@
   "member": "订阅用户",
   "no_text_recognized": "语音识别不可用，请联系管理员",
   "pending": "申请中",
+  "rejected": "已驳回",
   "request": "申请",
   "private": "私有",
   "publice": "公开",

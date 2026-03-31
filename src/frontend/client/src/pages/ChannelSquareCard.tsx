@@ -12,7 +12,7 @@ interface ChannelSquareCardProps {
   creatorAvatars?: string[];
   articleCount: number;
   subscriberCount: number;
-  status: "join" | "joined" | "pending" | "private";
+  status: "join" | "joined" | "pending" | "private" | "rejected";
   visibility?: "public" | "private" | "review";
   isHighlighted?: boolean;
   onAction?: () => void;
@@ -42,6 +42,8 @@ export function ChannelSquareCard({
         return { text: localize("pending"), variant: "secondary" as const, disabled: true };
       case "private":
         return { text: localize("private"), variant: "secondary" as const, disabled: true };
+      case "rejected":
+        return { text: localize("rejected") || "已驳回", variant: "secondary" as const, disabled: true };
       default:
         return { text: localize("subscribe") || "订阅", variant: "outline" as const, disabled: false };
     }

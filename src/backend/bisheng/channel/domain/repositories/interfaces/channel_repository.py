@@ -18,7 +18,8 @@ class ChannelRepository(BaseRepository[Channel, str], ABC):
                                    page: int = 1, page_size: int = 20) -> List[Tuple[Any, ...]]:
         """
         Find released channels for the channel square with subscription status and subscriber count.
-        Returns a list of tuples: (Channel, user_subscription_status, subscriber_count)
+        Returns a list of tuples:
+        (Channel, user_subscription_status, user_subscription_update_time, subscriber_count)
         """
         pass
 

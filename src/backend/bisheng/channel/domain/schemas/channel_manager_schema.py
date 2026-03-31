@@ -11,6 +11,7 @@ class SubscriptionStatusEnum(str, Enum):
     """Subscription Status Enum"""
     SUBSCRIBED = 'subscribed'
     PENDING = 'pending'
+    REJECTED = 'rejected'
     NOT_SUBSCRIBED = 'not_subscribed'
 
 

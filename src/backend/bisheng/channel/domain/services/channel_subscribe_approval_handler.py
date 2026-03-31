@@ -2,7 +2,7 @@ import logging
 from typing import Awaitable, Callable, List, Any
 
 from bisheng.channel.domain.repositories.interfaces.channel_repository import ChannelRepository
-from bisheng.common.models.space_channel_member import BusinessTypeEnum
+from bisheng.common.models.space_channel_member import BusinessTypeEnum, MembershipStatusEnum
 from bisheng.common.repositories.interfaces.space_channel_member_repository import SpaceChannelMemberRepository
 from bisheng.message.domain.models.inbox_message import InboxMessage
 from bisheng.message.domain.schemas.message_schema import UserContentItem, MessageContentItem, BusinessContentItem
@@ -40,11 +40,17 @@ class ChannelSubscribeApprovalHandler(ApprovalHandler):
                 channel_id, applicant_user_id, message.id,
             )
             return
+        if membership.status != MembershipStatusEnum.PENDING:
+            logger.warning(
+                "Channel membership is not pending when approving subscription: channel_id=%s, applicant_user_id=%s, message_id=%s, status=%s",
+                channel_id, applicant_user_id, message.id, membership.status,
+            )
+            return
         channel_info = await self.channel_repository.find_by_id(channel_id)
         if not channel_info:
             return
 
-        membership.status = True
+        membership.status = MembershipStatusEnum.ACTIVE
         await self.space_channel_member_repository.update(membership)
         operator_user_info = await UserDao.aget_user(operator_user_id)
         await self.notify_sender(
@@ -78,11 +84,18 @@ class ChannelSubscribeApprovalHandler(ApprovalHandler):
                 channel_id, applicant_user_id, message.id,
             )
             return
+        if membership.status != MembershipStatusEnum.PENDING:
+            logger.warning(
+                "Channel membership is not pending when rejecting subscription: channel_id=%s, applicant_user_id=%s, message_id=%s, status=%s",
+                channel_id, applicant_user_id, message.id, membership.status,
+            )
+            return
         channel_info = await self.channel_repository.find_by_id(channel_id)
         if not channel_info:
             return
 
-        await self.space_channel_member_repository.delete(membership.id)
+        membership.status = MembershipStatusEnum.REJECTED
+        await self.space_channel_member_repository.update(membership)
 
         operator_user_info = await UserDao.aget_user(operator_user_id)
 

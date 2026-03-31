@@ -1,7 +1,12 @@
 from abc import ABC, abstractmethod
 from typing import List, Optional
 
-from bisheng.common.models.space_channel_member import SpaceChannelMember, BusinessTypeEnum, UserRoleEnum
+from bisheng.common.models.space_channel_member import (
+    SpaceChannelMember,
+    BusinessTypeEnum,
+    UserRoleEnum,
+    MembershipStatusEnum,
+)
 from bisheng.common.repositories.interfaces.base_repository import BaseRepository
 
 
@@ -11,13 +16,13 @@ class SpaceChannelMemberRepository(BaseRepository[SpaceChannelMember, int], ABC)
 
     @abstractmethod
     async def add_member(self, business_id: str, business_type: BusinessTypeEnum, user_id: int, role: UserRoleEnum,
-                         status: bool = True) -> SpaceChannelMember:
+                         status: MembershipStatusEnum = MembershipStatusEnum.ACTIVE) -> SpaceChannelMember:
         """Add a member to a space or channel."""
         pass
 
     @abstractmethod
     async def find_channel_memberships(self, user_id: int, roles: List[UserRoleEnum],
-                                       status: bool = True) -> List[SpaceChannelMember]:
+                                       statuses: Optional[List[MembershipStatusEnum]] = None) -> List[SpaceChannelMember]:
         """Get all channel memberships for a user filtered by roles and status."""
         pass
 
@@ -55,10 +60,14 @@ class SpaceChannelMemberRepository(BaseRepository[SpaceChannelMember, int], ABC)
         pass
 
     @abstractmethod
+    async def remove_rejected_members(self, channel_id: str) -> None:
+        """Remove all rejected members from a channel."""
+        pass
+
+    @abstractmethod
     async def activate_pending_members(self, channel_id: str) -> int:
         """Activate all pending members of a channel (set status to True).
 
         Returns the number of members activated.
         """
         pass
-

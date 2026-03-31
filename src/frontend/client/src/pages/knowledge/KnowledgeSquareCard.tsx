@@ -6,7 +6,7 @@ import { cn } from "~/utils";
 import { KnowledgeSpace, VisibilityType } from "~/api/knowledge";
 import { useLocalize } from "~/hooks";
 
-type SquareSpaceStatus = "join" | "joined" | "pending";
+type SquareSpaceStatus = "join" | "joined" | "pending" | "rejected";
 
 interface KnowledgeSquareCardProps {
     space: KnowledgeSpace;
@@ -31,6 +31,8 @@ export default function KnowledgeSquareCard({
                 return { text: localize("subscribed") || localize("com_knowledge.joined"), variant: "secondary" as const, disabled: true };
             case "pending":
                 return { text: localize("pending") || localize("com_knowledge.applying"), variant: "secondary" as const, disabled: true };
+            case "rejected":
+                return { text: localize("rejected") || "已驳回", variant: "secondary" as const, disabled: true };
             default: {
                 return {
                     // “订阅/申请”动作统一展示为“加入”

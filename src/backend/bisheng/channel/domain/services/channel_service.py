@@ -40,7 +40,13 @@ from bisheng.common.errcode.channel import (
     ChannelSubscribeLimitExceededError,
 )
 from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError
-from bisheng.common.models.space_channel_member import BusinessTypeEnum, UserRoleEnum, SpaceChannelMemberDao
+from bisheng.common.models.space_channel_member import (
+    BusinessTypeEnum,
+    UserRoleEnum,
+    SpaceChannelMemberDao,
+    MembershipStatusEnum,
+    REJECTED_STATUS_DISPLAY_WINDOW,
+)
 from bisheng.common.repositories.interfaces.space_channel_member_repository import SpaceChannelMemberRepository
 from bisheng.core.external.bisheng_information_client.bisheng_information_manager import get_bisheng_information_client
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
@@ -74,13 +80,38 @@ class ChannelService:
         self.article_read_repository = article_read_repository
         self.message_service = message_service
 
+    @staticmethod
+    def _resolve_subscription_status(
+            membership_status: Optional[MembershipStatusEnum],
+            update_time: Optional[datetime] = None,
+    ) -> SubscriptionStatusEnum:
+        if membership_status is None:
+            return SubscriptionStatusEnum.NOT_SUBSCRIBED
+        if membership_status == MembershipStatusEnum.ACTIVE:
+            return SubscriptionStatusEnum.SUBSCRIBED
+        if membership_status == MembershipStatusEnum.PENDING:
+            return SubscriptionStatusEnum.PENDING
+        if (
+                membership_status == MembershipStatusEnum.REJECTED
+                and update_time is not None
+                and update_time >= datetime.now() - REJECTED_STATUS_DISPLAY_WINDOW
+        ):
+            return SubscriptionStatusEnum.REJECTED
+        return SubscriptionStatusEnum.NOT_SUBSCRIBED
+
+    @classmethod
+    def _resolve_membership_subscription_status(cls, membership) -> SubscriptionStatusEnum:
+        if membership is None:
+            return SubscriptionStatusEnum.NOT_SUBSCRIBED
+        return cls._resolve_subscription_status(membership.status, membership.update_time)
+
     async def create_channel(self, channel_data: CreateChannelRequest, login_user: UserPayload):
         """Create a new channel based on the provided data and the logged-in user."""
         # Check if the user has reached the maximum limit for creating channels
         existing_channels = await self.space_channel_member_repository.find_channel_memberships(
             user_id=login_user.user_id,
             roles=[UserRoleEnum.CREATOR],
-            status=True
+            statuses=[MembershipStatusEnum.ACTIVE]
         )
         if len(existing_channels) >= MAX_USER_CHANNEL_COUNT:
             raise ChannelCreateLimitExceededError()
@@ -161,7 +192,7 @@ class ChannelService:
         memberships = await self.space_channel_member_repository.find_channel_memberships(
             user_id=login_user.user_id,
             roles=roles,
-            status=True
+            statuses=[MembershipStatusEnum.ACTIVE]
         )
 
         if not memberships:
@@ -301,7 +332,7 @@ class ChannelService:
             user_id=login_user.user_id
         )
 
-        if not membership:
+        if not membership or membership.status != MembershipStatusEnum.ACTIVE:
             raise ChannelNotFoundError()
 
         await self.space_channel_member_repository.update_pin_status(
@@ -326,7 +357,7 @@ class ChannelService:
             business_type=BusinessTypeEnum.CHANNEL,
             user_id=login_user.user_id
         )
-        if not current_membership or not current_membership.status:
+        if not current_membership or current_membership.status != MembershipStatusEnum.ACTIVE:
             raise ValueError("You are not a member of this channel and cannot view the member list")
 
         # 2. If a keyword is provided, perform a fuzzy search on usernames to get matched user_ids
@@ -392,7 +423,7 @@ class ChannelService:
             business_type=BusinessTypeEnum.CHANNEL,
             user_id=login_user.user_id
         )
-        if not current_membership or not current_membership.status:
+        if not current_membership or current_membership.status != MembershipStatusEnum.ACTIVE:
             raise ChannelNotFoundError()
 
         if current_membership.user_role not in (UserRoleEnum.CREATOR, UserRoleEnum.ADMIN):
@@ -404,7 +435,7 @@ class ChannelService:
             business_type=BusinessTypeEnum.CHANNEL,
             user_id=req.user_id
         )
-        if not target_membership or not target_membership.status:
+        if not target_membership or target_membership.status != MembershipStatusEnum.ACTIVE:
             raise ValueError("The target user is not a member of this channel")
 
         # 3. Modifying the creator's role is not allowed
@@ -506,7 +537,7 @@ class ChannelService:
             business_type=BusinessTypeEnum.CHANNEL,
             user_id=login_user.user_id
         )
-        if not current_membership or not current_membership.status:
+        if not current_membership or current_membership.status != MembershipStatusEnum.ACTIVE:
             raise ValueError("You are not a member of this channel")
 
         if current_membership.user_role not in (UserRoleEnum.CREATOR, UserRoleEnum.ADMIN):
@@ -522,7 +553,7 @@ class ChannelService:
             business_type=BusinessTypeEnum.CHANNEL,
             user_id=req.user_id
         )
-        if not target_membership or not target_membership.status:
+        if not target_membership or target_membership.status != MembershipStatusEnum.ACTIVE:
             raise ValueError("The target user is not a member of this channel")
 
         # 4. Removing the creator is not allowed
@@ -592,17 +623,15 @@ class ChannelService:
         result_list: List[ChannelSquareItemResponse] = []
         for i, row in enumerate(rows):
             channel = row[0]  # Channel object
-            user_subscription_status = row[1]  # None / True / False
-            subscriber_count = row[2]  # int
+            user_subscription_status = row[1]
+            user_subscription_update_time = row[2]
+            subscriber_count = row[3]
             article_count = article_counts[i] if i < len(article_counts) else 0
 
-            # Determine subscription status enum
-            if user_subscription_status is None:
-                status = SubscriptionStatusEnum.NOT_SUBSCRIBED
-            elif user_subscription_status:
-                status = SubscriptionStatusEnum.SUBSCRIBED
-            else:
-                status = SubscriptionStatusEnum.PENDING
+            status = self._resolve_subscription_status(
+                membership_status=user_subscription_status,
+                update_time=user_subscription_update_time,
+            )
 
             # Prepare source infos
             top_source_ids = channel_to_top_sources.get(channel.id, [])
@@ -647,22 +676,13 @@ class ChannelService:
             raise ChannelNotFoundError()
         channel = channels[0]
 
-        # 2. Check if the user has reached the maximum limit for subscribing channels
-        # Count subscribed channels (MEMBER and ADMIN roles, including pending status)
-        subscribed_channels = await self.space_channel_member_repository.find_channel_memberships(
-            user_id=login_user.user_id,
-            roles=[UserRoleEnum.MEMBER, UserRoleEnum.ADMIN],
-            status=True
+        existing_membership = await self.space_channel_member_repository.find_membership(
+            business_id=req.channel_id,
+            business_type=BusinessTypeEnum.CHANNEL,
+            user_id=login_user.user_id
         )
-        # Also count pending subscriptions (status=False for REVIEW channels)
-        pending_subscriptions = await self.space_channel_member_repository.find_channel_memberships(
-            user_id=login_user.user_id,
-            roles=[UserRoleEnum.MEMBER, UserRoleEnum.ADMIN],
-            status=False
-        )
-        total_subscriptions = len(subscribed_channels) + len(pending_subscriptions)
-        if total_subscriptions >= MAX_USER_SUBSCRIBE_COUNT:
-            raise ChannelSubscribeLimitExceededError()
+        if existing_membership and existing_membership.user_role != UserRoleEnum.MEMBER:
+            return SubscriptionStatusEnum.SUBSCRIBED
 
         # 3. Check channel visibility
         if channel.visibility == ChannelVisibilityEnum.PRIVATE:
@@ -670,24 +690,32 @@ class ChannelService:
 
         # 4. Determine subscription status based on channel visibility
         if channel.visibility == ChannelVisibilityEnum.PUBLIC:
-            status = True
+            status = MembershipStatusEnum.ACTIVE
             return_status = SubscriptionStatusEnum.SUBSCRIBED
         elif channel.visibility == ChannelVisibilityEnum.REVIEW:
-            status = False
+            status = MembershipStatusEnum.PENDING
             return_status = SubscriptionStatusEnum.PENDING
         else:
             raise ValueError(f"Unsupported channel visibility: {channel.visibility}")
 
-        existing_membership = await self.space_channel_member_repository.find_membership(
-            business_id=req.channel_id,
-            business_type=BusinessTypeEnum.CHANNEL,
-            user_id=login_user.user_id
-        )
-        # 5. Add membership record
+        if existing_membership and existing_membership.status == MembershipStatusEnum.ACTIVE:
+            return SubscriptionStatusEnum.SUBSCRIBED
+        if existing_membership and existing_membership.status == MembershipStatusEnum.PENDING and status == MembershipStatusEnum.PENDING:
+            return SubscriptionStatusEnum.PENDING
+
+        if not existing_membership or existing_membership.status == MembershipStatusEnum.REJECTED:
+            subscribed_channels = await self.space_channel_member_repository.find_channel_memberships(
+                user_id=login_user.user_id,
+                roles=[UserRoleEnum.MEMBER, UserRoleEnum.ADMIN],
+                statuses=[MembershipStatusEnum.ACTIVE, MembershipStatusEnum.PENDING]
+            )
+            if len(subscribed_channels) >= MAX_USER_SUBSCRIBE_COUNT:
+                raise ChannelSubscribeLimitExceededError()
+
+        previous_status = existing_membership.status if existing_membership else None
         if existing_membership:
             existing_membership.status = status
             await self.space_channel_member_repository.update(existing_membership)
-
         else:
             await self.space_channel_member_repository.add_member(
                 business_id=req.channel_id,
@@ -698,7 +726,11 @@ class ChannelService:
             )
 
         # 6. Send approval notification for review channels
-        if channel.visibility == ChannelVisibilityEnum.REVIEW and self.message_service:
+        if (
+                channel.visibility == ChannelVisibilityEnum.REVIEW
+                and self.message_service
+                and previous_status != MembershipStatusEnum.PENDING
+        ):
             try:
                 await self._send_subscribe_approval_notification(channel, login_user)
             except Exception as e:
@@ -769,7 +801,7 @@ class ChannelService:
             business_type=BusinessTypeEnum.CHANNEL,
             user_id=login_user.user_id
         )
-        if not current_membership or not current_membership.status:
+        if not current_membership or current_membership.status != MembershipStatusEnum.ACTIVE:
             raise ValueError("You are not a member of this channel")
 
         if current_membership.user_role != UserRoleEnum.CREATOR:
@@ -801,6 +833,7 @@ class ChannelService:
                             "Activated %d pending members for channel_id=%s after visibility change from REVIEW to PUBLIC",
                             activated_count, channel_id
                         )
+                    await self.space_channel_member_repository.remove_rejected_members(channel_id)
                     if self.message_service:
                         await self.message_service.batch_approve_channel_subscription_messages(
                             channel_id=channel_id,
@@ -884,7 +917,7 @@ class ChannelService:
             business_type=BusinessTypeEnum.CHANNEL,
             user_id=login_user.user_id
         )
-        if not current_membership or not current_membership.status:
+        if not current_membership or current_membership.status != MembershipStatusEnum.ACTIVE:
             # If private, only members can view unless special requirement
             if channel.visibility == ChannelVisibilityEnum.PRIVATE:
                 raise ChannelAccessDeniedError(msg="You do not have permission to view this channel")
@@ -937,12 +970,7 @@ class ChannelService:
                     })
 
         # Determine subscription status
-        if current_membership is None:
-            subscription_status = SubscriptionStatusEnum.NOT_SUBSCRIBED
-        elif current_membership.status:
-            subscription_status = SubscriptionStatusEnum.SUBSCRIBED
-        else:
-            subscription_status = SubscriptionStatusEnum.PENDING
+        subscription_status = self._resolve_membership_subscription_status(current_membership)
 
         return ChannelDetailResponse(
             id=channel.id,
@@ -980,7 +1008,11 @@ class ChannelService:
             business_type=BusinessTypeEnum.CHANNEL,
             user_id=login_user.user_id
         )
-        if not current_membership or not current_membership.status or current_membership.user_role != UserRoleEnum.CREATOR:
+        if (
+                not current_membership
+                or current_membership.status != MembershipStatusEnum.ACTIVE
+                or current_membership.user_role != UserRoleEnum.CREATOR
+        ):
             raise ChannelPermissionDeniedError(msg="Only the creator can dismiss the channel")
 
         # 3. Delete all user relationships
@@ -1012,7 +1044,7 @@ class ChannelService:
             business_type=BusinessTypeEnum.CHANNEL,
             user_id=login_user.user_id
         )
-        if not current_membership or not current_membership.status:
+        if not current_membership or current_membership.status != MembershipStatusEnum.ACTIVE:
             raise ValueError("You are not subscribed to this channel")
 
         # 2. Remove relationship
