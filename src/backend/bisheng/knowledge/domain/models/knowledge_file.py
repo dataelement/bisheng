@@ -42,6 +42,7 @@ class ParseType(Enum):
 
 class FileSource(Enum):
     UPLOAD = 'upload'  # user upload
+    CHANNEL = 'channel'
     SPACE_UPLOAD = 'space_upload'
 
 

@@ -1467,7 +1467,7 @@ class ChannelService:
             knowledge_id=req.knowledge_id,
             file_path=md_file_paths,
             parent_id=req.parent_id,
-            file_source=FileSource.SPACE_UPLOAD
+            file_source=FileSource.CHANNEL
         )
 
         # 5. Update preview_file_object_name for successful files
