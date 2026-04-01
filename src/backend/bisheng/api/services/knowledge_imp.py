@@ -144,7 +144,7 @@ def delete_vector_files(file_ids: List[int], knowledge: Knowledge) -> bool:
     logger.info(f"delete_files file_ids={file_ids} knowledge_id={knowledge.id}")
     logger.info("start init Milvus")
     vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(0, knowledge=knowledge,
-                                                                        embedding=FakeEmbeddings())
+                                                                        embeddings=FakeEmbeddings())
     logger.info("start init ES")
     es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=knowledge)
     # Automatically close purchase order aftercollectionIf it does not exist, it will not
@@ -1216,7 +1216,7 @@ def delete_vector_data(knowledge: Knowledge, file_ids: List[int]):
     embeddings = FakeEmbeddings()
     collection_name = knowledge.collection_name
     # <g id="Bold">Medical Treatment:</g>vectordb
-    vectore_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(0, knowledge=knowledge, embedding=embeddings)
+    vectore_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(0, knowledge=knowledge, embeddings=embeddings)
     res = vectore_client.col.delete(f"file_id in {file_ids}", timeout=10)
     logger.info(f"act=delete_vector file_id={file_ids} res={res}")
 

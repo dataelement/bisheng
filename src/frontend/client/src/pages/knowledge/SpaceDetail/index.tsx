@@ -95,6 +95,8 @@ export function KnowledgeSpaceContent({
     const [editingTagsFileId, setEditingTagsFileId] = useState<string | null>(null);
     const [isBatchTagging, setIsBatchTagging] = useState(false);
 
+    // (card view grid uses responsive CSS classes; keep card sizing stable)
+
     useEffect(() => {
         setSelectedFiles(new Set());
     }, [space.id]);

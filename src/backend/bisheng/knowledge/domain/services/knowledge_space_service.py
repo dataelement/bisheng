@@ -29,7 +29,7 @@ from bisheng.database.models.role import RoleDao
 from bisheng.database.models.tag import TagDao, TagBusinessTypeEnum, Tag
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao, KnowledgeTypeEnum, AuthTypeEnum, \
-    KnowledgeRead
+    KnowledgeRead, KnowledgeState
 from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFile, KnowledgeFileDao, KnowledgeFileStatus, FileType, FileSource
 )
@@ -182,6 +182,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         return knowledge_space
 
     async def get_space_info(self, space_id: int) -> KnowledgeSpaceInfoResp:
+        from bisheng.worker import rebuild_knowledge_celery
+
         space = await KnowledgeDao.aquery_by_id(space_id)
 
         follower_num = await SpaceChannelMemberDao.async_count_space_members(space_id)
@@ -201,6 +203,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         result.follower_num = follower_num
         result.file_num = total_file_num
+        if space.state != KnowledgeState.PUBLISHED.value:
+            rebuild_knowledge_celery.delay(space_id, new_model_id=space.model, invoke_user_id=self.login_user.user_id)
+
         return result
 
     async def delete_space(self, space_id: int) -> None:
@@ -660,7 +665,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             parent_id: Optional[int] = None,
             order_field: str = 'file_type',
             order_sort: str = 'asc',
-            file_status: KnowledgeFileStatus = None,
+            file_status: List[int] = None,
             page: int = 1,
             page_size: int = 20,
     ) -> dict:
@@ -679,7 +684,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         return {"total": total, "page": page, "page_size": page_size, "data": data}
 
     async def search_space_children(self, space_id: int, parent_id: Optional[int] = None, tag_ids: List[int] = None,
-                                    keyword: str = None, page: int = 1, page_size: int = 20) -> Dict:
+                                    keyword: str = None, page: int = 1, page_size: int = 20,
+                                    file_status: List[int] = None) -> Dict:
         space = await self._require_read_permission(space_id)
 
         filter_files = []
@@ -720,11 +726,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
             file_level_path = f"{parent_folder.file_level_path}/{parent_folder.id}"
 
         res = await KnowledgeFileDao.aget_file_by_filters(space_id, file_name=keyword, file_ids=filter_files,
-                                                          extra_file_ids=extra_file_ids,
+                                                          extra_file_ids=extra_file_ids, status=file_status,
                                                           file_level_path=file_level_path, order_by="file_type",
                                                           page=page, page_size=page_size)
         total = await KnowledgeFileDao.acount_file_by_filters(space_id, file_name=keyword, file_ids=filter_files,
-                                                              extra_file_ids=extra_file_ids,
+                                                              extra_file_ids=extra_file_ids, status=file_status,
                                                               file_level_path=file_level_path)
 
         data = await self._handle_file_folder_extra_info(res)

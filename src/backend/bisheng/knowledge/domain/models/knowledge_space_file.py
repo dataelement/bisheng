@@ -63,7 +63,7 @@ class SpaceFileDao(KnowledgeFileDao):
             parent_id: Optional[int],
             order_field: str = "file_type",
             order_sort: str = "desc",
-            file_status: KnowledgeFileStatus = None,
+            file_status: List[int] = None,
             page: int = 1,
             page_size: int = 20,
     ) -> List[KnowledgeFile]:
@@ -84,7 +84,7 @@ class SpaceFileDao(KnowledgeFileDao):
         path_filter = KnowledgeFile.file_level_path == exact_path
         filters = [KnowledgeFile.knowledge_id == knowledge_id, path_filter]
 
-        if file_status is not None:
+        if file_status:
             from sqlalchemy.orm import aliased
             from sqlalchemy import exists, and_
             Descendant = aliased(KnowledgeFile)
@@ -92,14 +92,14 @@ class SpaceFileDao(KnowledgeFileDao):
             descendant_exists = exists().where(
                 Descendant.knowledge_id == knowledge_id,
                 Descendant.file_type == 1,
-                Descendant.status == file_status.value,
+                Descendant.status.in_(file_status),
                 or_(
                     Descendant.file_level_path == folder_prefix,
                     Descendant.file_level_path.like(func.concat(folder_prefix, '/%'))
                 )
             )
             status_filter = or_(
-                and_(KnowledgeFile.file_type == 1, KnowledgeFile.status == file_status.value),
+                and_(KnowledgeFile.file_type == 1, KnowledgeFile.status.in_(file_status)),
                 and_(KnowledgeFile.file_type == 0, descendant_exists)
             )
             filters.append(status_filter)
@@ -137,7 +137,7 @@ class SpaceFileDao(KnowledgeFileDao):
                 WHEN 'jpg' THEN 9
                 WHEN 'jpeg' THEN 10
                 WHEN 'png' THEN 11
-                WHEN 'bpm' THEN 12
+                WHEN 'bmp' THEN 12
                 WHEN 'md' THEN 13
                 WHEN 'txt' THEN 14
                 WHEN 'html' THEN 15
@@ -155,7 +155,7 @@ class SpaceFileDao(KnowledgeFileDao):
             cls,
             knowledge_id: int,
             parent_id: Optional[int],
-            file_status: KnowledgeFileStatus = None,
+            file_status: List[int] = None,
     ) -> int:
         """
         Async: Count direct children under a given parent.
@@ -173,7 +173,7 @@ class SpaceFileDao(KnowledgeFileDao):
         path_filter = KnowledgeFile.file_level_path == exact_path
         filters = [KnowledgeFile.knowledge_id == knowledge_id, path_filter]
 
-        if file_status is not None:
+        if file_status:
             from sqlalchemy.orm import aliased
             from sqlalchemy import exists, and_
             Descendant = aliased(KnowledgeFile)
@@ -181,14 +181,14 @@ class SpaceFileDao(KnowledgeFileDao):
             descendant_exists = exists().where(
                 Descendant.knowledge_id == knowledge_id,
                 Descendant.file_type == FileType.FILE.value,
-                Descendant.status == file_status.value,
+                Descendant.status.in_(file_status),
                 or_(
                     Descendant.file_level_path == folder_prefix,
                     Descendant.file_level_path.like(func.concat(folder_prefix, '/%'))
                 )
             )
             status_filter = or_(
-                and_(KnowledgeFile.file_type == FileType.FILE.value, KnowledgeFile.status == file_status.value),
+                and_(KnowledgeFile.file_type == FileType.FILE.value, KnowledgeFile.status.in_(file_status)),
                 and_(KnowledgeFile.file_type == FileType.DIR.value, descendant_exists)
             )
             filters.append(status_filter)

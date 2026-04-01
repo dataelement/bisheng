@@ -30,21 +30,35 @@ export default function FilePreviewPage() {
     // Fetch real preview URL via API
     const [fileUrl, setFileUrl] = useState<string>("");
     const [loading, setLoading] = useState(true);
+    const [conversionFailed, setConversionFailed] = useState(false);
+    const isPptFile = /^pptx?$/i.test(fileType);
 
     useEffect(() => {
         if (!fileId || !spaceId) { setLoading(false); return; }
         setLoading(true);
+        setConversionFailed(false);
         getFilePreviewApi(spaceId, fileId)
             .then((data) => {
-                // Prefer preview_url, fallback to original_url
-                const relativeUrl = data.preview_url || data.original_url;
-                if (relativeUrl) {
-                    setFileUrl(`${window.location.origin}${__APP_ENV__.BASE_URL}${relativeUrl}`);
+                if (isPptFile) {
+                    // For ppt/pptx, backend converts to PDF; only use preview_url
+                    if (data.preview_url) {
+                        setFileUrl(`${window.location.origin}${__APP_ENV__.BASE_URL}${data.preview_url}`);
+                    } else {
+                        // Conversion failed — no usable preview
+                        setConversionFailed(true);
+                        setFileUrl("");
+                    }
+                } else {
+                    // Normal files: prefer preview_url, fallback to original_url
+                    const relativeUrl = data.preview_url || data.original_url;
+                    if (relativeUrl) {
+                        setFileUrl(`${window.location.origin}${__APP_ENV__.BASE_URL}${relativeUrl}`);
+                    }
                 }
             })
             .catch((err) => console.error("Failed to load preview URL:", err))
             .finally(() => setLoading(false));
-    }, [fileId, spaceId]);
+    }, [fileId, spaceId, isPptFile]);
 
     // --- AI Assistant state ---
     const [showAiAssistant, setShowAiAssistant] = useState(false);
@@ -89,8 +103,8 @@ export default function FilePreviewPage() {
         );
     }
 
-    // No URL available
-    if (!fileUrl) {
+    // No URL available (skip this guard for pptx conversion failure — handled by FilePreview)
+    if (!fileUrl && !conversionFailed) {
         return (
             <div className="h-screen flex items-center justify-center bg-white">
                 <div className="text-[#86909c]">{localize("com_knowledge.fetch_preview_link_failed")}</div>
@@ -115,6 +129,7 @@ export default function FilePreviewPage() {
                     fileType={fileType}
                     fileUrl={fileUrl}
                     actions={aiButton}
+                    conversionFailed={conversionFailed}
                 />
             </div>
 

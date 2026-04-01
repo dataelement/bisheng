@@ -1,4 +1,5 @@
 import { useState, KeyboardEvent, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { X } from "lucide-react";
 import {
     Dialog,
@@ -48,6 +49,7 @@ export function EditTagsModal({
     const [inputValue, setInputValue] = useState("");
     const [loading, setLoading] = useState(false);
     const { showToast } = useToastContext();
+    const queryClient = useQueryClient();
 
     const isBatchMode = !!(fileIds && fileIds.length > 0);
 
@@ -121,6 +123,8 @@ export function EditTagsModal({
             setSpaceTags((prev) => [...prev, newTag]);
             setSelectedTagIds((prev) => new Set(prev).add(newTag.id));
             setInputValue("");
+            // Invalidate shared cache so search dropdown updates
+            queryClient.invalidateQueries({ queryKey: ['spaceTags', spaceId] });
         } catch {
             showToast({ message: localize("com_knowledge.create_tag_failed"), status: "error" });
         }
@@ -144,6 +148,8 @@ export function EditTagsModal({
                 showToast({ message: localize("com_knowledge.tag_save_success"), status: "success" });
             }
             onSaved?.();
+            // Invalidate shared spaceTags cache so search dropdown picks up new tags
+            queryClient.invalidateQueries({ queryKey: ['spaceTags', spaceId] });
             onClose(true);
         } catch {
             showToast({ message: localize("com_knowledge.tag_save_failed"), status: "error" });

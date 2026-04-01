@@ -176,7 +176,7 @@ def copy_vector(
     embedding = FakeEmbeddings()
     source_col = source_konwledge.collection_name
     source_milvus = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(0, knowledge=source_konwledge,
-                                                                        embedding=embedding)
+                                                                        embeddings=embedding)
     # Saat Inies Exclusion:vector
     fields = [s.name for s in source_milvus.col.schema.fields if s.name != "pk"]
     source_data = source_milvus.col.query(
@@ -186,14 +186,14 @@ def copy_vector(
     for data in source_data:
         data["knowledge_id"] = target_knowledge.id
         data["document_id"] = target_file_id
-    milvus_db = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(0, knowledge=target_knowledge, embedding=embedding)
+    milvus_db = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(0, knowledge=target_knowledge, embeddings=embedding)
     # Create a new one for the first time collection
     if milvus_db.col is None:
         new_col = Collection(name=target_knowledge.collection_name, schema=source_milvus.col.schema,
                              using=source_milvus.alias,
                              consistency_level=source_milvus.consistency_level)
         milvus_db = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(0, knowledge=target_knowledge,
-                                                                        embedding=embedding)
+                                                                        embeddings=embedding)
 
     if milvus_db:
         insert_milvus(source_data, fields, milvus_db)
@@ -207,9 +207,9 @@ def create_milvus_col_and_es_index(source_konwledge: Knowledge, target_knowledge
     embedding = FakeEmbeddings()
     source_col = source_konwledge.collection_name
     source_milvus = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(0, knowledge=source_konwledge,
-                                                                        embedding=embedding)
+                                                                        embeddings=embedding)
     milvus_db = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(0, knowledge=target_knowledge,
-                                                                    embedding=embedding)
+                                                                    embeddings=embedding)
     if milvus_db.col is None and source_milvus.col is not None:
         new_col = Collection(name=target_knowledge.collection_name, schema=source_milvus.col.schema,
                              using=source_milvus.alias,

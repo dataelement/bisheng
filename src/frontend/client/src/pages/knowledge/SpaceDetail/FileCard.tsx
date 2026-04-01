@@ -164,7 +164,7 @@ export function FileCard({
     return (
         <Card
             className={cn(
-                "group transition-all cursor-pointer group rounded-lg overflow-hidden border p-0 gap-0",
+                "group transition-all duration-[350ms] ease-in-out cursor-pointer group rounded-lg overflow-hidden border p-0 gap-0",
                 isSelected ? "border-primary shadow-sm" : "hover:border-[#c9cdd4]",
                 hovered && "shadow-md"
             )}
@@ -250,10 +250,15 @@ export function FileCard({
                     <div className="flex items-center justify-between mt-1 min-w-0 gap-2">
                         <div className="flex items-center flex-1 min-w-0 min-h-[24px]">
                             {isAdmin && isFolder && file.fileNum != null && (
-                                <div className="text-sm font-medium leading-none">
-                                    <span className="text-emerald-500 font-semibold">{file.successFileNum ?? 0}</span>
-                                    <span className="text-[#86909c]">/{file.fileNum}</span>
+                                <div className="text-xs font-medium leading-none">
+                                    <span className="text-emerald-500 font-normal">{file.successFileNum ?? 0}</span>
+                                    <span className="text-[#86909c] font-normal">/{file.fileNum}</span>
                                 </div>
+                            )}
+                            {!isAdmin && isFolder && file.fileNum != null && (
+                                <span className="text-xs text-[#86909c] whitespace-nowrap">
+                                    {localize("com_knowledge_items_count", { count: file.fileNum })}
+                                </span>
                             )}
                             {(!isFolder && file.tags && file.tags.length > 0) && (
                                 <TagGroup tags={file.tags} />

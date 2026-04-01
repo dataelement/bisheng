@@ -14,6 +14,7 @@ import {
     RotateCcw,
     Trash2
 } from "lucide-react";
+import { useState } from "react";
 import { KnowledgeSpace, FileStatus, SortType, SortDirection, SpaceRole, VisibilityType } from "~/api/knowledge";
 import { cn, copyText } from "~/utils";
 import { CompoundSearchInput, SearchParams } from "./CompoundSearchInput";
@@ -92,6 +93,7 @@ export function KnowledgeSpaceHeader({
     const isAdmin = space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
     const showShare = space.visibility !== VisibilityType.PRIVATE;
     const { showToast } = useToastContext();
+    const [isSearchActive, setIsSearchActive] = useState(false);
 
     const handleShare = () => {
         try {
@@ -221,19 +223,25 @@ export function KnowledgeSpaceHeader({
             {/* Toolbar */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 {/* { Left side: search & toggle & filter } */}
-                <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full sm:w-auto">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:flex-nowrap gap-3 w-full">
                     {/* Search */}
-                    <div className="flex-1 sm:flex-none flex items-center gap-2 w-full sm:w-auto">
-                        <div className="relative flex-1 sm:flex-none sm:w-[450px]">
+                    <div
+                        className={cn(
+                            "flex items-center gap-2 min-w-0 w-full sm:w-auto",
+                            isSearchActive ? "sm:flex-1" : "sm:flex-none"
+                        )}
+                    >
+                        <div className={cn("relative min-w-0", isSearchActive ? "flex-1 w-full" : "flex-none w-full sm:w-[450px]")}>
                             <CompoundSearchInput
                                 spaceId={space.id}
                                 isRoot={currentPath.length === 0}
                                 onSearch={onSearch}
+                                onActiveChange={setIsSearchActive}
                             />
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-3 w-full sm:w-auto">
+                    <div className="flex items-center gap-3 w-full sm:w-auto shrink-0 sm:flex-none">
                         {/* View Mode & Extra drop (Placeholder for bulk operations if needed, currently view mode) */}
                         <div className="flex border rounded-md p-0.5 text-sm h-8 shrink-0">
                             <button
@@ -261,8 +269,17 @@ export function KnowledgeSpaceHeader({
                             <>
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
-                                        <Button variant="outline" size="icon" className="h-8 font-normal text-gray-700 bg-white border-[#e5e6eb]">
-                                            <FunnelIcon className="size-4" />
+                                        <Button
+                                            variant="outline"
+                                            size="icon"
+                                            className={cn(
+                                                "h-8 w-8 p-0 font-normal border-[#e5e6eb]",
+                                                statusFilter.length > 0
+                                                    ? "bg-[#E6EDFC] border-[#024DE3] text-[#024DE3] hover:bg-[#E6EDFC]"
+                                                    : "bg-white text-gray-700 hover:bg-[#f7f8fa]"
+                                            )}
+                                        >
+                                            <FunnelIcon className={cn("size-4", statusFilter.length > 0 ? "text-[#024DE3]" : "text-gray-700")} />
                                         </Button>
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent align="start">
@@ -307,7 +324,7 @@ export function KnowledgeSpaceHeader({
 
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
-                                        <Button variant="outline" size="icon" className="h-8 font-normal text-gray-700 bg-white border-[#e5e6eb]">
+                                        <Button variant="outline" size="icon" className="h-8 w-8 p-0 font-normal text-gray-700 bg-white border-[#e5e6eb]">
                                             <ArrowDownNarrowWideIcon className="size-4" />
                                         </Button>
                                     </DropdownMenuTrigger>

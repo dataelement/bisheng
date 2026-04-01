@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Search, X, ChevronDown } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import {
     DropdownMenu,
     DropdownMenuTrigger,
@@ -21,28 +22,29 @@ export interface CompoundSearchInputProps {
     isRoot?: boolean;
     onSearch?: (params: SearchParams) => void;
     className?: string;
+    onActiveChange?: (active: boolean) => void;
 }
 
-export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, className }: CompoundSearchInputProps) {
+export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, className, onActiveChange }: CompoundSearchInputProps) {
     const localize = useLocalize();
   const [scope, setScope] = useState<'current' | 'all'>('current');
     const [selectedTags, setSelectedTags] = useState<SpaceTag[]>([]);
     const [keyword, setKeyword] = useState('');
     const [isFocused, setIsFocused] = useState(false);
-    const [spaceTags, setSpaceTags] = useState<SpaceTag[]>([]);
 
     const containerRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
 
+    // Fetch space tags via react-query so cache is shared with EditTagsModal
+    const { data: spaceTags = [] } = useQuery({
+        queryKey: ['spaceTags', spaceId],
+        queryFn: () => getSpaceTagsApi(spaceId),
+        enabled: !!spaceId,
+    });
+
     useEffect(() => {
         setScope(isRoot ? 'all' : 'current');
     }, [isRoot]);
-
-    // Fetch space tags when spaceId changes
-    useEffect(() => {
-        if (!spaceId) return;
-        getSpaceTagsApi(spaceId).then(setSpaceTags).catch(() => {});
-    }, [spaceId]);
 
     // Handle clicking outside to close the dropdown
     useEffect(() => {
@@ -54,6 +56,10 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
+
+    useEffect(() => {
+        onActiveChange?.(isFocused);
+    }, [isFocused, onActiveChange]);
 
     const isSearching = selectedTags.length > 0 || keyword.trim().length > 0;
 
