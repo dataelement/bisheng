@@ -54,7 +54,12 @@ export default function Knowledge() {
     const navigate = useNavigate();
     const location = useLocation();
     const queryClient = useQueryClient();
-    const { spaceId: previewSpaceId } = useParams<{ spaceId?: string }>();
+    const { spaceId } = useParams<{ spaceId?: string }>();
+    const path = location.pathname || "";
+    const isShareRoute = /^\/knowledge\/share\//.test(path);
+    const isDetailRoute = /^\/knowledge\/space\//.test(path);
+    const previewSpaceId = isShareRoute ? spaceId : undefined;
+    const detailSpaceId = isDetailRoute ? spaceId : undefined;
     const [previewDrawerOpen, setPreviewDrawerOpen] = useState(false);
     const [squarePreviewSpaceId, setSquarePreviewSpaceId] = useState<string | undefined>();
     const [squarePreviewDrawerOpen, setSquarePreviewDrawerOpen] = useState(false);
@@ -96,12 +101,38 @@ export default function Knowledge() {
             .catch(() => setSpaceTags([]));
     }, [activeSpace?.id]);
 
-    // Open preview drawer when URL has a spaceId param
+    // Share route: close drawer when leaving /knowledge/share/:spaceId
     useEffect(() => {
-        if (previewSpaceId) {
-            setPreviewDrawerOpen(true);
+        if (!previewSpaceId) {
+            setPreviewDrawerOpen(false);
         }
     }, [previewSpaceId]);
+
+    // Deep link to space detail: /knowledge/space/:spaceId
+    useEffect(() => {
+        if (!detailSpaceId) return;
+        let cancelled = false;
+        (async () => {
+            try {
+                const detail = await getSpaceInfoApi(detailSpaceId);
+                if (cancelled) return;
+                setShowKnowledgeSquare(false);
+                setSquarePreviewDrawerOpen(false);
+                setSquarePreviewSpaceId(undefined);
+                setActiveSpace({ ...detail, id: detailSpaceId });
+            } catch {
+                if (cancelled) return;
+                showToast({
+                    message: localize("com_knowledge.space_invalid_or_deleted"),
+                    severity: NotificationSeverity.WARNING,
+                });
+                navigate("/knowledge?square=1", { replace: true });
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [detailSpaceId]);
 
     // If navigation requests the knowledge square (e.g. via share-link error), open it.
     useEffect(() => {
@@ -113,13 +144,20 @@ export default function Knowledge() {
 
     // Share link guard: if /knowledge/share/:spaceId points to an invalid/private space,
     // or a space whose join policy changed (approval -> public), show toast and redirect to square.
+    // Space creator opens their own share link → go to space detail (same as sidebar entry).
     useEffect(() => {
         if (!previewSpaceId) return;
         let cancelled = false;
+        setPreviewDrawerOpen(false);
         (async () => {
             try {
                 const info = await getSpaceInfoApi(previewSpaceId);
                 if (cancelled) return;
+
+                if (info.role === SpaceRole.CREATOR) {
+                    navigate(`/knowledge/space/${previewSpaceId}`, { replace: true });
+                    return;
+                }
 
                 // If the space is now private/inaccessible, treat as invalid for share links.
                 if (info.visibility === VisibilityType.PRIVATE) {
@@ -143,6 +181,8 @@ export default function Knowledge() {
                     navigate("/knowledge?square=1", { replace: true });
                     return;
                 }
+
+                setPreviewDrawerOpen(true);
             } catch {
                 if (cancelled) return;
                 showToast({

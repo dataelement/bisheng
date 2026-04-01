@@ -35,17 +35,31 @@ export async function getMessageListApi(params?: {
   page_size?: number;
 }): Promise<MessageListResponse> {
   const resp: any = await request.get(`/api/v1/message/list`, { params });
-  // 兼容两种返回结构：
-  // 1) axios 风格: { data: { data: [...], total: 9 } }
-  // 2) 直接返回:   { data: [...], total: 9 }
-  const root = resp?.data ?? resp ?? {};
+  // request.get already returns response.data in this project.
+  // Compatible with variants:
+  // 1) { status_code, data: { data: [...], total } }
+  // 2) { status_code, data: [...] }
+  // 3) { data: { data: [...], total } }
+  // 4) { data: [...], total }
+  // 5) [...]
+  const root = resp ?? {};
+  const statusCode = root?.status_code ?? root?.code ?? root?.data?.status_code ?? root?.data?.code;
+  if (statusCode && statusCode !== 200) {
+    throw new Error(root?.status_message || root?.message || "getMessageListApi failed");
+  }
+
   const payload = root?.data ?? root ?? {};
-  const list = Array.isArray(payload?.data)
-    ? payload.data
-    : (Array.isArray(payload) ? payload : []);
+  const list =
+    Array.isArray(payload?.data) ? payload.data :
+      Array.isArray(payload?.data?.data) ? payload.data.data :
+        Array.isArray(payload?.list) ? payload.list :
+          Array.isArray(payload) ? payload : [];
+
+  const total =
+    Number(payload?.total ?? payload?.data?.total ?? root?.total ?? list.length ?? 0);
   return {
     data: list,
-    total: payload?.total ?? root?.total ?? list.length ?? 0,
+    total,
   };
 }
 

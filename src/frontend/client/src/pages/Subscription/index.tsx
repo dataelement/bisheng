@@ -33,9 +33,12 @@ const MAX_USER_CHANNELS = 10;
 export default function Subscription() {
     const localize = useLocalize();
     const { user } = useAuthContext();
-    const { channelId: previewChannelId } = useParams<{ channelId?: string }>();
+    const { channelId } = useParams<{ channelId?: string }>();
     const navigate = useNavigate();
     const location = useLocation();
+    const isShareRoute = location.pathname.includes("/channel/share/");
+    const previewChannelId = isShareRoute ? channelId : undefined;
+    const detailChannelId = !isShareRoute ? channelId : undefined;
     const [activeChannel, setActiveChannel] = useState<Channel | null>(null);
     const [channelRefreshToken, setChannelRefreshToken] = useState(0);
     const [showChannelSquare, setShowChannelSquare] = useState(false);
@@ -147,6 +150,41 @@ export default function Subscription() {
             cancelled = true;
         };
     }, [previewChannelId, user]);
+
+    // Deep link to channel detail: /channel/:channelId
+    useEffect(() => {
+        if (!detailChannelId) return;
+        let cancelled = false;
+        (async () => {
+            try {
+                const detail: any = await getChannelDetailApi(detailChannelId);
+                if (cancelled) return;
+                const name = String(detail?.name ?? "");
+                setActiveChannel({
+                    id: String(detailChannelId),
+                    name,
+                    description: detail?.description,
+                    creator: detail?.creator_name ?? "",
+                    creatorId: "",
+                    subscriberCount: Number(detail?.subscriber_count ?? 0),
+                    articleCount: Number(detail?.article_count ?? 0),
+                    unreadCount: 0,
+                    role: ChannelRole.MEMBER,
+                    isPinned: false,
+                    createdAt: String(detail?.create_time ?? ""),
+                    updatedAt: String(detail?.latest_article_update_time ?? ""),
+                    subChannels: [],
+                    source_list: detail?.source_list ?? [],
+                });
+            } catch {
+                // Fallback: land on channel page; user can select manually
+                navigate("/channel", { replace: true });
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [detailChannelId]);
 
     // If navigation requests the channel square (e.g. via share-link error), open it.
     useEffect(() => {

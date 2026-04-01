@@ -172,25 +172,28 @@ export default function KnowledgeSquare({
         setJoiningId(space.id);
         const prevSpaces = spaces;
 
-        setSpaces((prev) =>
-            prev.map((s) =>
-                s.id === space.id
-                    ? { ...s, squareStatus: nextStatus, isFollowed: nextStatus === "joined", isPending: nextStatus === "pending" }
-                    : s
-            )
-        );
-
         try {
             await subscribeSpaceApi(space.id);
+            setSpaces((prev) =>
+                prev.map((s) =>
+                    s.id === space.id
+                        ? { ...s, squareStatus: nextStatus, isFollowed: nextStatus === "joined", isPending: nextStatus === "pending" }
+                        : s
+                )
+            );
             if (nextStatus === "joined") {
                 showToast({ message: localize("com_knowledge.join_success"), severity: NotificationSeverity.SUCCESS });
             } else {
                 showToast({ message: `${tJoinPrefix}`, severity: NotificationSeverity.SUCCESS });
             }
-        } catch {
-            // rollback
+        } catch (e) {
+            // rollback (keep original status/label)
             setSpaces(prevSpaces);
-            showToast({ message: localize("com_knowledge.operation_failed_retry"), severity: NotificationSeverity.ERROR });
+            const message =
+                (e as any)?.message ||
+                (e as any)?.status_message ||
+                localize("com_knowledge.operation_failed_retry");
+            showToast({ message, severity: NotificationSeverity.ERROR });
         } finally {
             setJoiningId(null);
         }

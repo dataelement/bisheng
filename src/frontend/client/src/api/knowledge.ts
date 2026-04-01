@@ -545,10 +545,9 @@ export async function getSquareSpacesApi(params?: {
             const isReleased = Boolean(rawAny?.is_released ?? itemAny?.is_released);
             const isFollowed = subscriptionStatus === "subscribed";
             const isPending = subscriptionStatus === "pending";
-            const squareStatus: "join" | "joined" | "pending" | "rejected" =
+            const squareStatus: "join" | "joined" | "pending" =
                 subscriptionStatus === "subscribed" ? "joined"
                 : subscriptionStatus === "pending" ? "pending"
-                : subscriptionStatus === "rejected" ? "rejected"
                 : "join";
 
             const fileNum = itemAny?.file_num ?? rawAny?.file_num ?? rawAny?.fileNum ?? itemAny?.fileNum ?? 0;
@@ -746,7 +745,15 @@ export async function batchUpdateTagsApi(
  * POST /api/v1/knowledge/space/{space_id}/subscribe
  */
 export async function subscribeSpaceApi(space_id: string): Promise<void> {
-    await request.post(`/api/v1/knowledge/space/${space_id}/subscribe`);
+    const res = await request.post(`/api/v1/knowledge/space/${space_id}/subscribe`) as any;
+    if (res?.status_code && res.status_code !== 200) {
+        const msg =
+            (res as any)?.status_message ||
+            (res as any)?.message ||
+            (res as any)?.msg ||
+            "subscribe space failed";
+        throw new Error(msg);
+    }
 }
 
 /**

@@ -147,9 +147,9 @@ export function FileCard({
             return;
         }
 
-        // In preview drawer mode we disable page navigation for file clicks.
-        if (disableClickNavigate) return;
-        // Call parent-provided preview handler
+        // Space square drawer sets disableClickNavigate to avoid relying on default navigation;
+        // still honor explicit onPreview when provided.
+        if (disableClickNavigate && !onPreview) return;
         onPreview?.(file.id);
     };
 
