@@ -1441,9 +1441,9 @@ class ChannelService:
         # 3. Upload articles to minio
         minio_client = await get_minio_storage()
         md_file_paths = []
-        preview_map: dict[str, str] = {}  # md_object_name -> preview_object_name
+        preview_map: dict[int, str] = {}  # md_object_name -> preview_object_name
 
-        for article in articles:
+        for index, article in enumerate(articles):
             file_name = self._sanitize_file_name(article.title)
             unique_id = generate_uuid()
 
@@ -1458,17 +1458,7 @@ class ChannelService:
             md_file_paths.append(
                 await minio_client.get_share_link(md_object_name, bucket=minio_client.tmp_bucket, clear_host=False))
 
-            # Upload content_html as .html for preview
-            if article.content_html:
-                preview_object_name = f"channel_articles/{unique_id}/{file_name}.html"
-                await minio_client.put_object_tmp(
-                    object_name=preview_object_name,
-                    file=article.content_html.encode("utf-8"),
-                    content_type="text/html",
-                )
-                preview_map[md_object_name] = await minio_client.get_share_link(preview_object_name,
-                                                                                bucket=minio_client.tmp_bucket,
-                                                                                clear_host=False)
+            preview_map[index] = article.content_html
 
         # 4. Call KnowledgeSpaceService.add_file
         from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
@@ -1485,13 +1475,15 @@ class ChannelService:
         from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileStatus
 
         result = []
-        for kf in knowledge_files:
-            item = kf.model_dump()
-            if kf.status != KnowledgeFileStatus.FAILED.value and kf.object_name in preview_map:
-                preview_name = preview_map[kf.object_name]
-                kf.preview_file_object_name = preview_name
-                await KnowledgeFileDao.async_update(kf)
-                item["preview_file_object_name"] = preview_name
-            result.append(item)
+        for index, kf in enumerate(knowledge_files):
+            if kf.status != KnowledgeFileStatus.FAILED.value:
+                html_content = preview_map[index]
+                preview_object_name = f"preview/{kf.id}.html"
+                await minio_client.put_object(object_name=preview_object_name,
+                                              file=html_content.encode("utf-8"),
+                                              content_type="text/html")
+                kf.preview_file_object_name = preview_object_name
+                result.append(kf)
+        await KnowledgeFileDao.async_update_batch(result)
 
         return result
