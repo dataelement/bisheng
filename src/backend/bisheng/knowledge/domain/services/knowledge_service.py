@@ -1567,12 +1567,25 @@ class KnowledgeService(KnowledgeUtils):
         return True
 
     @classmethod
-    def get_file_share_url(cls, file_id: int) -> Tuple[str, str]:
-        """ Get the original download address of the file And Corresponding preview file download address """
-        file = KnowledgeFileDao.get_file_by_ids([file_id])
+    def get_file_share_with_auth(cls, login_user: UserPayload, file_id: int) -> Tuple[str, str]:
+        """ Get the original download address of the file with authentication """
+        file = KnowledgeFileDao.query_by_id_sync(file_id)
         if not file:
             raise NotFoundError()
-        file = file[0]
+        knowledge_info = KnowledgeDao.query_by_id(file.id)
+        if not knowledge_info:
+            raise NotFoundError()
+        if not login_user.access_check(knowledge_info.user_id, str(knowledge_info.id), AccessType.KNOWLEDGE):
+            raise UnAuthorizedError()
+        return cls.get_file_share_url(file=file)
+
+    @classmethod
+    def get_file_share_url(cls, file_id: int = None, file: KnowledgeFile = None) -> Tuple[str, str]:
+        """ Get the original download address of the file And Corresponding preview file download address """
+        if file is None:
+            file = KnowledgeFileDao.query_by_id_sync(file_id)
+        if not file:
+            raise NotFoundError()
         minio_client = get_minio_storage_sync()
         if file.preview_file_object_name:
             original_url = cls.get_file_share_url_with_empty(file.object_name)
