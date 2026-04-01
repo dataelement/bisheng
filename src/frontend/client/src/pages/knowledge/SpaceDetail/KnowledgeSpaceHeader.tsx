@@ -264,87 +264,83 @@ export function KnowledgeSpaceHeader({
                             </button>
                         </div>
 
-                        {/* Filters & Sort */}
-                        {viewMode === "card" && (
-                            <>
-                                <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                        <Button
-                                            variant="outline"
-                                            size="icon"
-                                            className={cn(
-                                                "h-8 w-8 p-0 font-normal border-[#e5e6eb]",
-                                                statusFilter.length > 0
-                                                    ? "bg-[#E6EDFC] border-[#024DE3] text-[#024DE3] hover:bg-[#E6EDFC]"
-                                                    : "bg-white text-gray-700 hover:bg-[#f7f8fa]"
-                                            )}
-                                        >
-                                            <FunnelIcon className={cn("size-4", statusFilter.length > 0 ? "text-[#024DE3]" : "text-gray-700")} />
-                                        </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="start">
-                                        <div className="px-2 py-1.5 text-xs font-medium text-[#86909c]">{localize("com_knowledge.status")}</div>
-                                        <DropdownMenuCheckboxItem
-                                            checked={statusFilter.includes(FileStatus.UPLOADING)}
-                                            onCheckedChange={(checked) => onFilterStatus(FileStatus.UPLOADING, checked)}
-                                        >
-                                            {localize("com_knowledge.uploading_status")}</DropdownMenuCheckboxItem>
-                                        <DropdownMenuCheckboxItem
-                                            checked={statusFilter.includes(FileStatus.WAITING)}
-                                            onCheckedChange={(checked) => onFilterStatus(FileStatus.WAITING, checked)}
-                                        >
-                                            {localize("com_knowledge.queueing_status")}</DropdownMenuCheckboxItem>
-                                        <DropdownMenuCheckboxItem
-                                            checked={statusFilter.includes(FileStatus.PROCESSING)}
-                                            onCheckedChange={(checked) => onFilterStatus(FileStatus.PROCESSING, checked)}
-                                        >
-                                            {localize("com_knowledge.parsing_status")}</DropdownMenuCheckboxItem>
-                                        <DropdownMenuCheckboxItem
-                                            checked={statusFilter.includes(FileStatus.REBUILDING)}
-                                            onCheckedChange={(checked) => onFilterStatus(FileStatus.REBUILDING, checked)}
-                                        >
-                                            {localize("com_knowledge.rebuilding_status")}</DropdownMenuCheckboxItem>
-                                        <DropdownMenuCheckboxItem
-                                            checked={statusFilter.includes(FileStatus.SUCCESS)}
-                                            onCheckedChange={(checked) => onFilterStatus(FileStatus.SUCCESS, checked)}
-                                        >
-                                            {localize("com_knowledge.success")}</DropdownMenuCheckboxItem>
-                                        <DropdownMenuCheckboxItem
-                                            checked={statusFilter.includes(FileStatus.FAILED)}
-                                            onCheckedChange={(checked) => onFilterStatus(FileStatus.FAILED, checked)}
-                                        >
-                                            {localize("com_knowledge.fail")}</DropdownMenuCheckboxItem>
-                                        <DropdownMenuCheckboxItem
-                                            checked={statusFilter.includes(FileStatus.TIMEOUT)}
-                                            onCheckedChange={(checked) => onFilterStatus(FileStatus.TIMEOUT, checked)}
-                                        >
-                                            {localize("com_knowledge.timeout")}</DropdownMenuCheckboxItem>
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
+                        {/* Status filter — visible in both card and list views */}
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button
+                                    variant="outline"
+                                    size="icon"
+                                    className={cn(
+                                        "h-8 w-8 p-0 font-normal border-[#e5e6eb]",
+                                        statusFilter.length > 0
+                                            ? "bg-[#E6EDFC] border-[#024DE3] text-[#024DE3] hover:bg-[#E6EDFC]"
+                                            : "bg-white text-gray-700 hover:bg-[#f7f8fa]"
+                                    )}
+                                >
+                                    <FunnelIcon className={cn("size-4", statusFilter.length > 0 ? "text-[#024DE3]" : "text-gray-700")} />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start">
+                                <div className="px-2 py-1.5 text-xs font-medium text-[#86909c]">{localize("com_knowledge.status")}</div>
+                                <DropdownMenuCheckboxItem
+                                    checked={statusFilter.includes(FileStatus.UPLOADING)}
+                                    onCheckedChange={(checked) => onFilterStatus(FileStatus.UPLOADING, checked)}
+                                >
+                                    {localize("com_knowledge.uploading_status")}</DropdownMenuCheckboxItem>
+                                <DropdownMenuCheckboxItem
+                                    checked={statusFilter.includes(FileStatus.WAITING)}
+                                    onCheckedChange={(checked) => onFilterStatus(FileStatus.WAITING, checked)}
+                                >
+                                    {localize("com_knowledge.queueing_status")}</DropdownMenuCheckboxItem>
+                                <DropdownMenuCheckboxItem
+                                    checked={statusFilter.includes(FileStatus.PROCESSING)}
+                                    onCheckedChange={(checked) => onFilterStatus(FileStatus.PROCESSING, checked)}
+                                >
+                                    {localize("com_knowledge.parsing_status")}</DropdownMenuCheckboxItem>
+                                <DropdownMenuCheckboxItem
+                                    checked={statusFilter.includes(FileStatus.REBUILDING)}
+                                    onCheckedChange={(checked) => onFilterStatus(FileStatus.REBUILDING, checked)}
+                                >
+                                    {localize("com_knowledge.rebuilding_status")}</DropdownMenuCheckboxItem>
+                                <DropdownMenuCheckboxItem
+                                    checked={statusFilter.includes(FileStatus.SUCCESS)}
+                                    onCheckedChange={(checked) => onFilterStatus(FileStatus.SUCCESS, checked)}
+                                >
+                                    {localize("com_knowledge.success")}</DropdownMenuCheckboxItem>
+                                <DropdownMenuCheckboxItem
+                                    checked={statusFilter.includes(FileStatus.FAILED)}
+                                    onCheckedChange={(checked) => onFilterStatus(FileStatus.FAILED, checked)}
+                                >
+                                    {localize("com_knowledge.fail")}</DropdownMenuCheckboxItem>
+                                <DropdownMenuCheckboxItem
+                                    checked={statusFilter.includes(FileStatus.TIMEOUT)}
+                                    onCheckedChange={(checked) => onFilterStatus(FileStatus.TIMEOUT, checked)}
+                                >
+                                    {localize("com_knowledge.timeout")}</DropdownMenuCheckboxItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
 
-                                <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                        <Button variant="outline" size="icon" className="h-8 w-8 p-0 font-normal text-gray-700 bg-white border-[#e5e6eb]">
-                                            <ArrowDownNarrowWideIcon className="size-4" />
-                                        </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="start">
-                                        <div className="px-2 py-1.5 text-xs font-medium text-[#86909c]">{localize("com_knowledge.sort_field")}</div>
-                                        <DropdownMenuItem onClick={() => onSort(SortType.NAME)}>
-                                            {localize("com_knowledge.sort_by_name")}{sortBy === SortType.NAME && (sortDirection === SortDirection.ASC ? "↑" : "↓")}
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem onClick={() => onSort(SortType.TYPE)}>
-                                            {localize("com_knowledge.sort_by_type")}{sortBy === SortType.TYPE && (sortDirection === SortDirection.ASC ? "↑" : "↓")}
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem onClick={() => onSort(SortType.SIZE)}>
-                                            {localize("com_knowledge.sort_by_size")}{sortBy === SortType.SIZE && (sortDirection === SortDirection.ASC ? "↑" : "↓")}
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem onClick={() => onSort(SortType.UPDATE_TIME)}>
-                                            {localize("com_knowledge.sort_by_time")}{sortBy === SortType.UPDATE_TIME && (sortDirection === SortDirection.ASC ? "↑" : "↓")}
-                                        </DropdownMenuItem>
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
-                            </>
+                        {/* Sort dropdown — card view only (list view uses column header sorting) */}
+                        {viewMode === "card" && (
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="outline" size="icon" className="h-8 w-8 p-0 font-normal text-gray-700 bg-white border-[#e5e6eb]">
+                                        <ArrowDownNarrowWideIcon className="size-4" />
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="start">
+                                    <div className="px-2 py-1.5 text-xs font-medium text-[#86909c]">{localize("com_knowledge.sort_field")}</div>
+                                    <DropdownMenuItem onClick={() => onSort(SortType.NAME)}>
+                                        {localize("com_knowledge.sort_by_name_label")}{sortBy === SortType.NAME && (sortDirection === SortDirection.ASC ? "↑" : "↓")}
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => onSort(SortType.TYPE)}>
+                                        {localize("com_knowledge.sort_by_type_label")}{sortBy === SortType.TYPE && (sortDirection === SortDirection.ASC ? "↑" : "↓")}
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => onSort(SortType.UPDATE_TIME)}>
+                                        {localize("com_knowledge.sort_by_update_time_label")}{sortBy === SortType.UPDATE_TIME && (sortDirection === SortDirection.ASC ? "↑" : "↓")}
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
                         )}
                     </div>
                 </div>
@@ -359,7 +355,7 @@ export function KnowledgeSpaceHeader({
                                 </Button> */}
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
-                                        <Button size="sm" variant="outline" className="h-8 font-normal rounded-md border-[#e5e6eb] text-[#4e5969]" disabled={isSearching}>
+                                        <Button size="sm" variant="outline" className="h-8 font-normal rounded-md border-[#e5e6eb] text-[#4e5969]">
                                             {localize("com_knowledge.batch_operation")}<ChevronDown className="size-4 ml-1" />
                                         </Button>
                                     </DropdownMenuTrigger>

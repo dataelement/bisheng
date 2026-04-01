@@ -190,6 +190,22 @@ customAxios.interceptors.response.use(
   },
 );
 
+const paramsSerializer = (params) => {
+  return Object.keys(params)
+    .map(key => {
+      const value = params[key];
+      if (value === undefined) {
+        return null; // 只返回非undefined的值
+      }
+      if (Array.isArray(value)) {
+        return value.map(val => `${key}=${val}`).join('&');
+      }
+      return `${key}=${value}`;
+    })
+    .filter(item => item !== null) // 过滤掉值为null的项
+    .join('&');
+}
+
 export default {
   get: _get,
   getResponse: _getResponse,
@@ -202,4 +218,5 @@ export default {
   patch: _patch,
   refreshToken,
   dispatchTokenUpdatedEvent,
+  paramsSerializer
 };

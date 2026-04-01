@@ -46,6 +46,13 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
         setScope(isRoot ? 'all' : 'current');
     }, [isRoot]);
 
+    // Reset search state when switching to a different space
+    useEffect(() => {
+        setSelectedTags([]);
+        setKeyword('');
+        setIsFocused(false);
+    }, [spaceId]);
+
     // Handle clicking outside to close the dropdown
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -157,7 +164,14 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
                     ref={inputRef}
                     type="text"
                     value={keyword}
-                    onChange={(e) => setKeyword(e.target.value)}
+                    onChange={(e) => {
+                        const newVal = e.target.value;
+                        setKeyword(newVal);
+                        // Auto-exit search mode when input is cleared and no tags are selected
+                        if (newVal === '' && selectedTags.length === 0) {
+                            fireSearch([], '');
+                        }
+                    }}
                     onKeyDown={handleKeyDown}
                     maxLength={100}
                     placeholder={selectedTags.length === 0 ? localize("com_knowledge.search_in_current_space") : ""}

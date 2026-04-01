@@ -237,10 +237,13 @@ export function KnowledgeSpaceContent({
                 if (!url) { showToast({ message: localize("com_knowledge.get_download_link_failed"), status: "error" }); return; }
                 triggerUrlDownload(url, `${file?.name ?? "folder"}.zip`);
             } else {
-                // Single file: get original URL from preview API
-                const { original_url } = await getFilePreviewApi(String(space.id), fileId);
-                if (!original_url) { showToast({ message: localize("com_knowledge.get_download_link_failed"), status: "error" }); return; }
-                triggerUrlDownload(original_url, file?.name);
+                // Single file: use preview_url for channel files, original_url for others
+                const previewData = await getFilePreviewApi(String(space.id), fileId);
+                const downloadUrl = file?.fileSource === 'channel'
+                    ? previewData.preview_url
+                    : previewData.original_url;
+                if (!downloadUrl) { showToast({ message: localize("com_knowledge.get_download_link_failed"), status: "error" }); return; }
+                triggerUrlDownload(downloadUrl, file?.name);
             }
         } catch {
             showToast({ message: localize("com_knowledge.download_failed"), status: "error" });
