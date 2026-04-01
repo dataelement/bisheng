@@ -144,15 +144,7 @@ class KnowledgeSpaceChatService:
             )
             reasoning_content += one.additional_kwargs.get("reasoning_content", "")
             answer += one.content
-        yield ChatResponse(
-            category=MessageCategory.STREAM,
-            message={
-                "content": answer,
-                "reasoning_content": reasoning_content
-            },
-            type="end"
-        )
-        await ChatMessageDao.ainsert_batch([
+        messages = [
             ChatMessage(
                 category=MessageCategory.QUESTION,
                 message=json.dumps({
@@ -177,7 +169,8 @@ class KnowledgeSpaceChatService:
                 type="end",
                 is_bot=True,
             )
-        ])
+        ]
+        await ChatMessageDao.ainsert_batch(messages)
         if not session.flow_name:
             asyncio.create_task(self.generate_conversation(
                 user_id=self.login_user.user_id,
@@ -185,6 +178,15 @@ class KnowledgeSpaceChatService:
                 question=query,
                 answer=answer,
             ))
+
+        yield ChatResponse(
+            category=MessageCategory.STREAM,
+            message={
+                "content": answer,
+                "reasoning_content": reasoning_content
+            },
+            type="end"
+        )
 
     @staticmethod
     async def generate_conversation(user_id: int, chat_id: str, question: str, answer: str = None):
