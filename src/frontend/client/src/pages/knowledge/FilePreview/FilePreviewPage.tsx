@@ -17,21 +17,37 @@ const AI_SPLIT_STORAGE_KEY = "file-preview-ai-split-width";
 const AI_MIN_LEFT = 480;
 const AI_MIN_RIGHT = 360;
 
+/**
+ * Extract file extension from a URL path, ignoring query parameters.
+ * e.g. "/bisheng/preview/84296.html?X-Amz-Algorithm=..." → "html"
+ */
+function extractExtFromUrl(url: string, fallback: string): string {
+    try {
+        // Strip query string and hash
+        const pathOnly = url.split('?')[0].split('#')[0];
+        const lastSegment = pathOnly.split('/').pop() || '';
+        const dotIndex = lastSegment.lastIndexOf('.');
+        if (dotIndex >= 0 && dotIndex < lastSegment.length - 1) {
+            return lastSegment.substring(dotIndex + 1).toLowerCase();
+        }
+    } catch {
+        // Parsing failed, use fallback
+    }
+    return fallback;
+}
+
 export default function FilePreviewPage() {
     const localize = useLocalize();
     const { fileId } = useParams<{ fileId: string }>();
     const [searchParams] = useSearchParams();
     const fileName = searchParams.get("name") || localize("com_knowledge.unknown_file");
-    // Prefer URL param; fallback to extension extracted from filename
-    const rawType = searchParams.get("type") || "";
-    const fileType = rawType || fileName.split('.').pop()?.toLowerCase() || "pdf";
     const spaceId = searchParams.get("spaceId") || "";
 
     // Fetch real preview URL via API
     const [fileUrl, setFileUrl] = useState<string>("");
+    const [fileType, setFileType] = useState<string>("pdf");
     const [loading, setLoading] = useState(true);
     const [conversionFailed, setConversionFailed] = useState(false);
-    const isPptFile = /^pptx?$/i.test(fileType);
 
     useEffect(() => {
         if (!fileId || !spaceId) { setLoading(false); return; }
@@ -39,26 +55,30 @@ export default function FilePreviewPage() {
         setConversionFailed(false);
         getFilePreviewApi(spaceId, fileId)
             .then((data) => {
-                if (isPptFile) {
-                    // For ppt/pptx, backend converts to PDF; only use preview_url
-                    if (data.preview_url) {
-                        setFileUrl(`${window.location.origin}${__APP_ENV__.BASE_URL}${data.preview_url}`);
-                    } else {
-                        // Conversion failed — no usable preview
-                        setConversionFailed(true);
-                        setFileUrl("");
-                    }
-                } else {
-                    // Normal files: prefer preview_url, fallback to original_url
-                    const relativeUrl = data.preview_url || data.original_url;
-                    if (relativeUrl) {
-                        setFileUrl(`${window.location.origin}${__APP_ENV__.BASE_URL}${relativeUrl}`);
-                    }
+                // Prefer preview_url, fallback to original_url
+                const chosenUrl = data.preview_url || data.original_url;
+                if (!chosenUrl) {
+                    setFileUrl("");
+                    return;
                 }
+
+                const ext = extractExtFromUrl(chosenUrl, "pdf");
+
+                // If backend didn't produce a preview_url and the original is ppt/pptx,
+                // the raw file can't be rendered — mark as conversion failed.
+                if (!data.preview_url && /^pptx?$/.test(ext)) {
+                    setConversionFailed(true);
+                    setFileUrl("");
+                    setFileType(ext);
+                    return;
+                }
+
+                setFileUrl(`${window.location.origin}${__APP_ENV__.BASE_URL}${chosenUrl}`);
+                setFileType(ext);
             })
             .catch((err) => console.error("Failed to load preview URL:", err))
             .finally(() => setLoading(false));
-    }, [fileId, spaceId, isPptFile]);
+    }, [fileId, spaceId]);
 
     // --- AI Assistant state ---
     const [showAiAssistant, setShowAiAssistant] = useState(false);

@@ -22,6 +22,10 @@ interface KnowledgeSpaceSidebarProps {
     onSpaceSettings: (space: KnowledgeSpace) => void;
     onManageMembers: (space: KnowledgeSpace) => void;
     onKnowledgeSquare?: () => void;
+    collapsed?: boolean;
+    onCollapsedChange?: (collapsed: boolean) => void;
+    /** When true, hide ONLY the expand toggle in collapsed mode (expand is provided elsewhere). */
+    hideExpandToggleWhenCollapsed?: boolean;
 }
 
 // Sort cycle: update_time → name → update_time
@@ -38,9 +42,17 @@ export function KnowledgeSpaceSidebar({
     onSpaceSettings,
     onManageMembers,
     onKnowledgeSquare,
+    collapsed: collapsedProp,
+    onCollapsedChange,
+    hideExpandToggleWhenCollapsed,
 }: KnowledgeSpaceSidebarProps) {
     const localize = useLocalize();
-    const [collapsed, setCollapsed] = useState(false);
+    const [collapsedState, setCollapsedState] = useState(false);
+    const collapsed = collapsedProp ?? collapsedState;
+    const setCollapsed = (next: boolean) => {
+        onCollapsedChange?.(next);
+        if (collapsedProp === undefined) setCollapsedState(next);
+    };
     const [createdCollapsed, setCreatedCollapsed] = useState(false);
     const [joinedCollapsed, setJoinedCollapsed] = useState(false);
     const [createdSortBy, setCreatedSortBy] = useState<SortType>(SortType.UPDATE_TIME);
@@ -114,7 +126,7 @@ export function KnowledgeSpaceSidebar({
     return (
         <div
             className={[
-                "h-full bg-white border-r border-[#e5e6eb] flex flex-col overflow-hidden flex-shrink-0",
+                `h-full bg-white flex flex-col overflow-hidden flex-shrink-0 ${collapsed ? "" : "border-r border-[#e5e6eb]"}`,
                 "transition-[width] duration-[350ms] ease-in-out",
                 collapsed ? "w-12" : "w-60",
             ].join(" ")}
@@ -124,18 +136,20 @@ export function KnowledgeSpaceSidebar({
                 <div className={collapsed ? "flex items-center justify-center" : "border-b border-[#e5e6eb] space-y-4 pb-4"}>
                     <div className={collapsed ? "flex items-center justify-center" : "px-2 flex justify-between items-center text-[14px] font-medium"}>
                         {!collapsed && <span className="text-[#1d2129]">{localize("com_knowledge.knowledge_space")}</span>}
-                        <Button
-                            size="icon"
-                            variant="ghost"
-                            className={collapsed ? "w-5 h-5" : "w-5 h-5 text-[#86909c]"}
-                            onClick={() => setCollapsed((v) => !v)}
-                        >
-                            {collapsed ? (
-                                <PanelLeftOpenIcon className="size-5" />
-                            ) : (
-                                <PanelRightOpenIcon className="size-5" />
-                            )}
-                        </Button>
+                        {!(collapsed && hideExpandToggleWhenCollapsed) && (
+                            <Button
+                                size="icon"
+                                variant="ghost"
+                                className={collapsed ? "w-5 h-5" : "w-5 h-5 text-[#86909c]"}
+                                onClick={() => setCollapsed(!collapsed)}
+                            >
+                                {collapsed ? (
+                                    <PanelLeftOpenIcon className="size-5" />
+                                ) : (
+                                    <PanelRightOpenIcon className="size-5" />
+                                )}
+                            </Button>
+                        )}
                     </div>
                     {!collapsed && (
                         <div className="flex items-center gap-3">

@@ -685,7 +685,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
     async def search_space_children(self, space_id: int, parent_id: Optional[int] = None, tag_ids: List[int] = None,
                                     keyword: str = None, page: int = 1, page_size: int = 20,
-                                    file_status: List[int] = None) -> Dict:
+                                    file_status: List[int] = None, order_field: str = "file_type",
+                                    order_sort: str = "asc") -> Dict:
         space = await self._require_read_permission(space_id)
 
         filter_files = []
@@ -728,6 +729,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         res = await KnowledgeFileDao.aget_file_by_filters(space_id, file_name=keyword, file_ids=filter_files,
                                                           extra_file_ids=extra_file_ids, status=file_status,
                                                           file_level_path=file_level_path, order_by="file_type",
+                                                          order_field=order_field, order_sort=order_sort,
                                                           page=page, page_size=page_size)
         total = await KnowledgeFileDao.acount_file_by_filters(space_id, file_name=keyword, file_ids=filter_files,
                                                               extra_file_ids=extra_file_ids, status=file_status,

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useLayoutEffect } from "react";
 import { useRecoilValue } from "recoil";
 import { FileStatus, FileType, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceRole, batchDeleteApi, batchDownloadApi, batchRetryApi, getFilePreviewApi } from "~/api/knowledge";
 import { useConfirm, useToastContext } from "~/Providers";
@@ -41,6 +41,8 @@ interface KnowledgeSpaceContentProps {
     onToggleAiAssistant?: () => void;
     isAiAssistantOpen?: boolean;
     onCreateSpace?: () => void;
+    sidebarCollapsed?: boolean;
+    onExpandSidebar?: () => void;
 }
 
 export function KnowledgeSpaceContent({
@@ -70,6 +72,8 @@ export function KnowledgeSpaceContent({
     onToggleAiAssistant,
     isAiAssistantOpen,
     onCreateSpace,
+    sidebarCollapsed,
+    onExpandSidebar,
 }: KnowledgeSpaceContentProps) {
     const localize = useLocalize();
     const displayFiles = [
@@ -95,7 +99,54 @@ export function KnowledgeSpaceContent({
     const [editingTagsFileId, setEditingTagsFileId] = useState<string | null>(null);
     const [isBatchTagging, setIsBatchTagging] = useState(false);
 
-    // (card view grid uses responsive CSS classes; keep card sizing stable)
+    // Card view: compute columns by *container width* (not viewport width).
+    // Thresholds (container width):
+    // >=1296: 6, 1024-1295: 5, 768-1023: 4, 600-767: 3, 480-599: 2, <480: 1
+    const cardGridRef = useRef<HTMLDivElement | null>(null);
+    const calcCols = (w: number) => {
+        if (w >= 1296) return 6;
+        if (w >= 1024) return 5;
+        if (w >= 768) return 4;
+        if (w >= 600) return 3;
+        if (w >= 480) return 2;
+        return 1;
+    };
+    const [cardCols, setCardCols] = useState(() => {
+        // Avoid first-paint "1 column" flash: start from viewport width, then refine with container width.
+        const w = typeof window !== "undefined"
+            ? (document.documentElement?.clientWidth || window.innerWidth || 0)
+            : 0;
+        return calcCols(w);
+    });
+    useLayoutEffect(() => {
+        if (viewMode !== "card") return;
+        const el = cardGridRef.current;
+        if (!el) return;
+
+        // Prefer the scroll container width (grid's parent) to avoid 0-width reads on first paint.
+        const parent = el.parentElement as HTMLElement | null;
+        const getWidth = () => parent?.clientWidth || el.clientWidth || 0;
+
+        let rafId: number | null = null;
+        const apply = () => {
+            const w = getWidth();
+            if (!w) {
+                rafId = window.requestAnimationFrame(apply);
+                return;
+            }
+            const cols = calcCols(w);
+            setCardCols((prev) => (prev === cols ? prev : cols));
+        };
+
+        apply();
+        const ro = new ResizeObserver(() => apply());
+        ro.observe(el);
+        if (parent) ro.observe(parent);
+        return () => {
+            if (rafId) window.cancelAnimationFrame(rafId);
+            ro.disconnect();
+        };
+    }, [viewMode]);
 
     useEffect(() => {
         setSelectedFiles(new Set());
@@ -237,10 +288,13 @@ export function KnowledgeSpaceContent({
                 if (!url) { showToast({ message: localize("com_knowledge.get_download_link_failed"), status: "error" }); return; }
                 triggerUrlDownload(url, `${file?.name ?? "folder"}.zip`);
             } else {
-                // Single file: get original URL from preview API
-                const { original_url } = await getFilePreviewApi(String(space.id), fileId);
-                if (!original_url) { showToast({ message: localize("com_knowledge.get_download_link_failed"), status: "error" }); return; }
-                triggerUrlDownload(original_url, file?.name);
+                // Single file: use preview_url for channel files, original_url for others
+                const previewData = await getFilePreviewApi(String(space.id), fileId);
+                const downloadUrl = file?.fileSource === 'channel'
+                    ? previewData.preview_url
+                    : previewData.original_url;
+                if (!downloadUrl) { showToast({ message: localize("com_knowledge.get_download_link_failed"), status: "error" }); return; }
+                triggerUrlDownload(downloadUrl, file?.name);
             }
         } catch {
             showToast({ message: localize("com_knowledge.download_failed"), status: "error" });
@@ -436,6 +490,8 @@ export function KnowledgeSpaceContent({
                 onBatchDelete={handleBatchDelete}
                 onToggleAiAssistant={onToggleAiAssistant}
                 isAiAssistantOpen={isAiAssistantOpen}
+                sidebarCollapsed={sidebarCollapsed}
+                onExpandSidebar={onExpandSidebar}
             />
 
             {/* Content Container (Scrollable) */}
@@ -461,7 +517,11 @@ export function KnowledgeSpaceContent({
                     </div>
                 ) : viewMode === "card" ? (
                     <div className="flex-1 overflow-y-auto">
-                        <div className="py-4 grid gap-4 grid-cols-1 min-[480px]:grid-cols-2 min-[600px]:grid-cols-3 min-[768px]:grid-cols-4 min-[1024px]:grid-cols-5 min-[1296px]:grid-cols-6">
+                        <div
+                            ref={cardGridRef}
+                            className="py-4 grid gap-4 w-full min-w-0"
+                            style={{ gridTemplateColumns: `repeat(${cardCols}, minmax(0, 1fr))` }}
+                        >
                             {displayFiles.map((file) => (
                                 <FileCard
                                     key={file.id}

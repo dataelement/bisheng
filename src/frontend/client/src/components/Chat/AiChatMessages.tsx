@@ -22,6 +22,8 @@ interface AiChatMessagesProps {
     shareToken?: string;
     /** When true, hides the share button in the header */
     hideShare?: boolean;
+    /** When true, hides the sticky header title bar */
+    hideHeaderTitle?: boolean;
     /** When true, renders messages as a flat list without tree/sibling navigation */
     flatMode?: boolean;
     onPresetClick?: (question: string) => void;
@@ -109,6 +111,7 @@ export default function AiChatMessages({
     presetQuestions = [],
     shareToken = '',
     hideShare = false,
+    hideHeaderTitle = false,
     flatMode = false,
     onPresetClick,
     onRegenerate,
@@ -212,14 +215,16 @@ export default function AiChatMessages({
     // --- Messages (tree rendering) ---
     return (
         <div className="flex-1 overflow-hidden relative">
-            <HeaderTitle
-                readOnly={!!shareToken}
-                hideShare={hideShare}
-                conversation={{ title: tree[0]?.flow_name || title, flowId: "", conversationId, flowType: 15 }}
-            />
+            {!hideHeaderTitle && (
+                <HeaderTitle
+                    readOnly={!!shareToken}
+                    hideShare={hideShare}
+                    conversation={{ title: tree[0]?.flow_name || title, flowId: "", conversationId, flowType: 15 }}
+                />
+            )}
             <div
                 ref={scrollRef}
-                className="h-full overflow-y-auto pt-14"
+                className={`h-full overflow-y-auto ${hideHeaderTitle ? "pt-2" : "pt-14"}`}
                 onScroll={handleScroll}
             >
                 <div className="flex flex-col py-2 max-w-[768px] mx-auto">

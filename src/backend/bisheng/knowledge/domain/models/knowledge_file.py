@@ -332,7 +332,7 @@ class KnowledgeFileDao(KnowledgeFileBase):
     def _build_file_filters_statement(cls, statement, file_name: str = None, status: List[int] = None,
                                       file_ids: List[int] = None, file_level_path: str = None,
                                       extra_file_ids: List[int] = None,
-                                      *, order_by: str = None):
+                                      *, order_by: str = None, order_field: str = None, order_sort: str = "desc"):
         and_statement = []
         if file_name:
             and_statement.append(KnowledgeFile.file_name.like(f'%{file_name}%'))
@@ -346,7 +346,11 @@ class KnowledgeFileDao(KnowledgeFileBase):
             statement = statement.where(or_(KnowledgeFile.id.in_(extra_file_ids), and_(*and_statement)))
         else:
             statement = statement.where(*and_statement)
-        if order_by == "file_type":
+
+        if order_field and order_sort:
+            from bisheng.knowledge.domain.models.knowledge_space_file import SpaceFileDao
+            statement = statement.order_by(text(SpaceFileDao.order_field_text(order_field, order_sort)))
+        elif order_by == "file_type":
             statement = statement.order_by(col(KnowledgeFile.file_type).asc())
         elif order_by == "update_time":
             statement = statement.order_by(col(KnowledgeFile.update_time).desc())
@@ -371,10 +375,12 @@ class KnowledgeFileDao(KnowledgeFileBase):
     async def aget_file_by_filters(cls, knowledge_id: int, file_name: str = None, status: List[int] = None,
                                    file_ids: List[int] = None, extra_file_ids: List[int] = None,
                                    file_level_path: str = None, order_by: str = None,
+                                   order_field: str = None, order_sort: str = "desc",
                                    *, page: int = 0, page_size: int = 0) -> List[KnowledgeFile]:
         statement = select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id)
         statement = cls._build_file_filters_statement(statement, file_name, status, file_ids, file_level_path,
-                                                      extra_file_ids=extra_file_ids, order_by=order_by)
+                                                      extra_file_ids=extra_file_ids, order_by=order_by,
+                                                      order_field=order_field, order_sort=order_sort)
         if page and page_size:
             statement = statement.offset((page - 1) * page_size).limit(page_size)
         async with get_async_db_session() as session:

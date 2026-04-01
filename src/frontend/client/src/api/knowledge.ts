@@ -141,6 +141,8 @@ export interface KnowledgeFile {
     successFileNum?: number;
     /** Total number of files (folders only) */
     fileNum?: number;
+    /** Source of the file, e.g. 'channel' for subscription channel files */
+    fileSource?: string;
     // Transient UI-only fields
     isCreating?: boolean;
 }
@@ -190,6 +192,7 @@ interface RawSpaceChild {
     update_time?: string;
     thumbnail?: string;
     error_message?: string;
+    file_source?: string;
 }
 
 /** Raw file record returned by addFiles / knowledge file APIs */
@@ -345,6 +348,7 @@ function mapChild(raw: any, spaceId: string): KnowledgeFile {
         errorMessage: raw?.error_message,
         successFileNum: raw?.success_file_num !== undefined ? Number(raw.success_file_num) : undefined,
         fileNum: raw?.file_num !== undefined ? Number(raw.file_num) : undefined,
+        fileSource: raw?.file_source,
     };
 }
 
@@ -547,8 +551,8 @@ export async function getSquareSpacesApi(params?: {
             const isPending = subscriptionStatus === "pending";
             const squareStatus: "join" | "joined" | "pending" =
                 subscriptionStatus === "subscribed" ? "joined"
-                : subscriptionStatus === "pending" ? "pending"
-                : "join";
+                    : subscriptionStatus === "pending" ? "pending"
+                        : "join";
 
             const fileNum = itemAny?.file_num ?? rawAny?.file_num ?? rawAny?.fileNum ?? itemAny?.fileNum ?? 0;
             const followerNum =
@@ -831,6 +835,7 @@ export async function getSpaceChildrenApi(params: {
                 order_sort: queryParams.order_sort,
                 file_status: queryParams.file_status?.length ? queryParams.file_status : undefined,
             },
+            paramsSerializer: request.paramsSerializer,
         }
     );
     return {
@@ -870,6 +875,7 @@ export async function searchSpaceChildrenApi(params: {
                 order_sort: queryParams.order_sort,
                 file_status: queryParams.file_status?.length ? queryParams.file_status : undefined,
             },
+            paramsSerializer: request.paramsSerializer,
         }
     );
 

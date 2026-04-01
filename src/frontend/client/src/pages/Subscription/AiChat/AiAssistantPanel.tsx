@@ -126,7 +126,7 @@ export function AiAssistantPanel({
                                     className="text-gray-400 p-0.5 group relative w-5 h-5"
                                     onClick={handleClearConversation}
                                 >
-                                    <ChannelClearIcon className="size-3.5" />
+                                    <ChannelClearIcon className="size-4" />
                                 </Button>
                             </TooltipTrigger>
                             <TooltipContent>
@@ -139,7 +139,7 @@ export function AiAssistantPanel({
                         className="text-gray-400 p-0.5 group relative w-5 h-5"
                         onClick={onClose}
                     >
-                        <ChevronsRightIcon className="size-full" />
+                        <ChevronsRightIcon className="size-4" />
                     </Button>
                 </div>
             </div>
@@ -153,6 +153,7 @@ export function AiAssistantPanel({
                 isStreaming={isStreaming}
                 presetQuestions={presetQuestions}
                 hideShare={isSimpleMode}
+                hideHeaderTitle
                 flatMode={isSimpleMode}
                 onPresetClick={(q) => setInputText(q)}
                 onRegenerate={regenerate}

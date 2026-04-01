@@ -1,6 +1,7 @@
-import { DownloadIcon, PanelLeftCloseIcon, ZoomInIcon, ZoomOutIcon } from "lucide-react";
+import { DownloadIcon, ZoomInIcon, ZoomOutIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "~/components";
+import { cn } from "~/utils";
 
 interface TopBarProps {
     fileName: string;
@@ -73,9 +74,22 @@ export function TopBar({
                     <div className="flex items-center relative shrink-0">
                         <Button
                             variant="ghost"
-                            className="h-8 w-8 rounded-md p-1.5 text-primary bg-primary/10 border border-primary"
+                            className={cn(
+                                "h-8 w-8 rounded-md p-1.5 border",
+                                sidebarOpen
+                                    ? "bg-primary/10 border-primary"
+                                    : "bg-white border-[#e5e6eb] hover:bg-[#f7f8fa]"
+                            )}
                             onClick={onToggleSidebar}>
-                            <PanelLeftCloseIcon className={sidebarOpen ? "" : 'rotate-180'} />
+                            <img
+                                className={cn(
+                                    "size-4",
+                                    // public/assets/channel/grid-three.svg is blue by default; when sidebar is closed, grey it out.
+                                    sidebarOpen ? "" : "grayscale brightness-75"
+                                )}
+                                src={`${__APP_ENV__.BASE_URL}/assets/channel/grid-three.svg`}
+                                alt=""
+                            />
                         </Button>
                     </div>
                 )}
