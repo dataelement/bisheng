@@ -174,13 +174,16 @@ async def search_space_children(
         parent_id: Optional[int] = None,
         page: int = 1,
         page_size: int = 20,
+        order_field: str = 'file_type',
+        order_sort: str = 'asc',
         tag_ids: List[int] = Query(default=None, description='标签ID列表'),
         file_status: List[int] = Query(default=None, description='文件状态列表'),
         keyword: Optional[str] = None,
         svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
     result = await svc.search_space_children(space_id, parent_id, tag_ids=tag_ids, keyword=keyword, page=page,
-                                             page_size=page_size, file_status=file_status)
+                                             page_size=page_size, file_status=file_status,
+                                             order_field=order_field, order_sort=order_sort)
     return resp_200(result)
 
 
