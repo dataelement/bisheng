@@ -203,7 +203,8 @@ class SpaceFileDao(KnowledgeFileDao):
         statement = select(func.sum(KnowledgeFile.file_size)).where(
             KnowledgeFile.user_id == user_id,
             KnowledgeFile.file_type == 1,
-            KnowledgeFile.file_source == FileSource.SPACE_UPLOAD.value,
+            col(KnowledgeFile.file_source).in_([FileSource.SPACE_UPLOAD.value,
+                                                FileSource.CHANNEL.value]),
         )
         async with get_async_db_session() as session:
             return await session.scalar(statement) or 0

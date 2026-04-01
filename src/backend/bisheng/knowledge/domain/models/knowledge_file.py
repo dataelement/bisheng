@@ -42,7 +42,7 @@ class ParseType(Enum):
 
 class FileSource(Enum):
     UPLOAD = 'upload'  # user upload
-    CHANNEL = 'channel'  # sync from channel
+    CHANNEL = 'channel'
     SPACE_UPLOAD = 'space_upload'
 
 
@@ -246,6 +246,15 @@ class KnowledgeFileDao(KnowledgeFileBase):
             await session.commit()
             await session.refresh(knowledge_file)
         return knowledge_file
+
+    @classmethod
+    async def async_update_batch(cls, knowledge_files: List[KnowledgeFile]) -> bool:
+        if not knowledge_files:
+            return False
+        async with get_async_db_session() as session:
+            session.add_all(knowledge_files)
+            await session.commit()
+            return True
 
     @classmethod
     def update_file_status(cls, file_ids: list[int], status: KnowledgeFileStatus, reason: str = None):
