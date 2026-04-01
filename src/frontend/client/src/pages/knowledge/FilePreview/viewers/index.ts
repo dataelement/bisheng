@@ -48,5 +48,5 @@ export function supportsPagination(type: ViewerType): boolean {
 
 /** Formats that support zoom */
 export function supportsZoom(type: ViewerType): boolean {
-    return type !== "xlsx" && type !== "unsupported";
+    return type !== "unsupported";
 }

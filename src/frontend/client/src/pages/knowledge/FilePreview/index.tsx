@@ -27,6 +27,8 @@ export interface FilePreviewProps {
     fileUrl: string;
     /** Extra actions rendered in TopBar right area (before download button) */
     actions?: React.ReactNode;
+    /** True when pptx-to-pdf conversion failed on the backend */
+    conversionFailed?: boolean;
 }
 
 export default function FilePreview({
@@ -34,9 +36,10 @@ export default function FilePreview({
     fileType,
     fileUrl,
     actions,
+    conversionFailed = false,
 }: FilePreviewProps) {
     const localize = useLocalize();
-  const viewerType = getViewerType(fileType);
+    const viewerType = getViewerType(fileType);
     const hasSidebar = supportsSidebar(viewerType);
     const hasPagination = supportsPagination(viewerType);
     const hasZoom = supportsZoom(viewerType);
@@ -54,7 +57,7 @@ export default function FilePreview({
 
     // Load PDF
     useEffect(() => {
-        if (viewerType !== "pdf") return;
+        if (viewerType !== "pdf" || !fileUrl) return;
 
         pdfjsLib.GlobalWorkerOptions.workerSrc =
             // @ts-ignore
@@ -129,6 +132,29 @@ export default function FilePreview({
         );
     }
 
+    // PPTX conversion failed — show zoom controls but display error in content area
+    if (conversionFailed) {
+        return (
+            <div className="w-full h-full flex flex-col">
+                <TopBar
+                    fileName={fileName}
+                    showZoom={true}
+                    zoomLevel={zoomLevel}
+                    onZoomIn={handleZoomIn}
+                    onZoomOut={handleZoomOut}
+                    onDownload={fileUrl ? handleDownload : undefined}
+                    actions={actions}
+                />
+                <div className="flex-1 flex items-center justify-center bg-[#fbfbfb]">
+                    <div className="flex flex-col items-center gap-3 text-[#86909c]">
+                        <div className="text-5xl">📄</div>
+                        <p className="text-base">{localize("com_knowledge.load_doc_failed")}</p>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     // Error state
     if (error) {
         return (
@@ -159,7 +185,7 @@ export default function FilePreview({
             case "docx":
                 return <DocxViewer fileUrl={fileUrl} zoomLevel={zoomLevel} />;
             case "xlsx":
-                return <XlsxViewer fileUrl={fileUrl} fileExt={fileType} />;
+                return <XlsxViewer fileUrl={fileUrl} fileExt={fileType} zoomLevel={zoomLevel} />;
             case "markdown":
                 return <MarkdownViewer fileUrl={fileUrl} zoomLevel={zoomLevel} />;
             case "html":

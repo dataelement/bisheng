@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useUnactivate } from "react-activation";
 import {
@@ -89,17 +89,12 @@ export default function Knowledge() {
     // ─── AI split-pane ──────────────────────────────────────────────────
     const aiPane = useAiSplitPane();
 
-    // ─── Space tags for AI chat ─────────────────────────────────────────
-    const [spaceTags, setSpaceTags] = useState<SpaceTag[]>([]);
-    useEffect(() => {
-        if (!activeSpace?.id) {
-            setSpaceTags([]);
-            return;
-        }
-        getSpaceTagsApi(String(activeSpace.id))
-            .then(setSpaceTags)
-            .catch(() => setSpaceTags([]));
-    }, [activeSpace?.id]);
+    // ─── Space tags for AI chat (shared cache with CompoundSearchInput) ──
+    const { data: spaceTags = [] } = useQuery({
+        queryKey: ['spaceTags', activeSpace?.id ? String(activeSpace.id) : ''],
+        queryFn: () => getSpaceTagsApi(String(activeSpace!.id)),
+        enabled: !!activeSpace?.id,
+    });
 
     // Share route: close drawer when leaving /knowledge/share/:spaceId
     useEffect(() => {
