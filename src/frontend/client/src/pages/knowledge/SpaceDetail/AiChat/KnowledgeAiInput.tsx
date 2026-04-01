@@ -13,6 +13,8 @@ import { SendIcon } from "~/components/svg";
 import { TagPicker } from "./TagPicker";
 import type { FolderChatTag } from "~/hooks/useFolderChat";
 import { useLocalize } from "~/hooks";
+import SpeechToTextComponent from "~/components/Voice/SpeechToText";
+import { useGetWorkbenchModelsQuery } from "~/hooks/queries/data-provider";
 
 interface KnowledgeAiInputProps {
     availableTags: { id: number; name: string }[];
@@ -42,6 +44,10 @@ export function KnowledgeAiInput({
     const [badgeIndentPx, setBadgeIndentPx] = useState<number | undefined>(undefined);
     const [textScrollTop, setTextScrollTop] = useState(0);
     const scrollRafRef = useRef<number | null>(null);
+
+    // Voice input: check if ASR model is available
+    const { data: modelData } = useGetWorkbenchModelsQuery();
+    const showVoice = !!modelData?.asr_model?.id;
 
     // Auto-resize textarea
     const autoResize = useCallback(() => {
@@ -238,8 +244,19 @@ export function KnowledgeAiInput({
 
                 {/* Toolbar row */}
                 <div className="relative h-8">
-                    {/* Send / Stop */}
+                    {/* Send / Stop / Voice buttons */}
                     <div className="absolute bottom-0 right-3 flex gap-2 items-center">
+                        {/* Voice input (Speech to Text) */}
+                        {showVoice && (
+                            <SpeechToTextComponent
+                                disabled={disabled}
+                                onChange={(e) => {
+                                    const newText = (inputText || "") + e;
+                                    setInputText(newText);
+                                }}
+                            />
+                        )}
+
                         {isStreaming ? (
                             <button
                                 type="button"

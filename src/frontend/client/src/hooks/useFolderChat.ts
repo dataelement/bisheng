@@ -58,18 +58,22 @@ export default function useFolderChat(
     // SSE lifecycle
     const { abort: abortSSE } = useStreamChatSSE(sseSubmission);
 
-    // --- Load session list on mount ---
+    // --- Load session list on mount / when space or folder changes ---
     useEffect(() => {
         if (!enabled) return;
+        // Immediately reset state to prevent stale chatId from being used
+        // if the user sends a message before the API responds.
+        setActiveChatId("");
+        setMessages([]);
+        setSessions([]);
         setIsSessionsLoading(true);
         getFolderSessions(spaceId, folderId)
             .then((list) => {
                 setSessions(list);
-                // Auto-select the most recent session if available
                 if (list.length > 0) {
-                    const latest = list[0];
-                    setActiveChatId(latest.chat_id);
+                    setActiveChatId(list[0].chat_id);
                 }
+                // list.length === 0 → activeChatId stays "", handled above
             })
             .catch((err) =>
                 console.error("[FolderChat] Failed to load sessions:", err)
