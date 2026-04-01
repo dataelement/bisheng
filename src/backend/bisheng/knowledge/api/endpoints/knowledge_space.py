@@ -158,7 +158,7 @@ async def list_space_children(
         parent_id: Optional[int] = None,
         order_field: str = 'file_type',
         order_sort: str = 'asc',
-        file_status: Optional[KnowledgeFileStatus] = None,
+        file_status: List[int] = Query(default=None, description="文件状态列表"),
         page: int = 1,
         page_size: int = 20,
         svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
@@ -169,17 +169,18 @@ async def list_space_children(
 
 
 @router.get('/{space_id}/search')
-async def list_space_children(
+async def search_space_children(
         space_id: int,
         parent_id: Optional[int] = None,
         page: int = 1,
         page_size: int = 20,
         tag_ids: List[int] = Query(default=None, description='标签ID列表'),
+        file_status: List[int] = Query(default=None, description='文件状态列表'),
         keyword: Optional[str] = None,
         svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
     result = await svc.search_space_children(space_id, parent_id, tag_ids=tag_ids, keyword=keyword, page=page,
-                                             page_size=page_size)
+                                             page_size=page_size, file_status=file_status)
     return resp_200(result)
 
 
