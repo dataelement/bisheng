@@ -387,11 +387,7 @@ export function AddSourceDropdown({
                                                                 {truncateName(source.name, MAX_NAME_DISPLAY)}
                                                             </span>
                                                             {source.type === "website" && source.url && (
-                                                                <img
-                                                                    src={EXTERNAL_LINK_ICON_SRC}
-                                                                    alt=""
-                                                                    className="ml-0.5 w-4 h-4 opacity-0 group-hover/link:opacity-100 transition-opacity flex-shrink-0"
-                                                                />
+                                                                <ChannelRightSmallUpIcon className="ml-0.5 w-4 h-4 opacity-0 group-hover/link:opacity-100 transition-opacity flex-shrink-0" />
                                                             )}
                                                         </span>
                                                         {mgr.isSearchMode && (

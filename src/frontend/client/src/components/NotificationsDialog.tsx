@@ -488,10 +488,17 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
         const isApproved = isApprovedStatus(approvalStatus) || isRejectedStatus(approvalStatus);
         const isSelfApplicationDecision = isSelfApplicationDecisionActionCode(notification.action_code);
         const isNotifyMessage = isNotifyMessageType(notification.message_type);
+        const isApprovalMessage = isApprovalMessageType(notification.message_type, notification.action_code);
+        const isPendingApproval = isPendingApprovalStatus(approvalStatus);
+        const approvalDecisionLabel = isApprovedStatus(approvalStatus)
+            ? localize("com_notifications_approved")
+            : isRejectedStatus(approvalStatus)
+                ? localize("com_notifications_rejected")
+                : null;
 
         const showDeleteOnHover =
             !showApproval &&
-            !isApprovalMessageType(notification.message_type, notification.action_code) &&
+            !isApprovalMessage &&
             (isApproved || isDecisionActionCode(notification.action_code));
 
         const textColor = !isVisuallyUnread(notification) || isApproved ? "text-[#989898]" : "text-[#1d2129]";
@@ -530,6 +537,22 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                 );
             }
 
+            // 审批类：未 hover 显示时间，hover 显示删除按钮
+            if (isApprovalMessage) {
+                if (!isHovered) return <span className="text-[14px] text-[#999999]">{formatMessageTime(createdAt)}</span>;
+                return (
+                    <button
+                        type="button"
+                        onClick={() => handleDelete(id)}
+                        className="flex items-center gap-1 px-3 py-1 text-[12px] text-[#4e5969] bg-white border border-[#e5e6eb] rounded hover:text-[#f53f3f] hover:border-[#f53f3f] transition-colors"
+                        title={localize("com_notifications_delete")}
+                    >
+                        <Trash2 className="size-3" />
+                        {localize("com_notifications_delete")}
+                    </button>
+                );
+            }
+
             // 其它类型：hover 且满足条件时显示删除按钮，否则显示时间
             if (isHovered && showDeleteOnHover && !isSelfApplicationDecision) {
                 return (
@@ -552,7 +575,7 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                 key={id}
                 data-message-id={id}
                 data-message-type={notification.message_type}
-                className="flex flex-col gap-2 px-3 py-6 hover:bg-[#f7f8fa] transition-colors duration-[350ms] ease-in-out"
+                className="relative px-6 py-4 border-b border-[#F2F3F5] hover:bg-[#f7f8fa] transition-colors"
                 onMouseEnter={onRowMouseEnter}
                 onMouseLeave={onRowMouseLeave}
                 ref={(node) => {
@@ -588,90 +611,110 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                     observersRef.current[id] = obs;
                 }}
             >
-                {/* Row 1: Avatar + message text + right slot */}
-                <div className="flex items-center gap-3">
+                <div className="flex items-start gap-3">
                     <Avatar className="size-9 flex-shrink-0">
                         {userAvatar ? <AvatarImage src={userAvatar} alt={userName} /> : null}
                         <AvatarName name={userName} className="text-xs" />
                     </Avatar>
 
-                    {/* Message text */}
-                    <div className={cn("flex-1 min-w-0 text-[14px] flex items-center gap-1 flex-wrap", textColor)}>
-                        <TooltipAnchor
-                            description={userGroup ? `${userName} - ${userGroup}` : userName}
-                            side="top"
-                        >
-                            <span className="font-medium cursor-pointer hover:text-[#165dff] shrink-0">
-                                @{userName}
-                            </span>
-                        </TooltipAnchor>
-                        <span className="min-w-0">
-                            {textPrefix}
-                            {canSplitTarget && (
-                                <span
-                                    className="font-medium cursor-pointer hover:text-[#165dff]"
-                                    onClick={() => {
-                                        const target = getNotificationTarget(notification);
-                                        if (!target) return;
-                                        if (target.targetType === "channel") {
-                                            navigate(`/channel/${target.targetId}`);
-                                        } else {
-                                            navigate(`/knowledge/space/${target.targetId}`);
-                                        }
-                                        onOpenChange?.(false);
-                                    }}
-                                >
-                                    {targetName}
+                    <div className="flex-1 min-w-0">
+                        <div className="flex items-center min-w-0 whitespace-nowrap min-h-9 text-[14px]">
+                            <TooltipAnchor
+                                description={userGroup ? `${userName} - ${userGroup}` : userName}
+                                side="top"
+                            >
+                                <span className={cn("font-medium cursor-pointer hover:text-[#165dff] shrink-0", textColor)}>
+                                    @{userName}
                                 </span>
-                            )}
-                        </span>
+                            </TooltipAnchor>
+                            <span className="mx-1 shrink-0"> </span>
+                            <span className={cn("min-w-0 overflow-hidden text-ellipsis whitespace-nowrap", textColor)}>
+                                {textPrefix}
+                                {canSplitTarget && (
+                                    <span
+                                        className="font-medium cursor-pointer hover:text-[#165dff]"
+                                        onClick={() => {
+                                            const target = getNotificationTarget(notification);
+                                            if (!target) return;
+                                            if (target.targetType === "channel") {
+                                                    navigate(`/channel/${target.targetId}`);
+                                            } else {
+                                                    navigate(`/knowledge/space/${target.targetId}`);
+                                            }
+                                                onOpenChange?.(false);
+                                        }}
+                                    >
+                                        {targetName}
+                                    </span>
+                                )}
+                            </span>
+                        </div>
+
                     </div>
 
-                    {/* Right slot: fixed height */}
-                    <div className="flex-shrink-0 h-7 flex items-center whitespace-nowrap">
-                        {isHovered && (isNotifyMessage || (showDeleteOnHover && !isSelfApplicationDecision)) ? (
-                            <button
-                                type="button"
-                                onClick={() => handleDelete(id)}
-                                className="appearance-none h-7 px-3 inline-flex items-center gap-1.5 text-[14px] text-[#4e5969] bg-white border border-[#e5e6eb] rounded-[6px] hover:text-[#f53f3f] hover:border-[#f53f3f] transition-colors active:translate-y-0"
-                                title={localize("com_notifications_delete")}
-                            >
-                                <Trash2 className="size-4" />
-                                {localize("com_notifications_delete")}
-                            </button>
-                        ) : (
-                            <span className="text-[14px] text-[#999999]">{formatMessageTime(createdAt)}</span>
+                    <div
+                        className={cn(
+                            "flex-shrink-0 whitespace-nowrap flex flex-col items-end",
+                            isNotifyMessage ? "self-center" : "self-start"
                         )}
+                    >
+                        <div>{rightSlot}</div>
+                        {showApproval ? (
+                            <div className="mt-2 flex items-center justify-end gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        if (!notification.is_read) markOneAsRead(id);
+                                        handleApproval(id, "rejected");
+                                    }}
+                                    className="flex items-center gap-1 px-3 py-1 text-[12px] text-[#f53f3f] border border-[#F2F3F5] bg-white hover:bg-[#fff2f0] rounded transition-colors"
+                                >
+                                    <XIcon className="size-3" />
+                                    {localize("com_notifications_reject")}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        if (!notification.is_read) markOneAsRead(id);
+                                        handleApproval(id, "approved");
+                                    }}
+                                    className="flex items-center gap-1 px-3 py-1 text-[12px] text-[#00b42a] border border-[#F2F3F5] bg-white hover:bg-[#e8ffea] rounded transition-colors"
+                                >
+                                    <Check className="size-3" />
+                                    {localize("com_notifications_accept")}
+                                </button>
+                            </div>
+                        ) : (isApprovalMessage && !isPendingApproval && approvalDecisionLabel) ? (
+                            <div className="mt-2 flex items-center justify-end">
+                                <button
+                                    type="button"
+                                    disabled
+                                    className={cn(
+                                        "flex items-center gap-1 px-3 py-1 text-[12px] border rounded cursor-default",
+                                        isApprovedStatus(approvalStatus)
+                                            ? "text-[#4e5969] border-[#E5E6EB] bg-white"
+                                            : "text-[#f53f3f] border-[#F2F3F5] bg-[#fff2f0]"
+                                    )}
+                                >
+                                    {isApprovedStatus(approvalStatus) ? <Check className="size-3" /> : <XIcon className="size-3" />}
+                                    {approvalDecisionLabel}
+                                </button>
+                            </div>
+                        ) : null}
                     </div>
                 </div>
 
-                {/* Row 2: approval buttons */}
-                {showApproval ? (
-                    <div className="flex items-center justify-end gap-2">
-                        <button
-                            type="button"
-                            onClick={() => {
-                                if (!notification.is_read) markOneAsRead(id);
-                                handleApproval(id, "rejected");
-                            }}
-                            className="appearance-none h-7 px-3 inline-flex items-center gap-1.5 text-[14px] text-[#f53f3f] border border-[#F2F3F5] bg-white hover:bg-[#fff2f0] rounded-[6px] transition-colors active:translate-y-0"
-                        >
-                            <XIcon className="size-4" />
-                            {localize("com_notifications_reject")}
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => {
-                                if (!notification.is_read) markOneAsRead(id);
-                                handleApproval(id, "approved");
-                            }}
-                            className="appearance-none h-7 px-3 inline-flex items-center gap-1.5 text-[14px] text-[#00b42a] border border-[#F2F3F5] bg-white hover:bg-[#e8ffea] rounded-[6px] transition-colors active:translate-y-0"
-                        >
-                            <Check className="size-4" />
-                            {localize("com_notifications_accept")}
-                        </button>
-                    </div>
-                ) : null}
+                {/* 自己申请结果：固定展示删除按钮（中间） */}
+                {isSelfApplicationDecision && (
+                    <button
+                        onClick={() => handleDelete(id)}
+                        className="absolute right-6 top-1/2 -translate-y-1/2 flex items-center gap-1 px-3 py-1 text-[12px] text-[#4e5969] bg-white border border-[#e5e6eb] rounded hover:text-[#f53f3f] hover:border-[#f53f3f] transition-colors"
+                        title={localize("com_notifications_delete")}
+                    >
+                        <Trash2 className="size-3" />
+                        {localize("com_notifications_delete")}
+                    </button>
+                )}
             </div>
         );
     };
@@ -707,15 +750,17 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                     <Tabs
                         value={activeTab}
                         onValueChange={(v) => setActiveTab(v as "all" | "request")}
-                        className="flex-1 flex flex-col min-h-0"
+                        className="flex flex-col flex-1 min-h-0"
                     >
                         <div className="flex flex-col flex-1 min-h-0">
-                            <div className="px-6 py-3 flex-shrink-0">
+                            <div className="px-6 pt-4 pb-0 flex-shrink-0">
                                 <div className="flex items-center justify-between">
                                     <TabsList className="bg-transparent p-0 gap-2">
                                         <TabsTrigger
                                             value="all"
-                                            className="appearance-none relative min-w-0 h-8 px-4 py-[5px] leading-none rounded-lg text-[14px] border border-transparent shadow-none transition-colors active:translate-y-0 data-[state=active]:gap-2 data-[state=active]:font-medium data-[state=active]:bg-[#E6EDFC] data-[state=active]:border-[#024DE3] data-[state=active]:text-[#024DE3] data-[state=active]:shadow-none data-[state=active]:[backdrop-filter:blur(4px)] data-[state=inactive]:gap-1 data-[state=inactive]:font-normal data-[state=inactive]:text-[#4E5969]"
+                                            className="relative !w-[60px] !min-w-[60px] !h-8 !px-0 !py-0 !rounded-[8px] flex items-center justify-center text-[14px] border border-transparent
+                                        data-[state=active]:bg-[#E6EDFC] data-[state=active]:border-[#E6EDFC] data-[state=active]:text-[#024DE3]
+                                        data-[state=inactive]:text-[#4E5969] data-[state=inactive]:bg-transparent"
                                         >
                                             {localize("com_notifications_tab_all")}
                                             {unreadCounts.all > 0 && (
@@ -726,7 +771,9 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                                         </TabsTrigger>
                                         <TabsTrigger
                                             value="request"
-                                            className="appearance-none relative min-w-0 h-8 px-4 py-[5px] leading-none rounded-lg text-[14px] border border-transparent shadow-none transition-colors active:translate-y-0 data-[state=active]:gap-2 data-[state=active]:font-medium data-[state=active]:bg-[#E6EDFC] data-[state=active]:border-[#024DE3] data-[state=active]:text-[#024DE3] data-[state=active]:shadow-none data-[state=active]:[backdrop-filter:blur(4px)] data-[state=inactive]:gap-1 data-[state=inactive]:font-normal data-[state=inactive]:text-[#4E5969]"
+                                            className="relative !w-[60px] !min-w-[60px] !h-8 !px-0 !py-0 !rounded-[8px] flex items-center justify-center text-[14px] border border-transparent
+                                        data-[state=active]:bg-[#E6EDFC] data-[state=active]:border-[#E6EDFC] data-[state=active]:text-[#024DE3]
+                                        data-[state=inactive]:text-[#4E5969] data-[state=inactive]:bg-transparent"
                                         >
                                             {localize("com_notifications_tab_request")}
                                             {unreadCounts.request > 0 && (
@@ -796,8 +843,8 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                                             onClick={() => setOnlyUnread((v) => !v)}
                                             className={
                                                 onlyUnread
-                                                    ? "h-8 px-3 py-0 text-[14px] font-normal leading-none rounded-[6px] border border-[#335CFF] bg-[rgba(51,92,255,0.2)] text-[#335CFF] [backdrop-filter:blur(4px)] hover:bg-[rgba(51,92,255,0.28)] hover:text-[#2236D9] active:translate-y-0"
-                                                    : "h-8 px-3 py-0 text-[14px] font-normal leading-none rounded-[6px] text-[#4e5969] border-[#e5e6eb] hover:bg-[#f7f8fa] active:translate-y-0"
+                                                    ? "!w-[88px] !h-8 !px-0 text-[14px] !rounded-[8px] bg-[#E6EDFC] border-[#E6EDFC] text-[#024DE3] hover:bg-[#E6EDFC] flex items-center justify-center"
+                                                    : "!w-[88px] !h-8 !px-0 text-[14px] !rounded-[8px] bg-white border-[#e5e6eb] text-[#4e5969] hover:bg-[#f7f8fa] flex items-center justify-center"
                                             }
                                         >
                                             {localize("com_notifications_unread_only")}
@@ -809,7 +856,11 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                                                 handleMarkAllAsRead();
                                             }}
                                             variant="outline"
-                                            className="h-8 px-3 py-0 text-[14px] font-normal leading-none rounded-[6px] bg-[#F8F8F8] border-transparent text-[#4e5969] [backdrop-filter:blur(4px)] hover:bg-[#f0f0f0] active:translate-y-0"
+                                            className={
+                                                isReadAllSelected
+                                                    ? "!w-[88px] !h-8 !px-0 text-[14px] !rounded-[8px] bg-[#E6EDFC] border-[#E6EDFC] text-[#024DE3] hover:bg-[#E6EDFC] flex items-center justify-center"
+                                                    : "!w-[88px] !h-8 !px-0 text-[14px] !rounded-[8px] bg-white border-[#e5e6eb] text-[#4e5969] hover:bg-[#f7f8fa] flex items-center justify-center"
+                                            }
                                         >
                                             {localize("com_notifications_mark_all_read")}
                                         </Button>
@@ -817,12 +868,12 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                                 </div>
                             </div>
 
-                            <div className="flex-1 overflow-hidden min-h-0">
+                            <div className="flex-1 overflow-hidden min-h-0 px-6 pb-4">
                                 <TabsContent forceMount value="all" className="h-full p-0 m-0 data-[state=inactive]:hidden">
                                     <div
                                         data-message-scroll-root="true"
                                         data-active={activeTab === "all" ? "true" : "false"}
-                                        className="h-full overflow-y-auto scroll-on-scroll px-6 py-3"
+                                        className="h-full overflow-y-scroll chrome-scrollbar scrollbar-gutter-stable"
                                         onScroll={(e) => handleListScroll(e.currentTarget)}
                                     >
                                         {loading ? (
@@ -849,7 +900,7 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                                     <div
                                         data-message-scroll-root="true"
                                         data-active={activeTab === "request" ? "true" : "false"}
-                                        className="h-full overflow-y-auto scroll-on-scroll px-6 py-3"
+                                        className="h-full overflow-y-scroll chrome-scrollbar scrollbar-gutter-stable"
                                         onScroll={(e) => handleListScroll(e.currentTarget)}
                                     >
                                         {loading ? (
@@ -860,7 +911,7 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                                             <>
                                                 {requestGroups.pending.length > 0 && (
                                                     <div className="mb-3">
-                                                        <div className="text-[14px] leading-[22px] text-[#999] font-normal mb-2">{localize("com_notifications_section_pending")}</div>
+                                                        <div className="px-6 py-2 text-[12px] text-[#86909c] font-medium">{localize("com_notifications_section_pending")}</div>
                                                         <div className="divide-y divide-[#F2F3F5]">
                                                             {requestGroups.pending.map(renderNotificationItem)}
                                                         </div>
@@ -869,7 +920,7 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
 
                                                 {requestGroups.approved.length > 0 && (
                                                     <div className="mt-2">
-                                                        <div className="text-[14px] leading-[22px] text-[#999] font-normal mb-2">{localize("com_notifications_section_reviewed")}</div>
+                                                        <div className="px-6 py-2 text-[12px] text-[#86909c] font-medium">{localize("com_notifications_section_reviewed")}</div>
                                                         <div className="divide-y divide-[#F2F3F5]">
                                                             {requestGroups.approved.map(renderNotificationItem)}
                                                         </div>

@@ -8,7 +8,7 @@
  * - History sidebar toggle
  * - Tag filter support via KnowledgeAiInput
  */
-import { HistoryIcon, PlusIcon, XIcon } from "lucide-react";
+import { HistoryIcon } from "lucide-react";
 import { useState } from "react";
 import { Button } from "~/components";
 import {
@@ -115,7 +115,11 @@ export function KnowledgeAiPanel({
                                     className="w-7 h-7 text-[#86909c] hover:text-[#4e5969]"
                                     onClick={handleNewChat}
                                 >
-                                    <PlusIcon className="size-4" />
+                                    <img
+                                        className="size-4"
+                                        src={`${__APP_ENV__.BASE_URL}/assets/channel/message-circle.svg`}
+                                        alt=""
+                                    />
                                 </Button>
                             </TooltipTrigger>
                             <TooltipContent>
@@ -133,7 +137,11 @@ export function KnowledgeAiPanel({
                                     className="w-7 h-7 text-[#86909c] hover:text-[#4e5969]"
                                     onClick={onClose}
                                 >
-                                    <XIcon className="size-4" />
+                                    <img
+                                        className="size-4"
+                                        src={`${__APP_ENV__.BASE_URL}/assets/channel/double-right.svg`}
+                                        alt=""
+                                    />
                                 </Button>
                             </TooltipTrigger>
                             <TooltipContent>
@@ -164,6 +172,7 @@ export function KnowledgeAiPanel({
                     isStreaming={isStreaming}
                     presetQuestions={[]}
                     hideShare
+                    hideHeaderTitle
                     flatMode
                     onPresetClick={() => { }}
                     onRegenerate={regenerate}

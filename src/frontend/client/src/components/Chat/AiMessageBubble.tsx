@@ -169,16 +169,8 @@ function UserBubble({
     const { user } = useAuthContext();
 
     return (
-        <div className="flex gap-3 px-4 py-3">
-            {/* Avatar */}
-            <div className="shrink-0 flex justify-center">
-                <Avatar className="w-6 h-6 text-xs">
-                    {user?.avatar ? <AvatarImage src={user?.avatar} alt="User" /> : <AvatarName name={user?.username} />}
-                </Avatar>
-            </div>
-            {/* Content */}
-            <div className="flex-1 min-w-0">
-                <div className="rc-name select-none font-semibold text-base">{user?.username}</div>
+        <div className="flex justify-end px-4 py-3">
+            <div className="max-w-[80%] min-w-0">
                 {/* Render uploaded files if any */}
                 {message.files && message.files.length > 0 && (
                     <div className="flex flex-wrap gap-2 mb-2 mt-1">
@@ -217,11 +209,24 @@ function UserBubble({
                         })}
                     </div>
                 )}
-                <div className="bs-mkdown mb-2 whitespace-pre-wrap break-words">
-                    {message.text}
+                <div className="flex gap-3">
+                    {/* Avatar (hidden by style only) */}
+                    <div className="hidden shrink-0 flex justify-center">
+                        <Avatar className="w-6 h-6 text-xs">
+                            {user?.avatar ? <AvatarImage src={user?.avatar} alt="User" /> : <AvatarName name={user?.username} />}
+                        </Avatar>
+                    </div>
+                    {/* Content */}
+                    <div className="flex-1 min-w-0">
+                        {/* Name (hidden by style only) */}
+                        <div className="hidden rc-name select-none font-semibold text-base">{user?.username}</div>
+                        <div className="rounded-[10px] bg-[#E6EDFC] text-[#1d2129] px-3 py-2 text-sm whitespace-pre-wrap break-words">
+                            {message.text}
+                        </div>
+                    </div>
                 </div>
                 {/* Action buttons */}
-                <div className="flex items-center gap-1 mt-1.5">
+                <div className="flex items-center justify-end gap-1 mt-1.5">
                     <CopyButton text={message.text} />
                     {siblingIdx !== undefined && siblingCount !== undefined && setSiblingIdx && (
                         <SiblingSwitch siblingIdx={siblingIdx} siblingCount={siblingCount} setSiblingIdx={setSiblingIdx} />
@@ -262,15 +267,16 @@ function AssistantBubble({
     const showCursor = isLatest && isStreaming;
 
     return (
-        <div className="flex gap-3 px-4 py-3">
-            {/* Avatar */}
-            <div className="shrink-0 w-6 h-6 rounded-full flex items-center justify-center">
-                {bsConfig?.assistantIcon.image ? <img src={__APP_ENV__.BASE_URL + bsConfig?.assistantIcon.image} alt="" />
-                    : <BotIcon size={16} className="text-black" />}
-            </div>
-            {/* Content */}
-            <div className="flex-1 min-w-0">
-                <div className="model-name select-none font-semibold text-base">{modelName}</div>
+        <div className="flex justify-start px-4 py-3">
+            <div className="max-w-[80%] min-w-0">
+                {/* Avatar + name kept but hidden via style only */}
+                <div className="hidden gap-3">
+                    <div className="shrink-0 w-6 h-6 rounded-full flex items-center justify-center">
+                        {bsConfig?.assistantIcon.image ? <img src={__APP_ENV__.BASE_URL + bsConfig?.assistantIcon.image} alt="" />
+                            : <BotIcon size={16} className="text-black" />}
+                    </div>
+                    <div className="model-name select-none font-semibold text-base">{modelName}</div>
+                </div>
 
                 {/* Thinking block - reuse existing Thinking component */}
                 {thinkingContent && (
@@ -284,12 +290,12 @@ function AssistantBubble({
 
                 {/* Error state */}
                 {message.error ? (
-                    <div className="text-sm text-red-500 bg-red-50 rounded-lg p-3">
+                    <div className="text-sm text-red-500 bg-red-50 rounded-[10px] px-3 py-2">
                         {regularContent || "发生错误，请重试"}
                     </div>
                 ) : (
                     /* Main content — uses existing Markdown with citation support */
-                    <div className="bs-mkdown message-content text-sm">
+                    <div className="rounded-[10px] bg-white border border-[#E5E6EB] px-3 py-2 bs-mkdown message-content text-sm">
                         <Markdown
                             content={regularContent}
                             webContent={webContent}

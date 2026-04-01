@@ -102,7 +102,7 @@ function ThumbnailItem({
             data-page={pageNumber}
             onClick={onClick}
             className={cn(
-                "cursor-pointer rounded-md overflow-hidden border-2 transition-colors flex flex-col items-center",
+                "cursor-pointer rounded-md overflow-hidden border-2 transition-colors flex flex-col items-center relative",
                 isActive
                     ? "border-[#165dff] shadow-sm"
                     : "border-transparent hover:border-[#c9cdd4]"
@@ -110,6 +110,9 @@ function ThumbnailItem({
             style={{ minHeight: '200px' }}
         >
             <canvas ref={canvasRef} className="w-full block" />
+            {!isActive && (
+                <div className="absolute inset-0 bg-black/40 pointer-events-none" />
+            )}
             <span className={cn(
                 "text-xs py-0.5",
                 isActive ? "text-[#165dff] font-medium" : "text-[#86909c]"

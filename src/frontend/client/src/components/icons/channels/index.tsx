@@ -104,15 +104,15 @@ export const ChannelSortAmountDownIcon: React.FC<ChannelIconProps> = (props) => 
   </svg>
 );
 
-export const ChannelSortAmountUpIcon: React.FC<ChannelIconProps> = (props) => (
-  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
-    <path d="M2.5 17L6.5 21" stroke="#333333" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    <path d="M6.5 21V4" stroke="#333333" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    <path d="M11.5 19.5H21.5" stroke="#333333" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    <path d="M11.5 14.5H19.5" stroke="#333333" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    <path d="M11.5 9.5H17.5" stroke="#333333" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    <path d="M11.5 4.5H15.5" stroke="#333333" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
+export const ChannelSortAmountUpIcon: React.FC<React.ImgHTMLAttributes<HTMLImageElement>> = ({ className, ...rest }) => (
+  <img
+    src={`${__APP_ENV__.BASE_URL}/assets/channel/sort-amount-up.svg`}
+    alt=""
+    width={24}
+    height={24}
+    className={className}
+    {...rest}
+  />
 );
 
 export const ChannelSortAmountDownBlueIcon: React.FC<ChannelIconProps> = (props) => (
@@ -126,15 +126,15 @@ export const ChannelSortAmountDownBlueIcon: React.FC<ChannelIconProps> = (props)
   </svg>
 );
 
-export const ChannelSortAmountUpBlueIcon: React.FC<ChannelIconProps> = (props) => (
-  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
-    <path d="M2.5 17L6.5 21" stroke="#165DFF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    <path d="M6.5 21V4" stroke="#165DFF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    <path d="M11.5 19.5H21.5" stroke="#165DFF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    <path d="M11.5 14.5H19.5" stroke="#165DFF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    <path d="M11.5 9.5H17.5" stroke="#165DFF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    <path d="M11.5 4.5H15.5" stroke="#165DFF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
+export const ChannelSortAmountUpBlueIcon: React.FC<React.ImgHTMLAttributes<HTMLImageElement>> = ({ className, ...rest }) => (
+  <img
+    src={`${__APP_ENV__.BASE_URL}/assets/channel/sort-amount-up-blue.svg`}
+    alt=""
+    width={24}
+    height={24}
+    className={className}
+    {...rest}
+  />
 );
 
 export const ChannelRightSmallUpIcon: React.FC<ChannelIconProps> = (props) => (

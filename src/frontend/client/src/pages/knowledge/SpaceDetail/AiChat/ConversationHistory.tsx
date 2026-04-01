@@ -2,8 +2,14 @@
  * ConversationHistory — slide-in sidebar listing past conversations.
  * Displays server-backed session records with delete support.
  */
-import { HistoryIcon, MessageSquareIcon, Trash2Icon, XIcon } from "lucide-react";
+import { HistoryIcon, MessageSquareIcon, MoreHorizontalIcon, Trash2Icon, XIcon } from "lucide-react";
 import { Button } from "~/components";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "~/components/ui/DropdownMenu";
 import type { FolderSession } from "~/api/chatApi";
 import { useLocalize } from "~/hooks";
 
@@ -79,18 +85,32 @@ export function ConversationHistory({
                                         {formatDate(session.update_time || session.create_time)}
                                     </p>
                                 </div>
-                                {/* Delete button — visible on hover */}
-                                <button
-                                    type="button"
-                                    className="flex-shrink-0 ml-2 p-1 rounded text-[#86909c] hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all"
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        onDelete(session.chat_id);
-                                    }}
-                                    aria-label="Delete session"
-                                >
-                                    <Trash2Icon className="size-3.5" />
-                                </button>
+                                {/* More menu — visible on hover */}
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <button
+                                            type="button"
+                                            className="flex-shrink-0 ml-2 p-1 rounded text-[#86909c] hover:text-[#4e5969] hover:bg-black/5 opacity-0 group-hover:opacity-100 transition-all"
+                                            onClick={(e) => e.stopPropagation()}
+                                            aria-label="More actions"
+                                        >
+                                            <MoreHorizontalIcon className="size-4" />
+                                        </button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent
+                                        align="end"
+                                        className="min-w-[140px]"
+                                        onClick={(e) => e.stopPropagation()}
+                                    >
+                                        <DropdownMenuItem
+                                            className="text-[#f53f3f] focus:text-[#f53f3f]"
+                                            onClick={() => onDelete(session.chat_id)}
+                                        >
+                                            <Trash2Icon className="size-4 mr-2" />
+                                            {localize("com_notifications_delete")}
+                                        </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
                             </div>
                         ))}
                     </div>

@@ -7,6 +7,7 @@ import {
     ChevronRight,
     Home,
     Info,
+    PanelLeftOpenIcon,
     ArrowDownNarrowWideIcon,
     FunnelIcon,
     Download,
@@ -14,7 +15,6 @@ import {
     RotateCcw,
     Trash2
 } from "lucide-react";
-import { useState } from "react";
 import { KnowledgeSpace, FileStatus, SortType, SortDirection, SpaceRole, VisibilityType } from "~/api/knowledge";
 import { cn, copyText } from "~/utils";
 import { CompoundSearchInput, SearchParams } from "./CompoundSearchInput";
@@ -60,6 +60,8 @@ interface KnowledgeSpaceHeaderProps {
     onBatchDelete: () => void;
     onToggleAiAssistant?: () => void;
     isAiAssistantOpen?: boolean;
+    sidebarCollapsed?: boolean;
+    onExpandSidebar?: () => void;
 }
 
 export function KnowledgeSpaceHeader({
@@ -87,13 +89,14 @@ export function KnowledgeSpaceHeader({
     onBatchRetry,
     onBatchDelete,
     onToggleAiAssistant,
-    isAiAssistantOpen
+    isAiAssistantOpen,
+    sidebarCollapsed,
+    onExpandSidebar
 }: KnowledgeSpaceHeaderProps) {
     const localize = useLocalize();
     const isAdmin = space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
     const showShare = space.visibility !== VisibilityType.PRIVATE;
     const { showToast } = useToastContext();
-    const [isSearchActive, setIsSearchActive] = useState(false);
 
     const handleShare = () => {
         try {
@@ -122,6 +125,17 @@ export function KnowledgeSpaceHeader({
                 <div className="flex items-center gap-1 text-sm flex-wrap w-full sm:w-auto">
                     {currentPath.length === 0 ? (
                         <div className="flex items-center gap-1">
+                            {sidebarCollapsed && (
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="w-7 h-7 text-[#86909c] hover:text-[#4e5969]"
+                                    onClick={onExpandSidebar}
+                                >
+                                    <PanelLeftOpenIcon className="size-4" />
+                                </Button>
+                            )}
                             <h1 className="text-base text-[#1d2129]">{space.name}</h1>
                             <Tooltip>
                                 <TooltipTrigger className="cursor-pointer">
@@ -223,25 +237,19 @@ export function KnowledgeSpaceHeader({
             {/* Toolbar */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 {/* { Left side: search & toggle & filter } */}
-                <div className="flex flex-col sm:flex-row sm:items-center sm:flex-nowrap gap-3 w-full">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full sm:w-auto">
                     {/* Search */}
-                    <div
-                        className={cn(
-                            "flex items-center gap-2 min-w-0 w-full sm:w-auto",
-                            isSearchActive ? "sm:flex-1" : "sm:flex-none"
-                        )}
-                    >
-                        <div className={cn("relative min-w-0", isSearchActive ? "flex-1 w-full" : "flex-none w-full sm:w-[450px]")}>
+                    <div className="flex-1 sm:flex-none flex items-center gap-2 w-full sm:w-auto">
+                        <div className="relative flex-1 sm:flex-none sm:w-[450px]">
                             <CompoundSearchInput
                                 spaceId={space.id}
                                 isRoot={currentPath.length === 0}
                                 onSearch={onSearch}
-                                onActiveChange={setIsSearchActive}
                             />
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-3 w-full sm:w-auto shrink-0 sm:flex-none">
+                    <div className="flex items-center gap-3 w-full sm:w-auto">
                         {/* View Mode & Extra drop (Placeholder for bulk operations if needed, currently view mode) */}
                         <div className="flex border rounded-md p-0.5 text-sm h-8 shrink-0">
                             <button
