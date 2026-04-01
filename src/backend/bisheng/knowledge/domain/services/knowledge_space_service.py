@@ -29,7 +29,7 @@ from bisheng.database.models.role import RoleDao
 from bisheng.database.models.tag import TagDao, TagBusinessTypeEnum, Tag
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao, KnowledgeTypeEnum, AuthTypeEnum, \
-    KnowledgeRead
+    KnowledgeRead, KnowledgeState
 from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFile, KnowledgeFileDao, KnowledgeFileStatus, FileType, FileSource
 )
@@ -182,6 +182,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         return knowledge_space
 
     async def get_space_info(self, space_id: int) -> KnowledgeSpaceInfoResp:
+        from bisheng.worker import rebuild_knowledge_celery
+
         space = await KnowledgeDao.aquery_by_id(space_id)
 
         follower_num = await SpaceChannelMemberDao.async_count_space_members(space_id)
@@ -201,6 +203,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         result.follower_num = follower_num
         result.file_num = total_file_num
+        if space.state != KnowledgeState.PUBLISHED.value:
+            rebuild_knowledge_celery.delay(space_id, new_model_id=space.model, invoke_user_id=self.login_user.user_id)
+
         return result
 
     async def delete_space(self, space_id: int) -> None:

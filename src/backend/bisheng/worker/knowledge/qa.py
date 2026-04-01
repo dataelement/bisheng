@@ -57,7 +57,7 @@ def copy_qa_knowledge_celery(source_knowledge_id: int, target_knowledge_id: int,
             return
 
         source_milvus = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(0, knowledge=source_knowledge,
-                                                                            embedding=FakeEmbeddings())
+                                                                            embeddings=FakeEmbeddings())
 
         # create new collection name for target knowledge
         new_col = Collection(name=target_knowledge.collection_name, schema=source_milvus.col.schema,
@@ -65,7 +65,7 @@ def copy_qa_knowledge_celery(source_knowledge_id: int, target_knowledge_id: int,
                              consistency_level=source_milvus.consistency_level)
 
         target_milvus = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(0, knowledge=target_knowledge,
-                                                                            embedding=FakeEmbeddings())
+                                                                            embeddings=FakeEmbeddings())
 
         # Batched SalinQAkey learning points Start from the first page
         batch_size = 100
@@ -199,7 +199,7 @@ def rebuild_qa_knowledge_celery(knowledge_id: int, embedding_model_id: int, invo
 
         milvus_db = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(invoke_user_id=invoke_user_id,
                                                                         knowledge=knowledge_info,
-                                                                        embedding=embeddings)
+                                                                        embeddings=embeddings)
 
         knowledge_info.state = KnowledgeState.PUBLISHED.value
 
