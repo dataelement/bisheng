@@ -16,7 +16,7 @@ class PreviewCacheTransformer(BaseDocumentTransformer):
     def transform_documents(
             self, documents: Sequence[Document], **kwargs: Any
     ) -> Sequence[Document]:
-        all_chunk_info = KnowledgeUtils.get_preview_cache(self.preview_cache_key)
+        all_chunk_info = KnowledgeUtils.get_preview_cache(self.preview_cache_key) if self.preview_cache_key else None
         knowledge_metadata_fields = {one.field_name for one in KNOWLEDGE_RAG_METADATA_SCHEMA}
         if all_chunk_info:
             logger.info("get file chunk from preview cache")
