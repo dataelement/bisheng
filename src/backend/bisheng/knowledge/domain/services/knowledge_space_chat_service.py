@@ -7,6 +7,7 @@ from fastapi import Request
 from langchain_core.documents import Document
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage, AIMessage
+from loguru import logger
 
 from bisheng.api.services.workstation import WorkStationService
 from bisheng.api.v1.schema.chat_schema import ChatMessageHistoryResponse
@@ -171,7 +172,7 @@ class KnowledgeSpaceChatService:
             )
         ]
         await ChatMessageDao.ainsert_batch(messages)
-        if not session.flow_name:
+        if not session.name:
             asyncio.create_task(self.generate_conversation(
                 user_id=self.login_user.user_id,
                 chat_id=session.chat_id,
@@ -192,6 +193,7 @@ class KnowledgeSpaceChatService:
     async def generate_conversation(user_id: int, chat_id: str, question: str, answer: str = None):
         llm_conf = await LLMService.get_workbench_llm()
         if not llm_conf or not llm_conf.chat_title_llm or not llm_conf.chat_title_llm.id:
+            logger.debug("not found chat title llm")
             return
         llm = await LLMService.get_bisheng_llm(
             model_id=llm_conf.chat_title_llm.id,
