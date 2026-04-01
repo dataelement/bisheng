@@ -137,7 +137,7 @@ class SpaceFileDao(KnowledgeFileDao):
                 WHEN 'jpg' THEN 9
                 WHEN 'jpeg' THEN 10
                 WHEN 'png' THEN 11
-                WHEN 'bpm' THEN 12
+                WHEN 'bmp' THEN 12
                 WHEN 'md' THEN 13
                 WHEN 'txt' THEN 14
                 WHEN 'html' THEN 15
