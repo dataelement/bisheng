@@ -1151,15 +1151,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             for rec in all_records:
-                if rec.file_type != FileType.FILE.value:  # skip folders
-                    continue
-                if not rec.object_name:  # no stored object – skip
-                    continue
-
                 rel_dir = resolve_dir_path(rec.file_level_path)
                 local_dir = os.path.join(tmp_dir, rel_dir) if rel_dir else tmp_dir
                 os.makedirs(local_dir, exist_ok=True)
                 local_path = os.path.join(local_dir, rec.file_name)
+
+                if rec.file_type == FileType.DIR.value:
+                    # Create the folder explicitly so empty folders exist in tmp_dir
+                    os.makedirs(local_path, exist_ok=True)
+                    continue
+
+                if not rec.object_name:  # no stored object – skip
+                    continue
 
                 try:
                     response = minio.download_object_sync(object_name=rec.object_name)
@@ -1181,6 +1184,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
             with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
                 for root, dirs, files in os.walk(tmp_dir):
+                    # Add directories to ensure empty directories are included in the zip
+                    for dirname in dirs:
+                        dir_path = os.path.join(root, dirname)
+                        arcname = os.path.relpath(dir_path, tmp_dir)
+                        zf.write(dir_path, arcname)
+                    # Add files
                     for filename in files:
                         if filename == zip_name:
                             continue  # don't zip the zip itself

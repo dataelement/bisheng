@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
     FileStatus,
     KnowledgeFile,
@@ -14,6 +14,14 @@ import { NotificationSeverity } from "~/common";
 import { useToastContext } from "~/Providers";
 import { SearchParams } from "../SpaceDetail/CompoundSearchInput";
 import { useLocalize } from "~/hooks";
+
+/** Statuses that indicate a file is still being processed */
+const PENDING_STATUSES: FileStatus[] = [
+    FileStatus.PROCESSING,
+    FileStatus.WAITING,
+    FileStatus.REBUILDING,
+    FileStatus.UPLOADING,
+];
 
 interface UseFileManagerOptions {
     activeSpace: KnowledgeSpace | null;
@@ -106,6 +114,27 @@ export function useFileManager({ activeSpace }: UseFileManagerOptions) {
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps -- loadFiles is stable via useCallback
     }, [searchQuery, searchTagIds, searchScope, statusFilter, sortBy, sortDirection, currentFolderId]);
+
+    // ─── Auto-polling for pending files ─────────────────────────────────
+    // Refresh the file list every 5s while any file on the current page
+    // is still in a processing/waiting/rebuilding/uploading state.
+    const loadFilesRef = useRef(loadFiles);
+    loadFilesRef.current = loadFiles;
+    const currentPageRef = useRef(currentPage);
+    currentPageRef.current = currentPage;
+
+    useEffect(() => {
+        const hasPending = files.some(
+            (f) => f.status && PENDING_STATUSES.includes(f.status)
+        );
+        if (!hasPending) return;
+
+        const timer = setInterval(() => {
+            loadFilesRef.current(currentPageRef.current);
+        }, 5000);
+
+        return () => clearInterval(timer);
+    }, [files]);
 
     // ─── Search handler ─────────────────────────────────────────────────
     const handleSearch = useCallback((params: SearchParams) => {

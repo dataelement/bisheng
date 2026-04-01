@@ -5,6 +5,8 @@ import { NotificationSeverity } from "~/common"
 import { useLocalize, useToast } from "~/hooks"
 import { SkillMethod } from "./appUtils/skillMethod"
 import { submitDataState } from "./store/atoms"
+import { appConversationsState } from "./store/appSidebarAtoms"
+import { genTitle } from "~/api/chat/data-service"
 
 export const AppLostMessage = '11111'
 const wsMap = new Map<string, WebSocket>()
@@ -28,10 +30,37 @@ const restartCallBack: any = { current: null } // 用于存储重启回调函数
 export const useWebSocket = (helpers) => {
     const { showToast } = useToast();
     const [submitData, setSubmitData] = useRecoilState(submitDataState)
+    const [, setAppConversations] = useRecoilState(appConversationsState)
     const localize = useLocalize()
 
     const websocket = wsMap.get(helpers.chatId)
     const currentChatId = useCurrentChatId(helpers.chatId)
+
+    // Track whether genTitle has been called for this chatId to avoid duplicates
+    const hasGeneratedTitleRef = useRef<Record<string, boolean>>({})
+
+    /**
+     * Generate an AI title for a new conversation after the first AI response.
+     * Mirrors the logic in useAiChat.ts onFinal for daily-mode conversations.
+     */
+    const triggerGenTitle = () => {
+        const chatId = helpers.chatId
+        if (!helpers.flow?.isNew) return
+        if (hasGeneratedTitleRef.current[chatId]) return
+        hasGeneratedTitleRef.current[chatId] = true
+
+        genTitle({ conversationId: chatId })
+            .then((res: { title?: string }) => {
+                if (!res?.title) return
+                // Update the sidebar conversation list with the new title
+                setAppConversations((prev) =>
+                    prev.map((c) => (c.id === chatId ? { ...c, title: res.title! } : c))
+                )
+            })
+            .catch(() => {
+                // genTitle failure is non-critical
+            })
+    }
 
     // 连接WebSocket
     const connect = (callBack) => {
@@ -127,6 +156,8 @@ export const useWebSocket = (helpers) => {
         } else if (data.type === 'close' && data.category === 'processing') {
             helpers.stopShow(false)
             helpers.message.closeAllLogMsg(helpers.chatId);
+            // Generate title for new conversations after first round completes
+            triggerGenTitle()
         }
 
         // messages
@@ -187,6 +218,8 @@ export const useWebSocket = (helpers) => {
                 helpers.message.skillStreamMsg(helpers.chatId, data)
             } else if (data.type === 'close') {
                 helpers.message.skillCloseMsg()
+                // Generate title for new conversations after first round completes
+                triggerGenTitle()
             }
 
             return

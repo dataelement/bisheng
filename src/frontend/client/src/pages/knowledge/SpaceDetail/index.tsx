@@ -208,9 +208,9 @@ export function KnowledgeSpaceContent({
             });
             if (!url) { showToast({ message: localize("com_knowledge.get_download_link_failed"), status: "error" }); return; }
             const now = new Date();
-            const dateStr = 
-                String(now.getFullYear()) + 
-                String(now.getMonth() + 1).padStart(2, '0') + 
+            const dateStr =
+                String(now.getFullYear()) +
+                String(now.getMonth() + 1).padStart(2, '0') +
                 String(now.getDate()).padStart(2, '0');
             const randomStr = Math.random().toString(36).substring(2, 8).toUpperCase();
             triggerUrlDownload(url, `${dateStr}_${randomStr}.zip`);
@@ -446,7 +446,7 @@ export function KnowledgeSpaceContent({
                             alt="empty"
                         />
                         <p className="text-[14px] leading-6 text-[#4E5969]">
-                            {searchQuery ? localize("com_knowledge.no_matched_file") : localize("com_knowledge.no_file_here_please")}
+                            {searchQuery ? localize("com_knowledge.no_matched_file") : isAdmin ? localize("com_knowledge.no_file_here_please") : localize("com_knowledge.no_file_here")}
                             {isAdmin && !searchQuery && (
                                 <span
                                     className="cursor-pointer text-[#165DFF] transition-colors hover:text-[#4080FF] active:text-[#0E42D2]"

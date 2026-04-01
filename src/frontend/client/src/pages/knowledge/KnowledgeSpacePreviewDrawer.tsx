@@ -140,6 +140,15 @@ export function KnowledgeSpacePreviewDrawer({
         setParentNameStack((prev) => prev.slice(0, depth));
     };
 
+    const handlePreviewFile = (fileId: string) => {
+        if (!space) return;
+        const file = filesPreview.find((f) => f.id === fileId);
+        const fileName = file?.name || localize("com_knowledge.unknown_file");
+        const ext = fileName.split(".").pop()?.toLowerCase() || "";
+        const url = `${__APP_ENV__.BASE_URL}/knowledge/file/${fileId}?name=${encodeURIComponent(fileName)}&type=${encodeURIComponent(ext)}&spaceId=${encodeURIComponent(space.id)}`;
+        window.open(url, "_blank");
+    };
+
     const isPublic = space?.visibility === VisibilityType.PUBLIC;
     const canViewFiles =
         !!space &&
@@ -179,8 +188,12 @@ export function KnowledgeSpacePreviewDrawer({
                     onSquareStatusChange?.(String(space.id), "pending");
                     showToast({ message: localize("com_knowledge.subscribe_apply_sent"), severity: NotificationSeverity.SUCCESS });
                 }
-            } catch {
-                showToast({ message: localize("com_knowledge.operation_failed_retry"), severity: NotificationSeverity.ERROR });
+            } catch (e) {
+                const message =
+                    (e as any)?.message ||
+                    (e as any)?.status_message ||
+                    localize("com_knowledge.operation_failed_retry");
+                showToast({ message, severity: NotificationSeverity.ERROR });
             }
             finally {
                 setSubscribing(false);
@@ -316,6 +329,7 @@ export function KnowledgeSpacePreviewDrawer({
                                                         setParentStack((prev) => [...prev, folderId]);
                                                         setParentNameStack((prev) => [...prev, f.name]);
                                                     }}
+                                                    onPreview={handlePreviewFile}
                                                     disableClickNavigate
                                                     hideSelectionCheckbox
                                                 />

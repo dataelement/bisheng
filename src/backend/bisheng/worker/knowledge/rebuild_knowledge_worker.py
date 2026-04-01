@@ -164,9 +164,9 @@ def _rebuild_embeddings(knowledge: Knowledge, files: List[KnowledgeFile], new_mo
             # Model test failure should terminate the entire process, not continue
             raise Exception(f"EmbeddingModel not available: {str(e)}")
 
-        vector_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(invoke_user_id=invoke_user_id,
-                                                                        knowledge=knowledge,
-                                                                        embeddings=new_embeddings)
+        vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(invoke_user_id=invoke_user_id,
+                                                                            knowledge=knowledge,
+                                                                            embeddings=new_embeddings)
         logger.info(f"[DEBUG] Slider Created Successfully.MilvusClientcollection_name={knowledge.collection_name}")
 
         # OthersESWhether the index is present (check in advance, avoid double-checking in the loop)

@@ -17,7 +17,7 @@ export function useNotificationCount() {
         fetchUnreadCount();
 
         // 定时刷新未读数量
-        const interval = setInterval(fetchUnreadCount, 15000);
+        const interval = setInterval(fetchUnreadCount, 150000);
 
         // 页面重新可见/聚焦时立即刷新，避免红点延迟
         const onFocus = () => { void fetchUnreadCount(); };

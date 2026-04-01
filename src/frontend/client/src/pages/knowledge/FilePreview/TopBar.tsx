@@ -79,7 +79,7 @@ export function TopBar({
                         </Button>
                     </div>
                 )}
-                <span className="text-xl font-semibold text-gray-800 truncate flex-1">
+                <span className="text-xl font-semibold text-gray-800 flex-1">
                     {fileName}
                 </span>
             </div>
