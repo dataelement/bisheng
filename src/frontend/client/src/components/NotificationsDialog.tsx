@@ -3,7 +3,7 @@ import { Search, Trash2, Check, XIcon } from "lucide-react";
 import { Dialog, DialogContent } from "~/components/ui/Dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "~/components/ui/Tabs";
 import { Button } from "~/components/ui/Button";
-import { Avatar, AvatarImage, AvatarName } from "~/components/ui/avatar";
+import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
 import { TooltipAnchor } from "~/components/ui/Tooltip";
 import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
