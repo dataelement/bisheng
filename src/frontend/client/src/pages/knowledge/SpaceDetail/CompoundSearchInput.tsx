@@ -22,9 +22,10 @@ export interface CompoundSearchInputProps {
     isRoot?: boolean;
     onSearch?: (params: SearchParams) => void;
     className?: string;
+    onActiveChange?: (active: boolean) => void;
 }
 
-export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, className }: CompoundSearchInputProps) {
+export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, className, onActiveChange }: CompoundSearchInputProps) {
     const localize = useLocalize();
   const [scope, setScope] = useState<'current' | 'all'>('current');
     const [selectedTags, setSelectedTags] = useState<SpaceTag[]>([]);
@@ -55,6 +56,10 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
+
+    useEffect(() => {
+        onActiveChange?.(isFocused);
+    }, [isFocused, onActiveChange]);
 
     const isSearching = selectedTags.length > 0 || keyword.trim().length > 0;
 
