@@ -11,9 +11,9 @@ from loguru import logger
 from bisheng.api.services.assistant import AssistantService
 from bisheng.api.services.workflow import WorkFlowService
 from bisheng.api.v1.schemas import ChatMessage, ChatResponse, FileResponse
-from bisheng.chat.client import ChatClient
-from bisheng.chat.clients.workflow_client import WorkflowClient
-from bisheng.chat.types import IgnoreException, WorkType
+from bisheng.common.chat.client import ChatClient
+from bisheng.common.chat.clients.workflow_client import WorkflowClient
+from bisheng.common.chat.types import IgnoreException, WorkType
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.schemas.telemetry.event_data_schema import ApplicationAliveEventData

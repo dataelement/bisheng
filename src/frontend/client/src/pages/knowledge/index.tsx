@@ -20,8 +20,6 @@ import {
     getMineSpacesApi,
     createSpaceApi,
     updateSpaceApi,
-    getSpaceTagsApi,
-    type SpaceTag,
 } from "~/api/knowledge";
 import { NotificationSeverity } from "~/common";
 import { KnowledgeSpaceMemberDialog } from "~/components/KnowledgeSpaceMemberDialog";
@@ -89,18 +87,6 @@ export default function Knowledge() {
 
     // ─── AI split-pane ──────────────────────────────────────────────────
     const aiPane = useAiSplitPane();
-
-    // ─── Space tags for AI chat ─────────────────────────────────────────
-    const [spaceTags, setSpaceTags] = useState<SpaceTag[]>([]);
-    useEffect(() => {
-        if (!activeSpace?.id) {
-            setSpaceTags([]);
-            return;
-        }
-        getSpaceTagsApi(String(activeSpace.id))
-            .then(setSpaceTags)
-            .catch(() => setSpaceTags([]));
-    }, [activeSpace?.id]);
 
     // Share route: close drawer when leaving /knowledge/share/:spaceId
     useEffect(() => {
@@ -469,7 +455,6 @@ export default function Knowledge() {
                                 spaceId={String(activeSpace.id)}
                                 folderId={fileManager.currentFolderId}
                                 contextLabel={contextLabel}
-                                availableTags={spaceTags}
                                 onClose={() => aiPane.setShowAiAssistant(false)}
                             />
                         </div>

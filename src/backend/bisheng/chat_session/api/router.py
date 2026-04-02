@@ -1,76 +1,10 @@
-from typing import Optional, Literal
+from fastapi import APIRouter
 
-from fastapi import APIRouter, Depends, Body
+from .endpoints.chat import router as chat_endpoints
+from .endpoints.feedback import router as feedback_endpoints
+from .endpoints.session import router as session_endpoints
 
-from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
-from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.common.errcode.http_error import NotFoundError
-from bisheng.common.schemas.api import resp_200
-from bisheng.common.schemas.telemetry.event_data_schema import MessageFeedbackEventData
-from bisheng.common.services import telemetry_service
-from bisheng.core.logger import trace_id_var
-from bisheng.database.models.flow import FlowType
-from bisheng.database.models.message import ChatMessageDao
-from bisheng.database.models.session import MessageSessionDao
-from ..domain.chat import ChatSessionService
-from ...api.services.workstation import WorkstationMessage
-
-router = APIRouter(prefix='/session', tags=['Chat Session'])
-
-
-def get_session_app_type(flow_type: int) -> ApplicationTypeEnum:
-    if flow_type == FlowType.WORKFLOW.value:
-        return ApplicationTypeEnum.WORKFLOW
-    if flow_type == FlowType.ASSISTANT.value:
-        return ApplicationTypeEnum.ASSISTANT
-    if flow_type == FlowType.LINSIGHT.value:
-        return ApplicationTypeEnum.LINSIGHT
-    return ApplicationTypeEnum.DAILY_CHAT
-
-
-@router.get('/chat/history')
-async def get_chat_message_public(*,
-                                  chat_id: str,
-                                  flow_id: str,
-                                  id: Optional[str] = None,
-                                  page_size: Optional[int] = 20,
-                                  login_user: UserPayload = Depends(UserPayload.get_login_user)):
-    """ api for audit module and mark qa """
-    history = await ChatSessionService.get_chat_history(chat_id, flow_id, id, page_size)
-    return resp_200(data=history)
-
-
-@router.get('/chat/messages/{conversationId}')
-async def get_chat_messages_by_conversation_id(*, conversationId: str,
-                                               login_user: UserPayload = Depends(UserPayload.get_login_user)):
-    """ api for getting chat messages by conversation id """
-    messages = await ChatMessageDao.aget_messages_by_chat_id(chat_id=conversationId, limit=1000)
-    if not messages:
-        raise NotFoundError()
-
-    return resp_200([await WorkstationMessage.from_chat_message(message) for message in messages])
-
-
-@router.post('/chat/message/telemetry')
-async def post_chat_message_telemetry(*,
-                                      message_id: int = Body(...),
-                                      operation_type: Literal['like', 'dislike', 'copy'] = Body(...),
-                                      login_user: UserPayload = Depends(UserPayload.get_login_user)):
-    """ api for telemetry user feedback """
-    message_info = await ChatMessageDao.aget_message_by_id(message_id)
-    if not message_info:
-        raise NotFoundError()
-    chat_info = await MessageSessionDao.async_get_one(message_info.chat_id)
-    if not chat_info:
-        raise NotFoundError()
-    await telemetry_service.log_event(user_id=login_user.user_id,
-                                      event_type=BaseTelemetryTypeEnum.MESSAGE_FEEDBACK,
-                                      trace_id=trace_id_var.get(),
-                                      event_data=MessageFeedbackEventData(
-                                          message_id=message_id,
-                                          app_id=chat_info.flow_id,
-                                          app_name=chat_info.flow_name,
-                                          app_type=get_session_app_type(chat_info.flow_type),
-                                          operation_type=operation_type,
-                                      ))
-    return resp_200()
+router = APIRouter(tags=['Chat'])
+router.include_router(chat_endpoints)
+router.include_router(feedback_endpoints)
+router.include_router(session_endpoints, prefix='/session')

@@ -341,7 +341,7 @@ class KnowledgeFileDao(KnowledgeFileBase):
         if file_ids:
             and_statement.append(KnowledgeFile.id.in_(file_ids))
         if file_level_path:
-            and_statement.append(KnowledgeFile.file_level_path == file_level_path)
+            and_statement.append(KnowledgeFile.file_level_path.like(f"{file_level_path}%"))
         if extra_file_ids:
             statement = statement.where(or_(KnowledgeFile.id.in_(extra_file_ids), and_(*and_statement)))
         else:

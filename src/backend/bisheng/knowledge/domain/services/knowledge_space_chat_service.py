@@ -82,13 +82,13 @@ class KnowledgeSpaceChatService:
             session = session[0]
 
         milvus_vector = await KnowledgeRag.init_knowledge_milvus_vectorstore(self.login_user.user_id, knowledge=space)
-        vector_retriever = milvus_vector.as_retriever(**{
+        vector_retriever = milvus_vector.as_retriever(search_kwargs={
             "k": 100,
             "param": {"ef": 110},
             "expr": f"document_id == {file_id}"
         })
         es_vector = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge=space)
-        es_retriever = es_vector.as_retriever(**{
+        es_retriever = es_vector.as_retriever(search_kwargs={
             "filter": [{"term": {"metadata.document_id": file_id}}]
         })
         async for one in self.space_rag(session, vector_retriever, es_retriever, query):
@@ -106,6 +106,7 @@ class KnowledgeSpaceChatService:
         )
         finally_docs: List[Document] = await retriever_tool.ainvoke(query)
         file_content = ""
+        logger.debug(f"retrieved_finally_docs: {len(finally_docs)}")
         for one in finally_docs:
             file_content += one.page_content + "\n"
 
@@ -293,17 +294,6 @@ class KnowledgeSpaceChatService:
     async def chat_folder(self, knowledge_id: int, folder_id: int, chat_id: str, query: str,
                           tags: Optional[List[Dict]] = None) -> AsyncIterator[ChatResponse]:
         """ Folder RAG query """
-        file_level_path = ""
-        if folder_id:
-            file_record = await KnowledgeFileDao.query_by_id(folder_id)
-            if not file_record or file_record.knowledge_id != knowledge_id or file_record.file_type != 0:
-                raise NotFoundError(msg="Invalid folder for chat")
-            file_level_path = file_record.file_level_path + f"/{file_record.id}"
-
-        space = await KnowledgeDao.aquery_by_id(knowledge_id)
-        if not space:
-            raise NotFoundError(msg="Knowledge space not found for chat")
-
         flow_id = self.generate_flow_id_for_folder(knowledge_id, folder_id)
         session = await MessageSessionDao.afilter_session(chat_ids=[chat_id],
                                                           flow_ids=[flow_id],
@@ -313,24 +303,48 @@ class KnowledgeSpaceChatService:
             raise NotFoundError(msg="Folder session not found")
         session = session[0]
 
-        file_ids = await SpaceFileDao.get_children_by_prefix(space.id, file_level_path)
-        file_ids = [one.id for one in file_ids]
-        if tags:
-            tag_file_ids = await TagDao.aget_resources_by_tags([one.get("id") for one in tags],
-                                                               resource_type=ResourceTypeEnum.SPACE_FILE)
-            tag_file_ids = [int(one.resource_id) for one in tag_file_ids]
-            file_ids = list(set(file_ids) & set(tag_file_ids))
+        space = await KnowledgeDao.aquery_by_id(knowledge_id)
+        if not space:
+            raise NotFoundError(msg="Knowledge space not found for chat")
 
-        milvus_vector = await KnowledgeRag.init_knowledge_milvus_vectorstore(self.login_user.user_id, knowledge=space)
-        vector_retriever = milvus_vector.as_retriever(**{
-            "k": 100,
-            "param": {"ef": 110},
-            "expr": f"document_id in {file_ids}"
-        })
-        es_vector = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge=space)
-        es_retriever = es_vector.as_retriever(**{
-            "filter": [{"terms": {"metadata.document_id": file_ids}}]
-        })
+        vector_retriever, es_retriever = None, None
+        if not folder_id:
+            milvus_vector = await KnowledgeRag.init_knowledge_milvus_vectorstore(self.login_user.user_id,
+                                                                                 knowledge=space)
+            es_vector = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge=space)
+            vector_retriever = milvus_vector.as_retriever(search_kwargs={
+                "k": 100,
+                "param": {"ef": 110}
+            })
+            es_retriever = es_vector.as_retriever(search_kwargs={"k": 100})
+        else:
+            file_record = await KnowledgeFileDao.query_by_id(folder_id)
+            if not file_record or file_record.knowledge_id != knowledge_id or file_record.file_type != 0:
+                raise NotFoundError(msg="Invalid folder for chat")
+            file_level_path = file_record.file_level_path + f"/{file_record.id}"
+
+            file_ids = await SpaceFileDao.get_children_by_prefix(space.id, file_level_path)
+            file_ids = [one.id for one in file_ids]
+            if tags:
+                tag_file_ids = await TagDao.aget_resources_by_tags([one.get("id") for one in tags],
+                                                                   resource_type=ResourceTypeEnum.SPACE_FILE)
+                tag_file_ids = [int(one.resource_id) for one in tag_file_ids]
+                file_ids = list(set(file_ids) & set(tag_file_ids))
+            if file_ids:
+                milvus_vector = await KnowledgeRag.init_knowledge_milvus_vectorstore(self.login_user.user_id,
+                                                                                     knowledge=space)
+                vector_retriever = milvus_vector.as_retriever(search_kwargs={
+                    "k": 100,
+                    "param": {"ef": 110},
+                    "expr": f"document_id in {file_ids}"
+                })
+                es_vector = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge=space)
+                es_retriever = es_vector.as_retriever(search_kwargs={
+                    "k": 100,
+                    "filter": [{"terms": {"metadata.document_id": file_ids}}]
+                })
+
+        # executeQuery(vector_retriever, es_retriever, query)
         async for one in self.space_rag(session, vector_retriever, es_retriever, query, tags):
             yield one
 

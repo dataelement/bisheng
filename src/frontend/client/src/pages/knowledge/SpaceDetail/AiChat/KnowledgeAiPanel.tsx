@@ -10,6 +10,7 @@
  */
 import { HistoryIcon } from "lucide-react";
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "~/components";
 import {
     Tooltip,
@@ -23,12 +24,12 @@ import type { FolderChatTag } from "~/hooks/useFolderChat";
 import { KnowledgeAiInput } from "./KnowledgeAiInput";
 import { ConversationHistory } from "./ConversationHistory";
 import { useLocalize } from "~/hooks";
+import { getSpaceTagsApi } from "~/api/knowledge";
 
 interface KnowledgeAiPanelProps {
     spaceId: string;
     folderId?: string;
     contextLabel: string; // "知识空间" | "文件夹"
-    availableTags?: { id: number; name: string }[];
     onClose: () => void;
 }
 
@@ -36,10 +37,17 @@ export function KnowledgeAiPanel({
     spaceId,
     folderId,
     contextLabel,
-    availableTags = [],
     onClose,
 }: KnowledgeAiPanelProps) {
     const localize = useLocalize();
+
+    // Fetch space tags via react-query (cache shared with other consumers)
+    const { data: availableTags = [] } = useQuery({
+        queryKey: ['spaceTags', spaceId],
+        queryFn: () => getSpaceTagsApi(spaceId),
+        enabled: !!spaceId,
+    });
+
   const {
         messages,
         sessions,
@@ -181,6 +189,7 @@ export function KnowledgeAiPanel({
 
             {/* Input Area — with # tag support */}
             <KnowledgeAiInput
+                key={spaceId}
                 availableTags={availableTags}
                 isStreaming={isStreaming}
                 onSend={handleSend}

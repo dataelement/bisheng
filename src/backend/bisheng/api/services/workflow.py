@@ -7,7 +7,7 @@ from langchain.memory import ConversationBufferWindowMemory
 from bisheng.api.v1.schema.workflow import WorkflowEvent, WorkflowEventType, WorkflowInputSchema, WorkflowInputItem, \
     WorkflowOutputSchema
 from bisheng.api.v1.schemas import ChatResponse
-from bisheng.chat.utils import SourceType
+from bisheng.common.chat.utils import SourceType
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.flow import WorkFlowInitError
