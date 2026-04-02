@@ -689,20 +689,42 @@ class KnowledgeSpaceService(KnowledgeUtils):
                                     order_sort: str = "asc") -> Dict:
         space = await self._require_read_permission(space_id)
 
+        file_level_path = None
         filter_files = []
+
+        if parent_id:
+            parent_folder = await KnowledgeFileDao.query_by_id(parent_id)
+            if not parent_folder:
+                raise NotFoundError()
+            file_level_path = f"{parent_folder.file_level_path}/{parent_folder.id}"
+            children_ids = await SpaceFileDao.get_children_by_prefix(space_id, file_level_path)
+            if not children_ids:
+                return {"total": 0, "page": page, "page_size": page_size, "data": []}
+            filter_files = [one.id for one in children_ids]
+
         if tag_ids:
             resources = await TagDao.aget_resources_by_tags(tag_ids, ResourceTypeEnum.SPACE_FILE)
             if not resources:
                 return {"total": 0, "page": page, "page_size": page_size, "data": []}
-            filter_files = [int(one.resource_id) for one in resources]
+            filter_files = list(set(filter_files) & set([int(one.resource_id) for one in resources]))
+            if not filter_files:
+                return {"total": 0, "page": page, "page_size": page_size, "data": []}
 
         extra_file_ids = []
         if keyword:
+            query = {"match_phrase": {"text": keyword}}
+            if filter_files:
+                query = {
+                    "bool": {
+                        "must": [
+                            query,
+                            {"terms": {"metadata.document_id": filter_files}},
+                        ]
+                    }
+                }
             es_vector = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge=space)
-            es_result = await es_vector.client.search(body={
-                "query": {
-                    "match_phrase": {"text": keyword}
-                },
+            es_result = await es_vector.client.search(index=space.index_name, body={
+                "query": query,
                 "aggs": {
                     "document_ids": {
                         "terms": {
@@ -718,13 +740,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     extra_file_ids.append(one["key"])
             if filter_files:
                 extra_file_ids = list(set(filter_files) & set(extra_file_ids))
-
-        file_level_path = None
-        if parent_id:
-            parent_folder = await KnowledgeFileDao.query_by_id(parent_id)
-            if not parent_folder:
-                raise NotFoundError()
-            file_level_path = f"{parent_folder.file_level_path}/{parent_folder.id}"
 
         res = await KnowledgeFileDao.aget_file_by_filters(space_id, file_name=keyword, file_ids=filter_files,
                                                           extra_file_ids=extra_file_ids, status=file_status,
