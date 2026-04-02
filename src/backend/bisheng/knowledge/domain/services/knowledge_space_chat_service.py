@@ -82,13 +82,13 @@ class KnowledgeSpaceChatService:
             session = session[0]
 
         milvus_vector = await KnowledgeRag.init_knowledge_milvus_vectorstore(self.login_user.user_id, knowledge=space)
-        vector_retriever = milvus_vector.as_retriever(**{
+        vector_retriever = milvus_vector.as_retriever(search_kwargs={
             "k": 100,
             "param": {"ef": 110},
             "expr": f"document_id == {file_id}"
         })
         es_vector = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge=space)
-        es_retriever = es_vector.as_retriever(**{
+        es_retriever = es_vector.as_retriever(search_kwargs={
             "filter": [{"term": {"metadata.document_id": file_id}}]
         })
         async for one in self.space_rag(session, vector_retriever, es_retriever, query):
@@ -106,6 +106,7 @@ class KnowledgeSpaceChatService:
         )
         finally_docs: List[Document] = await retriever_tool.ainvoke(query)
         file_content = ""
+        logger.debug(f"retrieved_finally_docs: {len(finally_docs)}")
         for one in finally_docs:
             file_content += one.page_content + "\n"
 
@@ -311,11 +312,11 @@ class KnowledgeSpaceChatService:
             milvus_vector = await KnowledgeRag.init_knowledge_milvus_vectorstore(self.login_user.user_id,
                                                                                  knowledge=space)
             es_vector = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge=space)
-            vector_retriever = milvus_vector.as_retriever(**{
+            vector_retriever = milvus_vector.as_retriever(search_kwargs={
                 "k": 100,
                 "param": {"ef": 110}
             })
-            es_retriever = es_vector.as_retriever(**{"k": 100})
+            es_retriever = es_vector.as_retriever(search_kwargs={"k": 100})
         else:
             file_record = await KnowledgeFileDao.query_by_id(folder_id)
             if not file_record or file_record.knowledge_id != knowledge_id or file_record.file_type != 0:
@@ -332,13 +333,13 @@ class KnowledgeSpaceChatService:
             if file_ids:
                 milvus_vector = await KnowledgeRag.init_knowledge_milvus_vectorstore(self.login_user.user_id,
                                                                                      knowledge=space)
-                vector_retriever = milvus_vector.as_retriever(**{
+                vector_retriever = milvus_vector.as_retriever(search_kwargs={
                     "k": 100,
                     "param": {"ef": 110},
                     "expr": f"document_id in {file_ids}"
                 })
                 es_vector = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge=space)
-                es_retriever = es_vector.as_retriever(**{
+                es_retriever = es_vector.as_retriever(search_kwargs={
                     "k": 100,
                     "filter": [{"terms": {"metadata.document_id": file_ids}}]
                 })
