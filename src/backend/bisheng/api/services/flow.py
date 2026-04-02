@@ -8,7 +8,7 @@ from loguru import logger
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200, FlowVersionCreate, FlowCompareReq, resp_500, \
     StreamData
-from bisheng.chat.utils import process_node_data
+from bisheng.common.chat.utils import process_node_data
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.flow import NotFoundVersionError, CurVersionDelError, VersionNameExistsError, \

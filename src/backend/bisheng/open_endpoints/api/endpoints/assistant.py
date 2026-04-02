@@ -15,7 +15,7 @@ from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.v1.chat import chat_manager
 from bisheng.api.v1.schemas import (OpenAIChatCompletionReq,
                                     OpenAIChatCompletionResp, OpenAIChoice)
-from bisheng.chat.types import WorkType
+from bisheng.common.chat.types import WorkType
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
 from bisheng.common.schemas.api import resp_200, PageData
 from bisheng.common.schemas.telemetry.event_data_schema import ApplicationAliveEventData, ApplicationProcessEventData

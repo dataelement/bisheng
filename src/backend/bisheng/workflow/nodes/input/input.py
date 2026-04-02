@@ -10,7 +10,7 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from loguru import logger
 
 from bisheng.api.v1.schemas import FileProcessBase
-from bisheng.chat.types import IgnoreException
+from bisheng.common.chat.types import IgnoreException
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.errcode.knowledge import KnowledgeFileNotSupportedError
 from bisheng.core.cache.utils import file_download

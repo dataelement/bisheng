@@ -11,7 +11,7 @@ from langchain_core.documents import Document
 from langchain_core.language_models import BaseChatModel
 
 from bisheng.api.services.audit_log import AuditLogService
-from bisheng.chat.utils import SourceType, process_source_document
+from bisheng.common.chat.utils import SourceType, process_source_document
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.utils.title_generator import generate_conversation_title_async
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
