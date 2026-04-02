@@ -1,5 +1,5 @@
 import { Database } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as RadioGroup from "@radix-ui/react-radio-group";
 import { NotificationSeverity } from "~/common";
 import { useToastContext } from "~/Providers";
@@ -52,8 +52,8 @@ export function CreateKnowledgeSpaceDrawer({
     const localize = useLocalize();
     const [name, setName] = useState("");
     const [description, setDescription] = useState("");
-    const [joinPolicy, setJoinPolicy] = useState<JoinPolicy>("review");
-    const [publishToSquare, setPublishToSquare] = useState<PublishToSquare>("yes");
+    const [joinPolicy, setJoinPolicy] = useState<JoinPolicy>("private");
+    const [publishToSquare, setPublishToSquare] = useState<PublishToSquare>("no");
     const [showSuccess, setShowSuccess] = useState(false);
     /** Skip max-length enforcement while IME is composing (e.g. Chinese pinyin), so intermediate input is not mistaken as overflow. */
     const nameComposingRef = useRef(false);
@@ -64,15 +64,15 @@ export function CreateKnowledgeSpaceDrawer({
         [joinPolicy]
     );
 
-    const resetForm = () => {
-        setName("");
+    const resetForm = useCallback(() => {
+        setName(localize("com_knowledge.default_personal_space_name"));
         setDescription("");
-        setJoinPolicy("review");
-        setPublishToSquare("yes");
+        setJoinPolicy("private");
+        setPublishToSquare("no");
         setShowSuccess(false);
-    };
+    }, [localize]);
 
-    // Pre-fill form in edit mode
+    // Pre-fill form: create defaults match 个人知识库迁移 (私密, 默认名称); edit from editingSpace
     useEffect(() => {
         if (!open) {
             resetForm();
@@ -91,8 +91,10 @@ export function CreateKnowledgeSpaceDrawer({
             );
             setPublishToSquare(editingSpace.isReleased ? "yes" : "no");
             setShowSuccess(false);
+        } else if (mode === "create") {
+            resetForm();
         }
-    }, [open, mode, editingSpace]);
+    }, [open, mode, editingSpace, resetForm]);
 
     const handleConfirm = () => {
         if (!name.trim()) {

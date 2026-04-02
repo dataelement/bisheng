@@ -108,7 +108,8 @@ export function KnowledgeSpacePreviewDrawer({
                 setFilesPreview([]);
                 setChildrenTotal(0);
             });
-    }, [space?.id, space?.visibility, currentParentId]);
+        // Include join/subscription signals so file list loads when async info maps to joined without subscription_status.
+    }, [space?.id, space?.visibility, space?.subscriptionStatus, space?.isFollowed, currentParentId, status]);
 
     const loadMoreChildren = async () => {
         if (!space || !canViewFiles) return;
@@ -150,10 +151,14 @@ export function KnowledgeSpacePreviewDrawer({
     };
 
     const isPublic = space?.visibility === VisibilityType.PUBLIC;
+    // /info sometimes omits subscription_status but still sets is_followed for already-approved members.
     const canViewFiles =
         !!space &&
         (space.visibility === VisibilityType.PUBLIC ||
-            (space.visibility === VisibilityType.APPROVAL && space.subscriptionStatus === "subscribed"));
+            (space.visibility === VisibilityType.APPROVAL &&
+                (space.subscriptionStatus === "subscribed" ||
+                    space.isFollowed === true ||
+                    status === "joined")));
 
     const handleClickAction = () => {
         if (!space) return;

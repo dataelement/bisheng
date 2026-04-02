@@ -12,7 +12,6 @@ import {
     createManagerChannelApi,
     updateChannelApi,
     getChannelDetailApi,
-    getArticlesApi,
 } from "~/api/channels";
 import { type KnowledgeSpace } from "~/api/knowledge";
 import { NotificationSeverity } from "~/common";
@@ -48,6 +47,8 @@ export default function Subscription() {
     const [showFullScreenBtn, setShowFullScreenBtn] = useState(true);
     // Track whether fullscreen was entered via AI assistant button (not fullscreen button)
     const enteredFullscreenViaAiRef = useRef(false);
+    /** When true, ignore stale async completion that would re-open the share preview (e.g. user closed overlay while user ref/effect re-ran). */
+    const userClosedSharePreviewRef = useRef(false);
     const [previewDrawerOpen, setPreviewDrawerOpen] = useState(false);
     const [channelSquareRefreshKey, setChannelSquareRefreshKey] = useState(0);
     const [memberDialogOpen, setMemberDialogOpen] = useState(false);
@@ -59,26 +60,35 @@ export default function Subscription() {
     const queryClient = useQueryClient();
 
     // Open preview drawer when channelId route param is present.
-    // Prefetch data first to avoid showing a blank loading sheet (esp. private/dissolved channels).
-    // If the current user is the channel creator, skip the drawer and navigate directly.
-    // Wait for user to be loaded so we can reliably check ownership.
+    // Prefetch channel detail only (validates private / dissolved). Articles load inside
+    // ChannelPreviewDrawer so a list API failure does not close the share route and bounce to square.
+    // Creator shortcut: skip drawer only when not browsing channel plaza (plaza card click should
+    // always open the same preview as other subscribers).
+    const previewUserKey = user?.username ?? "";
+
     useEffect(() => {
         if (!previewChannelId || !user) return;
+        userClosedSharePreviewRef.current = false;
         let cancelled = false;
         (async () => {
             try {
-                // Use validating queryFns that mirror ChannelPreviewDrawer's
-                // own queries — throw on business-level error status_code so
-                // react-query treats them as real failures and we never open
-                // the drawer for dissolved / inaccessible channels.
                 const detail: any = await queryClient.fetchQuery({
                     queryKey: ["channelPreviewDetail", previewChannelId],
                     queryFn: async () => {
                         const res: any = await getChannelDetailApi(previewChannelId);
-                        if ((res?.status_code && res.status_code !== 200) || !res?.id) {
+                        const payload =
+                            res?.id != null && String(res.id) !== ""
+                                ? res
+                                : res?.data && typeof res.data === "object"
+                                    ? res.data
+                                    : res;
+                        if (!payload?.id) {
                             throw new Error("channel_invalid");
                         }
-                        return res;
+                        if (payload?.status_code && payload.status_code !== 200) {
+                            throw new Error("channel_invalid");
+                        }
+                        return payload;
                     },
                     staleTime: 0,
                     retry: false,
@@ -97,15 +107,14 @@ export default function Subscription() {
                     return;
                 }
 
-                // If the current user is the channel creator, skip the preview drawer
-                // and navigate directly to the channel detail view.
                 const isCreator =
                     Boolean(user?.username) &&
                     Boolean(detail?.creator_name) &&
-                    user?.username === detail?.creator_name;
+                    String(user.username).trim() === String(detail.creator_name).trim();
 
-                if (isCreator) {
-                    // Try to find the channel in cached lists and auto-select it
+                // From channel square: always show preview (even for creator). Direct share links
+                // paste/open: keep shortcut into main channel UI.
+                if (isCreator && !showChannelSquare) {
                     const allChannels = [
                         ...(queryClient.getQueryData<Channel[]>(["channels", "created", SortType.RECENT_UPDATE]) || []),
                     ];
@@ -117,25 +126,8 @@ export default function Subscription() {
                     return;
                 }
 
-                // Use fetchQuery (not prefetchQuery) so errors propagate to
-                // the catch block instead of being silently swallowed.
-                await queryClient.fetchQuery({
-                    queryKey: ["channelPreviewArticles", previewChannelId],
-                    queryFn: async () => {
-                        const res: any = await getArticlesApi({
-                            channelId: previewChannelId,
-                            page: 1,
-                            pageSize: 10,
-                        });
-                        if (res?.status_code && res.status_code !== 200) {
-                            throw new Error("articles_load_failed");
-                        }
-                        return res;
-                    },
-                    staleTime: 0,
-                    retry: false,
-                });
                 if (cancelled) return;
+                if (userClosedSharePreviewRef.current) return;
                 setPreviewDrawerOpen(true);
             } catch {
                 if (cancelled) return;
@@ -149,7 +141,14 @@ export default function Subscription() {
         return () => {
             cancelled = true;
         };
-    }, [previewChannelId, user]);
+    }, [previewChannelId, previewUserKey, showChannelSquare]);
+
+    // Leaving /channel/share/* should not leave the drawer marked open with a stale channelId.
+    useEffect(() => {
+        if (!previewChannelId) {
+            setPreviewDrawerOpen(false);
+        }
+    }, [previewChannelId]);
 
     // Deep link to channel detail: /channel/:channelId
     useEffect(() => {
@@ -203,10 +202,10 @@ export default function Subscription() {
     const handlePreviewDrawerClose = (open: boolean) => {
         setPreviewDrawerOpen(open);
         if (!open) {
-            navigate("/channel", { replace: true });
-            if (showChannelSquare) {
-                setChannelSquareRefreshKey((k) => k + 1);
-            }
+            userClosedSharePreviewRef.current = true;
+            // Keep URL aligned with plaza mode so search/effects don't fight; avoid refreshKey bump here
+            // (it remounts the list and feels like the page "jumping"; subscribe still bumps via bumpChannelSquareList).
+            navigate(showChannelSquare ? "/channel?square=1" : "/channel", { replace: true });
         }
     };
 
