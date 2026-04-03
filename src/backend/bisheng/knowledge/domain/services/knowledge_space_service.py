@@ -38,6 +38,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     KnowledgeSpaceInfoResp, SpaceMemberResponse, SpaceMemberPageResponse,
     UpdateSpaceMemberRoleRequest, RemoveSpaceMemberRequest, SpaceSubscriptionStatusEnum
 )
+from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import KnowledgeAuditTelemetryService
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.llm.domain import LLMService
@@ -168,7 +169,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
             is_released=is_released,
         )
 
-        knowledge_space = KnowledgeService.create_knowledge_base(self.request, self.login_user, db_knowledge)
+        knowledge_space = KnowledgeService.create_knowledge_base(self.request, self.login_user, db_knowledge,
+                                                                 skip_hook=True)
 
         member = SpaceChannelMember(
             business_id=str(knowledge_space.id),
@@ -178,6 +180,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
             status=MembershipStatusEnum.ACTIVE,
         )
         await SpaceChannelMemberDao.async_insert_member(member)
+
+        # Audit log for knowledge space creation
+        await KnowledgeAuditTelemetryService.audit_create_knowledge_space(self.login_user, self.request, knowledge_space)
 
         return knowledge_space
 
@@ -222,6 +227,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await asyncio.to_thread(KnowledgeService.delete_knowledge_file_in_minio, space_id)
 
         await KnowledgeDao.async_delete_knowledge(knowledge_id=space_id)
+
+        # Audit log and telemetry
+        await KnowledgeAuditTelemetryService.audit_delete_knowledge_space(self.login_user, self.request, space)
+        KnowledgeAuditTelemetryService.telemetry_delete_knowledge(self.login_user)
         return
 
     async def update_knowledge_space(

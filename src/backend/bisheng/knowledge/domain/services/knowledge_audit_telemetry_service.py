@@ -18,6 +18,10 @@ class KnowledgeAuditTelemetryService:
         AuditLogService.create_knowledge(login_user, get_request_ip(request), knowledge.id)
 
     @staticmethod
+    async def audit_create_knowledge_space(login_user, request, knowledge: Knowledge) -> None:
+        await AuditLogService.create_knowledge_space(login_user, get_request_ip(request), knowledge)
+
+    @staticmethod
     def telemetry_new_knowledge(login_user, knowledge: Knowledge) -> None:
         telemetry_service.log_event_sync(
             user_id=login_user.user_id,
@@ -41,6 +45,10 @@ class KnowledgeAuditTelemetryService:
     @staticmethod
     def audit_delete_knowledge(login_user, request, knowledge: Knowledge) -> None:
         AuditLogService.delete_knowledge(login_user, get_request_ip(request), knowledge)
+
+    @staticmethod
+    async def audit_delete_knowledge_space(login_user, request, knowledge: Knowledge) -> None:
+        await AuditLogService.delete_knowledge_space(login_user, get_request_ip(request), knowledge)
 
     @staticmethod
     def audit_upload_knowledge_file(login_user, request, knowledge: Knowledge, file_list: List[KnowledgeFile]) -> None:

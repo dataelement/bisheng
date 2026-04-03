@@ -234,7 +234,8 @@ class KnowledgeService(KnowledgeUtils):
         return cls.create_knowledge_base(request, login_user, db_knowledge)
 
     @classmethod
-    def create_knowledge_base(cls, request, login_user: UserPayload, db_knowledge: Knowledge) -> Knowledge:
+    def create_knowledge_base(cls, request, login_user: UserPayload, db_knowledge: Knowledge,
+                              skip_hook: bool = False) -> Knowledge:
         # generate index_name and collection_name
         db_knowledge.index_name = generate_knowledge_index_name()
         db_knowledge.collection_name = db_knowledge.index_name
@@ -254,7 +255,8 @@ class KnowledgeService(KnowledgeUtils):
             logger.exception("create knowledge index name error")
 
         # Handling the next steps in creating a Knowledge Base
-        cls.create_knowledge_hook(request, login_user, db_knowledge)
+        if not skip_hook:
+            cls.create_knowledge_hook(request, login_user, db_knowledge)
         return db_knowledge
 
     @classmethod

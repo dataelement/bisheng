@@ -336,6 +336,48 @@ class AuditLogService:
                            str(knowledge.id), knowledge.name, ResourceTypeEnum.KNOWLEDGE, str(knowledge.id))
 
     @classmethod
+    async def create_knowledge_space(cls, user: UserPayload, ip_address: str, knowledge: Knowledge):
+        """
+        New Knowledge Space Audit Log
+        """
+        logger.info(f"act=create_knowledge_space user={user.user_name} ip={ip_address} knowledge={knowledge.id}")
+        user_group = await UserGroupDao.aget_user_group(user.user_id)
+        group_ids = [one.group_id for one in user_group]
+        audit_log = AuditLog(
+            operator_id=user.user_id,
+            operator_name=user.user_name,
+            group_ids=group_ids,
+            system_id=SystemId.KNOWLEDGE_SPACE.value,
+            event_type=EventType.CREATE_KNOWLEDGE_SPACE.value,
+            object_type=ObjectType.KNOWLEDGE_SPACE.value,
+            object_id=str(knowledge.id),
+            object_name=knowledge.name,
+            ip_address=ip_address,
+        )
+        await AuditLogDao.ainsert_audit_logs([audit_log])
+
+    @classmethod
+    async def delete_knowledge_space(cls, user: UserPayload, ip_address: str, knowledge: Knowledge):
+        """
+        Delete Knowledge Space Audit Log
+        """
+        logger.info(f"act=delete_knowledge_space user={user.user_name} ip={ip_address} knowledge={knowledge.id}")
+        user_group = await UserGroupDao.aget_user_group(user.user_id)
+        group_ids = [one.group_id for one in user_group]
+        audit_log = AuditLog(
+            operator_id=user.user_id,
+            operator_name=user.user_name,
+            group_ids=group_ids,
+            system_id=SystemId.KNOWLEDGE_SPACE.value,
+            event_type=EventType.DELETE_KNOWLEDGE_SPACE.value,
+            object_type=ObjectType.KNOWLEDGE_SPACE.value,
+            object_id=str(knowledge.id),
+            object_name=knowledge.name,
+            ip_address=ip_address,
+        )
+        await AuditLogDao.ainsert_audit_logs([audit_log])
+
+    @classmethod
     def upload_knowledge_file(cls, user: UserPayload, ip_address: str, knowledge_id: int, file_name: str):
         """
         Audit Logs for Knowledge Base Upload Files
