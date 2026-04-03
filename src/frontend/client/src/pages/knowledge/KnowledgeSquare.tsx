@@ -189,11 +189,21 @@ export default function KnowledgeSquare({
         } catch (e) {
             // rollback (keep original status/label)
             setSpaces(prevSpaces);
-            const message =
+            const rawMessage =
                 (e as any)?.message ||
                 (e as any)?.status_message ||
-                localize("com_knowledge.operation_failed_retry");
-            showToast({ message, severity: NotificationSeverity.ERROR });
+                "";
+
+            // Backend errcode 18032: SpaceSubscribeLimitError
+            // Msg: "You can subscribe to a maximum of 50 knowledge spaces"
+            if (typeof rawMessage === "string" && rawMessage.includes("maximum of 50 knowledge spaces")) {
+                showToast({ message: localize("com_knowledge.join_space_limit_reached_50"), severity: NotificationSeverity.WARNING });
+            } else {
+                const message =
+                    rawMessage ||
+                    localize("com_knowledge.operation_failed_retry");
+                showToast({ message, severity: NotificationSeverity.ERROR });
+            }
         } finally {
             setJoiningId(null);
         }

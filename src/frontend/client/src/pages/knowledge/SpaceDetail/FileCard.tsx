@@ -32,6 +32,8 @@ interface FileCardProps {
     onCancelCreate?: () => void;
     disableClickNavigate?: boolean;
     hideSelectionCheckbox?: boolean;
+    /** Hide per-file download UI (icon + menu item), e.g. in read-only preview drawers. */
+    hideDownloadActions?: boolean;
 }
 
 export function FileCard({
@@ -50,6 +52,7 @@ export function FileCard({
     onCancelCreate,
     disableClickNavigate = false,
     hideSelectionCheckbox = false,
+    hideDownloadActions = false,
 }: FileCardProps) {
     const localize = useLocalize();
     const isCreating = !!file.isCreating;
@@ -160,6 +163,8 @@ export function FileCard({
         )
     );
     const showMoreMenu = isAdmin;
+    const showInlineDownloadButton = !hideDownloadActions && !showMoreMenu;
+    const showMenuDownloadItem = !hideDownloadActions;
 
     return (
         <Card
@@ -185,7 +190,7 @@ export function FileCard({
                     )}
 
                     <div className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
-                        {!showMoreMenu && (
+                        {showInlineDownloadButton && (
                             <Button
                                 variant="outline"
                                 size="icon"
@@ -211,10 +216,12 @@ export function FileCard({
 
                                 <DropdownMenuContent align="end" className="min-w-[120px]" onClick={(e) => e.stopPropagation()}>
 
-                                    {/* 当有更多菜单时，下载按钮收起在下拉列表内展示 */}
-                                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDownload(); }}>
-                                        {localize("com_knowledge.download")}
-                                    </DropdownMenuItem>
+                                    {/* 当有更多菜单时，下载按钮收起在下拉列表内展示（可按需隐藏） */}
+                                    {showMenuDownloadItem && (
+                                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDownload(); }}>
+                                            {localize("com_knowledge.download")}
+                                        </DropdownMenuItem>
+                                    )}
 
                                     {/* 如果是管理员，显示后续管理操作 */}
                                     {isAdmin && (

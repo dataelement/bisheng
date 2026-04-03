@@ -65,7 +65,7 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
     const [hasSearched, setHasSearched] = useState(false);
 
     const searchInputRef = useRef<HTMLInputElement | null>(null);
-    /** Right column (time/delete): only swap to delete when pointer is over that area */
+    /** Tracks row hover to toggle delete button (instead of relying on the time column hover). */
     const [dateSlotHoverId, setDateSlotHoverId] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [page, setPage] = useState(1);
@@ -506,6 +506,7 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
         const textColor = !isVisuallyUnread(notification) || isApproved ? "text-[#989898]" : "text-[#1d2129]";
 
         const onRowMouseEnter = () => {
+            setDateSlotHoverId(id);
             // 请求类：hover 0.5s 才已读（滚动不触发）
             if (isApprovalMessageType(notification.message_type, notification.action_code) && !notification.is_read) {
                 window.clearTimeout(requestHoverTimersRef.current[id]);
@@ -518,6 +519,7 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
         const onRowMouseLeave = () => {
             window.clearTimeout(requestHoverTimersRef.current[id]);
             delete requestHoverTimersRef.current[id];
+            setDateSlotHoverId(null);
         };
 
         const showRightSlotDelete = dateSlotHoverId === id && canShowDeleteInDateSlot;
@@ -602,12 +604,8 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                         </span>
                     </div>
 
-                    {/* Right slot: hover this area (time) to show delete — 待审批 / 已审批 / 通知等 */}
-                    <div
-                        className="flex-shrink-0 h-7 flex items-center justify-end whitespace-nowrap min-w-[72px]"
-                        onMouseEnter={() => setDateSlotHoverId(id)}
-                        onMouseLeave={() => setDateSlotHoverId((cur) => (cur === id ? null : cur))}
-                    >
+                    {/* Right slot: shows delete when the whole row is hovered */}
+                    <div className="flex-shrink-0 h-7 flex items-center justify-end whitespace-nowrap min-w-[72px]">
                         {showRightSlotDelete ? (
                             <button
                                 type="button"
@@ -624,7 +622,7 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                     </div>
                 </div>
 
-                {/* Row 2: approval buttons */}
+                {/* Row 2: approval buttons (pending) / completed status (已同意/已拒绝) */}
                 {showApproval ? (
                     <div className="flex items-center justify-end gap-2">
                         <button
@@ -649,6 +647,28 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                             <Check className="size-4" />
                             {localize("com_notifications_accept")}
                         </button>
+                    </div>
+                ) : isCompletedApprovalItem && !isSelfApplicationDecision && !isNotifyMessage ? (
+                    <div className="flex justify-end">
+                        {isApprovedStatus(approvalStatus) ? (
+                            <button
+                                type="button"
+                                disabled
+                                className="h-7 px-3 inline-flex items-center gap-1.5 text-[14px] text-[#86909C] border border-[#E5E6EB] bg-[#F7F8FA] rounded-[6px] cursor-default"
+                            >
+                                <Check className="size-4" />
+                                {localize("com_notifications_approved")}
+                            </button>
+                        ) : (
+                            <button
+                                type="button"
+                                disabled
+                                className="h-7 px-3 inline-flex items-center gap-1.5 text-[14px] text-[#86909C] border border-[#E5E6EB] bg-[#F7F8FA] rounded-[6px] cursor-default"
+                            >
+                                <XIcon className="size-4" />
+                                {localize("com_notifications_rejected")}
+                            </button>
+                        )}
                     </div>
                 ) : null}
             </div>
