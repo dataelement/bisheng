@@ -146,6 +146,23 @@ export default function Knowledge() {
                     return;
                 }
 
+                // Frontend fallback: in some scenarios (e.g. creator share link),
+                // `/info` may not provide `role/user_role`.
+                // If the space exists in "mine created" list, treat as creator and go to detail page.
+                try {
+                    const mineSpaces = await getMineSpacesApi();
+                    const previewId = String(previewSpaceId);
+                    const isMineCreator = mineSpaces.some(
+                        (s) => s.id === previewId && s.role === SpaceRole.CREATOR
+                    );
+                    if (isMineCreator) {
+                        navigate(`/knowledge/space/${previewSpaceId}`, { replace: true });
+                        return;
+                    }
+                } catch {
+                    // ignore fallback error, keep existing guard behavior
+                }
+
                 // If the space is now private/inaccessible, treat as invalid for share links.
                 if (info.visibility === VisibilityType.PRIVATE) {
                     showToast({

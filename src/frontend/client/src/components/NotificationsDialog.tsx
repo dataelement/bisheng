@@ -477,7 +477,7 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                 .split(/[,/]/)
                 .map((g) => g.trim())
                 .filter(Boolean);
-        const userGroup = groupNames.join(" / ");
+        const userGroup = groupNames.join("、");
         const userAvatar = userMeta?.avatar || userMeta?.user_avatar || "";
         const createdAt = notification.create_time;
         const approvalStatus = notification.status;
@@ -529,7 +529,12 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                 key={id}
                 data-message-id={id}
                 data-message-type={notification.message_type}
-                className="flex flex-col gap-2 px-3 py-6 hover:bg-[#f7f8fa] transition-colors duration-[350ms] ease-in-out"
+                className="flex flex-col gap-2 px-3 py-6 hover:bg-[#f7f8fa] "
+                style={{
+                    transitionProperty: 'background-color',
+                    transitionDuration: '350ms',
+                    transitionTimingFunction: 'ease-in-out'
+                }}
                 onMouseEnter={onRowMouseEnter}
                 onMouseLeave={onRowMouseLeave}
                 ref={(node) => {
