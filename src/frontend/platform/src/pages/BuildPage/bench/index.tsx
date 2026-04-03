@@ -434,7 +434,7 @@ export default function index() {
 
                     </div>
                     {/* Action Buttons */}
-                    <div className="flex justify-end gap-4 absolute bottom-4 right-4">
+                    <div className="flex justify-end gap-4 absolute bottom-1 right-4">
                         <Preview onBeforView={handleSave} />
                         <Button onClick={handleSave}>{t('save')}</Button>
                     </div>

@@ -196,7 +196,7 @@ export default function Subscribe() {
                             </>
                         </div>
                     </div>
-                    <div className="flex justify-end gap-4 absolute bottom-4 right-4">
+                    <div className="flex justify-end gap-4 absolute bottom-1 right-4">
                         <Preview onBeforView={handleSave} />
                         <Button onClick={handleSave}>{t('save')}</Button>
                     </div>
@@ -248,12 +248,18 @@ const useChatConfig = (refs: UseChatConfigProps) => {
                     const userPromptFromRes = (res as any).userPrompt ?? (res as any).user_prompt;
                     const maxChunkSizeFromRes = (res as any).max_chunk_size ?? (res as any).maxTokens;
                     const feedbackTipsFromRes = (res as any).feedback_tips ?? (res as any).feedbackTips;
+                    const normalizeNonEmptyString = (value: unknown): string | undefined => {
+                        if (typeof value !== 'string') return undefined;
+                        const trimmed = value.trim();
+                        // Treat empty string / whitespace-only as "API empty" and do not override defaults.
+                        return trimmed ? value : undefined;
+                    };
                     return {
                         ...prev,
-                        systemPrompt: systemPromptFromRes || defaultSystemPrompt,
-                        userPrompt: userPromptFromRes ?? prev.userPrompt,
+                        systemPrompt: normalizeNonEmptyString(systemPromptFromRes) ?? defaultSystemPrompt,
+                        userPrompt: normalizeNonEmptyString(userPromptFromRes) ?? prev.userPrompt,
                         maxChunkSize: typeof maxChunkSizeFromRes === 'number' ? maxChunkSizeFromRes : prev.maxChunkSize,
-                        feedbackTips: feedbackTipsFromRes ?? prev.feedbackTips,
+                        feedbackTips: normalizeNonEmptyString(feedbackTipsFromRes) ?? prev.feedbackTips,
                     };
                 });
             }

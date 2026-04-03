@@ -115,7 +115,7 @@ export default function KnowledgeSpace() {
                             </>
                         </div>
                     </div>
-                    <div className="flex justify-end gap-4 absolute bottom-4 right-4">
+                    <div className="flex justify-end gap-4 absolute bottom-1 right-4">
                         <Preview onBeforView={handleSave} />
                         <Button onClick={handleSave}>{t('save')}</Button>
                     </div>
@@ -147,10 +147,16 @@ const useKnowledgeConfig = () => {
             const systemPromptFromRes = cfg.system_prompt ?? cfg.systemPrompt;
             const userPromptFromRes = cfg.user_prompt ?? cfg.userPrompt;
             const maxChunkSizeFromRes = cfg.max_chunk_size ?? cfg.maxTokens;
+            const normalizeNonEmptyString = (value: unknown): string | undefined => {
+                if (typeof value !== 'string') return undefined;
+                const trimmed = value.trim();
+                // Treat empty string / whitespace-only as "API empty" and do not override defaults.
+                return trimmed ? value : undefined;
+            };
             setFormData((prev) => ({
                 ...prev,
-                systemPrompt: systemPromptFromRes || t('chatConfig.systemPrompt2'),
-                userPrompt: userPromptFromRes ?? prev.userPrompt,
+                systemPrompt: normalizeNonEmptyString(systemPromptFromRes) ?? t('chatConfig.systemPrompt2'),
+                userPrompt: normalizeNonEmptyString(userPromptFromRes) ?? prev.userPrompt,
                 maxChunkSize: typeof maxChunkSizeFromRes === 'number' ? maxChunkSizeFromRes : prev.maxChunkSize,
             }));
         });
