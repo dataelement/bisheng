@@ -65,7 +65,8 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
     const [hasSearched, setHasSearched] = useState(false);
 
     const searchInputRef = useRef<HTMLInputElement | null>(null);
-    const [hoveredId, setHoveredId] = useState<string | null>(null);
+    /** Right column (time/delete): only swap to delete when pointer is over that area */
+    const [dateSlotHoverId, setDateSlotHoverId] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [page, setPage] = useState(1);
     const [hasMore, setHasMore] = useState(true);
@@ -483,21 +484,28 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
         const { text, targetName, showApproval } = getNotificationText(notification);
         const canSplitTarget = Boolean(targetName) && text.includes(targetName);
         const textPrefix = canSplitTarget ? text.split(targetName)[0] : text;
-        const isHovered = hoveredId === id;
 
         const isApproved = isApprovedStatus(approvalStatus) || isRejectedStatus(approvalStatus);
         const isSelfApplicationDecision = isSelfApplicationDecisionActionCode(notification.action_code);
         const isNotifyMessage = isNotifyMessageType(notification.message_type);
 
-        const showDeleteOnHover =
+        const isCompletedApprovalItem =
             !showApproval &&
-            !isApprovalMessageType(notification.message_type, notification.action_code) &&
-            (isApproved || isDecisionActionCode(notification.action_code));
+            isApprovalMessageType(notification.message_type, notification.action_code) &&
+            isApproved;
+
+        const canShowDeleteInDateSlot =
+            isNotifyMessage ||
+            isSelfApplicationDecision ||
+            showApproval ||
+            isCompletedApprovalItem ||
+            (!showApproval &&
+                !isApprovalMessageType(notification.message_type, notification.action_code) &&
+                (isApproved || isDecisionActionCode(notification.action_code)));
 
         const textColor = !isVisuallyUnread(notification) || isApproved ? "text-[#989898]" : "text-[#1d2129]";
 
         const onRowMouseEnter = () => {
-            setHoveredId(id);
             // 请求类：hover 0.5s 才已读（滚动不触发）
             if (isApprovalMessageType(notification.message_type, notification.action_code) && !notification.is_read) {
                 window.clearTimeout(requestHoverTimersRef.current[id]);
@@ -508,44 +516,11 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
         };
 
         const onRowMouseLeave = () => {
-            setHoveredId(null);
             window.clearTimeout(requestHoverTimersRef.current[id]);
             delete requestHoverTimersRef.current[id];
         };
 
-        const rightSlot = (() => {
-            // 通知类：未 hover 显示时间，hover 显示删除按钮（居中）
-            if (isNotifyMessage) {
-                if (!isHovered) return <span className="text-[14px] text-[#999999]">{formatMessageTime(createdAt)}</span>;
-                return (
-                    <button
-                        type="button"
-                        onClick={() => handleDelete(id)}
-                        className="flex items-center gap-1 px-3 py-1 text-[12px] text-[#4e5969] bg-white border border-[#e5e6eb] rounded hover:text-[#f53f3f] hover:border-[#f53f3f] transition-colors"
-                        title={localize("com_notifications_delete")}
-                    >
-                        <Trash2 className="size-3" />
-                        {localize("com_notifications_delete")}
-                    </button>
-                );
-            }
-
-            // 其它类型：hover 且满足条件时显示删除按钮，否则显示时间
-            if (isHovered && showDeleteOnHover && !isSelfApplicationDecision) {
-                return (
-                    <button
-                        type="button"
-                        onClick={() => handleDelete(id)}
-                        className="flex items-center gap-1 px-3 py-1 text-[12px] text-[#4e5969] bg-white border border-[#e5e6eb] rounded hover:text-[#f53f3f] hover:border-[#f53f3f] transition-colors"
-                        title={localize("com_notifications_delete")}
-                    >
-                        <Trash2 className="size-3" />
-                        {localize("com_notifications_delete")}
-                    </button>
-                );
-            }
-            return <span className="text-[14px] text-[#999999]">{formatMessageTime(createdAt)}</span>;
-        })();
+        const showRightSlotDelete = dateSlotHoverId === id && canShowDeleteInDateSlot;
 
         return (
             <div
@@ -627,9 +602,13 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                         </span>
                     </div>
 
-                    {/* Right slot: fixed height */}
-                    <div className="flex-shrink-0 h-7 flex items-center whitespace-nowrap">
-                        {isHovered && (isNotifyMessage || (showDeleteOnHover && !isSelfApplicationDecision)) ? (
+                    {/* Right slot: hover this area (time) to show delete — 待审批 / 已审批 / 通知等 */}
+                    <div
+                        className="flex-shrink-0 h-7 flex items-center justify-end whitespace-nowrap min-w-[72px]"
+                        onMouseEnter={() => setDateSlotHoverId(id)}
+                        onMouseLeave={() => setDateSlotHoverId((cur) => (cur === id ? null : cur))}
+                    >
+                        {showRightSlotDelete ? (
                             <button
                                 type="button"
                                 onClick={() => handleDelete(id)}
