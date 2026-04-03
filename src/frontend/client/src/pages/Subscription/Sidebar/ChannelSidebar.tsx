@@ -123,9 +123,13 @@ export function ChannelSidebar({
         <div
             className={[
                 "h-full bg-white border-r border-[#e5e6eb] flex flex-col overflow-hidden flex-shrink-0",
-                "transition-[width] duration-[350ms] ease-in-out",
                 collapsed ? "w-12" : "w-60",
             ].join(" ")}
+            style={{
+                transitionProperty: 'background-color',
+                transitionDuration: '350ms',
+                transitionTimingFunction: 'ease-in-out'
+            }}
         >
             {/* 顶部操作区 */}
             <div className={collapsed ? "px-0 py-5" : "px-3 py-5"}>
@@ -164,8 +168,12 @@ export function ChannelSidebar({
                 className={[
                     "flex-1 min-h-0",
                     collapsed ? "opacity-0 pointer-events-none" : "opacity-100",
-                    "transition-opacity duration-[350ms] ease-in-out",
                 ].join(" ")}
+                style={{
+                    transitionProperty: 'background-color',
+                    transitionDuration: '350ms',
+                    transitionTimingFunction: 'ease-in-out'
+                }}
             >
                 <div
                     className="h-full overflow-y-auto scroll-on-scroll px-3 pb-5"

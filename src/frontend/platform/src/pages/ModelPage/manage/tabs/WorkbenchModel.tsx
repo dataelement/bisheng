@@ -85,8 +85,10 @@ export default function WorkbenchModel({ onBack }) {
                 linsight_executor_mode: executionMode,
                 asr_model: asrModelId ? { id: String(asrModelId) } : null, // 支持空值
                 tts_model: ttsModelId ? { id: String(ttsModelId) } : null, // 支持空值
-                chat_title_llm: knowledgeSpaceLlmId ? { id: String(knowledgeSpaceLlmId) } : null, // 支持空值
-                knowledge_space_llm: chatTitleLlmId ? { id: String(chatTitleLlmId) } : null, // 支持空值
+                // “订阅 / 知识空间问答生成模型”
+                knowledge_space_llm: knowledgeSpaceLlmId ? { id: String(knowledgeSpaceLlmId) } : null, // 支持空值
+                // “应用会话标题生成模型”
+                chat_title_llm: chatTitleLlmId ? { id: String(chatTitleLlmId) } : null, // 支持空值
             };
 
             // 提交更新并通过 refetch 获取最新配置（无需再次调用 getLinsightModelConfig）
@@ -186,8 +188,8 @@ export default function WorkbenchModel({ onBack }) {
             <LoadingIcon />
         </div>
     );
-    console.log('ASR Model Options structure:', JSON.stringify(asrModel, null, 2));
-    console.log('TTS Model Options structure:', JSON.stringify(ttsModel, null, 2));
+    // console.log('ASR Model Options structure:', JSON.stringify(asrModel, null, 2));
+    console.log('TTS Model Options structure:', JSON.stringify(embeddings, null, 2));
     return (
         <div className="max-w-[520px] mx-auto gap-y-4 flex flex-col mt-16 relative">
             <ModelSelect

@@ -38,6 +38,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     KnowledgeSpaceInfoResp, SpaceMemberResponse, SpaceMemberPageResponse,
     UpdateSpaceMemberRoleRequest, RemoveSpaceMemberRequest, SpaceSubscriptionStatusEnum
 )
+from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import KnowledgeAuditTelemetryService
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.llm.domain import LLMService
@@ -168,7 +169,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
             is_released=is_released,
         )
 
-        knowledge_space = KnowledgeService.create_knowledge_base(self.request, self.login_user, db_knowledge)
+        knowledge_space = KnowledgeService.create_knowledge_base(self.request, self.login_user, db_knowledge,
+                                                                 skip_hook=True)
 
         member = SpaceChannelMember(
             business_id=str(knowledge_space.id),
@@ -178,6 +180,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
             status=MembershipStatusEnum.ACTIVE,
         )
         await SpaceChannelMemberDao.async_insert_member(member)
+
+        # Audit log for knowledge space creation
+        await KnowledgeAuditTelemetryService.audit_create_knowledge_space(self.login_user, self.request, knowledge_space)
 
         return knowledge_space
 
@@ -194,15 +199,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
             result.user_name = create_user.user_name if create_user else str(space.user_id)
         else:
             result.user_name = self.login_user.user_name
-
-        self._apply_subscription_flags(result, SpaceSubscriptionStatusEnum.SUBSCRIBED)
+        self._apply_subscription_flags(result, SpaceSubscriptionStatusEnum.SUBSCRIBED)        
         if space.user_id != self.login_user.user_id:
             member_info = await SpaceChannelMemberDao.async_find_member(space_id=space.id,
                                                                         user_id=self.login_user.user_id)
             self._apply_subscription_flags(result, self._resolve_subscription_status(member_info))
-
+            if member_info and member_info.is_active:
+                result.user_role = member_info.user_role
+        else:
+            result.user_role = UserRoleEnum.CREATOR
         result.follower_num = follower_num
         result.file_num = total_file_num
+        
         if space.state != KnowledgeState.PUBLISHED.value:
             rebuild_knowledge_celery.delay(space_id, new_model_id=space.model, invoke_user_id=self.login_user.user_id)
 
@@ -222,6 +230,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await asyncio.to_thread(KnowledgeService.delete_knowledge_file_in_minio, space_id)
 
         await KnowledgeDao.async_delete_knowledge(knowledge_id=space_id)
+
+        # Audit log and telemetry
+        await KnowledgeAuditTelemetryService.audit_delete_knowledge_space(self.login_user, self.request, space)
+        KnowledgeAuditTelemetryService.telemetry_delete_knowledge(self.login_user)
         return
 
     async def update_knowledge_space(
@@ -267,22 +279,27 @@ class KnowledgeSpaceService(KnowledgeUtils):
     async def get_my_created_spaces(
             self, order_by: str = 'update_time'
     ) -> List[KnowledgeRead]:
-        res = await KnowledgeDao.async_get_spaces_by_user(self.login_user.user_id, order_by)
-        space_members = await SpaceChannelMemberDao.async_get_all_members_for_spaces(self.login_user.user_id,
-                                                                                     [str(one.id) for one in res])
-        space_members = {
-            one.business_id: one for one in space_members
+        members = await SpaceChannelMemberDao.async_get_user_writable_members(self.login_user.user_id)
+        if not members:
+            return []
+
+        members_map = {
+            int(one.business_id): one for one in members
         }
+        res = await KnowledgeDao.async_get_spaces_by_ids(list(members_map.keys()), order_by)
         pinned_res = []
         not_pinned_res = []
         for one in res:
-            spcae_config = space_members.get(str(one.id))
-            if spcae_config and spcae_config.is_pinned:
+            member_conf = members_map.get(one.id)
+            if not member_conf:
+                continue
+
+            if member_conf.is_pinned:
                 pinned_res.append(
                     KnowledgeSpaceInfoResp(
                         **one.model_dump(),
                         is_pinned=True,
-                        user_role=UserRoleEnum.CREATOR,
+                        user_role=member_conf.user_role,
                         subscription_status=SpaceSubscriptionStatusEnum.SUBSCRIBED,
                         is_followed=True,
                     ))
@@ -291,7 +308,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     KnowledgeSpaceInfoResp(
                         **one.model_dump(),
                         is_pinned=False,
-                        user_role=UserRoleEnum.CREATOR,
+                        user_role=member_conf.user_role,
                         subscription_status=SpaceSubscriptionStatusEnum.SUBSCRIBED,
                         is_followed=True,
                     ))
@@ -706,7 +723,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
             resources = await TagDao.aget_resources_by_tags(tag_ids, ResourceTypeEnum.SPACE_FILE)
             if not resources:
                 return {"total": 0, "page": page, "page_size": page_size, "data": []}
-            filter_files = list(set(filter_files) & set([int(one.resource_id) for one in resources]))
+            if filter_files:
+                filter_files = list(set(filter_files) & set([int(one.resource_id) for one in resources]))
+            else:
+                filter_files = [int(one.resource_id) for one in resources]
             if not filter_files:
                 return {"total": 0, "page": page, "page_size": page_size, "data": []}
 

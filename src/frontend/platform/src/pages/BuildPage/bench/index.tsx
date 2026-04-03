@@ -434,7 +434,7 @@ export default function index() {
 
                     </div>
                     {/* Action Buttons */}
-                    <div className="flex justify-end gap-4 absolute bottom-4 right-4">
+                    <div className="flex justify-end gap-4 absolute bottom-1 right-4">
                         <Preview onBeforView={handleSave} />
                         <Button onClick={handleSave}>{t('save')}</Button>
                     </div>
@@ -503,7 +503,8 @@ const useChatConfig = (refs: UseChatConfigProps) => {
             prompt: `{file_content}
 {question}`,
         },
-        tabDisplayName: "",
+        // 默认展示名称：接口为空时展示默认文案
+        tabDisplayName: t('dailyFullName'),
     });
 
     // Simple deep comparison to avoid circular refresh caused by parent-child mutual setting
@@ -552,7 +553,13 @@ const useChatConfig = (refs: UseChatConfigProps) => {
                         webSearch: mergeObj(prev.webSearch, cfg.webSearch),
                         knowledgeBase: mergeObj(prev.knowledgeBase, cfg.knowledgeBase),
                         fileUpload: mergeObj(prev.fileUpload, cfg.fileUpload),
-                        tabDisplayName: cfg.tabDisplayName ?? prev.tabDisplayName
+                        tabDisplayName: (() => {
+                            // Treat empty string / whitespace as "API empty" and don't override defaults.
+                            const raw = (cfg as any).tabDisplayName ?? (cfg as any).tab_display_name;
+                            if (typeof raw !== 'string') return prev.tabDisplayName;
+                            const trimmed = raw.trim();
+                            return trimmed ? trimmed : prev.tabDisplayName;
+                        })()
                     };
                 });
             }

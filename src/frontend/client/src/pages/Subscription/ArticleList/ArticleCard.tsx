@@ -50,7 +50,12 @@ export function ArticleCard({ article, onSelect, isSelected, searchQuery }: Arti
 
     return (
         <div
-            className={`group cursor-pointer relative py-5 flex gap-6 transition-opacity border-b border-dashed border-gray-200 last:border-none`}
+            className={`group cursor-pointer relative py-5 flex gap-6 border-b border-dashed border-gray-200 last:border-none`}
+            style={{
+                transitionProperty: 'background-color',
+                transitionDuration: '350ms',
+                transitionTimingFunction: 'ease-in-out'
+            }}
             onClick={() => onSelect(article)}
         >
             {/* 1. 左侧封面图 - 移动到左边，并调整比例 */}
@@ -59,7 +64,12 @@ export function ArticleCard({ article, onSelect, isSelected, searchQuery }: Arti
                     <img
                         src={article.coverImage}
                         alt={article.title}
-                        className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                        className="w-full h-full object-cover group-hover:scale-105"
+                        style={{
+                            transitionProperty: 'background-color',
+                            transitionDuration: '350ms',
+                            transitionTimingFunction: 'ease-in-out'
+                        }}
                     />
                 </div>
             )}
@@ -68,7 +78,7 @@ export function ArticleCard({ article, onSelect, isSelected, searchQuery }: Arti
             <div className="flex-1 min-w-0 flex flex-col justify-between">
                 <div>
                     {/* 标题 - 搜索时使用 highlight HTML，非搜索时纯文本 */}
-                    <h3 className={`font-bold line-clamp-1 [&_em]:not-italic [&_em]:bg-[#FFBF00]/20 [&_em]:font-medium ${isSelected ? 'text-primary' : 'group-hover:text-primary'} ${article.isRead ? "text-[#989898]" : "text-gray-800"
+                    <h3 className={`font-medium line-clamp-1 [&_em]:not-italic [&_em]:bg-[#FFBF00]/20 [&_em]:font-medium ${isSelected ? 'text-primary' : 'group-hover:text-primary'} ${article.isRead ? "text-[#989898]" : "text-gray-800"
                         }`}>
                         {highlightTitle
                             ? <span dangerouslySetInnerHTML={{ __html: highlightTitle }} />

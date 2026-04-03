@@ -171,9 +171,14 @@ function TreeNode({
     return (
         <div>
             <div
-                className={`group flex items-center gap-1.5 py-1 px-2 rounded-md cursor-pointer text-sm transition-colors select-none
+                className={`group flex items-center gap-1.5 py-1 px-2 rounded-md cursor-pointer text-sm select-none
                     ${isSelected ? "bg-[#EEF2FF] text-primary" : "hover:bg-gray-50"}`}
-                style={{ paddingLeft: `${indent + 8}px` }}
+                style={{
+                    paddingLeft: `${indent + 8}px`,
+                    transitionProperty: 'background-color',
+                    transitionDuration: '350ms',
+                    transitionTimingFunction: 'ease-in-out'
+                }}
                 onClick={() => onSelect(node.id)}
             >
                 {/* Expand toggle */}
@@ -216,9 +221,15 @@ function TreeNode({
                 {/* Add folder button (hover) */}
                 {!isEditing && (
                     <button
-                        className="shrink-0 opacity-0 group-hover:opacity-100 size-4 flex items-center justify-center rounded hover:bg-[#dce4ff] text-[#86909c] hover:text-primary transition-all"
+                        className="shrink-0 opacity-0 group-hover:opacity-100 size-4 flex items-center justify-center rounded hover:bg-[#dce4ff] text-[#86909c] hover:text-primary"
                         title={localize("com_subscription.new_subfolder")}
                         onClick={e => { e.stopPropagation(); onAddFolder(node.id, node.level, node.spaceId); }}
+                        style={{
+                            paddingLeft: `${indent + 8}px`,
+                            transitionProperty: 'background-color',
+                            transitionDuration: '350ms',
+                            transitionTimingFunction: 'ease-in-out'
+                        }}
                     >
                         <Plus className="size-4 text-primary" />
                     </button>
