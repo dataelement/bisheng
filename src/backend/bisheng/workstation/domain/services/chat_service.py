@@ -2,6 +2,7 @@ import asyncio
 import json
 import time
 from datetime import datetime
+from typing import Any, Dict, List, Tuple
 from uuid import uuid4
 
 from fastapi import Request
@@ -27,6 +28,8 @@ from bisheng.common.services import telemetry_service
 from bisheng.core.cache.utils import async_file_download
 from bisheng.core.logger import trace_id_var
 from bisheng.core.prompts.manager import get_prompt_manager
+from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
+from bisheng.citation.domain.services.citation_registry_service import CitationRegistryService
 from bisheng.database.models.flow import FlowType
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
@@ -37,6 +40,7 @@ from bisheng.tool.domain.services.executor import ToolExecutor
 from .constants import PROMPT_SEARCH, VISUAL_MODEL_FILE_TYPES
 from .chat_helpers import (
     build_final_content_for_db,
+    build_web_search_display_items,
     build_step_id,
     final_message,
     gen_title,
@@ -47,7 +51,7 @@ from .chat_helpers import (
 from .workstation_service import WorkStationService
 
 
-async def web_search(query: str, user_id: int):
+async def web_search(query: str, user_id: int) -> Tuple[str, List[Dict[str, Any]], List[CitationRegistryItemSchema], List[Dict[str, Any]]]:
     """Search the web via configured tool."""
     web_search_info = GptsToolsDao.get_tool_by_tool_key('web_search')
     if not web_search_info:
@@ -61,12 +65,12 @@ async def web_search(query: str, user_id: int):
     )
     if not web_search_tool:
         raise WebSearchToolNotFoundError(exception=Exception('No web_search tool found in gpts tools'))
-    search_list = await web_search_tool.ainvoke(input={'query': query})
-    search_list = json.loads(search_list)
-    search_res = ''
-    for index, one in enumerate(search_list):
-        search_res += f'[webpage ${index} begin]\n${one.get("snippet")}\n[webpage ${index} end]\n\n'
-    return search_res, search_list
+    web_results = await web_search_tool.ainvoke(input={'query': query})
+    web_results = json.loads(web_results)
+    citation_registry = CitationRegistryService.build_web_registry(web_results)
+    search_result_items = build_web_search_display_items(web_results, citation_registry)
+    search_res = CitationRegistryService.build_web_prompt_context(citation_registry)
+    return search_res, web_results, citation_registry, search_result_items
 
 
 async def get_file_content(filepath_local: str, file_name: str, invoke_user_id: int):
@@ -206,6 +210,7 @@ async def stream_chat_completion(request: Request, data: APIChatCompletion, logi
 
         prompt = data.text
         web_list = []
+        citation_registry = None
         error = False
         final_res = ''
         reasoning_res = ''
@@ -225,8 +230,11 @@ async def stream_chat_completion(request: Request, data: APIChatCompletion, logi
                 search_res = await bisheng_llm.ainvoke(search_decision_prompt)
                 if search_res.content == '1':
                     logger.info(f'Web search needed for prompt: {data.text}')
-                    search_text, web_list = await web_search(data.text, user_id=login_user.user_id)
-                    content = {'content': [{'type': 'search_result', 'search_result': web_list}]}
+                    search_text, web_list, citation_registry, search_result_items = await web_search(
+                        data.text,
+                        user_id=login_user.user_id,
+                    )
+                    content = {'content': [{'type': 'search_result', 'search_result': search_result_items}]}
                     yield SSEResponse(
                         event='on_search_result',
                         data=delta(id=step_id, delta=content),
@@ -241,7 +249,7 @@ async def stream_chat_completion(request: Request, data: APIChatCompletion, logi
                 or len(data.use_knowledge_base.organization_knowledge_ids) > 0
             ):
                 logger.info(f'Using knowledge base for prompt: {data.text}')
-                chunks, source_document = await WorkStationService.queryChunksFromDB(
+                chunks, source_document, citation_registry = await WorkStationService.queryChunksFromDB(
                     data.text,
                     use_knowledge_param=data.use_knowledge_base,
                     max_token=max_token,
@@ -354,6 +362,7 @@ async def stream_chat_completion(request: Request, data: APIChatCompletion, logi
             error,
             model_info.displayName,
             source_document,
+            citation_registry,
         )
 
         if is_new_conv:

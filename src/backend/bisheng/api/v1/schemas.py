@@ -6,6 +6,7 @@ from langchain.docstore.document import Document
 from orjson import orjson
 from pydantic import BaseModel, Field, model_validator, field_validator, ConfigDict
 
+from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
 from bisheng.database.models.assistant import AssistantBase
 from bisheng.database.models.flow import FlowCreate, FlowRead, FlowType
 from bisheng.database.models.message import ChatMessageRead
@@ -160,6 +161,7 @@ class ChatMessage(BaseModel):
     receiver: Optional[dict] = None
     liked: int = 0
     extra: Optional[str | dict] = '{}'
+    citations: Optional[List[CitationRegistryItemSchema]] = None
     flow_id: Optional[str] = None
     chat_id: Optional[str] = None
 

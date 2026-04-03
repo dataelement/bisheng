@@ -1,6 +1,7 @@
 import json
 from abc import abstractmethod, ABC
-from typing import Type
+from typing import Any, Dict, Type
+from uuid import uuid4
 
 import requests
 from langchain_community.utilities import BingSearchAPIWrapper
@@ -50,6 +51,31 @@ class SearchTool(ABC):
         # For demonstration purposes, we'll just return a dummy response
         result = self._invoke(query, **kwargs)
         return json.dumps(result, ensure_ascii=False)
+
+    @classmethod
+    def normalize_result_item(
+        cls,
+        *,
+        title: Any = None,
+        snippet: Any = None,
+        url: Any = None,
+        source: Any = None,
+        site_icon: Any = None,
+        date_published: Any = None,
+        item_id: Any = None,
+    ) -> Dict[str, Any]:
+        """Normalize provider-specific search result fields into one protocol."""
+        normalized_url = str(url or '').strip()
+        normalized_source = str(source or '').strip() or cls.get_host_from_url(normalized_url) or ''
+        return {
+            'id': str(item_id or uuid4().hex[:8]),
+            'title': str(title or '').strip() or None,
+            'snippet': str(snippet or '').strip() or None,
+            'url': normalized_url,
+            'source': normalized_source or None,
+            'siteIcon': str(site_icon or '').strip() or None,
+            'datePublished': str(date_published or '').strip() or None,
+        }
 
     @classmethod
     def get_host_from_url(cls, url: str) -> str:
@@ -104,14 +130,14 @@ class BingSearch(SearchTool):
         web_list = []
         for index, result in enumerate(res):
             # 处理搜索结果
-            snippet = result.get('snippet')
-            web_list.append({
-                'title': result.get('title'),
-                'url': result.get('link'),
-                'snippet': snippet,
-                'thumbnail': result.get('thumbnail'),
-                'site_name': self.get_host_from_url(result.get('link'))
-            })
+            web_list.append(self.normalize_result_item(
+                item_id=result.get('id') or result.get('link') or index,
+                title=result.get('title'),
+                url=result.get('link'),
+                snippet=result.get('snippet'),
+                site_icon=result.get('thumbnail'),
+                source=self.get_host_from_url(result.get('link')),
+            ))
         return web_list
 
 
@@ -132,13 +158,15 @@ class BoChaSearch(SearchTool):
         web_pages = result.get('data', {}).get('webPages', {}).get('value', [])
         web_list = []
         for index, item in enumerate(web_pages):
-            web_list.append({
-                'title': item.get('name'),
-                'url': item.get('url'),
-                'snippet': item.get('snippet'),
-                'thumbnail': item.get('siteIcon'),
-                'site_name': item.get('siteName') or self.get_host_from_url(item.get('url')),
-            })
+            web_list.append(self.normalize_result_item(
+                item_id=item.get('id') or item.get('url') or index,
+                title=item.get('name'),
+                url=item.get('url'),
+                snippet=item.get('snippet'),
+                site_icon=item.get('siteIcon'),
+                source=item.get('siteName') or self.get_host_from_url(item.get('url')),
+                date_published=item.get('datePublished') or item.get('dateLastCrawled'),
+            ))
         return web_list
 
 
@@ -174,13 +202,13 @@ class JinaDeepSearch(SearchTool):
             item_message = item.get('message', {})
             for one_web in item_message.get('annotations', []):
                 one_web_info = one_web.get('url_citation', {})
-                web_list.append({
-                    'title': one_web_info.get('title'),
-                    'url': one_web.get('url'),
-                    'snippet': one_web.get('exactQuote'),
-                    'thumbnail': None,
-                    'site_name': self.get_host_from_url(one_web.get('url')),
-                })
+                web_list.append(self.normalize_result_item(
+                    item_id=one_web.get('url') or index,
+                    title=one_web_info.get('title'),
+                    url=one_web.get('url'),
+                    snippet=one_web.get('exactQuote'),
+                    source=self.get_host_from_url(one_web.get('url')),
+                ))
         return web_list
 
 
@@ -198,13 +226,15 @@ class SerpSearch(SearchTool):
         answer_result = result.get('organic_results', [])
         web_list = []
         for index, item in enumerate(answer_result):
-            web_list.append({
-                'title': item.get('title'),
-                'url': item.get('link'),
-                'snippet': item.get('snippet'),
-                'thumbnail': item.get('source_logo') or item.get('thumbnail'),
-                'site_name': self.get_host_from_url(item.get('link')),
-            })
+            web_list.append(self.normalize_result_item(
+                item_id=item.get('position') or item.get('link') or index,
+                title=item.get('title'),
+                url=item.get('link'),
+                snippet=item.get('snippet'),
+                site_icon=item.get('source_logo') or item.get('thumbnail'),
+                source=item.get('source') or self.get_host_from_url(item.get('link')),
+                date_published=item.get('date'),
+            ))
         return web_list
 
 
@@ -222,13 +252,15 @@ class TavilySearch(SearchTool):
 
         web_list = []
         for index, item in enumerate(answers):
-            web_list.append({
-                'title': item.get('title'),
-                'url': item.get('url'),
-                'snippet': item.get('content'),
-                'thumbnail': item.get('favicon'),
-                'site_name': self.get_host_from_url(item.get('url')),
-            })
+            web_list.append(self.normalize_result_item(
+                item_id=item.get('id') or item.get('url') or index,
+                title=item.get('title'),
+                url=item.get('url'),
+                snippet=item.get('content'),
+                site_icon=item.get('favicon'),
+                source=item.get('source') or self.get_host_from_url(item.get('url')),
+                date_published=item.get('published_date'),
+            ))
         return web_list
 
 
@@ -248,13 +280,15 @@ class CloudswaySearch(SearchTool):
         # parse result
         web_list = []
         for index, item in enumerate(answers):
-            web_list.append({
-                'title': item.get('name'),
-                'url': item.get('url'),
-                'snippet': item.get('snippet'),
-                'thumbnail': item.get('thumbnailUrl'),
-                'site_name': item.get('siteName') or self.get_host_from_url(item.get('url')),
-            })
+            web_list.append(self.normalize_result_item(
+                item_id=item.get('id') or item.get('url') or index,
+                title=item.get('name'),
+                url=item.get('url'),
+                snippet=item.get('snippet'),
+                site_icon=item.get('thumbnailUrl'),
+                source=item.get('siteName') or self.get_host_from_url(item.get('url')),
+                date_published=item.get('datePublished') or item.get('dateLastCrawled'),
+            ))
         return web_list
 
 
@@ -271,11 +305,13 @@ class SearXNGSearch(SearchTool):
 
         web_list = []
         for index, item in enumerate(answers):
-            web_list.append({
-                'title': item.get('title'),
-                'url': item.get('url'),
-                'snippet': item.get('content'),
-                'thumbnail': item.get('thumbnail'),
-                'site_name': self.get_host_from_url(item.get('url')),
-            })
+            web_list.append(self.normalize_result_item(
+                item_id=item.get('id') or item.get('url') or index,
+                title=item.get('title'),
+                url=item.get('url'),
+                snippet=item.get('content'),
+                site_icon=item.get('thumbnail'),
+                source=item.get('engine') or self.get_host_from_url(item.get('url')),
+                date_published=item.get('publishedDate'),
+            ))
         return web_list

@@ -18,7 +18,13 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.channel import KnowledgeSpaceLLMNotConfiguredError
 from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.common.utils.title_generator import generate_conversation_title_async
+from bisheng.core.database import get_async_db_session
 from bisheng.core.prompts.manager import get_prompt_manager
+from bisheng.citation.domain.repositories.implementations.message_citation_repository_impl import (
+    MessageCitationRepositoryImpl,
+)
+from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
+from bisheng.citation.domain.services.citation_registry_service import CitationRegistryService
 from bisheng.database.constants import MessageCategory
 from bisheng.database.models.flow import FlowType
 from bisheng.database.models.group_resource import ResourceTypeEnum
@@ -104,11 +110,15 @@ class KnowledgeSpaceChatService:
             max_content=space_conf.max_chunk_size,
             sort_by_source_and_index=True
         )
-        finally_docs: List[Document] = await retriever_tool.ainvoke(query)
-        file_content = ""
+        retrieval_result = await retriever_tool.ainvoke(query)
+        finally_docs: List[Document] = retrieval_result.source_documents
+        citation_registry = retrieval_result.citation_registry
+        file_content = retrieval_result.prompt_context
         logger.debug(f"retrieved_finally_docs: {len(finally_docs)}")
-        for one in finally_docs:
-            file_content += one.page_content + "\n"
+        if not file_content:
+            file_content = ""
+            for one in finally_docs:
+                file_content += one.page_content + "\n"
 
         prompt_service = await get_prompt_manager()
 
@@ -146,33 +156,43 @@ class KnowledgeSpaceChatService:
             )
             reasoning_content += one.additional_kwargs.get("reasoning_content", "")
             answer += one.content
-        messages = [
-            ChatMessage(
-                category=MessageCategory.QUESTION,
-                message=json.dumps({
-                    "query": query,
-                    "tags": tags,
-                }, ensure_ascii=False),
-                chat_id=session.chat_id,
-                flow_id=session.flow_id,
-                user_id=self.login_user.user_id,
-                type="end",
-                is_bot=False,
-            ),
-            ChatMessage(
-                category=MessageCategory.ANSWER,
-                message=json.dumps({
-                    "content": answer,
-                    "reasoning_content": reasoning_content
-                }, ensure_ascii=False),
-                chat_id=session.chat_id,
-                flow_id=session.flow_id,
-                user_id=self.login_user.user_id,
-                type="end",
-                is_bot=True,
-            )
-        ]
-        await ChatMessageDao.ainsert_batch(messages)
+        question_message = await ChatMessageDao.ainsert_one(ChatMessage(
+            category=MessageCategory.QUESTION,
+            message=json.dumps({
+                "query": query,
+                "tags": tags,
+            }, ensure_ascii=False),
+            chat_id=session.chat_id,
+            flow_id=session.flow_id,
+            user_id=self.login_user.user_id,
+            type="end",
+            is_bot=False,
+        ))
+        answer_message = await ChatMessageDao.ainsert_one(ChatMessage(
+            category=MessageCategory.ANSWER,
+            message=json.dumps({
+                "content": answer,
+                "reasoning_content": reasoning_content,
+                "citations": [item.model_dump(mode="json") for item in citation_registry],
+            }, ensure_ascii=False),
+            chat_id=session.chat_id,
+            flow_id=session.flow_id,
+            user_id=self.login_user.user_id,
+            type="end",
+            is_bot=True,
+        ))
+        await self.persist_citations(
+            message_id=answer_message.id,
+            citation_registry=citation_registry,
+            chat_id=session.chat_id,
+            flow_id=session.flow_id,
+        )
+        logger.info(
+            "saved knowledge space messages question_id={} answer_id={} citations={}",
+            question_message.id,
+            answer_message.id,
+            len(citation_registry),
+        )
         if not session.name:
             asyncio.create_task(self.generate_conversation(
                 user_id=self.login_user.user_id,
@@ -185,8 +205,10 @@ class KnowledgeSpaceChatService:
             category=MessageCategory.STREAM,
             message={
                 "content": answer,
-                "reasoning_content": reasoning_content
+                "reasoning_content": reasoning_content,
+                "citations": [item.model_dump(mode="json") for item in citation_registry],
             },
+            citations=citation_registry,
             type="end"
         )
 
@@ -389,3 +411,26 @@ class KnowledgeSpaceChatService:
                 answer = json.loads(one.message).get("content")
                 messages.append(AIMessage(content=answer))
         return messages
+
+    @staticmethod
+    async def persist_citations(
+        message_id: int,
+        citation_registry: List[CitationRegistryItemSchema],
+        chat_id: str,
+        flow_id: str,
+    ) -> None:
+        """Persist citation registry items for a completed answer message."""
+        if not citation_registry or message_id is None:
+            return
+
+        try:
+            async with get_async_db_session() as session:
+                registry_service = CitationRegistryService(MessageCitationRepositoryImpl(session))
+                await registry_service.save_citations(
+                    message_id=message_id,
+                    items=citation_registry,
+                    chat_id=chat_id,
+                    flow_id=flow_id,
+                )
+        except Exception as exc:
+            logger.exception(f'persist_citations failed: {exc}')

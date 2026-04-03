@@ -3,6 +3,8 @@ from typing import Optional, Any, List
 
 from pydantic import BaseModel, Field, field_validator
 
+from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
+
 
 class WorkflowEventType(Enum):
     NodeRun = 'node_run'
@@ -29,6 +31,7 @@ class WorkflowOutputSchema(BaseModel):
     reasoning_content: Optional[str] = Field(default=None, description='The reasoning content')
     output_key: Optional[str] = Field(default=None, description='output message key')
     files: Optional[List[Any]] = Field(default=None, description='The files list')
+    citations: Optional[List[CitationRegistryItemSchema]] = Field(default=None, description='The citation registry')
     source_url: Optional[str] = Field(default=None, description='The document source url, is web url')
     extra: Optional[str] = Field(default=None, description='The extra data')
 

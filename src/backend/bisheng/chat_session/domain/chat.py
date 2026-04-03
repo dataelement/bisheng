@@ -14,6 +14,12 @@ from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.schemas.telemetry.event_data_schema import NewMessageSessionEventData, DeleteMessageSessionEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.base import BaseService
+from bisheng.core.database import get_async_db_session
+from bisheng.citation.domain.repositories.implementations.message_citation_repository_impl import (
+    MessageCitationRepositoryImpl,
+)
+from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
+from bisheng.citation.domain.services.citation_registry_service import CitationRegistryService
 from bisheng.core.logger import trace_id_var
 from bisheng.database.models.assistant import AssistantDao
 from bisheng.database.models.flow import FlowDao, FlowType
@@ -28,6 +34,23 @@ from bisheng.user.domain.models.user import UserDao
 
 class ChatSessionService:
     """Chat session lifecycle services."""
+
+    @staticmethod
+    async def get_message_citations_by_message_ids(
+        message_ids: List[int],
+    ) -> dict[int, List[CitationRegistryItemSchema]]:
+        """Load normalized citations for a batch of message IDs."""
+        if not message_ids:
+            return {}
+
+        async with get_async_db_session() as session:
+            repository = MessageCitationRepositoryImpl(session)
+            registry_service = CitationRegistryService(repository)
+            citations = await repository.find_by_message_ids_grouped(message_ids)
+            return {
+                message_id: [registry_service.to_registry_item(citation) for citation in items]
+                for message_id, items in citations.items()
+            }
 
     @staticmethod
     async def get_chat_history(chat_id: str, flow_id: str, message_id: Optional[str] = None,
@@ -45,7 +68,15 @@ class ChatSessionService:
                                                                   message_id=message_id, page_size=page_size)
         if history:
             user_info = await UserDao.aget_user(user_id=session_info.user_id)
-            history = ChatMessageHistoryResponse.from_chat_message_objs(history, user_info, session_info)
+            citation_map = await ChatSessionService.get_message_citations_by_message_ids(
+                [one.id for one in history if one.id is not None],
+            )
+            history = ChatMessageHistoryResponse.from_chat_message_objs(
+                history,
+                user_info,
+                session_info,
+                citation_map,
+            )
         return history
 
     @staticmethod

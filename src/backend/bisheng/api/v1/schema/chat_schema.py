@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, field_validator
 
+from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
 from bisheng.database.models.message import ChatMessage, ChatMessageQuery
 from bisheng.database.models.session import MessageSession
 from bisheng.user.domain.models.user import User
@@ -96,12 +97,24 @@ class SSEResponse(BaseModel):
 class ChatMessageHistoryResponse(ChatMessageQuery):
     user_name: Optional[str] = None
     flow_name: Optional[str] = None
+    citations: Optional[List[CitationRegistryItemSchema]] = None
 
     @classmethod
-    def from_chat_message_objs(cls, chat_messages: List[ChatMessage], user_model: User,
-                               message_session: MessageSession):
+    def from_chat_message_objs(
+        cls,
+        chat_messages: List[ChatMessage],
+        user_model: User,
+        message_session: MessageSession,
+        citations_by_message_id: Optional[Dict[int, List[CitationRegistryItemSchema]]] = None,
+    ) -> List["ChatMessageHistoryResponse"]:
         return [
             cls.model_validate(obj).model_copy(
-                update={"user_name": user_model.user_name, "flow_name": message_session.flow_name,
-                        "name": message_session.name}) for obj in chat_messages
+                update={
+                    "user_name": user_model.user_name,
+                    "flow_name": message_session.flow_name,
+                    "name": message_session.name,
+                    "citations": citations_by_message_id.get(obj.id) if citations_by_message_id else None,
+                }
+            )
+            for obj in chat_messages
         ]

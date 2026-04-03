@@ -10,6 +10,7 @@ from bisheng.api.v1 import (assistant_router, audit_router, chat_router,
                             workstation_router, tool_router, invite_code_router, skillcenter_router, flows_router)
 from bisheng.channel.api.router import router as channel_router
 from bisheng.chat_session.api.router import router as session_router
+from bisheng.citation.api.router import router as citation_router
 from bisheng.finetune.api.finetune import router as finetune_router
 from bisheng.finetune.api.server import router as server_router
 from bisheng.knowledge.api.router import qa_router, knowledge_router, knowledge_space_router
@@ -52,6 +53,7 @@ router.include_router(share_link_router)
 router.include_router(telemetry_search_router)
 router.include_router(channel_router)
 router.include_router(message_router)
+router.include_router(citation_router)
 
 router_rpc = APIRouter(prefix='/api/v2', )
 router_rpc.include_router(knowledge_router_rpc)
