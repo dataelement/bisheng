@@ -258,7 +258,10 @@ function mapSpace(raw: RawKnowledgeSpace): KnowledgeSpace {
         isPending: raw.is_pending ?? false,
         isFollowed: raw.is_followed ?? false,
         // Some detail endpoints may carry subscription_status; keep it if present.
-        subscriptionStatus: (raw as any).subscription_status,
+        subscriptionStatus:
+            (raw as any).subscription_status ??
+            (raw as any).subscriptionStatus ??
+            undefined,
     };
 }
 

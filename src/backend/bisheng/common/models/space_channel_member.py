@@ -290,6 +290,30 @@ class SpaceChannelMemberDao:
             return result.all()
 
     @classmethod
+    async def async_get_user_writable_members(cls, user_id: int) -> List[SpaceChannelMember]:
+        """
+        Async: Get all active writable space membership records for a user
+        (creator and admin), ordered by is_pinned DESC then create_time DESC.
+        """
+
+        statement = (
+            select(SpaceChannelMember)
+            .where(
+                SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
+                SpaceChannelMember.user_id == user_id,
+                SpaceChannelMember.status == MembershipStatusEnum.ACTIVE,
+                SpaceChannelMember.user_role.in_([UserRoleEnum.CREATOR, UserRoleEnum.ADMIN]),
+            )
+            .order_by(
+                SpaceChannelMember.is_pinned.desc(),
+                SpaceChannelMember.create_time.desc(),
+            )
+        )
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return result.all()
+
+    @classmethod
     async def async_get_followed_members_for_spaces(cls, user_id: int, space_ids: List[str]) -> List[
         SpaceChannelMember]:
         """ Async: Get ACTIVE follow-status members for a batch of space IDs and a given user """

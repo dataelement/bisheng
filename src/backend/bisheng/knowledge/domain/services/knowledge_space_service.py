@@ -267,22 +267,27 @@ class KnowledgeSpaceService(KnowledgeUtils):
     async def get_my_created_spaces(
             self, order_by: str = 'update_time'
     ) -> List[KnowledgeRead]:
-        res = await KnowledgeDao.async_get_spaces_by_user(self.login_user.user_id, order_by)
-        space_members = await SpaceChannelMemberDao.async_get_all_members_for_spaces(self.login_user.user_id,
-                                                                                     [str(one.id) for one in res])
-        space_members = {
-            one.business_id: one for one in space_members
+        members = await SpaceChannelMemberDao.async_get_user_writable_members(self.login_user.user_id)
+        if not members:
+            return []
+
+        members_map = {
+            int(one.business_id): one for one in members
         }
+        res = await KnowledgeDao.async_get_spaces_by_ids(list(members_map.keys()), order_by)
         pinned_res = []
         not_pinned_res = []
         for one in res:
-            spcae_config = space_members.get(str(one.id))
-            if spcae_config and spcae_config.is_pinned:
+            member_conf = members_map.get(one.id)
+            if not member_conf:
+                continue
+
+            if member_conf.is_pinned:
                 pinned_res.append(
                     KnowledgeSpaceInfoResp(
                         **one.model_dump(),
                         is_pinned=True,
-                        user_role=UserRoleEnum.CREATOR,
+                        user_role=member_conf.user_role,
                         subscription_status=SpaceSubscriptionStatusEnum.SUBSCRIBED,
                         is_followed=True,
                     ))
@@ -291,7 +296,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     KnowledgeSpaceInfoResp(
                         **one.model_dump(),
                         is_pinned=False,
-                        user_role=UserRoleEnum.CREATOR,
+                        user_role=member_conf.user_role,
                         subscription_status=SpaceSubscriptionStatusEnum.SUBSCRIBED,
                         is_followed=True,
                     ))

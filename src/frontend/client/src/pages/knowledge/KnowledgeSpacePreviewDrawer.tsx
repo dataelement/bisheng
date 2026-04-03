@@ -108,7 +108,8 @@ export function KnowledgeSpacePreviewDrawer({
                 setFilesPreview([]);
                 setChildrenTotal(0);
             });
-    }, [space?.id, space?.visibility, currentParentId]);
+        // Include join/subscription signals so file list loads when async info maps to joined without subscription_status.
+    }, [space?.id, space?.visibility, space?.subscriptionStatus, space?.isFollowed, currentParentId, status]);
 
     const loadMoreChildren = async () => {
         if (!space || !canViewFiles) return;
@@ -150,10 +151,14 @@ export function KnowledgeSpacePreviewDrawer({
     };
 
     const isPublic = space?.visibility === VisibilityType.PUBLIC;
+    // /info sometimes omits subscription_status but still sets is_followed for already-approved members.
     const canViewFiles =
         !!space &&
         (space.visibility === VisibilityType.PUBLIC ||
-            (space.visibility === VisibilityType.APPROVAL && space.subscriptionStatus === "subscribed"));
+            (space.visibility === VisibilityType.APPROVAL &&
+                (space.subscriptionStatus === "subscribed" ||
+                    space.isFollowed === true ||
+                    status === "joined")));
 
     const handleClickAction = () => {
         if (!space) return;
@@ -189,11 +194,21 @@ export function KnowledgeSpacePreviewDrawer({
                     showToast({ message: localize("com_knowledge.subscribe_apply_sent"), severity: NotificationSeverity.SUCCESS });
                 }
             } catch (e) {
-                const message =
+                const rawMessage =
                     (e as any)?.message ||
                     (e as any)?.status_message ||
-                    localize("com_knowledge.operation_failed_retry");
-                showToast({ message, severity: NotificationSeverity.ERROR });
+                    "";
+
+                // Backend errcode 18032: SpaceSubscribeLimitError
+                // Msg: "You can subscribe to a maximum of 50 knowledge spaces"
+                if (typeof rawMessage === "string" && rawMessage.includes("maximum of 50 knowledge spaces")) {
+                    showToast({ message: localize("com_knowledge.join_space_limit_reached_50"), severity: NotificationSeverity.WARNING });
+                } else {
+                    const message =
+                        rawMessage ||
+                        localize("com_knowledge.operation_failed_retry");
+                    showToast({ message, severity: NotificationSeverity.ERROR });
+                }
             }
             finally {
                 setSubscribing(false);
@@ -320,7 +335,7 @@ export function KnowledgeSpacePreviewDrawer({
                                                     userRole={SpaceRole.MEMBER}
                                                     isSelected={false}
                                                     onSelect={() => { }}
-                                                    onDownload={() => { }}
+                                                            onDownload={() => { }}
                                                     onRename={() => { }}
                                                     onDelete={() => { }}
                                                     onEditTags={() => { }}
@@ -331,7 +346,8 @@ export function KnowledgeSpacePreviewDrawer({
                                                     }}
                                                     onPreview={handlePreviewFile}
                                                     disableClickNavigate
-                                                    hideSelectionCheckbox
+                                                            hideSelectionCheckbox
+                                                            hideDownloadActions
                                                 />
                                             ))}
                                         </div>
