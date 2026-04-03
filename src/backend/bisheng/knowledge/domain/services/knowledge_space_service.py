@@ -711,7 +711,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
             resources = await TagDao.aget_resources_by_tags(tag_ids, ResourceTypeEnum.SPACE_FILE)
             if not resources:
                 return {"total": 0, "page": page, "page_size": page_size, "data": []}
-            filter_files = list(set(filter_files) & set([int(one.resource_id) for one in resources]))
+            if filter_files:
+                filter_files = list(set(filter_files) & set([int(one.resource_id) for one in resources]))
+            else:
+                filter_files = [int(one.resource_id) for one in resources]
             if not filter_files:
                 return {"total": 0, "page": page, "page_size": page_size, "data": []}
 
