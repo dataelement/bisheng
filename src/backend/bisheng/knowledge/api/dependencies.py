@@ -10,6 +10,9 @@ from bisheng.knowledge.domain.repositories.implementations.knowledge_file_reposi
 from bisheng.knowledge.domain.repositories.implementations.knowledge_repository_impl import KnowledgeRepositoryImpl
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository import KnowledgeFileRepository
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_repository import KnowledgeRepository
+from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import KnowledgeAuditTelemetryService
+from bisheng.knowledge.domain.services.knowledge_metadata_service import KnowledgeMetadataService
+from bisheng.knowledge.domain.services.knowledge_permission_service import KnowledgePermissionService
 from bisheng.message.api.dependencies import get_message_service as _get_message_service
 
 # Service imports are deferred to avoid circular imports
@@ -35,14 +38,34 @@ async def get_knowledge_file_repository(
     return KnowledgeFileRepositoryImpl(session)
 
 
+async def get_knowledge_metadata_service(
+        knowledge_repository: KnowledgeRepository = Depends(get_knowledge_repository),
+        knowledge_file_repository: KnowledgeFileRepository = Depends(get_knowledge_file_repository),
+        permission_service: KnowledgePermissionService = Depends(KnowledgePermissionService),
+) -> KnowledgeMetadataService:
+    return KnowledgeMetadataService(
+        knowledge_repository=knowledge_repository,
+        knowledge_file_repository=knowledge_file_repository,
+        permission_service=permission_service,
+    )
+
+
 async def get_knowledge_service(
         knowledge_repository: KnowledgeRepository = Depends(get_knowledge_repository),
         knowledge_file_repository: KnowledgeFileRepository = Depends(get_knowledge_file_repository),
+        permission_service: KnowledgePermissionService = Depends(KnowledgePermissionService),
+        audit_telemetry_service: KnowledgeAuditTelemetryService = Depends(KnowledgeAuditTelemetryService),
+        metadata_service: KnowledgeMetadataService = Depends(get_knowledge_metadata_service),
 ) -> 'KnowledgeService':
     """DapatkanKnowledgeServiceInstance Dependencies"""
     from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService as _KnowledgeService
-    return _KnowledgeService(knowledge_repository=knowledge_repository,
-                             knowledge_file_repository=knowledge_file_repository)
+    return _KnowledgeService(
+        knowledge_repository=knowledge_repository,
+        knowledge_file_repository=knowledge_file_repository,
+        permission_service=permission_service,
+        audit_telemetry_service=audit_telemetry_service,
+        metadata_service=metadata_service,
+    )
 
 
 async def get_knowledge_file_service(
