@@ -1245,7 +1245,6 @@
     "create_chat": "新建会话",
     "create_folder_failed": "新建文件夹失败",
     "create_knowledge_space": "创建知识空间",
-    "default_personal_space_name": "个人知识空间",
     "create_space_failed": "创建知识空间失败",
     "create_space_limit_reached": "您已达到创建知识空间的上限",
     "join_space_limit_reached_50": "您已达到知识空间的上限50",

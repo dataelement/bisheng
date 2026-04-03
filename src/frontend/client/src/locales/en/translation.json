@@ -1325,7 +1325,6 @@
     "create_chat": "New chat",
     "create_folder_failed": "Failed to create folder",
     "create_knowledge_space": "Create knowledge space",
-    "default_personal_space_name": "Personal knowledge space",
     "create_space_failed": "Failed to create knowledge space",
     "create_space_limit_reached": "You have reached the limit for creating knowledge spaces",
     "join_space_limit_reached_50": "You have reached the maximum of 50 knowledge spaces",
