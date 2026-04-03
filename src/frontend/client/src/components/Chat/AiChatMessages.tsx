@@ -186,7 +186,7 @@ export default function AiChatMessages({
                                 <Button
                                     key={i}
                                     variant="ghost"
-                                    className="bg-gray-50 hover:bg-[#E6EDFC] active:bg-[#E6EDFC] text-sm text-gray-800 hover:text-[#165DFF] px-3 py-1 rounded-lg text-left flex items-center gap-1 group w-fit transition-colors"
+                                    className="bg-gray-50 font-normal hover:bg-[#E6EDFC] active:bg-[#E6EDFC] text-sm text-gray-800 hover:text-[#165DFF] px-3 py-1 rounded-lg text-left flex items-center gap-1 group w-fit transition-colors"
                                     onClick={() => onPresetClick?.(q)}
                                 >
                                     <div className="size-4 flex items-center justify-center">

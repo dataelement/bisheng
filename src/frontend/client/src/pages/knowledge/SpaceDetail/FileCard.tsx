@@ -169,10 +169,15 @@ export function FileCard({
     return (
         <Card
             className={cn(
-                "group transition-all duration-[350ms] ease-in-out cursor-pointer group rounded-lg overflow-hidden border p-0 gap-0",
+                "group cursor-pointer group rounded-lg overflow-hidden border p-0 gap-0",
                 isSelected ? "border-primary shadow-sm" : "hover:border-[#c9cdd4]",
                 hovered && "shadow-md"
             )}
+            style={{
+                transitionProperty: 'background-color',
+                transitionDuration: '350ms',
+                transitionTimingFunction: 'ease-in-out'
+            }}
             onMouseEnter={() => setHovered(true)}
             onMouseLeave={() => setHovered(false)}
             onClick={handleCardClick}

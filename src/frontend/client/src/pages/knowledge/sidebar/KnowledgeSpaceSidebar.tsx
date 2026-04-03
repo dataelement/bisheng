@@ -127,9 +127,13 @@ export function KnowledgeSpaceSidebar({
         <div
             className={[
                 `h-full bg-white flex flex-col overflow-hidden flex-shrink-0 ${collapsed ? "" : "border-r border-[#e5e6eb]"}`,
-                "transition-[width] duration-[350ms] ease-in-out",
                 collapsed ? "w-12" : "w-60",
             ].join(" ")}
+            style={{
+                transitionProperty: 'background-color',
+                transitionDuration: '350ms',
+                transitionTimingFunction: 'ease-in-out'
+            }}
         >
             {/* Top actions */}
             <div className={collapsed ? "px-0 py-5" : "px-3 py-5"}>
@@ -170,8 +174,12 @@ export function KnowledgeSpaceSidebar({
                 className={[
                     "flex-1 min-h-0",
                     collapsed ? "opacity-0 pointer-events-none" : "opacity-100",
-                    "transition-opacity duration-[350ms] ease-in-out",
                 ].join(" ")}
+                style={{
+                    transitionProperty: 'background-color',
+                    transitionDuration: '350ms',
+                    transitionTimingFunction: 'ease-in-out'
+                }}
             >
                 <div
                     className="h-full overflow-y-auto scroll-on-scroll px-3 pb-5"

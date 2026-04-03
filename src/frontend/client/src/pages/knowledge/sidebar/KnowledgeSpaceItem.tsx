@@ -46,7 +46,7 @@ export default function KnowledgeSpaceItem({
     onManageMembers,
 }: KnowledgeSpaceItemProps) {
     const localize = useLocalize();
-  const [isEditing, setIsEditing] = useState(false);
+    const [isEditing, setIsEditing] = useState(false);
     const [menuOpen, setMenuOpen] = useState(false);
     const { showToast } = useToastContext();
     const confirm = useConfirm()
@@ -68,10 +68,15 @@ export default function KnowledgeSpaceItem({
 
     return (
         <div
-            className={`group flex items-center justify-between h-8 px-3 py-1.5 rounded-lg cursor-pointer transition-all border ${isActive
+            className={`group flex items-center justify-between h-8 px-3 py-1.5 rounded-lg cursor-pointer  border ${isActive
                 ? "bg-[#E6EDFC] border-primary shadow-sm"
                 : "border-transparent hover:bg-[#F7F7F7]"
                 }`}
+            style={{
+                transitionProperty: 'background-color',
+                transitionDuration: '350ms',
+                transitionTimingFunction: 'ease-in-out'
+            }}
             onClick={() => !isEditing && onSelect(space)}
         >
             <div className="flex items-center gap-1 flex-1 min-w-0">

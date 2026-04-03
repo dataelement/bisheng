@@ -72,10 +72,15 @@ export default function ChannelItem({
 
     return (
         <div
-            className={`group flex items-center justify-between h-8 px-3 py-1.5 rounded-lg cursor-pointer transition-all duration-[350ms] ease-in-out border ${isActive
+            className={`group flex items-center justify-between h-8 px-3 py-1.5 rounded-lg cursor-pointer border ${isActive
                 ? "bg-[#E6EDFC] border-primary shadow-sm"
                 : "border-transparent hover:bg-[#F7F7F7]"
                 }`}
+            style={{
+                transitionProperty: 'background-color',
+                transitionDuration: '350ms',
+                transitionTimingFunction: 'ease-in-out'
+            }}
             onClick={() => !isEditing && onSelect(channel)}
         >
             <div className="flex items-center gap-1 flex-1 min-w-0">
@@ -120,9 +125,14 @@ export default function ChannelItem({
                     <span className={`
                         absolute right-0 flex items-center justify-center
                         text-[10px] px-1.5 py-[1px] rounded-md font-medium bg-[#335CFF33]/20 text-primary
-                        transition-opacity duration-200
                         ${menuOpen ? "opacity-0" : "group-hover:opacity-0"}
-                    `}>
+                    `}
+                        style={{
+                            transitionProperty: 'background-color',
+                            transitionDuration: '350ms',
+                            transitionTimingFunction: 'ease-in-out'
+                        }}
+                    >
                         {channel.unreadCount}
                     </span>
                 )}

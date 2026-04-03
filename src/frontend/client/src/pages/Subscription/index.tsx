@@ -59,6 +59,22 @@ export default function Subscription() {
     const { showToast } = useToastContext();
     const queryClient = useQueryClient();
 
+    // Feature gate: system may disable Channel/Subscription via user plugins.
+    // Share links should redirect to workbench home with a clear permission toast.
+    useEffect(() => {
+        const plugins: string[] | null = Array.isArray((user as any)?.plugins)
+            ? ((user as any)?.plugins as string[])
+            : null;
+        const channelEnabled = plugins ? plugins.includes("subscription") : true;
+        if (!channelEnabled) {
+            showToast({
+                message: "您当前没有访问该功能的权限。如有需要，请联系管理员开通。",
+                severity: NotificationSeverity.ERROR,
+            });
+            navigate("/c/new", { replace: true });
+        }
+    }, [user, showToast, navigate]);
+
     // Open preview drawer when channelId route param is present.
     // Prefetch channel detail only (validates private / dissolved). Articles load inside
     // ChannelPreviewDrawer so a list API failure does not close the share route and bounce to square.

@@ -34,6 +34,7 @@ import { useFileManager } from "./hooks/useFileManager";
 import { useFileUpload } from "./hooks/useFileUpload";
 import { useAiSplitPane } from "./hooks/useAiSplitPane";
 import { useLocalize } from "~/hooks";
+import { useAuthContext } from "~/hooks/AuthContext";
 
 export default function Knowledge() {
     const localize = useLocalize();
@@ -50,6 +51,7 @@ export default function Knowledge() {
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
     const { showToast } = useToastContext();
+    const { user } = useAuthContext();
     const navigate = useNavigate();
     const location = useLocation();
     const queryClient = useQueryClient();
@@ -63,6 +65,22 @@ export default function Knowledge() {
     const [squarePreviewSpaceId, setSquarePreviewSpaceId] = useState<string | undefined>();
     const [squarePreviewDrawerOpen, setSquarePreviewDrawerOpen] = useState(false);
     const [squareStatusOverride, setSquareStatusOverride] = useState<Record<string, "join" | "joined" | "pending">>({});
+
+    // Feature gate: system may disable Knowledge Space via user plugins.
+    // Share links should redirect to workbench home with a clear permission toast.
+    useEffect(() => {
+        const plugins: string[] | null = Array.isArray((user as any)?.plugins)
+            ? ((user as any)?.plugins as string[])
+            : null;
+        const knowledgeEnabled = plugins ? plugins.includes("knowledge_space") : true;
+        if (!knowledgeEnabled) {
+            showToast({
+                message: "您当前没有访问该功能的权限。如有需要，请联系管理员开通。",
+                severity: NotificationSeverity.ERROR,
+            });
+            navigate("/c/new", { replace: true });
+        }
+    }, [user, showToast, navigate]);
 
     // KeepAlive: when leaving /knowledge, reset square view so switching back lands on default page.
     useUnactivate(() => {

@@ -745,11 +745,15 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                                         <div
                                             className={[
                                                 "flex items-center h-8 rounded-lg border bg-white overflow-hidden",
-                                                "transition-[width,border-color] duration-[350ms] ease-in-out",
                                                 showSearch
                                                     ? "w-[220px] border-[#024DE3]"
                                                     : "w-8 border-[#E5E6EB] cursor-pointer hover:bg-[#F7F8FA]",
                                             ].join(" ")}
+                                            style={{
+                                                transitionProperty: 'background-color',
+                                                transitionDuration: '350ms',
+                                                transitionTimingFunction: 'ease-in-out'
+                                            }}
                                             onClick={() => {
                                                 if (!showSearch) {
                                                     setShowSearch(true);
@@ -760,9 +764,14 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                                         >
                                             <div
                                                 className={[
-                                                    "flex items-center justify-center px-[7px] h-full shrink-0 transition-colors duration-[350ms] ease-in-out",
+                                                    "flex items-center justify-center px-[7px] h-full shrink-0",
                                                     showSearch ? "text-[#024DE3]" : "text-[#86909C]",
                                                 ].join(" ")}
+                                                style={{
+                                                    transitionProperty: 'background-color',
+                                                    transitionDuration: '350ms',
+                                                    transitionTimingFunction: 'ease-in-out'
+                                                }}
                                             >
                                                 <Search className="size-4" />
                                             </div>
@@ -785,10 +794,14 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                                                     }
                                                 }}
                                                 tabIndex={showSearch ? 0 : -1}
-                                                style={{ fontWeight: 400 }}
+                                                style={{
+                                                    fontWeight: 400,
+                                                    transitionProperty: 'background-color',
+                                                    transitionDuration: '350ms',
+                                                    transitionTimingFunction: 'ease-in-out'
+                                                }}
                                                 className={[
                                                     "flex-1 h-full pr-3 text-[14px] font-normal text-[#1d2129] bg-transparent outline-none placeholder:text-[#C9CDD4] placeholder:font-normal",
-                                                    "transition-opacity duration-[350ms] ease-in-out",
                                                     showSearch ? "opacity-100" : "opacity-0 pointer-events-none",
                                                 ].join(" ")}
                                             />
