@@ -199,15 +199,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
             result.user_name = create_user.user_name if create_user else str(space.user_id)
         else:
             result.user_name = self.login_user.user_name
-
-        self._apply_subscription_flags(result, SpaceSubscriptionStatusEnum.SUBSCRIBED)
+        self._apply_subscription_flags(result, SpaceSubscriptionStatusEnum.SUBSCRIBED)        
         if space.user_id != self.login_user.user_id:
             member_info = await SpaceChannelMemberDao.async_find_member(space_id=space.id,
                                                                         user_id=self.login_user.user_id)
             self._apply_subscription_flags(result, self._resolve_subscription_status(member_info))
-
+            if member_info and member_info.is_active:
+                result.user_role = member_info.user_role
+        else:
+            result.user_role = UserRoleEnum.CREATOR
         result.follower_num = follower_num
         result.file_num = total_file_num
+        
         if space.state != KnowledgeState.PUBLISHED.value:
             rebuild_knowledge_celery.delay(space_id, new_model_id=space.model, invoke_user_id=self.login_user.user_id)
 
