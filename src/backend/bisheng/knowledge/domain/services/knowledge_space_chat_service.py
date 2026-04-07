@@ -374,6 +374,8 @@ class KnowledgeSpaceChatService:
 
         # Get subscription configuration
         config = await WorkStationService.get_knowledge_space_config()
+        if config is None:
+            config = KnowledgeSpaceConfig()
 
         return llm, config
 
