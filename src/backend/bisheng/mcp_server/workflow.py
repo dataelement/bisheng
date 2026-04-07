@@ -74,6 +74,16 @@ class WorkflowNodeParamsResult(BaseModel):
     error_code: Optional[int] = None
 
 
+class WorkflowConnectionResult(BaseModel):
+    ok: bool = True
+    service: str = 'bisheng-workflow-mcp'
+    authenticated: bool = True
+    user_id: Optional[int] = None
+    user_name: str = ''
+    message: str = 'SUCCESS'
+    error_code: Optional[int] = None
+
+
 def _mutation_error(exc: Exception) -> WorkflowMutationResult:
     if isinstance(exc, BaseErrorCode):
         return WorkflowMutationResult(ok=False, message=exc.message, error_code=exc.code)
@@ -117,6 +127,54 @@ def create_workflow_mcp_server():
         mcp.settings.streamable_http_path = '/'
     except Exception:
         pass
+
+    @mcp.tool()
+    async def ping() -> WorkflowConnectionResult:
+        """Verify the MCP connection and return the current authenticated Bisheng user."""
+        try:
+            login_user = await get_login_user_from_mcp_token()
+            return WorkflowConnectionResult(
+                user_id=login_user.user_id,
+                user_name=login_user.user_name,
+            )
+        except Exception as exc:
+            logger.exception('ping failed')
+            if isinstance(exc, BaseErrorCode):
+                return WorkflowConnectionResult(
+                    ok=False,
+                    authenticated=False,
+                    message=exc.message,
+                    error_code=exc.code,
+                )
+            return WorkflowConnectionResult(
+                ok=False,
+                authenticated=False,
+                message=str(exc) or exc.__class__.__name__,
+            )
+
+    @mcp.tool()
+    async def whoami() -> WorkflowConnectionResult:
+        """Return the authenticated Bisheng user behind the current MCP bearer token."""
+        try:
+            login_user = await get_login_user_from_mcp_token()
+            return WorkflowConnectionResult(
+                user_id=login_user.user_id,
+                user_name=login_user.user_name,
+            )
+        except Exception as exc:
+            logger.exception('whoami failed')
+            if isinstance(exc, BaseErrorCode):
+                return WorkflowConnectionResult(
+                    ok=False,
+                    authenticated=False,
+                    message=exc.message,
+                    error_code=exc.code,
+                )
+            return WorkflowConnectionResult(
+                ok=False,
+                authenticated=False,
+                message=str(exc) or exc.__class__.__name__,
+            )
 
     @mcp.tool()
     async def list_workflow_nodes(flow_id: str, version_id: int = 0) -> WorkflowNodeListResult:
