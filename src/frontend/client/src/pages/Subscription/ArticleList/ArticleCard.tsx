@@ -10,6 +10,7 @@ import { copyText } from "~/utils";
 import { AddSpaceIcon, ShareOutlineIcon } from "~/components/icons";
 import { AddToKnowledgeModal } from "../Article/AddToKnowledgeModal";
 import { ChannelQuoteIcon } from "~/components/icons/channels";
+import { useAuthContext } from "~/hooks/AuthContext";
 
 interface ArticleCardProps {
     article: Article;
@@ -23,6 +24,10 @@ export function ArticleCard({ article, onSelect, isSelected, searchQuery }: Arti
     const [showKnowledgeModal, setShowKnowledgeModal] = useState(false);
     const { handleShare } = useArticleShare();
     const { showToast } = useToastContext();
+    const { user } = useAuthContext();
+    const hasKnowledge = Array.isArray((user as any)?.plugins)
+        ? ((user as any).plugins as string[]).includes('knowledge_space')
+        : true;
 
     // 格式化时间逻辑保持不变
     const formatTime = (dateString: string) => {
@@ -49,6 +54,7 @@ export function ArticleCard({ article, onSelect, isSelected, searchQuery }: Arti
         : null;
 
     return (
+        <>
         <div
             className={`group cursor-pointer relative py-5 flex gap-6 border-b border-dashed border-gray-200 last:border-none`}
             style={{
@@ -114,7 +120,7 @@ export function ArticleCard({ article, onSelect, isSelected, searchQuery }: Arti
 
                     {/* 4. Hover 操作按钮 - 按照截图移动到右下角 */}
                     <div className="absolute right-0 flex items-center gap-3 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity">
-                        <button
+                        {hasKnowledge && <button
                             onClick={(e) => {
                                 e.stopPropagation();
                                 setShowKnowledgeModal(true);
@@ -123,7 +129,7 @@ export function ArticleCard({ article, onSelect, isSelected, searchQuery }: Arti
                             title={localize("com_subscription.add_to_knowledge_space")}
                         >
                             <BookPlusIcon className="size-3.5" />
-                        </button>
+                        </button>}
                         <button
                             onClick={(e) => {
                                 e.stopPropagation();
@@ -151,13 +157,14 @@ export function ArticleCard({ article, onSelect, isSelected, searchQuery }: Arti
                     </div>
                 </div>
             </div>
+            </div>
 
-            {/* Add to Knowledge Space Modal */}
+            {/* Add to Knowledge Space Modal — rendered outside the card to avoid interaction interference */}
             <AddToKnowledgeModal
                 open={showKnowledgeModal}
                 onOpenChange={setShowKnowledgeModal}
                 articleId={article.id}
             />
-        </div>
+        </>
     );
 }

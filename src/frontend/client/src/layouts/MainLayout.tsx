@@ -164,18 +164,18 @@ export default function MainLayout() {
 
   // Track last visited path per sidebar section.
   // Runs synchronously before Sidebar renders in the same cycle.
-  if (/^\/(c|linsight)(\/|$)/.test(pathname))       lastSectionPaths.home = pathname;
-  else if (/^\/(apps|app)(\/|$)/.test(pathname))     lastSectionPaths.apps = pathname;
-  else if (/^\/channel(\/|$)/.test(pathname))        lastSectionPaths.channel = pathname;
-  else if (pathname.startsWith('/knowledge'))          lastSectionPaths.knowledge = pathname;
+  if (/^\/(c|linsight)(\/|$)/.test(pathname)) lastSectionPaths.home = pathname;
+  else if (/^\/(apps|app)(\/|$)/.test(pathname)) lastSectionPaths.apps = pathname;
+  else if (/^\/channel(\/|$)/.test(pathname)) lastSectionPaths.channel = pathname;
+  else if (pathname.startsWith('/knowledge')) lastSectionPaths.knowledge = pathname;
 
   // Each sidebar tab gets its own KeepAlive cache key so switching
   // between tabs triggers cache/restore instead of re-rendering.
   const cacheKey = (() => {
     if (/^\/(c|linsight)(\/|$)/.test(pathname)) return 'chat_tab';
-    if (/^\/(apps|app)(\/|$)/.test(pathname))   return 'apps_tab';
-    if (/^\/channel(\/|$)/.test(pathname))      return 'channel_tab';
-    if (pathname.startsWith('/knowledge'))        return 'knowledge_tab';
+    if (/^\/(apps|app)(\/|$)/.test(pathname)) return 'apps_tab';
+    if (/^\/channel(\/|$)/.test(pathname)) return 'channel_tab';
+    if (pathname.startsWith('/knowledge')) return 'knowledge_tab';
     return 'other';
   })();
 
@@ -188,7 +188,7 @@ export default function MainLayout() {
           id={cacheKey}
           saveScroll={true}
         >
-          <div className='bg-white rounded-xl shadow-xl overflow-hidden h-[calc(100vh-16px)]'>
+          <div className='bg-white rounded-xl shadow-xl overflow-y-auto h-[calc(100vh-16px)]'>
             {outlet}
           </div>
         </KeepAlive>

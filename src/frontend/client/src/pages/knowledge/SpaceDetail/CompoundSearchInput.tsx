@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Search, X, ChevronDown } from 'lucide-react';
 import {
     DropdownMenu,
@@ -38,15 +38,20 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
         setScope(isRoot ? 'all' : 'current');
     }, [isRoot]);
 
+    // Fetch space tags from API
+    const refreshTags = useCallback(() => {
+        if (!spaceId) return;
+        getSpaceTagsApi(spaceId).then(setSpaceTags).catch(() => { });
+    }, [spaceId]);
+
     // Reset search state when switching to a different space
     useEffect(() => {
         setSelectedTags([]);
         setKeyword('');
         setIsFocused(false);
-        // Fetch space tags when spaceId changes
-        if (!spaceId) return;
-        getSpaceTagsApi(spaceId).then(setSpaceTags).catch(() => { });
-    }, [spaceId]);
+        setSpaceTags([]);
+        refreshTags();
+    }, [spaceId, refreshTags]);
 
     // Handle clicking outside to close the dropdown
     useEffect(() => {
@@ -116,6 +121,7 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
                 )}
                 onClick={() => {
                     inputRef.current?.focus();
+                    if (!isFocused) refreshTags();
                     setIsFocused(true);
                 }}
             >
@@ -167,7 +173,7 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
                     maxLength={100}
                     placeholder={selectedTags.length === 0 ? localize("com_knowledge.search_in_current_space") : ""}
                     className="flex-1 min-w-[50px] bg-transparent outline-none text-[13px] text-[#1d2129] placeholder:text-[#86909c] h-[22px]"
-                    onFocus={() => setIsFocused(true)}
+                    onFocus={() => { if (!isFocused) refreshTags(); setIsFocused(true); }}
                 />
 
                 {/* Clear button */}

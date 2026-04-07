@@ -966,13 +966,16 @@ export async function addFilesApi(
 export async function addArticleToKnowledgeApi(
     knowledge_id: string,
     article_ids: string[],
-    parent_id?: string | null
-): Promise<void> {
-    await request.post(`/api/v1/channel/manager/articles/add_to_knowledge_space`, {
+    parent_id?: string | null,
+    force_replace?: boolean
+): Promise<any> {
+    const res = await request.post(`/api/v1/channel/manager/articles/add_to_knowledge_space`, {
         knowledge_id: Number(knowledge_id),
         article_ids,
         parent_id: parent_id ? Number(parent_id) : null,
+        ...(force_replace ? { force_replace: true } : {}),
     });
+    return res;
 }
 
 /**

@@ -16,6 +16,7 @@ import { useToastContext } from "~/Providers";
 import { formatTime } from "~/utils";
 import { useArticleShare } from "../hooks/useArticleShare";
 import { AddToKnowledgeModal } from "./AddToKnowledgeModal";
+import { useAuthContext } from "~/hooks/AuthContext";
 
 interface ArticleDetailProps {
     article: Article;
@@ -194,7 +195,11 @@ export function ArticleDetail({ article, loading = false, screenFull = false, sh
     };
 
 
-    const hasKnowledge = true
+    // Check if user has knowledge_space permission from web_menu
+    const { user } = useAuthContext();
+    const hasKnowledge = Array.isArray((user as any)?.plugins)
+        ? ((user as any).plugins as string[]).includes('knowledge_space')
+        : true;
     return (
         <div className={`flex px-4 py-5 flex-col h-full  ${screenFull ? '' : 'border-l border-gray-100'}`}>
             {/* Top Toolbar */}

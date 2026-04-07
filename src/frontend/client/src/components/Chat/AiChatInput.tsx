@@ -221,7 +221,7 @@ const AiChatInput = memo(
         );
 
         return (
-            <div className="px-4 pb-4 shrink-0 relative">
+            <div className="aichat px-4 pb-4 shrink-0 relative">
                 {/* Drag-drop overlay */}
                 {isDragging && <DragDropOverlay />}
 
@@ -321,7 +321,7 @@ const AiChatInput = memo(
                         onPaste={handlePaste}
                         onScroll={handleTextareaScroll}
                         onHeightChange={updateTextareaScrollable}
-                        disabled={disabled}
+                        disabled={disabled || isStreaming}
                         placeholder={placeholder || bsConfig?.inputPlaceholder}
                         tabIndex={0}
                         data-testid="ai-chat-input"

@@ -204,40 +204,58 @@ export function formatStrTime(time: string, notSameDayFormat: string): string {
     date1.getDate() === date2.getDate() ? formatDate(date1, 'HH:mm') : formatDate(date1, notSameDayFormat)
 }
 
-const copyTextInDom = (dom) => {
+const copyTextInDom = (dom: HTMLElement): Promise<string> => {
   const range = document.createRange();
-
   range.selectNode(dom);
-  window.getSelection().removeAllRanges();
-  window.getSelection().addRange(range);
-
-  return new Promise((res) => {
-    document.execCommand('copy');
-    window.getSelection().removeAllRanges();
-    res(dom.innerText);
-  })
-}
-
-// 复制到剪切板
-export const copyText = (text: string | HTMLElement) => {
-  // 复制 dom 内文本
-  if (typeof text !== 'string') return copyTextInDom(text)
-  // 高级 API直接复制文本（需要 https 环境）
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    return navigator.clipboard.writeText(text)
+  const selection = window.getSelection();
+  if (selection) {
+    selection.removeAllRanges();
+    selection.addRange(range);
   }
-  // 通过把文本写入 dom, 间接通过选中 dom 复制文本
-  const areaDom = document.createElement("textarea");
-  // 设置样式使其不在屏幕上显示
-  areaDom.style.position = 'absolute';
-  areaDom.style.left = '-9999px';
-  areaDom.value = text;
-  document.body.appendChild(areaDom);
-
-  return copyTextInDom(areaDom).then((str) => {
-    document.body.removeChild(areaDom);
-  })
+  return new Promise((resolve) => {
+    document.execCommand('copy');
+    window.getSelection()?.removeAllRanges();
+    resolve(dom.innerText);
+  });
 };
+
+// Copy text to clipboard with Firefox-compatible fallback
+export const copyText = (text: string | HTMLElement): Promise<string | void> => {
+  // Copy DOM element content
+  if (typeof text !== 'string') return copyTextInDom(text);
+
+  // Try modern Clipboard API first, then fall back to textarea + execCommand.
+  // Firefox may reject clipboard.writeText when not in a direct user-gesture
+  // synchronous context, so we always fall through to the legacy path on failure.
+  if (navigator.clipboard?.writeText) {
+    return navigator.clipboard.writeText(text).catch(() => copyTextFallback(text));
+  }
+  return copyTextFallback(text);
+};
+
+/** Legacy fallback: create a hidden textarea, select its content, and execCommand('copy'). */
+function copyTextFallback(text: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    // Keep it off-screen but still in layout so Firefox can select it
+    textarea.style.position = 'fixed';
+    textarea.style.left = '-9999px';
+    textarea.style.top = '-9999px';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    try {
+      document.execCommand('copy');
+      resolve();
+    } catch {
+      reject(new Error('execCommand copy failed'));
+    } finally {
+      document.body.removeChild(textarea);
+    }
+  });
+}
 
 
 export function downloadFile(url, label) {

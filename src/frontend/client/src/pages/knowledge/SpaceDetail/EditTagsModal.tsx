@@ -132,7 +132,10 @@ export function EditTagsModal({
 
     // Save: update file tags via API
     const handleSave = async () => {
+        const pendingText = inputValue.trim();
+
         setLoading(true);
+
         try {
             const tagIds = Array.from(selectedTagIds);
             if (isBatchMode && fileIds) {
@@ -145,7 +148,7 @@ export function EditTagsModal({
             } else if (fileId) {
                 // Single file overwrite mode
                 await updateFileTagsApi(spaceId, fileId, tagIds);
-                showToast({ message: localize("com_knowledge.tag_save_success"), status: "success" });
+                !pendingText && showToast({ message: localize("com_knowledge.tag_save_success"), status: "success" });
             }
             onSaved?.();
             // Invalidate shared spaceTags cache so search dropdown picks up new tags

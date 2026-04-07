@@ -61,6 +61,9 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
 
         switch (numericType) {
             case FLOW_TYPES.SKILL:
+                // Skill (flow_type=1) is not accessible via app chat — redirect to 404
+                navigate('/404', { replace: true });
+                return;
             case FLOW_TYPES.WORK_FLOW:
                 // Fetch detail and chat history, skip global 403 redirect
                 const [flowRes, msgRes] = await Promise.all([

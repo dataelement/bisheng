@@ -225,7 +225,7 @@ export function CreateChannelDrawer({
                         />
                     ) : (
                         <div
-                            className="flex-1 overflow-y-auto scroll-on-scroll px-6 py-5 space-y-5"
+                            className="flex-1 min-h-0 overflow-y-auto scroll-on-scroll px-6 py-5 space-y-5"
                             onScroll={handleBodyScroll}
                             data-scrolling={isBodyScrolling ? "true" : "false"}
                         >
@@ -350,7 +350,18 @@ export function CreateChannelDrawer({
                                 </Label>
                                 <RadioGroup.Root
                                     value={form.visibility}
-                                    onValueChange={(v) => form.setVisibility(v as any)}
+                                    onValueChange={async (v) => {
+                                        // In edit mode, show confirmation when switching to private
+                                        if (isEditMode && v === "private" && form.visibility !== "private") {
+                                            const confirmed = await confirm({
+                                                description: localize("com_subscription.confirm_change_to_private"),
+                                                confirmText: localize("com_subscription.change_to_private"),
+                                                cancelText: localize("com_subscription.cancel"),
+                                            });
+                                            if (!confirmed) return;
+                                        }
+                                        form.setVisibility(v as any);
+                                    }}
                                     className="flex flex-col gap-3"
                                 >
                                     {[

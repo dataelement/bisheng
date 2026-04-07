@@ -315,6 +315,8 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                 },
             };
 
+            // Lock input immediately — don't wait for SSE open event
+            setIsStreaming(true);
             setSseSubmission(submission);
         },
         [conversationId, isStreaming, chatModel, selectedOrgKbs, searchType, isLingsi]
@@ -453,6 +455,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                 },
             };
 
+            setIsStreaming(true);
             setSseSubmission(submission);
         },
         [conversationId, isStreaming, chatModel, selectedOrgKbs, searchType]

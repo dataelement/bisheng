@@ -124,6 +124,8 @@ export default function useFileChat(spaceId: string, fileId: string) {
             };
 
             setMessages((prev) => [...prev, userMessage, initialResponse]);
+            // Lock input immediately — don't wait for SSE open event
+            setIsStreaming(true);
             setSseSubmission(
                 buildSubmission({ query: text.trim() }, responseMessageId)
             );
@@ -171,6 +173,7 @@ export default function useFileChat(spaceId: string, fileId: string) {
             };
 
             setMessages((prev) => [...prev, newResponse]);
+            setIsStreaming(true);
             setSseSubmission(
                 buildSubmission(
                     { query: parentMsg.text?.trim() || "" },

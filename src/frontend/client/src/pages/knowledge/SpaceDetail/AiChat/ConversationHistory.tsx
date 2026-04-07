@@ -30,7 +30,7 @@ export function ConversationHistory({
 }: ConversationHistoryProps) {
     // Format date for display
     const localize = useLocalize();
-  const formatDate = (dateStr: string) => {
+    const formatDate = (dateStr: string) => {
         const d = new Date(dateStr);
         const now = new Date();
         const isToday = d.toDateString() === now.toDateString();
@@ -70,16 +70,15 @@ export function ConversationHistory({
                         {sessions.map((session) => (
                             <div
                                 key={session.chat_id}
-                                className={`group flex items-center justify-between w-full px-3 py-2.5 rounded-lg transition-colors cursor-pointer ${
-                                    session.chat_id === activeChatId
-                                        ? "bg-[#e8f3ff] text-[#165dff]"
-                                        : "text-[#4e5969] hover:bg-[#f7f8fa]"
-                                }`}
+                                className={`group flex items-center justify-between w-full px-3 py-2.5 rounded-lg transition-colors cursor-pointer ${session.chat_id === activeChatId
+                                    ? "bg-[#e8f3ff] text-[#165dff]"
+                                    : "text-[#4e5969] hover:bg-[#f7f8fa]"
+                                    }`}
                                 onClick={() => onSelect(session.chat_id)}
                             >
                                 <div className="flex-1 min-w-0">
                                     <p className="text-sm font-medium truncate">
-                                        {session.flow_name || localize("com_knowledge.new_chat")}
+                                        {session.name || localize("com_knowledge.new_chat")}
                                     </p>
                                     <p className="text-xs text-[#86909c] mt-0.5">
                                         {formatDate(session.update_time || session.create_time)}

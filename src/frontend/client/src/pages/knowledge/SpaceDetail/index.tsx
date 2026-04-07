@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useLayoutEffect } from "react";
+import { useState, useRef, useEffect, useLayoutEffect, useMemo } from "react";
 import { useRecoilValue } from "recoil";
 import { FileStatus, FileType, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceRole, batchDeleteApi, batchDownloadApi, batchRetryApi, getFilePreviewApi } from "~/api/knowledge";
 import { useConfirm, useToastContext } from "~/Providers";
@@ -76,11 +76,24 @@ export function KnowledgeSpaceContent({
     onExpandSidebar,
 }: KnowledgeSpaceContentProps) {
     const localize = useLocalize();
-    const displayFiles = [
-        ...(creatingFolder ? [creatingFolder] : []),
-        ...uploadingFiles,
-        ...files
-    ];
+    const isMember = space.role === SpaceRole.MEMBER;
+    const displayFiles = useMemo(() => {
+        const allFiles = [
+            ...(creatingFolder ? [creatingFolder] : []),
+            ...uploadingFiles,
+            ...files
+        ];
+        if (!isMember) return allFiles;
+        // Bug 10: members should not see uploading/processing/waiting files
+        // Bug 11: non-admin (members) should not see failed files
+        const hiddenStatuses: FileStatus[] = [
+            FileStatus.UPLOADING,
+            FileStatus.PROCESSING,
+            FileStatus.WAITING,
+            FileStatus.FAILED,
+        ];
+        return allFiles.filter(f => !f.status || !hiddenStatuses.includes(f.status));
+    }, [creatingFolder, uploadingFiles, files, isMember]);
 
     const [searchQuery, setSearchQuery] = useState("");
     const [searchTagIds, setSearchTagIds] = useState<number[]>([]);
@@ -150,6 +163,9 @@ export function KnowledgeSpaceContent({
 
     useEffect(() => {
         setSelectedFiles(new Set());
+        setStatusFilter([]);
+        setSearchQuery("");
+        setSearchTagIds([]);
     }, [space.id]);
 
     const isAdmin = space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
@@ -294,7 +310,21 @@ export function KnowledgeSpaceContent({
                     ? previewData.preview_url
                     : previewData.original_url;
                 if (!downloadUrl) { showToast({ message: localize("com_knowledge.get_download_link_failed"), status: "error" }); return; }
-                triggerUrlDownload(downloadUrl, file?.name);
+
+                let finalName = file?.name || "download";
+                const urlPath = downloadUrl.split('?')[0].split('#')[0];
+                const lastDotIndex = urlPath.lastIndexOf('.');
+                const lastSlashIndex = urlPath.lastIndexOf('/');
+                if (lastDotIndex > lastSlashIndex && lastDotIndex < urlPath.length - 1) {
+                    const urlExt = urlPath.slice(lastDotIndex + 1);
+                    const nameLastDotIndex = finalName.lastIndexOf('.');
+                    if (nameLastDotIndex > 0) {
+                        finalName = `${finalName.slice(0, nameLastDotIndex)}.${urlExt}`;
+                    } else {
+                        finalName = `${finalName}.${urlExt}`;
+                    }
+                }
+                triggerUrlDownload(downloadUrl, finalName);
             }
         } catch {
             showToast({ message: localize("com_knowledge.download_failed"), status: "error" });

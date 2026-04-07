@@ -231,7 +231,7 @@ export function KnowledgeAiInput({
                             isComposingRef.current = false;
                         }}
                         onScroll={handleTextScroll}
-                        disabled={disabled}
+                        disabled={disabled || isStreaming}
                         placeholder={localize("com_knowledge.ai_input_placeholder")}
                         rows={1}
                         className="w-full bg-transparent text-sm outline-none resize-none max-h-48 overflow-y-auto pr-6"

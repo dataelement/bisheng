@@ -55,7 +55,7 @@ export default function Knowledge() {
     const navigate = useNavigate();
     const location = useLocation();
     const queryClient = useQueryClient();
-    const { spaceId } = useParams<{ spaceId?: string }>();
+    const { spaceId, folderId: urlFolderId } = useParams<{ spaceId?: string; folderId?: string }>();
     const path = location.pathname || "";
     const isShareRoute = /^\/knowledge\/share\//.test(path);
     const isDetailRoute = /^\/knowledge\/space\//.test(path);
@@ -90,7 +90,7 @@ export default function Knowledge() {
     });
 
     // ─── File management (list, pagination, search, sort, navigation) ────
-    const fileManager = useFileManager({ activeSpace });
+    const fileManager = useFileManager({ activeSpace, initialFolderId: urlFolderId });
 
     const fileUpload = useFileUpload({
         activeSpace,
@@ -113,7 +113,7 @@ export default function Knowledge() {
         }
     }, [previewSpaceId]);
 
-    // Deep link to space detail: /knowledge/space/:spaceId
+    // Deep link to space detail: /knowledge/space/:spaceId or /knowledge/space/:spaceId/folder/:folderId
     useEffect(() => {
         if (!detailSpaceId) return;
         let cancelled = false;

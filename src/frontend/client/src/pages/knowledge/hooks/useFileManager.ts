@@ -25,13 +25,15 @@ const PENDING_STATUSES: FileStatus[] = [
 
 interface UseFileManagerOptions {
     activeSpace: KnowledgeSpace | null;
+    /** Optional folder ID from URL deep link — navigate here on initial load */
+    initialFolderId?: string;
 }
 
 /**
  * Manages file list state: loading, pagination, search, sorting, folder navigation.
  * Extracted from the root Knowledge component.
  */
-export function useFileManager({ activeSpace }: UseFileManagerOptions) {
+export function useFileManager({ activeSpace, initialFolderId }: UseFileManagerOptions) {
     const localize = useLocalize();
     const [files, setFiles] = useState<KnowledgeFile[]>([]);
     const [currentPage, setCurrentPage] = useState(1);
@@ -93,15 +95,48 @@ export function useFileManager({ activeSpace }: UseFileManagerOptions) {
         [activeSpace?.id, searchQuery, searchTagIds, searchScope, statusFilter, sortBy, sortDirection, currentFolderId, pageSize, showToast]
     );
 
+    // Track whether the initial folder deep link has been consumed
+    const initialFolderConsumedRef = useRef(false);
+
     // Reload files whenever active space changes
     useEffect(() => {
         if (activeSpace) {
             setCurrentPage(1);
-            setCurrentFolderId(undefined);
-            setCurrentPath([]);
             setSearchQuery("");
             setStatusFilter([]);
-            loadFiles(1);
+
+            // If there's an unconsumed initial folder from URL, navigate there
+            if (initialFolderId && !initialFolderConsumedRef.current) {
+                initialFolderConsumedRef.current = true;
+                setCurrentFolderId(initialFolderId);
+                // Fetch parent chain for breadcrumb path
+                getFolderParentPathApi(activeSpace.id, initialFolderId)
+                    .then((parentPath) => {
+                        // parentPath excludes the folder itself — use last parent's children API
+                        // to find the actual folder name. Fallback to the ID string.
+                        const lastParentId = parentPath.length > 0
+                            ? parentPath[parentPath.length - 1].id
+                            : undefined;
+                        return getSpaceChildrenApi({
+                            space_id: activeSpace.id,
+                            parent_id: lastParentId,
+                            page: 1,
+                            page_size: 100,
+                        }).then((res) => {
+                            const folder = res.data.find(f => f.id === initialFolderId);
+                            const folderName = folder?.name || initialFolderId;
+                            setCurrentPath([...parentPath, { id: initialFolderId, name: folderName }]);
+                        });
+                    })
+                    .catch(() => {
+                        setCurrentPath([{ id: initialFolderId, name: initialFolderId }]);
+                    });
+                // Don't call loadFiles here — the currentFolderId change watcher effect will trigger it
+            } else {
+                setCurrentFolderId(undefined);
+                setCurrentPath([]);
+                loadFiles(1);
+            }
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-run when space id changes
     }, [activeSpace?.id]);

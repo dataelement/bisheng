@@ -30,6 +30,8 @@ export function useAppSidebar() {
   const [sidebarVisible, setSidebarVisible] = useRecoilState(sidebarVisibleState);
 
   const [loading, setLoading] = useState(false);
+  // Track whether we previously had conversations (to distinguish initial empty from delete-all)
+  const hadConversationsRef = useRef(false);
 
   /** Fetch conversation list for the current app and return it. */
   const fetchConversations = useCallback(async (): Promise<AppConversation[]> => {
@@ -51,10 +53,12 @@ export function useAppSidebar() {
       });
       setConversations(list);
 
-      // Notify when no conversation history exists for this app
-      if (list.length === 0) {
+      // Show toast only when user deletes all conversations (non-empty → empty),
+      // not on initial load when no history exists
+      if (list.length === 0 && hadConversationsRef.current) {
         showToastRef.current?.({ message: '历史会话已删除', severity: NotificationSeverity.ERROR });
       }
+      hadConversationsRef.current = list.length > 0;
       return list;
     } catch {
       console.error('Failed to fetch app conversations');
