@@ -283,23 +283,23 @@ class WorkStationService(BaseService):
                 sort_by_source_and_index=True,
             )
 
-            retrieval_result = await knowledge_retriever_tool.ainvoke({'query': question})
-            if not retrieval_result:
+            finally_docs = await knowledge_retriever_tool.ainvoke({'query': question})
+            if not finally_docs:
                 return [], [], []
 
-            prompt_context = retrieval_result.prompt_context.strip()
-            citation_registry = retrieval_result.citation_registry
+            citation_registry = CitationRegistryService.build_rag_registry(finally_docs)
+            prompt_context = CitationRegistryService.build_rag_prompt_context(citation_registry).strip()
             if not prompt_context:
                 formatted_results = []
-                for doc in retrieval_result.source_documents:
+                for doc in finally_docs:
                     file_name = doc.metadata.get('source') or doc.metadata.get('document_name')
                     content = doc.page_content.strip()
                     formatted_results.append(
                         f'[file name]:{file_name}\n[file content begin]\n{content}\n[file content end]\n'
                     )
-                return formatted_results, retrieval_result.source_documents, citation_registry
+                return formatted_results, finally_docs, citation_registry
 
-            return [prompt_context], retrieval_result.source_documents, citation_registry
+            return [prompt_context], finally_docs, citation_registry
         except Exception as exc:
             logger.exception(f'queryChunksFromDB error: {exc}')
             return [], None, []

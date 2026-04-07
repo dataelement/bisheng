@@ -1,4 +1,4 @@
-from typing import Any, Type, List, Optional, Sequence
+from typing import Any, Type, List, Optional
 
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.documents import Document, BaseDocumentCompressor
@@ -8,8 +8,6 @@ from langchain_core.retrievers import BaseRetriever
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field
 
-from bisheng.citation.domain.schemas.citation_schema import RagRetrievalResultSchema
-from bisheng.citation.domain.services.citation_registry_service import CitationRegistryService
 from bisheng.core.ai.rerank.rrf_rerank import RRFRerank
 
 system_template = """# 任务
@@ -46,7 +44,7 @@ class KnowledgeRetrieverTool(BaseTool):
     rrf_weights: List[float] = Field(default=None)
     rrf_remove_zero_score: bool = Field(default=False)
 
-    def _run(self, query: str, **kwargs: Any) -> RagRetrievalResultSchema:
+    def _run(self, query: str, **kwargs: Any) -> List[Document]:
         milvus_docs, es_docs = [], []
         if self.vector_retriever:
             milvus_docs = self.vector_retriever.invoke(query)
@@ -57,9 +55,9 @@ class KnowledgeRetrieverTool(BaseTool):
 
         if self.rerank:
             finally_docs = self.rerank.compress_documents(finally_docs, query)
-        return self._build_retrieval_result(finally_docs)
+        return finally_docs
 
-    async def _arun(self, query: str, **kwargs: Any) -> RagRetrievalResultSchema:
+    async def _arun(self, query: str, **kwargs: Any) -> List[Document]:
         milvus_docs, es_docs = [], []
         if self.vector_retriever:
             milvus_docs = await self.vector_retriever.ainvoke(query)
@@ -70,19 +68,7 @@ class KnowledgeRetrieverTool(BaseTool):
 
         if self.rerank:
             finally_docs = await self.rerank.acompress_documents(finally_docs, query)
-        return self._build_retrieval_result(finally_docs)
-
-    @staticmethod
-    def _build_retrieval_result(finally_docs: Sequence[Document]) -> RagRetrievalResultSchema:
-        """Build a structured RAG retrieval result with backward-compatible iteration."""
-        source_documents = list(finally_docs)
-        citation_registry = CitationRegistryService.build_rag_registry(source_documents)
-        prompt_context = CitationRegistryService.build_rag_prompt_context(citation_registry)
-        return RagRetrievalResultSchema(
-            prompt_context=prompt_context,
-            source_documents=source_documents,
-            citation_registry=citation_registry,
-        )
+        return finally_docs
 
     def _rrf_rerank(self, milvus_docs: List[Document], es_docs: List[Document], query: str) -> List[Document]:
         if not milvus_docs and not es_docs:
@@ -156,20 +142,11 @@ class KnowledgeRagTool(BaseTool):
         return await qa_chain.ainvoke(llm_inputs)
 
     def _get_llm_inputs(self, query: str, retrieval_result: Any) -> Any:
-        """Build prompt inputs from the structured RAG retrieval result."""
-        if isinstance(retrieval_result, RagRetrievalResultSchema):
-            source_documents = retrieval_result.source_documents
-            prompt_context = retrieval_result.prompt_context
-        else:
-            source_documents = list(retrieval_result or [])
-            citation_registry = CitationRegistryService.build_rag_registry(source_documents)
-            prompt_context = CitationRegistryService.build_rag_prompt_context(citation_registry)
-
+        """Build prompt inputs from retrieved documents."""
+        source_documents = list(retrieval_result or [])
         inputs = {
             "context": source_documents,
         }
-        if "prompt_context" in self.chat_prompt.input_variables:
-            inputs["prompt_context"] = prompt_context
         if "question" in self.chat_prompt.input_variables:
             inputs["question"] = query
         return inputs

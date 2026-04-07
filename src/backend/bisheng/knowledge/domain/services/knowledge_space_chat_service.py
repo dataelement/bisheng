@@ -110,10 +110,9 @@ class KnowledgeSpaceChatService:
             max_content=space_conf.max_chunk_size,
             sort_by_source_and_index=True
         )
-        retrieval_result = await retriever_tool.ainvoke(query)
-        finally_docs: List[Document] = retrieval_result.source_documents
-        citation_registry = retrieval_result.citation_registry
-        file_content = retrieval_result.prompt_context
+        finally_docs: List[Document] = await retriever_tool.ainvoke(query)
+        citation_registry = CitationRegistryService.build_rag_registry(finally_docs)
+        file_content = CitationRegistryService.build_rag_prompt_context(citation_registry)
         logger.debug(f"retrieved_finally_docs: {len(finally_docs)}")
         if not file_content:
             file_content = ""
