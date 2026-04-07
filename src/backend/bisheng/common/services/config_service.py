@@ -8,7 +8,7 @@ from bisheng.common.models.config import ConfigKeyEnum, Config
 from bisheng.common.repositories.implementations.config_repository_impl import ConfigRepositoryImpl
 from bisheng.core.cache.redis_manager import get_redis_client_sync
 from bisheng.core.config.settings import Settings, PasswordConf, SystemLoginMethod, \
-    WorkflowConf, LinsightConf, KnowledgeConf, IntelligenceCenterConf
+    WorkflowConf, LinsightConf, KnowledgeConf, IntelligenceCenterConf, McpConf
 from bisheng.core.database import get_sync_db_session, get_async_db_session
 
 config_file = os.getenv('config', 'config.yaml')
@@ -261,6 +261,13 @@ class ConfigService(Settings):
         # Get all of them firstkey
         all_config = await self.aget_all_config()
         return all_config.get(key, {})
+
+    async def get_mcp_conf(self) -> McpConf:
+        all_config = await self.aget_all_config()
+        mcp_conf = all_config.get('mcp', {})
+        if mcp_conf:
+            return McpConf(**mcp_conf)
+        return McpConf()
 
 
 settings = ConfigService.load_settings_from_yaml(config_file)

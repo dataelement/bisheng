@@ -252,6 +252,11 @@ class IntelligenceCenterConf(BaseModel):
     kwargs: Dict = Field(default_factory=dict, description='Additional Arguments')
 
 
+class McpConf(BaseModel):
+    """ MCP Configure """
+    enable_stdio: bool = Field(default=True, description='Whether to enable stdio')
+
+
 class Settings(BaseModel):
     """ Application Settings """
     model_config = ConfigDict(validate_assignment=True, arbitrary_types_allowed=True, extra='ignore')
@@ -305,6 +310,7 @@ class Settings(BaseModel):
     license_str: Optional[str] = None  # license Contents
 
     information_conf: IntelligenceCenterConf = IntelligenceCenterConf()
+    mcp: McpConf = McpConf()
 
     @field_validator('database_url')
     @classmethod

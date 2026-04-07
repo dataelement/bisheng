@@ -96,3 +96,6 @@ linsight:
   default_temperature: 0
   # 模型json格式失败重试时的温度
   retry_temperature: 1
+
+mcp:
+  enable_stdio: true
