@@ -806,7 +806,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if await SpaceFileDao.count_folder_by_name(knowledge_id, folder_name, file_level_path) > 0:
             raise SpaceFolderDuplicateError()
 
-        return await KnowledgeFileDao.aadd_file(KnowledgeFile(
+        added_folder = await KnowledgeFileDao.aadd_file(KnowledgeFile(
             knowledge_id=knowledge_id,
             user_id=self.login_user.user_id,
             user_name=self.login_user.user_name,
@@ -818,6 +818,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
             file_level_path=file_level_path,
             status=KnowledgeFileStatus.SUCCESS.value,
         ))
+        await KnowledgeDao.async_update_knowledge_update_time_by_id(knowledge_id)
+        return added_folder
 
     async def rename_folder(
             self, folder_id: int, new_name: str
@@ -834,7 +836,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
             raise SpaceFolderDuplicateError()
 
         folder.file_name = new_name
-        return await KnowledgeFileDao.async_update(folder)
+        updated_folder = await KnowledgeFileDao.async_update(folder)
+        await KnowledgeDao.async_update_knowledge_update_time_by_id(folder.knowledge_id)
+        return updated_folder
 
     async def delete_folder(self, space_id: int, folder_id: int):
         from bisheng.worker.knowledge.file_worker import delete_knowledge_file_celery
@@ -861,6 +865,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await self.update_folder_update_time(folder.file_level_path)
 
         await KnowledgeFileDao.adelete_batch(file_ids + floder_ids)
+        await KnowledgeDao.async_update_knowledge_update_time_by_id(space_id)
 
     async def get_folder_file_parent(self, space_id: int, file_id: int) -> List[Dict]:
         await self._require_read_permission(space_id)
@@ -954,6 +959,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         for index, one in enumerate(process_files):
             file_worker.parse_knowledge_file_celery.delay(one.id, preview_cache_keys[index])
         await self.update_folder_update_time(file_level_path)
+        await KnowledgeDao.async_update_knowledge_update_time_by_id(knowledge_id)
         return failed_files + process_files
 
     async def rename_file(
@@ -980,6 +986,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if updated_file.status == KnowledgeFileStatus.SUCCESS.value:
             rebuild_knowledge_file_chunk.delay(file_id=file_id)
         await self.update_folder_update_time(file_record.file_level_path)
+        await KnowledgeDao.async_update_knowledge_update_time_by_id(file_record.knowledge_id)
         return updated_file
 
     async def delete_file(self, file_id: int):
@@ -994,6 +1001,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await KnowledgeFileDao.adelete_batch([file_id])
         delete_knowledge_file_celery.delay(file_ids=[file_id], knowledge_id=file_record.knowledge_id, clear_minio=True)
         await self.update_folder_update_time(file_record.file_level_path)
+        await KnowledgeDao.async_update_knowledge_update_time_by_id(file_record.knowledge_id)
 
     async def get_file_preview(self, file_id: int) -> dict:
         file_record = await KnowledgeFileDao.query_by_id(file_id)
@@ -1048,6 +1056,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         resource_id = str(file_id)
         resource_type = ResourceTypeEnum.SPACE_FILE
         await TagDao.aupdate_resource_tags(tag_ids, resource_id, resource_type, self.login_user.user_id)
+        await KnowledgeDao.async_update_knowledge_update_time_by_id(space_id)
 
     async def batch_add_file_tags(self, space_id: int, file_ids: List[int], tag_ids: List[int]):
         """ 1：支持对文件批量添加标签: Batch add tags to files. """
@@ -1063,6 +1072,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         resource_type = ResourceTypeEnum.SPACE_FILE
         for file_id in valid_file_ids:
             await TagDao.add_tags(tag_ids, str(file_id), resource_type, self.login_user.user_id)
+
+        await KnowledgeDao.async_update_knowledge_update_time_by_id(space_id)
 
     async def retry_space_files(self, space_id: int, req_data: dict) -> list:
         """
@@ -1093,6 +1104,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         for folder_path in file_level_path:
             await self.update_folder_update_time(folder_path)
 
+        await KnowledgeDao.async_update_knowledge_update_time_by_id(space_id)
         return []
 
     async def batch_retry_failed_files(self, space_id: int, file_ids: List[int]):
@@ -1123,6 +1135,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if all_file_ids:
             await KnowledgeFileDao.aupdate_file_status(all_file_ids, KnowledgeFileStatus.WAITING,
                                                        "batch_retry_failed_files")
+            await KnowledgeDao.async_update_knowledge_update_time_by_id(space_id)
         return True
 
     # ──────────────────────────── Batch Ops ───────────────────────────────────
@@ -1147,6 +1160,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             await KnowledgeFileDao.adelete_batch(file_ids)
             delete_knowledge_file_celery.delay(file_ids=file_ids, knowledge_id=knowledge.id,
                                                clear_minio=True)
+            await KnowledgeDao.async_update_knowledge_update_time_by_id(knowledge.id)
 
     async def batch_download(
             self, space_id: int, file_ids: List[int], folder_ids: List[int]
