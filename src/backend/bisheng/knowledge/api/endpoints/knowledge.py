@@ -407,13 +407,12 @@ async def get_QA_list(*,
 
 
 @router.post('/retry', status_code=200)
-def retry(*,
-          request: Request,
-          login_user: UserPayload = Depends(UserPayload.get_login_user),
-          background_tasks: BackgroundTasks,
-          req_data: dict):
+async def retry(*,
+                request: Request,
+                login_user: UserPayload = Depends(UserPayload.get_login_user),
+                req_data: dict):
     """Failed Retry"""
-    KnowledgeService.retry_files(request, login_user, background_tasks, req_data)
+    await KnowledgeService.retry_files(request, login_user, req_data)
     return resp_200()
 
 

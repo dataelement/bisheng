@@ -182,7 +182,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await SpaceChannelMemberDao.async_insert_member(member)
 
         # Audit log for knowledge space creation
-        await KnowledgeAuditTelemetryService.audit_create_knowledge_space(self.login_user, self.request, knowledge_space)
+        await KnowledgeAuditTelemetryService.audit_create_knowledge_space(self.login_user, self.request,
+                                                                          knowledge_space)
 
         return knowledge_space
 
@@ -199,7 +200,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             result.user_name = create_user.user_name if create_user else str(space.user_id)
         else:
             result.user_name = self.login_user.user_name
-        self._apply_subscription_flags(result, SpaceSubscriptionStatusEnum.SUBSCRIBED)        
+        self._apply_subscription_flags(result, SpaceSubscriptionStatusEnum.SUBSCRIBED)
         if space.user_id != self.login_user.user_id:
             member_info = await SpaceChannelMemberDao.async_find_member(space_id=space.id,
                                                                         user_id=self.login_user.user_id)
@@ -210,7 +211,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             result.user_role = UserRoleEnum.CREATOR
         result.follower_num = follower_num
         result.file_num = total_file_num
-        
+
         if space.state != KnowledgeState.PUBLISHED.value:
             rebuild_knowledge_celery.delay(space_id, new_model_id=space.model, invoke_user_id=self.login_user.user_id)
 
@@ -1063,7 +1064,39 @@ class KnowledgeSpaceService(KnowledgeUtils):
         for file_id in valid_file_ids:
             await TagDao.add_tags(tag_ids, str(file_id), resource_type, self.login_user.user_id)
 
+    async def retry_space_files(self, space_id: int, req_data: dict) -> list:
+        """
+        Retry logic for multiple files in a knowledge space with potentially new split rules.
+        Similar to KnowledgeService.retry_files but scoped to a space.
+        """
+        space = await KnowledgeDao.aquery_by_id(space_id)
+        if not space or space.type != KnowledgeTypeEnum.SPACE.value:
+            raise SpaceNotFoundError()
+        await self._require_write_permission(space_id)
+
+        db_file_retry = req_data.get("file_objs")
+        if not db_file_retry:
+            return []
+
+        id2input = {file.get("id"): file for file in db_file_retry}
+        file_ids = list(id2input.keys())
+        db_files = await KnowledgeFileDao.aget_file_by_ids(file_ids)
+        if not db_files:
+            return []
+
+        for db_file in db_files:
+            if db_file.knowledge_id != space_id:
+                raise SpaceFileNotFoundError()
+
+        tmp, file_level_path = await self.process_retry_files(db_files, id2input, self.login_user)
+
+        for folder_path in file_level_path:
+            await self.update_folder_update_time(folder_path)
+
+        return []
+
     async def batch_retry_failed_files(self, space_id: int, file_ids: List[int]):
+
         from bisheng.worker import retry_knowledge_file_celery
 
         space = await KnowledgeDao.aquery_by_id(space_id)

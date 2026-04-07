@@ -30,7 +30,6 @@ from bisheng.common.errcode.knowledge import (
     KnowledgeExistError,
     KnowledgeNoEmbeddingError, KnowledgeNotQAError, KnowledgeFileFailedError,
 )
-from bisheng.common.errcode.knowledge import KnowledgeNotExistError
 from bisheng.core.ai import FakeEmbeddings
 from bisheng.core.cache.redis_manager import get_redis_client_sync, get_redis_client
 from bisheng.core.cache.utils import file_download, async_file_download
@@ -651,8 +650,6 @@ class KnowledgeService(KnowledgeUtils):
         :param req_data:
         :return:
         """
-        from bisheng.worker.knowledge import file_worker
-
         knowledge = await KnowledgeDao.async_query_by_id(req_data.knowledge_id)
         if not knowledge:
             raise NotFoundError.http_exception()
@@ -666,85 +663,41 @@ class KnowledgeService(KnowledgeUtils):
         if not db_file:
             raise NotFoundError.http_exception()
 
-        split_rule_dict = req_data.model_dump(include=set(list(FileProcessBase.model_fields.keys())))
-        if req_data.excel_rule is not None:
-            split_rule_dict["excel_rule"] = req_data.excel_rule.model_dump()
-        db_file.split_rule = json.dumps(split_rule_dict)
-        db_file.status = KnowledgeFileStatus.WAITING.value  # Parsing
-        db_file.updater_id = login_user.user_id
-        db_file.updater_name = login_user.user_name
-        db_file = await KnowledgeFileDao.async_update(db_file)
-
-        preview_cache_key = cls.get_preview_cache_key(req_data.knowledge_id, file_path=req_data.file_path)
-        file_worker.retry_knowledge_file_celery.delay(db_file.id, preview_cache_key, req_data.callback_url)
+        db_file = await cls.process_rebuild_file(db_file, req_data, login_user.user_id, login_user.user_name)
 
         return db_file.model_dump()
 
     @classmethod
-    def retry_files(
+    async def retry_files(
             cls,
             request: Request,
             login_user: UserPayload,
-            background_tasks: BackgroundTasks,
             req_data: dict,
     ):
-        from bisheng.worker.knowledge import file_worker
 
         db_file_retry = req_data.get("file_objs")
         if not db_file_retry:
             return []
         id2input = {file.get("id"): file for file in db_file_retry}
         file_ids = list(id2input.keys())
-        db_files: List[KnowledgeFile] = KnowledgeFileDao.select_list(file_ids=file_ids)
+        db_files: List[KnowledgeFile] = await KnowledgeFileDao.aget_file_by_ids(file_ids=file_ids)
         if not db_files:
             return []
-        knowledge = KnowledgeDao.query_by_id(db_files[0].knowledge_id)
+        knowledge = await KnowledgeDao.aquery_by_id(db_files[0].knowledge_id)
         if not knowledge:
             raise NotFoundError.http_exception()
-        if not login_user.access_check(
+        if not await login_user.async_access_check(
                 knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE_WRITE
         ):
             raise UnAuthorizedError.http_exception()
-        res = []
 
         req_data["knowledge_id"] = knowledge.id
 
-        minio_client = get_minio_storage_sync()
-        file_level_path = set()
+        tmp, file_level_path = await cls.process_retry_files(db_files, id2input, login_user)
 
-        for file in db_files:
-            input_file = id2input.get(file.id)
-
-            # file exist
-            file.object_name = input_file.get("object_name", file.object_name)
-            file_preview_cache_key = KnowledgeUtils.get_preview_cache_key(
-                file.knowledge_id, input_file.get("file_path", "")
-            )
-
-            if file.object_name.startswith('tmp'):
-                # Moving Temporary Files to the Official Directory
-                new_object_name = KnowledgeUtils.get_knowledge_file_object_name(file.id, file.object_name)
-                minio_client.copy_object_sync(source_object=file.object_name, dest_object=new_object_name,
-                                              source_bucket=minio_client.tmp_bucket,
-                                              dest_bucket=minio_client.bucket)
-                file.object_name = new_object_name
-            file.file_name = input_file.get("file_name", None) or file.file_name
-            file.remark = ""
-            file.split_rule = input_file["split_rule"]
-            file.status = KnowledgeFileStatus.WAITING.value  # Parsing
-            file.updater_id = login_user.user_id
-            file.updater_name = login_user.user_name
-            file_level_path.add(file.file_level_path)
-
-            file = KnowledgeFileDao.update(file)
-            res.append([file, file_preview_cache_key])
-        tmp = []
-        for one_file in res:
-            file_worker.retry_knowledge_file_celery.delay(one_file[0].id, one_file[1], None)
-            tmp.append(one_file[0])
         cls.upload_knowledge_file_hook(request, login_user, knowledge, tmp)
         for one in file_level_path:
-            cls.update_folder_update_time_sync(one)
+            await cls.update_folder_update_time(one)
         return []
 
     @classmethod

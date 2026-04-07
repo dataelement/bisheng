@@ -16,6 +16,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     BatchDeleteReq, BatchDownloadReq,
     UpdateSpaceMemberRoleRequest, RemoveSpaceMemberRequest,
     ChatReq, ChatFolderReq, )
+from bisheng.api.v1.schemas import KnowledgeFileReProcess
 from bisheng.knowledge.domain.services.knowledge_space_chat_service import KnowledgeSpaceChatService
 from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 
@@ -361,6 +362,17 @@ async def batch_retry_failed_files(
         svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ):
     result = await svc.batch_retry_failed_files(space_id, file_ids)
+    return resp_200(result)
+
+
+@router.post('/{space_id}/files/retry')
+async def retry_space_files(
+        space_id: int,
+        req_data: dict = Body(...),
+        svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    """Retry files in a knowledge space with potentially new split rules"""
+    result = await svc.retry_space_files(space_id, req_data)
     return resp_200(result)
 
 
