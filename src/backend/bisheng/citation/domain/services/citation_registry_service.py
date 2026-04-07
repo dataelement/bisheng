@@ -168,7 +168,6 @@ class CitationRegistryService:
     def build_rag_registry_item(
         cls,
         document: Document,
-        display_order: int,
         citation_id: Optional[str] = None,
     ) -> CitationRegistryItemSchema:
         """Build a normalized registry item from a retrieved RAG document."""
@@ -177,7 +176,6 @@ class CitationRegistryService:
             citationId=citation_id or cls.generate_rag_citation_id(),
             type=CitationType.RAG,
             groupKey=cls.build_rag_group_key(payload.fileId, payload.documentId),
-            displayOrder=display_order,
             sourcePayload=payload,
         )
 
@@ -185,7 +183,6 @@ class CitationRegistryService:
     def build_rag_registry(
         cls,
         documents: List[Document],
-        start_display_order: int = 1,
     ) -> List[CitationRegistryItemSchema]:
         """Build grouped normalized registry items from retrieved RAG documents."""
         if not documents:
@@ -200,14 +197,13 @@ class CitationRegistryService:
             grouped_documents.setdefault(group_key, []).append(document)
 
         registry_items: List[CitationRegistryItemSchema] = []
-        for index, grouped_docs in enumerate(grouped_documents.values()):
+        for grouped_docs in grouped_documents.values():
             payload = cls._build_rag_payload(grouped_docs)
             registry_items.append(
                 CitationRegistryItemSchema(
                     citationId=cls.generate_rag_citation_id(),
                     type=CitationType.RAG,
                     groupKey=cls.build_rag_group_key(payload.fileId, payload.documentId),
-                    displayOrder=start_display_order + index,
                     sourcePayload=payload,
                 )
             )
@@ -217,7 +213,6 @@ class CitationRegistryService:
     def build_web_registry_item(
         cls,
         result: Dict[str, Any],
-        display_order: int,
         citation_id: Optional[str] = None,
     ) -> CitationRegistryItemSchema:
         """Build a normalized registry item from a web search result."""
@@ -239,7 +234,6 @@ class CitationRegistryService:
             citationId=citation_id or cls.generate_web_citation_id(),
             type=CitationType.WEB,
             groupKey=cls.build_web_group_key(payload.url),
-            displayOrder=display_order,
             sourcePayload=payload,
         )
 
@@ -247,86 +241,9 @@ class CitationRegistryService:
     def build_web_registry(
         cls,
         results: List[Dict[str, Any]],
-        start_display_order: int = 1,
     ) -> List[CitationRegistryItemSchema]:
         """Build normalized registry items from web search results."""
-        return [
-            cls.build_web_registry_item(result=result, display_order=start_display_order + index)
-            for index, result in enumerate(results)
-        ]
-
-    @staticmethod
-    def build_rag_prompt_context(items: List[CitationRegistryItemSchema]) -> str:
-        """Build a prompt context string with explicit citation markers."""
-        if not items:
-            return ''
-
-        sections: List[str] = [
-            'Use citation markers in the format [[ref:<citation_id>]] when referencing the evidence below.',
-        ]
-        for item in items:
-            payload = RagCitationPayloadSchema.model_validate(item.sourcePayload)
-            title = payload.fileName or payload.documentName or f'File {payload.fileId or payload.documentId or ""}'.strip()
-            header = f'[[ref:{item.citationId}]] {title}'.strip()
-            meta_bits: List[str] = []
-            if payload.knowledgeName:
-                meta_bits.append(f'knowledge={payload.knowledgeName}')
-            if payload.fileType:
-                meta_bits.append(f'type={payload.fileType}')
-            if payload.previewUrl:
-                meta_bits.append(f'preview={payload.previewUrl}')
-            if payload.downloadUrl:
-                meta_bits.append(f'download={payload.downloadUrl}')
-            if meta_bits:
-                header = f"{header} ({'; '.join(meta_bits)})"
-
-            chunk_lines: List[str] = [header]
-            for chunk_index, chunk in enumerate(payload.items, start=1):
-                chunk_title_bits: List[str] = [f'chunk={chunk_index}']
-                if chunk.chunkId:
-                    chunk_title_bits.append(f'id={chunk.chunkId}')
-                if chunk.chunkIndex is not None:
-                    chunk_title_bits.append(f'index={chunk.chunkIndex}')
-                if chunk.page is not None:
-                    chunk_title_bits.append(f'page={chunk.page}')
-                if chunk.bbox:
-                    chunk_title_bits.append(f'bbox={chunk.bbox}')
-                chunk_title = ' | '.join(chunk_title_bits)
-                chunk_content = (chunk.content or '').strip()
-                if chunk_content:
-                    chunk_lines.append(f'- {chunk_title}\n{chunk_content}')
-                else:
-                    chunk_lines.append(f'- {chunk_title}')
-            sections.append('\n'.join(chunk_lines))
-
-        return '\n\n'.join(sections)
-
-    @staticmethod
-    def build_web_prompt_context(items: List[CitationRegistryItemSchema]) -> str:
-        """Build a prompt context string with explicit citation markers for web results."""
-        if not items:
-            return ''
-
-        sections: List[str] = [
-            'Use citation markers in the format [[ref:<citation_id>]] when referencing the web results below.',
-        ]
-        for item in items:
-            payload = WebCitationPayloadSchema.model_validate(item.sourcePayload)
-            lines: List[str] = [f'[[ref:{item.citationId}]] {payload.title or payload.url}']
-            meta_bits: List[str] = []
-            if payload.source:
-                meta_bits.append(f'source={payload.source}')
-            if payload.datePublished:
-                meta_bits.append(f'datePublished={payload.datePublished}')
-            if payload.url:
-                meta_bits.append(f'url={payload.url}')
-            if meta_bits:
-                lines.append(f"meta: {'; '.join(meta_bits)}")
-            if payload.snippet:
-                lines.append(payload.snippet)
-            sections.append('\n'.join(lines))
-
-        return '\n\n'.join(sections)
+        return [cls.build_web_registry_item(result=result) for result in results]
 
     async def save_citations(
         self,
@@ -354,7 +271,6 @@ class CitationRegistryService:
                 flow_id=flow_id,
                 citation_type=item.type.value,
                 group_key=item.groupKey,
-                display_order=item.displayOrder,
                 source_payload=self._dump_source_payload(item.sourcePayload),
             )
             for item in unique_items.values()
@@ -365,7 +281,7 @@ class CitationRegistryService:
             created_entities = await self.repository.bulk_create(entities)
             existing_entities.extend(created_entities)
 
-        return sorted(existing_entities, key=lambda item: (item.display_order, item.id or 0))
+        return sorted(existing_entities, key=lambda item: item.id or 0)
 
     def save_citations_sync(
         self,
@@ -396,7 +312,6 @@ class CitationRegistryService:
                 flow_id=flow_id,
                 citation_type=item.type.value,
                 group_key=item.groupKey,
-                display_order=item.displayOrder,
                 source_payload=self.dump_source_payload(item.sourcePayload),
             )
             for item in unique_items.values()
@@ -407,7 +322,7 @@ class CitationRegistryService:
             created_entities = bulk_create_sync(entities)
             existing_entities.extend(created_entities)
 
-        return sorted(existing_entities, key=lambda item: (item.display_order, item.id or 0))
+        return sorted(existing_entities, key=lambda item: item.id or 0)
 
     def to_registry_item(self, citation: MessageCitation) -> CitationRegistryItemSchema:
         """Convert a persisted citation entity to schema."""
@@ -416,7 +331,6 @@ class CitationRegistryService:
             citationId=citation.citation_id,
             type=CitationType(citation.citation_type),
             groupKey=citation.group_key or '',
-            displayOrder=citation.display_order,
             sourcePayload=source_payload,
         )
 

@@ -69,7 +69,19 @@ async def web_search(query: str, user_id: int) -> Tuple[str, List[Dict[str, Any]
     web_results = json.loads(web_results)
     citation_registry = CitationRegistryService.build_web_registry(web_results)
     search_result_items = build_web_search_display_items(web_results, citation_registry)
-    search_res = CitationRegistryService.build_web_prompt_context(citation_registry)
+    # TODO: Build citation-aware prompt context in the workstation web search business layer.
+    search_res = '\n\n'.join(
+        '\n'.join(
+            str(item)
+            for item in (
+                result.get('title') or result.get('name') or result.get('url'),
+                result.get('url') or result.get('link'),
+                result.get('snippet') or result.get('summary') or result.get('content'),
+            )
+            if item
+        )
+        for result in web_results
+    )
     return search_res, web_results, citation_registry, search_result_items
 
 

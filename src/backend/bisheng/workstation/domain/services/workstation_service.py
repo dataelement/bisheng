@@ -20,6 +20,7 @@ from bisheng.common.models.config import Config, ConfigDao, ConfigKeyEnum
 from bisheng.common.services.base import BaseService
 from bisheng.core.vectorstore.multi_retriever import MultiRetriever
 from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
+from bisheng.citation.domain.services.citation_registry_service import CitationRegistryService
 from bisheng.database.constants import MessageCategory
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
@@ -288,7 +289,8 @@ class WorkStationService(BaseService):
                 return [], [], []
 
             citation_registry = CitationRegistryService.build_rag_registry(finally_docs)
-            prompt_context = CitationRegistryService.build_rag_prompt_context(citation_registry).strip()
+            # TODO: Build citation-aware prompt context in the workstation business layer.
+            prompt_context = ''
             if not prompt_context:
                 formatted_results = []
                 for doc in finally_docs:

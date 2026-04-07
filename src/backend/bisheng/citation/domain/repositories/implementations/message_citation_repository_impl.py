@@ -20,7 +20,7 @@ class MessageCitationRepositoryImpl(BaseRepositoryImpl[MessageCitation, int], Me
         query = (
             select(MessageCitation)
             .where(MessageCitation.message_id == message_id)
-            .order_by(MessageCitation.display_order.asc(), MessageCitation.id.asc())
+            .order_by(MessageCitation.id.asc())
         )
         result = await self.session.exec(query)
         return list(result.all())
@@ -30,7 +30,7 @@ class MessageCitationRepositoryImpl(BaseRepositoryImpl[MessageCitation, int], Me
         query = (
             select(MessageCitation)
             .where(MessageCitation.message_id == message_id)
-            .order_by(MessageCitation.display_order.asc(), MessageCitation.id.asc())
+            .order_by(MessageCitation.id.asc())
         )
         result = self.session.exec(query)
         return list(result.all())
@@ -61,7 +61,7 @@ class MessageCitationRepositoryImpl(BaseRepositoryImpl[MessageCitation, int], Me
         query = (
             select(MessageCitation)
             .where(col(MessageCitation.citation_id).in_(citation_ids))
-            .order_by(MessageCitation.display_order.asc(), MessageCitation.id.asc())
+            .order_by(MessageCitation.id.asc())
         )
         result = await self.session.exec(query)
         return list(result.all())
@@ -74,7 +74,7 @@ class MessageCitationRepositoryImpl(BaseRepositoryImpl[MessageCitation, int], Me
         query = (
             select(MessageCitation)
             .where(col(MessageCitation.message_id).in_(message_ids))
-            .order_by(MessageCitation.message_id.asc(), MessageCitation.display_order.asc(), MessageCitation.id.asc())
+            .order_by(MessageCitation.message_id.asc(), MessageCitation.id.asc())
         )
         result = await self.session.exec(query)
 

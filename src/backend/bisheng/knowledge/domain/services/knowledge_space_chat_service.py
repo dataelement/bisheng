@@ -112,12 +112,11 @@ class KnowledgeSpaceChatService:
         )
         finally_docs: List[Document] = await retriever_tool.ainvoke(query)
         citation_registry = CitationRegistryService.build_rag_registry(finally_docs)
-        file_content = CitationRegistryService.build_rag_prompt_context(citation_registry)
+        # TODO: Build citation-aware prompt context in the knowledge space business layer.
         logger.debug(f"retrieved_finally_docs: {len(finally_docs)}")
-        if not file_content:
-            file_content = ""
-            for one in finally_docs:
-                file_content += one.page_content + "\n"
+        file_content = ""
+        for one in finally_docs:
+            file_content += one.page_content + "\n"
 
         prompt_service = await get_prompt_manager()
 

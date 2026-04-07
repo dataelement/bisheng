@@ -27,7 +27,6 @@ class CitationFragmentSchema(CitationSchemaBase):
     citationId: str = Field(..., description='Unique citation identifier')
     type: Optional[CitationType] = Field(default=None, description='Citation source type')
     groupKey: Optional[str] = Field(default=None, description='Display grouping key')
-    displayOrder: Optional[int] = Field(default=None, description='Display order inside registry list')
 
 
 class RagCitationItemSchema(CitationSchemaBase):
@@ -85,7 +84,6 @@ class CitationRegistryItemSchema(CitationSchemaBase):
     citationId: str = Field(..., description='Unique citation identifier')
     type: CitationType = Field(..., description='Citation source type')
     groupKey: str = Field(..., description='Display grouping key')
-    displayOrder: int = Field(..., description='Display order inside registry list')
     sourcePayload: CitationSourcePayload = Field(..., description='Structured source payload')
 
 

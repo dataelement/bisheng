@@ -120,7 +120,6 @@ def build_web_search_display_items(
             'citationId': item.citationId,
             'type': item.type.value,
             'groupKey': item.groupKey,
-            'displayOrder': item.displayOrder,
             'id': web_result.get('id'),
             'title': payload.title,
             'snippet': payload.snippet,
