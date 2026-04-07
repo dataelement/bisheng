@@ -44,10 +44,10 @@ const AiModelSelect = memo(
                 disabled={disabled}
                 onValueChange={onChange}
             >
-                <SelectTrigger className="h-7 rounded-full px-2 text-gray-500 bg-white dark:bg-transparent">
+                <SelectTrigger className="h-7 rounded-full px-2 text-gray-500 bg-white dark:bg-transparent max-[575px]:px-1.5">
                     <div className="flex gap-2">
                         <Rotate3DIcon size="16" />
-                        <span className="text-xs font-normal">{label}</span>
+                        <span className="text-xs font-normal max-[575px]:sr-only">{label}</span>
                     </div>
                 </SelectTrigger>
                 <SelectContent className="bg-white">

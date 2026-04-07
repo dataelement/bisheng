@@ -100,7 +100,17 @@ export default function AppRoot() {
 
                     {/* Chat panel (routed) */}
                     <div className="relative flex h-full max-w-full flex-1 flex-col overflow-hidden">
-                        <MobileNav setNavVisible={setNavVisible} />
+                        <MobileNav
+                            variant="app"
+                            navVisible={sidebarVisible}
+                            setNavVisible={(action) =>
+                                setSidebarVisible((prev) =>
+                                    typeof action === 'function' ? action(prev) : action
+                                )
+                            }
+                            persistNavVisibleInLocalStorage={false}
+                            navigateToNewChatPath={false}
+                        />
                         <Outlet context={{ navVisible, setNavVisible } satisfies ContextType} />
                     </div>
                 </div>

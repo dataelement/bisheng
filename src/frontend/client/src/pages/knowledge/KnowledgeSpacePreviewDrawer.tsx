@@ -335,7 +335,7 @@ export function KnowledgeSpacePreviewDrawer({
                                                     userRole={SpaceRole.MEMBER}
                                                     isSelected={false}
                                                     onSelect={() => { }}
-                                                            onDownload={() => { }}
+                                                    onDownload={() => { }}
                                                     onRename={() => { }}
                                                     onDelete={() => { }}
                                                     onEditTags={() => { }}
@@ -346,8 +346,8 @@ export function KnowledgeSpacePreviewDrawer({
                                                     }}
                                                     onPreview={handlePreviewFile}
                                                     disableClickNavigate
-                                                            hideSelectionCheckbox
-                                                            hideDownloadActions
+                                                    hideSelectionCheckbox
+                                                    hideDownloadActions
                                                 />
                                             ))}
                                         </div>

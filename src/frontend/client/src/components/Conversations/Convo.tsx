@@ -253,9 +253,13 @@ export default function Conversation({
       )}
       <div
         className={cn(
-          isPopoverActive || isActiveConvo
-            ? "flex"
-            : "hidden group-focus-within:flex group-hover:flex"
+          isSmallScreen
+            ? "flex w-[48px] justify-end items-center shrink-0"
+            : isPopoverActive || isActiveConvo
+              ? "flex"
+              : "hidden group-focus-within:flex group-hover:flex",
+          // Ensure consistent rendering on hoverless devices
+          "[@media(hover:none)]:flex",
         )}
       >
         {!renaming && (

@@ -41,7 +41,7 @@ export const ChatToolDown = ({
     <Select disabled={disabled}>
       <SelectTrigger
         className={cn(
-          "h-7 rounded-full px-2 data-[state=open]:border-blue-500",
+          "h-7 rounded-full px-2 data-[state=open]:border-blue-500 max-[575px]:px-1.5",
           searchType === "netSearch" && "bg-blue-100"
         )}
       >
@@ -52,7 +52,7 @@ export const ChatToolDown = ({
           )}
         >
           <Settings2Icon size="16" />
-          <span className="text-xs font-normal">
+          <span className="text-xs font-normal max-[575px]:sr-only">
             {localize("com_tools_title")}
           </span>
         </div>
@@ -122,10 +122,10 @@ export const LinsiTools = ({ tools, setTools }) => {
 
   return (
     <Select>
-      <SelectTrigger className="h-7 rounded-full px-2 bg-white dark:bg-transparent data-[state=open]:border-blue-500">
+      <SelectTrigger className="h-7 rounded-full px-2 bg-white dark:bg-transparent data-[state=open]:border-blue-500 max-[575px]:px-1.5">
         <div className={cn("flex gap-2", active && "text-blue-600")}>
           <Settings2Icon size="16" />
-          <span className="text-xs font-normal">
+          <span className="text-xs font-normal max-[575px]:sr-only">
             {localize("com_tools_title")}
           </span>
         </div>

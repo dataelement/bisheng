@@ -221,7 +221,7 @@ const AiChatInput = memo(
         );
 
         return (
-            <div className="px-4 pb-4 shrink-0 relative">
+            <div className="px-4 pb-4 max-[575px]:px-0 max-[575px]:pb-3 shrink-0 relative">
                 {/* Drag-drop overlay */}
                 {isDragging && <DragDropOverlay />}
 
@@ -238,7 +238,7 @@ const AiChatInput = memo(
                     </div>
                 </div>}
 
-                <div className={`relative pb-3 flex w-full flex-col bg-surface-tertiary overflow-hidden ${size === 'mini' ? 'rounded-xl' : 'rounded-3xl'}`}>
+                <div className={`relative pb-3 flex w-full flex-col bg-surface-tertiary overflow-hidden max-[575px]:bg-[#f4f5f7] ${size === 'mini' ? 'rounded-xl' : 'rounded-3xl max-[575px]:rounded-2xl'}`}>
                     {/* File upload area: file list + attachment button */}
                     {showUpload && (() => {
                         const InputFilesAny = InputFiles as any;

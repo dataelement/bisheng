@@ -139,7 +139,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
         <div ref={chatContainerRef} className="relative z-10 h-full overflow-y-auto noscrollbar">
           <div className={cn(
             showCode ? 'hidden' : 'flex flex-col relative',
-            hasMessages ? 'h-full' : 'h-[calc(100vh-200px)] justify-center'
+            hasMessages ? 'h-full' : 'h-[calc(100vh-200px)] max-[575px]:min-h-[calc(100dvh-240px)] max-[575px]:h-auto justify-center'
           )}>
             {/* Content area */}
             {isLoading && conversationId !== 'new' ? (
@@ -168,7 +168,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
             )}
 
             {/* Input area — using new AiChatInput */}
-            {!shareToken && <div className="w-full max-w-[768px] mx-auto">
+            {!shareToken && <div className="w-full max-w-[768px] mx-auto max-[575px]:max-w-full max-[575px]:px-3 shrink-0">
               {isLingsi ?
                 <LinsightChatInput
                   disabled={!!shareToken}

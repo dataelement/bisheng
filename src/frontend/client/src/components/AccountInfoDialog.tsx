@@ -32,7 +32,7 @@ export function AccountInfoDialog({
     onOpenChange,
     username = "admin",
     avatarUrl = "/path-to-avatar.png",
-    onAvatarUpdated
+    onAvatarUpdated,
 }: AccountInfoDialogProps) {
     const [isEditing, setIsEditing] = useState(false);
     const { showToast } = useToastContext();
@@ -263,14 +263,17 @@ export function AccountInfoDialog({
 
     return (
         <Dialog open={open} onOpenChange={handleOpenChange}>
-            <DialogContent className="w-[480px] p-0 rounded-2xl shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
+            <DialogContent
+                className="w-[480px] p-0 rounded-2xl shadow-[0_8px_24px_rgba(0,0,0,0.12)] flex flex-col overflow-hidden
+                max-[576px]:w-[calc(100vw-16px)] max-[576px]:max-w-none max-[576px]:h-[calc(100vh-16px)] max-[576px]:max-h-[calc(100vh-16px)]"
+            >
                 {/* 标题栏 */}
-                <div className="flex items-center justify-between px-6 py-4 border-b border-[#f2f3f5]">
+                <div className="flex items-center justify-between px-6 py-4 border-b border-[#f2f3f5] max-[576px]:px-4">
                     <h2 className="text-[16px] font-semibold text-[#1d2129]">账号信息</h2>
                 </div>
 
                 {/* 内容区域 */}
-                <div className="px-6 py-5 space-y-5 -mt-10">
+                <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5 -mt-10 max-[576px]:px-4 max-[576px]:pb-0">
                     {/* 隐藏的头像上传 input */}
                     <input
                         ref={fileInputRef}
@@ -408,30 +411,35 @@ export function AccountInfoDialog({
                                     </div>
                                 </div>
 
-                                {/* 按钮组 */}
-                                <div className="flex items-center justify-end gap-3 pt-2">
-                                    <Button
-                                        variant="outline"
-                                        onClick={handleCancel}
-                                        className="h-8 px-4 text-[14px] text-[#4e5969] border-[#e5e6eb] hover:bg-[#f7f8fa]"
-                                    >
-                                        取消
-                                    </Button>
-                                    <Button
-                                        onClick={handleSubmit}
-                                        disabled={isSubmitDisabled()}
-                                        className={`h-8 px-4 text-[14px] ${isSubmitDisabled()
-                                            ? 'bg-[#e5e6eb] text-[#c9cdd4] cursor-not-allowed hover:bg-[#e5e6eb]'
-                                            : 'bg-[#165dff] text-white hover:bg-[#4080ff]'
-                                            }`}
-                                    >
-                                        确认修改
-                                    </Button>
-                                </div>
+                                {/* 按钮组移到弹窗底部 footer（不依赖 sticky） */}
                             </div>
                         )}
                     </div>
                 </div>
+                {isEditing ? (
+                    <div
+                        className="flex items-center justify-end gap-3 pt-2 px-6 pb-4 w-full border-t border-[#ececec] max-[576px]:px-4 max-[576px]:pb-0 max-[576px]:justify-between max-[576px]:gap-2"
+                    >
+                        <Button
+                            variant="outline"
+                            onClick={handleCancel}
+                            className="h-8 px-4 text-[14px] text-[#4e5969] border-[#e5e6eb] hover:bg-[#f7f8fa] max-[576px]:flex-1 max-[576px]:w-1/2 max-[576px]:px-0"
+                        >
+                            取消
+                        </Button>
+                        <Button
+                            onClick={handleSubmit}
+                            disabled={isSubmitDisabled()}
+                            className={`h-8 px-4 text-[14px] ${
+                                isSubmitDisabled()
+                                    ? 'bg-[#e5e6eb] text-[#c9cdd4] cursor-not-allowed hover:bg-[#e5e6eb]'
+                                    : 'bg-[#165dff] text-white hover:bg-[#4080ff]'
+                            } max-[576px]:flex-1 max-[576px]:w-1/2 max-[576px]:px-0`}
+                        >
+                            确认修改
+                        </Button>
+                    </div>
+                ) : null}
             </DialogContent>
         </Dialog>
     );

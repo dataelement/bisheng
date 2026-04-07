@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom"
 import { getChatOnlineApi, getUncategorized } from "~/api/apps"
 import { ConversationData, QueryKeys } from "~/types/chat"
 import store from "~/store"
+import { NotificationSeverity } from "~/common";
 import { addConversation, cn, copyText, generateUUID } from "~/utils"
 import { getAppShareUrl } from './appUtils'
 import AppAvator from '~/components/Avator'
@@ -84,7 +85,8 @@ const ExploreCard = ({ agent, onClick, onShare }: { agent: any, onClick: (agent:
                         onClick={(e) => { e.stopPropagation(); onClick(agent); }}
                         className="bg-[#335cff] flex flex-[1_0_0] h-[28px] items-center justify-center px-[10px] rounded-[6px] text-white text-[14px] font-['PingFang_SC'] hover:bg-blue-600 transition-colors"
                     >
-                        开始对话
+                        <Play className="size-4 shrink-0 hidden max-[576px]:block" aria-hidden />
+                        <span className="max-[576px]:sr-only">开始对话</span>
                     </button>
                 </div>
             </div>
@@ -189,7 +191,7 @@ export default function ExplorePlaza() {
                 title: agent.name,
                 tools: [],
                 updatedAt: ""
-            });
+            } as any);
         });
         navigate(`/chat/${_chatId}/${flowId}/${flowType}`);
     }
@@ -198,9 +200,9 @@ export default function ExplorePlaza() {
         const shareUrl = getAppShareUrl(agent.id, agent.flow_type || agent.type);
         try {
             await copyText(shareUrl);
-            showToast?.({ message: '应用链接已复制到剪贴板', severity: 'success' });
+            showToast?.({ message: '应用链接已复制到剪贴板', severity: NotificationSeverity.SUCCESS });
         } catch {
-            showToast?.({ message: '复制应用链接失败', severity: 'error' });
+            showToast?.({ message: '复制应用链接失败', severity: NotificationSeverity.ERROR });
         }
     }
 
@@ -238,7 +240,7 @@ export default function ExplorePlaza() {
 
             {/* 智能体网格 */}
             <main className="w-full max-w-[1000px] px-6 xl:px-0">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-[12px]">
+                <div className="grid grid-cols-1 max-[576px]:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-[12px]">
                     {agents.map((agent, idx) => (
                         <ExploreCard key={`${agent.id}-${idx}`} agent={agent} onClick={handleCardClick} onShare={handleShare} />
                     ))}

@@ -1,5 +1,6 @@
 import { Search, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useMediaQuery } from '~/hooks';
 import { cn } from '~/utils';
 
 interface AppSearchBarProps {
@@ -18,6 +19,8 @@ export function AppSearchBar({ query, onSearch, debounceMs = 300 }: AppSearchBar
   const [localValue, setLocalValue] = useState(query);
   const inputRef = useRef<HTMLInputElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout>>();
+
+  const isMobile576 = useMediaQuery('(max-width: 576px)');
 
   // Keep local value in sync with external query changes
   useEffect(() => {
@@ -51,16 +54,16 @@ export function AppSearchBar({ query, onSearch, debounceMs = 300 }: AppSearchBar
     inputRef.current?.focus();
   };
 
-  const expanded = isOpen || !!localValue;
+  const expanded = isMobile576 ? true : isOpen || !!localValue;
 
   return (
     <div
       className={cn(
         'flex items-center border border-gray-100 rounded-lg px-3 py-[5px] transition-all duration-200',
-        expanded ? 'w-64' : 'w-8 h-8 justify-center cursor-pointer',
+        expanded ? (isMobile576 ? 'w-full' : 'w-64') : 'w-8 h-8 justify-center cursor-pointer',
       )}
       onClick={() => {
-        if (!expanded) {
+        if (!expanded && !isMobile576) {
           setIsOpen(true);
           setTimeout(() => inputRef.current?.focus(), 50);
         }
@@ -71,13 +74,13 @@ export function AppSearchBar({ query, onSearch, debounceMs = 300 }: AppSearchBar
         <>
           <input
             ref={inputRef}
-            autoFocus
+            autoFocus={!isMobile576}
             value={localValue}
             onChange={(e) => handleChange(e.target.value)}
             className="ml-2 w-full bg-transparent outline-none text-sm"
             placeholder="搜索应用..."
             onBlur={() => {
-              if (!localValue) setIsOpen(false);
+              if (!isMobile576 && !localValue) setIsOpen(false);
             }}
           />
           {localValue && (

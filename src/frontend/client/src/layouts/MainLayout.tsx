@@ -5,10 +5,12 @@ import GlobeIcon from '~/components/ui/icon/Globe';
 import HomeIcon from '~/components/ui/icon/Home';
 import LinkIcon from '~/components/ui/icon/Link';
 import MonitorIcon from '~/components/ui/icon/Monitor';
-import React, { useCallback, useEffect, useMemo } from 'react';
+import { Menu, X } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import KeepAlive from 'react-activation';
 import { matchPath, NavLink, useLocation, useOutlet } from 'react-router-dom';
 import { useRecoilState } from 'recoil';
+import { useMediaQuery } from '~/hooks';
 import { bishengConfState } from '~/pages/appChat/store/atoms';
 import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import { useAuthContext, useLocalize } from '~/hooks';
@@ -25,30 +27,51 @@ interface SidebarItemProps {
   icon: React.ReactNode;
   to: string;
   active: boolean; // 改为手动传入 active 状态
+  label?: string;
+  showLabel?: boolean;
 }
 
-function SidebarItem({ icon, to, active }: SidebarItemProps) {
+function SidebarItem({ icon, to, active, label, showLabel }: SidebarItemProps) {
   return (
     <NavLink
       to={to}
       className={cn(
-        "flex items-center justify-center p-3 rounded-lg cursor-pointer transition-colors hover:bg-[#e6edfc]",
+        showLabel ? "flex flex-col items-center justify-center p-3 rounded-lg cursor-pointer transition-colors hover:bg-[#e6edfc] gap-1" : "flex items-center justify-center p-3 rounded-lg cursor-pointer transition-colors hover:bg-[#e6edfc]",
         active && "bg-[#e6edfc]"
       )}
     >
       {React.cloneElement(icon as React.ReactElement, {
         className: cn("size-5", active ? "text-[#335CFF]" : "text-[#818181]"),
       })}
+      {showLabel && label ? (
+        <span
+          className={cn(
+            "text-[11px] leading-4 font-['PingFang_SC']",
+            active ? "text-[#335CFF]" : "text-[#818181]"
+          )}
+        >
+          {label}
+        </span>
+      ) : null}
     </NavLink>
   );
 }
 
-function Sidebar() {
+function Sidebar({ mobileSidebarOpen }: { mobileSidebarOpen: boolean }) {
   const { pathname } = useLocation();
   const { data: bsConfig } = useGetBsConfig();
   const { user, logout } = useAuthContext();
   const localize = useLocalize();
   const [langcode, setLangcode] = useRecoilState(store.lang);
+  const isMobile = useMediaQuery('(max-width: 768px)');
+  const isChatSection = /^\/(c|linsight)(\/|$)/.test(pathname);
+  // app chat route: /app/:conversationId/:fid/:type
+  const isAppChatSection = /^\/app(\/|$)/.test(pathname);
+  // Use includes() to tolerate possible basename prefix (e.g. "/xxx/apps")
+  const isAppSection = pathname.includes('/apps') || pathname.includes('/app/');
+  const isAppsHome = /\/apps(\/|$)/.test(pathname) && !pathname.includes('/apps/explore');
+  const showAppLabels = isMobile && isAppSection && isAppsHome && mobileSidebarOpen;
+  const shouldHideSidebarOnMobileAppsHome = isMobile && isAppSection && isAppsHome && !mobileSidebarOpen;
 
   // Backend returns `web_menu` but we map it into front-end user as `plugins`.
   const plugins: string[] | null = Array.isArray((user as any)?.plugins)
@@ -63,24 +86,28 @@ function Sidebar() {
       section: 'home',
       to: lastSectionPaths.home || '/c/new',
       icon: <HomeIcon />,
+      label: '首页',
       isActive: /^\/(c|linsight)(\/|$)/.test(pathname),
     },
     {
       section: 'apps',
       to: lastSectionPaths.apps || '/apps',
       icon: <GlobeIcon />,
+      label: '应用',
       isActive: matchPath('/app/:id/:fid/:type', pathname) !== null || pathname.startsWith('/apps'),
     },
     {
       section: 'channel',
       to: lastSectionPaths.channel || '/channel',
       icon: <LinkIcon />,
+      label: '订阅',
       isActive: pathname.startsWith('/channel'),
     },
     {
       section: 'knowledge',
       to: lastSectionPaths.knowledge || '/knowledge',
       icon: <BookOpenIcon />,
+      label: '知识库',
       isActive: pathname.startsWith('/knowledge'),
     },
   ].filter((l) => {
@@ -96,13 +123,24 @@ function Sidebar() {
     Cookies.set('lang', userLang, { expires: 365 });
   }, [setLangcode]);
 
-  const displayName = user?.name ?? user?.username ?? localize('com_nav_user');
-
   return (
-    <div className="w-16 h-screen flex flex-col items-center justify-between py-4 px-2 shrink-0">
+    <div
+      className={cn(
+        isAppSection && isMobile
+          ? mobileSidebarOpen
+            ? 'w-[132px] px-3'
+            : 'w-16 px-2'
+          : 'w-16 px-2',
+        'h-screen flex flex-col items-center justify-between py-4 shrink-0',
+        // 主站会话移动端：不展示左侧窄栏，入口在会话区顶栏与历史抽屉内
+        (isChatSection || isAppChatSection) && isMobile && 'hidden md:flex',
+      )}
+    >
       <div className="flex flex-col gap-10 items-center">
-        <div className="size-10 relative">
-          <img src={__APP_ENV__.BASE_URL + bsConfig?.sidebarIcon.image} className="size-full" alt="logo" />
+        <div className="size-10 relative flex items-center justify-center shrink-0">
+          {bsConfig?.sidebarIcon?.image ? (
+            <img src={__APP_ENV__.BASE_URL + bsConfig.sidebarIcon.image} className="size-full object-contain" alt="" />
+          ) : null}
         </div>
 
         <div className="flex flex-col gap-4 items-center">
@@ -112,6 +150,8 @@ function Sidebar() {
               to={link.to}
               icon={link.icon}
               active={link.isActive}
+              label={(link as any).label}
+              showLabel={showAppLabels}
             />
           ))}
         </div>
@@ -138,6 +178,21 @@ export default function MainLayout() {
   const { pathname } = useLocation();
   const outlet = useOutlet();
   const { user, logout, isUserLoading } = useAuthContext();
+  const isMobile = useMediaQuery('(max-width: 768px)');
+  const isAppSection = pathname.includes('/apps') || pathname.includes('/app/');
+  const isAppsArea = pathname.includes('/apps');
+  const isAppsHomePage = isAppsArea && !pathname.includes('/apps/explore');
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const shouldHideSidebarOnMobileAppsArea = isMobile && isAppsArea && !mobileSidebarOpen;
+
+  useEffect(() => {
+    if (!isMobile || !isAppSection) return;
+    try {
+      localStorage.setItem('mobileAppSidebarOpen', JSON.stringify(mobileSidebarOpen));
+    } catch {
+      // ignore
+    }
+  }, [isMobile, isAppSection, mobileSidebarOpen]);
 
   // Auth guard: redirect to login when user query finishes without a valid user.
   // The 401 interceptor in request.ts already handles production redirect,
@@ -151,7 +206,7 @@ export default function MainLayout() {
   // Load env config once on mount — makes bishengConfState available to all pages
   const [, setConfig] = useRecoilState(bishengConfState);
   useEffect(() => {
-    getBysConfigApi().then(res => {
+    getBysConfigApi().then((res: any) => {
       setConfig(res.data);
     });
   }, []);
@@ -181,14 +236,24 @@ export default function MainLayout() {
 
   return (
     <div className="flex bg-[#F9F9F9] overflow-hidden w-screen">
-      <Sidebar />
+      {shouldHideSidebarOnMobileAppsArea ? null : <Sidebar mobileSidebarOpen={mobileSidebarOpen} />}
       <main className="flex-1 h-screen relative p-2 pl-0 min-w-0">
         <KeepAlive
           name={cacheKey}
           id={cacheKey}
           saveScroll={true}
         >
-          <div className='bg-white rounded-xl shadow-xl overflow-hidden h-[calc(100vh-16px)]'>
+          <div className='bg-white rounded-xl shadow-xl overflow-hidden h-[calc(100vh-16px)] relative'>
+            {isMobile && isAppsArea && (
+              <button
+                type="button"
+                aria-label={mobileSidebarOpen ? '收起侧边栏' : '展开侧边栏'}
+                onClick={() => setMobileSidebarOpen((v) => !v)}
+                className="absolute top-[8px] left-[10px] z-[70] size-9 rounded-md bg-transparent border-0 hover:bg-[#f2f3f5] flex items-center justify-center"
+              >
+                {mobileSidebarOpen ? <X className="size-4 text-[#1d2129]" /> : <Menu className="size-4 text-[#1d2129]" />}
+              </button>
+            )}
             {outlet}
           </div>
         </KeepAlive>

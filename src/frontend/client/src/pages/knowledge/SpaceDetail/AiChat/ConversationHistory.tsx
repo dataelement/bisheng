@@ -90,7 +90,7 @@ export function ConversationHistory({
                                     <DropdownMenuTrigger asChild>
                                         <button
                                             type="button"
-                                            className="flex-shrink-0 ml-2 p-1 rounded text-[#86909c] hover:text-[#4e5969] hover:bg-black/5 opacity-0 group-hover:opacity-100 transition-all"
+                                            className="flex-shrink-0 ml-2 p-1 rounded text-[#86909c] hover:text-[#4e5969] hover:bg-black/5 opacity-0 group-hover:opacity-100 max-[575px]:opacity-100 [@media(hover:none)]:opacity-100 transition-all"
                                             onClick={(e) => e.stopPropagation()}
                                             aria-label="More actions"
                                         >

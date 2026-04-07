@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
+import { useRecoilState } from 'recoil';
 import type { ContextType } from '~/common';
 import { Banner } from '~/components/Banners';
 import { MobileNav, Nav } from '~/components/Nav';
 import { useAgentsMap, useAssistantsMap, useAuthContext, useFileMap, useSearch } from '~/hooks';
+import store from '~/store';
 import {
   AgentsMapContext,
   AssistantsMapContext,
@@ -14,10 +16,7 @@ import {
 
 export default function Root() {
   const [bannerHeight, setBannerHeight] = useState(0);
-  const [navVisible, setNavVisible] = useState(() => {
-    const savedNavVisible = localStorage.getItem('navVisible');
-    return savedNavVisible !== null ? JSON.parse(savedNavVisible) : true;
-  });
+  const [navVisible, setNavVisible] = useRecoilState(store.chatHistoryDrawerOpen);
 
   const { isAuthenticated, logout } = useAuthContext();
   const assistantsMap = useAssistantsMap({ isAuthenticated });
@@ -46,7 +45,12 @@ export default function Root() {
                   <Nav navVisible={navVisible} setNavVisible={setNavVisible} />
                   {/* 会话消息面板区(路由) */}
                   <div className="relative flex h-full max-w-full flex-1 flex-col overflow-hidden">
-                    <MobileNav setNavVisible={setNavVisible} />
+                    <MobileNav
+                      variant="chat"
+                      navVisible={navVisible}
+                      setNavVisible={setNavVisible}
+                      persistNavVisibleInLocalStorage={false}
+                    />
                     <Outlet context={{ navVisible, setNavVisible } satisfies ContextType} />
                   </div>
                 </div>

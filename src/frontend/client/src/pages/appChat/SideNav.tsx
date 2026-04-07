@@ -1,4 +1,4 @@
-import { ChevronLeft, MoreHorizontal } from 'lucide-react';
+import { ChevronLeft, Plus, Share2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useRecoilValue } from 'recoil';
 import { currentChatState } from '~/pages/appChat/store/atoms';
@@ -83,15 +83,19 @@ export function SideNav() {
                     <div className="flex items-center justify-center gap-[4px]">
                         <button
                             onClick={shareApp}
-                            className="flex-1 min-w-0 h-[28px] flex items-center justify-center bg-white border border-[#ececec] rounded-[6px] text-[14px] leading-[22px] hover:bg-gray-50 transition-colors"
+                            type="button"
+                            className="flex-1 min-w-0 h-[28px] flex items-center justify-center gap-1 bg-white border border-[#ececec] rounded-[6px] text-[14px] leading-[22px] hover:bg-gray-50 transition-colors max-[575px]:px-2"
                         >
-                            分享应用
+                            <Share2 className="size-4 shrink-0 text-[#212121] hidden max-[575px]:block" aria-hidden />
+                            <span className="max-[575px]:sr-only">分享应用</span>
                         </button>
                         <button
                             onClick={createNewChat}
-                            className="flex-1 min-w-0 h-[28px] flex items-center justify-center bg-white border border-[#ececec] rounded-[6px] text-[14px] leading-[22px] hover:bg-gray-50 transition-colors"
+                            type="button"
+                            className="flex-1 min-w-0 h-[28px] flex items-center justify-center gap-1 bg-white border border-[#ececec] rounded-[6px] text-[14px] leading-[22px] hover:bg-gray-50 transition-colors max-[576px]:px-2"
                         >
-                            开启新对话
+                            <Plus className="size-4 shrink-0 text-[#212121] hidden max-[576px]:block" aria-hidden />
+                            <span className="max-[576px]:sr-only">开启新对话</span>
                         </button>
                     </div>
                 </div>
