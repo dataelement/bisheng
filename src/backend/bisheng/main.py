@@ -1,4 +1,4 @@
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
@@ -13,6 +13,7 @@ from bisheng.common.init_data import init_default_data
 from bisheng.common.services.config_service import settings
 from bisheng.core.context import initialize_app_context, close_app_context
 from bisheng.core.logger import set_logger_config
+from bisheng.mcp_server import get_workflow_mcp_asgi_app, get_workflow_mcp_server
 from bisheng.services.utils import initialize_services, teardown_services
 from bisheng.utils.http_middleware import CustomMiddleware, WebSocketLoggingMiddleware
 from bisheng.utils.threadpool import thread_pool
@@ -54,11 +55,17 @@ async def lifespan(app: FastAPI):
     await initialize_app_context(config=settings)
     initialize_services()
     await init_default_data()
-    # LangfuseInstance.update()
-    yield
-    teardown_services()
-    thread_pool.tear_down()
-    await close_app_context()
+    try:
+        async with AsyncExitStack() as stack:
+            workflow_mcp_server = get_workflow_mcp_server()
+            if workflow_mcp_server is not None:
+                await stack.enter_async_context(workflow_mcp_server.session_manager.run())
+            # LangfuseInstance.update()
+            yield
+    finally:
+        teardown_services()
+        thread_pool.tear_down()
+        await close_app_context()
 
 
 def create_app():
@@ -95,6 +102,9 @@ def create_app():
 
     app.include_router(router)
     app.include_router(router_rpc)
+    workflow_mcp_app = get_workflow_mcp_asgi_app()
+    if workflow_mcp_app is not None:
+        app.mount('/mcp', workflow_mcp_app)
     if settings.debug:
         import tracemalloc
         tracemalloc.start()
