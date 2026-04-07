@@ -553,6 +553,48 @@ class AuditLogService:
         await cls._dashboard_log(user, ip_address, group_ids, EventType.DELETE_DASHBOARD, dashboard_id, dashboard_name)
 
     @classmethod
+    async def create_channel(cls, user: UserPayload, ip_address: str, channel_id: str, channel_name: str):
+        """
+        New Channel Audit Log
+        """
+        logger.info(f"act=create_channel user={user.user_name} ip={ip_address} channel={channel_id}")
+        user_group = await UserGroupDao.aget_user_group(user.user_id)
+        group_ids = [one.group_id for one in user_group]
+        audit_log = AuditLog(
+            operator_id=user.user_id,
+            operator_name=user.user_name,
+            group_ids=group_ids,
+            system_id=SystemId.SUBSCRIPTION.value,
+            event_type=EventType.CREATE_CHANNEL.value,
+            object_type=ObjectType.CHANNEL.value,
+            object_id=channel_id,
+            object_name=channel_name,
+            ip_address=ip_address,
+        )
+        await AuditLogDao.ainsert_audit_logs([audit_log])
+
+    @classmethod
+    async def delete_channel(cls, user: UserPayload, ip_address: str, channel_id: str, channel_name: str):
+        """
+        Delete Channel Audit Log
+        """
+        logger.info(f"act=delete_channel user={user.user_name} ip={ip_address} channel={channel_id}")
+        user_group = await UserGroupDao.aget_user_group(user.user_id)
+        group_ids = [one.group_id for one in user_group]
+        audit_log = AuditLog(
+            operator_id=user.user_id,
+            operator_name=user.user_name,
+            group_ids=group_ids,
+            system_id=SystemId.SUBSCRIPTION.value,
+            event_type=EventType.DELETE_CHANNEL.value,
+            object_type=ObjectType.CHANNEL.value,
+            object_id=channel_id,
+            object_name=channel_name,
+            ip_address=ip_address,
+        )
+        await AuditLogDao.ainsert_audit_logs([audit_log])
+
+    @classmethod
     async def get_filter_flow_ids(cls, user: UserPayload, flow_ids: List[str], group_ids: List[int]) -> (bool, List):
         """Filter workflow, assistant and workstation ids by visible groups."""
         flow_ids = [one for one in flow_ids]

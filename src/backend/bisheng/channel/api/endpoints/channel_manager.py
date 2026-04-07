@@ -31,12 +31,13 @@ router = APIRouter(prefix='/manager', tags=['Channel Management'])
 
 @router.post("/create")
 async def create_channel(
+        request: Request,
         req_param: CreateChannelRequest,
         login_user: UserPayload = Depends(UserPayload.get_login_user),
         channel_service: 'ChannelService' = Depends(get_channel_service)
 ):
     """Endpoint to create a new channel."""
-    channel = await channel_service.create_channel(req_param, login_user)
+    channel = await channel_service.create_channel(req_param, login_user, request)
 
     return resp_200(data=channel)
 
@@ -321,13 +322,14 @@ async def update_channel_info(
 
 @router.delete("/{channel_id}")
 async def dismiss_channel(
+        request: Request,
         channel_id: str,
         login_user: UserPayload = Depends(UserPayload.get_login_user),
         channel_service: 'ChannelService' = Depends(get_channel_service)
 ):
     """Dismiss channel API"""
     try:
-        await channel_service.dismiss_channel(channel_id, login_user)
+        await channel_service.dismiss_channel(channel_id, login_user, request)
         return resp_200(data=True)
     except ValueError as e:
         logger.warning(f"Dismiss channel failed: {e}")

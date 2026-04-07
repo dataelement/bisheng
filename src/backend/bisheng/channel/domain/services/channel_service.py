@@ -53,7 +53,7 @@ from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.knowledge.domain.models.knowledge_file import FileSource
 from bisheng.message.domain.services.message_service import MessageService
 from bisheng.user.domain.models.user import UserDao
-from bisheng.utils import generate_uuid
+from bisheng.utils import generate_uuid, get_request_ip
 
 logger = logging.getLogger(__name__)
 
@@ -105,7 +105,7 @@ class ChannelService:
             return SubscriptionStatusEnum.NOT_SUBSCRIBED
         return cls._resolve_subscription_status(membership.status, membership.update_time)
 
-    async def create_channel(self, channel_data: CreateChannelRequest, login_user: UserPayload):
+    async def create_channel(self, channel_data: CreateChannelRequest, login_user: UserPayload, request=None):
         """Create a new channel based on the provided data and the logged-in user."""
         # Check if the user has reached the maximum limit for creating channels
         existing_channels = await self.space_channel_member_repository.find_channel_memberships(
@@ -173,6 +173,13 @@ class ChannelService:
         # Update latest_article_update_time for the new channel
         if channel_model.source_list:
             await self.update_channels_latest_article_time([channel_model])
+
+        # Audit log
+        from bisheng.api.services.audit_log import AuditLogService
+        if request:
+            await AuditLogService.create_channel(
+                login_user, get_request_ip(request), str(channel_model.id), channel_model.name
+            )
 
         return channel_model
 
@@ -990,7 +997,7 @@ class ChannelService:
             subscription_status=subscription_status
         )
 
-    async def dismiss_channel(self, channel_id: str, login_user: UserPayload):
+    async def dismiss_channel(self, channel_id: str, login_user: UserPayload, request=None):
         """
         Dismiss a channel:
         - Must be creator
@@ -1032,6 +1039,14 @@ class ChannelService:
         if channel.source_list:
             bisheng_information_client = await get_bisheng_information_client()
             await bisheng_information_client.unsubscribe_information_source(channel.source_list)
+
+        # Audit log
+        from bisheng.api.services.audit_log import AuditLogService
+        if request:
+            await AuditLogService.delete_channel(
+                login_user, get_request_ip(request), channel_id, channel.name
+            )
+
 
         return True
 
