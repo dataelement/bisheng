@@ -53,7 +53,7 @@ const TagGroup = ({ tags, actionButton }: { tags: FileTag[], actionButton?: Reac
         <TooltipProvider delayDuration={200}>
             <div
                 ref={containerRef}
-                className="flex gap-1.5 flex-nowrap items-center min-w-0 min-h-[24px] flex-1 relative overflow-hidden"
+                className="relative flex min-h-[24px] min-w-0 flex-1 flex-nowrap items-center gap-1.5 overflow-hidden"
             >
                 {/* 1. 实际显示的标签 */}
                 {visibleTags.map((tag, index) => (

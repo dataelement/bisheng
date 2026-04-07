@@ -448,7 +448,7 @@ export function KnowledgeSpaceContent({
 
     return (
         <div
-            className="px-4 flex-1 flex flex-col h-full overflow-hidden relative rounded-lg"
+            className="flex h-full min-w-0 flex-1 flex-col overflow-hidden rounded-lg px-4"
             onDragEnter={handleDragEnter}
             onDragLeave={handleDragLeave}
             onDragOver={handleDragOver}
@@ -494,10 +494,11 @@ export function KnowledgeSpaceContent({
                 onExpandSidebar={onExpandSidebar}
             />
 
-            {/* Content Container (Scrollable) */}
-            <div className="flex-1 min-w-0 min-h-0 flex flex-col">
+            {/* Content Container (Scrollable) — 文件列表整体描边 */}
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[6px] border-[0.5px] border-solid border-[#ECECEC] bg-white">
                 {displayFiles.length === 0 ? (
-                    <div className="flex flex-1 flex-col items-center justify-center py-10 text-center h-full">
+                    <div className="flex h-full flex-1 flex-col items-center justify-center py-10 text-center">
                         <img
                             className="size-[120px] mb-4 object-contain opacity-90"
                             src={`${__APP_ENV__.BASE_URL}/assets/channel/empty.png`}
@@ -519,7 +520,7 @@ export function KnowledgeSpaceContent({
                     <div className="flex-1 overflow-y-auto">
                         <div
                             ref={cardGridRef}
-                            className="py-4 grid gap-4 w-full min-w-0"
+                            className="grid w-full min-w-0 gap-4 py-4"
                             style={{ gridTemplateColumns: `repeat(${cardCols}, minmax(0, 1fr))` }}
                         >
                             {displayFiles.map((file) => (
@@ -543,8 +544,8 @@ export function KnowledgeSpaceContent({
                         </div>
                     </div>
                 ) : (
-                    <div className="flex-1 min-h-0 min-w-0 flex flex-col py-4">
-                        <div className="flex-1 overflow-y-auto">
+                    <div className="flex min-h-0 min-w-0 flex-1 flex-col py-4">
+                        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">
                             <FileTable files={displayFiles}
                                 selectedFiles={selectedFiles}
                                 handleSelectAll={handleSelectAll}
@@ -566,10 +567,11 @@ export function KnowledgeSpaceContent({
                         </div>
                     </div>
                 )}
+                </div>
             </div>
 
             {/* Footer */}
-            <div className="py-3 px-4 flex items-center justify-between border-t border-[#e5e6eb] flex-shrink-0 bg-white">
+            <div className="flex flex-shrink-0 items-center justify-between border-t border-[#e5e6eb] bg-white px-4 py-3">
                 {/* Left side: selection path (only in search mode with selections) */}
                 {isSearching && selectedFiles.size > 0 ? (
                     <SelectionPathBreadcrumb

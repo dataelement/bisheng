@@ -118,9 +118,9 @@ export function KnowledgeSpaceHeader({
     // Debug log removed during refactoring
 
     return (
-        <div className="pt-5 space-y-4">
+        <div className="space-y-4 pt-5">
             {/* 面包屑 / Title */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
                 {/* 左侧：标题与信息 / 面包屑 */}
                 <div className="flex items-center gap-1 text-sm flex-wrap w-full sm:w-auto">
                     {currentPath.length === 0 ? (
@@ -215,7 +215,7 @@ export function KnowledgeSpaceHeader({
                 <div className="flex items-center gap-3 self-end sm:self-auto shrink-0 mt-2 sm:mt-0">
                     <Button
                         variant="ghost"
-                        className={`h-8 px-1.5 gap-1 bg-gradient-to-br from-[#335CFF] to-[#7433FF] bg-clip-text text-transparent hover:text-transparent ${isAiAssistantOpen ? 'bg-[#f0f5ff] rounded-md' : ''}`}
+                        className={`h-8 px-1.5 gap-1 font-normal bg-gradient-to-br from-[#335CFF] to-[#7433FF] bg-clip-text text-transparent hover:text-transparent ${isAiAssistantOpen ? 'bg-[#f0f5ff] rounded-md' : ''}`}
                         disabled={isSearching}
                         onClick={onToggleAiAssistant}
                     >
@@ -225,7 +225,7 @@ export function KnowledgeSpaceHeader({
                     {showShare && (
                         <Button
                             variant="ghost"
-                            className="h-8 px-1.5 gap-1 transition-colors"
+                            className="h-8 px-1.5 gap-1 font-normal transition-colors"
                             onClick={handleShare}
                         >
                             <ShareOutlineIcon className="size-4 text-gray-800" />
@@ -235,11 +235,11 @@ export function KnowledgeSpaceHeader({
             </div>
 
             {/* Toolbar */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
                 {/* { Left side: search & toggle & filter } */}
-                <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full sm:w-auto">
+                <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center">
                     {/* Search */}
-                    <div className="flex-1 sm:flex-none flex items-center gap-2 w-full sm:w-auto">
+                    <div className="flex w-full flex-1 items-center gap-2 sm:w-auto sm:flex-none">
                         <div className="relative flex-1 sm:flex-none sm:w-[450px]">
                             <CompoundSearchInput
                                 spaceId={space.id}
@@ -393,7 +393,7 @@ export function KnowledgeSpaceHeader({
                         {isAdmin && (
                             <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
-                                    <Button size="sm" className="h-8 font-normal rounded-md" disabled={isSearching}>
+                                    <Button size="sm" className="h-8 px-4 font-normal rounded-md" disabled={isSearching}>
                                         {localize("com_knowledge.add_new")}<ChevronDown className="size-4 ml-1" />
                                     </Button>
                                 </DropdownMenuTrigger>

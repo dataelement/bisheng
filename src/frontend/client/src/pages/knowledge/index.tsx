@@ -139,13 +139,23 @@ export default function Knowledge() {
         };
     }, [detailSpaceId]);
 
-    // If navigation requests the knowledge square (e.g. via share-link error), open it.
+    // 广场：?square=1；从消息提醒「拒绝加入知识空间」进入时带 previewSpace=，打开广场上的预览抽屉
     useEffect(() => {
         const params = new URLSearchParams(location.search);
         if (params.get("square") === "1") {
             setShowKnowledgeSquare(true);
         }
-    }, [location.search]);
+        const previewFromQuery = params.get("previewSpace");
+        if (previewFromQuery) {
+            setShowKnowledgeSquare(true);
+            setSquarePreviewSpaceId(previewFromQuery);
+            setSquarePreviewDrawerOpen(true);
+            params.delete("previewSpace");
+            const nextSearch = params.toString();
+            const path = location.pathname || "/knowledge";
+            navigate(nextSearch ? `${path}?${nextSearch}` : path, { replace: true });
+        }
+    }, [location.search, location.pathname, navigate]);
 
     // Share link guard: if /knowledge/share/:spaceId points to an invalid/private space,
     // or a space whose join policy changed (approval -> public), show toast and redirect to square.
@@ -432,11 +442,11 @@ export default function Knowledge() {
             />
 
             {activeSpace ? (
-                <div ref={aiPane.splitContainerRef} className="flex-1 flex h-full overflow-hidden">
+                <div ref={aiPane.splitContainerRef} className="flex h-full min-w-0 flex-1 overflow-hidden">
                     {/* Left: file list */}
                     <div
                         style={{ width: aiPane.showAiAssistant ? `${aiPane.aiSplitWidth}px` : '100%' }}
-                        className="h-full flex-shrink-0 overflow-hidden"
+                        className="h-full min-w-0 flex-shrink-0 overflow-hidden"
                     >
                         <KnowledgeSpaceContent
                             space={activeSpace}

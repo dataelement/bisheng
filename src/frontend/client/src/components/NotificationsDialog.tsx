@@ -324,6 +324,15 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
         return { text, targetName, showApproval };
     };
 
+    /** 仅「拒绝了你加入知识空间的申请」类通知（action / system 文案码为 rejected_knowledge_space） */
+    const isRejectedKnowledgeSpaceJoinNotification = (notification: MessageItem): boolean => {
+        const code = getSystemTextCode(notification);
+        return (
+            code === "rejected_knowledge_space" ||
+            notification.action_code === "rejected_knowledge_space"
+        );
+    };
+
     const getNotificationTarget = (notification: MessageItem): { targetType: "channel" | "space"; targetId: string } | null => {
         const allBusinessParts = (notification.content ?? []).filter((c: any) => c?.type === "business_url") as any[];
         const systemText = String(notification.content?.find((c: any) => c?.type === "system_text")?.content ?? "");
@@ -597,6 +606,13 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                                         if (!target) return;
                                         if (target.targetType === "channel") {
                                             navigate(`/channel/${target.targetId}`);
+                                        } else if (
+                                            isRejectedKnowledgeSpaceJoinNotification(notification)
+                                        ) {
+                                            // 广场页 + KnowledgeSpacePreviewDrawer（与「前往广场」里点卡片预览一致）
+                                            navigate(
+                                                `/knowledge?square=1&previewSpace=${encodeURIComponent(target.targetId)}`
+                                            );
                                         } else {
                                             navigate(`/knowledge/space/${target.targetId}`);
                                         }

@@ -1,6 +1,6 @@
 import { ChevronDown, ChevronRight, PlusSquare } from "lucide-react";
 import * as RadioGroup from "@radix-ui/react-radio-group";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useConfirm, useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
 import {
@@ -41,6 +41,13 @@ import { useCreateChannelForm } from "../hooks/useCreateChannelForm";
 const MAX_CHANNEL_NAME = 10;
 const MAX_CHANNEL_DESC = 100;
 const MAX_SUB_CHANNELS = 6;
+
+/** 可见方式 / 权限：主标题（私有、需审核、公开）— 与创建知识空间一致 */
+const PERMISSION_OPTION_TEXT_CLASS =
+    "text-[14px] font-normal leading-[22px] tracking-normal text-[#212121]";
+const PERMISSION_OPTION_FONT: CSSProperties = {
+    fontFamily: '"PingFang SC", "PingFang TC", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif',
+};
 
 export type { SubChannelData };
 
@@ -330,7 +337,7 @@ export function CreateChannelDrawer({
                                             }
                                         }}
                                         placeholder={localize("com_subscription.enter_channel_description")}
-                                        className="min-h-[80px] text-[14px] bg-white border-[#E5E6EB] pr-14"
+                                        className="min-h-[80px] text-[14px] bg-[#fff] rounded-[6px] border-[#E5E6EB] pr-14"
                                     />
                                 </div>
                             </div>
@@ -374,13 +381,16 @@ export function CreateChannelDrawer({
                                             >
                                                 <RadioGroup.Indicator className="h-1.5 w-1.5 rounded-full bg-white" />
                                             </RadioGroup.Item>
-                                            <div className="flex">
-                                                <span className="text-[14px] text-[#1D2129]">
+                                            <div className="flex flex-wrap items-baseline gap-x-2">
+                                                <span
+                                                    className={PERMISSION_OPTION_TEXT_CLASS}
+                                                    style={PERMISSION_OPTION_FONT}
+                                                >
                                                     {opt.label}
                                                 </span>
-                                                <p className="text-[15px] text-[#86909C] mt-0.5 ml-2">
+                                                <span className="text-[14px] font-normal text-[#999]">
                                                     {opt.desc}
-                                                </p>
+                                                </span>
                                             </div>
                                         </label>
                                     ))}
@@ -579,7 +589,7 @@ export function CreateChannelDrawer({
                             <Button
                                 variant="secondary"
                                 onClick={() => handleClose(false)}
-                                className="h-8 rounded-[6px] px-5 inline-flex items-center justify-center leading-none bg-[#F2F3F5] hover:bg-[#E5E6EB] border-none text-[14px] text-[#4E5969]"
+                                className="h-8 rounded-[6px] px-5 inline-flex items-center justify-center leading-none bg-[#F2F3F5] hover:bg-[#E5E6EB] border-none text-[14px] font-normal text-[#4E5969]"
                             >
                                 {localize("cancel")}
                             </Button>
@@ -636,7 +646,7 @@ export function CreateChannelDrawer({
                                         form.setSubmitting(false);
                                     }
                                 }}
-                                className="h-8 rounded-[6px] px-5 inline-flex items-center justify-center leading-none bg-[#165DFF] hover:bg-[#4080FF] text-white border-none text-[14px] disabled:opacity-50"
+                                className="h-8 rounded-[6px] px-5 inline-flex items-center justify-center leading-none bg-[#165DFF] hover:bg-[#4080FF] text-white border-none text-[14px] font-normal disabled:opacity-50"
                             >
                                 {isEditMode
                                     ? form.submitting ? localize("com_subscription.saving") : localize("com_subscription.save")

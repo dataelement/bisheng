@@ -1,5 +1,4 @@
 import {
-    BookText,
     MinimizeIcon,
     MoreHorizontal,
     Pin,
@@ -19,6 +18,7 @@ import {
 } from "~/components/ui/DropdownMenu";
 import { useConfirm, useToastContext } from "~/Providers";
 import { useLocalize } from "~/hooks";
+import { ChannelPinIcon } from "~/components/icons/channels";
 
 interface KnowledgeSpaceItemProps {
     space: KnowledgeSpace;
@@ -81,7 +81,12 @@ export default function KnowledgeSpaceItem({
         >
             <div className="flex items-center gap-1 flex-1 min-w-0">
                 <div className={`flex-shrink-0 flex items-center justify-center size-5 rounded-md ${isActive ? "bg-white border border-[#165dff]/20 shadow-sm" : ""}`}>
-                    <BookText className={`size-3 ${isActive ? "text-[#165dff]" : "text-[#86909c]"}`} />
+                    <img
+                        src={`${__APP_ENV__.BASE_URL}/assets/channel/notebook-one.svg`}
+                        alt=""
+                        className="size-3 object-contain shrink-0"
+                        aria-hidden
+                    />
                 </div>
 
                 {isEditing ? (
@@ -98,24 +103,18 @@ export default function KnowledgeSpaceItem({
                         onClick={(e) => e.stopPropagation()}
                     />
                 ) : (
-                    <div className="flex items-center gap-1 flex-1 min-w-0">
-                        <span onDoubleClick={() => setIsEditing(true)} className="text-[14px] truncate text-[#1d2129]">
+                    <div className="flex flex-1 min-w-0 items-center gap-1">
+                        <span onDoubleClick={() => setIsEditing(true)} className="truncate text-[14px] text-[#1d2129]">
                             {space.name}
                         </span>
+                        {space.isPinned && (
+                            <ChannelPinIcon className="h-[14px] w-[14px] shrink-0" aria-hidden />
+                        )}
                     </div>
                 )}
             </div>
 
-            <div className="flex items-center justify-end flex-shrink-0 w-8 h-5 relative">
-                {space.isPinned && (
-                    <div className={`
-                        absolute right-0 flex items-center justify-center p-1 pointer-events-none
-                        transition-opacity duration-200
-                        ${menuOpen ? "opacity-0" : "opacity-100 group-hover:opacity-0"}
-                    `}>
-                        <Pin className="size-3.5 text-[#5773B4] rotate-45" fill="#AEC9FF" />
-                    </div>
-                )}
+            <div className="relative flex h-5 w-8 flex-shrink-0 items-center justify-end">
                 <DropdownMenu onOpenChange={setMenuOpen}>
                     <DropdownMenuTrigger asChild>
                         <button

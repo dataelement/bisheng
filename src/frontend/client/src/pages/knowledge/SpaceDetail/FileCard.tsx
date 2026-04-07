@@ -276,7 +276,7 @@ export function FileCard({
                                 <TagGroup tags={file.tags} />
                             )}
                         </div>
-                        <span className="text-[#86909c] text-xs shrink-0">{formatTimeCard(file.updatedAt)}</span>
+                        <span className="text-[#999] text-xs shrink-0 ">{formatTimeCard(file.updatedAt)}</span>
                     </div>
                 </div>
             </CardContent>
