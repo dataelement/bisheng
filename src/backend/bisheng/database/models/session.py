@@ -295,7 +295,8 @@ class MessageSessionDao(MessageSessionBase):
     @classmethod
     async def update_session_name(cls, chat_id: str, name: str):
         statement = update(MessageSession).where(col(MessageSession.chat_id) == chat_id).values(
-            name=name
+            name=name,
+            update_time=datetime.now()
         )
         async with get_async_db_session() as session:
             await session.exec(statement)
@@ -304,7 +305,8 @@ class MessageSessionDao(MessageSessionBase):
     @classmethod
     def update_session_name_sync(cls, chat_id: str, name: str):
         statement = update(MessageSession).where(col(MessageSession.chat_id) == chat_id).values(
-            name=name
+            name=name,
+            update_time=datetime.now()
         )
         with get_sync_db_session() as session:
             session.exec(statement)
