@@ -10,6 +10,7 @@ from captcha.image import ImageCaptcha
 from fastapi import APIRouter, Depends, HTTPException, Query, Body, Request
 from fastapi.security import OAuth2PasswordBearer
 from loguru import logger
+from pydantic import BaseModel, Field
 from sqlmodel import select
 
 from bisheng.api.services.audit_log import AuditLogService
@@ -25,6 +26,7 @@ from bisheng.database.models.mark_task import MarkTaskDao
 from bisheng.database.models.role import Role, RoleCreate, RoleDao, RoleUpdate
 from bisheng.database.models.role_access import RoleRefresh, RoleAccessDao, AccessType
 from bisheng.database.models.user_group import UserGroupDao
+from bisheng.mcp_server.auth import create_mcp_access_token, get_request_bisheng_access_token, resolve_login_user_from_bisheng_access_token
 from bisheng.utils import generate_uuid
 from bisheng.utils import get_request_ip
 from bisheng.utils.constants import CAPTCHA_PREFIX, RSA_KEY, USER_PASSWORD_ERROR, USER_CURRENT_SESSION
@@ -41,6 +43,10 @@ from ...core.logger import trace_id_var
 router = APIRouter(prefix='', tags=['User'])
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl='token')
+
+
+class McpTokenCreateRequest(BaseModel):
+    expires_in: int = Field(default=1800, ge=60, le=3600, description='MCP token ttl in seconds')
 
 
 @router.post('/user/regist')
@@ -107,6 +113,22 @@ def clear_error_password_key(username: str):
 @router.post('/user/login')
 async def login(*, request: Request, user: UserLogin, auth_jwt: AuthJwt = Depends()):
     return await UserService.user_login(request, user=user, auth_jwt=auth_jwt)
+
+
+@router.post('/user/mcp_token')
+async def create_workflow_mcp_token(request: Request,
+                                    body: McpTokenCreateRequest = Body(default=None)):
+    body = body or McpTokenCreateRequest()
+    access_token = get_request_bisheng_access_token(request)
+    if not access_token:
+        return UnAuthorizedError.return_resp(msg='Bisheng login required before issuing MCP token')
+    login_user = await resolve_login_user_from_bisheng_access_token(access_token)
+    _, token_payload = create_mcp_access_token(
+        login_user,
+        access_token,
+        expires_in=body.expires_in,
+    )
+    return resp_200(token_payload)
 
 
 @router.get('/user/admin')

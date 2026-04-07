@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, patch
 
 from bisheng.api.services.external_workflow import ExternalWorkflowService
 from bisheng.api.services.workflow import WorkFlowService
-from bisheng.common.errcode.flow import WorkFlowInitError, WorkflowNameExistsError
+from bisheng.common.errcode.flow import WorkFlowInitError, WorkFlowVersionUpdateError, WorkflowNameExistsError
 from bisheng.database.models.flow import FlowStatus
 from bisheng.database.models.flow_version import FlowVersionDao
 
@@ -33,6 +33,16 @@ def make_graph():
                         'key': 'system_prompt',
                         'type': 'var_textarea',
                         'value': 'hello',
+                    }, {
+                        'key': 'openai_api_key',
+                        'type': 'str',
+                        'password': True,
+                        'value': 'secret',
+                    }, {
+                        'key': 'hidden_internal',
+                        'type': 'str',
+                        'show': False,
+                        'value': 'hidden',
                     }],
                 }],
             },
@@ -61,6 +71,8 @@ class TestExternalWorkflowService(IsolatedAsyncioTestCase):
         self.assertEqual(temperature['placeholder'], '0.0 ~ 1.0')
         self.assertTrue(temperature['refresh'])
         self.assertEqual(temperature['options'], [{'key': 0.3, 'value': 0.3}, {'key': 0.7, 'value': 0.7}])
+        self.assertNotIn('openai_api_key', result['params'])
+        self.assertNotIn('hidden_internal', result['params'])
 
     async def test_update_workflow_node_params_revalidates_before_persist(self):
         flow = SimpleNamespace(id='flow-1', name='demo', status=FlowStatus.OFFLINE.value)
@@ -96,6 +108,24 @@ class TestExternalWorkflowService(IsolatedAsyncioTestCase):
         self.assertEqual(len(persisted), 1)
         self.assertTrue(persisted[0]['_external_workflow_meta']['draft'])
         self.assertEqual(persisted[0]['nodes'][0]['data']['group_params'][0]['params'][0]['value'], 0.3)
+        self.assertEqual(persisted[0]['_external_workflow_meta']['revision'], 1)
+
+    async def test_update_workflow_node_params_rejects_revision_mismatch(self):
+        flow = SimpleNamespace(id='flow-1', name='demo', status=FlowStatus.OFFLINE.value)
+        version = SimpleNamespace(id=11, data=ExternalWorkflowService._mark_graph_as_draft(make_graph()), is_current=1)
+
+        async def fake_get_editable_version(login_user, flow_id, version_id=None):
+            return flow, version
+
+        with patch.object(ExternalWorkflowService, '_get_editable_version', side_effect=fake_get_editable_version):
+            with self.assertRaises(WorkFlowVersionUpdateError):
+                await ExternalWorkflowService.update_workflow_node_params(
+                    login_user=SimpleNamespace(user_id=1),
+                    flow_id='flow-1',
+                    node_id='node-1',
+                    updates={'temperature': 0.3},
+                    expected_revision=999,
+                )
 
     async def test_update_workflow_node_params_rejects_invalid_graph_before_persist(self):
         flow = SimpleNamespace(id='flow-1', name='demo', status=FlowStatus.OFFLINE.value)

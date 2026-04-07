@@ -9,7 +9,7 @@ from bisheng.api.services.flow import FlowService
 from bisheng.api.services.workflow import WorkFlowService
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.flow import (NotFoundVersionError, WorkflowNameExistsError,
-                                         WorkFlowInitError, WorkFlowOnlineEditError)
+                                         WorkFlowInitError, WorkFlowOnlineEditError, WorkFlowVersionUpdateError)
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
 from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.flow import Flow, FlowDao, FlowStatus, FlowType
@@ -24,6 +24,17 @@ from bisheng.workflow.graph.workflow import Workflow
 class ExternalWorkflowService:
     _DRAFT_META_KEY = '_external_workflow_meta'
     _DRAFT_SOURCE = 'clawith_mcp'
+    _SENSITIVE_KEY_PATTERNS = (
+        'password',
+        'token',
+        'secret',
+        'api_key',
+        'apikey',
+        'credential',
+        'auth',
+        'cookie',
+    )
+    _BLOCKED_FIELD_TYPES = {'file', 'password'}
 
     @staticmethod
     def _internal_request() -> Request:
@@ -67,9 +78,14 @@ class ExternalWorkflowService:
     @classmethod
     def _mark_graph_as_draft(cls, graph_data: dict) -> dict:
         updated_graph = copy.deepcopy(graph_data)
+        current_meta = updated_graph.get(cls._DRAFT_META_KEY, {})
+        if not isinstance(current_meta, dict):
+            current_meta = {}
         updated_graph[cls._DRAFT_META_KEY] = {
             'draft': True,
             'source': cls._DRAFT_SOURCE,
+            'revision': int(current_meta.get('revision', 0)) + 1,
+            'updated_at': int(time.time() * 1000),
         }
         return updated_graph
 
@@ -85,6 +101,28 @@ class ExternalWorkflowService:
             return False
         meta = graph_data.get(cls._DRAFT_META_KEY, {})
         return isinstance(meta, dict) and meta.get('draft') is True
+
+    @classmethod
+    def get_graph_revision(cls, graph_data: Optional[dict]) -> int:
+        if not isinstance(graph_data, dict):
+            return 0
+        meta = graph_data.get(cls._DRAFT_META_KEY, {})
+        if not isinstance(meta, dict):
+            return 0
+        try:
+            return int(meta.get('revision', 0) or 0)
+        except Exception:
+            return 0
+
+    @classmethod
+    def _assert_expected_revision(cls, graph_data: Optional[dict], expected_revision: Optional[int]):
+        if expected_revision is None:
+            return
+        current_revision = cls.get_graph_revision(graph_data)
+        if current_revision != expected_revision:
+            raise WorkFlowVersionUpdateError(
+                msg=f'Workflow draft revision mismatch, expected {expected_revision}, got {current_revision}'
+            )
 
     @classmethod
     def _validate_graph_structure(cls, graph_data: dict):
@@ -270,6 +308,28 @@ class ExternalWorkflowService:
         return keys
 
     @classmethod
+    def _is_sensitive_param_field(cls, key: str, field: dict) -> bool:
+        lowered_key = key.lower()
+        if any(pattern in lowered_key for pattern in cls._SENSITIVE_KEY_PATTERNS):
+            return True
+        display_name = str(field.get('display_name') or field.get('label') or '').lower()
+        if any(pattern in display_name for pattern in cls._SENSITIVE_KEY_PATTERNS):
+            return True
+        if field.get('password') is True:
+            return True
+        if field.get('type') in cls._BLOCKED_FIELD_TYPES:
+            return True
+        return False
+
+    @classmethod
+    def _is_editable_param_field(cls, key: str, field: dict) -> bool:
+        if field.get('show') is False:
+            return False
+        if cls._is_sensitive_param_field(key, field):
+            return False
+        return True
+
+    @classmethod
     def _iter_node_param_fields(cls, node: dict):
         group_params = node.get('data', {}).get('group_params')
         if isinstance(group_params, list):
@@ -294,7 +354,8 @@ class ExternalWorkflowService:
     def _get_node_param_fields(cls, node: dict) -> dict[str, tuple[str, dict]]:
         fields = {}
         for group_name, field in cls._iter_node_param_fields(node):
-            fields[field['key']] = (group_name, field)
+            if cls._is_editable_param_field(field['key'], field):
+                fields[field['key']] = (group_name, field)
         if not fields:
             raise NotFoundError(msg='Workflow node params not found')
         return fields
@@ -481,8 +542,10 @@ class ExternalWorkflowService:
                                     graph_data: dict,
                                     name: Optional[str] = None,
                                     description: Optional[str] = None,
-                                    guide_word: Optional[str] = None) -> tuple[Flow, FlowVersion]:
+                                    guide_word: Optional[str] = None,
+                                    expected_revision: Optional[int] = None) -> tuple[Flow, FlowVersion]:
         flow, editable_version = await cls._get_editable_version(login_user, flow_id)
+        cls._assert_expected_revision(editable_version.data, expected_revision)
         has_flow_updates = any(value is not None for value in (name, description, guide_word))
         if has_flow_updates and flow.status == FlowStatus.ONLINE.value:
             raise WorkFlowOnlineEditError()
@@ -513,15 +576,20 @@ class ExternalWorkflowService:
         nodes = []
         for node in version.data.get('nodes', []):
             node_type = node.get('data', {}).get('type') or node.get('type', '')
+            try:
+                param_keys = cls._get_editable_node_param_keys(node)
+            except NotFoundError:
+                param_keys = []
             nodes.append({
                 'id': node.get('id', ''),
                 'type': node_type,
                 'name': node.get('data', {}).get('name') or node.get('data', {}).get('node', {}).get('display_name', ''),
-                'param_keys': cls._get_editable_node_param_keys(node),
+                'param_keys': param_keys,
             })
         return {
             'flow_id': flow_id,
             'version_id': version.id,
+            'draft_revision': cls.get_graph_revision(version.data),
             'nodes': nodes,
         }
 
@@ -534,12 +602,12 @@ class ExternalWorkflowService:
         _, version = await cls._get_editable_version(login_user, flow_id, version_id)
         node = cls._find_node(version.data, node_id)
         params = {}
-        for group_name, value in cls._iter_node_param_fields(node):
-            key = value['key']
+        for key, (group_name, value) in cls._get_node_param_fields(node).items():
             params[key] = cls._build_param_payload(group_name, value)
         return {
             'flow_id': flow_id,
             'version_id': version.id,
+            'draft_revision': cls.get_graph_revision(version.data),
             'node_id': node_id,
             'node_type': node.get('data', {}).get('type') or node.get('type', ''),
             'node_name': node.get('data', {}).get('name') or node.get('data', {}).get('node', {}).get('display_name', ''),
@@ -552,8 +620,10 @@ class ExternalWorkflowService:
                                           flow_id: str,
                                           node_id: str,
                                           updates: dict,
-                                          version_id: Optional[int] = None) -> tuple[Flow, FlowVersion]:
+                                          version_id: Optional[int] = None,
+                                          expected_revision: Optional[int] = None) -> tuple[Flow, FlowVersion]:
         flow, editable_version = await cls._get_editable_version(login_user, flow_id, version_id)
+        cls._assert_expected_revision(editable_version.data, expected_revision)
         graph_data = cls._patch_node_template(editable_version.data, node_id, updates)
         cls._validate_draft_graph(login_user, graph_data, flow_name=flow.name, flow_id=flow.id)
         editable_version.data = cls._mark_graph_as_draft(graph_data)

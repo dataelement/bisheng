@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from bisheng.api.services.external_workflow import ExternalWorkflowService
 from bisheng.api.v1.schemas import GraphData
 from bisheng.common.errcode.base import BaseErrorCode
-from bisheng.mcp_server.auth import McpAuthorizationMiddleware, get_login_user_from_mcp_token
+from bisheng.mcp_server.auth import McpAuthorizationMiddleware, get_current_token_scopes, get_login_user_from_mcp_token, require_mcp_scopes
 
 try:
     from mcp.server.fastmcp import FastMCP
@@ -20,6 +20,7 @@ class WorkflowMutationResult(BaseModel):
     flow_id: Optional[str] = None
     version_id: Optional[int] = None
     status: Optional[str] = None
+    draft_revision: Optional[int] = None
     error_code: Optional[int] = None
 
 
@@ -28,6 +29,7 @@ class WorkflowValidationResult(BaseModel):
     valid: bool = True
     flow_id: Optional[str] = None
     version_id: Optional[int] = None
+    draft_revision: Optional[int] = None
     errors: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     error_code: Optional[int] = None
@@ -44,6 +46,7 @@ class WorkflowNodeListResult(BaseModel):
     ok: bool = True
     flow_id: Optional[str] = None
     version_id: Optional[int] = None
+    draft_revision: Optional[int] = None
     nodes: list[WorkflowNodeSummary] = Field(default_factory=list)
     message: str = 'SUCCESS'
     error_code: Optional[int] = None
@@ -66,6 +69,7 @@ class WorkflowNodeParamsResult(BaseModel):
     ok: bool = True
     flow_id: Optional[str] = None
     version_id: Optional[int] = None
+    draft_revision: Optional[int] = None
     node_id: Optional[str] = None
     node_type: str = ''
     node_name: str = ''
@@ -80,6 +84,7 @@ class WorkflowConnectionResult(BaseModel):
     authenticated: bool = True
     user_id: Optional[int] = None
     user_name: str = ''
+    scopes: list[str] = Field(default_factory=list)
     message: str = 'SUCCESS'
     error_code: Optional[int] = None
 
@@ -136,6 +141,7 @@ def create_workflow_mcp_server():
             return WorkflowConnectionResult(
                 user_id=login_user.user_id,
                 user_name=login_user.user_name,
+                scopes=list(get_current_token_scopes()),
             )
         except Exception as exc:
             logger.exception('ping failed')
@@ -160,6 +166,7 @@ def create_workflow_mcp_server():
             return WorkflowConnectionResult(
                 user_id=login_user.user_id,
                 user_name=login_user.user_name,
+                scopes=list(get_current_token_scopes()),
             )
         except Exception as exc:
             logger.exception('whoami failed')
@@ -181,6 +188,7 @@ def create_workflow_mcp_server():
         """List nodes in a workflow version so the caller can choose a node_id to edit."""
         try:
             login_user = await get_login_user_from_mcp_token()
+            require_mcp_scopes('workflow.read')
             data = await ExternalWorkflowService.list_workflow_nodes(
                 login_user=login_user,
                 flow_id=flow_id,
@@ -198,6 +206,7 @@ def create_workflow_mcp_server():
         """Read the current editable params of a workflow node."""
         try:
             login_user = await get_login_user_from_mcp_token()
+            require_mcp_scopes('workflow.read')
             data = await ExternalWorkflowService.get_workflow_node_params(
                 login_user=login_user,
                 flow_id=flow_id,
@@ -217,6 +226,7 @@ def create_workflow_mcp_server():
         """Create a new Bisheng workflow draft for the current logged-in user."""
         try:
             login_user = await get_login_user_from_mcp_token()
+            require_mcp_scopes('workflow.write')
             flow, version = ExternalWorkflowService.create_workflow_draft(
                 login_user=login_user,
                 name=name,
@@ -228,6 +238,7 @@ def create_workflow_mcp_server():
                 flow_id=flow.id,
                 version_id=version.id,
                 status='draft',
+                draft_revision=ExternalWorkflowService.get_graph_revision(version.data),
             )
         except Exception as exc:
             logger.exception('create_workflow_draft failed')
@@ -238,10 +249,12 @@ def create_workflow_mcp_server():
                                     graph_data: GraphData,
                                     name: str = '',
                                     description: str = '',
-                                    guide_word: str = '') -> WorkflowMutationResult:
+                                    guide_word: str = '',
+                                    expected_revision: int = 0) -> WorkflowMutationResult:
         """Create a new draft version for an existing Bisheng workflow."""
         try:
             login_user = await get_login_user_from_mcp_token()
+            require_mcp_scopes('workflow.write')
             _, version = await ExternalWorkflowService.update_workflow_draft(
                 login_user=login_user,
                 flow_id=flow_id,
@@ -249,11 +262,13 @@ def create_workflow_mcp_server():
                 name=name or None,
                 description=description or None,
                 guide_word=guide_word or None,
+                expected_revision=expected_revision if expected_revision >= 0 else None,
             )
             return WorkflowMutationResult(
                 flow_id=flow_id,
                 version_id=version.id,
                 status='draft',
+                draft_revision=ExternalWorkflowService.get_graph_revision(version.data),
             )
         except Exception as exc:
             logger.exception('update_workflow_draft failed')
@@ -263,21 +278,25 @@ def create_workflow_mcp_server():
     async def update_workflow_node_params(flow_id: str,
                                           node_id: str,
                                           updates: dict[str, object],
-                                          version_id: int = 0) -> WorkflowMutationResult:
+                                          version_id: int = 0,
+                                          expected_revision: int = 0) -> WorkflowMutationResult:
         """Create a new draft version by patching one node's params, such as prompt or temperature."""
         try:
             login_user = await get_login_user_from_mcp_token()
+            require_mcp_scopes('workflow.write')
             _, version = await ExternalWorkflowService.update_workflow_node_params(
                 login_user=login_user,
                 flow_id=flow_id,
                 node_id=node_id,
                 updates=updates,
                 version_id=version_id or None,
+                expected_revision=expected_revision if expected_revision >= 0 else None,
             )
             return WorkflowMutationResult(
                 flow_id=flow_id,
                 version_id=version.id,
                 status='draft',
+                draft_revision=ExternalWorkflowService.get_graph_revision(version.data),
             )
         except Exception as exc:
             logger.exception('update_workflow_node_params failed')
@@ -288,6 +307,7 @@ def create_workflow_mcp_server():
         """Validate a Bisheng workflow version without publishing it."""
         try:
             login_user = await get_login_user_from_mcp_token()
+            require_mcp_scopes('workflow.write')
             flow, version = await ExternalWorkflowService.validate_workflow(
                 login_user=login_user,
                 flow_id=flow_id,
@@ -297,6 +317,7 @@ def create_workflow_mcp_server():
                 flow_id=flow.id,
                 version_id=version.id,
                 valid=True,
+                draft_revision=ExternalWorkflowService.get_graph_revision(version.data),
             )
         except Exception as exc:
             logger.exception('validate_workflow failed')
@@ -307,6 +328,7 @@ def create_workflow_mcp_server():
         """Publish a validated Bisheng workflow version."""
         try:
             login_user = await get_login_user_from_mcp_token()
+            require_mcp_scopes('workflow.publish')
             flow, version = await ExternalWorkflowService.publish_workflow(
                 login_user=login_user,
                 flow_id=flow_id,
@@ -316,6 +338,7 @@ def create_workflow_mcp_server():
                 flow_id=flow.id,
                 version_id=version.id,
                 status='published',
+                draft_revision=ExternalWorkflowService.get_graph_revision(version.data),
             )
         except Exception as exc:
             logger.exception('publish_workflow failed')
