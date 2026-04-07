@@ -1,12 +1,11 @@
 from base64 import b64decode
 from datetime import datetime
-from typing import List
+from typing import List, TYPE_CHECKING
+from urllib.parse import unquote, urlsplit
 
 import rsa
 from fastapi import Request, Depends, UploadFile, HTTPException
 
-from bisheng.api.services.audit_log import AuditLogService
-from bisheng.api.v1.schemas import CreateUserReq
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.errcode.user import (UserNameAlreadyExistError,
                                          UserNeedGroupAndRoleError, UserForbiddenError, CaptchaError, UserValidateError,
@@ -17,7 +16,7 @@ from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
 from bisheng.core.cache.redis_manager import get_redis_client_sync, get_redis_client
 from bisheng.core.logger import trace_id_var
-from bisheng.core.storage.minio.minio_manager import get_minio_storage
+from bisheng.core.storage.minio.minio_manager import get_minio_storage, get_minio_storage_sync
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.user.domain.models.user import User, UserDao, UserLogin, UserRead, UserCreate
 from bisheng.utils import md5_hash, get_request_ip, generate_uuid
@@ -25,6 +24,9 @@ from bisheng.utils.constants import RSA_KEY
 from .auth import LoginUser, AuthJwt
 from .captcha import verify_captcha
 from ..const import USER_PASSWORD_ERROR, USER_CURRENT_SESSION
+
+if TYPE_CHECKING:
+    from bisheng.api.v1.schemas import CreateUserReq
 
 # Allowed avatar file types and their MIME types
 ALLOWED_AVATAR_TYPES = {
@@ -34,9 +36,61 @@ ALLOWED_AVATAR_TYPES = {
     'image/gif': '.gif',
 }
 MAX_AVATAR_SIZE = 10 * 1024 * 1024  # 10MB
+AVATAR_OBJECT_PREFIX = 'avatar/'
 
 
 class UserService:
+    @classmethod
+    def _normalize_avatar_object_name(cls, avatar: str | None, bucket: str | None = None) -> str | None:
+        if not avatar:
+            return avatar
+
+        avatar = avatar.strip()
+        path = urlsplit(avatar).path if '://' in avatar or avatar.startswith('/') else avatar.split('?', 1)[0]
+        path = unquote(path).lstrip('/')
+
+        if bucket and path.startswith(f'{bucket}/'):
+            path = path[len(bucket) + 1:]
+
+        if path.startswith(AVATAR_OBJECT_PREFIX):
+            return path
+        return None
+
+    @classmethod
+    def get_avatar_share_link_sync(cls, avatar: str | None) -> str | None:
+        if not avatar:
+            return avatar
+
+        minio_client = get_minio_storage_sync()
+        object_name = cls._normalize_avatar_object_name(avatar, minio_client.bucket)
+        if not object_name:
+            return avatar
+        return minio_client.get_share_link_sync(object_name)
+
+    @classmethod
+    async def get_avatar_share_link(cls, avatar: str | None) -> str | None:
+        if not avatar:
+            return avatar
+
+        minio_client = await get_minio_storage()
+        object_name = cls._normalize_avatar_object_name(avatar, minio_client.bucket)
+        if not object_name:
+            return avatar
+        return await minio_client.get_share_link(object_name)
+
+    @classmethod
+    async def build_user_read(cls, user: User, **kwargs) -> UserRead:
+        user_data = user.model_dump()
+        user_data.update(kwargs)
+        user_data['avatar'] = await cls.get_avatar_share_link(user_data.get('avatar'))
+        return UserRead(**user_data)
+
+    @classmethod
+    def build_user_read_sync(cls, user: User, **kwargs) -> UserRead:
+        user_data = user.model_dump()
+        user_data.update(kwargs)
+        user_data['avatar'] = cls.get_avatar_share_link_sync(user_data.get('avatar'))
+        return UserRead(**user_data)
 
     @classmethod
     def decrypt_md5_password(cls, password: str):
@@ -48,7 +102,7 @@ class UserService:
         return password
 
     @classmethod
-    def create_user(cls, request: Request, login_user: LoginUser, req_data: CreateUserReq):
+    def create_user(cls, request: Request, login_user: LoginUser, req_data: 'CreateUserReq'):
         """
         Create User
         """
@@ -140,6 +194,8 @@ class UserService:
 
     @classmethod
     async def user_login(cls, request: Request, user: UserLogin, auth_jwt: AuthJwt = Depends()):
+        from bisheng.api.services.audit_log import AuditLogService
+
         if await settings.aget_from_db('use_captcha'):
             if not user.captcha_key or not await verify_captcha(user.captcha, user.captcha_key):
                 raise CaptchaError()
@@ -176,7 +232,7 @@ class UserService:
                                           trace_id=trace_id_var.get(),
                                           event_data=UserLoginEventData(method="password"))
 
-        return resp_200(UserRead(access_token=access_token, **db_user.__dict__))
+        return resp_200(await cls.build_user_read(db_user, access_token=access_token))
 
     @classmethod
     def get_user_all_info(cls, *, start_time: datetime = None, end_time: datetime = None, user_ids: List[int] = None,
@@ -215,7 +271,7 @@ class UserService:
         if len(content) > MAX_AVATAR_SIZE:
             raise HTTPException(
                 status_code=400,
-                detail=f'File size exceeds limit. Maximum size: 2MB'
+                detail='File size exceeds limit. Maximum size: 10MB'
             )
 
         # Generate object name for MinIO
@@ -230,16 +286,10 @@ class UserService:
             content_type=file.content_type,
         )
 
-        # Get share link
-        avatar_url = await minio_client.get_share_link(
-            object_name=object_name,
-            clear_host=True
-        )
-
         # Update user avatar in database
         user = await UserDao.aget_user(user_id)
         if user:
-            user.avatar = avatar_url
+            user.avatar = object_name
             await UserDao.aupdate_user(user)
 
-        return avatar_url
+        return await cls.get_avatar_share_link(object_name)

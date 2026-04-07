@@ -122,7 +122,7 @@ async def get_admins(login_user: LoginUser = Depends(LoginUser.get_login_user)):
         admins = UserRoleDao.get_admins_user()
         admins_ids = [admin.user_id for admin in admins]
         admin_users = UserDao.get_user_by_ids(admins_ids)
-        res = [UserRead(**one.__dict__) for one in admin_users]
+        res = [UserService.build_user_read_sync(one) for one in admin_users]
         return resp_200(res)
     except Exception:
         raise HTTPException(status_code=500, detail='User information failed')
@@ -138,7 +138,12 @@ async def get_info(login_user: LoginUser = Depends(LoginUser.get_login_user)):
 
     admin_group = await UserGroupDao.aget_user_admin_group(user_id)
     admin_group = [one.group_id for one in admin_group]
-    return resp_200(UserRead(role=str(role), web_menu=web_menu, admin_groups=admin_group, **db_user.__dict__))
+    return resp_200(await UserService.build_user_read(
+        db_user,
+        role=str(role),
+        web_menu=web_menu,
+        admin_groups=admin_group,
+    ))
 
 
 @router.post('/user/logout', status_code=201)
@@ -204,6 +209,7 @@ async def list_user(*,
     group_dict = {}
     for one in users:
         one_data = one.model_dump()
+        one_data["avatar"] = UserService.get_avatar_share_link_sync(one_data.get("avatar"))
         user_roles = get_user_roles(one, role_dict)
         user_groups = get_user_groups(one, group_dict)
         # If not hyper-managed, data needs to be filtered, Cannot see the list of roles and user groups within a user group not managed by him
@@ -698,7 +704,7 @@ async def create_user(*,
 
 @router.post('/user/avatar', status_code=200)
 async def upload_avatar(*,
-                        file: UploadFile = File(..., description="Avatar image file (jpg/png/webp/gif, max 2MB)"),
+                        file: UploadFile = File(..., description="Avatar image file (jpg/png/webp/gif, max 10MB)"),
                         login_user: LoginUser = Depends(LoginUser.get_login_user)):
     """
     Upload user avatar

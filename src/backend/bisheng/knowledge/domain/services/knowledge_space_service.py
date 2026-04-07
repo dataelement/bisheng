@@ -363,6 +363,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
     async def get_knowledge_square(
             self, keyword: str = None, page: int = 1, page_size: int = 20
     ) -> dict:
+        from bisheng.user.domain.services.user import UserService
+
         """
         Return PUBLIC/APPROVAL spaces for the Knowledge Square with pagination, sorted by:
         1. Not-joined first (easier to explore)
@@ -421,7 +423,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         "is_pending": subscription_status == SpaceSubscriptionStatusEnum.PENDING,
                         "subscription_status": subscription_status,
                         "user_name": creator.user_name if creator else str(space.user_id),
-                        "avatar": creator.avatar if creator else None,
+                        "avatar": await UserService.get_avatar_share_link(creator.avatar) if creator else None,
                         "file_num": success_file_map.get(space.id, 0),
                         "follower_num": subscriber_count,
                     }
@@ -434,6 +436,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
     async def get_space_members(self, space_id: int, page: int, page_size: int,
                                 keyword: Optional[str] = None) -> SpaceMemberPageResponse:
+        from bisheng.user.domain.services.user import UserService
+
         """
         Paginate through the list of space members.
         - Verify if the current user has read permission
@@ -476,7 +480,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             result_list.append(SpaceMemberResponse(
                 user_id=member.user_id,
                 user_name=user_name,
-                user_avatar=user.avatar if user else None,
+                user_avatar=await UserService.get_avatar_share_link(user.avatar) if user else None,
                 user_role=member.user_role.value,
                 user_groups=user_groups,
             ))

@@ -344,6 +344,8 @@ class ChannelService:
 
     async def list_channel_members(self, channel_id: str, page: int, page_size: int,
                                    keyword: Optional[str], login_user: UserPayload) -> ChannelMemberPageResponse:
+        from bisheng.user.domain.services.user import UserService
+
         """
         Paginate through the list of channel members.
         - Verify if the current user is a member of the channel
@@ -402,7 +404,7 @@ class ChannelService:
             result_list.append(ChannelMemberResponse(
                 user_id=member.user_id,
                 user_name=user_name,
-                user_avatar=user.avatar if user else None,
+                user_avatar=await UserService.get_avatar_share_link(user.avatar) if user else None,
                 user_role=member.user_role.value,
                 user_groups=user_groups,
             ))

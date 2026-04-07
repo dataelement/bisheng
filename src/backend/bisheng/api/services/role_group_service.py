@@ -26,6 +26,7 @@ from bisheng.telemetry_search.domain.services.dashboard import DashboardService
 from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
 from bisheng.user.domain.models.user import User, UserDao
 from bisheng.user.domain.models.user_role import UserRoleDao
+from bisheng.user.domain.services.user import UserService
 from bisheng.utils import get_request_ip
 
 
@@ -50,7 +51,7 @@ class RoleGroupService():
         groupReads = [GroupRead.validate(group) for group in groups]
         for group in groupReads:
             group.group_admins = [
-                users_dict.get(user.user_id).model_dump() for user in user_admin
+                self._dump_user_with_avatar_share_link(users_dict.get(user.user_id)) for user in user_admin
                 if user.group_id == group.id
             ]
         return groupReads
@@ -138,16 +139,25 @@ class RoleGroupService():
         redis_client.rpush('delete_group', delete_message, expiration=86400)
         redis_client.publish('delete_group', delete_message)
 
-    def get_group_user_list(self, group_id: int, page_size: int, page_num: int) -> List[User]:
+    def get_group_user_list(self, group_id: int, page_size: int, page_num: int) -> Optional[List[Dict]]:
         """Get the full amountgroupVertical"""
 
         # Inquiryuser
         user_group_list = UserGroupDao.get_group_user(group_id, page_size, page_num)
         if user_group_list:
             user_ids = [user.user_id for user in user_group_list]
-            return UserDao.get_user_by_ids(user_ids)
+            users = UserDao.get_user_by_ids(user_ids)
+            return [self._dump_user_with_avatar_share_link(user) for user in users]
 
         return None
+
+    @staticmethod
+    def _dump_user_with_avatar_share_link(user: User | None) -> Dict:
+        if not user:
+            return {}
+        user_data = user.model_dump()
+        user_data['avatar'] = UserService.get_avatar_share_link_sync(user_data.get('avatar'))
+        return user_data
 
     def insert_user_group(self, user_group: UserGroupCreate) -> UserGroupRead:
         """Insert User Group"""
