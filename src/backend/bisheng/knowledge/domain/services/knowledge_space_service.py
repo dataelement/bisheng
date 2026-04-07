@@ -922,7 +922,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             for one in roles:
                 default_file_size_limit = max(default_file_size_limit, one.knowledge_space_file_limit)
         default_file_size_limit = default_file_size_limit * 1024 * 1024 * 1024
-        current_total_file_size = await SpaceFileDao.get_user_total_file_size(self.login_user.user_id)
+        current_total_file_size = int(await SpaceFileDao.get_user_total_file_size(self.login_user.user_id))
 
         file_split_rule = FileProcessBase(knowledge_id=knowledge_id)
         process_files = []
