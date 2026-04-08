@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 
 from bisheng.common.models.space_channel_member import UserRoleEnum
 from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum, KnowledgeBase
+from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileRead
 
 
 class SpaceSubscriptionStatusEnum(str, Enum):
@@ -123,3 +124,8 @@ class RemoveSpaceMemberRequest(BaseModel):
     """Remove Space Member Request"""
     space_id: int = Field(default=0, description='Space ID')
     user_id: int = Field(..., description='Target User ID to Remove')
+
+
+class KnowledgeSpaceFileResponse(KnowledgeFileRead):
+    """Knowledge Space File Response"""
+    old_file_level_path: Optional[str] = Field(None, description="Old File Level Path")

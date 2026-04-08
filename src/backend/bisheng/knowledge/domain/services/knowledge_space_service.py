@@ -36,7 +36,7 @@ from bisheng.knowledge.domain.models.knowledge_file import (
 from bisheng.knowledge.domain.models.knowledge_space_file import SpaceFileDao
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     KnowledgeSpaceInfoResp, SpaceMemberResponse, SpaceMemberPageResponse,
-    UpdateSpaceMemberRoleRequest, RemoveSpaceMemberRequest, SpaceSubscriptionStatusEnum
+    UpdateSpaceMemberRoleRequest, RemoveSpaceMemberRequest, SpaceSubscriptionStatusEnum, KnowledgeSpaceFileResponse
 )
 from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import KnowledgeAuditTelemetryService
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
@@ -896,7 +896,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             file_path: List[str],
             parent_id: Optional[int] = None,
             file_source: FileSource = None,
-    ) -> List[KnowledgeFile]:
+    ) -> List[KnowledgeSpaceFileResponse]:
         if file_source is None:
             file_source = FileSource.SPACE_UPLOAD
         await self._require_write_permission(knowledge_id)
@@ -929,6 +929,23 @@ class KnowledgeSpaceService(KnowledgeUtils):
         default_file_size_limit = default_file_size_limit * 1024 * 1024 * 1024
         current_total_file_size = int(await SpaceFileDao.get_user_total_file_size(self.login_user.user_id))
 
+        folder_id2name = {}
+
+        async def get_folder_name(tmp_file_level_path: str) -> str:
+            if not tmp_file_level_path:
+                return ""
+            folder_ids = [int(fid) for fid in file_level_path.split("/") if fid]
+            not_exists_ids = [one for one in folder_ids if one not in folder_id2name]
+            if not_exists_ids:
+                folder_list = await KnowledgeFileDao.aget_file_by_ids(folder_ids)
+                for folder in folder_list:
+                    folder_id2name[folder.id] = folder.file_name
+            tmp = ""
+            for one in folder_ids:
+                folder_name = folder_id2name.get(one, one)
+                tmp += f"/{folder_name}"
+            return tmp
+
         file_split_rule = FileProcessBase(knowledge_id=knowledge_id)
         process_files = []
         failed_files = []
@@ -953,7 +970,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 process_files.append(db_file)
                 current_total_file_size += db_file.file_size
             else:
-                failed_files.append(db_file)
+                failed_file = KnowledgeSpaceFileResponse(**db_file.model_dump())
+                failed_file.old_file_level_path = await get_folder_name(db_file.file_level_path)
+                failed_file.file_level_path = file_level_path
+                failed_files.append(failed_file)
 
         for index, one in enumerate(process_files):
             file_worker.parse_knowledge_file_celery.delay(one.id, preview_cache_keys[index])

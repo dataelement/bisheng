@@ -217,6 +217,14 @@ class KnowledgeUtils(BaseService):
 
         for file in db_files:
             input_file = id2input.get(file.id)
+            new_file_name = file.file_name
+            try:
+                content = input_file.get("remark")
+                content = json.loads(content)
+                if content.get("new_name"):
+                    new_file_name = content.get("new_name")
+            except Exception as e:
+                pass
 
             # file exist
             file.object_name = input_file.get("object_name", file.object_name)
@@ -231,12 +239,13 @@ class KnowledgeUtils(BaseService):
                                                source_bucket=minio_client.tmp_bucket,
                                                dest_bucket=minio_client.bucket)
                 file.object_name = new_object_name
-            file.file_name = input_file.get("file_name", None) or file.file_name
+            file.file_name = new_file_name
             file.remark = ""
             file.split_rule = input_file["split_rule"]
             file.status = KnowledgeFileStatus.WAITING.value  # Parsing
             file.updater_id = login_user.user_id
             file.updater_name = login_user.user_name
+            file.file_level_path = input_file["file_level_path"]
             if file.file_level_path:
                 file_level_path.add(file.file_level_path)
 
