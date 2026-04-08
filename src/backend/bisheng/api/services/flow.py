@@ -21,6 +21,7 @@ from bisheng.database.models.flow import FlowDao, FlowStatus, Flow, FlowType
 from bisheng.database.models.flow_version import FlowVersionDao, FlowVersionRead, FlowVersion
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum, GroupResource
 from bisheng.database.models.role_access import AccessType
+from bisheng.database.models.session import MessageSessionDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.share_link.domain.models.share_link import ShareLink
 from bisheng.utils import get_request_ip
@@ -305,4 +306,19 @@ class FlowService(BaseService):
 
         # WritelogoCeacle
         await cls.get_logo_share_link_async(flow_info.logo)
+        return True
+
+    @classmethod
+    def delete_flow_hook(cls, request: Request, login_user: UserPayload, flow_info: Flow) -> bool:
+        logger.info(f'delete_flow_hook flow: {flow_info.id}, user_payload: {login_user.user_id}')
+
+        # Write Audit Log
+        AuditLogService.delete_build_workflow(login_user, get_request_ip(request), flow_info)
+
+        # Delete Skills Associated Under User Group
+        GroupResourceDao.delete_group_resource_by_third_id(flow_info.id, ResourceTypeEnum.WORK_FLOW)
+
+        # Update session information
+        MessageSessionDao.update_session_info_by_flow(flow_info.name, flow_info.description, flow_info.logo,
+                                                      flow_info.id, flow_info.flow_type)
         return True
