@@ -292,11 +292,11 @@ export function ArticleDetail({ article, loading = false, screenFull = false, sh
                                 <ZoomIn className="size-5" />{localize("com_subscription.zoom_in")}</button>
                             <button onClick={() => setScale(s => Math.max(0.5, s - 0.2))} className="hover:text-white flex items-center gap-1">
                                 <ZoomOut className="size-5" />{localize("com_subscription.zoom_out")}</button>
-                            <div className="w-px h-4 bg-white/20 mx-2" />
-                            <button onClick={handleCopy} className="hover:text-white flex items-center gap-1">
+                            {/* <div className="w-px h-4 bg-white/20 mx-2" /> */}
+                            {/* <button onClick={handleCopy} className="hover:text-white flex items-center gap-1">
                                 <Copy className="size-5" />{localize("com_subscription.copy")}</button>
                             <button onClick={handleDownload} className="hover:text-white flex items-center gap-1">
-                                <Download className="size-5" />{localize("com_subscription.download")}</button>
+                                <Download className="size-5" />{localize("com_subscription.download")}</button> */}
                         </div>
                         <button onClick={() => setPreviewUrl(null)} className="hover:text-white text-white bg-white/10 p-2 rounded-full">
                             <X className="size-8" />

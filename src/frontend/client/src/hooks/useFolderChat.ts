@@ -283,6 +283,8 @@ export default function useFolderChat(
                 tags: tag ? [{ id: tag.id, name: tag.name }] : [],
             };
 
+            // Lock input immediately — don't wait for SSE open event
+            setIsStreaming(true);
             setSseSubmission(buildSubmission(payload, responseMessageId));
         },
         [

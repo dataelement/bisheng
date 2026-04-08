@@ -225,8 +225,9 @@ export const copyText = (text: string | HTMLElement): Promise<string | void> => 
   if (typeof text !== 'string') return copyTextInDom(text);
 
   // Try modern Clipboard API first, then fall back to textarea + execCommand.
-  // Firefox may reject clipboard.writeText when not in a direct user-gesture
-  // synchronous context, so we always fall through to the legacy path on failure.
+  // Firefox may silently fail with clipboard.writeText (resolves but clears
+  // clipboard) when not in a direct user-gesture synchronous context, so we
+  // always fall through to the legacy path on failure.
   if (navigator.clipboard?.writeText) {
     return navigator.clipboard.writeText(text).catch(() => copyTextFallback(text));
   }

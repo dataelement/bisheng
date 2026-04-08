@@ -295,7 +295,7 @@ function AssistantBubble({
                     </div>
                 ) : (
                     /* Main content — uses existing Markdown with citation support */
-                    <div className="rounded-[10px] bg-white border border-[#E5E6EB] px-3 py-2 bs-mkdown message-content text-sm">
+                    <div className="rounded-[10px] bg-white border border-[#E5E6EB] px-3 py-2 bs-mkdown message-content text-sm overflow-hidden break-words [word-break:break-all]">
                         <Markdown
                             content={regularContent}
                             webContent={webContent}

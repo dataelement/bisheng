@@ -276,7 +276,7 @@ export function KnowledgeSpaceHeader({
                         </div>
 
                         {/* Status filter — visible in both card and list views */}
-                        <DropdownMenu>
+                        {space.role !== SpaceRole.MEMBER && <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                                 <Button
                                     variant="outline"
@@ -329,6 +329,7 @@ export function KnowledgeSpaceHeader({
                                     {localize("com_knowledge.timeout")}</DropdownMenuCheckboxItem>
                             </DropdownMenuContent>
                         </DropdownMenu>
+                        }
 
                         {/* Sort dropdown — card view only (list view uses column header sorting) */}
                         {viewMode === "card" && (

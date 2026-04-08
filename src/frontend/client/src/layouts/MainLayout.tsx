@@ -173,7 +173,8 @@ export default function MainLayout() {
   // Each sidebar tab gets its own KeepAlive cache key so switching
   // between tabs triggers cache/restore instead of re-rendering.
   const cacheKey = (() => {
-    if (/^\/(c|linsight)(\/|$)/.test(pathname)) return 'chat_tab';
+    if (/^\/linsight(\/|$)/.test(pathname)) return 'linsight_tab';
+    if (/^\/c(\/|$)/.test(pathname)) return 'chat_tab';
     if (/^\/(apps|app)(\/|$)/.test(pathname)) return 'apps_tab';
     if (/^\/channel(\/|$)/.test(pathname)) return 'channel_tab';
     if (pathname.startsWith('/knowledge')) return 'knowledge_tab';

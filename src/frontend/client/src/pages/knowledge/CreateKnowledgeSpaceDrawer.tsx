@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import * as RadioGroup from "@radix-ui/react-radio-group";
 import { NotificationSeverity } from "~/common";
-import { useToastContext } from "~/Providers";
+import { useConfirm, useToastContext } from "~/Providers";
 import { Button } from "~/components/ui/Button";
 import { Input } from "~/components/ui/Input";
 import { Label } from "~/components/ui/Label";
@@ -56,6 +56,7 @@ export function CreateKnowledgeSpaceDrawer({
     editingSpace,
 }: CreateKnowledgeSpaceDrawerProps) {
     const { showToast } = useToastContext();
+    const confirm = useConfirm();
     const localize = useLocalize();
     const [name, setName] = useState("");
     const [description, setDescription] = useState("");
@@ -265,7 +266,17 @@ export function CreateKnowledgeSpaceDrawer({
                                 </Label>
                                 <RadioGroup.Root
                                     value={joinPolicy}
-                                    onValueChange={(v) => setJoinPolicy(v as JoinPolicy)}
+                                    onValueChange={async (v) => {
+                                        if (mode === "edit" && v === "private" && joinPolicy !== "private") {
+                                            const confirmed = await confirm({
+                                                description: localize("com_subscription.confirm_knowledge_change_to_private"),
+                                                confirmText: localize("com_subscription.change_to_private"),
+                                                cancelText: localize("com_subscription.cancel"),
+                                            });
+                                            if (!confirmed) return;
+                                        }
+                                        setJoinPolicy(v as JoinPolicy);
+                                    }}
                                     className="flex flex-col gap-3"
                                 >
                                     {[

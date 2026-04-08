@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { useUnactivate } from "react-activation";
+import { useActivate, useUnactivate } from "react-activation";
 import {
     Button,
     Dialog,
@@ -51,12 +51,17 @@ export default function Knowledge() {
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
     const { showToast } = useToastContext();
-    const showToastRef = useRef(showToast);
-    const localizeRef = useRef(localize);
-    showToastRef.current = showToast;
-    localizeRef.current = localize;
     const { user, isUserLoading } = useAuthContext();
     const navigate = useNavigate();
+
+    // Stable refs for functions used in effects — avoids infinite loops caused
+    // by unstable references (e.g. localize returns a new fn every render).
+    const localizeRef = useRef(localize);
+    localizeRef.current = localize;
+    const showToastRef = useRef(showToast);
+    showToastRef.current = showToast;
+    const navigateRef = useRef(navigate);
+    navigateRef.current = navigate;
     const location = useLocation();
     const queryClient = useQueryClient();
     const { spaceId, folderId: urlFolderId } = useParams<{ spaceId?: string; folderId?: string }>();
@@ -89,8 +94,8 @@ export default function Knowledge() {
             message: localizeRef.current("com_plugin_feature_no_access_toast"),
             severity: NotificationSeverity.ERROR,
         });
-        navigate("/c/new", { replace: true });
-    }, [knowledgePluginGate, navigate]);
+        navigateRef.current("/c/new", { replace: true });
+    }, [knowledgePluginGate]);
 
     // KeepAlive: when leaving /knowledge, reset square view so switching back lands on default page.
     useUnactivate(() => {
@@ -101,6 +106,11 @@ export default function Knowledge() {
 
     // ─── File management (list, pagination, search, sort, navigation) ────
     const fileManager = useFileManager({ activeSpace, initialFolderId: urlFolderId });
+
+    // KeepAlive: refresh the file list every time the user navigates back to /knowledge.
+    useActivate(() => {
+        fileManager.loadFiles(fileManager.currentPage);
+    });
 
     const fileUpload = useFileUpload({
         activeSpace,
@@ -127,14 +137,19 @@ export default function Knowledge() {
     useEffect(() => {
         if (!detailSpaceId) return;
         if (knowledgePluginGate === "loading" || knowledgePluginGate === "disabled") return;
+
+        // Immediately claim the space ID so the sidebar auto-select won't
+        // race ahead and pick a different space while the info fetch is in-flight.
+        setActiveSpace((prev) => prev?.id === detailSpaceId ? prev : { id: detailSpaceId } as KnowledgeSpace);
+        setShowKnowledgeSquare(false);
+        setSquarePreviewDrawerOpen(false);
+        setSquarePreviewSpaceId(undefined);
+
         let cancelled = false;
         (async () => {
             try {
                 const detail = await getSpaceInfoApi(detailSpaceId);
                 if (cancelled) return;
-                setShowKnowledgeSquare(false);
-                setSquarePreviewDrawerOpen(false);
-                setSquarePreviewSpaceId(undefined);
                 setActiveSpace({ ...detail, id: detailSpaceId });
             } catch {
                 if (cancelled) return;
@@ -142,13 +157,13 @@ export default function Knowledge() {
                     message: localizeRef.current("com_knowledge.space_invalid_or_deleted"),
                     severity: NotificationSeverity.WARNING,
                 });
-                navigate("/knowledge?square=1", { replace: true });
+                navigateRef.current("/knowledge?square=1", { replace: true });
             }
         })();
         return () => {
             cancelled = true;
         };
-    }, [detailSpaceId, knowledgePluginGate, navigate]);
+    }, [detailSpaceId, knowledgePluginGate]);
 
     // 广场：?square=1；从消息提醒「拒绝加入知识空间」进入时带 previewSpace=，打开广场上的预览抽屉
     useEffect(() => {
@@ -198,7 +213,7 @@ export default function Knowledge() {
                 if (cancelled) return;
 
                 if (info.role === SpaceRole.CREATOR) {
-                    navigate(`/knowledge/space/${previewSpaceId}`, { replace: true });
+                    navigateRef.current(`/knowledge/space/${previewSpaceId}`, { replace: true });
                     return;
                 }
 
@@ -212,7 +227,7 @@ export default function Knowledge() {
                         (s) => s.id === previewId && s.role === SpaceRole.CREATOR
                     );
                     if (isMineCreator) {
-                        navigate(`/knowledge/space/${previewSpaceId}`, { replace: true });
+                        navigateRef.current(`/knowledge/space/${previewSpaceId}`, { replace: true });
                         return;
                     }
                 } catch {
@@ -226,7 +241,7 @@ export default function Knowledge() {
                         severity: NotificationSeverity.WARNING,
                     });
                     setPreviewDrawerOpen(false);
-                    navigate("/knowledge?square=1", { replace: true });
+                    navigateRef.current("/knowledge?square=1", { replace: true });
                     return;
                 }
 
@@ -238,7 +253,7 @@ export default function Knowledge() {
                         severity: NotificationSeverity.WARNING,
                     });
                     setPreviewDrawerOpen(false);
-                    navigate("/knowledge?square=1", { replace: true });
+                    navigateRef.current("/knowledge?square=1", { replace: true });
                     return;
                 }
 
@@ -250,13 +265,13 @@ export default function Knowledge() {
                     severity: NotificationSeverity.WARNING,
                 });
                 setPreviewDrawerOpen(false);
-                navigate("/knowledge?square=1", { replace: true });
+                navigateRef.current("/knowledge?square=1", { replace: true });
             }
         })();
         return () => {
             cancelled = true;
         };
-    }, [previewSpaceId, knowledgePluginGate, navigate]);
+    }, [previewSpaceId, knowledgePluginGate]);
 
     // ─── Space actions ──────────────────────────────────────────────────
     const handleSpaceSelect = async (space: KnowledgeSpace | null) => {

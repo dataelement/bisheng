@@ -1,6 +1,7 @@
 import { useCallback, useRef } from 'react';
 import { useGetModelsQuery } from '~/hooks/queries';
 import { useNavigate } from 'react-router-dom';
+import useLocalize from '~/hooks/useLocalize';
 import {
   Constants,
   FileSources,
@@ -34,6 +35,7 @@ import store from '~/store';
 
 const useNewConvo = (index = 0) => {
   const navigate = useNavigate();
+  const localize = useLocalize();
   const { data: startupConfig } = useGetStartupConfig();
   const clearAllConversations = store.useClearConvoState();
   const defaultPreset = useRecoilValue(store.defaultPreset);
@@ -213,7 +215,7 @@ const useNewConvo = (index = 0) => {
 
       const conversation = {
         conversationId: Constants.NEW_CONVO as string,
-        title: 'New Chat',
+        title: localize('com_ui_new_chat'),
         endpoint: null,
         ...template,
         flowType: 15,

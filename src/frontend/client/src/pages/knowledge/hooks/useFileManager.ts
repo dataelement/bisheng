@@ -95,10 +95,11 @@ export function useFileManager({ activeSpace, initialFolderId }: UseFileManagerO
         [activeSpace?.id, searchQuery, searchTagIds, searchScope, statusFilter, sortBy, sortDirection, currentFolderId, pageSize, showToast]
     );
 
-    // Track whether the initial folder deep link has been consumed
-    const initialFolderConsumedRef = useRef(false);
+    // Track which initialFolderId has been consumed (value, not boolean)
+    // so re-navigation to a different folder deep link works correctly.
+    const consumedFolderIdRef = useRef<string | undefined>(undefined);
 
-    // Reload files whenever active space changes
+    // Reload files whenever active space or deep-link folder changes
     useEffect(() => {
         if (activeSpace) {
             setCurrentPage(1);
@@ -106,8 +107,8 @@ export function useFileManager({ activeSpace, initialFolderId }: UseFileManagerO
             setStatusFilter([]);
 
             // If there's an unconsumed initial folder from URL, navigate there
-            if (initialFolderId && !initialFolderConsumedRef.current) {
-                initialFolderConsumedRef.current = true;
+            if (initialFolderId && consumedFolderIdRef.current !== initialFolderId) {
+                consumedFolderIdRef.current = initialFolderId;
                 setCurrentFolderId(initialFolderId);
                 // Fetch parent chain for breadcrumb path
                 getFolderParentPathApi(activeSpace.id, initialFolderId)
@@ -138,8 +139,8 @@ export function useFileManager({ activeSpace, initialFolderId }: UseFileManagerO
                 loadFiles(1);
             }
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-run when space id changes
-    }, [activeSpace?.id]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run when space or deep-link folder changes
+    }, [activeSpace?.id, initialFolderId]);
 
     // Reload files when folder navigation or filters change
     useEffect(() => {

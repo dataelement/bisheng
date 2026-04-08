@@ -3,7 +3,7 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useRecoilState, useRecoilValue } from "recoil";
 import AppAvator from "~/components/Avator";
 import HeaderTitle from "~/components/Chat/HeaderTitle";
-import { useAuthContext } from "~/hooks";
+import { useAuthContext, useLocalize } from "~/hooks";
 import ChatInput from "./ChatInput";
 import ChatMessages from "./ChatMessages";
 import { ChatEmptyState } from "./components/ChatEmptyState";
@@ -18,6 +18,7 @@ export default function ChatView({ data, cid, v, readOnly }) {
     const help = useChatHelpers()
     useWebSocket(help)
 
+    const localize = useLocalize();
     const location = useLocation();
     const navigate = useNavigate();
     const { fid: flowId, type: flowType } = useParams();
@@ -31,7 +32,7 @@ export default function ChatView({ data, cid, v, readOnly }) {
         const chatId = generateUUID(32);
         setConversations((prev) => [{
             id: chatId,
-            title: 'New Chat',
+            title: localize('com_ui_new_chat'),
             flowId: flowId,
             flowType: Number(flowType),
             updatedAt: new Date().toISOString(),

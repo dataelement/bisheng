@@ -125,7 +125,8 @@ export const useLinsightData = ({ vid, sopId, conversationId, shareToken }
 
     // 加载会话版本和任务
     useEffect(() => {
-        if (!conversationId || conversationId === 'new' || !(linsightTools && PersonalTool && orgTools)) {
+        // if (!conversationId || conversationId === 'new' || !(linsightTools && PersonalTool && orgTools)) {
+        if (!conversationId || conversationId === 'new' || !(linsightTools && orgTools)) {
             return;
         }
 

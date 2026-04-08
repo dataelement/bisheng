@@ -1493,6 +1493,7 @@
     "confirm_add": "追加を確認",
     "confirm_close": "閉じる",
     "confirm_change_to_private": "チャンネルをプライベートに設定すると、非メンバーは購読できなくなります。よろしいですか？",
+    "confirm_knowledge_change_to_private": "この操作により、参加済みのすべてのユーザーが削除されます。プライベートに変更してもよろしいですか？",
     "confirm_crawl": "クロールを完了",
     "confirm_create": "作成を確認",
     "confirm_delete_channel_for_all": "他の購読メンバーのこのチャンネルも削除されますが、よろしいですか？",

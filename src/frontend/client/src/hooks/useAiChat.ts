@@ -10,6 +10,7 @@ import type { ConversationData, TConversation } from "~/types/chat";
 import { QueryKeys, dataService } from "~/types/chat";
 import { addConversation, updateConvoFields } from "~/utils";
 import store from "~/store";
+import { useLocalize } from "~/hooks";
 import type { ChatMessage } from "~/api/chatApi";
 import {
     buildMessageTree,
@@ -20,6 +21,7 @@ import useAiChatSSE, { type SSESubmission } from "~/hooks/useAiChatSSE";
 const NO_PARENT = "00000000-0000-0000-0000-000000000000";
 
 export default function useAiChat(initialConversationId: string = "new", isLingsi: boolean = false) {
+    const localize = useLocalize();
     // --- Local state ---
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [conversationId, setConversationId] = useState(initialConversationId);
@@ -160,7 +162,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                 use_knowledge_base: {
                     personal_knowledge_enabled: false,
                     organization_knowledge_ids: orgKbs,
-                    convert_organization_knowledge_ids: spaceKbs,
+                    knowledge_space_ids: spaceKbs,
                 },
                 isContinued: false,
                 isTemporary: false,
@@ -183,26 +185,29 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                     if (newConvoId && newConvoId !== "") {
                         setConversationId(newConvoId);
 
-                        // Immediately add a 'New Chat' placeholder to sidebar
-                        const placeholderConvo = {
-                            conversationId: newConvoId,
-                            title: 'New Chat',
-                            createdAt: new Date().toISOString(),
-                            updatedAt: new Date().toISOString(),
-                            model: chatModel.name || '',
-                            endpoint: '',
-                            endpointType: 'custom',
-                            isArchived: false,
-                            tags: [],
-                        } as unknown as TConversation;
+                        // Only add placeholder for brand-new conversations to avoid
+                        // overwriting an existing conversation's generated title.
+                        if (wasNewConvo) {
+                            const placeholderConvo = {
+                                conversationId: newConvoId,
+                                title: localize('com_ui_new_chat'),
+                                createdAt: new Date().toISOString(),
+                                updatedAt: new Date().toISOString(),
+                                model: chatModel.name || '',
+                                endpoint: '',
+                                endpointType: 'custom',
+                                isArchived: false,
+                                tags: [],
+                            } as unknown as TConversation;
 
-                        queryClient.setQueryData<ConversationData>(
-                            [QueryKeys.allConversations],
-                            (convoData) => {
-                                if (!convoData) return convoData;
-                                return addConversation(convoData, placeholderConvo);
-                            }
-                        );
+                            queryClient.setQueryData<ConversationData>(
+                                [QueryKeys.allConversations],
+                                (convoData) => {
+                                    if (!convoData) return convoData;
+                                    return addConversation(convoData, placeholderConvo);
+                                }
+                            );
+                        }
                     }
                     // Update user message with server-assigned data
                     setMessages((prev) =>
@@ -380,7 +385,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                 search_enabled: searchType === "netSearch",
                 use_knowledge_base: {
                     organization_knowledge_ids: selectedOrgKbs.filter((kb) => kb.type === 'org').map((kb) => kb.id),
-                    convert_organization_knowledge_ids: selectedOrgKbs.filter((kb) => kb.type === 'space').map((kb) => Number(kb.id)),
+                    knowledge_space_ids: selectedOrgKbs.filter((kb) => kb.type === 'space').map((kb) => Number(kb.id)),
                 },
                 isContinued: false,
                 isRegenerate: true,

@@ -144,9 +144,14 @@ export default function Subscription() {
 
                 if (cancelled) return;
 
+                const isCreator =
+                    Boolean(user?.username) &&
+                    Boolean(detail?.creator_name) &&
+                    String(user.username).trim() === String(detail.creator_name).trim();
+
                 // Share link guard: if the channel has become private (or otherwise inaccessible),
-                // show toast and redirect to channel square.
-                if (detail?.visibility === "private") {
+                // show toast and redirect to channel square. Skip for the channel creator.
+                if (detail?.visibility === "private" && !isCreator) {
                     showToast({
                         message: localize("com_subscription.channel_invalid_or_inaccessible"),
                         severity: NotificationSeverity.WARNING,
@@ -154,11 +159,6 @@ export default function Subscription() {
                     navigate("/channel?square=1", { replace: true });
                     return;
                 }
-
-                const isCreator =
-                    Boolean(user?.username) &&
-                    Boolean(detail?.creator_name) &&
-                    String(user.username).trim() === String(detail.creator_name).trim();
 
                 // From channel square: always show preview (even for creator). Direct share links
                 // paste/open: keep shortcut into main channel UI.
@@ -171,9 +171,22 @@ export default function Subscription() {
                         ...(queryClient.getQueryData<Channel[]>(["channels", "created", SortType.RECENT_UPDATE]) || []),
                     ];
                     const found = allChannels.find(c => c.id === previewChannelId);
-                    if (found) {
-                        setActiveChannel(found);
-                    }
+                    setActiveChannel(found ?? {
+                        id: String(previewChannelId),
+                        name: String(detail?.name ?? ""),
+                        description: detail?.description,
+                        creator: detail?.creator_name ?? "",
+                        creatorId: "",
+                        subscriberCount: Number(detail?.subscriber_count ?? 0),
+                        articleCount: Number(detail?.article_count ?? 0),
+                        unreadCount: 0,
+                        role: ChannelRole.MEMBER,
+                        isPinned: false,
+                        createdAt: String(detail?.create_time ?? ""),
+                        updatedAt: String(detail?.latest_article_update_time ?? ""),
+                        subChannels: [],
+                        source_list: detail?.source_list ?? [],
+                    });
                     navigate("/channel", { replace: true });
                     return;
                 }

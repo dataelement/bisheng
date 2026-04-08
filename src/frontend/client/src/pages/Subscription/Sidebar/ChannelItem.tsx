@@ -130,6 +130,7 @@ export default function ChannelItem({
                         style={{
                             transitionProperty: 'background-color',
                             transitionDuration: '350ms',
+                            // transitionDelay: '100ms',
                             transitionTimingFunction: 'ease-in-out'
                         }}
                     >
@@ -142,7 +143,7 @@ export default function ChannelItem({
                     <DropdownMenuTrigger asChild>
                         <button
                             className={`
-                                absolute right-0 flex items-center justify-center p-1 rounded-md hover:bg-black/5 transition-opacity duration-200 outline-none
+                                absolute right-0 flex items-center justify-center p-1 rounded-md hover:bg-black/5 outline-none
                                 ${menuOpen ? "opacity-100 z-10" : "opacity-0 group-hover:opacity-100 z-10"}
                             `}
                             onClick={(e) => e.stopPropagation()}

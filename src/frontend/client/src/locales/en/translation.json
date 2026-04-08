@@ -1574,6 +1574,7 @@
     "confirm_add": "Confirm add",
     "confirm_close": "Confirm close",
     "confirm_change_to_private": "After setting the channel to private, non-member users will not be able to subscribe. Are you sure?",
+    "confirm_knowledge_change_to_private": "This will remove all joined users. Are you sure you want to set it to private?",
     "confirm_crawl": "Confirm crawl",
     "confirm_create": "Confirm Create",
     "confirm_delete_channel_for_all": "This channel will also be deleted for other subscribed members, confirm operation?",

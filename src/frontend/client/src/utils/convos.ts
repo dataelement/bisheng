@@ -1,12 +1,5 @@
 import {
-  format,
-  isToday,
-  subDays,
-  getYear,
   parseISO,
-  startOfDay,
-  startOfYear,
-  isWithinInterval,
 } from 'date-fns';
 import { EModelEndpoint, LocalStorageKeys } from '~/types/chat';
 import type {
@@ -38,26 +31,44 @@ export const dateKeys = {
   december: 'com_ui_date_december',
 };
 
+/**
+ * Determine the time-group label for a date.
+ * Uses startOfDay boundary comparisons — same algorithm as the app
+ * conversation sidebar (appUtils.groupConversationsByTime).
+ */
 const getGroupName = (date: Date) => {
-  const now = new Date(Date.now());
-  if (isToday(date)) {
+  const now = new Date();
+  const todayStart = startOfDay(now);
+  const yesterdayStart = startOfDay(addDays(todayStart, -1));
+  const past7Start = startOfDay(addDays(todayStart, -6));
+  const past30Start = startOfDay(addDays(todayStart, -29));
+
+  if (date >= todayStart) {
     return dateKeys.today;
   }
-  if (isWithinInterval(date, { start: startOfDay(subDays(now, 1)), end: now })) {
+  if (date >= yesterdayStart) {
     return dateKeys.yesterday;
   }
-  if (isWithinInterval(date, { start: subDays(now, 7), end: now })) {
+  if (date >= past7Start) {
     return dateKeys.previous7Days;
   }
-  if (isWithinInterval(date, { start: subDays(now, 30), end: now })) {
+  if (date >= past30Start) {
     return dateKeys.previous30Days;
   }
-  // if (isWithinInterval(date, { start: startOfYear(now), end: now })) {
-  //   const month = format(date, 'MMMM').toLowerCase();
-  //   return dateKeys[month];
-  // }
-  return ' ' + getYear(date).toString();
+  return ' ' + date.getFullYear().toString();
 };
+
+function startOfDay(date: Date): Date {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function addDays(date: Date, days: number): Date {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  return d;
+}
 
 const monthOrderMap = new Map([
   ['december', 11],
