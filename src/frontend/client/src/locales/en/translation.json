@@ -552,6 +552,7 @@
   "com_nav_welcome_assistant": "Please Select an Assistant",
   "com_nav_welcome_message": "How can I help you today?",
   "com_node_run_node": "node",
+  "com_plugin_feature_no_access_toast": "You do not have permission to access this feature. Please contact your administrator if you need access.",
   "com_preview_old_version_unsupported": "Preview not supported for old file format",
   "com_preview_source_paragraph": "Source paragraphs",
   "com_preview_type_unsupported": "This file type is not supported for preview",

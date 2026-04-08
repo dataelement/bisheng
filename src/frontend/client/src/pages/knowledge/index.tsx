@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useUnactivate } from "react-activation";
@@ -51,7 +51,7 @@ export default function Knowledge() {
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
     const { showToast } = useToastContext();
-    const { user } = useAuthContext();
+    const { user, isUserLoading } = useAuthContext();
     const navigate = useNavigate();
     const location = useLocation();
     const queryClient = useQueryClient();
@@ -64,23 +64,29 @@ export default function Knowledge() {
     const [previewDrawerOpen, setPreviewDrawerOpen] = useState(false);
     const [squarePreviewSpaceId, setSquarePreviewSpaceId] = useState<string | undefined>();
     const [squarePreviewDrawerOpen, setSquarePreviewDrawerOpen] = useState(false);
-    const [squareStatusOverride, setSquareStatusOverride] = useState<Record<string, "join" | "joined" | "pending">>({});
+    const [squareStatusOverride, setSquareStatusOverride] = useState<
+        Record<string, "join" | "joined" | "pending" | "rejected">
+    >({});
+
+    /** Wait for user fetch before applying plugin gate; avoid share routes firing APIs then bouncing wrong. */
+    const knowledgePluginGate = useMemo((): "loading" | "enabled" | "disabled" => {
+        if (isUserLoading) return "loading";
+        if (!user) return "enabled";
+        const plugins = (user as { plugins?: unknown }).plugins;
+        if (!Array.isArray(plugins)) return "enabled";
+        return plugins.includes("knowledge_space") ? "enabled" : "disabled";
+    }, [user, isUserLoading]);
 
     // Feature gate: system may disable Knowledge Space via user plugins.
     // Share links should redirect to workbench home with a clear permission toast.
     useEffect(() => {
-        const plugins: string[] | null = Array.isArray((user as any)?.plugins)
-            ? ((user as any)?.plugins as string[])
-            : null;
-        const knowledgeEnabled = plugins ? plugins.includes("knowledge_space") : true;
-        if (!knowledgeEnabled) {
-            showToast({
-                message: "您当前没有访问该功能的权限。如有需要，请联系管理员开通。",
-                severity: NotificationSeverity.ERROR,
-            });
-            navigate("/c/new", { replace: true });
-        }
-    }, [user, showToast, navigate]);
+        if (knowledgePluginGate !== "disabled") return;
+        showToast({
+            message: localize("com_plugin_feature_no_access_toast"),
+            severity: NotificationSeverity.ERROR,
+        });
+        navigate("/c/new", { replace: true });
+    }, [knowledgePluginGate, showToast, navigate, localize]);
 
     // KeepAlive: when leaving /knowledge, reset square view so switching back lands on default page.
     useUnactivate(() => {
@@ -116,6 +122,7 @@ export default function Knowledge() {
     // Deep link to space detail: /knowledge/space/:spaceId or /knowledge/space/:spaceId/folder/:folderId
     useEffect(() => {
         if (!detailSpaceId) return;
+        if (knowledgePluginGate === "loading" || knowledgePluginGate === "disabled") return;
         let cancelled = false;
         (async () => {
             try {
@@ -137,10 +144,11 @@ export default function Knowledge() {
         return () => {
             cancelled = true;
         };
-    }, [detailSpaceId]);
+    }, [detailSpaceId, knowledgePluginGate, localize, navigate, showToast]);
 
     // 广场：?square=1；从消息提醒「拒绝加入知识空间」进入时带 previewSpace=，打开广场上的预览抽屉
     useEffect(() => {
+        if (knowledgePluginGate === "loading" || knowledgePluginGate === "disabled") return;
         const params = new URLSearchParams(location.search);
         if (params.get("square") === "1") {
             setShowKnowledgeSquare(true);
@@ -155,13 +163,14 @@ export default function Knowledge() {
             const path = location.pathname || "/knowledge";
             navigate(nextSearch ? `${path}?${nextSearch}` : path, { replace: true });
         }
-    }, [location.search, location.pathname, navigate]);
+    }, [location.search, location.pathname, navigate, knowledgePluginGate]);
 
     // Share link guard: if /knowledge/share/:spaceId points to an invalid/private space,
     // or a space whose join policy changed (approval -> public), show toast and redirect to square.
     // Space creator opens their own share link → go to space detail (same as sidebar entry).
     useEffect(() => {
         if (!previewSpaceId) return;
+        if (knowledgePluginGate === "loading" || knowledgePluginGate === "disabled") return;
         let cancelled = false;
         setPreviewDrawerOpen(false);
         (async () => {
@@ -228,7 +237,7 @@ export default function Knowledge() {
         return () => {
             cancelled = true;
         };
-    }, [previewSpaceId]);
+    }, [previewSpaceId, knowledgePluginGate, localize, navigate, showToast]);
 
     // ─── Space actions ──────────────────────────────────────────────────
     const handleSpaceSelect = async (space: KnowledgeSpace | null) => {
@@ -370,6 +379,10 @@ export default function Knowledge() {
 
     const locationKey = fileManager.currentFolderId || activeSpace?.id || "";
     const contextLabel = fileManager.currentFolderId ? localize("com_knowledge.folder") : localize("com_knowledge.knowledge_space");
+
+    if (knowledgePluginGate === "disabled") {
+        return null;
+    }
 
     // Knowledge square view
     if (showKnowledgeSquare) {

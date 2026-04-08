@@ -23,7 +23,7 @@ interface KnowledgeSpacePreviewDrawerProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     /** Notify parent to sync square card status */
-    onSquareStatusChange?: (spaceId: string, status: "join" | "joined" | "pending") => void;
+    onSquareStatusChange?: (spaceId: string, status: "join" | "joined" | "pending" | "rejected") => void;
 }
 
 export function KnowledgeSpacePreviewDrawer({
@@ -37,7 +37,7 @@ export function KnowledgeSpacePreviewDrawer({
     const MAX_JOINED_SPACES = 50;
 
     const [space, setSpace] = useState<KnowledgeSpace | null>(null);
-    const [status, setStatus] = useState<"none" | "joined" | "pending">("none");
+    const [status, setStatus] = useState<"none" | "joined" | "pending" | "rejected">("none");
     const [subscribing, setSubscribing] = useState(false);
     const [filesPreview, setFilesPreview] = useState<KnowledgeFile[]>([]);
     const [childrenPage, setChildrenPage] = useState(1);
@@ -62,7 +62,12 @@ export function KnowledgeSpacePreviewDrawer({
         getSpaceInfoApi(spaceId)
             .then(info => {
                 setSpace(info);
-                if (info.isPending) {
+                const sub = String(info.subscriptionStatus ?? "").toLowerCase();
+                // /info may still set is_followed when subscription_status is rejected; prefer explicit status.
+                if (sub === "rejected") {
+                    setStatus("rejected");
+                    onSquareStatusChange?.(String(info.id), "rejected");
+                } else if (info.isPending) {
                     setStatus("pending");
                     onSquareStatusChange?.(String(info.id), "pending");
                 } else if (info.isFollowed) {
@@ -151,19 +156,22 @@ export function KnowledgeSpacePreviewDrawer({
     };
 
     const isPublic = space?.visibility === VisibilityType.PUBLIC;
+    const subscriptionRejected =
+        String(space?.subscriptionStatus ?? "").toLowerCase() === "rejected" || status === "rejected";
     // /info sometimes omits subscription_status but still sets is_followed for already-approved members.
     const canViewFiles =
         !!space &&
+        !subscriptionRejected &&
         (space.visibility === VisibilityType.PUBLIC ||
             (space.visibility === VisibilityType.APPROVAL &&
-                (space.subscriptionStatus === "subscribed" ||
+                (String(space.subscriptionStatus ?? "").toLowerCase() === "subscribed" ||
                     space.isFollowed === true ||
                     status === "joined")));
 
     const handleClickAction = () => {
         if (!space) return;
 
-        if (status === "joined" || status === "pending") return;
+        if (status === "joined" || status === "pending" || status === "rejected") return;
         if (subscribing) return;
 
         (async () => {
@@ -217,9 +225,10 @@ export function KnowledgeSpacePreviewDrawer({
     };
 
     const getButtonConfig = () => {
-        // 仅把“订阅/申请”改成“加入”；“已订阅/申请中”保持原文案
+        // 仅把“订阅/申请”改成“加入”；“已订阅/申请中/已驳回”保持原文案
         if (status === "joined") return { label: localize("com_knowledge.subscribed"), variant: "secondary" as const, disabled: true };
         if (status === "pending") return { label: localize("com_knowledge.applying"), variant: "secondary" as const, disabled: true };
+        if (status === "rejected") return { label: localize("rejected"), variant: "secondary" as const, disabled: true };
         if (isPublic) return { label: localize("com_knowledge.join"), variant: "default" as const, disabled: subscribing };
         return { label: localize("com_knowledge.join"), variant: "outline" as const, disabled: subscribing };
     };
@@ -276,7 +285,7 @@ export function KnowledgeSpacePreviewDrawer({
                                     variant={btn.variant}
                                     className={`h-8 px-5 py-1 text-sm font-normal rounded-md flex-shrink-0 ${status === "joined"
                                         ? "bg-[#F2F3F5] text-[#86909C] border-[#E5E6EB]"
-                                        : status === "pending"
+                                        : status === "pending" || status === "rejected"
                                             ? "bg-[#F2F3F5] text-[#C9CDD4] border-[#E5E6EB]"
                                             : ""
                                         }`}

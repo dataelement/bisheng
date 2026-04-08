@@ -536,6 +536,7 @@
   "com_nav_welcome_assistant": "请选择助手",
   "com_nav_welcome_message": "我今天能帮你做什么？",
   "com_node_run_node": "节点",
+  "com_plugin_feature_no_access_toast": "您当前没有访问该功能的权限。如有需要，请联系管理员开通。",
   "com_preview_old_version_unsupported": "旧版文件格式暂不支持预览",
   "com_preview_source_paragraph": "来源段落",
   "com_preview_type_unsupported": "此文件暂不支持预览",

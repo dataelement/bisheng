@@ -95,8 +95,8 @@ export interface KnowledgeSpace {
     // Used only by the "square explore" UI
     isFollowed?: boolean;
     isPending?: boolean;
-    // join | joined | pending
-    squareStatus?: "join" | "joined" | "pending";
+    // join | joined | pending | rejected (square list & preview)
+    squareStatus?: "join" | "joined" | "pending" | "rejected";
 
     /** Optional subscription status (e.g. "subscribed") from detail APIs */
     subscriptionStatus?: string;
@@ -552,10 +552,14 @@ export async function getSquareSpacesApi(params?: {
             const isReleased = Boolean(rawAny?.is_released ?? itemAny?.is_released);
             const isFollowed = subscriptionStatus === "subscribed";
             const isPending = subscriptionStatus === "pending";
-            const squareStatus: "join" | "joined" | "pending" =
-                subscriptionStatus === "subscribed" ? "joined"
-                    : subscriptionStatus === "pending" ? "pending"
-                        : "join";
+            const squareStatus: "join" | "joined" | "pending" | "rejected" =
+                subscriptionStatus === "subscribed"
+                    ? "joined"
+                    : subscriptionStatus === "pending"
+                        ? "pending"
+                        : subscriptionStatus === "rejected"
+                            ? "rejected"
+                            : "join";
 
             const fileNum = itemAny?.file_num ?? rawAny?.file_num ?? rawAny?.fileNum ?? itemAny?.fileNum ?? 0;
             const followerNum =

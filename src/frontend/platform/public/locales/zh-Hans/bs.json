@@ -1067,7 +1067,9 @@
       "dashboard": "看板",
       "system": "系统",
       "subscribe": "订阅",
-      "knowledgeSpace": "知识空间"
+      "subscription": "订阅",
+      "knowledgeSpace": "知识空间",
+      "knowledge_space": "知识空间"
     },
     "eventTypeEnum": {
       "createChat": "新建会话",
@@ -1134,7 +1136,9 @@
       "tool": "工具",
       "dashboard": "统计看板",
       "knowledge": "知识库",
-      "workstation": "工作台（日常模式）"
+      "workstation": "工作台（日常模式）",
+      "channel": "频道",
+      "knowledge_space": "知识空间"
     },
     "appUsage": "应用使用",
     "systemOperations": "系统操作",

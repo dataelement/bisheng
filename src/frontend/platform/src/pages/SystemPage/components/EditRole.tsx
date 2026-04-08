@@ -146,6 +146,10 @@ const SearchPanne = ({
     if (!isPermissionTable) return children?.(data) || null;
     const isMenuOrBoard = type === 'menu' || type === 'board' || type === 'workbenchMenu';
     const isMenuType = type === 'menu' || type === 'workbenchMenu';
+    /** 菜单、工作台菜单：无「管理权限」列（必须保持 !isMenuType） */
+    /** 在上述之外：商业版看板展示管理权限；开源版看板不展示；其余资源类型均展示 */
+    const showManagePermissionColumn =
+      !isMenuType && (type !== "board" || Boolean(appConfig.isPro));
     const showViewPermissionLabel = !hideViewPermissionLabel;
     return (
       <Table>
@@ -156,7 +160,7 @@ const SearchPanne = ({
             <TableHead className="text-center w-[175px]">
               {showViewPermissionLabel ? (!isMenuOrBoard ? t('system.usePermission') : t('system.viewPermission')) : null}
             </TableHead>
-            {!isMenuType && (appConfig.isPro && type === 'board') && (
+            {showManagePermissionColumn && (
               <TableHead className="text-right w-[75px]">{t('system.managePermission')}</TableHead>
             )}
           </TableRow>
@@ -172,7 +176,7 @@ const SearchPanne = ({
                   onCheckedChange={(bln) => onUseChange(el.id, bln)}
                 />
               </TableCell>}
-              {!isMenuType && (appConfig.isPro && type === 'board') && (
+              {showManagePermissionColumn && (
                 <TableCell className="text-center">
                   <Switch
                     checked={manageChecked(el.id)}

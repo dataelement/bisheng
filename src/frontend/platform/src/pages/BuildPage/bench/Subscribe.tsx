@@ -232,37 +232,39 @@ interface UseChatConfigProps {
 const useChatConfig = (refs: UseChatConfigProps) => {
     const { t } = useTranslation()
 
+    const defaultUserPrompt = t('chatConfig.referenceAndQuestion');
     const [formData, setFormData] = useState<ChatConfigForm>({
         systemPrompt: t('chatConfig.systemPrompt2'),
-        userPrompt: '',
+        userPrompt: defaultUserPrompt,
         maxChunkSize: 15000,
         feedbackTips: '请将您的网站爬取需求发送至邮箱：XXXX@XX',
     });
 
     useEffect(() => {
         getSubConfigApi().then((res) => {
-            if (res) {
-                const defaultSystemPrompt = t('chatConfig.systemPrompt2');
-                setFormData((prev) => {
-                    const systemPromptFromRes = (res as any).systemPrompt ?? (res as any).system_prompt;
-                    const userPromptFromRes = (res as any).userPrompt ?? (res as any).user_prompt;
-                    const maxChunkSizeFromRes = (res as any).max_chunk_size ?? (res as any).maxTokens;
-                    const feedbackTipsFromRes = (res as any).feedback_tips ?? (res as any).feedbackTips;
-                    const normalizeNonEmptyString = (value: unknown): string | undefined => {
-                        if (typeof value !== 'string') return undefined;
-                        const trimmed = value.trim();
-                        // Treat empty string / whitespace-only as "API empty" and do not override defaults.
-                        return trimmed ? value : undefined;
-                    };
-                    return {
-                        ...prev,
-                        systemPrompt: normalizeNonEmptyString(systemPromptFromRes) ?? defaultSystemPrompt,
-                        userPrompt: normalizeNonEmptyString(userPromptFromRes) ?? prev.userPrompt,
-                        maxChunkSize: typeof maxChunkSizeFromRes === 'number' ? maxChunkSizeFromRes : prev.maxChunkSize,
-                        feedbackTips: normalizeNonEmptyString(feedbackTipsFromRes) ?? prev.feedbackTips,
-                    };
-                });
-            }
+            // Interceptor returns response.data.data — null when no config row exists yet.
+            const cfg = res != null && typeof res === 'object' ? (res as Record<string, unknown>) : null;
+            const defaultSystemPrompt = t('chatConfig.systemPrompt2');
+            const defaultUser = t('chatConfig.referenceAndQuestion');
+            setFormData((prev) => {
+                const systemPromptFromRes = cfg?.systemPrompt ?? cfg?.system_prompt;
+                const userPromptFromRes = cfg?.userPrompt ?? cfg?.user_prompt;
+                const maxChunkSizeFromRes = cfg?.max_chunk_size ?? cfg?.maxTokens;
+                const feedbackTipsFromRes = cfg?.feedback_tips ?? cfg?.feedbackTips;
+                const normalizeNonEmptyString = (value: unknown): string | undefined => {
+                    if (typeof value !== 'string') return undefined;
+                    const trimmed = value.trim();
+                    // Treat empty string / whitespace-only as "API empty" and do not override defaults.
+                    return trimmed ? value : undefined;
+                };
+                return {
+                    ...prev,
+                    systemPrompt: normalizeNonEmptyString(systemPromptFromRes) ?? defaultSystemPrompt,
+                    userPrompt: normalizeNonEmptyString(userPromptFromRes) ?? defaultUser,
+                    maxChunkSize: typeof maxChunkSizeFromRes === 'number' ? maxChunkSizeFromRes : prev.maxChunkSize,
+                    feedbackTips: normalizeNonEmptyString(feedbackTipsFromRes) ?? prev.feedbackTips,
+                };
+            });
         });
     }, []);
 

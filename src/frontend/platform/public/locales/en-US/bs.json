@@ -1078,7 +1078,9 @@
       "dashboard": "Dashboard",
       "system": "System",
       "subscribe": "Subscription",
-      "knowledgeSpace": "Knowledge Space"
+      "subscription": "Subscription",
+      "knowledgeSpace": "Knowledge Space",
+      "knowledge_space": "Knowledge Space"
     },
     "eventTypeEnum": {
       "createChat": "Create Session",
@@ -1127,7 +1129,11 @@
       "user_login": "User Login",
       "addTool": "Create Tool",
       "updateTool": "Edit Tool",
-      "deleteTool": "Delete Tool"
+      "deleteTool": "Delete Tool",
+      "create_channel": "Create Channel",
+      "delete_channel": "Delete Channel",
+      "create_knowledge_space": "Create Knowledge Space",
+      "delete_knowledge_space": "Delete Knowledge Space"
     },
     "objectTypeEnum": {
       "none": "None",
@@ -1141,7 +1147,9 @@
       "tool": "Tool",
       "dashboard": "Dashboard",
       "knowledge": "Knowledge Base",
-      "workstation": "Workbench (Daily Mode)"
+      "workstation": "Workbench (Daily Mode)",
+      "channel": "Channel",
+      "knowledge_space": "Knowledge Space"
     },
     "appUsage": "App Usage",
     "systemOperations": "System Operations",

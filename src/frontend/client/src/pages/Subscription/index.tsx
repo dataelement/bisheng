@@ -1,6 +1,6 @@
 import { useLocalize } from "~/hooks";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useUnactivate } from "react-activation";
 import { useAuthContext } from "~/hooks/AuthContext";
@@ -31,7 +31,7 @@ const MAX_USER_CHANNELS = 10;
 
 export default function Subscription() {
     const localize = useLocalize();
-    const { user } = useAuthContext();
+    const { user, isUserLoading } = useAuthContext();
     const { channelId } = useParams<{ channelId?: string }>();
     const navigate = useNavigate();
     const location = useLocation();
@@ -59,21 +59,24 @@ export default function Subscription() {
     const { showToast } = useToastContext();
     const queryClient = useQueryClient();
 
+    const channelPluginGate = useMemo((): "loading" | "enabled" | "disabled" => {
+        if (isUserLoading) return "loading";
+        if (!user) return "enabled";
+        const plugins = (user as { plugins?: unknown }).plugins;
+        if (!Array.isArray(plugins)) return "enabled";
+        return plugins.includes("subscription") ? "enabled" : "disabled";
+    }, [user, isUserLoading]);
+
     // Feature gate: system may disable Channel/Subscription via user plugins.
     // Share links should redirect to workbench home with a clear permission toast.
     useEffect(() => {
-        const plugins: string[] | null = Array.isArray((user as any)?.plugins)
-            ? ((user as any)?.plugins as string[])
-            : null;
-        const channelEnabled = plugins ? plugins.includes("subscription") : true;
-        if (!channelEnabled) {
-            showToast({
-                message: "您当前没有访问该功能的权限。如有需要，请联系管理员开通。",
-                severity: NotificationSeverity.ERROR,
-            });
-            navigate("/c/new", { replace: true });
-        }
-    }, [user, showToast, navigate]);
+        if (channelPluginGate !== "disabled") return;
+        showToast({
+            message: localize("com_plugin_feature_no_access_toast"),
+            severity: NotificationSeverity.ERROR,
+        });
+        navigate("/c/new", { replace: true });
+    }, [channelPluginGate, showToast, navigate, localize]);
 
     // Open preview drawer when channelId route param is present.
     // Prefetch channel detail only (validates private / dissolved). Articles load inside
@@ -84,6 +87,7 @@ export default function Subscription() {
 
     useEffect(() => {
         if (!previewChannelId || !user) return;
+        if (channelPluginGate === "loading" || channelPluginGate === "disabled") return;
         userClosedSharePreviewRef.current = false;
         let cancelled = false;
         (async () => {
@@ -157,7 +161,7 @@ export default function Subscription() {
         return () => {
             cancelled = true;
         };
-    }, [previewChannelId, previewUserKey, showChannelSquare]);
+    }, [previewChannelId, previewUserKey, showChannelSquare, channelPluginGate, localize, navigate, queryClient, showToast, user]);
 
     // Leaving /channel/share/* should not leave the drawer marked open with a stale channelId.
     useEffect(() => {
@@ -169,6 +173,7 @@ export default function Subscription() {
     // Deep link to channel detail: /channel/:channelId
     useEffect(() => {
         if (!detailChannelId) return;
+        if (channelPluginGate === "loading" || channelPluginGate === "disabled") return;
         let cancelled = false;
         (async () => {
             try {
@@ -199,15 +204,16 @@ export default function Subscription() {
         return () => {
             cancelled = true;
         };
-    }, [detailChannelId]);
+    }, [detailChannelId, channelPluginGate, navigate]);
 
     // If navigation requests the channel square (e.g. via share-link error), open it.
     useEffect(() => {
+        if (channelPluginGate === "loading" || channelPluginGate === "disabled") return;
         const params = new URLSearchParams(location.search);
         if (params.get("square") === "1") {
             setShowChannelSquare(true);
         }
-    }, [location.search]);
+    }, [location.search, channelPluginGate]);
 
     // KeepAlive: when leaving /channel, component is "deactivated" (effects may not run).
     // Reset square view so switching back lands on default channel page.
@@ -292,6 +298,10 @@ export default function Subscription() {
         window.addEventListener("keydown", onKeyDown);
         return () => window.removeEventListener("keydown", onKeyDown);
     }, [fullScreenArticle]);
+
+    if (channelPluginGate === "disabled") {
+        return null;
+    }
 
     return (
         <div className="relative h-full flex">

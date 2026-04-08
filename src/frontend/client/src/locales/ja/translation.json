@@ -536,6 +536,7 @@
   "com_nav_welcome_assistant": "アシスタントを選択してください",
   "com_nav_welcome_message": "本日どのようにお手伝いできますか？",
   "com_node_run_node": "ノード",
+  "com_plugin_feature_no_access_toast": "この機能にアクセスする権限がありません。必要な場合は管理者にお問い合わせください。",
   "com_preview_old_version_unsupported": "旧バージョンのファイル形式は現在プレビュー非対応です",
   "com_preview_source_paragraph": "出典段落",
   "com_preview_type_unsupported": "この種類のファイルはプレビュー非対応です",
