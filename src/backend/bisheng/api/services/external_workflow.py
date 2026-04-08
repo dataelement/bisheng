@@ -19,6 +19,7 @@ from bisheng.utils import generate_uuid
 from bisheng.workflow.common.node import BaseNodeData
 from bisheng.workflow.edges.edges import EdgeBase
 from bisheng.workflow.graph.workflow import Workflow
+from bisheng.workflow.authoring.registry import create_graph_node_payload
 
 
 class ExternalWorkflowService:
@@ -284,6 +285,20 @@ class ExternalWorkflowService:
         raise NotFoundError(msg=f'Workflow node not found: {node_id}')
 
     @staticmethod
+    def _find_node_index(graph_data: dict, node_id: str) -> int:
+        for index, node in enumerate(graph_data.get('nodes', [])):
+            if node.get('id') == node_id:
+                return index
+        raise NotFoundError(msg=f'Workflow node not found: {node_id}')
+
+    @staticmethod
+    def _find_edge_index(graph_data: dict, edge_id: str) -> int:
+        for index, edge in enumerate(graph_data.get('edges', [])):
+            if edge.get('id') == edge_id:
+                return index
+        raise NotFoundError(msg=f'Workflow edge not found: {edge_id}')
+
+    @staticmethod
     def _get_node_template(node: dict) -> dict:
         template = node.get('data', {}).get('node', {}).get('template')
         if not isinstance(template, dict):
@@ -466,6 +481,146 @@ class ExternalWorkflowService:
         }
 
     @classmethod
+    def _next_graph_node_id(cls, node_type: str) -> str:
+        return f'{node_type}_{generate_uuid()[:8]}'
+
+    @classmethod
+    def _next_graph_edge_id(cls) -> str:
+        return f'edge_{generate_uuid()[:8]}'
+
+    @classmethod
+    def _apply_node_initial_params(cls, node_payload: dict, initial_params: Optional[dict]) -> dict:
+        if not initial_params:
+            return node_payload
+        graph_data = {'nodes': [copy.deepcopy(node_payload)], 'edges': []}
+        patched_graph = cls._patch_node_template(graph_data, node_payload['id'], initial_params)
+        return patched_graph['nodes'][0]
+
+    @classmethod
+    def _add_node_to_graph(cls,
+                           graph_data: dict,
+                           node_type: str,
+                           *,
+                           name: str = '',
+                           position_x: float = 0,
+                           position_y: float = 0,
+                           node_id: Optional[str] = None,
+                           initial_params: Optional[dict] = None) -> tuple[dict, str]:
+        updated_graph = copy.deepcopy(graph_data)
+        resolved_node_id = node_id or cls._next_graph_node_id(node_type)
+        if any(node.get('id') == resolved_node_id for node in updated_graph.get('nodes', [])):
+            cls._raise_workflow_error(f'Duplicate node id: {resolved_node_id}')
+
+        node_payload = create_graph_node_payload(
+            node_type,
+            node_id=resolved_node_id,
+            name=name,
+            position_x=position_x,
+            position_y=position_y,
+        )
+        if node_payload is None:
+            raise NotFoundError(msg=f'Workflow node template not found: {node_type}')
+        node_payload = cls._apply_node_initial_params(node_payload, initial_params)
+        updated_graph.setdefault('nodes', []).append(node_payload)
+        return updated_graph, resolved_node_id
+
+    @classmethod
+    def _remove_node_from_graph(cls, graph_data: dict, node_id: str, *, cascade: bool = True) -> dict:
+        updated_graph = copy.deepcopy(graph_data)
+        node_index = cls._find_node_index(updated_graph, node_id)
+        related_edges = [
+            edge for edge in updated_graph.get('edges', [])
+            if edge.get('source') == node_id or edge.get('target') == node_id
+        ]
+        if related_edges and not cascade:
+            cls._raise_workflow_error(f'Node {node_id} still has connected edges')
+        updated_graph['nodes'].pop(node_index)
+        if related_edges:
+            updated_graph['edges'] = [
+                edge for edge in updated_graph.get('edges', [])
+                if edge.get('source') != node_id and edge.get('target') != node_id
+            ]
+        return updated_graph
+
+    @classmethod
+    def _connect_nodes_in_graph(cls,
+                                graph_data: dict,
+                                *,
+                                source_node_id: str,
+                                target_node_id: str,
+                                source_handle: str,
+                                target_handle: str,
+                                edge_id: Optional[str] = None) -> tuple[dict, str]:
+        updated_graph = copy.deepcopy(graph_data)
+        source_node = cls._find_node(updated_graph, source_node_id)
+        target_node = cls._find_node(updated_graph, target_node_id)
+        if source_node_id == target_node_id:
+            cls._raise_workflow_error('Workflow edge cannot connect a node to itself')
+        if not source_handle:
+            cls._raise_workflow_error('Workflow edge source_handle is required')
+        if not target_handle:
+            cls._raise_workflow_error('Workflow edge target_handle is required')
+
+        for edge in updated_graph.get('edges', []):
+            if (
+                edge.get('source') == source_node_id and
+                edge.get('target') == target_node_id and
+                edge.get('sourceHandle') == source_handle and
+                edge.get('targetHandle') == target_handle
+            ):
+                cls._raise_workflow_error('Duplicate workflow edge')
+
+        resolved_edge_id = edge_id or cls._next_graph_edge_id()
+        updated_graph.setdefault('edges', []).append({
+            'id': resolved_edge_id,
+            'source': source_node_id,
+            'sourceHandle': source_handle,
+            'sourceType': source_node.get('data', {}).get('type') or source_node.get('type', ''),
+            'target': target_node_id,
+            'targetHandle': target_handle,
+            'targetType': target_node.get('data', {}).get('type') or target_node.get('type', ''),
+        })
+        return updated_graph, resolved_edge_id
+
+    @classmethod
+    def _disconnect_edge_from_graph(cls,
+                                    graph_data: dict,
+                                    *,
+                                    edge_id: Optional[str] = None,
+                                    source_node_id: str = '',
+                                    target_node_id: str = '',
+                                    source_handle: str = '',
+                                    target_handle: str = '') -> tuple[dict, str]:
+        updated_graph = copy.deepcopy(graph_data)
+        removed_edge_id = edge_id or ''
+        if edge_id:
+            edge_index = cls._find_edge_index(updated_graph, edge_id)
+            updated_graph['edges'].pop(edge_index)
+            return updated_graph, edge_id
+
+        matches = []
+        for index, edge in enumerate(updated_graph.get('edges', [])):
+            if source_node_id and edge.get('source') != source_node_id:
+                continue
+            if target_node_id and edge.get('target') != target_node_id:
+                continue
+            if source_handle and edge.get('sourceHandle') != source_handle:
+                continue
+            if target_handle and edge.get('targetHandle') != target_handle:
+                continue
+            matches.append((index, edge))
+
+        if not matches:
+            raise NotFoundError(msg='Workflow edge not found')
+        if len(matches) > 1:
+            cls._raise_workflow_error('Workflow edge selector is ambiguous')
+
+        edge_index, edge = matches[0]
+        removed_edge_id = edge.get('id', '')
+        updated_graph['edges'].pop(edge_index)
+        return updated_graph, removed_edge_id
+
+    @classmethod
     def _patch_node_template(cls, graph_data: dict, node_id: str, updates: dict) -> dict:
         if not isinstance(updates, dict) or not updates:
             cls._raise_workflow_error('Workflow node updates must be a non-empty JSON object')
@@ -629,6 +784,101 @@ class ExternalWorkflowService:
         editable_version.data = cls._mark_graph_as_draft(graph_data)
         editable_version = FlowVersionDao.update_version(editable_version)
         return flow, editable_version
+
+    @classmethod
+    async def add_workflow_node(cls,
+                                login_user: UserPayload,
+                                flow_id: str,
+                                node_type: str,
+                                name: str = '',
+                                position_x: float = 0,
+                                position_y: float = 0,
+                                initial_params: Optional[dict] = None,
+                                version_id: Optional[int] = None,
+                                expected_revision: Optional[int] = None) -> tuple[Flow, FlowVersion, str]:
+        flow, editable_version = await cls._get_editable_version(login_user, flow_id, version_id)
+        cls._assert_expected_revision(editable_version.data, expected_revision)
+        graph_data, node_id = cls._add_node_to_graph(
+            editable_version.data,
+            node_type,
+            name=name,
+            position_x=position_x,
+            position_y=position_y,
+            initial_params=initial_params,
+        )
+        cls._validate_draft_graph(login_user, graph_data, flow_name=flow.name, flow_id=flow.id)
+        editable_version.data = cls._mark_graph_as_draft(graph_data)
+        editable_version = FlowVersionDao.update_version(editable_version)
+        return flow, editable_version, node_id
+
+    @classmethod
+    async def remove_workflow_node(cls,
+                                   login_user: UserPayload,
+                                   flow_id: str,
+                                   node_id: str,
+                                   *,
+                                   cascade: bool = True,
+                                   version_id: Optional[int] = None,
+                                   expected_revision: Optional[int] = None) -> tuple[Flow, FlowVersion]:
+        flow, editable_version = await cls._get_editable_version(login_user, flow_id, version_id)
+        cls._assert_expected_revision(editable_version.data, expected_revision)
+        graph_data = cls._remove_node_from_graph(editable_version.data, node_id, cascade=cascade)
+        cls._validate_draft_graph(login_user, graph_data, flow_name=flow.name, flow_id=flow.id)
+        editable_version.data = cls._mark_graph_as_draft(graph_data)
+        editable_version = FlowVersionDao.update_version(editable_version)
+        return flow, editable_version
+
+    @classmethod
+    async def connect_workflow_nodes(cls,
+                                     login_user: UserPayload,
+                                     flow_id: str,
+                                     source_node_id: str,
+                                     target_node_id: str,
+                                     source_handle: str,
+                                     target_handle: str,
+                                     *,
+                                     version_id: Optional[int] = None,
+                                     expected_revision: Optional[int] = None) -> tuple[Flow, FlowVersion, str]:
+        flow, editable_version = await cls._get_editable_version(login_user, flow_id, version_id)
+        cls._assert_expected_revision(editable_version.data, expected_revision)
+        graph_data, edge_id = cls._connect_nodes_in_graph(
+            editable_version.data,
+            source_node_id=source_node_id,
+            target_node_id=target_node_id,
+            source_handle=source_handle,
+            target_handle=target_handle,
+        )
+        cls._validate_draft_graph(login_user, graph_data, flow_name=flow.name, flow_id=flow.id)
+        editable_version.data = cls._mark_graph_as_draft(graph_data)
+        editable_version = FlowVersionDao.update_version(editable_version)
+        return flow, editable_version, edge_id
+
+    @classmethod
+    async def disconnect_workflow_edge(cls,
+                                       login_user: UserPayload,
+                                       flow_id: str,
+                                       *,
+                                       edge_id: str = '',
+                                       source_node_id: str = '',
+                                       target_node_id: str = '',
+                                       source_handle: str = '',
+                                       target_handle: str = '',
+                                       version_id: Optional[int] = None,
+                                       expected_revision: Optional[int] = None) -> tuple[Flow, FlowVersion, str]:
+        flow, editable_version = await cls._get_editable_version(login_user, flow_id, version_id)
+        cls._assert_expected_revision(editable_version.data, expected_revision)
+        graph_data, removed_edge_id = cls._disconnect_edge_from_graph(
+            editable_version.data,
+            edge_id=edge_id or None,
+            source_node_id=source_node_id,
+            target_node_id=target_node_id,
+            source_handle=source_handle,
+            target_handle=target_handle,
+        )
+        cls._validate_draft_graph(login_user, graph_data, flow_name=flow.name, flow_id=flow.id)
+        editable_version.data = cls._mark_graph_as_draft(graph_data)
+        editable_version = FlowVersionDao.update_version(editable_version)
+        return flow, editable_version, removed_edge_id
 
     @classmethod
     async def validate_workflow(cls, login_user: UserPayload, flow_id: str, version_id: int) -> tuple[Flow, FlowVersion]:

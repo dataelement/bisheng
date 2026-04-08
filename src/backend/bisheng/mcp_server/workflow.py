@@ -30,6 +30,8 @@ class WorkflowMutationResult(BaseModel):
     version_id: Optional[int] = None
     status: Optional[str] = None
     draft_revision: Optional[int] = None
+    node_id: Optional[str] = None
+    edge_id: Optional[str] = None
     error_code: Optional[int] = None
 
 
@@ -441,6 +443,138 @@ def create_workflow_mcp_server():
             )
         except Exception as exc:
             logger.exception('update_workflow_draft failed')
+            return _mutation_error(exc)
+
+    @mcp.tool()
+    async def add_node(flow_id: str,
+                       node_type: str,
+                       name: str = '',
+                       position_x: float = 0,
+                       position_y: float = 0,
+                       initial_params: Optional[dict] = None,
+                       version_id: int = 0,
+                       expected_revision: int = 0) -> WorkflowMutationResult:
+        """Add one node to the editable workflow graph."""
+        try:
+            login_user = await get_login_user_from_mcp_token()
+            require_mcp_scopes('workflow.write')
+            flow, version, node_id = await ExternalWorkflowService.add_workflow_node(
+                login_user=login_user,
+                flow_id=flow_id,
+                node_type=node_type,
+                name=name,
+                position_x=position_x,
+                position_y=position_y,
+                initial_params=initial_params,
+                version_id=version_id or None,
+                expected_revision=expected_revision or None,
+            )
+            return WorkflowMutationResult(
+                flow_id=flow.id,
+                version_id=version.id,
+                status='draft',
+                draft_revision=ExternalWorkflowService.get_graph_revision(version.data),
+                node_id=node_id,
+            )
+        except Exception as exc:
+            logger.exception('add_node failed')
+            return _mutation_error(exc)
+
+    @mcp.tool()
+    async def remove_node(flow_id: str,
+                          node_id: str,
+                          cascade: bool = True,
+                          version_id: int = 0,
+                          expected_revision: int = 0) -> WorkflowMutationResult:
+        """Remove one node from the editable workflow graph."""
+        try:
+            login_user = await get_login_user_from_mcp_token()
+            require_mcp_scopes('workflow.write')
+            flow, version = await ExternalWorkflowService.remove_workflow_node(
+                login_user=login_user,
+                flow_id=flow_id,
+                node_id=node_id,
+                cascade=cascade,
+                version_id=version_id or None,
+                expected_revision=expected_revision or None,
+            )
+            return WorkflowMutationResult(
+                flow_id=flow.id,
+                version_id=version.id,
+                status='draft',
+                draft_revision=ExternalWorkflowService.get_graph_revision(version.data),
+                node_id=node_id,
+            )
+        except Exception as exc:
+            logger.exception('remove_node failed')
+            return _mutation_error(exc)
+
+    @mcp.tool()
+    async def connect_nodes(flow_id: str,
+                            source_node_id: str,
+                            target_node_id: str,
+                            source_handle: str,
+                            target_handle: str,
+                            version_id: int = 0,
+                            expected_revision: int = 0) -> WorkflowMutationResult:
+        """Connect two existing workflow nodes with one edge."""
+        try:
+            login_user = await get_login_user_from_mcp_token()
+            require_mcp_scopes('workflow.write')
+            flow, version, edge_id = await ExternalWorkflowService.connect_workflow_nodes(
+                login_user=login_user,
+                flow_id=flow_id,
+                source_node_id=source_node_id,
+                target_node_id=target_node_id,
+                source_handle=source_handle,
+                target_handle=target_handle,
+                version_id=version_id or None,
+                expected_revision=expected_revision or None,
+            )
+            return WorkflowMutationResult(
+                flow_id=flow.id,
+                version_id=version.id,
+                status='draft',
+                draft_revision=ExternalWorkflowService.get_graph_revision(version.data),
+                edge_id=edge_id,
+            )
+        except Exception as exc:
+            logger.exception('connect_nodes failed')
+            return _mutation_error(exc)
+
+    @mcp.tool()
+    async def disconnect_edge(flow_id: str,
+                              edge_id: str = '',
+                              source_node_id: str = '',
+                              target_node_id: str = '',
+                              source_handle: str = '',
+                              target_handle: str = '',
+                              version_id: int = 0,
+                              expected_revision: int = 0) -> WorkflowMutationResult:
+        """Disconnect one edge from the editable workflow graph."""
+        try:
+            login_user = await get_login_user_from_mcp_token()
+            require_mcp_scopes('workflow.write')
+            flow, version, removed_edge_id = await ExternalWorkflowService.disconnect_workflow_edge(
+                login_user=login_user,
+                flow_id=flow_id,
+                edge_id=edge_id,
+                source_node_id=source_node_id,
+                target_node_id=target_node_id,
+                source_handle=source_handle,
+                target_handle=target_handle,
+                version_id=version_id or None,
+                expected_revision=expected_revision or None,
+            )
+            return WorkflowMutationResult(
+                flow_id=flow.id,
+                version_id=version.id,
+                status='draft',
+                draft_revision=ExternalWorkflowService.get_graph_revision(version.data),
+                edge_id=removed_edge_id,
+            )
+        except Exception as exc:
+            logger.exception('disconnect_edge failed')
             return _mutation_error(exc)
 
     @mcp.tool()

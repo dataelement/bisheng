@@ -986,3 +986,36 @@ def list_node_type_descriptors() -> list[NodeTypeDescriptor]:
             )
         )
     return descriptors
+
+
+def get_node_template_payload(node_type: str) -> Optional[dict]:
+    template = _TEMPLATE_MAP.get(node_type)
+    if template is None:
+        return None
+    return copy.deepcopy(template)
+
+
+def create_graph_node_payload(node_type: str,
+                              *,
+                              node_id: str,
+                              name: str = '',
+                              position_x: float = 0,
+                              position_y: float = 0) -> Optional[dict]:
+    template = get_node_template_payload(node_type)
+    if template is None:
+        return None
+
+    template['id'] = node_id
+    template['name'] = name or template.get('name') or _display_name_for(node_type)
+    template.setdefault('description', '')
+    template.setdefault('v', '1')
+
+    return {
+        'id': node_id,
+        'type': node_type,
+        'position': {
+            'x': position_x,
+            'y': position_y,
+        },
+        'data': template,
+    }

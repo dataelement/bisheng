@@ -209,3 +209,137 @@ class TestExternalWorkflowService(IsolatedAsyncioTestCase):
         self.assertEqual(len(updated_payloads), 2)
         self.assertNotIn('_external_workflow_meta', updated_payloads[0])
         self.assertTrue(updated_payloads[1]['_external_workflow_meta']['draft'])
+
+    async def test_add_workflow_node_revalidates_before_persist(self):
+        flow = SimpleNamespace(id='flow-1', name='demo', status=FlowStatus.OFFLINE.value)
+        version = SimpleNamespace(id=11, data=make_graph(), is_current=1)
+        persisted = []
+
+        async def fake_get_editable_version(login_user, flow_id, version_id=None):
+            return flow, version
+
+        def fake_validate(login_user, graph_data, flow_name, flow_id=None):
+            return None
+
+        def fake_update_version(version_info):
+            persisted.append(deepcopy(version_info.data))
+            return version_info
+
+        with patch.object(ExternalWorkflowService, '_get_editable_version', side_effect=fake_get_editable_version), \
+                patch.object(ExternalWorkflowService, '_validate_draft_graph', side_effect=fake_validate), \
+                patch.object(FlowVersionDao, 'update_version', side_effect=fake_update_version):
+            _, updated_version, node_id = await ExternalWorkflowService.add_workflow_node(
+                login_user=SimpleNamespace(user_id=1),
+                flow_id='flow-1',
+                node_type='code',
+                name='Code Node',
+                position_x=120,
+                position_y=260,
+            )
+
+        self.assertEqual(updated_version.id, 11)
+        self.assertTrue(node_id.startswith('code_'))
+        self.assertEqual(len(persisted), 1)
+        self.assertEqual(len(persisted[0]['nodes']), 2)
+        self.assertEqual(persisted[0]['nodes'][1]['id'], node_id)
+        self.assertEqual(persisted[0]['nodes'][1]['position'], {'x': 120, 'y': 260})
+        self.assertEqual(persisted[0]['nodes'][1]['data']['type'], 'code')
+        self.assertEqual(persisted[0]['nodes'][1]['data']['name'], 'Code Node')
+        self.assertTrue(persisted[0]['_external_workflow_meta']['draft'])
+
+    async def test_remove_workflow_node_cascades_related_edges(self):
+        flow = SimpleNamespace(id='flow-1', name='demo', status=FlowStatus.OFFLINE.value)
+        graph = make_graph()
+        graph['nodes'].append({
+            'id': 'node-2',
+            'data': {
+                'id': 'node-2',
+                'type': 'output',
+                'name': 'Output Node',
+                'group_params': [],
+            },
+        })
+        graph['edges'].append({
+            'id': 'edge-1',
+            'source': 'node-1',
+            'sourceHandle': 'output',
+            'target': 'node-2',
+            'targetHandle': 'input',
+        })
+        version = SimpleNamespace(id=11, data=graph, is_current=1)
+        persisted = []
+
+        async def fake_get_editable_version(login_user, flow_id, version_id=None):
+            return flow, version
+
+        def fake_validate(login_user, graph_data, flow_name, flow_id=None):
+            return None
+
+        def fake_update_version(version_info):
+            persisted.append(deepcopy(version_info.data))
+            return version_info
+
+        with patch.object(ExternalWorkflowService, '_get_editable_version', side_effect=fake_get_editable_version), \
+                patch.object(ExternalWorkflowService, '_validate_draft_graph', side_effect=fake_validate), \
+                patch.object(FlowVersionDao, 'update_version', side_effect=fake_update_version):
+            await ExternalWorkflowService.remove_workflow_node(
+                login_user=SimpleNamespace(user_id=1),
+                flow_id='flow-1',
+                node_id='node-2',
+            )
+
+        self.assertEqual(len(persisted), 1)
+        self.assertEqual(len(persisted[0]['nodes']), 1)
+        self.assertEqual(persisted[0]['nodes'][0]['id'], 'node-1')
+        self.assertEqual(persisted[0]['edges'], [])
+
+    async def test_connect_and_disconnect_workflow_nodes_persist_edge_updates(self):
+        flow = SimpleNamespace(id='flow-1', name='demo', status=FlowStatus.OFFLINE.value)
+        graph = make_graph()
+        graph['nodes'].append({
+            'id': 'node-2',
+            'data': {
+                'id': 'node-2',
+                'type': 'output',
+                'name': 'Output Node',
+                'group_params': [],
+            },
+        })
+        version = SimpleNamespace(id=11, data=graph, is_current=1)
+        persisted = []
+
+        async def fake_get_editable_version(login_user, flow_id, version_id=None):
+            return flow, version
+
+        def fake_validate(login_user, graph_data, flow_name, flow_id=None):
+            return None
+
+        def fake_update_version(version_info):
+            persisted.append(deepcopy(version_info.data))
+            version.data = deepcopy(version_info.data)
+            return version_info
+
+        with patch.object(ExternalWorkflowService, '_get_editable_version', side_effect=fake_get_editable_version), \
+                patch.object(ExternalWorkflowService, '_validate_draft_graph', side_effect=fake_validate), \
+                patch.object(FlowVersionDao, 'update_version', side_effect=fake_update_version):
+            _, _, edge_id = await ExternalWorkflowService.connect_workflow_nodes(
+                login_user=SimpleNamespace(user_id=1),
+                flow_id='flow-1',
+                source_node_id='node-1',
+                target_node_id='node-2',
+                source_handle='output',
+                target_handle='input',
+            )
+            _, _, removed_edge_id = await ExternalWorkflowService.disconnect_workflow_edge(
+                login_user=SimpleNamespace(user_id=1),
+                flow_id='flow-1',
+                edge_id=edge_id,
+            )
+
+        self.assertEqual(edge_id, removed_edge_id)
+        self.assertEqual(len(persisted), 2)
+        self.assertEqual(len(persisted[0]['edges']), 1)
+        self.assertEqual(persisted[0]['edges'][0]['id'], edge_id)
+        self.assertEqual(persisted[0]['edges'][0]['sourceType'], 'llm')
+        self.assertEqual(persisted[0]['edges'][0]['targetType'], 'output')
+        self.assertEqual(persisted[1]['edges'], [])
