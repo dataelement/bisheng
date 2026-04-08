@@ -18,13 +18,7 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.channel import KnowledgeSpaceLLMNotConfiguredError
 from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.common.utils.title_generator import generate_conversation_title_async
-from bisheng.core.database import get_async_db_session
 from bisheng.core.prompts.manager import get_prompt_manager
-from bisheng.citation.domain.repositories.implementations.message_citation_repository_impl import (
-    MessageCitationRepositoryImpl,
-)
-from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
-from bisheng.citation.domain.services.citation_registry_service import CitationRegistryService
 from bisheng.database.constants import MessageCategory
 from bisheng.database.models.flow import FlowType
 from bisheng.database.models.group_resource import ResourceTypeEnum
@@ -111,8 +105,6 @@ class KnowledgeSpaceChatService:
             sort_by_source_and_index=True
         )
         finally_docs: List[Document] = await retriever_tool.ainvoke(query)
-        citation_registry = CitationRegistryService.build_rag_registry(finally_docs)
-        # TODO: Build citation-aware prompt context in the knowledge space business layer.
         logger.debug(f"retrieved_finally_docs: {len(finally_docs)}")
         file_content = ""
         for one in finally_docs:
@@ -171,7 +163,6 @@ class KnowledgeSpaceChatService:
             message=json.dumps({
                 "content": answer,
                 "reasoning_content": reasoning_content,
-                "citations": [item.model_dump(mode="json") for item in citation_registry],
             }, ensure_ascii=False),
             chat_id=session.chat_id,
             flow_id=session.flow_id,
@@ -179,17 +170,10 @@ class KnowledgeSpaceChatService:
             type="end",
             is_bot=True,
         ))
-        await self.persist_citations(
-            message_id=answer_message.id,
-            citation_registry=citation_registry,
-            chat_id=session.chat_id,
-            flow_id=session.flow_id,
-        )
         logger.info(
-            "saved knowledge space messages question_id={} answer_id={} citations={}",
+            "saved knowledge space messages question_id={} answer_id={}",
             question_message.id,
             answer_message.id,
-            len(citation_registry),
         )
         if not session.name:
             asyncio.create_task(self.generate_conversation(
@@ -204,9 +188,7 @@ class KnowledgeSpaceChatService:
             message={
                 "content": answer,
                 "reasoning_content": reasoning_content,
-                "citations": [item.model_dump(mode="json") for item in citation_registry],
             },
-            citations=citation_registry,
             type="end"
         )
 
@@ -409,26 +391,3 @@ class KnowledgeSpaceChatService:
                 answer = json.loads(one.message).get("content")
                 messages.append(AIMessage(content=answer))
         return messages
-
-    @staticmethod
-    async def persist_citations(
-        message_id: int,
-        citation_registry: List[CitationRegistryItemSchema],
-        chat_id: str,
-        flow_id: str,
-    ) -> None:
-        """Persist citation registry items for a completed answer message."""
-        if not citation_registry or message_id is None:
-            return
-
-        try:
-            async with get_async_db_session() as session:
-                registry_service = CitationRegistryService(MessageCitationRepositoryImpl(session))
-                await registry_service.save_citations(
-                    message_id=message_id,
-                    items=citation_registry,
-                    chat_id=chat_id,
-                    flow_id=flow_id,
-                )
-        except Exception as exc:
-            logger.exception(f'persist_citations failed: {exc}')

@@ -19,13 +19,7 @@ from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
 from bisheng.common.utils.title_generator import generate_conversation_title_sync
 from bisheng.core.cache.redis_manager import get_redis_client_sync
-from bisheng.core.database import get_sync_db_session
 from bisheng.core.logger import trace_id_var
-from bisheng.citation.domain.repositories.implementations.message_citation_repository_impl import (
-    MessageCitationRepositoryImpl,
-)
-from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
-from bisheng.citation.domain.services.citation_registry_service import CitationRegistryService
 from bisheng.database.models.flow import FlowDao, FlowType
 from bisheng.database.models.message import ChatMessageDao, ChatMessage
 from bisheng.database.models.session import MessageSessionDao, MessageSession
@@ -418,85 +412,6 @@ class RedisCallback(BaseCallback):
         if self.workflow and self.get_workflow_stop():
             self.workflow.stop()
 
-    @staticmethod
-    def _normalize_source_documents(source_documents) -> List[Document]:
-        """Normalize source documents into a list for citation registry building."""
-        if source_documents is None:
-            return []
-        if isinstance(source_documents, Document):
-            return [source_documents]
-        if isinstance(source_documents, list):
-            return [one for one in source_documents if isinstance(one, Document)]
-        return []
-
-    @staticmethod
-    def _extract_citation_registry(
-        chat_response: ChatResponse,
-        source_documents=None,
-    ) -> List[CitationRegistryItemSchema]:
-        """Extract citation registry from explicit payload or source documents."""
-        if chat_response.citations:
-            return chat_response.citations
-
-        citation_registry = getattr(source_documents, 'citation_registry', None)
-        if citation_registry:
-            return citation_registry
-
-        normalized_documents = RedisCallback._normalize_source_documents(source_documents)
-        if normalized_documents:
-            return CitationRegistryService.build_rag_registry(normalized_documents)
-
-        return []
-
-    @staticmethod
-    def _load_existing_citations(
-        repository: MessageCitationRepositoryImpl,
-        registry_service: CitationRegistryService,
-        message_id: int,
-    ) -> List[CitationRegistryItemSchema]:
-        """Load persisted citations for a message if they already exist."""
-        existing_entities = repository.find_by_message_id_sync(message_id)
-        if not existing_entities:
-            return []
-
-        return [registry_service.to_registry_item(entity) for entity in existing_entities]
-
-    def persist_citation_registry(
-        self,
-        message_id: int,
-        chat_response: ChatResponse,
-        source_documents=None,
-    ) -> List[CitationRegistryItemSchema]:
-        """Persist normalized citation registry items for workflow messages."""
-        citation_registry = self._extract_citation_registry(chat_response, source_documents)
-        if not citation_registry:
-            return []
-
-        try:
-            with get_sync_db_session() as session:
-                repository = MessageCitationRepositoryImpl(session)
-                registry_service = CitationRegistryService(repository)
-                existing_items = self._load_existing_citations(repository, registry_service, message_id)
-                if existing_items:
-                    return existing_items
-
-                saved_entities = registry_service.save_citations_sync(
-                    message_id=message_id,
-                    items=citation_registry,
-                    chat_id=self.chat_id,
-                    flow_id=self.workflow_id,
-                )
-                return [registry_service.to_registry_item(entity) for entity in saved_entities]
-        except Exception as exc:
-            logger.exception(
-                'persist workflow citation registry failed message_id={} chat_id={} flow_id={}: {}',
-                message_id,
-                self.chat_id,
-                self.workflow_id,
-                exc,
-            )
-            return []
-
     def save_chat_message(self, chat_response: ChatResponse, source_documents=None) -> int | str | None:
         """  save chat message to database
         return message id
@@ -529,14 +444,6 @@ class RedisCallback(BaseCallback):
             category=chat_response.category,
             files=json.dumps(chat_response.files, ensure_ascii=False)
         ))
-
-        persisted_citations = self.persist_citation_registry(
-            message_id=message.id,
-            chat_response=chat_response,
-            source_documents=source_documents,
-        )
-        if persisted_citations:
-            chat_response.citations = persisted_citations
 
         # If the document is traceable, handle the recallchunk
         if chat_response.source not in [0, 4]:

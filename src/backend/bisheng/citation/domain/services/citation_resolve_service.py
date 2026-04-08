@@ -54,12 +54,11 @@ class CitationResolveService:
     ) -> CitationRegistryItemSchema:
         """Enrich a RAG citation with file share URLs and best-effort bbox details."""
         payload = RagCitationPayloadSchema.model_validate(item.sourcePayload)
-        file_id = payload.fileId or payload.documentId
+        file_id = payload.documentId
 
         if file_id is not None:
             file_info = await asyncio.to_thread(KnowledgeFileDao.query_by_id_sync, file_id)
             if file_info is not None:
-                payload.fileId = file_info.id
                 payload.documentId = payload.documentId or file_info.id
                 payload.knowledgeId = payload.knowledgeId or file_info.knowledge_id
                 payload.documentName = payload.documentName or file_info.file_name
@@ -73,7 +72,10 @@ class CitationResolveService:
                     )
                     payload.downloadUrl = download_url or payload.downloadUrl
                     payload.previewUrl = preview_url or payload.previewUrl
-                    payload.bbox = await self._resolve_bbox(file_info.id, payload.bbox)
+                    if payload.items:
+                        first_item = payload.items[0]
+                        resolved_bbox = await self._resolve_bbox(file_info.id, first_item.bbox)
+                        payload.items[0] = first_item.model_copy(update={'bbox': resolved_bbox})
 
         return item.model_copy(update={'sourcePayload': payload})
 

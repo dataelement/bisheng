@@ -13,7 +13,6 @@ class MessageCitationBase(SQLModelSerializable):
     chat_id: Optional[str] = Field(default=None, index=True, max_length=128)
     flow_id: Optional[str] = Field(default=None, index=True, max_length=128)
     citation_type: str = Field(max_length=32)
-    group_key: Optional[str] = Field(default=None, max_length=255)
     source_payload: Dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
     created_time: Optional[datetime] = Field(
         default=None,
