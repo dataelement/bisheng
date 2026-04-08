@@ -84,3 +84,8 @@ dependencies = [
     "json-repair>=0.55.0",
     "arxiv>=2.4.0"
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+]

@@ -4,9 +4,18 @@ from loguru import logger
 from pydantic import BaseModel, Field
 
 from bisheng.api.services.external_workflow import ExternalWorkflowService
+from bisheng.api.services.workflow_authoring import WorkflowAuthoringService
 from bisheng.api.v1.schemas import GraphData
 from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.mcp_server.auth import McpAuthorizationMiddleware, get_current_token_scopes, get_login_user_from_mcp_token, require_mcp_scopes
+from bisheng.workflow.authoring import (
+    NodeTemplateDescriptor,
+    NodeTypeDescriptor,
+    ValidationDiagnostic,
+    WorkflowGraphDescriptor,
+    WorkflowManifest,
+    WorkflowVersionSummary,
+)
 
 try:
     from mcp.server.fastmcp import FastMCP
@@ -32,6 +41,7 @@ class WorkflowValidationResult(BaseModel):
     draft_revision: Optional[int] = None
     errors: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+    diagnostics: list[ValidationDiagnostic] = Field(default_factory=list)
     error_code: Optional[int] = None
 
 
@@ -89,6 +99,49 @@ class WorkflowConnectionResult(BaseModel):
     error_code: Optional[int] = None
 
 
+class WorkflowManifestResult(BaseModel):
+    ok: bool = True
+    workflow: Optional[WorkflowManifest] = None
+    message: str = 'SUCCESS'
+    error_code: Optional[int] = None
+
+
+class WorkflowManifestListResult(BaseModel):
+    ok: bool = True
+    workflows: list[WorkflowManifest] = Field(default_factory=list)
+    message: str = 'SUCCESS'
+    error_code: Optional[int] = None
+
+
+class WorkflowVersionListResult(BaseModel):
+    ok: bool = True
+    flow_id: Optional[str] = None
+    versions: list[WorkflowVersionSummary] = Field(default_factory=list)
+    message: str = 'SUCCESS'
+    error_code: Optional[int] = None
+
+
+class WorkflowGraphResult(BaseModel):
+    ok: bool = True
+    graph: Optional[WorkflowGraphDescriptor] = None
+    message: str = 'SUCCESS'
+    error_code: Optional[int] = None
+
+
+class NodeTypeListResult(BaseModel):
+    ok: bool = True
+    node_types: list[NodeTypeDescriptor] = Field(default_factory=list)
+    message: str = 'SUCCESS'
+    error_code: Optional[int] = None
+
+
+class NodeTemplateResult(BaseModel):
+    ok: bool = True
+    template: Optional[NodeTemplateDescriptor] = None
+    message: str = 'SUCCESS'
+    error_code: Optional[int] = None
+
+
 def _mutation_error(exc: Exception) -> WorkflowMutationResult:
     if isinstance(exc, BaseErrorCode):
         return WorkflowMutationResult(ok=False, message=exc.message, error_code=exc.code)
@@ -101,9 +154,15 @@ def _validation_error(exc: Exception) -> WorkflowValidationResult:
             ok=False,
             valid=False,
             errors=[exc.message],
+            diagnostics=WorkflowAuthoringService.diagnostics_from_exception(exc),
             error_code=exc.code,
         )
-    return WorkflowValidationResult(ok=False, valid=False, errors=[str(exc) or exc.__class__.__name__])
+    return WorkflowValidationResult(
+        ok=False,
+        valid=False,
+        errors=[str(exc) or exc.__class__.__name__],
+        diagnostics=WorkflowAuthoringService.diagnostics_from_exception(exc),
+    )
 
 
 def _node_list_error(exc: Exception) -> WorkflowNodeListResult:
@@ -116,6 +175,42 @@ def _node_params_error(exc: Exception) -> WorkflowNodeParamsResult:
     if isinstance(exc, BaseErrorCode):
         return WorkflowNodeParamsResult(ok=False, message=exc.message, error_code=exc.code)
     return WorkflowNodeParamsResult(ok=False, message=str(exc) or exc.__class__.__name__)
+
+
+def _workflow_manifest_error(exc: Exception) -> WorkflowManifestResult:
+    if isinstance(exc, BaseErrorCode):
+        return WorkflowManifestResult(ok=False, message=exc.message, error_code=exc.code)
+    return WorkflowManifestResult(ok=False, message=str(exc) or exc.__class__.__name__)
+
+
+def _workflow_manifest_list_error(exc: Exception) -> WorkflowManifestListResult:
+    if isinstance(exc, BaseErrorCode):
+        return WorkflowManifestListResult(ok=False, message=exc.message, error_code=exc.code)
+    return WorkflowManifestListResult(ok=False, message=str(exc) or exc.__class__.__name__)
+
+
+def _workflow_version_list_error(exc: Exception) -> WorkflowVersionListResult:
+    if isinstance(exc, BaseErrorCode):
+        return WorkflowVersionListResult(ok=False, message=exc.message, error_code=exc.code)
+    return WorkflowVersionListResult(ok=False, message=str(exc) or exc.__class__.__name__)
+
+
+def _workflow_graph_error(exc: Exception) -> WorkflowGraphResult:
+    if isinstance(exc, BaseErrorCode):
+        return WorkflowGraphResult(ok=False, message=exc.message, error_code=exc.code)
+    return WorkflowGraphResult(ok=False, message=str(exc) or exc.__class__.__name__)
+
+
+def _node_type_list_error(exc: Exception) -> NodeTypeListResult:
+    if isinstance(exc, BaseErrorCode):
+        return NodeTypeListResult(ok=False, message=exc.message, error_code=exc.code)
+    return NodeTypeListResult(ok=False, message=str(exc) or exc.__class__.__name__)
+
+
+def _node_template_result_error(exc: Exception) -> NodeTemplateResult:
+    if isinstance(exc, BaseErrorCode):
+        return NodeTemplateResult(ok=False, message=exc.message, error_code=exc.code)
+    return NodeTemplateResult(ok=False, message=str(exc) or exc.__class__.__name__)
 
 
 def create_workflow_mcp_server():
@@ -182,6 +277,80 @@ def create_workflow_mcp_server():
                 authenticated=False,
                 message=str(exc) or exc.__class__.__name__,
             )
+
+    @mcp.tool()
+    async def list_workflows() -> WorkflowManifestListResult:
+        """List workflows the current MCP user can author."""
+        try:
+            login_user = await get_login_user_from_mcp_token()
+            require_mcp_scopes('workflow.read')
+            workflows = await WorkflowAuthoringService.list_workflows(login_user)
+            return WorkflowManifestListResult(workflows=workflows)
+        except Exception as exc:
+            logger.exception('list_workflows failed')
+            return _workflow_manifest_list_error(exc)
+
+    @mcp.tool()
+    async def get_workflow(flow_id: str) -> WorkflowManifestResult:
+        """Return manifest information for one authorable workflow."""
+        try:
+            login_user = await get_login_user_from_mcp_token()
+            require_mcp_scopes('workflow.read')
+            workflow = await WorkflowAuthoringService.get_workflow(login_user, flow_id)
+            return WorkflowManifestResult(workflow=workflow)
+        except Exception as exc:
+            logger.exception('get_workflow failed')
+            return _workflow_manifest_error(exc)
+
+    @mcp.tool()
+    async def get_workflow_versions(flow_id: str) -> WorkflowVersionListResult:
+        """List versions for one authorable workflow."""
+        try:
+            login_user = await get_login_user_from_mcp_token()
+            require_mcp_scopes('workflow.read')
+            versions = await WorkflowAuthoringService.get_workflow_versions(login_user, flow_id)
+            return WorkflowVersionListResult(flow_id=flow_id, versions=versions)
+        except Exception as exc:
+            logger.exception('get_workflow_versions failed')
+            return _workflow_version_list_error(exc)
+
+    @mcp.tool()
+    async def get_workflow_graph(flow_id: str, version_id: int = 0) -> WorkflowGraphResult:
+        """Return the normalized editable graph for a workflow."""
+        try:
+            login_user = await get_login_user_from_mcp_token()
+            require_mcp_scopes('workflow.read')
+            graph = await WorkflowAuthoringService.get_workflow_graph(
+                login_user=login_user,
+                flow_id=flow_id,
+                version_id=version_id or None,
+            )
+            return WorkflowGraphResult(graph=graph)
+        except Exception as exc:
+            logger.exception('get_workflow_graph failed')
+            return _workflow_graph_error(exc)
+
+    @mcp.tool()
+    async def list_node_types() -> NodeTypeListResult:
+        """List supported workflow node types for authoring."""
+        try:
+            await get_login_user_from_mcp_token()
+            require_mcp_scopes('workflow.read')
+            return NodeTypeListResult(node_types=WorkflowAuthoringService.list_node_types())
+        except Exception as exc:
+            logger.exception('list_node_types failed')
+            return _node_type_list_error(exc)
+
+    @mcp.tool()
+    async def get_node_template(node_type: str) -> NodeTemplateResult:
+        """Return the normalized template metadata for one workflow node type."""
+        try:
+            await get_login_user_from_mcp_token()
+            require_mcp_scopes('workflow.read')
+            return NodeTemplateResult(template=WorkflowAuthoringService.get_node_template(node_type))
+        except Exception as exc:
+            logger.exception('get_node_template failed')
+            return _node_template_result_error(exc)
 
     @mcp.tool()
     async def list_workflow_nodes(flow_id: str, version_id: int = 0) -> WorkflowNodeListResult:
@@ -318,6 +487,7 @@ def create_workflow_mcp_server():
                 version_id=version.id,
                 valid=True,
                 draft_revision=ExternalWorkflowService.get_graph_revision(version.data),
+                diagnostics=[],
             )
         except Exception as exc:
             logger.exception('validate_workflow failed')

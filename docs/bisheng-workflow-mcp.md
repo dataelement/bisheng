@@ -2,8 +2,12 @@
 
 ## 概述
 
-Bisheng 提供一个面向外部 Agent 的 Workflow MCP 服务，支持：
+Bisheng 提供一个面向外部 Agent 的 Workflow Authoring MCP 服务，支持：
 
+- 发现可编辑 workflow
+- 读取 workflow manifest / version / graph
+- 发现可用 node type
+- 读取 node template
 - 创建 workflow draft
 - 读取 workflow 节点
 - 读取节点可编辑参数
@@ -116,6 +120,12 @@ tool 权限要求：
 
 - `ping`: 任意已认证 MCP token
 - `whoami`: 任意已认证 MCP token
+- `list_workflows`: `workflow.read`
+- `get_workflow`: `workflow.read`
+- `get_workflow_versions`: `workflow.read`
+- `get_workflow_graph`: `workflow.read`
+- `list_node_types`: `workflow.read`
+- `get_node_template`: `workflow.read`
 - `list_workflow_nodes`: `workflow.read`
 - `get_workflow_node_params`: `workflow.read`
 - `create_workflow_draft`: `workflow.write`
@@ -153,6 +163,109 @@ tool 权限要求：
 
 返回当前 MCP token 对应的 Bisheng 用户。
 
+### `list_workflows`
+
+列出当前用户有 authoring 权限的 workflow。
+
+返回会带：
+
+- `flow_id`
+- `name`
+- `description`
+- `status`
+- `current_version_id`
+- `editable_version_id`
+- `draft_revision`
+- `schema_version`
+
+### `get_workflow`
+
+读取单个 workflow 的 manifest 信息。
+
+### `get_workflow_versions`
+
+列出 workflow 全部版本摘要。
+
+返回会带：
+
+- `version_id`
+- `name`
+- `description`
+- `is_current`
+- `is_editable`
+- `is_external_draft`
+- `original_version_id`
+- `draft_revision`
+- `schema_version`
+
+### `get_workflow_graph`
+
+读取 workflow 当前可编辑版本的标准化 graph。
+
+输入：
+
+```json
+{
+  "flow_id": "<flow_id>"
+}
+```
+
+可选传 `version_id` 指定版本。
+
+返回会带：
+
+- `flow_id`
+- `version_id`
+- `draft_revision`
+- `schema_version`
+- `nodes`
+- `edges`
+
+每个 `node` 会包含：
+
+- `id`
+- `type`
+- `name`
+- `tab`
+- `param_keys`
+- `params`
+
+### `list_node_types`
+
+列出当前 Workflow Authoring MCP 支持发现的 node type。
+
+返回会带：
+
+- `type`
+- `display_name`
+- `description`
+- `param_keys`
+- `dynamic_template`
+- `schema_version`
+
+### `get_node_template`
+
+读取单个 node type 的标准化 template。
+
+输入：
+
+```json
+{
+  "node_type": "llm"
+}
+```
+
+返回会带：
+
+- `node_type`
+- `display_name`
+- `description`
+- `tab`
+- `groups`
+- `params`
+- `dynamic_template`
+- `schema_version`
+
 ### `create_workflow_draft`
 
 创建一个新的 workflow draft。
@@ -165,7 +278,17 @@ tool 权限要求：
   "description": "created by agent",
   "guide_word": "",
   "graph_data": {
-    "nodes": [],
+    "nodes": [
+      {
+        "id": "start_1",
+        "data": {
+          "id": "start_1",
+          "type": "start",
+          "name": "Start",
+          "group_params": []
+        }
+      }
+    ],
     "edges": []
   }
 }
@@ -303,6 +426,15 @@ tool 权限要求：
 
 校验 workflow 当前版本。
 
+返回新增 `diagnostics` 字段，每个诊断项包含：
+
+- `code`
+- `severity`
+- `message`
+- `node_id`
+- `field_path`
+- `suggested_fix`
+
 ### `publish_workflow`
 
 发布指定 workflow 版本。
@@ -433,7 +565,7 @@ Clawith 里建议这样接：
 
 1. 普通 Bisheng access token 可成功换取 MCP token
 2. MCP token 可成功调用 `ping`
-3. MCP token 可成功调用 `list_workflow_nodes`
+3. MCP token 可成功调用 discovery / authoring tool
 4. workflow tool 返回 `draft_revision`
 5. 节点参数读取正常
 6. `update_workflow_node_params` 成功写入后会推进 `draft_revision`
