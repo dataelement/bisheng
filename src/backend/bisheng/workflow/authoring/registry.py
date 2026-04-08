@@ -1012,7 +1012,7 @@ def create_graph_node_payload(node_type: str,
 
     return {
         'id': node_id,
-        'type': node_type,
+        'type': 'noteNode' if node_type == 'note' else 'flowNode',
         'position': {
             'x': position_x,
             'y': position_y,

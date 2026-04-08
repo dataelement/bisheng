@@ -37,6 +37,8 @@ class ExternalWorkflowService:
     _DEFAULT_TARGET_HANDLE = 'left_handle'
     _DEFAULT_HORIZONTAL_NODE_GAP = 320
     _NOTE_NODE_TYPE = NodeType.NOTE.value
+    _EDITOR_FLOW_NODE_TYPE = 'flowNode'
+    _EDITOR_NOTE_NODE_TYPE = 'noteNode'
     _START_NODE_TYPE = NodeType.START.value
     _END_NODE_TYPE = NodeType.END.value
     _SENSITIVE_KEY_PATTERNS = (
@@ -683,6 +685,20 @@ class ExternalWorkflowService:
         return node_payload
 
     @classmethod
+    def _normalize_editor_node_types(cls, graph_data: dict) -> dict:
+        for node in graph_data.get('nodes', []):
+            if not isinstance(node, dict):
+                continue
+            node_data = node.get('data')
+            if not isinstance(node_data, dict):
+                continue
+            node_type = node_data.get('type')
+            if not node_type:
+                continue
+            node['type'] = cls._EDITOR_NOTE_NODE_TYPE if node_type == cls._NOTE_NODE_TYPE else cls._EDITOR_FLOW_NODE_TYPE
+        return graph_data
+
+    @classmethod
     def _ensure_create_graph_scaffold(cls, graph_data: dict) -> dict:
         if not isinstance(graph_data, dict):
             return graph_data
@@ -692,6 +708,7 @@ class ExternalWorkflowService:
             return graph_data
 
         updated_graph = copy.deepcopy(graph_data)
+        cls._normalize_editor_node_types(updated_graph)
         start_nodes = cls._find_nodes_by_type(updated_graph, cls._START_NODE_TYPE)
         end_nodes = cls._find_nodes_by_type(updated_graph, cls._END_NODE_TYPE)
 
@@ -1042,6 +1059,7 @@ class ExternalWorkflowService:
         if name is not None and name != flow.name:
             cls._assert_workflow_name_available(login_user, name, exclude_flow_id=flow.id)
 
+        graph_data = cls._normalize_editor_node_types(copy.deepcopy(graph_data))
         if has_flow_updates:
             if name is not None:
                 flow.name = name

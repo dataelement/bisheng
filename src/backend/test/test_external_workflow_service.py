@@ -198,6 +198,7 @@ class TestExternalWorkflowService(IsolatedAsyncioTestCase):
         graph = ExternalWorkflowService._ensure_create_graph_scaffold({'nodes': [], 'edges': []})
 
         self.assertEqual([node['data']['type'] for node in graph['nodes']], ['start', 'end'])
+        self.assertEqual([node['type'] for node in graph['nodes']], ['flowNode', 'flowNode'])
         self.assertEqual(len(graph['edges']), 1)
         self.assertEqual(graph['edges'][0]['source'], graph['nodes'][0]['id'])
         self.assertEqual(graph['edges'][0]['target'], graph['nodes'][1]['id'])
@@ -224,6 +225,7 @@ class TestExternalWorkflowService(IsolatedAsyncioTestCase):
         end_id = next(node_id for node_id, node_type in node_types.items() if node_type == 'end')
 
         self.assertEqual(len(graph['nodes']), 3)
+        self.assertEqual([node['type'] for node in graph['nodes']], ['flowNode', 'flowNode', 'flowNode'])
         self.assertEqual(len(graph['edges']), 2)
         self.assertTrue(any(edge['source'] == start_id and edge['target'] == 'input-1' for edge in graph['edges']))
         self.assertTrue(any(edge['source'] == 'input-1' and edge['target'] == end_id for edge in graph['edges']))
@@ -258,6 +260,7 @@ class TestExternalWorkflowService(IsolatedAsyncioTestCase):
         start_id = next(node_id for node_id, node_type in node_types.items() if node_type == 'start')
         end_id = next(node_id for node_id, node_type in node_types.items() if node_type == 'end')
 
+        self.assertEqual([node['type'] for node in graph['nodes']], ['flowNode', 'flowNode', 'flowNode'])
         self.assertTrue(any(edge['source'] == start_id and edge['target'] == 'condition-1' for edge in graph['edges']))
         self.assertTrue(
             any(
@@ -319,7 +322,40 @@ class TestExternalWorkflowService(IsolatedAsyncioTestCase):
         self.assertEqual(version.id, 11)
         scaffold_types = [node['data']['type'] for node in captured['graph_data']['nodes']]
         self.assertEqual(scaffold_types, ['start', 'end'])
+        self.assertEqual([node['type'] for node in captured['graph_data']['nodes']], ['flowNode', 'flowNode'])
         self.assertEqual(len(captured['graph_data']['edges']), 1)
+
+    def test_normalize_workflow_editor_graph_rewrites_legacy_node_types(self):
+        graph = {
+            'nodes': [{
+                'id': 'start-1',
+                'type': 'start',
+                'position': {'x': 0, 'y': 0},
+                'data': {
+                    'id': 'start-1',
+                    'type': 'start',
+                    'name': 'Start',
+                    'group_params': [],
+                },
+            }, {
+                'id': 'end-1',
+                'type': 'end',
+                'position': {'x': 320, 'y': 0},
+                'data': {
+                    'id': 'end-1',
+                    'type': 'end',
+                    'name': 'End',
+                    'group_params': [],
+                },
+            }],
+            'edges': [],
+        }
+
+        normalized = FlowService._normalize_workflow_editor_graph(graph)
+
+        self.assertEqual([node['type'] for node in normalized['nodes']], ['flowNode', 'flowNode'])
+        self.assertEqual([node['data']['type'] for node in normalized['nodes']], ['start', 'end'])
+        self.assertEqual([node['type'] for node in graph['nodes']], ['start', 'end'])
 
     def test_get_existing_external_draft_version_limits_recent_versions(self):
         captured = {'statements': []}
@@ -554,6 +590,7 @@ class TestExternalWorkflowService(IsolatedAsyncioTestCase):
         self.assertEqual(len(persisted), 1)
         self.assertEqual(len(persisted[0]['nodes']), 2)
         self.assertEqual(persisted[0]['nodes'][1]['id'], node_id)
+        self.assertEqual(persisted[0]['nodes'][1]['type'], 'flowNode')
         self.assertEqual(persisted[0]['nodes'][1]['position'], {'x': 120, 'y': 260})
         self.assertEqual(persisted[0]['nodes'][1]['data']['type'], 'code')
         self.assertEqual(persisted[0]['nodes'][1]['data']['name'], 'Code Node')

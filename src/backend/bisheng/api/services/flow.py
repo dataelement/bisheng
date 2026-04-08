@@ -37,6 +37,31 @@ from bisheng.utils import get_request_ip
 
 class FlowService(BaseService):
 
+    @staticmethod
+    def _normalize_workflow_editor_graph(graph_data: Optional[dict]) -> Optional[dict]:
+        if not isinstance(graph_data, dict):
+            return graph_data
+
+        nodes = graph_data.get('nodes')
+        if not isinstance(nodes, list):
+            return graph_data
+
+        normalized_graph = copy.deepcopy(graph_data)
+        for node in normalized_graph.get('nodes', []):
+            if not isinstance(node, dict):
+                continue
+            node_data = node.get('data')
+            if not isinstance(node_data, dict):
+                continue
+            node_type = node_data.get('type')
+            if not node_type:
+                continue
+            if node.get('type') in {'flowNode', 'noteNode'}:
+                continue
+            node['type'] = 'noteNode' if node_type == 'note' else 'flowNode'
+
+        return normalized_graph
+
     @classmethod
     def get_version_list_by_flow(cls, user: UserPayload, flow_id: str) -> UnifiedResponseModel[List[FlowVersionRead]]:
         """
@@ -233,6 +258,8 @@ class FlowService(BaseService):
                 raise UnAuthorizedError()
 
         flow_info.logo = await cls.get_logo_share_link_async(flow_info.logo)
+        if flow_info.flow_type == FlowType.WORKFLOW.value:
+            flow_info.data = cls._normalize_workflow_editor_graph(flow_info.data)
 
         return resp_200(data=flow_info)
 
