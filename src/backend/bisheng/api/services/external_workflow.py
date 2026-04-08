@@ -20,6 +20,7 @@ from bisheng.utils import generate_uuid
 from bisheng.workflow.common.node import BaseNodeData, NodeType
 from bisheng.workflow.edges.edges import EdgeBase
 from bisheng.workflow.graph.workflow import Workflow
+from bisheng.workflow.authoring.editor_compat import normalize_workflow_editor_graph
 from bisheng.workflow.authoring.registry import create_graph_node_payload
 from bisheng.workflow.nodes.condition.conidition_case import ConditionCases
 
@@ -686,17 +687,7 @@ class ExternalWorkflowService:
 
     @classmethod
     def _normalize_editor_node_types(cls, graph_data: dict) -> dict:
-        for node in graph_data.get('nodes', []):
-            if not isinstance(node, dict):
-                continue
-            node_data = node.get('data')
-            if not isinstance(node_data, dict):
-                continue
-            node_type = node_data.get('type')
-            if not node_type:
-                continue
-            node['type'] = cls._EDITOR_NOTE_NODE_TYPE if node_type == cls._NOTE_NODE_TYPE else cls._EDITOR_FLOW_NODE_TYPE
-        return graph_data
+        return normalize_workflow_editor_graph(graph_data, in_place=True)
 
     @classmethod
     def _ensure_create_graph_scaffold(cls, graph_data: dict) -> dict:
@@ -939,6 +930,10 @@ class ExternalWorkflowService:
                 normalized_case = ConditionCases(**raw_case).model_dump()
             except Exception as exc:
                 cls._raise_workflow_error(f'Invalid condition case at index {index}: {exc}')
+            for condition in normalized_case.get('conditions') or []:
+                right_value_type = condition.get('right_value_type')
+                if right_value_type != 'ref':
+                    condition['right_value_type'] = 'input'
             case_id = normalized_case['id']
             if case_id in seen_case_ids:
                 cls._raise_workflow_error(f'Duplicate condition case id: {case_id}')

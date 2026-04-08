@@ -33,34 +33,14 @@ from bisheng.share_link.domain.models.share_link import ShareLink
 from bisheng.user.domain.models.user import UserDao
 from bisheng.user.domain.models.user_role import UserRoleDao
 from bisheng.utils import get_request_ip
+from bisheng.workflow.authoring.editor_compat import normalize_workflow_editor_graph
 
 
 class FlowService(BaseService):
 
     @staticmethod
     def _normalize_workflow_editor_graph(graph_data: Optional[dict]) -> Optional[dict]:
-        if not isinstance(graph_data, dict):
-            return graph_data
-
-        nodes = graph_data.get('nodes')
-        if not isinstance(nodes, list):
-            return graph_data
-
-        normalized_graph = copy.deepcopy(graph_data)
-        for node in normalized_graph.get('nodes', []):
-            if not isinstance(node, dict):
-                continue
-            node_data = node.get('data')
-            if not isinstance(node_data, dict):
-                continue
-            node_type = node_data.get('type')
-            if not node_type:
-                continue
-            if node.get('type') in {'flowNode', 'noteNode'}:
-                continue
-            node['type'] = 'noteNode' if node_type == 'note' else 'flowNode'
-
-        return normalized_graph
+        return normalize_workflow_editor_graph(graph_data)
 
     @classmethod
     def get_version_list_by_flow(cls, user: UserPayload, flow_id: str) -> UnifiedResponseModel[List[FlowVersionRead]]:

@@ -347,15 +347,67 @@ class TestExternalWorkflowService(IsolatedAsyncioTestCase):
                     'name': 'End',
                     'group_params': [],
                 },
+            }, {
+                'id': 'condition-1',
+                'type': 'condition',
+                'position': {'x': 160, 'y': 0},
+                'data': {
+                    'id': 'condition-1',
+                    'type': 'condition',
+                    'name': 'Condition',
+                    'group_params': [{
+                        'params': [{
+                            'key': 'condition',
+                            'type': 'condition',
+                            'value': [{
+                                'id': 'case_a',
+                                'operator': 'and',
+                                'conditions': [{
+                                    'id': 'rule_1',
+                                    'left_var': 'code_1.score',
+                                    'comparison_operation': 'greater_than',
+                                    'right_value_type': 'const',
+                                    'right_value': '80',
+                                }],
+                            }],
+                        }],
+                    }],
+                },
             }],
             'edges': [],
         }
 
         normalized = FlowService._normalize_workflow_editor_graph(graph)
 
-        self.assertEqual([node['type'] for node in normalized['nodes']], ['flowNode', 'flowNode'])
-        self.assertEqual([node['data']['type'] for node in normalized['nodes']], ['start', 'end'])
-        self.assertEqual([node['type'] for node in graph['nodes']], ['start', 'end'])
+        self.assertEqual([node['type'] for node in normalized['nodes']], ['flowNode', 'flowNode', 'flowNode'])
+        self.assertEqual([node['data']['type'] for node in normalized['nodes']], ['start', 'end', 'condition'])
+        self.assertEqual([node['type'] for node in graph['nodes']], ['start', 'end', 'condition'])
+        condition_item = normalized['nodes'][2]['data']['group_params'][0]['params'][0]['value'][0]['conditions'][0]
+        self.assertEqual(condition_item['right_value_type'], 'input')
+        self.assertEqual(condition_item['left_label'], '')
+        self.assertEqual(condition_item['right_label'], '')
+
+    def test_normalize_condition_cases_keeps_editor_friendly_shape(self):
+        normalized = ExternalWorkflowService._normalize_condition_cases([{
+            'id': 'case_a',
+            'operator': 'and',
+            'conditions': [{
+                'id': 'rule_1',
+                'left_var': 'code_1.score',
+                'left_label': 'Score/priority_score',
+                'comparison_operation': 'greater_than_or_equal',
+                'right_value_type': 'const',
+                'right_value': '90',
+                'right_label': '',
+                'variable_key_value': {},
+            }],
+            'variable_key_value': {},
+        }])
+
+        condition_item = normalized[0]['conditions'][0]
+        self.assertEqual(condition_item['left_label'], 'Score/priority_score')
+        self.assertEqual(condition_item['right_label'], '')
+        self.assertEqual(condition_item['right_value_type'], 'input')
 
     def test_get_existing_external_draft_version_limits_recent_versions(self):
         captured = {'statements': []}

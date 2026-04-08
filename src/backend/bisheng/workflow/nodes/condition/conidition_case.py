@@ -11,9 +11,11 @@ from bisheng.workflow.nodes.base import BaseNode
 class ConditionOne(BaseModel):
     id: str = Field(..., description='Unique id for condition')
     left_var: str = Field(..., description='Left variable')
+    left_label: str = Field('', description='Left variable label for editor display')
     comparison_operation: str = Field(..., description='Compare type')
     right_value_type: str = Field(..., description='Right value type')
     right_value: str = Field(..., description='Right value')
+    right_label: str = Field('', description='Right variable label for editor display')
     variable_key_value: Dict = Field(default={}, description='variable key value')
 
     def evaluate(self, node_instance: BaseNode) -> bool:
