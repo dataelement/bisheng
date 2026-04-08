@@ -20,7 +20,7 @@ from bisheng.common.services.config_service import settings
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum, GroupResource
 from bisheng.database.models.role_access import AccessType
 from bisheng.database.models.user_group import UserGroupDao
-from bisheng.mcp_manage.clients.stdio import StdioClient
+from bisheng.mcp_manage.constant import McpClientType
 from bisheng.mcp_manage.manager import ClientManager
 from bisheng.tool.domain.const import ToolPresetType
 from bisheng.tool.domain.langchain.linsight_knowledge import SearchKnowledgeBase
@@ -267,9 +267,9 @@ class ToolServices(BaseModel):
             raise ToolMcpSchemaError()
         mcp_conf = await settings.get_mcp_conf()
         if not mcp_conf.enable_stdio:
-            client = await ClientManager.connect_mcp_from_json(tool_type.openapi_schema)
-            if isinstance(client, StdioClient):
-                raise ToolMcpSchemaError()
+            client_type, _ = ClientManager.parse_mcp_client_type(tool_type.openapi_schema)
+            if client_type == McpClientType.STDIO.value:
+                raise ToolMcpSchemaError(msg="not support stdio mcp server")
 
         return tool_type
 
