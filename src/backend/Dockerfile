@@ -2,6 +2,8 @@ FROM dataelement/bisheng-backend:base.v8
 
 WORKDIR /app
 
+ENV UV_HTTP_TIMEOUT=300
+
 COPY ./ ./
 
 # 生成并安装依赖

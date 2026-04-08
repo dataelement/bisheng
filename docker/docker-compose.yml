@@ -40,7 +40,11 @@ services:
 
   backend:
     container_name: bisheng-backend
-    image: dataelement/bisheng-backend:v2.4.0-beta1
+    image: bisheng-backend-local:dev
+    platform: linux/amd64
+    build:
+      context: ../src/backend
+      dockerfile: Dockerfile
     ports:
       - "7860:7860"
     environment:
@@ -78,7 +82,11 @@ services:
   
   backend_worker:
     container_name: bisheng-backend-worker
-    image: dataelement/bisheng-backend:v2.4.0-beta1
+    image: bisheng-backend-local:dev
+    platform: linux/amd64
+    build:
+      context: ../src/backend
+      dockerfile: Dockerfile
     environment:
       TZ: Asia/Shanghai
       BS_MILVUS_CONNECTION_ARGS: '{"host":"milvus","port":"19530","user":"","password":"","secure":false}'
