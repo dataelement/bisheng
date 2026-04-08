@@ -494,7 +494,11 @@ class KnowledgeService(KnowledgeUtils):
             raise ValueError("File resolution is empty")
 
         parse_type = type(pipeline.loader).__name__ if pipeline.loader else "local"
-        partitions = None
+        partitions = {}
+        if hasattr(pipeline.loader, "bbox_list") and pipeline.loader.bbox_list:
+            for text_bbox in pipeline.loader.bbox_list:
+                bbox_key = "-".join([str(int(one)) for one in text_bbox.bbox])
+                partitions[f"{text_bbox.page}-{bbox_key}"] = text_bbox.model_dump()
 
         texts = [doc.page_content for doc in result.documents]
         metadatas = [doc.metadata for doc in result.documents]
