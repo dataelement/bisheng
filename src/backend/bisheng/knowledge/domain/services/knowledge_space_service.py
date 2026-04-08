@@ -953,9 +953,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 process_files.append(db_file)
                 current_total_file_size += db_file.file_size
             else:
-                failed_file_info = db_file.model_dump()
-                failed_file_info["file_path"] = one
-                failed_files.append(failed_file_info)
+                failed_files.append(db_file)
+
         for index, one in enumerate(process_files):
             file_worker.parse_knowledge_file_celery.delay(one.id, preview_cache_keys[index])
         await self.update_folder_update_time(file_level_path)

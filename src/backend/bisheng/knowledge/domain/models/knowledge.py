@@ -165,9 +165,9 @@ class KnowledgeDao(KnowledgeBase):
 
     @classmethod
     async def async_update_knowledge_update_time_by_id(cls, knowledge_id: int):
-        statement = update(Knowledge).where(Knowledge.id == knowledge_id).values(
+        statement = update(Knowledge).where(col(Knowledge.id) == knowledge_id).values(
             update_time=text('NOW()'))
-        async with get_db_session() as session:
+        async with get_async_db_session() as session:
             await session.exec(statement)
             await session.commit()
 

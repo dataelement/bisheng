@@ -39,7 +39,7 @@ from bisheng.common.errcode.channel import (
     ChannelAdminLimitExceededError,
     ChannelSubscribeLimitExceededError,
 )
-from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError
+from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError, SpaceFileNameDuplicateError
 from bisheng.common.models.space_channel_member import (
     BusinessTypeEnum,
     UserRoleEnum,
@@ -1047,7 +1047,6 @@ class ChannelService:
                 login_user, get_request_ip(request), channel_id, channel.name
             )
 
-
         return True
 
     async def unsubscribe_channel(self, channel_id: str, login_user: UserPayload):
@@ -1492,6 +1491,7 @@ class ChannelService:
         from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileStatus
 
         result = []
+        failed = False
         for index, kf in enumerate(knowledge_files):
             if kf.status != KnowledgeFileStatus.FAILED.value:
                 html_content = preview_map[index]
@@ -1501,6 +1501,10 @@ class ChannelService:
                                               content_type="text/html")
                 kf.preview_file_object_name = preview_object_name
                 result.append(kf)
+            else:
+                failed = True
         await KnowledgeFileDao.async_update_batch(result)
+        if failed:
+            raise SpaceFileNameDuplicateError()
 
         return result
