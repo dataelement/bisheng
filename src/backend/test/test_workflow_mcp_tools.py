@@ -2,6 +2,8 @@ from types import SimpleNamespace
 from unittest import IsolatedAsyncioTestCase
 from unittest.mock import AsyncMock, patch
 
+from bisheng.common.errcode.flow import WorkFlowInitError
+from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.mcp_server.workflow import create_workflow_mcp_server
 from bisheng.workflow.authoring import WorkflowManifest
@@ -57,6 +59,19 @@ class TestWorkflowMcpTools(IsolatedAsyncioTestCase):
         self.assertEqual(result.error_code, 404)
         self.assertEqual(result.message, 'missing node template')
 
+    async def test_list_workflows_wraps_scope_error(self):
+        login_user = SimpleNamespace(user_id=7, user_name='admin')
+        list_workflows = get_tool('list_workflows')
+
+        with patch('bisheng.mcp_server.workflow.get_login_user_from_mcp_token', AsyncMock(return_value=login_user)), \
+                patch('bisheng.mcp_server.workflow.require_mcp_scopes',
+                      side_effect=UnAuthorizedError(msg='forbidden')):
+            result = await list_workflows()
+
+        self.assertFalse(result.ok)
+        self.assertEqual(result.error_code, 403)
+        self.assertEqual(result.message, 'forbidden')
+
     async def test_get_condition_node_wraps_service_payload(self):
         login_user = SimpleNamespace(user_id=7, user_name='admin')
         get_condition_node = get_tool('get_condition_node')
@@ -80,3 +95,31 @@ class TestWorkflowMcpTools(IsolatedAsyncioTestCase):
         self.assertTrue(result.ok)
         self.assertEqual(result.node_id, 'condition-1')
         self.assertEqual(result.route_handles, ['case_a', 'right_handle'])
+
+    async def test_validate_workflow_returns_structured_diagnostics_on_error(self):
+        login_user = SimpleNamespace(user_id=7, user_name='admin')
+        validate_workflow = get_tool('validate_workflow')
+
+        with patch('bisheng.mcp_server.workflow.get_login_user_from_mcp_token', AsyncMock(return_value=login_user)), \
+                patch('bisheng.mcp_server.workflow.require_mcp_scopes'), \
+                patch('bisheng.mcp_server.workflow.ExternalWorkflowService.validate_workflow',
+                      AsyncMock(side_effect=WorkFlowInitError(msg='Param temperature must be within scope [0, 1]'))):
+            result = await validate_workflow(flow_id='flow-1', version_id=11)
+
+        self.assertFalse(result.ok)
+        self.assertFalse(result.valid)
+        self.assertEqual(result.error_code, 10526)
+        self.assertEqual(result.errors, ['Param temperature must be within scope [0, 1]'])
+        self.assertEqual(result.diagnostics[0].field_path, 'temperature')
+
+    async def test_ping_returns_connection_error_when_authentication_fails(self):
+        ping = get_tool('ping')
+
+        with patch('bisheng.mcp_server.workflow.get_login_user_from_mcp_token',
+                   AsyncMock(side_effect=UnAuthorizedError(msg='missing token'))):
+            result = await ping()
+
+        self.assertFalse(result.ok)
+        self.assertFalse(result.authenticated)
+        self.assertEqual(result.error_code, 403)
+        self.assertEqual(result.message, 'missing token')

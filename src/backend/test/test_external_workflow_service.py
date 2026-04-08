@@ -407,6 +407,39 @@ class TestExternalWorkflowService(IsolatedAsyncioTestCase):
         self.assertEqual(persisted[0]['nodes'][0]['id'], 'node-1')
         self.assertEqual(persisted[0]['edges'], [])
 
+    async def test_remove_workflow_node_rejects_connected_node_when_cascade_disabled(self):
+        flow = SimpleNamespace(id='flow-1', name='demo', status=FlowStatus.OFFLINE.value)
+        graph = make_graph()
+        graph['nodes'].append({
+            'id': 'node-2',
+            'data': {
+                'id': 'node-2',
+                'type': 'output',
+                'name': 'Output Node',
+                'group_params': [],
+            },
+        })
+        graph['edges'].append({
+            'id': 'edge-1',
+            'source': 'node-1',
+            'sourceHandle': 'output',
+            'target': 'node-2',
+            'targetHandle': 'input',
+        })
+        version = SimpleNamespace(id=11, data=graph, is_current=1)
+
+        async def fake_get_editable_version(login_user, flow_id, version_id=None):
+            return flow, version
+
+        with patch.object(ExternalWorkflowService, '_get_editable_version', side_effect=fake_get_editable_version):
+            with self.assertRaises(WorkFlowInitError):
+                await ExternalWorkflowService.remove_workflow_node(
+                    login_user=SimpleNamespace(user_id=1),
+                    flow_id='flow-1',
+                    node_id='node-2',
+                    cascade=False,
+                )
+
     async def test_connect_and_disconnect_workflow_nodes_persist_edge_updates(self):
         flow = SimpleNamespace(id='flow-1', name='demo', status=FlowStatus.OFFLINE.value)
         graph = make_graph()
@@ -458,6 +491,89 @@ class TestExternalWorkflowService(IsolatedAsyncioTestCase):
         self.assertEqual(persisted[0]['edges'][0]['targetType'], 'output')
         self.assertEqual(persisted[1]['edges'], [])
 
+    async def test_connect_workflow_nodes_rejects_duplicate_edge(self):
+        flow = SimpleNamespace(id='flow-1', name='demo', status=FlowStatus.OFFLINE.value)
+        graph = make_graph()
+        graph['nodes'].append({
+            'id': 'node-2',
+            'data': {
+                'id': 'node-2',
+                'type': 'output',
+                'name': 'Output Node',
+                'group_params': [],
+            },
+        })
+        graph['edges'].append({
+            'id': 'edge-1',
+            'source': 'node-1',
+            'sourceHandle': 'output',
+            'target': 'node-2',
+            'targetHandle': 'input',
+        })
+        version = SimpleNamespace(id=11, data=graph, is_current=1)
+
+        async def fake_get_editable_version(login_user, flow_id, version_id=None):
+            return flow, version
+
+        with patch.object(ExternalWorkflowService, '_get_editable_version', side_effect=fake_get_editable_version):
+            with self.assertRaises(WorkFlowInitError):
+                await ExternalWorkflowService.connect_workflow_nodes(
+                    login_user=SimpleNamespace(user_id=1),
+                    flow_id='flow-1',
+                    source_node_id='node-1',
+                    target_node_id='node-2',
+                    source_handle='output',
+                    target_handle='input',
+                )
+
+    async def test_disconnect_workflow_edge_rejects_ambiguous_selector(self):
+        flow = SimpleNamespace(id='flow-1', name='demo', status=FlowStatus.OFFLINE.value)
+        graph = make_graph()
+        graph['nodes'].append({
+            'id': 'node-2',
+            'data': {
+                'id': 'node-2',
+                'type': 'output',
+                'name': 'Output Node',
+                'group_params': [],
+            },
+        })
+        graph['nodes'].append({
+            'id': 'node-3',
+            'data': {
+                'id': 'node-3',
+                'type': 'output',
+                'name': 'Output Node 2',
+                'group_params': [],
+            },
+        })
+        graph['edges'].extend([{
+            'id': 'edge-1',
+            'source': 'node-1',
+            'sourceHandle': 'output',
+            'target': 'node-2',
+            'targetHandle': 'input',
+        }, {
+            'id': 'edge-2',
+            'source': 'node-1',
+            'sourceHandle': 'output',
+            'target': 'node-3',
+            'targetHandle': 'input',
+        }])
+        version = SimpleNamespace(id=11, data=graph, is_current=1)
+
+        async def fake_get_editable_version(login_user, flow_id, version_id=None):
+            return flow, version
+
+        with patch.object(ExternalWorkflowService, '_get_editable_version', side_effect=fake_get_editable_version):
+            with self.assertRaises(WorkFlowInitError):
+                await ExternalWorkflowService.disconnect_workflow_edge(
+                    login_user=SimpleNamespace(user_id=1),
+                    flow_id='flow-1',
+                    source_node_id='node-1',
+                    source_handle='output',
+                )
+
     async def test_get_condition_node_config_returns_cases_and_routes(self):
         flow = SimpleNamespace(id='flow-1', name='demo', status=FlowStatus.OFFLINE.value)
         version = SimpleNamespace(id=11, data=make_condition_graph(), is_current=1)
@@ -477,6 +593,21 @@ class TestExternalWorkflowService(IsolatedAsyncioTestCase):
         self.assertIn('case_a', result['route_handles'])
         self.assertIn('right_handle', result['route_handles'])
         self.assertEqual(result['outgoing_edges']['case_a'][0]['edge_id'], 'edge-1')
+
+    async def test_get_condition_node_config_rejects_non_condition_node(self):
+        flow = SimpleNamespace(id='flow-1', name='demo', status=FlowStatus.OFFLINE.value)
+        version = SimpleNamespace(id=11, data=make_graph(), is_current=1)
+
+        async def fake_get_editable_version(login_user, flow_id, version_id=None):
+            return flow, version
+
+        with patch.object(ExternalWorkflowService, '_get_editable_version', side_effect=fake_get_editable_version):
+            with self.assertRaises(WorkFlowInitError):
+                await ExternalWorkflowService.get_condition_node_config(
+                    login_user=SimpleNamespace(user_id=1),
+                    flow_id='flow-1',
+                    node_id='node-1',
+                )
 
     async def test_update_condition_node_persists_structured_cases(self):
         flow = SimpleNamespace(id='flow-1', name='demo', status=FlowStatus.OFFLINE.value)
@@ -548,3 +679,36 @@ class TestExternalWorkflowService(IsolatedAsyncioTestCase):
                         'variable_key_value': {},
                     }],
                 )
+
+    async def test_update_condition_node_rejects_duplicate_case_ids(self):
+        flow = SimpleNamespace(id='flow-1', name='demo', status=FlowStatus.OFFLINE.value)
+        version = SimpleNamespace(id=11, data=make_condition_graph(), is_current=1)
+
+        async def fake_get_editable_version(login_user, flow_id, version_id=None):
+            return flow, version
+
+        with patch.object(ExternalWorkflowService, '_get_editable_version', side_effect=fake_get_editable_version):
+            with self.assertRaises(WorkFlowInitError):
+                await ExternalWorkflowService.update_condition_node(
+                    login_user=SimpleNamespace(user_id=1),
+                    flow_id='flow-1',
+                    node_id='condition-1',
+                    condition_cases=[{
+                        'id': 'case_a',
+                        'operator': 'and',
+                        'conditions': [],
+                        'variable_key_value': {},
+                    }, {
+                        'id': 'case_a',
+                        'operator': 'or',
+                        'conditions': [],
+                        'variable_key_value': {},
+                    }],
+                )
+
+    def test_validate_condition_node_routes_rejects_missing_fallback_edge(self):
+        graph = make_condition_graph()
+        graph['edges'] = [edge for edge in graph['edges'] if edge['sourceHandle'] != 'right_handle']
+
+        with self.assertRaises(WorkFlowInitError):
+            ExternalWorkflowService._validate_special_node_routes(graph)
