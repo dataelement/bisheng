@@ -248,6 +248,11 @@ class ToolServices(BaseModel):
                                           is_preset=ToolPresetType.MCP.value,
                                           openapi_schema=file_content,
                                           children=[])
+            mcp_conf = await settings.get_mcp_conf()
+            if not mcp_conf.enable_stdio:
+                client_type, _ = ClientManager.parse_mcp_client_type(tool_type.openapi_schema)
+                if client_type == McpClientType.STDIO.value:
+                    raise ToolMcpSchemaError(msg="mcp not support stdio mode")
             # Instantiatemcpservice object, getting a list of tools
             client = await ClientManager.connect_mcp_from_json(result)
 
@@ -265,11 +270,6 @@ class ToolServices(BaseModel):
             break
         if tool_type is None:
             raise ToolMcpSchemaError()
-        mcp_conf = await settings.get_mcp_conf()
-        if not mcp_conf.enable_stdio:
-            client_type, _ = ClientManager.parse_mcp_client_type(tool_type.openapi_schema)
-            if client_type == McpClientType.STDIO.value:
-                raise ToolMcpSchemaError(msg="not support stdio mcp server")
 
         return tool_type
 
