@@ -124,20 +124,35 @@ class TestExternalWorkflowService(IsolatedAsyncioTestCase):
         self.assertEqual(args[2], 'demo')
 
     def test_get_existing_external_draft_version_limits_recent_versions(self):
-        captured = {}
+        captured = {'statements': []}
 
         class FakeResult:
+            def __init__(self, versions):
+                self._versions = versions
+
             def all(self):
-                return []
+                return self._versions
 
         class FakeSession:
+            def __init__(self):
+                self.calls = 0
+
             def exec(self, statement):
-                captured['statement'] = statement
-                return FakeResult()
+                captured['statements'].append(statement)
+                self.calls += 1
+                if self.calls == 1:
+                    versions = [SimpleNamespace(data={'nodes': [], 'edges': []}) for _ in range(
+                        ExternalWorkflowService._MAX_EXTERNAL_DRAFT_SCAN)]
+                    return FakeResult(versions)
+                return FakeResult([
+                    SimpleNamespace(data=ExternalWorkflowService._mark_graph_as_draft({'nodes': [], 'edges': []}))
+                ])
 
         class FakeContext:
             def __enter__(self):
-                return FakeSession()
+                if 'session' not in captured:
+                    captured['session'] = FakeSession()
+                return captured['session']
 
             def __exit__(self, exc_type, exc, tb):
                 return False
@@ -145,9 +160,11 @@ class TestExternalWorkflowService(IsolatedAsyncioTestCase):
         with patch('bisheng.api.services.external_workflow.get_sync_db_session', return_value=FakeContext()):
             result = ExternalWorkflowService._get_existing_external_draft_version('flow-1')
 
-        self.assertIsNone(result)
-        self.assertIsNotNone(captured['statement']._limit_clause)
-        self.assertEqual(captured['statement']._limit_clause.value, ExternalWorkflowService._MAX_EXTERNAL_DRAFT_SCAN)
+        self.assertIsNotNone(result)
+        self.assertEqual(len(captured['statements']), 2)
+        self.assertIsNotNone(captured['statements'][0]._limit_clause)
+        self.assertEqual(captured['statements'][0]._limit_clause.value, ExternalWorkflowService._MAX_EXTERNAL_DRAFT_SCAN)
+        self.assertEqual(captured['statements'][1]._offset_clause.value, ExternalWorkflowService._MAX_EXTERNAL_DRAFT_SCAN)
 
     async def test_get_workflow_node_params_returns_extended_metadata(self):
         version = SimpleNamespace(id=11, data=make_graph())
@@ -503,3 +520,31 @@ class TestExternalWorkflowService(IsolatedAsyncioTestCase):
         self.assertEqual(updated_version.id, 11)
         self.assertEqual(persisted[0]['nodes'][0]['data']['group_params'][0]['params'][0]['value'][0]['id'], 'case_b')
         self.assertTrue(persisted[0]['_external_workflow_meta']['draft'])
+
+    async def test_update_condition_node_rejects_case_id_without_matching_edge(self):
+        flow = SimpleNamespace(id='flow-1', name='demo', status=FlowStatus.OFFLINE.value)
+        version = SimpleNamespace(id=11, data=make_condition_graph(), is_current=1)
+
+        async def fake_get_editable_version(login_user, flow_id, version_id=None):
+            return flow, version
+
+        with patch.object(ExternalWorkflowService, '_get_editable_version', side_effect=fake_get_editable_version):
+            with self.assertRaises(WorkFlowInitError):
+                await ExternalWorkflowService.update_condition_node(
+                    login_user=SimpleNamespace(user_id=1),
+                    flow_id='flow-1',
+                    node_id='condition-1',
+                    condition_cases=[{
+                        'id': 'case_renamed',
+                        'operator': 'and',
+                        'conditions': [{
+                            'id': 'rule_1',
+                            'left_var': 'score',
+                            'comparison_operation': 'greater_than',
+                            'right_value_type': 'const',
+                            'right_value': '80',
+                            'variable_key_value': {},
+                        }],
+                        'variable_key_value': {},
+                    }],
+                )

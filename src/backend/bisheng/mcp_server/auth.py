@@ -208,6 +208,8 @@ async def _validate_mcp_access_token(token: str) -> tuple[UserPayload, tuple[str
             subject = json.loads(payload.get('sub') or '{}')
         except Exception as exc:
             raise JWTDecodeError(status_code=401, message=f'Invalid MCP token subject: {exc}')
+        if not isinstance(subject, dict):
+            raise JWTDecodeError(status_code=401, message='Invalid MCP token subject')
         user_id = user_id or subject.get('user_id')
         user_name = user_name or subject.get('user_name')
     parent_session_hash = payload.get('parent_session_hash')

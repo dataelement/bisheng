@@ -459,6 +459,7 @@ tool 权限要求：
 - `condition_cases[].id` 就是该分支在 graph 里的 `source_handle`
 - 默认兜底分支固定是 `right_handle`
 - 分支连线仍然通过 `connect_nodes` / `disconnect_edge` 操作
+- 每个 `condition_cases[].id` 都必须有对应的出边，且 `right_handle` 也必须有兜底出边
 
 ### `update_condition_node`
 
@@ -503,6 +504,11 @@ tool 权限要求：
   "node_id": "condition_1234"
 }
 ```
+
+注意：
+
+- 如果你修改了 `condition_cases[].id`，必须同步调整对应边的 `source_handle`
+- 如果 case id 和出边 handle 不一致，服务端会拒绝保存
 
 返回：
 

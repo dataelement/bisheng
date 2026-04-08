@@ -203,6 +203,45 @@ class ExternalWorkflowService:
                 seen_keys.add(key)
 
     @classmethod
+    def _validate_condition_node_routes(cls, graph_data: dict, node_id: str, condition_cases: list[dict]):
+        valid_handles = {one['id'] for one in condition_cases}
+        valid_handles.add(cls._CONDITION_FALLBACK_HANDLE)
+        outgoing_handles = {
+            (edge.get('sourceHandle') or '')
+            for edge in graph_data.get('edges', [])
+            if edge.get('source') == node_id
+        }
+        stale_handles = sorted(handle for handle in outgoing_handles if handle not in valid_handles)
+        if stale_handles:
+            cls._raise_workflow_error(
+                f'Condition node {node_id} has stale route handles: {", ".join(stale_handles)}'
+            )
+
+        missing_handles = [one['id'] for one in condition_cases if one['id'] not in outgoing_handles]
+        if missing_handles:
+            cls._raise_workflow_error(
+                f'Condition node {node_id} is missing route edges for: {", ".join(missing_handles)}'
+            )
+
+        if cls._CONDITION_FALLBACK_HANDLE not in outgoing_handles:
+            cls._raise_workflow_error(
+                f'Condition node {node_id} is missing fallback route edge: {cls._CONDITION_FALLBACK_HANDLE}'
+            )
+
+    @classmethod
+    def _validate_special_node_routes(cls, graph_data: dict):
+        for raw_node in graph_data.get('nodes', []):
+            node_id = raw_node.get('id', '')
+            node_data = raw_node.get('data', {})
+            if not isinstance(node_data, dict):
+                continue
+            if node_data.get('type') != cls._CONDITION_NODE_TYPE:
+                continue
+            condition_field = cls._get_node_param_field(raw_node, cls._CONDITION_PARAM_KEY)
+            condition_cases = cls._normalize_condition_cases(condition_field.get('value') or [])
+            cls._validate_condition_node_routes(graph_data, node_id, condition_cases)
+
+    @classmethod
     def _validate_workflow_runtime(cls, login_user: UserPayload, graph_data: dict, flow_name: str, flow_id: Optional[str] = None):
         try:
             Workflow(
@@ -225,6 +264,7 @@ class ExternalWorkflowService:
                               flow_name: str,
                               flow_id: Optional[str] = None):
         cls._validate_graph_structure(graph_data)
+        cls._validate_special_node_routes(graph_data)
         cls._validate_workflow_runtime(login_user, graph_data, flow_name=flow_name, flow_id=flow_id)
 
     @classmethod
@@ -243,15 +283,20 @@ class ExternalWorkflowService:
 
     @classmethod
     def _get_existing_external_draft_version(cls, flow_id: str) -> Optional[FlowVersion]:
-        with get_sync_db_session() as session:
-            statement = select(FlowVersion).where(
-                FlowVersion.flow_id == flow_id,
-                FlowVersion.is_delete == 0,
-            ).order_by(FlowVersion.id.desc()).limit(cls._MAX_EXTERNAL_DRAFT_SCAN)
-            versions = session.exec(statement).all()
-        for version in versions:
-            if cls._is_draft_graph(version.data):
-                return version
+        offset = 0
+        while True:
+            with get_sync_db_session() as session:
+                statement = select(FlowVersion).where(
+                    FlowVersion.flow_id == flow_id,
+                    FlowVersion.is_delete == 0,
+                ).order_by(FlowVersion.id.desc()).limit(cls._MAX_EXTERNAL_DRAFT_SCAN).offset(offset)
+                versions = session.exec(statement).all()
+            for version in versions:
+                if cls._is_draft_graph(version.data):
+                    return version
+            if len(versions) < cls._MAX_EXTERNAL_DRAFT_SCAN:
+                break
+            offset += cls._MAX_EXTERNAL_DRAFT_SCAN
         return None
 
     @classmethod

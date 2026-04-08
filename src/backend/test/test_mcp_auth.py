@@ -4,10 +4,12 @@ from unittest.mock import AsyncMock, patch
 
 from fastapi import FastAPI, WebSocket
 from fastapi.testclient import TestClient
+import jwt
 
 from bisheng.common.exceptions.auth import JWTDecodeError
 from bisheng.mcp_server import auth as mcp_auth
 from bisheng.mcp_server.auth import McpAuthorizationMiddleware, create_mcp_access_token, get_login_user_from_mcp_token
+from bisheng.user.domain.services.auth import AuthJwt
 
 
 def create_test_client():
@@ -134,3 +136,19 @@ class TestMcpAccessToken(IsolatedAsyncioTestCase):
         self.assertEqual(user.user_id, 7)
         self.assertEqual(user.user_name, 'admin')
         self.assertEqual(scopes, ('workflow.read', 'workflow.write', 'workflow.publish'))
+
+    async def test_validate_mcp_token_rejects_non_json_legacy_subject(self):
+        token = jwt.encode({
+            'sub': '7',
+            'iss': 'bisheng-mcp',
+            'aud': 'bisheng-workflow-mcp',
+            'iat': 1,
+            'exp': 9999999999,
+            'jti': 'bad-token',
+            'token_type': 'mcp_access_token',
+            'scope': ['workflow.read'],
+            'parent_session_hash': 'hash',
+        }, AuthJwt().jwt_secret, algorithm='HS256')
+
+        with self.assertRaises(JWTDecodeError):
+            await mcp_auth._validate_mcp_access_token(token)
