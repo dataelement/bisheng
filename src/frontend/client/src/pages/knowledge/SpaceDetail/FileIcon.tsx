@@ -2,7 +2,7 @@ import React from 'react';
 import { DocxIcon, PptxIcon, XlsxIcon, TxtIcon } from '~/components/icons';
 import { FileStatus } from '~/api/knowledge';
 
-const iconSlotClass = 'h-[35px] w-[40px] shrink-0 object-contain';
+const iconSlotClass = 'size-[64px] shrink-0 object-contain';
 
 const FileIconRenderer = ({ file, isFolder }: { file: any; isFolder: boolean }) => {
     const iconMap = {
@@ -20,7 +20,7 @@ const FileIconRenderer = ({ file, isFolder }: { file: any; isFolder: boolean }) 
     if (isFolder) {
         return (
             <img
-                src={`${__APP_ENV__.BASE_URL}/assets/channel/Subtract.svg`}
+                src={`${__APP_ENV__.BASE_URL}/assets/channel/Folder.svg`}
                 alt=""
                 className={iconSlotClass}
             />

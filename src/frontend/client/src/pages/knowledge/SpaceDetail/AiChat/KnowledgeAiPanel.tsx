@@ -59,6 +59,7 @@ export function KnowledgeAiPanel({
         createSession,
         switchSession,
         deleteSession,
+        renameSession,
         regenerate,
     } = useFolderChat(spaceId, folderId);
 
@@ -88,6 +89,9 @@ export function KnowledgeAiPanel({
     const handleDeleteSession = (chatId: string) => {
         deleteSession(chatId);
     };
+
+    const handleRenameSession = (chatId: string, name: string) =>
+        renameSession(chatId, name);
 
     return (
         <div className="flex flex-col h-full bg-white relative">
@@ -203,6 +207,7 @@ export function KnowledgeAiPanel({
                     activeChatId={activeChatId}
                     onSelect={handleHistorySelect}
                     onDelete={handleDeleteSession}
+                    onRename={handleRenameSession}
                     onClose={() => setShowHistory(false)}
                 />
             )}

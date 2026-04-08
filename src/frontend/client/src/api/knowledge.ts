@@ -399,6 +399,9 @@ export function fileStatusToNumber(status: FileStatus): number {
     }
 }
 
+/** Backend `/children` filter: all statuses except FAILED (3). Used for 知识广场 when viewer is member-only. */
+export const SPACE_CHILDREN_STATUS_NUMS_EXCLUDE_FAILED: number[] = [1, 2, 4, 5, 6];
+
 /** Map a raw knowledge file record to the frontend KnowledgeFile model */
 function mapRawFile(raw: RawKnowledgeFile): KnowledgeFile {
     const isFolder = raw.file_type === 0;

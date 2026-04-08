@@ -37,7 +37,7 @@ interface ChannelPreviewDrawerProps {
     onSubscriptionChanged?: () => void;
 }
 
-type SubscribeStatus = "none" | "subscribed" | "pending";
+type SubscribeStatus = "none" | "subscribed" | "pending" | "rejected";
 
 export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscriptionChanged }: ChannelPreviewDrawerProps) {
     const localize = useLocalize();
@@ -153,7 +153,13 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscrip
 
     // Handle subscribe action
     const handleSubscribe = async () => {
-        if (!channelId || subscribing || subscribeStatus === "subscribed" || subscribeStatus === "pending") return;
+        if (!channelId || subscribing) return;
+        if (subscribeStatus === "subscribed" || subscribeStatus === "pending" || subscribeStatus === "rejected") return;
+        if (
+            String(channelDetail?.subscription_status ?? "").toLowerCase() === "rejected"
+        ) {
+            return;
+        }
 
         setSubscribing(true);
         try {
@@ -201,6 +207,9 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscrip
         if (status === "pending") {
             return { text: localize("com_subscription.applying"), disabled: true, variant: "secondary" as const };
         }
+        if (status === "rejected") {
+            return { text: localize("rejected") || "已驳回", disabled: true, variant: "secondary" as const };
+        }
         return { text: localize("com_subscription.subscribe"), disabled: false, variant: "outline" as const };
     };
     const isCreatorView =
@@ -209,10 +218,11 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscrip
 
 
     const effectiveSubscribeStatus: SubscribeStatus = (() => {
-        // 优先使用本地交互态（点击订阅后的即时反馈），否则使用详情接口状态
         if (subscribeStatus !== "none") return subscribeStatus;
-        if (channelDetail?.subscription_status === "subscribed") return "subscribed";
-        if (channelDetail?.subscription_status === "pending") return "pending";
+        const sub = String(channelDetail?.subscription_status ?? "").toLowerCase();
+        if (sub === "subscribed") return "subscribed";
+        if (sub === "pending") return "pending";
+        if (sub === "rejected") return "rejected";
         return "none";
     })();
     const btnConfig = getButtonConfig(effectiveSubscribeStatus);
@@ -324,7 +334,7 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscrip
                                         onClick={handleSubscribe}
                                         className={`h-8 px-5 py-1 text-sm font-normal rounded-md flex-shrink-0 ${effectiveSubscribeStatus === "subscribed"
                                             ? "bg-[#f2f3f5] text-[#86909c] border-[#e5e6eb] cursor-default"
-                                            : effectiveSubscribeStatus === "pending"
+                                            : effectiveSubscribeStatus === "pending" || effectiveSubscribeStatus === "rejected"
                                                 ? "bg-[#f2f3f5] text-[#c9cdd4] border-[#e5e6eb] cursor-not-allowed"
                                                 : "text-[#1d2129] border-[#e5e6eb] hover:bg-gray-50"
                                             }`}
@@ -362,6 +372,7 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscrip
                                         <ArticleCard
                                             key={article.id}
                                             article={article}
+                                            showArticleActions={false}
                                             onSelect={(a) => {
                                                 const url = (a?.url || "").trim();
                                                 if (!url) {

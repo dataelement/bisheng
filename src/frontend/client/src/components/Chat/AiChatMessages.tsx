@@ -170,7 +170,12 @@ export default function AiChatMessages({
     // --- Empty state ---
     if (!hasMessages && !isLoading) {
         return (
-            <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col items-center justify-center">
+            <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col items-center justify-center"
+                style={{
+                    transitionProperty: 'background-color',
+                    transitionDuration: '350ms',
+                    transitionTimingFunction: 'ease-in-out'
+                }}>
                 <div className="mb-6">
                     <img
                         className="size-[80px] object-contain mx-auto block"

@@ -133,7 +133,7 @@ export function KnowledgeSpaceHeader({
                                     className="w-7 h-7 text-[#86909c] hover:text-[#4e5969]"
                                     onClick={onExpandSidebar}
                                 >
-                                    <PanelLeftOpenIcon className="size-4" />
+                                    <PanelLeftOpenIcon className="size-5" />
                                 </Button>
                             )}
                             <h1 className="text-base text-[#1d2129]">{space.name}</h1>
@@ -237,19 +237,22 @@ export function KnowledgeSpaceHeader({
             {/* Toolbar */}
             <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
                 {/* { Left side: search & toggle & filter } */}
-                <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center">
-                    {/* Search */}
-                    <div className="flex w-full flex-1 items-center gap-2 sm:w-auto sm:flex-none">
-                        <div className="relative flex-1 sm:flex-none sm:w-[450px]">
-                            <CompoundSearchInput
-                                spaceId={space.id}
-                                isRoot={currentPath.length === 0}
-                                onSearch={onSearch}
-                            />
-                        </div>
+                <div className="flex w-full min-w-0 flex-col gap-3 sm:flex-1 sm:flex-row sm:items-center sm:gap-3">
+                    <div
+                        className={cn(
+                            "relative min-w-0 w-full transition-[width,max-width,flex-grow] duration-200 ease-out",
+                            "sm:flex-none sm:w-[450px] sm:max-w-[450px] sm:shrink-0",
+                            "sm:focus-within:flex-1 sm:focus-within:w-auto sm:focus-within:max-w-none sm:focus-within:min-w-0"
+                        )}
+                    >
+                        <CompoundSearchInput
+                            spaceId={space.id}
+                            isRoot={currentPath.length === 0}
+                            onSearch={onSearch}
+                        />
                     </div>
 
-                    <div className="flex items-center gap-3 w-full sm:w-auto">
+                    <div className="flex w-full shrink-0 items-center gap-3 sm:w-auto">
                         {/* View Mode & Extra drop (Placeholder for bulk operations if needed, currently view mode) */}
                         <div className="flex border rounded-md p-0.5 text-sm h-8 shrink-0">
                             <button
@@ -277,9 +280,8 @@ export function KnowledgeSpaceHeader({
                             <DropdownMenuTrigger asChild>
                                 <Button
                                     variant="outline"
-                                    size="icon"
                                     className={cn(
-                                        "h-8 w-8 p-0 font-normal border-[#e5e6eb]",
+                                        "inline-flex h-8 w-8 min-h-8 min-w-8 shrink-0 items-center justify-center gap-0 rounded-md p-0 font-normal border-[#e5e6eb]",
                                         statusFilter.length > 0
                                             ? "bg-[#E6EDFC] border-[#024DE3] text-[#024DE3] hover:bg-[#E6EDFC]"
                                             : "bg-white text-gray-700 hover:bg-[#f7f8fa]"
@@ -332,7 +334,10 @@ export function KnowledgeSpaceHeader({
                         {viewMode === "card" && (
                             <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
-                                    <Button variant="outline" size="icon" className="h-8 w-8 p-0 font-normal text-gray-700 bg-white border-[#e5e6eb]">
+                                    <Button
+                                        variant="outline"
+                                        className="inline-flex h-8 w-8 min-h-8 min-w-8 shrink-0 items-center justify-center gap-0 rounded-md p-0 font-normal text-gray-700 bg-white border-[#e5e6eb]"
+                                    >
                                         <ArrowDownNarrowWideIcon className="size-4" />
                                     </Button>
                                 </DropdownMenuTrigger>

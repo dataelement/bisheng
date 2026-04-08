@@ -51,6 +51,10 @@ export default function Knowledge() {
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
     const { showToast } = useToastContext();
+    const showToastRef = useRef(showToast);
+    const localizeRef = useRef(localize);
+    showToastRef.current = showToast;
+    localizeRef.current = localize;
     const { user, isUserLoading } = useAuthContext();
     const navigate = useNavigate();
     const location = useLocation();
@@ -81,12 +85,12 @@ export default function Knowledge() {
     // Share links should redirect to workbench home with a clear permission toast.
     useEffect(() => {
         if (knowledgePluginGate !== "disabled") return;
-        showToast({
-            message: localize("com_plugin_feature_no_access_toast"),
+        showToastRef.current({
+            message: localizeRef.current("com_plugin_feature_no_access_toast"),
             severity: NotificationSeverity.ERROR,
         });
         navigate("/c/new", { replace: true });
-    }, [knowledgePluginGate, showToast, navigate, localize]);
+    }, [knowledgePluginGate, navigate]);
 
     // KeepAlive: when leaving /knowledge, reset square view so switching back lands on default page.
     useUnactivate(() => {
@@ -134,8 +138,8 @@ export default function Knowledge() {
                 setActiveSpace({ ...detail, id: detailSpaceId });
             } catch {
                 if (cancelled) return;
-                showToast({
-                    message: localize("com_knowledge.space_invalid_or_deleted"),
+                showToastRef.current({
+                    message: localizeRef.current("com_knowledge.space_invalid_or_deleted"),
                     severity: NotificationSeverity.WARNING,
                 });
                 navigate("/knowledge?square=1", { replace: true });
@@ -144,11 +148,26 @@ export default function Knowledge() {
         return () => {
             cancelled = true;
         };
-    }, [detailSpaceId, knowledgePluginGate, localize, navigate, showToast]);
+    }, [detailSpaceId, knowledgePluginGate, navigate]);
 
     // 广场：?square=1；从消息提醒「拒绝加入知识空间」进入时带 previewSpace=，打开广场上的预览抽屉
     useEffect(() => {
         if (knowledgePluginGate === "loading" || knowledgePluginGate === "disabled") return;
+        const path = location.pathname || "";
+        const isSpaceDetailPath = /^\/knowledge\/space\//.test(path);
+
+        // 深链在空间内时不要被历史遗留的 ?square=1 拉回广场（侧边选空间常不更新 URL）
+        if (isSpaceDetailPath) {
+            setShowKnowledgeSquare(false);
+            const params = new URLSearchParams(location.search);
+            if (params.get("square") === "1") {
+                params.delete("square");
+                const nextSearch = params.toString();
+                navigate(nextSearch ? `${path}?${nextSearch}` : path, { replace: true });
+            }
+            return;
+        }
+
         const params = new URLSearchParams(location.search);
         if (params.get("square") === "1") {
             setShowKnowledgeSquare(true);
@@ -160,8 +179,8 @@ export default function Knowledge() {
             setSquarePreviewDrawerOpen(true);
             params.delete("previewSpace");
             const nextSearch = params.toString();
-            const path = location.pathname || "/knowledge";
-            navigate(nextSearch ? `${path}?${nextSearch}` : path, { replace: true });
+            const basePath = path || "/knowledge";
+            navigate(nextSearch ? `${basePath}?${nextSearch}` : basePath, { replace: true });
         }
     }, [location.search, location.pathname, navigate, knowledgePluginGate]);
 
@@ -202,8 +221,8 @@ export default function Knowledge() {
 
                 // If the space is now private/inaccessible, treat as invalid for share links.
                 if (info.visibility === VisibilityType.PRIVATE) {
-                    showToast({
-                        message: localize("com_knowledge.space_invalid_or_deleted"),
+                    showToastRef.current({
+                        message: localizeRef.current("com_knowledge.space_invalid_or_deleted"),
                         severity: NotificationSeverity.WARNING,
                     });
                     setPreviewDrawerOpen(false);
@@ -214,8 +233,8 @@ export default function Knowledge() {
                 // Space changed from approval to public while user had a pending application.
                 // Product expectation: toast + redirect to square page.
                 if (info.visibility === VisibilityType.PUBLIC && info.isPending) {
-                    showToast({
-                        message: localize("com_knowledge.space_became_public_go_square"),
+                    showToastRef.current({
+                        message: localizeRef.current("com_knowledge.space_became_public_go_square"),
                         severity: NotificationSeverity.WARNING,
                     });
                     setPreviewDrawerOpen(false);
@@ -226,8 +245,8 @@ export default function Knowledge() {
                 setPreviewDrawerOpen(true);
             } catch {
                 if (cancelled) return;
-                showToast({
-                    message: localize("com_knowledge.space_invalid_or_deleted"),
+                showToastRef.current({
+                    message: localizeRef.current("com_knowledge.space_invalid_or_deleted"),
                     severity: NotificationSeverity.WARNING,
                 });
                 setPreviewDrawerOpen(false);
@@ -237,7 +256,7 @@ export default function Knowledge() {
         return () => {
             cancelled = true;
         };
-    }, [previewSpaceId, knowledgePluginGate, localize, navigate, showToast]);
+    }, [previewSpaceId, knowledgePluginGate, navigate]);
 
     // ─── Space actions ──────────────────────────────────────────────────
     const handleSpaceSelect = async (space: KnowledgeSpace | null) => {

@@ -134,7 +134,7 @@ export function ChannelSidebar({
             {/* 顶部操作区 */}
             <div className={collapsed ? "px-0 py-5" : "px-3 py-5"}>
                 <div className={collapsed ? "flex items-center justify-center" : "border-b border-[#e5e6eb] space-y-4 pb-4"}>
-                    <div className={collapsed ? "flex items-center justify-center" : "px-2 flex justify-between items-center text-[14px] font-medium"}>
+                    <div className={collapsed ? "flex items-center justify-center" : "px-2 flex justify-between items-center text-[16px] font-medium"}>
                         {!collapsed && <span>{localize("com_subscription.subscribe")}</span>}
                         <Button
                             size="icon"
@@ -151,10 +151,10 @@ export function ChannelSidebar({
                     </div>
                     {!collapsed && (
                         <div className="flex items-center gap-3">
-                            <Button variant="secondary" onClick={onCreateChannel} className="flex-1 h-8 text-[13px] bg-[#F2F3F5] hover:bg-[#E5E6EB] border-none gap-1">
+                            <Button variant="secondary" onClick={onCreateChannel} className="flex-1 h-8 text-[13px] bg-[#F7F7F7] hover:bg-[#E5E6EB] border-none gap-1">
                                 <Plus className="size-4" />{localize("com_subscription.create")}
                             </Button>
-                            <Button variant="secondary" onClick={onChannelSquare} className="flex-1 h-8 text-[13px] bg-[#F2F3F5] hover:bg-[#E5E6EB] border-none gap-1">
+                            <Button variant="secondary" onClick={onChannelSquare} className="flex-1 h-8 text-[13px] bg-[#F7F7F7] hover:bg-[#E5E6EB] border-none gap-1">
                                 <ChannelBlocksArrowsIcon className="size-4" />
                                 {localize("com_subscription.go_to_square")}
                             </Button>

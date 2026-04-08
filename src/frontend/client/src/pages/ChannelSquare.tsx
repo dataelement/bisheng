@@ -243,7 +243,7 @@ export default function ChannelSquare({
       {/* 头部区域 */}
       <div
         className="w-full relative overflow-hidden border-b border-[#F0F1F5] bg-center bg-no-repeat bg-cover"
-        style={{ backgroundImage: `url(${__APP_ENV__.BASE_URL}/assets/tabbg.svg)` }}
+        style={{ backgroundImage: `url(${__APP_ENV__.BASE_URL}/assets/channel/bgchannel.svg)` }}
       >
 
         {/* 返回按钮：固定在头部左上，不跟随居中容器偏移 */}

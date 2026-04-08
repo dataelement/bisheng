@@ -48,9 +48,10 @@ const ExploreCard = ({ agent, onClick, onShare }: { agent: any, onClick: (agent:
         <div
             onClick={() => onClick(agent)}
             className={cn(
-                "group relative border border-solid content-stretch flex gap-[12px] h-[80px] items-center overflow-clip px-[12px] py-[8px] rounded-[8px] transition-all cursor-pointer",
-                "border-[#ebecf0] border-[0.5px] hover:border-[#335cff] hover:border-[1.047px] hover:shadow-[0px_8px_20px_0px_rgba(117,145,212,0.12)] bg-white",
-                "bg-[linear-gradient(145.87deg,_rgb(249,251,254)_0%,_rgb(255,255,255)_50%,_rgb(249,251,254)_100%)]"
+                "group relative content-stretch flex h-[80px] items-center gap-[12px] overflow-clip rounded-[8px] p-[12px] transition-all cursor-pointer",
+                "border border-solid border-[#E5E6EB] bg-white",
+                "hover:border-[#335CFF] hover:shadow-[0_8px_20px_0_rgba(117,145,212,0.12)]",
+                "hover:bg-[linear-gradient(0deg,#FFF_0%,#FFF_100%),linear-gradient(110deg,#F9FBFE_0%,#FFF_50%,#F9FBFE_100%)]"
             )}
         >
             {/* 左侧图标 */}
@@ -68,7 +69,7 @@ const ExploreCard = ({ agent, onClick, onShare }: { agent: any, onClick: (agent:
                 </p>
 
                 {/* 描述区域：平时显示，hover时隐藏 */}
-                <p className="flex-[1_0_0] font-['PingFang_SC'] leading-5 text-[12px] text-[#a9aeb8] w-full line-clamp-2 break-words group-hover:hidden whitespace-normal mt-[2px]">
+                <p className="flex-[1_0_0] font-['PingFang_SC'] leading-[20px] text-[14px] text-[#A9AEB8] w-full line-clamp-2 break-words group-hover:hidden whitespace-normal mt-[2px]">
                     {agent.description || agent.desc || "暂无描述内容..."}
                 </p>
 

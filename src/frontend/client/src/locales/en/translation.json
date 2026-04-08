@@ -1769,6 +1769,9 @@
     "remove": "Remove",
     "search_user_placeholder": "Enter username to search",
     "subscriber": "Subscriber",
+    "member_pagination_1": "Total ",
+    "member_pagination_2": " items, ",
+    "member_pagination_3": " per page",
     "total_members": "Total members",
     "website_not_indexed": "Website not in database. Do you want to crawl?",
     "create": "Create"

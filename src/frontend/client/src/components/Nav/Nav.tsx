@@ -176,11 +176,11 @@ const Nav = ({
       </div>
       {/* Desktop collapsed rail: match channel sidebar style */}
       {!navVisible && !isSmallScreen && (
-        <div className="w-12 h-full bg-white flex flex-col items-center justify-end pb-4">
+        <div className="flex h-full w-12 flex-col items-center justify-start bg-white pt-4">
           <button
             type="button"
             onClick={toggleNavVisible}
-            className="w-5 h-5 rounded-md flex items-center justify-center hover:bg-slate-100 text-[#1d2129]"
+            className="flex h-5 w-5 items-center justify-center rounded-md text-[#1d2129] hover:bg-slate-100"
             aria-label={localize('com_nav_open_sidebar')}
             title={localize('com_nav_open_sidebar')}
           >

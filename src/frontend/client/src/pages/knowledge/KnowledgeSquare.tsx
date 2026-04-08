@@ -155,10 +155,31 @@ export default function KnowledgeSquare({
         if (currentStatus !== "join") return;
         if (joiningId) return;
 
+        const prevSpaces = spaces;
+        setJoiningId(space.id);
+        setSpaces((prev) =>
+            prev.map((s) =>
+                s.id === space.id
+                    ? {
+                          ...s,
+                          squareStatus: nextStatus,
+                          isFollowed: nextStatus === "joined",
+                          isPending: nextStatus === "pending",
+                      }
+                    : s
+            )
+        );
+
+        const rollback = () => {
+            setSpaces(prevSpaces);
+            setJoiningId(null);
+        };
+
         // Join/apply upper limit (includes followed + pending applications)
         try {
             const joinedSpaces = await getJoinedSpacesApi();
             if (joinedSpaces.length >= MAX_JOINED_SPACES) {
+                rollback();
                 showToast({
                     message: localize("com_knowledge.join_space_limit_reached_50"),
                     severity: NotificationSeverity.WARNING,
@@ -169,26 +190,15 @@ export default function KnowledgeSquare({
             // If the limit check fails, keep the existing behavior instead of blocking.
         }
 
-        setJoiningId(space.id);
-        const prevSpaces = spaces;
-
         try {
             await subscribeSpaceApi(space.id);
-            setSpaces((prev) =>
-                prev.map((s) =>
-                    s.id === space.id
-                        ? { ...s, squareStatus: nextStatus, isFollowed: nextStatus === "joined", isPending: nextStatus === "pending" }
-                        : s
-                )
-            );
             if (nextStatus === "joined") {
                 showToast({ message: localize("com_knowledge.join_success"), severity: NotificationSeverity.SUCCESS });
             } else {
                 showToast({ message: `${tJoinPrefix}`, severity: NotificationSeverity.SUCCESS });
             }
         } catch (e) {
-            // rollback (keep original status/label)
-            setSpaces(prevSpaces);
+            rollback();
             const rawMessage =
                 (e as any)?.message ||
                 (e as any)?.status_message ||

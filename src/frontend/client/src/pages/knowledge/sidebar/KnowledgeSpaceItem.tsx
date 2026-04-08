@@ -84,7 +84,7 @@ export default function KnowledgeSpaceItem({
                     <img
                         src={`${__APP_ENV__.BASE_URL}/assets/channel/notebook-one.svg`}
                         alt=""
-                        className="size-3 object-contain shrink-0"
+                        className="size-3.5 object-contain shrink-0"
                         aria-hidden
                     />
                 </div>

@@ -1688,6 +1688,9 @@
     "remove": "削除",
     "search_user_placeholder": "ユーザー名を入力して検索",
     "subscriber": "購読者",
+    "member_pagination_1": "全",
+    "member_pagination_2": "件のデータ、1ページあたり",
+    "member_pagination_3": "件",
     "total_members": "メンバー総数",
     "website_not_indexed": "サイトがまだ登録されていません。クロールしますか？",
     "create": "作成"

@@ -1,4 +1,5 @@
 import * as React from "react"
+import cn from "~/utils/cn"
 
 const Avatar = React.forwardRef<
   HTMLSpanElement,
@@ -6,7 +7,7 @@ const Avatar = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <span
     ref={ref}
-    className={`relative flex h-10 w-10 shrink-0 overflow-hidden rounded-full ${className || ''}`}
+    className={cn("relative flex h-10 w-10 shrink-0 overflow-hidden rounded-full", className)}
     {...props}
   />
 ))
@@ -18,7 +19,7 @@ const AvatarImage = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <img
     ref={ref}
-    className={`aspect-square h-full w-full ${className || ''}`}
+    className={cn("aspect-square h-full w-full", className)}
     {...props}
   />
 ))
@@ -45,7 +46,7 @@ const AvatarName = React.forwardRef<HTMLDivElement, AvatarNameProps>(
     return (
       <div
         ref={ref}
-        className={`flex h-full w-full items-center justify-center aspect-square bg-primary text-white font-medium ${className || ''}`}
+        className={cn("flex h-full w-full items-center justify-center aspect-square bg-primary text-white font-medium", className)}
         {...props}
       >
         {getInitials(name)}

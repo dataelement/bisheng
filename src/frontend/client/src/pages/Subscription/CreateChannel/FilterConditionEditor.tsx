@@ -342,7 +342,7 @@ export function FilterConditionEditor({
                                             minRows={1}
                                             maxRows={4}
                                             placeholder={localize("com_subscription.input_keywords_semicolon_separated")}
-                                            className="w-full px-3 py-1 text-[14px] text-[#999999] rounded-lg border border-[#E5E6EB] focus:outline-none focus:ring-2 focus:ring-[#165DFF]/30 focus:border-[#165DFF] resize-none leading-[22px]"
+                                            className="w-full px-3 py-1 text-[14px] text-[#212121] placeholder:text-[#999999] rounded-lg border border-[#E5E6EB] focus:outline-none focus:ring-2 focus:ring-[#165DFF]/30 focus:border-[#165DFF] resize-none leading-[22px]"
                                         />
                                     </div>
 

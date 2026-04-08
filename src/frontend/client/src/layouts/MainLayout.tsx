@@ -11,7 +11,7 @@ import { matchPath, NavLink, useLocation, useOutlet } from 'react-router-dom';
 import { useRecoilState } from 'recoil';
 import { bishengConfState } from '~/pages/appChat/store/atoms';
 import { useGetBsConfig } from '~/hooks/queries/data-provider';
-import { useAuthContext, useLocalize } from '~/hooks';
+import { useAuthContext, useLocalize, useScrollbarWhileScrolling } from '~/hooks';
 import store from '~/store';
 import { cn } from '~/utils';
 import { UserPopMenu } from './UserPopMenu';
@@ -138,6 +138,7 @@ export default function MainLayout() {
   const { pathname } = useLocation();
   const outlet = useOutlet();
   const { user, logout, isUserLoading } = useAuthContext();
+  const { onScroll: onOutletScroll, scrollingProps: outletScrollingProps } = useScrollbarWhileScrolling();
 
   // Auth guard: redirect to login when user query finishes without a valid user.
   // The 401 interceptor in request.ts already handles production redirect,
@@ -188,7 +189,11 @@ export default function MainLayout() {
           id={cacheKey}
           saveScroll={true}
         >
-          <div className='bg-white rounded-xl shadow-xl overflow-y-auto h-[calc(100vh-16px)]'>
+          <div
+            className="h-[calc(100vh-16px)] overflow-y-auto scroll-on-scroll rounded-xl bg-white shadow-xl"
+            onScroll={onOutletScroll}
+            {...outletScrollingProps}
+          >
             {outlet}
           </div>
         </KeepAlive>

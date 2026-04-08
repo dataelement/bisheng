@@ -2,7 +2,7 @@ import { useLocalize } from "~/hooks";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { useUnactivate } from "react-activation";
+import { useActivate, useUnactivate } from "react-activation";
 import { useAuthContext } from "~/hooks/AuthContext";
 import {
     Article,
@@ -29,6 +29,11 @@ import { buildCreateChannelPayload } from "./channelUtils";
 
 const MAX_USER_CHANNELS = 10;
 
+const extractShareChannelIdFromPath = (pathname: string): string | undefined => {
+    const matched = pathname.match(/\/channel\/share\/([^/?#]+)/);
+    return matched?.[1];
+};
+
 export default function Subscription() {
     const localize = useLocalize();
     const { user, isUserLoading } = useAuthContext();
@@ -36,7 +41,12 @@ export default function Subscription() {
     const navigate = useNavigate();
     const location = useLocation();
     const isShareRoute = location.pathname.includes("/channel/share/");
-    const previewChannelId = isShareRoute ? channelId : undefined;
+    const [shareChannelIdFromPath, setShareChannelIdFromPath] = useState<string | undefined>(
+        extractShareChannelIdFromPath(location.pathname)
+    );
+    const [manualPreviewChannelId, setManualPreviewChannelId] = useState<string | undefined>(undefined);
+    const routePreviewChannelId = shareChannelIdFromPath || (isShareRoute ? channelId : undefined);
+    const previewChannelId = routePreviewChannelId || manualPreviewChannelId;
     const detailChannelId = !isShareRoute ? channelId : undefined;
     const [activeChannel, setActiveChannel] = useState<Channel | null>(null);
     const [channelRefreshToken, setChannelRefreshToken] = useState(0);
@@ -51,6 +61,8 @@ export default function Subscription() {
     const userClosedSharePreviewRef = useRef(false);
     const [previewDrawerOpen, setPreviewDrawerOpen] = useState(false);
     const [channelSquareRefreshKey, setChannelSquareRefreshKey] = useState(0);
+    /** Bumped on KeepAlive re-activation so share-preview effect re-runs (deps may be unchanged vs cached instance). */
+    const [channelTabActivateEpoch, setChannelTabActivateEpoch] = useState(0);
     const [memberDialogOpen, setMemberDialogOpen] = useState(false);
     const [memberDialogSpace, setMemberDialogSpace] = useState<KnowledgeSpace | null>(null);
     const [channelMemberOpen, setChannelMemberOpen] = useState(false);
@@ -67,6 +79,11 @@ export default function Subscription() {
         return plugins.includes("subscription") ? "enabled" : "disabled";
     }, [user, isUserLoading]);
 
+    // Keep parsed share channel id in sync with path (route params can lag on KeepAlive restore).
+    useEffect(() => {
+        setShareChannelIdFromPath(extractShareChannelIdFromPath(location.pathname));
+    }, [location.pathname]);
+
     // Feature gate: system may disable Channel/Subscription via user plugins.
     // Share links should redirect to workbench home with a clear permission toast.
     useEffect(() => {
@@ -78,7 +95,18 @@ export default function Subscription() {
         navigate("/c/new", { replace: true });
     }, [channelPluginGate, showToast, navigate, localize]);
 
-    // Open preview drawer when channelId route param is present.
+    // Route-driven sync for preview drawer:
+    // entering /channel/share/:id always opens drawer immediately (including KeepAlive re-activate).
+    useEffect(() => {
+        if (routePreviewChannelId || manualPreviewChannelId) {
+            userClosedSharePreviewRef.current = false;
+            setPreviewDrawerOpen(true);
+            return;
+        }
+        setPreviewDrawerOpen(false);
+    }, [routePreviewChannelId, manualPreviewChannelId, channelTabActivateEpoch]);
+
+    // Validate preview channel when channelId route param is present.
     // Prefetch channel detail only (validates private / dissolved). Articles load inside
     // ChannelPreviewDrawer so a list API failure does not close the share route and bounce to square.
     // Creator shortcut: skip drawer only when not browsing channel plaza (plaza card click should
@@ -134,7 +162,11 @@ export default function Subscription() {
 
                 // From channel square: always show preview (even for creator). Direct share links
                 // paste/open: keep shortcut into main channel UI.
-                if (isCreator && !showChannelSquare) {
+                // Use ?square=1 (not React state): navigating /channel → /channel/share/* can remount
+                // Subscription and reset showChannelSquare, which wrongly triggered the creator shortcut.
+                const fromChannelSquare =
+                    new URLSearchParams(location.search).get("square") === "1";
+                if (isCreator && !fromChannelSquare) {
                     const allChannels = [
                         ...(queryClient.getQueryData<Channel[]>(["channels", "created", SortType.RECENT_UPDATE]) || []),
                     ];
@@ -148,7 +180,6 @@ export default function Subscription() {
 
                 if (cancelled) return;
                 if (userClosedSharePreviewRef.current) return;
-                setPreviewDrawerOpen(true);
             } catch {
                 if (cancelled) return;
                 showToast({
@@ -161,7 +192,7 @@ export default function Subscription() {
         return () => {
             cancelled = true;
         };
-    }, [previewChannelId, previewUserKey, showChannelSquare, channelPluginGate, localize, navigate, queryClient, showToast, user]);
+    }, [previewChannelId, previewUserKey, location.search, channelTabActivateEpoch, channelPluginGate, localize, navigate, queryClient, showToast, user]);
 
     // Leaving /channel/share/* should not leave the drawer marked open with a stale channelId.
     useEffect(() => {
@@ -221,13 +252,30 @@ export default function Subscription() {
         setShowChannelSquare(false);
     });
 
+    // KeepAlive: when coming back to the channel tab, `location` deps may be unchanged so effects
+    // that open the plaza / share preview do not re-run. Sync from URL and force preview effect.
+    useActivate(() => {
+        const path = window.location.pathname;
+        const params = new URLSearchParams(window.location.search);
+        setShareChannelIdFromPath(extractShareChannelIdFromPath(path));
+        if (params.get("square") === "1") {
+            setShowChannelSquare(true);
+        }
+        if (path.includes("/channel/share/")) {
+            setChannelTabActivateEpoch((e) => e + 1);
+        }
+    });
+
     const handlePreviewDrawerClose = (open: boolean) => {
         setPreviewDrawerOpen(open);
         if (!open) {
+            setManualPreviewChannelId(undefined);
             userClosedSharePreviewRef.current = true;
             // Keep URL aligned with plaza mode so search/effects don't fight; avoid refreshKey bump here
             // (it remounts the list and feels like the page "jumping"; subscribe still bumps via bumpChannelSquareList).
-            navigate(showChannelSquare ? "/channel?square=1" : "/channel", { replace: true });
+            const backToSquare =
+                new URLSearchParams(location.search).get("square") === "1";
+            navigate(backToSquare ? "/channel?square=1" : "/channel", { replace: true });
         }
     };
 
@@ -313,7 +361,10 @@ export default function Subscription() {
                         navigate("/channel", { replace: true });
                     }}
                     onPreviewChannel={(id) => {
-                        navigate(`/channel/share/${id}`);
+                        setManualPreviewChannelId(id);
+                        userClosedSharePreviewRef.current = false;
+                        setPreviewDrawerOpen(true);
+                        navigate(`/channel/share/${id}?square=1`);
                     }}
                 />
             ) : (

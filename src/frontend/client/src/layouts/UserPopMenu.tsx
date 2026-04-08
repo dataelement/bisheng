@@ -1,5 +1,5 @@
-import { Bell, Globe, LogOut, ChevronRight, User, Check } from "lucide-react";
-import { useState } from "react";
+import { Bell, Globe, LogOut, Check } from "lucide-react";
+import { useLayoutEffect, useRef, useState, type MouseEvent } from "react";
 import { useRecoilState } from "recoil";
 import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
 import {
@@ -19,6 +19,9 @@ import store from "~/store";
 
 export function UserPopMenu() {
     const [dropdownOpen, setDropdownOpen] = useState(false);
+    const [menuAlignOffset, setMenuAlignOffset] = useState(0);
+    const [menuSideOffset, setMenuSideOffset] = useState(0);
+    const triggerRef = useRef<HTMLDivElement>(null);
     const [accountDialogOpen, setAccountDialogOpen] = useState(false);
     const [notificationsDialogOpen, setNotificationsDialogOpen] = useState(false);
 
@@ -32,6 +35,8 @@ export function UserPopMenu() {
     const changeLang = (lang: string) => setLangcode(lang);
     const displayName = user?.username || "admin";
     const [avatarUrl, setAvatarUrl] = useState<string>(user?.avatar || "");
+    /** 避免打开瞬间菜单盖住头像时，同一套 pointer 事件的 click 落到下方菜单项（如退出登录） */
+    const suppressMenuItemClicksRef = useRef(false);
 
     // 保留原有方法
     const handleAccountInfoClick = () => {
@@ -53,15 +58,55 @@ export function UserPopMenu() {
     const displayUnreadCount = unreadCount > 99 ? "99+" : String(unreadCount);
     const handleDropdownOpenChange = (nextOpen: boolean) => {
         setDropdownOpen(nextOpen);
+        if (nextOpen) {
+            suppressMenuItemClicksRef.current = true;
+            window.setTimeout(() => {
+                suppressMenuItemClicksRef.current = false;
+            }, 150);
+        } else {
+            suppressMenuItemClicksRef.current = false;
+        }
         // Open/close menu时都主动刷新一次未读计数
         void refreshCount();
     };
+
+    /** MenuItem 的 onClick 与 Radix 的 handleSelect 组合：必须 preventDefault 才能阻止误触后的选中与关菜单 */
+    const runMenuAction = (fn: () => void) => (e: MouseEvent) => {
+        if (suppressMenuItemClicksRef.current) {
+            e.preventDefault();
+            return;
+        }
+        fn();
+    };
+
+    useLayoutEffect(() => {
+        if (!dropdownOpen) {
+            setMenuAlignOffset(0);
+            setMenuSideOffset(0);
+            return;
+        }
+        const measure = () => {
+            const el = triggerRef.current;
+            if (!el) return;
+            const r = el.getBoundingClientRect();
+            setMenuAlignOffset(-Math.round(r.left));
+            const marginBottom = 8;
+            // side=top + 负 sideOffset：面板下移，底缘贴近视口底（左下角）
+            setMenuSideOffset(Math.round(r.top - (window.innerHeight - marginBottom)));
+        };
+        measure();
+        window.addEventListener("resize", measure);
+        return () => window.removeEventListener("resize", measure);
+    }, [dropdownOpen]);
 
     return (
         <>
             <DropdownMenu open={dropdownOpen} onOpenChange={handleDropdownOpenChange}>
                 <DropdownMenuTrigger asChild>
-                    <div className="relative size-10 cursor-pointer outline-none active:scale-95 transition-transform">
+                    <div
+                        ref={triggerRef}
+                        className="relative size-10 cursor-pointer outline-none active:scale-95 transition-transform"
+                    >
                         <Avatar className="size-10 hover:opacity-90 transition-opacity">
                             {avatarUrl ? (
                                 <AvatarImage src={avatarUrl} alt="User" />
@@ -79,13 +124,16 @@ export function UserPopMenu() {
                 </DropdownMenuTrigger>
 
                 <DropdownMenuContent
-                    side="right"
-                    align="end"
-                    className="w-[200px] ml-3 p-2 rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.08)] bg-white border-[#f0f0f0]"
+                    side="top"
+                    align="start"
+                    alignOffset={menuAlignOffset}
+                    sideOffset={menuSideOffset}
+                    onCloseAutoFocus={(e) => e.preventDefault()}
+                    className="w-[200px] p-2 rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.08)] bg-white border-[#f0f0f0]"
                 >
                     {/* 1. 用户头部信息 */}
                     <div className="flex items-center gap-3 px-3 py-1">
-                        <Avatar className="size-10 border border-gray-100" onClick={handleAccountInfoClick}>
+                        <Avatar className="size-10 border border-gray-100" onClick={runMenuAction(handleAccountInfoClick)}>
                             {avatarUrl ? (
                                 <AvatarImage src={avatarUrl} alt="User" />
                             ) : user?.avatar ? (
@@ -94,7 +142,7 @@ export function UserPopMenu() {
                                 <AvatarName name={user?.username} />
                             )}
                         </Avatar>
-                        <div className="flex flex-col justify-center overflow-hidden" onClick={handleAccountInfoClick}>
+                        <div className="flex flex-col justify-center overflow-hidden" onClick={runMenuAction(handleAccountInfoClick)}>
                             <span className="text-[15px] font-medium text-gray-900 truncate">
                                 {displayName}
                             </span>
@@ -106,7 +154,7 @@ export function UserPopMenu() {
                     {/* 3. 消息提醒 (保留逻辑) */}
                     <DropdownMenuItem
                         className="group flex items-center justify-between px-3 py-1.5 cursor-pointer rounded-xl hover:bg-gray-50 focus:bg-gray-50 outline-none"
-                        onClick={handleNotificationsClick}
+                        onClick={runMenuAction(handleNotificationsClick)}
                     >
                         <div className="flex items-center gap-3">
                             <Bell className="size-[18px] text-gray-600" />
@@ -128,15 +176,15 @@ export function UserPopMenu() {
                             </div>
                         </DropdownMenuSubTrigger>
                         <DropdownMenuSubContent className="rounded-xl border-gray-100 shadow-lg ml-2">
-                            <DropdownMenuItem className="py-2.5 px-3 rounded-lg" onClick={() => changeLang('zh-Hans')}>
+                            <DropdownMenuItem className="py-2.5 px-3 rounded-lg" onClick={runMenuAction(() => changeLang('zh-Hans'))}>
                                 <span className="flex-1 text-sm">中文</span>
                                 {langcode === 'zh-Hans' && <Check className="ml-2 size-4 text-blue-600" />}
                             </DropdownMenuItem>
-                            <DropdownMenuItem className="py-2.5 px-3 rounded-lg" onClick={() => changeLang('en')}>
+                            <DropdownMenuItem className="py-2.5 px-3 rounded-lg" onClick={runMenuAction(() => changeLang('en'))}>
                                 <span className="flex-1 text-sm">English</span>
                                 {langcode === 'en' && <Check className="ml-2 size-4 text-blue-600" />}
                             </DropdownMenuItem>
-                            <DropdownMenuItem className="py-2.5 px-3 rounded-lg" onClick={() => changeLang('ja')}>
+                            <DropdownMenuItem className="py-2.5 px-3 rounded-lg" onClick={runMenuAction(() => changeLang('ja'))}>
                                 <span className="flex-1 text-sm">日本語</span>
                                 {langcode === 'ja' && <Check className="ml-2 size-4 text-blue-600" />}
                             </DropdownMenuItem>
@@ -145,7 +193,7 @@ export function UserPopMenu() {
 
                     {/* 5. 退出登录 */}
                     <DropdownMenuItem
-                        onClick={logout}
+                        onClick={runMenuAction(logout)}
                         className="group flex items-center gap-3 px-3 py-1.5 cursor-pointer rounded-xl hover:bg-red-50 focus:bg-red-50 outline-none mt-1 transition-colors !text-[#f53f3f] hover:!text-[#f53f3f] focus:!text-[#f53f3f]"
                     >
                         <LogOut className="size-[18px]" />

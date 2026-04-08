@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useLayoutEffect, useMemo } from "react";
+import { useState, useRef, useEffect, useLayoutEffect } from "react";
 import { useRecoilValue } from "recoil";
 import { FileStatus, FileType, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceRole, batchDeleteApi, batchDownloadApi, batchRetryApi, getFilePreviewApi } from "~/api/knowledge";
 import { useConfirm, useToastContext } from "~/Providers";
@@ -12,7 +12,7 @@ import { FileTable } from "./FileTable";
 import { KnowledgeSpaceHeader } from "./KnowledgeSpaceHeader";
 import { PaginationBar } from "./PaginationBar";
 import { SelectionPathBreadcrumb } from "./SelectionPathBreadcrumb";
-import { useLocalize } from "~/hooks";
+import { useLocalize, useScrollbarWhileScrolling } from "~/hooks";
 
 interface KnowledgeSpaceContentProps {
     space: KnowledgeSpace;
@@ -76,24 +76,13 @@ export function KnowledgeSpaceContent({
     onExpandSidebar,
 }: KnowledgeSpaceContentProps) {
     const localize = useLocalize();
-    const isMember = space.role === SpaceRole.MEMBER;
-    const displayFiles = useMemo(() => {
-        const allFiles = [
-            ...(creatingFolder ? [creatingFolder] : []),
-            ...uploadingFiles,
-            ...files
-        ];
-        if (!isMember) return allFiles;
-        // Bug 10: members should not see uploading/processing/waiting files
-        // Bug 11: non-admin (members) should not see failed files
-        const hiddenStatuses: FileStatus[] = [
-            FileStatus.UPLOADING,
-            FileStatus.PROCESSING,
-            FileStatus.WAITING,
-            FileStatus.FAILED,
-        ];
-        return allFiles.filter(f => !f.status || !hiddenStatuses.includes(f.status));
-    }, [creatingFolder, uploadingFiles, files, isMember]);
+    const cardScroll = useScrollbarWhileScrolling();
+    const listBodyScroll = useScrollbarWhileScrolling();
+    const displayFiles = [
+        ...(creatingFolder ? [creatingFolder] : []),
+        ...uploadingFiles,
+        ...files
+    ];
 
     const [searchQuery, setSearchQuery] = useState("");
     const [searchTagIds, setSearchTagIds] = useState<number[]>([]);
@@ -163,9 +152,6 @@ export function KnowledgeSpaceContent({
 
     useEffect(() => {
         setSelectedFiles(new Set());
-        setStatusFilter([]);
-        setSearchQuery("");
-        setSearchTagIds([]);
     }, [space.id]);
 
     const isAdmin = space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
@@ -310,21 +296,7 @@ export function KnowledgeSpaceContent({
                     ? previewData.preview_url
                     : previewData.original_url;
                 if (!downloadUrl) { showToast({ message: localize("com_knowledge.get_download_link_failed"), status: "error" }); return; }
-
-                let finalName = file?.name || "download";
-                const urlPath = downloadUrl.split('?')[0].split('#')[0];
-                const lastDotIndex = urlPath.lastIndexOf('.');
-                const lastSlashIndex = urlPath.lastIndexOf('/');
-                if (lastDotIndex > lastSlashIndex && lastDotIndex < urlPath.length - 1) {
-                    const urlExt = urlPath.slice(lastDotIndex + 1);
-                    const nameLastDotIndex = finalName.lastIndexOf('.');
-                    if (nameLastDotIndex > 0) {
-                        finalName = `${finalName.slice(0, nameLastDotIndex)}.${urlExt}`;
-                    } else {
-                        finalName = `${finalName}.${urlExt}`;
-                    }
-                }
-                triggerUrlDownload(downloadUrl, finalName);
+                triggerUrlDownload(downloadUrl, file?.name);
             }
         } catch {
             showToast({ message: localize("com_knowledge.download_failed"), status: "error" });
@@ -526,7 +498,7 @@ export function KnowledgeSpaceContent({
 
             {/* Content Container (Scrollable) — 文件列表整体描边 */}
             <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-                <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[6px] border-[0.5px] border-solid border-[#ECECEC] bg-white">
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[6px]  border-solid border-[#ECECEC] bg-white">
                 {displayFiles.length === 0 ? (
                     <div className="flex h-full flex-1 flex-col items-center justify-center py-10 text-center">
                         <img
@@ -547,7 +519,11 @@ export function KnowledgeSpaceContent({
                         </p>
                     </div>
                 ) : viewMode === "card" ? (
-                    <div className="flex-1 overflow-y-auto">
+                    <div
+                        className="flex-1 overflow-y-auto scroll-on-scroll"
+                        onScroll={cardScroll.onScroll}
+                        {...cardScroll.scrollingProps}
+                    >
                         <div
                             ref={cardGridRef}
                             className="grid w-full min-w-0 gap-4 py-4"
@@ -575,7 +551,11 @@ export function KnowledgeSpaceContent({
                     </div>
                 ) : (
                     <div className="flex min-h-0 min-w-0 flex-1 flex-col py-4">
-                        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">
+                        <div
+                            className="min-h-0 min-w-0 flex-1 overflow-y-auto scroll-on-scroll"
+                            onScroll={listBodyScroll.onScroll}
+                            {...listBodyScroll.scrollingProps}
+                        >
                             <FileTable files={displayFiles}
                                 selectedFiles={selectedFiles}
                                 handleSelectAll={handleSelectAll}

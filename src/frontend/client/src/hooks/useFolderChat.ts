@@ -17,6 +17,7 @@ import {
     createFolderSession,
     deleteFolderSession,
     getFolderChatHistory,
+    renameConversation,
 } from "~/api/chatApi";
 import useStreamChatSSE, {
     type StreamChatSSESubmission,
@@ -184,6 +185,28 @@ export default function useFolderChat(
         [activeChatId, abortSSE]
     );
 
+    // --- Rename a session ---
+    const renameSession = useCallback(
+        async (chatId: string, name: string) => {
+            if (!enabled) return false;
+            const trimmed = name.trim();
+            if (!trimmed) return false;
+            try {
+                await renameConversation(chatId, trimmed);
+                setSessions((prev) =>
+                    prev.map((s) =>
+                        s.chat_id === chatId ? { ...s, name: trimmed } : s
+                    )
+                );
+                return true;
+            } catch (err) {
+                console.error("[FolderChat] Failed to rename session:", err);
+                return false;
+            }
+        },
+        [enabled]
+    );
+
     // --- Delete a session ---
     const deleteSession = useCallback(
         async (chatId: string) => {
@@ -347,5 +370,6 @@ export default function useFolderChat(
         createSession,
         switchSession,
         deleteSession,
+        renameSession,
     };
 }

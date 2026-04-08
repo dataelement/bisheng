@@ -377,8 +377,10 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
             /knowledge_space/i.test(systemText) ||
             /space/i.test(systemText);
 
-        if (businessType === "channel_id" && data?.channel_id) {
-            return { targetType: "channel", targetId: String(data.channel_id) };
+        // BusinessContentItem serializes id as metadata.business_id (no nested data.channel_id)
+        if (businessType === "channel_id") {
+            const channelId = pickId(data?.channel_id, meta?.business_id, data?.business_id);
+            if (channelId) return { targetType: "channel", targetId: channelId };
         }
         if (businessType === "channel") {
             const channelId = data?.channel_id ?? data?.business_id ?? (notification as any)?.business_id;

@@ -17,9 +17,17 @@ interface ArticleCardProps {
     onSelect: (article: Article) => void;
     isSelected: boolean;
     searchQuery?: string;
+    /** When false, hides add-to-knowledge and share (e.g. channel plaza preview drawer). */
+    showArticleActions?: boolean;
 }
 
-export function ArticleCard({ article, onSelect, isSelected, searchQuery }: ArticleCardProps) {
+export function ArticleCard({
+    article,
+    onSelect,
+    isSelected,
+    searchQuery,
+    showArticleActions = true,
+}: ArticleCardProps) {
     const localize = useLocalize();
     const [showKnowledgeModal, setShowKnowledgeModal] = useState(false);
     const { handleShare } = useArticleShare();
@@ -118,43 +126,49 @@ export function ArticleCard({ article, onSelect, isSelected, searchQuery }: Arti
                         <span className="text-gray-400">{formatTime(article.publishedAt)}</span>
                     </div>
 
-                    {/* 4. Hover 操作按钮 - 按照截图移动到右下角 */}
-                    <div className="absolute right-0 flex items-center gap-3 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity">
-                        {hasKnowledge && <button
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                setShowKnowledgeModal(true);
-                            }}
-                            className=" rounded-full bg-gray-50 flex items-center justify-center size-8 text-gray-800 hover:bg-gray-100 transition-colors cursor-pointer"
-                            title={localize("com_subscription.add_to_knowledge_space")}
-                        >
-                            <BookPlusIcon className="size-3.5" />
-                        </button>}
-                        <button
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                handleShare(article);
-                                const shareText = localize("com_subscription.reading_article_share", { title: article.title, url: article.url });
-                                copyText(shareText)
-                                    .then(() => {
-                                        showToast({
-                                            message: localize("com_subscription.share_link_copied"),
-                                            severity: NotificationSeverity.SUCCESS
-                                        });
-                                    })
-                                    .catch(() => {
-                                        showToast({
-                                            message: localize("com_subscription.copy_failed_retry"),
-                                            severity: NotificationSeverity.ERROR
-                                        });
+                    {showArticleActions && (
+                        <div className="absolute right-0 flex items-center gap-3 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity">
+                            {hasKnowledge && (
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setShowKnowledgeModal(true);
+                                    }}
+                                    className=" rounded-full bg-gray-50 flex items-center justify-center size-8 text-gray-800 hover:bg-gray-100 transition-colors cursor-pointer"
+                                    title={localize("com_subscription.add_to_knowledge_space")}
+                                >
+                                    <BookPlusIcon className="size-3.5" />
+                                </button>
+                            )}
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleShare(article);
+                                    const shareText = localize("com_subscription.reading_article_share", {
+                                        title: article.title,
+                                        url: article.url,
                                     });
-                            }}
-                            className=" rounded-full bg-gray-50 flex items-center justify-center size-8 text-gray-800 hover:bg-gray-100 transition-colors cursor-pointer"
-                            title={localize("com_subscription.share")}
-                        >
-                            <ShareOutlineIcon className="size-3.5" />
-                        </button>
-                    </div>
+                                    copyText(shareText)
+                                        .then(() => {
+                                            showToast({
+                                                message: localize("com_subscription.share_link_copied"),
+                                                severity: NotificationSeverity.SUCCESS,
+                                            });
+                                        })
+                                        .catch(() => {
+                                            showToast({
+                                                message: localize("com_subscription.copy_failed_retry"),
+                                                severity: NotificationSeverity.ERROR,
+                                            });
+                                        });
+                                }}
+                                className=" rounded-full bg-gray-50 flex items-center justify-center size-8 text-gray-800 hover:bg-gray-100 transition-colors cursor-pointer"
+                                title={localize("com_subscription.share")}
+                            >
+                                <ShareOutlineIcon className="size-3.5" />
+                            </button>
+                        </div>
+                    )}
                 </div>
             </div>
             </div>

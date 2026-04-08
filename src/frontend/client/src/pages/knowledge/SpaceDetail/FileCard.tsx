@@ -13,7 +13,7 @@ import { cn } from "~/utils";
 import FileIconRenderer from "./FileIcon";
 import TagGroup from "./TagGroup";
 import { useInlineRename } from "../hooks/useInlineRename";
-import { formatTimeCard } from "../knowledgeUtils";
+import { formatTimeCard, isKnowledgeItemPreviewable } from "../knowledgeUtils";
 import { useLocalize } from "~/hooks";
 
 interface FileCardProps {
@@ -57,6 +57,7 @@ export function FileCard({
     const localize = useLocalize();
     const isCreating = !!file.isCreating;
     const [hovered, setHovered] = useState(false);
+    const [moreMenuOpen, setMoreMenuOpen] = useState(false);
 
     const isAdmin = userRole === SpaceRole.CREATOR || userRole === SpaceRole.ADMIN;
     const isFolder = file.type === FileType.FOLDER;
@@ -80,6 +81,10 @@ export function FileCard({
 
     // formatTime is now imported from ../knowledgeUtils
 
+    const nameToneClass = isKnowledgeItemPreviewable(file)
+        ? "text-[#165dff]"
+        : "text-[#4e5969]";
+
     const getStatusText = () => {
         if (isRenaming) {
             return (
@@ -99,7 +104,7 @@ export function FileCard({
         }
 
         if (!isAdmin || isFolder) {
-            return <span className="truncate">{file.name}</span>;
+            return <span className={cn("truncate", nameToneClass)}>{file.name}</span>;
         }
 
         switch (file.status) {
@@ -107,7 +112,7 @@ export function FileCard({
                 return (
                     <div className="flex items-center flex-1 min-w-0">
                         <Circle className="size-1.5 fill-[#165dff] text-[#165dff] shrink-0 mr-1.5" />
-                        <span className="truncate text-[#1d2129]">{file.name}</span>
+                        <span className={cn("truncate", nameToneClass)}>{file.name}</span>
                         <span className="text-[#86909c] text-xs ml-1.5 shrink-0">{localize("com_knowledge.uploading")}</span>
                     </div>
                 );
@@ -116,7 +121,7 @@ export function FileCard({
                 return (
                     <div className="flex items-center flex-1 min-w-0">
                         <Circle className="size-1.5 fill-[#165dff] text-[#165dff] shrink-0 mr-1.5" />
-                        <span className="truncate text-[#1d2129]">{file.name}</span>
+                        <span className={cn("truncate", nameToneClass)}>{file.name}</span>
                         <span className="text-[#86909c] text-xs ml-1.5 shrink-0">{localize("com_knowledge.parsing")}</span>
                     </div>
                 );
@@ -124,7 +129,7 @@ export function FileCard({
                 return (
                     <div className="flex items-center flex-1 min-w-0">
                         <Circle className="size-1.5 fill-[#165dff] text-[#165dff] shrink-0 mr-1.5" />
-                        <span className="truncate text-[#1d2129]">{file.name}</span>
+                        <span className={cn("truncate", nameToneClass)}>{file.name}</span>
                         <span className="text-[#86909c] text-xs ml-1.5 shrink-0">{localize("com_knowledge.queueing")}</span>
                     </div>
                 );
@@ -133,11 +138,11 @@ export function FileCard({
                 return (
                     <div className="flex items-center flex-1 min-w-0">
                         <Circle className="size-1.5 fill-[#f53f3f] text-[#f53f3f] shrink-0 mr-1.5" />
-                        <span className="truncate text-[#1d2129]">{file.name}</span>
+                        <span className={cn("truncate", nameToneClass)}>{file.name}</span>
                     </div>
                 );
             default:
-                return <span className="truncate text-[#1d2129]">{file.name}</span>;
+                return <span className={cn("truncate", nameToneClass)}>{file.name}</span>;
         }
     };
 
@@ -149,6 +154,8 @@ export function FileCard({
             onNavigateFolder?.(file.id);
             return;
         }
+
+        if (!isKnowledgeItemPreviewable(file)) return;
 
         // Space square drawer sets disableClickNavigate to avoid relying on default navigation;
         // still honor explicit onPreview when provided.
@@ -163,13 +170,20 @@ export function FileCard({
         )
     );
     const showMoreMenu = isAdmin;
+    /** 有「更多」时下载只在菜单内；无更多（普通成员/预览）时单独显示下载图标 */
     const showInlineDownloadButton = !hideDownloadActions && !showMoreMenu;
     const showMenuDownloadItem = !hideDownloadActions;
+    const showCardActions = moreMenuOpen || hovered;
+    const cardOpensPreviewOrFolder =
+        !isCreating &&
+        !isRenaming &&
+        (isFolder || isKnowledgeItemPreviewable(file));
 
     return (
         <Card
             className={cn(
-                "group cursor-pointer group rounded-lg overflow-hidden border p-0 gap-0",
+                "group rounded-lg overflow-hidden border p-0 gap-0",
+                cardOpensPreviewOrFolder ? "cursor-pointer" : "cursor-default",
                 isSelected ? "border-primary shadow-sm" : "hover:border-[#c9cdd4]",
                 hovered && "shadow-md"
             )}
@@ -194,7 +208,12 @@ export function FileCard({
                         </div>
                     )}
 
-                    <div className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+                    <div
+                        className={cn(
+                            "absolute top-2 right-2 z-10 flex items-center gap-1 transition-opacity",
+                            showCardActions ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                        )}
+                    >
                         {showInlineDownloadButton && (
                             <Button
                                 variant="outline"
@@ -207,7 +226,7 @@ export function FileCard({
                             </Button>
                         )}
                         {showMoreMenu && (
-                            <DropdownMenu>
+                            <DropdownMenu open={moreMenuOpen} onOpenChange={setMoreMenuOpen}>
                                 <DropdownMenuTrigger asChild>
                                     <Button
                                         variant="outline"
@@ -220,30 +239,39 @@ export function FileCard({
                                 </DropdownMenuTrigger>
 
                                 <DropdownMenuContent align="end" className="min-w-[120px]" onClick={(e) => e.stopPropagation()}>
-
-                                    {/* 当有更多菜单时，下载按钮收起在下拉列表内展示（可按需隐藏） */}
                                     {showMenuDownloadItem && (
                                         <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDownload(); }}>
                                             {localize("com_knowledge.download")}
                                         </DropdownMenuItem>
                                     )}
 
-                                    {/* 如果是管理员，显示后续管理操作 */}
                                     {isAdmin && (
                                         <>
-                                            {!isFolder && <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEditTags(); }}>{localize("com_knowledge.edit_tags")}</DropdownMenuItem>}
-                                            <DropdownMenuItem onClick={(e) => {
-                                                e.stopPropagation();
-                                                startRenaming();
-                                            }}>{localize("com_knowledge.rename")}</DropdownMenuItem>
-                                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDelete(); }} className="text-[#f53f3f] focus:text-[#f53f3f]">
-                                                {localize("com_knowledge.delete")}</DropdownMenuItem>
+                                            {!isFolder && (
+                                                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEditTags(); }}>
+                                                    {localize("com_knowledge.edit_tags")}
+                                                </DropdownMenuItem>
+                                            )}
+                                            <DropdownMenuItem
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    startRenaming();
+                                                }}
+                                            >
+                                                {localize("com_knowledge.rename")}
+                                            </DropdownMenuItem>
+                                            {hasRetryOption && (
+                                                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onRetry?.(); }}>
+                                                    {localize("com_knowledge.retry")}
+                                                </DropdownMenuItem>
+                                            )}
+                                            <DropdownMenuItem
+                                                onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                                                className="text-[#f53f3f] focus:text-[#f53f3f]"
+                                            >
+                                                {localize("com_knowledge.delete")}
+                                            </DropdownMenuItem>
                                         </>
-                                    )}
-
-                                    {/* Retry for failed files or folders with partial failures */}
-                                    {hasRetryOption && (
-                                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onRetry?.(); }}>{localize("com_knowledge.retry")}</DropdownMenuItem>
                                     )}
                                 </DropdownMenuContent>
                             </DropdownMenu>

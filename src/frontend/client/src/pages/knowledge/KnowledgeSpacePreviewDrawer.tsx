@@ -9,6 +9,7 @@ import { FileCard } from "./SpaceDetail/FileCard";
 import {
     KnowledgeFile,
     KnowledgeSpace,
+    SPACE_CHILDREN_STATUS_NUMS_EXCLUDE_FAILED,
     SpaceRole,
     VisibilityType,
     getJoinedSpacesApi,
@@ -46,6 +47,11 @@ export function KnowledgeSpacePreviewDrawer({
     const [parentStack, setParentStack] = useState<string[]>([]);
     const [parentNameStack, setParentNameStack] = useState<string[]>([]);
     const currentParentId = parentStack.length > 0 ? parentStack[parentStack.length - 1] : undefined;
+
+    /** /info 的 user_role 为 member 或 null（映射为 MEMBER）时，广场预览不展示失败文件（与空间内普通成员一致） */
+    const squarePreviewExcludeFailedFiles = (s: KnowledgeSpace | null) =>
+        !!s && s.role === SpaceRole.MEMBER;
+
     useEffect(() => {
         if (!open || !spaceId) return;
 
@@ -99,11 +105,13 @@ export function KnowledgeSpacePreviewDrawer({
         setChildrenTotal(0);
         setLoadingChildrenMore(false);
 
+        const memberView = squarePreviewExcludeFailedFiles(space);
         getSpaceChildrenApi({
             space_id: space.id,
             ...(currentParentId ? { parent_id: currentParentId } : {}),
             page: 1,
             page_size: 20,
+            ...(memberView ? { file_status: SPACE_CHILDREN_STATUS_NUMS_EXCLUDE_FAILED } : {}),
         })
             .then(res => {
                 setFilesPreview(res.data);
@@ -114,7 +122,7 @@ export function KnowledgeSpacePreviewDrawer({
                 setChildrenTotal(0);
             });
         // Include join/subscription signals so file list loads when async info maps to joined without subscription_status.
-    }, [space?.id, space?.visibility, space?.subscriptionStatus, space?.isFollowed, currentParentId, status]);
+    }, [space?.id, space?.role, space?.visibility, space?.subscriptionStatus, space?.isFollowed, currentParentId, status]);
 
     const loadMoreChildren = async () => {
         if (!space || !canViewFiles) return;
@@ -124,11 +132,13 @@ export function KnowledgeSpacePreviewDrawer({
         const nextPage = childrenPage + 1;
         setLoadingChildrenMore(true);
         try {
+            const memberView = squarePreviewExcludeFailedFiles(space);
             const res = await getSpaceChildrenApi({
                 space_id: space.id,
                 ...(currentParentId ? { parent_id: currentParentId } : {}),
                 page: nextPage,
                 page_size: 20,
+                ...(memberView ? { file_status: SPACE_CHILDREN_STATUS_NUMS_EXCLUDE_FAILED } : {}),
             });
             setFilesPreview(prev => [...prev, ...res.data]);
             setChildrenTotal(res.total);
@@ -174,13 +184,24 @@ export function KnowledgeSpacePreviewDrawer({
         if (status === "joined" || status === "pending" || status === "rejected") return;
         if (subscribing) return;
 
+        const nextUiStatus: "joined" | "pending" = isPublic ? "joined" : "pending";
+        const prevUiStatus = status;
+
         (async () => {
             setSubscribing(true);
+            setStatus(nextUiStatus);
+            onSquareStatusChange?.(String(space.id), nextUiStatus);
+
+            const rollback = () => {
+                setStatus(prevUiStatus);
+                onSquareStatusChange?.(String(space.id), "join");
+            };
+
             try {
-                // Join/apply upper limit (includes followed + pending applications)
                 try {
                     const joinedSpaces = await getJoinedSpacesApi();
                     if (joinedSpaces.length >= MAX_JOINED_SPACES) {
+                        rollback();
                         showToast({
                             message: localize("com_knowledge.join_space_limit_reached_50"),
                             severity: NotificationSeverity.WARNING,
@@ -193,22 +214,17 @@ export function KnowledgeSpacePreviewDrawer({
 
                 await subscribeSpaceApi(space.id);
                 if (isPublic) {
-                    setStatus("joined");
-                    onSquareStatusChange?.(String(space.id), "joined");
                     showToast({ message: localize("com_knowledge.join_success"), severity: NotificationSeverity.SUCCESS });
                 } else {
-                    setStatus("pending");
-                    onSquareStatusChange?.(String(space.id), "pending");
                     showToast({ message: localize("com_knowledge.subscribe_apply_sent"), severity: NotificationSeverity.SUCCESS });
                 }
             } catch (e) {
+                rollback();
                 const rawMessage =
                     (e as any)?.message ||
                     (e as any)?.status_message ||
                     "";
 
-                // Backend errcode 18032: SpaceSubscribeLimitError
-                // Msg: "You can subscribe to a maximum of 50 knowledge spaces"
                 if (typeof rawMessage === "string" && rawMessage.includes("maximum of 50 knowledge spaces")) {
                     showToast({ message: localize("com_knowledge.join_space_limit_reached_50"), severity: NotificationSeverity.WARNING });
                 } else {
@@ -217,8 +233,7 @@ export function KnowledgeSpacePreviewDrawer({
                         localize("com_knowledge.operation_failed_retry");
                     showToast({ message, severity: NotificationSeverity.ERROR });
                 }
-            }
-            finally {
+            } finally {
                 setSubscribing(false);
             }
         })();

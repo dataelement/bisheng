@@ -267,6 +267,8 @@ export interface FolderSession {
     chat_id: string;
     flow_id: string;
     flow_name: string;
+    /** User-visible title; may be empty until renamed or title generation */
+    name?: string | null;
     create_time: string;
     update_time: string;
     [key: string]: any;
@@ -318,6 +320,17 @@ export async function deleteFolderSession(
         `/api/v1/knowledge/space/${spaceId}/chat/folder/session`,
         { data: body }
     );
+}
+
+/** Rename a chat session (POST /api/v1/chat/conversation/rename) */
+export async function renameConversation(
+    chatId: string,
+    name: string
+): Promise<void> {
+    await http.post(`/api/v1/chat/conversation/rename`, {
+        conversationId: chatId,
+        name: name.trim(),
+    });
 }
 
 /** Fetch folder/space chat history for a specific session */

@@ -1,5 +1,11 @@
-import { FileType } from "~/api/knowledge";
+import { FileStatus, FileType, type KnowledgeFile } from "~/api/knowledge";
 import i18next from "i18next";
+
+/** 列表/卡片：可点击「查看详情」——文件夹，或解析成功（SUCCESS）的文件 */
+export function isKnowledgeItemPreviewable(file: KnowledgeFile): boolean {
+    if (file.type === FileType.FOLDER) return true;
+    return file.status === FileStatus.SUCCESS;
+}
 
 // ─── File upload constants ──────────────────────────────────────────
 /** Allowed file extensions for upload (shared across drag-drop, file input, and validation) */

@@ -115,14 +115,11 @@ export function AddSourceDropdown({
                             data-scrolling={isCollapsedListScrolling ? "true" : "false"}
                         >
                             {[...sources].reverse().map((s, idx, arr) => (
-                                <div
-                                    key={s.id}
-                                    className={cn(
-                                        "flex items-center gap-3 py-2 px-4 hover:bg-[#EEEFF1]",
-                                        idx < arr.length - 1 && "border-b border-dashed border-[#D9D9D9]"
-                                    )}
-                                    onClick={(e) => e.stopPropagation()}
-                                >
+                                <div key={s.id}>
+                                    <div
+                                        className="flex items-center gap-3 py-2 px-4 hover:bg-[#EEEFF1]"
+                                        onClick={(e) => e.stopPropagation()}
+                                    >
                                     <div className="w-8 h-8 rounded-full bg-[#E5E6EB] flex-shrink-0 overflow-hidden">
                                         {s.avatar ? (
                                             <img src={s.avatar} alt="" className="w-full h-full object-cover" />
@@ -182,6 +179,13 @@ export function AddSourceDropdown({
                                             <Minus className="size-3 text-[#F53F3F]" />
                                         </span>
                                     </button>
+                                    </div>
+                                    {idx < arr.length - 1 && (
+                                        <div
+                                            className="mx-[12px] border-b border-dashed border-[#D9D9D9]"
+                                            aria-hidden
+                                        />
+                                    )}
                                 </div>
                             ))}
                         </div>
@@ -233,31 +237,33 @@ export function AddSourceDropdown({
                     </div>
                     {/* 仅非搜索时显示 Tab；搜索时混合展示，类型在名称后 */}
                     {!mgr.isSearchMode && (
-                        <div className="flex gap-4 px-4 border-b border-[#E5E6EB]">
-                            <button
-                                type="button"
-                                onClick={() => mgr.setActiveTab("official_account")}
-                                className={cn(
-                                    "pb-2 text-[14px] font-medium border-b-2 -mb-px",
-                                    mgr.activeTab === "official_account"
-                                        ? "text-[#165DFF] border-[#165DFF]"
-                                        : "text-[#86909C] border-transparent"
-                                )}
-                            >
-                                {localize("com_subscription.official_account")}
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => mgr.setActiveTab("website")}
-                                className={cn(
-                                    "pb-2 text-[14px] font-medium border-b-2 -mb-px",
-                                    mgr.activeTab === "website"
-                                        ? "text-[#165DFF] border-[#165DFF]"
-                                        : "text-[#86909C] border-transparent"
-                                )}
-                            >
-                                {localize("com_subscription.website")}
-                            </button>
+                        <div className="mx-3 border-b border-[#E5E6EB]">
+                            <div className="flex gap-4 px-1">
+                                <button
+                                    type="button"
+                                    onClick={() => mgr.setActiveTab("official_account")}
+                                    className={cn(
+                                        "pb-2 text-[14px] font-medium border-b-2 -mb-px",
+                                        mgr.activeTab === "official_account"
+                                            ? "text-[#165DFF] border-[#165DFF]"
+                                            : "text-[#86909C] border-transparent"
+                                    )}
+                                >
+                                    {localize("com_subscription.official_account")}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => mgr.setActiveTab("website")}
+                                    className={cn(
+                                        "pb-2 text-[14px] font-medium border-b-2 -mb-px",
+                                        mgr.activeTab === "website"
+                                            ? "text-[#165DFF] border-[#165DFF]"
+                                            : "text-[#86909C] border-transparent"
+                                    )}
+                                >
+                                    {localize("com_subscription.website")}
+                                </button>
+                            </div>
                         </div>
                     )}
                     <div

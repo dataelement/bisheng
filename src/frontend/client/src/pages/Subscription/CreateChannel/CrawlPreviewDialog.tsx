@@ -206,7 +206,11 @@ export function CrawlPreviewDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="w-[600px] h-[600px] max-w-[600px] flex flex-col bg-white text-[14px] [&>button]:hidden">
+            <DialogContent
+                className="w-[600px] h-[600px] max-w-[600px] flex flex-col bg-white text-[14px] [&>button]:hidden"
+                onPointerDownOutside={(e) => e.preventDefault()}
+                onInteractOutside={(e) => e.preventDefault()}
+            >
                 <DialogHeader>
                     <DialogTitle className="text-[16px] font-medium">
                         {localize("com_subscription.confirm_crawled_content")}
@@ -304,7 +308,7 @@ export function CrawlPreviewDialog({
 
                 {/* 底部操作：爬取中也展示两按钮，添加到信源置灰 */}
                 {(status === "loading" || status === "success" || status === "error" || status === "singlePageWarning") && (
-                    <div className="flex items-center justify-between gap-3 pt-4 border-t border-[#E5E6EB] mt-auto">
+                    <div className="mt-auto flex shrink-0 items-center justify-between gap-3 pt-4">
                         {(status === "success" || status === "error" || status === "singlePageWarning") ? (
                             <button
                                 type="button"

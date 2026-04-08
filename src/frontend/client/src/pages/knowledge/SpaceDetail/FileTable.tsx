@@ -29,8 +29,8 @@ import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { SortType, SortDirection, FileStatus, FileType, KnowledgeFile } from "~/api/knowledge";
 import { formatBytes } from "~/utils";
 import { useInlineRename } from "../hooks/useInlineRename";
-import { formatTime } from "../knowledgeUtils";
-import { useLocalize } from "~/hooks";
+import { formatTime, isKnowledgeItemPreviewable } from "../knowledgeUtils";
+import { useLocalize, useScrollbarWhileScrolling } from "~/hooks";
 
 /** 状态列悬停：下载 / 更多 — 白底、细灰边、4px 圆角 */
 const FILE_ROW_ACTION_BTN_CLASS =
@@ -186,11 +186,11 @@ const StatusBadge = ({ status }: { status: FileStatus }) => {
 function ResizeHandle({ columnKey, onResizeStart }: { columnKey: ColumnKey; onResizeStart: (key: ColumnKey, e: React.MouseEvent) => void }) {
     return (
         <div
-            className="absolute right-0 top-0 bottom-0 w-[6px] cursor-col-resize z-10 group/handle flex items-center justify-center"
+            className="group/handle absolute right-0 top-0 bottom-0 z-10 flex w-2 cursor-col-resize items-center justify-center translate-x-1/2"
             onMouseDown={(e) => onResizeStart(columnKey, e)}
         >
-            {/* 悬停时显示蓝色高亮线 */}
-            <div className="w-[2px] h-full bg-transparent group-hover/handle:bg-[#165dff] transition-colors" />
+            {/* 高亮线与列分界线对齐：手柄跨在相邻两列边界上，避免命中区偏在分割线左侧 */}
+            <div className="h-full w-0.5 bg-transparent group-hover/handle:bg-[#165dff] transition-colors" />
         </div>
     );
 }
@@ -222,6 +222,10 @@ const SortableHeader = ({
     onResizeStart,
     stickyLeft,
     showShadow,
+    /** 表头内容与排序图标整体右对齐（与数字列单元格一致） */
+    headerAlignEnd,
+    /** true：排序图标在标题左侧（如文件大小列） */
+    sortIconBeforeText,
 }: {
     children: React.ReactNode;
     sortKey: string;
@@ -232,11 +236,27 @@ const SortableHeader = ({
     onResizeStart: (key: ColumnKey, e: React.MouseEvent) => void;
     stickyLeft?: number;
     showShadow?: boolean;
+    headerAlignEnd?: boolean;
+    sortIconBeforeText?: boolean;
 }) => {
     const isActive = currentSort?.key === sortKey;
     const direction = isActive ? currentSort.direction : "asc";
     const isSticky = stickyLeft !== undefined;
     const isResizable = !NON_RESIZABLE_COLUMNS.includes(columnKey);
+    const arrowDir = direction === "asc" ? "up" : "down";
+    const sortIconSrc = `${__APP_ENV__.BASE_URL}/assets/channel/sort-amount-${arrowDir}${isActive ? "-blue" : ""}.svg`;
+    const sortIcon = (
+        <img
+            className={`size-4 shrink-0 transition-opacity ${
+                isActive ? "opacity-100" : "opacity-0"
+            } group-hover:opacity-100`}
+            src={sortIconSrc}
+            alt=""
+        />
+    );
+    const title = (
+        <span className={cn("text-sm font-normal", isActive ? "text-[#1d2129]" : "text-[#4e5969]")}>{children}</span>
+    );
     return (
         <TableHead
             className={cn(
@@ -252,26 +272,23 @@ const SortableHeader = ({
             }}
             onClick={() => onSort(sortKey)}
         >
-            <div className="flex items-center gap-1.5 border-l pl-3">
-                {(() => {
-                    const arrowDir = direction === "asc" ? "up" : "down";
-                    const isActiveSort = isActive;
-                    const src = `${__APP_ENV__.BASE_URL}/assets/channel/sort-amount-${arrowDir}${
-                        isActiveSort ? "-blue" : ""
-                    }.svg`;
-                    return (
-                        <img
-                            className={`size-4 shrink-0 transition-opacity ${
-                                isActiveSort ? "opacity-100" : "opacity-0"
-                            } group-hover:opacity-100`}
-                            src={src}
-                            alt="sort"
-                        />
-                    );
-                })()}
-                <span className={cn("text-sm font-normal", isActive ? "text-[#1d2129]" : "text-[#4e5969]")}>
-                    {children}
-                </span>
+            <div
+                className={cn(
+                    "flex min-w-0 items-center gap-1.5 border-l pl-3",
+                    headerAlignEnd && "w-full justify-end"
+                )}
+            >
+                {sortIconBeforeText ? (
+                    <>
+                        {sortIcon}
+                        {title}
+                    </>
+                ) : (
+                    <>
+                        {title}
+                        {sortIcon}
+                    </>
+                )}
             </div>
             {isResizable && <ResizeHandle columnKey={columnKey} onResizeStart={onResizeStart} />}
             {/* 固定列右侧阴影 */}
@@ -362,6 +379,8 @@ function FileTableHeader({
                     width={columnWidths.size}
                     columnKey="size"
                     onResizeStart={onResizeStart}
+                    headerAlignEnd
+                    sortIconBeforeText
                 >
                     {localize("com_knowledge.file_size")}</SortableHeader>
 
@@ -433,14 +452,20 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
     const { columnWidths, onResizeStart, totalWidth } = useResizableColumns();
     const scrollRef = useRef<HTMLDivElement>(null);
     const { showLeftShadow, showRightShadow } = useScrollShadow(scrollRef);
+    const { onScroll: onTableHScroll, scrollingProps: tableHScrollProps } = useScrollbarWhileScrolling();
 
     const isAllSelected = files.length > 0 && files.every((f) => selectedFiles.has(f.id));
     const isIndeterminate = !isAllSelected && files.some((f) => selectedFiles.has(f.id));
 
     return (
-        <div className="relative max-w-full min-w-0 overflow-hidden border-t border-[#e5e6eb]">
+        <div className="relative max-w-full min-w-0 overflow-hidden">
             {/* 横向滚动限制在容器内，不撑开整页 */}
-            <div ref={scrollRef} className="max-w-full overflow-x-auto overflow-y-visible">
+            <div
+                ref={scrollRef}
+                className="max-w-full overflow-x-auto overflow-y-visible scroll-on-scroll"
+                onScroll={onTableHScroll}
+                {...tableHScrollProps}
+            >
                 <table
                     className="w-full caption-bottom text-sm border-collapse"
                     style={{ tableLayout: "fixed", width: totalWidth, minWidth: "100%" }}
@@ -532,9 +557,13 @@ function FileRow({
     showLeftShadow: boolean;
 }) {
     const localize = useLocalize();
+    const [moreMenuOpen, setMoreMenuOpen] = useState(false);
     const isFolder = file.type === FileType.FOLDER;
     const isCreating = !!file.isCreating;
-    const rowBg = isSelected ? "bg-[#E6EDFC] group-hover:bg-[#F8F8F8]" : "bg-white group-hover:bg-[#f7f7f7]";
+    // 每格统一底色 + 同一套 transition，避免固定列用 group-hover、其余列透出 tr:hover 时不同步闪一下
+    const rowBg = isSelected
+        ? "bg-[#E6EDFC] transition-colors duration-150 group-hover:bg-[#F8F8F8]"
+        : "bg-white transition-colors duration-150 group-hover:bg-[#f7f7f7]";
 
     const {
         isRenaming,
@@ -560,12 +589,16 @@ function FileRow({
         )
     );
     const showMoreMenu = isAdmin;
+    const namePreviewable = isKnowledgeItemPreviewable(file);
 
     return (
-        <TableRow className={cn(
-            "group border-b-[#e5e6eb] transition-colors",
-            isSelected ? "bg-[#E6EDFC] hover:bg-[#F8F8F8]" : "hover:bg-[#f7f7f7]"
-        )}>
+        <TableRow
+            className={cn(
+                "group border-b border-b-[#e5e6eb]",
+                // 取消 Table 默认 tr:hover 底色，整行颜色只由单元格 rowBg + group-hover 控制
+                "bg-transparent hover:bg-transparent"
+            )}
+        >
             {/* 复选框 — 左侧固定 */}
             <TableCell
                 className={cn("sticky left-0 z-10 px-0 py-3 text-center", rowBg)}
@@ -591,18 +624,18 @@ function FileRow({
                 }}
             >
                 <div className="flex items-center gap-2 min-w-0 text-gray-300 ">
-                    <div className="flex h-[35px] w-[40px] shrink-0 items-center justify-center rounded-sm bg-white">
+                    <div className="flex size-[14px] shrink-0 items-center justify-center rounded-sm bg-white">
                         {isFolder
                             ? (
                                 <img
-                                    src={`${__APP_ENV__.BASE_URL}/assets/channel/Subtract.svg`}
+                                    src={`${__APP_ENV__.BASE_URL}/assets/channel/folder-close.svg`}
                                     alt=""
-                                    className="h-[35px] w-[40px] object-contain"
+                                    className="size-[14px] object-contain"
                                 />
                             )
                             : (['png', 'jpg', 'jpeg', 'bmp', 'gif', 'webp'].includes(file.name.split('.').pop()?.toLowerCase() || "")
-                                ? <FileImageIcon className="size-4" />
-                                : <FileUserIcon className="size-4" />)
+                                ? <FileImageIcon className="size-[14px]" />
+                                : <FileUserIcon className="size-[14px]" />)
                         }
                     </div>
                     {isRenaming ? (
@@ -618,13 +651,19 @@ function FileRow({
                         />
                     ) : (
                         <span
-                            className="text-sm text-[#1d2129] truncate cursor-pointer hover:text-[#165dff] flex-1"
+                            className={cn(
+                                "text-sm truncate flex-1",
+                                namePreviewable
+                                    ? "cursor-pointer text-[#165dff] hover:text-[#4080FF]"
+                                    : "cursor-default text-[#4e5969]"
+                            )}
                             onClick={(e) => {
                                 e.stopPropagation();
                                 if (isFolder) {
                                     onNavigateFolder?.();
                                     return;
                                 }
+                                if (!namePreviewable) return;
                                 onPreview?.();
                             }}
                         >
@@ -638,7 +677,7 @@ function FileRow({
 
             {/* 类型 */}
             <TableCell
-                className="py-3 text-sm text-[#86909c]"
+                className={cn("py-3 text-sm text-[#86909c]", rowBg)}
                 style={{ width: columnWidths.fileType, minWidth: columnWidths.fileType, maxWidth: columnWidths.fileType }}
             >
                 <span className="truncate block">
@@ -646,19 +685,19 @@ function FileRow({
                 </span>
             </TableCell>
 
-            {/* 大小 */}
+            {/* 大小 — 单元格右对齐，与表头一致 */}
             <TableCell
-                className="py-3 text-sm text-[#86909c]"
+                className={cn("py-3 text-right text-sm text-[#86909c]", rowBg)}
                 style={{ width: columnWidths.size, minWidth: columnWidths.size, maxWidth: columnWidths.size }}
             >
-                <span className="truncate block">
+                <span className="block truncate">
                     {isFolder ? "--" : (file.size ? formatBytes(file.size, 2, true) : "--")}
                 </span>
             </TableCell>
 
             {/* 标签 — 行悬停时显示编辑（管理员、非文件夹） */}
             <TableCell
-                className="py-3"
+                className={cn("py-3", rowBg)}
                 style={{ width: columnWidths.tags, minWidth: columnWidths.tags, maxWidth: columnWidths.tags }}
             >
                 <div className="flex h-full w-full items-center gap-1.5 overflow-hidden">
@@ -685,130 +724,108 @@ function FileRow({
                 </div>
             </TableCell>
 
-            {/* 时间 — 非管理员：行悬停显示下载（无「状态」列时） */}
+            {/* 更新时间 — 操作按钮改到行末占位列，避免盖住文字 */}
             <TableCell
-                className="py-3 text-sm text-[#86909c]"
+                className={cn("py-3 text-sm text-[#86909c]", rowBg)}
                 style={{ width: columnWidths.updateTime, minWidth: columnWidths.updateTime, maxWidth: columnWidths.updateTime }}
             >
-                {isAdmin ? (
-                    <span className="block truncate whitespace-nowrap">{formatTime(file.updatedAt)}</span>
-                ) : (
-                    <div className="flex min-w-0 items-center justify-between gap-2">
-                        <span className="block min-w-0 truncate whitespace-nowrap">{formatTime(file.updatedAt)}</span>
-                        <button
-                            type="button"
-                            className={cn(
-                                FILE_ROW_ACTION_BTN_CLASS,
-                                "opacity-0 pointer-events-none transition-opacity group-hover:pointer-events-auto group-hover:opacity-100"
-                            )}
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                onDownload();
-                            }}
-                            title={localize("com_knowledge.download")}
-                        >
-                            <Download className="size-4" />
-                        </button>
-                    </div>
-                )}
+                <span className="block truncate whitespace-nowrap">{formatTime(file.updatedAt)}</span>
             </TableCell>
 
-            {/* 状态（管理员）— 悬停按钮锚在胶囊水平中点：左缘对齐 50%，只盖住右半段文字 */}
+            {/* 状态（管理员） */}
             {isAdmin && (
                 <TableCell
-                    className="relative overflow-visible py-3 align-middle"
+                    className={cn("py-3 align-middle", rowBg)}
                     style={{ width: columnWidths.status, minWidth: columnWidths.status, maxWidth: columnWidths.status }}
                 >
-                    <div className="relative inline-flex w-max max-w-full items-center">
-                        {isFolder ? (
-                            <span className="whitespace-nowrap text-sm">
-                                <span className="font-medium text-emerald-500">
-                                    {file.successFileNum ?? 0}
-                                </span>
-                                <span className="text-[#86909c]">
-                                    /{file.fileNum ?? 0}
-                                </span>
+                    {isFolder ? (
+                        <span className="whitespace-nowrap text-sm">
+                            <span className="font-medium text-emerald-500">
+                                {file.successFileNum ?? 0}
                             </span>
-                        ) : (
-                            <StatusBadge status={file.status ?? FileStatus.WAITING} />
-                        )}
-                        <div
-                            className={cn(
-                                "absolute left-1/2 top-1/2 z-[2] flex -translate-y-1/2 items-center gap-1",
-                                "pointer-events-none opacity-0 transition-opacity",
-                                "group-hover:pointer-events-auto group-hover:opacity-100"
-                            )}
-                        >
-                            <button
-                                type="button"
-                                className={FILE_ROW_ACTION_BTN_CLASS}
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    onDownload();
-                                }}
-                                title={localize("com_knowledge.download")}
-                            >
-                                <Download className="size-4" />
-                            </button>
-                            {showMoreMenu && (
-                                <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                        <button type="button" className={FILE_ROW_ACTION_BTN_CLASS}>
-                                            <MoreVertical className="size-4" />
-                                        </button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end" className="w-32">
-                                        {!isFolder && (
-                                            <DropdownMenuItem
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    onEditTags();
-                                                }}
-                                            >
-                                                <Tag className="mr-2 size-4" />
-                                                {localize("com_knowledge.edit_tags")}
-                                            </DropdownMenuItem>
-                                        )}
-                                        <DropdownMenuItem
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                startRenaming();
-                                            }}
-                                        >
-                                            <Edit className="mr-2 size-4" />
-                                            {localize("com_knowledge.rename")}
-                                        </DropdownMenuItem>
-                                        {hasRetryOption && (
-                                            <DropdownMenuItem
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    onRetry?.();
-                                                }}
-                                            >
-                                                <RefreshCw className="mr-2 size-4" />
-                                                {localize("com_knowledge.retry")}
-                                            </DropdownMenuItem>
-                                        )}
-                                        <DropdownMenuItem
-                                            className="text-[#f53f3f] focus:bg-[#fff2f0] focus:text-[#f53f3f]"
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                onDelete();
-                                            }}
-                                        >
-                                            <Trash2 className="mr-2 size-4" />
-                                            {localize("com_knowledge.delete")}
-                                        </DropdownMenuItem>
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
-                            )}
-                        </div>
-                    </div>
+                            <span className="text-[#86909c]">/{file.fileNum ?? 0}</span>
+                        </span>
+                    ) : (
+                        <StatusBadge status={file.status ?? FileStatus.WAITING} />
+                    )}
                 </TableCell>
             )}
 
-            {/* 占位空列 */}
-            <TableCell className="pointer-events-none border-none p-0" />
+            {/* 占位列：吸收剩余宽度；行悬停操作按钮固定距表格右缘 12px */}
+            <TableCell className={cn("relative border-none p-0 pointer-events-none", rowBg)}>
+                <div
+                    className={cn(
+                        "absolute right-[12px] top-1/2 z-[5] flex -translate-y-1/2 items-center gap-1 pointer-events-auto transition-opacity",
+                        moreMenuOpen
+                            ? "opacity-100"
+                            : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100"
+                    )}
+                >
+                    <button
+                        type="button"
+                        className={FILE_ROW_ACTION_BTN_CLASS}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onDownload();
+                        }}
+                        title={localize("com_knowledge.download")}
+                    >
+                        <Download className="size-4" />
+                    </button>
+                    {showMoreMenu && (
+                        <DropdownMenu open={moreMenuOpen} onOpenChange={setMoreMenuOpen}>
+                            <DropdownMenuTrigger asChild>
+                                <button type="button" className={FILE_ROW_ACTION_BTN_CLASS}>
+                                    <MoreVertical className="size-4" />
+                                </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-32">
+                                {!isFolder && (
+                                    <DropdownMenuItem
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            onEditTags();
+                                        }}
+                                    >
+                                        <Tag className="mr-2 size-4" />
+                                        {localize("com_knowledge.edit_tags")}
+                                    </DropdownMenuItem>
+                                )}
+                                <DropdownMenuItem
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        startRenaming();
+                                    }}
+                                >
+                                    <Edit className="mr-2 size-4" />
+                                    {localize("com_knowledge.rename")}
+                                </DropdownMenuItem>
+                                {hasRetryOption && (
+                                    <DropdownMenuItem
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            onRetry?.();
+                                        }}
+                                    >
+                                        <RefreshCw className="mr-2 size-4" />
+                                        {localize("com_knowledge.retry")}
+                                    </DropdownMenuItem>
+                                )}
+                                <DropdownMenuItem
+                                    className="text-[#f53f3f] focus:bg-[#fff2f0] focus:text-[#f53f3f]"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        onDelete();
+                                    }}
+                                >
+                                    <Trash2 className="mr-2 size-4" />
+                                    {localize("com_knowledge.delete")}
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    )}
+                </div>
+            </TableCell>
         </TableRow>
     );
 }

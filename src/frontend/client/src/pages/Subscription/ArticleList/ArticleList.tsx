@@ -236,10 +236,12 @@ export function ArticleList({ channel, selectedArticleId, onArticleSelect }: Art
         <div className="flex-1 px-4 h-full flex flex-col max-w-[1000px] mx-auto">
             {/* header */}
             <div className="pt-5 pb-4 space-y-4">
-                {/* 第一行：频道名称、信息、分享 */}
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1">
-                        <h1 className="">{channelDetail?.name || channel.name}</h1>
+                {/* 第一行：频道名称、信息、分享（固定 32px 高，避免分享按钮显隐或详情切换时闪动） */}
+                <div className="flex h-8 min-h-8 shrink-0 items-center justify-between gap-2">
+                    <div className="flex min-w-0 flex-1 items-center gap-1">
+                        <h1 className="truncate text-[16px] font-semibold leading-8 text-[#1D2129]">
+                            {channelDetail?.name || channel.name}
+                        </h1>
                         <Tooltip>
                             <TooltipTrigger>
                                 <Info className="size-4 text-[#86909c]" />
@@ -263,18 +265,30 @@ export function ArticleList({ channel, selectedArticleId, onArticleSelect }: Art
                         </Tooltip>
                     </div>
 
-                    {channelDetail?.visibility !== 'private' && <Button
-                        onClick={() => {
-                            const shareUrl = `${window.location.origin}${__APP_ENV__.BASE_URL}/channel/share/${channel.id}`;
-                            const shareText = localize("com_subscription.welcome_join_channel_share", { name: channel.name, shareUrl });
-                            copyText(shareText).then(() => {
-                                showToast({ message: localize("com_subscription.share_link_copied"), severity: NotificationSeverity.SUCCESS });
-                            });
-                        }}
-                        variant="outline"
-                        className="h-8 px-4 text-[14px] rounded-md font-normal"
-                    >
-                        <ShareOutlineIcon className="size-3.5" />{localize("com_subscription.share")}</Button>}
+                    <div className="flex h-8 flex-shrink-0 items-center justify-end">
+                        {channelDetail?.visibility !== "private" ? (
+                            <Button
+                                onClick={() => {
+                                    const shareUrl = `${window.location.origin}${__APP_ENV__.BASE_URL}/channel/share/${channel.id}`;
+                                    const shareText = localize("com_subscription.welcome_join_channel_share", {
+                                        name: channel.name,
+                                        shareUrl
+                                    });
+                                    copyText(shareText).then(() => {
+                                        showToast({
+                                            message: localize("com_subscription.share_link_copied"),
+                                            severity: NotificationSeverity.SUCCESS
+                                        });
+                                    });
+                                }}
+                                variant="outline"
+                                className="h-8 px-4 text-[14px] rounded-md font-normal"
+                            >
+                                <ShareOutlineIcon className="size-3.5" />
+                                {localize("com_subscription.share")}
+                            </Button>
+                        ) : null}
+                    </div>
                 </div>
 
                 {/* 第二行：子频道 Tabs 与 工具栏 (搜索/筛选) */}

@@ -138,7 +138,7 @@ export function KnowledgeSpaceSidebar({
             {/* Top actions */}
             <div className={collapsed ? "px-0 py-5" : "px-3 py-5"}>
                 <div className={collapsed ? "flex items-center justify-center" : "border-b border-[#e5e6eb] space-y-4 pb-4"}>
-                    <div className={collapsed ? "flex items-center justify-center" : "px-2 flex justify-between items-center text-[14px] font-medium"}>
+                    <div className={collapsed ? "flex items-center justify-center" : "px-2 flex justify-between items-center text-[16px] font-medium"}>
                         {!collapsed && <span className="text-[#1d2129]">{localize("com_knowledge.knowledge_space")}</span>}
                         {!(collapsed && hideExpandToggleWhenCollapsed) && (
                             <Button
