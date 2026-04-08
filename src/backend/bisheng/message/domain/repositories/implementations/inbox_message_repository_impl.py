@@ -1,7 +1,7 @@
 import logging
 from typing import List, Optional
 
-from sqlalchemy import JSON, Text, cast, func
+from sqlalchemy import JSON, and_, cast, func, or_
 from sqlmodel import select, col
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -10,6 +10,9 @@ from bisheng.message.domain.models.inbox_message import InboxMessage, MessageSta
 from bisheng.message.domain.repositories.interfaces.inbox_message_repository import InboxMessageRepository
 
 logger = logging.getLogger(__name__)
+
+SEARCHABLE_CONTENT_TYPES = ('user', 'business_url')
+MAX_CONTENT_ITEMS_FOR_KEYWORD_SEARCH = 10
 
 
 class InboxMessageRepositoryImpl(BaseRepositoryImpl[InboxMessage, int], InboxMessageRepository):
@@ -25,9 +28,21 @@ class InboxMessageRepositoryImpl(BaseRepositoryImpl[InboxMessage, int], InboxMes
         )
 
     def _apply_content_keyword_filter(self, query, keyword: str):
-        """Apply LIKE filter on JSON content by casting it to text."""
+        """Apply keyword filter on content fields for searchable JSON content items."""
         like_pattern = f'%{keyword}%'
-        return query.where(cast(InboxMessage.content, Text).like(like_pattern))
+        searchable_conditions = []
+
+        for index in range(MAX_CONTENT_ITEMS_FOR_KEYWORD_SEARCH):
+            item_type = func.json_unquote(func.json_extract(InboxMessage.content, f'$[{index}].type'))
+            item_content = func.json_unquote(func.json_extract(InboxMessage.content, f'$[{index}].content'))
+            searchable_conditions.append(
+                and_(
+                    item_type.in_(SEARCHABLE_CONTENT_TYPES),
+                    item_content.like(like_pattern),
+                )
+            )
+
+        return query.where(or_(*searchable_conditions))
 
     async def find_messages_by_receiver(
         self,
