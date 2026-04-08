@@ -12,9 +12,34 @@ export const flowVersionCompatible = (flow) => {
             case 'llm': comptibleLLM(node.data); break;
             case 'rag': comptibleRag(node.data); break;
             case 'knowledge_retriever': comptibleKnowledgeRetriever(node.data); break;
+            case 'condition': comptibleCondition(node.data); break;
         }
     })
     return flow
+}
+
+const normalizeConditionRule = (rule) => ({
+    id: rule?.id || generateUUID(8),
+    left_var: typeof rule?.left_var === 'string' ? rule.left_var : '',
+    left_label: typeof rule?.left_label === 'string' ? rule.left_label : '',
+    comparison_operation: typeof rule?.comparison_operation === 'string' ? rule.comparison_operation : '',
+    right_value_type: rule?.right_value_type === 'ref' ? 'ref' : 'input',
+    right_value: typeof rule?.right_value === 'string' ? rule.right_value : '',
+    right_label: typeof rule?.right_label === 'string' ? rule.right_label : '',
+});
+
+const comptibleCondition = (node) => {
+    if (!Array.isArray(node?.group_params) || !node.group_params[0]?.params?.length) return;
+
+    const conditionParam = node.group_params[0].params.find((param) => param.key === 'condition');
+    if (!conditionParam) return;
+
+    const rawBranches = Array.isArray(conditionParam.value) ? conditionParam.value : [];
+    conditionParam.value = rawBranches.map((branch) => ({
+        id: branch?.id || generateUUID(8),
+        operator: branch?.operator === 'or' ? 'or' : 'and',
+        conditions: Array.isArray(branch?.conditions) ? branch.conditions.map(normalizeConditionRule) : [],
+    }));
 }
 const comptibleRag = (node) => {
     if (!node.v) {

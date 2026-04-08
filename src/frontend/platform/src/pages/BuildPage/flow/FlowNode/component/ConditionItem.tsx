@@ -24,6 +24,27 @@ interface Item {
     del: boolean
 }
 
+const normalizeConditionRule = (item?: Partial<Item>) => ({
+    id: item?.id || generateUUID(8),
+    left_var: typeof item?.left_var === 'string' ? item.left_var : '',
+    left_label: typeof item?.left_label === 'string' ? item.left_label : '',
+    comparison_operation: typeof item?.comparison_operation === 'string' ? item.comparison_operation : '',
+    right_value_type: item?.right_value_type === 'ref' ? 'ref' : 'input',
+    right_value: typeof item?.right_value === 'string' ? item.right_value : '',
+    right_label: typeof item?.right_label === 'string' ? item.right_label : '',
+});
+
+const normalizeConditionBranches = (value) => {
+    if (!Array.isArray(value)) return [];
+    return value.map((branch) => ({
+        id: branch?.id || generateUUID(8),
+        operator: branch?.operator === 'or' ? 'or' : 'and',
+        conditions: Array.isArray(branch?.conditions)
+            ? branch.conditions.map((item) => normalizeConditionRule(item))
+            : [],
+    }));
+};
+
 
 const Item = ({ nodeId, item, index, del, required, varErrors, onUpdateItem, onDeleteItem }) => {
     const { t } = useTranslation('flow');
@@ -159,6 +180,11 @@ export default function ConditionItem({ nodeId, node, data: paramItem, onChange,
     const { t } = useTranslation('flow'); // 获取翻译函数
     const [value, setValue] = useState([]);
     const [required, setRequired] = useState(false);
+    const normalizedParamValue = useMemo(() => normalizeConditionBranches(paramItem?.value), [paramItem?.value]);
+    const needsParamNormalization = useMemo(
+        () => JSON.stringify(normalizedParamValue) !== JSON.stringify(paramItem?.value ?? []),
+        [normalizedParamValue, paramItem?.value]
+    );
 
     const handleAddCondition = () => {
         setRequired(false);
@@ -170,12 +196,20 @@ export default function ConditionItem({ nodeId, node, data: paramItem, onChange,
     };
 
     useEffect(() => {
-        if (paramItem.value && paramItem.value.length) {
-            setValue(paramItem.value);
-        } else {
-            handleAddCondition();
+        if (normalizedParamValue.length) {
+            setValue(normalizedParamValue);
+            if (needsParamNormalization) {
+                onChange(normalizedParamValue);
+            }
+            return;
         }
-    }, []);
+        setValue((current) => {
+            if (current.length) return current;
+            const initialValue = [{ id: generateUUID(8), operator: 'and', conditions: [] }];
+            onChange(initialValue);
+            return initialValue;
+        });
+    }, [needsParamNormalization, normalizedParamValue, onChange, paramItem?.value]);
 
     const deleteCondition = (id) => {
         setValue((val) => {
@@ -219,8 +253,8 @@ export default function ConditionItem({ nodeId, node, data: paramItem, onChange,
             setTimeout(() => {
                 setRequired(true);
             }, 100);
-            if (paramItem.value.length === 0) return t('conditionBranchCannotBeEmpty'); // 条件分支不可为空
-            const res = paramItem.value.some((item) => {
+            if (value.length === 0) return t('conditionBranchCannotBeEmpty'); // 条件分支不可为空
+            const res = value.some((item) => {
                 if (!item.conditions.length) return true;
                 return item.conditions.some((cds) => {
                     if (!cds.left_label) return true;
@@ -237,7 +271,7 @@ export default function ConditionItem({ nodeId, node, data: paramItem, onChange,
         });
 
         return () => onValidate(() => { });
-    }, [paramItem.value]);
+    }, [onValidate, t, value]);
 
     // 校验变量是否可用
     const { flow } = useFlowStore();
@@ -265,7 +299,7 @@ export default function ConditionItem({ nodeId, node, data: paramItem, onChange,
     useEffect(() => {
         onVarEvent && onVarEvent(validateVarAvailble);
         return () => onVarEvent && onVarEvent(() => { });
-    }, [paramItem, value]);
+    }, [onVarEvent, paramItem, value]);
 
     // Update Preset Questions 
     // const [_, forceUpdate] = useState(false)
