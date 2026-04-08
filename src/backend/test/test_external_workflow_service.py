@@ -52,6 +52,50 @@ def make_graph():
 
 
 class TestExternalWorkflowService(IsolatedAsyncioTestCase):
+    async def test_create_workflow_draft_uses_async_thread_wrapper(self):
+        expected_flow = SimpleNamespace(id='flow-1')
+        expected_version = SimpleNamespace(id=11, data=make_graph())
+
+        async_to_thread = AsyncMock(return_value=(expected_flow, expected_version))
+        with patch('bisheng.api.services.external_workflow.asyncio.to_thread', async_to_thread):
+            flow, version = await ExternalWorkflowService.create_workflow_draft(
+                login_user=SimpleNamespace(user_id=1),
+                name='demo',
+                graph_data=make_graph(),
+            )
+
+        self.assertEqual(flow.id, 'flow-1')
+        self.assertEqual(version.id, 11)
+        args = async_to_thread.await_args.args
+        self.assertIs(args[0].__func__, ExternalWorkflowService._create_workflow_draft_sync.__func__)
+        self.assertEqual(args[2], 'demo')
+
+    def test_get_existing_external_draft_version_limits_recent_versions(self):
+        captured = {}
+
+        class FakeResult:
+            def all(self):
+                return []
+
+        class FakeSession:
+            def exec(self, statement):
+                captured['statement'] = statement
+                return FakeResult()
+
+        class FakeContext:
+            def __enter__(self):
+                return FakeSession()
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        with patch('bisheng.api.services.external_workflow.get_sync_db_session', return_value=FakeContext()):
+            result = ExternalWorkflowService._get_existing_external_draft_version('flow-1')
+
+        self.assertIsNone(result)
+        self.assertIsNotNone(captured['statement']._limit_clause)
+        self.assertEqual(captured['statement']._limit_clause.value, ExternalWorkflowService._MAX_EXTERNAL_DRAFT_SCAN)
+
     async def test_get_workflow_node_params_returns_extended_metadata(self):
         version = SimpleNamespace(id=11, data=make_graph())
 

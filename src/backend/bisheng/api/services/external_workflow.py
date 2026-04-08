@@ -1,3 +1,4 @@
+import asyncio
 import copy
 import time
 from typing import Optional
@@ -25,6 +26,7 @@ from bisheng.workflow.authoring.registry import create_graph_node_payload
 class ExternalWorkflowService:
     _DRAFT_META_KEY = '_external_workflow_meta'
     _DRAFT_SOURCE = 'clawith_mcp'
+    _MAX_EXTERNAL_DRAFT_SCAN = 20
     _SENSITIVE_KEY_PATTERNS = (
         'password',
         'token',
@@ -239,7 +241,7 @@ class ExternalWorkflowService:
             statement = select(FlowVersion).where(
                 FlowVersion.flow_id == flow_id,
                 FlowVersion.is_delete == 0,
-            ).order_by(FlowVersion.id.desc())
+            ).order_by(FlowVersion.id.desc()).limit(cls._MAX_EXTERNAL_DRAFT_SCAN)
             versions = session.exec(statement).all()
         for version in versions:
             if cls._is_draft_graph(version.data):
@@ -659,12 +661,12 @@ class ExternalWorkflowService:
         return version
 
     @classmethod
-    def create_workflow_draft(cls,
-                              login_user: UserPayload,
-                              name: str,
-                              graph_data: dict,
-                              description: Optional[str] = None,
-                              guide_word: Optional[str] = None) -> tuple[Flow, FlowVersion]:
+    def _create_workflow_draft_sync(cls,
+                                    login_user: UserPayload,
+                                    name: str,
+                                    graph_data: dict,
+                                    description: Optional[str] = None,
+                                    guide_word: Optional[str] = None) -> tuple[Flow, FlowVersion]:
         cls._assert_workflow_name_available(login_user, name)
         cls._validate_draft_graph(login_user, graph_data, flow_name=name)
 
@@ -689,6 +691,22 @@ class ExternalWorkflowService:
             FlowType.WORKFLOW.value,
         )
         return db_flow, current_version
+
+    @classmethod
+    async def create_workflow_draft(cls,
+                                    login_user: UserPayload,
+                                    name: str,
+                                    graph_data: dict,
+                                    description: Optional[str] = None,
+                                    guide_word: Optional[str] = None) -> tuple[Flow, FlowVersion]:
+        return await asyncio.to_thread(
+            cls._create_workflow_draft_sync,
+            login_user,
+            name,
+            graph_data,
+            description,
+            guide_word,
+        )
 
     @classmethod
     async def update_workflow_draft(cls,
