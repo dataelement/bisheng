@@ -3,6 +3,7 @@ import base64
 import contextlib
 import functools
 import hashlib
+import io
 import json
 import os
 import shutil
@@ -19,6 +20,7 @@ import cchardet
 import requests
 from appdirs import user_cache_dir
 from fastapi import UploadFile
+from urllib3 import BaseHTTPResponse
 from urllib3.util import parse_url
 
 from bisheng.core.external.http_client.http_client_manager import get_http_client
@@ -287,7 +289,7 @@ async def save_uploaded_file(file: UploadFile, folder_name, file_name, bucket_na
 
 
 @create_cache_folder
-def save_download_file(file_input: Union[bytes, BinaryIO], folder_name: str, filename: str) -> str:
+def save_download_file(file_input: Union[bytes, BinaryIO, BaseHTTPResponse], folder_name: str, filename: str) -> str:
     """
     Synchronous I/O intensive tasks:
     Write data stream to a temporary file
@@ -301,8 +303,12 @@ def save_download_file(file_input: Union[bytes, BinaryIO], folder_name: str, fil
     else:
         src_stream = file_input
         # Make sure the pointer is at the beginning
-        if hasattr(src_stream, 'seek'):
-            src_stream.seek(0)
+        try:
+            if hasattr(src_stream, 'seek'):
+                src_stream.seek(0)
+        # http response objects may not support seek, so we can ignore UnsupportedOperation exceptions
+        except io.UnsupportedOperation:
+            pass
 
     # Prepare a temporary file (write a temporary random filename first to avoid not being able to determine the filename before the hash calculation is finished).
     cache_path = Path(CACHE_DIR)
@@ -321,12 +327,24 @@ def save_download_file(file_input: Union[bytes, BinaryIO], folder_name: str, fil
         # Write to temporary file and calculate SHA256 simultaneously
         with open(temp_file_path, 'wb') as dst_file:
             chunk_size = 65536  # 64KB
-            while True:
-                chunk = src_stream.read(chunk_size)
-                if not chunk:
-                    break
-                sha256_hash.update(chunk)
-                dst_file.write(chunk)
+            # minio response
+            if hasattr(src_stream, 'stream'):
+                for one in src_stream.stream(chunk_size):
+                    sha256_hash.update(one)
+                    dst_file.write(one)
+            # requests response
+            elif hasattr(src_stream, 'iter_content'):
+                for one in src_stream.iter_content(chunk_size):
+                    sha256_hash.update(one)
+                    dst_file.write(one)
+            # other file-like objects
+            else:
+                while True:
+                    chunk = src_stream.read(chunk_size)
+                    if not chunk:
+                        break
+                    sha256_hash.update(chunk)
+                    dst_file.write(chunk)
 
         # calculate final hash
         file_hash = sha256_hash.hexdigest()
@@ -381,19 +399,24 @@ def file_download(file_path: str):
             # download file from minio sdk
             bucket_name, object_name = url_obj.path.replace(minio_share_host, "", 1).lstrip("/").split('/', 1)
             object_name = unquote(object_name)
-            file_content = minio_client.get_object_sync(bucket_name, object_name)
+            file_response = minio_client.download_object_sync(bucket_name, object_name)
         else:
             # download file from http url
-            r = requests.get(file_path, verify=False)
+            r = requests.get(file_path, verify=False, stream=True)
             if r.status_code != 200:
                 raise ValueError('Check the url of your file; returned status code %s' % r.status_code)
-            # OthersContent-Dispositionheader to find the filename
+            # Content-Disposition header to find the filename
             content_disposition = r.headers.get('Content-Disposition')
             if content_disposition:
                 filename = unquote(content_disposition).split('filename=')[-1].strip("\"'")
-            file_content = r.content
-
-        file_path = save_download_file(file_content, 'bisheng', filename)
+            file_response = r
+        try:
+            file_path = save_download_file(file_response, 'bisheng', filename)
+        finally:
+            if file_response:
+                file_response.close()
+                if hasattr(file_response, 'release_conn'):
+                    file_response.release_conn()
         return file_path, filename
 
     # <g id="Bold">Medical Treatment:</g> MinIO Relative path (In / Starts with a signature parameter)
@@ -413,11 +436,16 @@ def file_download(file_path: str):
                 bucket_name, object_name = path_parts
                 # Call Synchronized minio Method download
                 object_name = unquote(object_name)
-                file_content = minio_client.get_object_sync(bucket_name, object_name)
-
-                filename = unquote(object_name.split('/')[-1])
-                file_path = save_download_file(file_content, 'bisheng', filename)
-                return file_path, filename
+                file_response = None
+                try:
+                    file_response = minio_client.download_object_sync(bucket_name, object_name)
+                    filename = unquote(object_name.split('/')[-1])
+                    file_path = save_download_file(file_response, 'bisheng', filename)
+                    return file_path, filename
+                finally:
+                    if file_response:
+                        file_response.close()
+                        file_response.release_conn()
         except Exception as e:
             # If the parsing fails, print the log and let the program continue to throw down ValueError
             print(f"Error handling relative MinIO path: {e}")

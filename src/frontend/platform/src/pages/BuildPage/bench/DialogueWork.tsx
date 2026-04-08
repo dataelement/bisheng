@@ -3,10 +3,11 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import LingSiWork from "./LingSiWork";
 import Index from "./index";
+import Subscribe from "./Subscribe";
+import KnowledgeSpace from "./KnowledgeSpace";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/bs-ui/tabs";
 
 export default function DialogueWork() {
-  const [formData, setFormData] = useState(null); // For sharing data between tabs
   const [defaultValue] = useState("client");
   const { t, i18n } = useTranslation();
   useEffect(() => {
@@ -19,12 +20,20 @@ export default function DialogueWork() {
         <TabsList className="">
           <TabsTrigger value="client">{t('bench.daily')}</TabsTrigger>
           <TabsTrigger value="lingsi" className="roundedrounded-xl">{t('bench.lingsi')}</TabsTrigger>
+          <TabsTrigger value="subscribe">{t('bench.subscribe')}</TabsTrigger>
+          <TabsTrigger value="knowledgeSpace">{t('bench.knowledgeSpace')}</TabsTrigger>
         </TabsList>
         <TabsContent value="client" key="client-tab">
-          <Index formData={formData} setFormData={setFormData} />
+          <Index />
         </TabsContent>
         <TabsContent value="lingsi">
-          <LingSiWork formData={formData} setFormData={setFormData} />
+          <LingSiWork />
+        </TabsContent>
+        <TabsContent value="subscribe">
+          <Subscribe />
+        </TabsContent>
+        <TabsContent value="knowledgeSpace">
+          <KnowledgeSpace />
         </TabsContent>
       </Tabs>
     </div>

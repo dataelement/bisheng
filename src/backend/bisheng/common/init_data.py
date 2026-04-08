@@ -53,6 +53,8 @@ async def init_default_data():
                                    third_id=WebMenuResource.BACKEND.value),
                         RoleAccess(role_id=DefaultRole, type=AccessType.WEB_MENU.value,
                                    third_id=WebMenuResource.FRONTEND.value),
+                        RoleAccess(role_id=DefaultRole, type=AccessType.WEB_MENU.value,
+                                   third_id=WebMenuResource.KNOWLEDGE_SPACE.value),
                     ])
                     await session.commit()
                 # Add Default User Group

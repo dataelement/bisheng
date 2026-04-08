@@ -45,6 +45,8 @@ class WorkbenchModelConfig(BaseModel):
     # Speech-to-text model
     asr_model: Optional[WSModel] = Field(default=None, description='Speech-to-text model')
     tts_model: Optional[WSModel] = Field(default=None, description='Text-to-speech model')
+    knowledge_space_llm: Optional[WSModel] = Field(default=None, description='Knowledge Space Model')
+    chat_title_llm: Optional[WSModel] = Field(default=None, description='Chat Title Generation Model')
 
 
 class LLMModelCreateReq(BaseModel):
@@ -65,13 +67,15 @@ class LLMServerCreateReq(BaseModel):
     limit_flag: Optional[bool] = Field(default=False, description='Whether to turn on the daily call limit')
     limit: Optional[int] = Field(default=0, description='Daily call limit')
     config: Optional[dict] = Field(default=None, description='Service Provider Configuration')
-    models: Optional[List[LLMModelCreateReq]] = Field(default_factory=list, description='List of models under Service Provider')
+    models: Optional[List[LLMModelCreateReq]] = Field(default_factory=list,
+                                                      description='List of models under Service Provider')
 
 
 class KnowledgeLLMConfig(BaseModel):
     embedding_model_id: Optional[int] = Field(None, description="Knowledge Base DefaultembeddingModel'sID")
     source_model_id: Optional[int] = Field(None, description="the Knowledge Base Traceability Model'sID")
-    extract_title_model_id: Optional[int] = Field(None, description="Documentation Knowledge Base Extraction Header Model'sID")
+    extract_title_model_id: Optional[int] = Field(None,
+                                                  description="Documentation Knowledge Base Extraction Header Model'sID")
     qa_similar_model_id: Optional[int] = Field(None, description="QAThe Knowledge Base Similarity Question Model'sID")
     abstract_prompt: Optional[str] = Field(None, description='Summary Prompt')
 
@@ -80,15 +84,19 @@ class AssistantLLMItem(BaseModel):
     model_id: Optional[int] = Field(None, description="Model'sID")
     agent_executor_type: Optional[str] = Field(default='ReAct',
                                                description='Execution modefunction call or ReAct')
-    knowledge_max_content: Optional[int] = Field(default=15000, description='Maximum number of strings for knowledge base retrieval')
-    knowledge_sort_index: Optional[bool] = Field(default=False, description='Whether to reschedule after knowledge base retrieval')
+    knowledge_max_content: Optional[int] = Field(default=15000,
+                                                 description='Maximum number of strings for knowledge base retrieval')
+    knowledge_sort_index: Optional[bool] = Field(default=False,
+                                                 description='Whether to reschedule after knowledge base retrieval')
     streaming: Optional[bool] = Field(default=True, description='Whether to turn on streaming')
     default: Optional[bool] = Field(default=False, description='Is default model')
 
 
 class AssistantLLMConfig(BaseModel):
-    llm_list: Optional[List[AssistantLLMItem]] = Field(default_factory=list, description='Assistant OptionalLLMVertical')
-    auto_llm: Optional[AssistantLLMItem] = Field(None, description='Assistant Portrait Automatic Optimization Model Configuration')
+    llm_list: Optional[List[AssistantLLMItem]] = Field(default_factory=list,
+                                                       description='Assistant OptionalLLMVertical')
+    auto_llm: Optional[AssistantLLMItem] = Field(None,
+                                                 description='Assistant Portrait Automatic Optimization Model Configuration')
 
 
 class EvaluationLLMConfig(BaseModel):

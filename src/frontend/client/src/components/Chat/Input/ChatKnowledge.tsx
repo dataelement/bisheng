@@ -1,25 +1,38 @@
-import { useEffect, useState, useMemo } from "react";
 import {
-  Check,
   BookOpen,
   BookOpenText,
+  Check,
+  ChevronRight,
   Loader2,
   SearchIcon,
 } from "lucide-react";
-import { Switch, Input } from "~/components/ui";
-import { Select, SelectContent, SelectTrigger } from "~/components/ui/Select";
+import { useEffect, useMemo, useState } from "react";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "~/components/ui/Tooltip2";
-import { useLocalize } from "~/hooks";
-import { useGetOrgToolList, useModelBuilding } from "~/data-provider";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+  Input
+} from "~/components/ui";
+import { useGetOrgToolList } from "~/data-provider";
 import { BsConfig } from "~/data-provider/data-provider/src";
-import { cn } from "~/utils";
+import { useLocalize } from "~/hooks";
 import { useToastContext } from "~/Providers";
+import { cn } from "~/utils";
 
-// Custom Hook: Debounce value
+// --- 类型定义 ---
+export type KnowledgeType = 'org' | 'space';
+
+export interface KnowledgeItem {
+  id: string;
+  name: string;
+  type: KnowledgeType;
+}
+
+// --- Hooks ---
 function useDebounce<T>(value: T, delay: number): T {
   const [debouncedValue, setDebouncedValue] = useState<T>(value);
   useEffect(() => {
@@ -28,259 +41,274 @@ function useDebounce<T>(value: T, delay: number): T {
   }, [value, delay]);
   return debouncedValue;
 }
-const PERSONAL_KB = {
-  id: "personal_knowledge_base",
-  name: "个人知识库",
+
+// --- 子组件：列表面板 ---
+const KnowledgeListPanel = ({
+  placeholder,
+  keyword,
+  setKeyword,
+  items,
+  selectedItems, // 这里接收的是筛选后的数组
+  onToggle,
+  isFetching,
+  hasMore,
+  onLoadMore,
+  emptyText,
+}: {
+  placeholder: string;
+  keyword: string;
+  setKeyword: (v: string) => void;
+  items: any[];
+  selectedItems: KnowledgeItem[];
+  onToggle: (item: any) => void;
+  isFetching: boolean;
+  hasMore: boolean;
+  onLoadMore: () => void;
+  emptyText: string;
+}) => {
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+    if (scrollHeight - scrollTop <= clientHeight + 10 && !isFetching && hasMore) {
+      onLoadMore();
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-3">
+      {/* 搜索框 */}
+      <div className="relative px-1">
+        <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+        <Input
+          className="h-8 text-xs bg-slate-50 border-none pl-8 focus-visible:ring-1 focus-visible:ring-blue-500/20"
+          placeholder={placeholder}
+          value={keyword}
+          onChange={(e) => setKeyword(e.target.value)}
+          onClick={(e) => e.stopPropagation()}
+        />
+      </div>
+
+      {/* 滚动列表 */}
+      <div
+        className="max-h-[300px] overflow-y-auto custom-scrollbar flex flex-col gap-0.5"
+        onScroll={handleScroll}
+      >
+        {items.map((item) => {
+          // 判断是否选中
+          const isChecked = selectedItems.some((s) => s.id === item.id);
+          return (
+            <DropdownMenuItem
+              key={item.id}
+              onSelect={(e) => {
+                e.preventDefault();
+                onToggle(item);
+              }}
+              className="flex items-center gap-2.5 px-2.5 py-2 cursor-pointer rounded-lg hover:bg-slate-50 focus:bg-slate-50 outline-none"
+            >
+              <div
+                className={cn(
+                  "size-4 rounded border flex items-center justify-center transition-colors shrink-0",
+                  isChecked ? "bg-blue-600 border-blue-600" : "border-slate-300 bg-white"
+                )}
+              >
+                {isChecked && <Check size={12} className="text-white stroke-[3]" />}
+              </div>
+              <span className="truncate flex-1 text-[13px] text-slate-700 leading-none">
+                {item.name}
+              </span>
+            </DropdownMenuItem>
+          );
+        })}
+
+        {isFetching && (
+          <div className="flex justify-center py-3">
+            <Loader2 size={16} className="animate-spin text-slate-300" />
+          </div>
+        )}
+        {!isFetching && items.length === 0 && (
+          <div className="text-center text-[12px] text-slate-400 py-10">{emptyText}</div>
+        )}
+      </div>
+    </div>
+  );
 };
+
+// --- main ---
 export const ChatKnowledge = ({
   config,
   disabled,
-  searchType,
-  setSearchType,
-  enableOrgKb,
-  setEnableOrgKb,
-  selectedOrgKbs,
-  setSelectedOrgKbs,
+  value = [],
+  onChange,
 }: {
   config?: BsConfig;
   disabled: boolean;
-  searchType: string;
-  setSearchType: React.Dispatch<React.SetStateAction<string>>;
-  enableOrgKb: boolean;
-  setEnableOrgKb: (v: boolean) => void;
-  selectedOrgKbs: { id: string; name: string }[];
-  setSelectedOrgKbs: React.Dispatch<
-    React.SetStateAction<{ id: string; name: string }[]>
-  >;
+  value: KnowledgeItem[];
+  onChange: (val: KnowledgeItem[]) => void;
 }) => {
-  const [building] = useModelBuilding();
+  console.log('value :>> ', value);
   const localize = useLocalize();
   const PAGE_SIZE = 20;
-  const MAX_ORG_KB = 50;
-
-  // Search and Pagination State
-  const [keyword, setKeyword] = useState("");
-  const debouncedKeyword = useDebounce(keyword, 500);
-  const [page, setPage] = useState(1);
-  const [allOrgKbs, setAllOrgKbs] = useState<any[]>([]);
-  const [hasMore, setHasMore] = useState(true);
+  const MAX_KB_PER_TYPE = 50;
   const { showToast } = useToastContext();
 
-  // Fetch Data
-  const { data: currentPageData, isFetching } = useGetOrgToolList({
-    page,
-    page_size: PAGE_SIZE,
-    name: debouncedKeyword,
+  // checked data
+  const selectedKnowledgeSpaces = useMemo(
+    () => value.filter((item) => item.type === 'space'),
+    [value]
+  );
+
+  const selectedOrgKbs = useMemo(
+    () => value.filter((item) => item.type === 'org'),
+    [value]
+  );
+
+  // search page
+  const [orgKeyword, setOrgKeyword] = useState("");
+  const debouncedOrgKeyword = useDebounce(orgKeyword, 500);
+  const [orgPage, setOrgPage] = useState(1);
+  const [allOrgKbs, setAllOrgKbs] = useState<any[]>([]);
+  const [hasMoreOrg, setHasMoreOrg] = useState(true);
+
+  const [spaceKeyword, setSpaceKeyword] = useState("");
+  const debouncedSpaceKeyword = useDebounce(spaceKeyword, 500);
+  const [spacePage, setSpacePage] = useState(1);
+  const [allSpaces, setAllSpaces] = useState<any[]>([]);
+  const [hasMoreSpace, setHasMoreSpace] = useState(true);
+
+  const { data: orgData, isFetching: orgFetching } = useGetOrgToolList({
+    page: orgPage, page_size: PAGE_SIZE, name: debouncedOrgKeyword,
   });
 
-  // Reset list when search keyword changes
+  const { data: spaceData, isFetching: spaceFetching } = useGetOrgToolList({
+    page: spacePage, page_size: PAGE_SIZE, name: debouncedSpaceKeyword,
+  });
+
   useEffect(() => {
-    setPage(1);
+    setOrgPage(1);
     setAllOrgKbs([]);
-    setHasMore(true);
-  }, [debouncedKeyword]);
+  }, [debouncedOrgKeyword]);
 
-  // Accumulate data when page or response changes
   useEffect(() => {
-    if (currentPageData) {
-      setAllOrgKbs((prev) => {
-        if (page === 1) return [...currentPageData];
-        const newItems = currentPageData.filter(
-          (item: any) => !prev.some((p) => p.id === item.id)
-        );
-        return [...prev, ...newItems];
-      });
-      setHasMore(currentPageData.length === PAGE_SIZE);
-    }
-  }, [currentPageData, page, debouncedKeyword]);
+    setSpacePage(1);
+    setAllSpaces([]);
+  }, [debouncedSpaceKeyword]);
 
-  // Infinite Scroll Handler
-  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
-    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
-    if (
-      scrollHeight - scrollTop <= clientHeight + 10 &&
-      !isFetching &&
-      hasMore
-    ) {
-      setPage((prev) => prev + 1);
+  useEffect(() => {
+    if (orgData) {
+      setAllOrgKbs((prev) => (orgPage === 1 ? [...orgData] : [...prev, ...orgData]));
+      setHasMoreOrg(orgData.length === PAGE_SIZE);
     }
-  };
+  }, [orgData, orgPage]);
 
-  const toggleOrgKb = (kb: { id: string; name: string }) => {
-    setSelectedOrgKbs((prev) => {
-      const exists = prev.some((i) => i.id === kb.id);
-      if (exists) return prev.filter((i) => i.id !== kb.id);
-      if (prev.length >= MAX_ORG_KB) {
+  useEffect(() => {
+    if (spaceData) {
+      setAllSpaces((prev) => (spacePage === 1 ? [...spaceData] : [...prev, ...spaceData]));
+      setHasMoreSpace(spaceData.length === PAGE_SIZE);
+    }
+  }, [spaceData, spacePage]);
+
+  // checked data
+  const handleToggle = (item: any, type: KnowledgeType) => {
+    const exists = value.some((i) => i.id === item.id && i.type === type);
+
+    if (exists) {
+      const nextValue = value.filter((i) => !(i.id === item.id && i.type === type));
+      onChange(nextValue);
+    } else {
+      const currentTypeCount = value.filter(i => i.type === type).length;
+
+      if (currentTypeCount >= MAX_KB_PER_TYPE) {
         showToast({
-          message: localize("kbLimitReached"),
-          status: "error",
+          message: type === 'space' ? "知识空间数量已达上限" : "组织知识库数量已达上限",
+          status: "error"
         });
-        return prev;
+        return;
       }
-      return [{ id: kb.id, name: kb.name }, ...prev];
-    });
+
+      // 添加时注入 type
+      const newItem: KnowledgeItem = { id: item.id, name: item.name, type };
+      onChange([newItem, ...value]);
+    }
   };
-  useEffect(() => {
-    setSelectedOrgKbs((prev) => {
-      const filtered = prev.filter((kb) => kb.id !== PERSONAL_KB.id);
-      return searchType === "knowledgeSearch" ? [...filtered, PERSONAL_KB] : filtered;
-    });
-  }, [searchType]);
 
-  useEffect(() => {
-    if (!enableOrgKb) {
-      // 仅删除组织 KB
-      setSelectedOrgKbs((prev) =>
-        prev.filter((kb) => kb.id === PERSONAL_KB.id || kb.id === PERSONAL_KB.id)
-      );
-    }
-  }, [enableOrgKb, setSelectedOrgKbs]);
-
-  useEffect(() => {
-    if (!selectedOrgKbs.length && !enableOrgKb) {
-      setSelectedOrgKbs([]);
-      setEnableOrgKb(false);
-    }
-  }, []);
+  const hasAnySelection = value.length > 0;
 
   return (
-    <Select disabled={disabled}>
-      <SelectTrigger
-        className={cn(
-          "h-7 rounded-full px-2 data-[state=open]:border-blue-500",
-          (searchType === "knowledgeSearch" || enableOrgKb) && "bg-blue-100"
-        )}
-      >
-        <div
-          className={cn(
-            "flex gap-2 items-center ",
-            (searchType === "knowledgeSearch" || enableOrgKb) && "text-blue-600"
-          )}
-        >
+    <DropdownMenu>
+      <DropdownMenuTrigger disabled={disabled}>
+        <div className={cn(
+          "flex bg-white items-center gap-2 h-7 px-3 rounded-full border border-slate-200 text-gray-500 cursor-pointer hover:border-blue-400 transition-all outline-none disabled:opacity-0",
+          hasAnySelection && "bg-blue-50 border-blue-200 text-blue-600",
+          disabled && "opacity-50 hover:border-slate-200 cursor-not-allowed"
+        )}>
           <BookOpenText size={16} />
-          <span className="text-xs">
-            {localize("com_tools_knowledge_base")}
-          </span>
+          <span className="text-xs break-keep">知识库</span>
+          <ChevronRight size={14} className="rotate-90 opacity-40" />
         </div>
-      </SelectTrigger>
+      </DropdownMenuTrigger>
 
-      <SelectContent className="bg-white rounded-xl p-3 w-64 shadow-lg border">
-        {/* Section 1: Personal Knowledge Base */}
+      <DropdownMenuContent align="start" className="w-[200px] p-1.5 rounded-2xl shadow-xl border-slate-100">
 
-        <div className="flex justify-between items-center">
-          <div className="flex gap-2 items-center">
-            <BookOpen
-              size={16}
-              color="#595959"
-              strokeWidth={2.75}
-              className="text-slate-500"
-            />
-            <span className="text-xs font-medium">
-              {localize("com_tools_personal_knowledge")}
-            </span>
-          </div>
-          <Tooltip delayDuration={200}>
-            <TooltipTrigger asChild>
-              <div>
-                <Switch
-                  className="data-[state=checked]:bg-blue-600"
-                  disabled={building || disabled}
-                  checked={searchType === "knowledgeSearch"}
-                  onCheckedChange={(val) =>
-                    setSearchType(val ? "knowledgeSearch" : "")
-                  }
-                />
+        {/* 知识空间 */}
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger className="flex items-center justify-between rounded-xl hover:bg-slate-50 focus:bg-slate-50 outline-none cursor-pointer">
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <BookOpen className="size-[18px] text-slate-600" />
+                {selectedKnowledgeSpaces.length > 0 && (
+                  <span className="absolute -top-1 -right-1 size-2.5 bg-blue-500 rounded-full border-2 border-white" />
+                )}
               </div>
-            </TooltipTrigger>
-            {building && (
-              <TooltipContent>
-                {localize("com_tools_knowledge_rebuilding")}
-              </TooltipContent>
-            )}
-          </Tooltip>
-        </div>
+              <span className="text-[14px] text-slate-700 font-normal">知识空间</span>
+            </div>
+          </DropdownMenuSubTrigger>
 
-        {/* Section 2: Organization Knowledge Base */}
-        <div className="flex justify-between items-center mt-3  -ml-0.5">
-          <div className="flex gap-2 items-center">
-            <img
-              className="size-5 text-slate-500"
-              src={__APP_ENV__.BASE_URL + "/assets/books.svg"}
-              alt=""
+          <DropdownMenuSubContent className="w-[280px] p-3 rounded-2xl shadow-2xl ml-2 border-slate-100 bg-white">
+            <KnowledgeListPanel
+              placeholder="搜索知识空间名称"
+              keyword={spaceKeyword}
+              setKeyword={setSpaceKeyword}
+              items={allSpaces}
+              selectedItems={selectedKnowledgeSpaces}
+              onToggle={(item) => handleToggle(item, 'space')}
+              isFetching={spaceFetching}
+              hasMore={hasMoreSpace}
+              onLoadMore={() => setSpacePage(p => p + 1)}
+              emptyText="暂无知识空间"
             />
-            <span className="text-xs font-medium">
-              {localize("com_tools_org_knowledge")}
-            </span>
-          </div>
-          <Switch
-            checked={enableOrgKb}
-            onCheckedChange={setEnableOrgKb}
-            disabled={disabled}
-            className="data-[state=checked]:bg-blue-600"
-          />
-        </div>
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
 
-        {/* Org KB Search and List */}
-        {enableOrgKb && (
-          <div className="mt-3">
-            <div className="relative">
-              <Input
-                className="h-8 text-xs mb-2 bg-slate-50 border-none focus-visible:ring-1 focus-visible:ring-blue-500 pr-8" // 新增 pr-8 给图标留空间
-                placeholder={localize("com_tools_knowledge_base_search")}
-                value={keyword}
-                onChange={(e) => setKeyword(e.target.value)}
-              />
-              {/* 搜索图标 - 固定在输入框右侧 */}
-              <SearchIcon
-                className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400"
-                aria-hidden="true"
-              />
+        {/* 组织知识库 */}
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger className="flex items-center justify-between rounded-xl hover:bg-slate-50 focus:bg-slate-50 outline-none cursor-pointer mt-0.5">
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <img src={`${__APP_ENV__.BASE_URL}/assets/books.svg`} className="size-[18px] opacity-70" alt="" />
+                {selectedOrgKbs.length > 0 && (
+                  <span className="absolute -top-1 -right-1 size-2.5 bg-blue-500 rounded-full border-2 border-white" />
+                )}
+              </div>
+              <span className="text-[14px] text-slate-700 font-normal">组织知识库</span>
             </div>
+          </DropdownMenuSubTrigger>
 
-            <div
-              className="max-h-52 overflow-y-auto custom-scrollbar"
-              onScroll={handleScroll}
-            >
-              {allOrgKbs.map((item) => {
-                const checked = selectedOrgKbs.some((kb) => kb.id === item.id);
-                return (
-                  <div
-                    key={item.id}
-                    onClick={() => toggleOrgKb(item)}
-                    className="flex justify-between items-center px-2 py-2 rounded-md cursor-pointer text-xs hover:bg-slate-50 group"
-                  >
-                    <span className="truncate flex-1 pr-2 text-slate-700">
-                      {item.name}
-                    </span>
-                    {checked && (
-                      <Check size={14} className="text-blue-600 shrink-0" />
-                    )}
-                  </div>
-                );
-              })}
+          <DropdownMenuSubContent className="w-[280px] p-3 rounded-2xl shadow-2xl ml-2 border-slate-100 bg-white">
+            <KnowledgeListPanel
+              placeholder="搜索知识库名称"
+              keyword={orgKeyword}
+              setKeyword={setOrgKeyword}
+              items={allOrgKbs}
+              selectedItems={selectedOrgKbs}
+              onToggle={(item) => handleToggle(item, 'org')}
+              isFetching={orgFetching}
+              hasMore={hasMoreOrg}
+              onLoadMore={() => setOrgPage(p => p + 1)}
+              emptyText="暂无组织知识库"
+            />
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
 
-              {/* Loading & Empty State Feedback */}
-              {isFetching && (
-                <div className="flex justify-center py-2">
-                  <Loader2 size={14} className="animate-spin text-slate-400" />
-                </div>
-              )}
-
-              {/* {allOrgKbs.length === 0 && (
-                <div className="text-center text-[10px] text-slate-400 py-2 border-t mt-1">
-                  {localize("com_tools_no_more")}
-                </div>
-              )} */}
-
-              {!isFetching && allOrgKbs.length === 0 && (
-                <div className="text-center text-xs text-slate-400 py-6">
-                  {localize("com_tools_no_results")}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-      </SelectContent>
-    </Select>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 };

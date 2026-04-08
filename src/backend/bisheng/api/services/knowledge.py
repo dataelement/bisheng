@@ -3,6 +3,7 @@ import math
 import os
 from datetime import datetime
 from typing import Any, Dict, List
+from urllib.parse import urlparse
 
 from fastapi import BackgroundTasks, Request
 from loguru import logger
@@ -755,9 +756,9 @@ class KnowledgeService(KnowledgeUtils):
             db_file.remark = json.dumps({
                 "new_name": original_file_name,
                 "old_name": old_name}, ensure_ascii=False)
-            # Uploaded tominio, do not modify the database, it is up to the front-end to decide whether to overwrite or not. If it is overwritten, the retry interface
-            with open(filepath, "rb") as file:
-                minio_client.put_object_tmp_sync(db_file.object_name, file.read())
+            # Uploaded to minio, do not modify the database, it is up to the front-end to decide whether to overwrite or not. If it is overwritten, the retry interface
+            minio_client.put_object_tmp_sync(db_file.object_name, filepath)
+            cls.remove_unused_file(file_info.file_path)
             db_file.status = KnowledgeFileStatus.FAILED.value
             db_file.split_rule = str_split_rule
             # Update file size information
@@ -786,9 +787,21 @@ class KnowledgeService(KnowledgeUtils):
         db_file.object_name = KnowledgeUtils.get_knowledge_file_object_name(db_file.id, db_file.file_name)
         minio_client.put_object_sync(bucket_name=minio_client.bucket, object_name=db_file.object_name,
                                      file=filepath)
+        cls.remove_unused_file(file_info.file_path)
+
         logger.info("upload_original_file path={}", db_file.object_name)
         KnowledgeFileDao.update(db_file)
         return db_file
+
+    @classmethod
+    def remove_unused_file(cls, file_path: str):
+        """Remove unused files in minio"""
+        minio_client = get_minio_storage_sync()
+        minio_share_host = minio_client.get_minio_share_host()
+        if file_path.startswith(minio_share_host):
+            url_obj = urlparse(file_path)
+            bucket_name, object_name = url_obj.path.replace(minio_share_host, "", 1).lstrip("/").split('/', 1)
+            minio_client.remove_object_sync(bucket_name=bucket_name, object_name=object_name)
 
     @classmethod
     def get_knowledge_files_title(cls, db_knowledge: Knowledge, files: List[KnowledgeFile]) -> Dict[str, str]:

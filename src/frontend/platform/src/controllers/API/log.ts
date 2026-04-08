@@ -29,7 +29,16 @@ export async function getLogsApi({ page, pageSize, userIds, groupId = '', start,
 // 系统模块
 export async function getModulesApi(): Promise<{ data: any[] }> {
     return {
-        data: [{ name: 'log.systemIdEnum.chat', value: 'chat' }, { name: 'log.systemIdEnum.build', value: 'build' }, { name: 'log.systemIdEnum.knowledge', value: 'knowledge' }, { name: 'log.systemIdEnum.system', value: 'system' },{ name: 'log.systemIdEnum.dashboard', value: 'dashboard' }]
+        data: [
+            { name: 'log.systemIdEnum.chat', value: 'chat' },
+            { name: 'log.systemIdEnum.build', value: 'build' },
+            { name: 'log.systemIdEnum.knowledge', value: 'knowledge' },
+            { name: 'log.systemIdEnum.system', value: 'system' },
+            { name: 'log.systemIdEnum.dashboard', value: 'dashboard' },
+            { name: 'log.systemIdEnum.subscribe', value: 'subscription' },
+            { name: 'log.systemIdEnum.knowledgeSpace', value: 'knowledge_space' },
+        ],
+
     }
 }
 
@@ -58,7 +67,11 @@ const actions = [
     { name: 'log.eventTypeEnum.delete_tool', value: 'delete_tool' },
     { name: 'log.eventTypeEnum.create_dashboard', value: 'create_dashboard' },
     { name: 'log.eventTypeEnum.update_dashboard', value: 'update_dashboard' },
-    { name: 'log.eventTypeEnum.delete_dashboard', value: 'delete_dashboard' }
+    { name: 'log.eventTypeEnum.delete_dashboard', value: 'delete_dashboard' },
+    { name: 'log.eventTypeEnum.create_channel', value: 'create_channel' },
+    { name: 'log.eventTypeEnum.delete_channel', value: 'delete_channel' },
+    { name: 'log.eventTypeEnum.create_knowledge_space', value: 'create_knowledge_space' },
+    { name: 'log.eventTypeEnum.delete_knowledge_space', value: 'delete_knowledge_space' },
 ];
 
 // 全部操作行为
@@ -74,6 +87,8 @@ export async function getActionsByModuleApi(moduleId) {
         case 'knowledge': return actions.filter(a => a.value.includes('knowledge') || a.value.includes('file'))
         case 'system': return actions.filter(a => a.value.includes('user') || a.value.includes('role'))
         case 'dashboard': return actions.filter(a => a.value.includes('dashboard'))
+        case 'subscription': return actions.filter(a => a.value.includes('channel'))
+        case 'knowledge_space': return actions.filter(a => a.value.includes('knowledge_space'))
     }
 }
 

@@ -1,21 +1,15 @@
 import {
-  FileText,
   GlobeIcon,
   Hammer,
   KeyRound,
   Pencil,
-  Settings2Icon,
+  Settings2Icon
 } from "lucide-react";
 import { useEffect, useMemo } from "react";
 import { useRecoilValue } from "recoil";
 import { Switch } from "~/components/ui";
 import { Select, SelectContent, SelectTrigger } from "~/components/ui/Select";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "~/components/ui/Tooltip2";
-import { useGetBsConfig, useModelBuilding } from "~/data-provider";
+import { useGetBsConfig } from "~/data-provider";
 import { useLocalize } from "~/hooks";
 import store from "~/store";
 
@@ -24,21 +18,16 @@ import { cn } from "~/utils";
 
 // 工具
 export const ChatToolDown = ({
-  linsi,
-  tools,
-  setTools,
   config,
   searchType,
   setSearchType,
   disabled,
 }: {
-  linsi: boolean;
   config?: BsConfig;
   searchType: string;
   setSearchType: (type: string) => void;
   disabled: boolean;
 }) => {
-  const [building] = useModelBuilding();
   const localize = useLocalize();
 
   // 每次重置工具
@@ -46,8 +35,7 @@ export const ChatToolDown = ({
     setSearchType("");
   }, []);
 
-  if (!linsi && !config?.webSearch.enabled) return null;
-  if (linsi) return <LinsiTools tools={tools} setTools={setTools} />;
+  if (!config?.webSearch.enabled) return null;
 
   return (
     <Select disabled={disabled}>
@@ -97,7 +85,7 @@ export const ChatToolDown = ({
   );
 };
 
-const LinsiTools = ({ tools, setTools }) => {
+export const LinsiTools = ({ tools, setTools }) => {
   const { data: bsConfig } = useGetBsConfig();
   const localize = useLocalize();
   const lang = useRecoilValue(store.lang);

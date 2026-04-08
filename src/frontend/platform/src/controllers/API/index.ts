@@ -977,7 +977,6 @@ export async function GPUlistApi(): Promise<any> {
 export async function GPUlistByFinetuneApi(): Promise<any> {
   return await axios.get(`/api/v1/finetune/gpu`);
 }
-
 // 工作台配置
 export async function setWorkstationConfigApi(data): Promise<any> {
   return await axios.post(`api/v1/workstation/config`, data);
@@ -985,7 +984,34 @@ export async function setWorkstationConfigApi(data): Promise<any> {
 export async function getWorkstationConfigApi(): Promise<any> {
   return await axios.get(`api/v1/workstation/config`);
 }
-
+// 工作台日常配置
+export async function setDailyConfigApi(data): Promise<any> {
+  return await axios.post(`api/v1/workstation/config/daily`, data);
+}
+export async function getDailyConfigApi(): Promise<any> {
+  return await axios.get(`api/v1/workstation/config/daily`);
+}
+// 工作台灵思配置
+export async function getLinsiConfigApi(): Promise<any> {
+  return await axios.get(`api/v1/workstation/config/linsight`);
+}
+export async function setLinsiConfigApi(data): Promise<any> {
+  return await axios.post(`api/v1/workstation/config/linsight`, data);
+}
+// 工作台订阅配置
+export async function getSubConfigApi(): Promise<any> {
+  return await axios.get(`api/v1/workstation/config/subscription`);
+}
+export async function setSubConfigApi(data): Promise<any> {
+  return await axios.post(`api/v1/workstation/config/subscription`, data);
+}
+// 工作台知识空间配置
+export async function getKnowledgeConfigApi(): Promise<any> {
+  return await axios.get(`api/v1/workstation/config/knowledge_space`);
+}
+export async function setKnowledgeConfigApi(data): Promise<any> {
+  return await axios.post(`api/v1/workstation/config/knowledge_space`, data);
+}
 export async function getChatHistoryApi(chatId: string): Promise<any> {
   return await axios.get('/api/v1/session/chat/messages/' + chatId);
 }

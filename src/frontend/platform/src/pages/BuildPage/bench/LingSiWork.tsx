@@ -15,7 +15,7 @@ import { Card, CardContent } from "@/components/bs-ui/card";
 import { message, toast, useToast } from "@/components/bs-ui/toast/use-toast";
 import { locationContext } from "@/contexts/locationContext";
 import { userContext } from "@/contexts/userContext";
-import { getWorkstationConfigApi, setWorkstationConfigApi } from "@/controllers/API";
+import { getLinsiConfigApi, setLinsiConfigApi } from "@/controllers/API";
 import { sopApi } from "@/controllers/API/linsight";
 import { getToolsApi } from "@/controllers/API/tools";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
@@ -89,9 +89,15 @@ export interface ChatConfigForm {
         enabled: boolean;
         prompt: string;
     };
+    linsightConfig?: {
+        linsight_entry: boolean;
+        input_placeholder: string;
+        tools: any[];
+        tab_display_name?: string;
+    };
 }
 
-export default function index({ formData: parentFormData, setFormData: parentSetFormData }) {
+export default function index() {
     const { t } = useTranslation()
     const [keywords, setKeywords] = useState('');
     const [datalist, setDatalist] = useState([]);
@@ -100,9 +106,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
     const [page, setPage] = useState(1);
     const [pageSize] = useState(10);
     const [batchDeleting, setBatchDeleting] = useState(false);
-    const [selectedTools, setSelectedTools] = useState(() => {
-        return parentFormData?.linsightConfig?.tools || [];
-    });
+    const [selectedTools, setSelectedTools] = useState([]);
     const [showToolSelector, setShowToolSelector] = useState(false);
     const [toolSearchTerm, setToolSearchTerm] = useState('');
     const [pageInputValue, setPageInputValue] = useState('1');
@@ -169,9 +173,10 @@ export default function index({ formData: parentFormData, setFormData: parentSet
             linsight_entry: true,
             input_placeholder: t('bench.inputPlaceholderDescription'),
             tools: [],
-        }
+            tab_display_name: t('linsightFullName'),
+        },
     };
-    const [formData, setFormData] = useState<ChatConfigForm>(parentFormData || defaultFormValues);
+    const [formData, setFormData] = useState<ChatConfigForm>(defaultFormValues);
     const [toolsData, setToolsData] = useState({
         builtin: [],
         api: [],
@@ -198,28 +203,6 @@ export default function index({ formData: parentFormData, setFormData: parentSet
         }
     };
     // Simple deep comparison (JSON serialization) to avoid circular refresh caused by parent-child mutual setting
-    const isDeepEqual = (a: any, b: any) => {
-        try {
-            return JSON.stringify(a) === JSON.stringify(b);
-        } catch {
-            return a === b;
-        }
-    };
-
-    useEffect(() => {
-        if (parentFormData && !isDeepEqual(formData, parentFormData)) {
-            setFormData(parentFormData);
-        }
-        if (parentFormData?.linsightConfig?.tools) {
-            setSelectedTools(parentFormData.linsightConfig.tools);
-        }
-    }, [parentFormData]);
-
-    useEffect(() => {
-        if (parentSetFormData && !isDeepEqual(formData, parentFormData)) {
-            parentSetFormData(formData);
-        }
-    }, [formData, parentFormData]);
     useEffect(() => {
         setFormData(prev => ({
             ...prev,
@@ -363,40 +346,24 @@ export default function index({ formData: parentFormData, setFormData: parentSet
             navigate('/build/apps');
             return;
         }
+
         const loadInitialData = async () => {
             try {
-                let config;
-                if (!parentFormData) {
-                    config = await getWorkstationConfigApi();
-                } else {
-                    config = parentFormData;
-                }
+                const res = await getLinsiConfigApi();
+                const cfg = (res && res.data) || res || {};
+                const toolsFromCfg = Array.isArray(cfg.tools) ? cfg.tools : [];
+                setFormData(prev => ({
+                    ...prev,
+                    linsightConfig: {
+                        linsight_entry: cfg.linsight_entry ?? prev.linsightConfig?.linsight_entry ?? true,
+                        input_placeholder: cfg.input_placeholder ?? prev.linsightConfig?.input_placeholder ?? t('bench.inputPlaceholderDescription'),
+                        tools: toolsFromCfg.length ? toolsFromCfg : (prev.linsightConfig?.tools || []),
+                        tab_display_name: cfg.tab_display_name ?? prev.linsightConfig?.tab_display_name ?? t('linsightFullName'),
+                    },
+                }));
 
-                if (config && 'menuShow' in config) {
-                    setFormData({
-                        ...defaultFormValues,
-                        ...config,
-                        inputPlaceholder: config.inputPlaceholder ||
-                            config.linsightConfig?.input_placeholder ||
-                            defaultFormValues.inputPlaceholder,
-                        linsightConfig: {
-                            ...defaultFormValues.linsightConfig,
-                            ...config.linsightConfig,
-                            input_placeholder: config.linsightConfig?.input_placeholder || '',
-                            linsight_entry: config.linsightConfig?.linsight_entry || true,
-                        }
-                    });
-
-                    const tools = config.linsightConfig?.tools || parentFormData?.linsightConfig?.tools;
-
-                    if (tools?.length > 0) {
-                        setSelectedTools(tools);
-                    }
-                } else {
-                    setFormData((prev) => ({
-                        ...prev,
-                        ...config
-                    }))
+                if (toolsFromCfg.length > 0) {
+                    setSelectedTools(toolsFromCfg);
                 }
             } catch (error) {
                 toast({ variant: 'error', description: t('chatConfig.initLoadFailed') });
@@ -406,7 +373,7 @@ export default function index({ formData: parentFormData, setFormData: parentSet
         };
 
         loadInitialData();
-    }, [user]);
+    }, [user, navigate, t]);
 
     useEffect(() => {
         if (initialized && !toolsData[activeToolTab].length) {
@@ -879,6 +846,23 @@ export default function index({ formData: parentFormData, setFormData: parentSet
                             }))}
                         >{null}</ToggleSection>
                         <FormInput
+                            label={t('chatConfig.modelDisplayName')}
+                            value={formData.linsightConfig?.tab_display_name}
+                            placeholder={t('chatConfig.linsightPlaceholder')}
+                            maxLength={20}
+                            onChange={(v) => {
+                                const next = (v || '').slice(0, 20);
+                                setFormData(prev => ({
+                                    ...prev,
+                                    linsightConfig: {
+                                        ...prev.linsightConfig,
+                                        tab_display_name: next
+                                    }
+                                }));
+                            }}
+                            error={""}
+                        />
+                        <FormInput
                             label={t('chatConfig.inputPlaceholder')}
                             value={formData.linsightConfig?.input_placeholder}
                             placeholder={t('chatConfig.linsightPlaceholder')}
@@ -1036,7 +1020,15 @@ const useChatConfig = (
     const { toast } = useToast();
 
     const handleSave = async (formData: ChatConfigForm) => {
-        // Keep all necessary fields
+        // 校验：灵思模式展示名称必填
+        const rawName = formData.linsightConfig?.tab_display_name || '';
+        const trimmedName = rawName.trim();
+        if (!trimmedName) {
+            toast({ variant: 'error', description: t('chatConfig.errors.lingsiModeNameRequired') });
+            return false;
+        }
+
+        // 只保存「灵思」需要的配置：linsight_entry、input_placeholder、tools、tab_display_name
         const processedTools = selectedTools.map(tool => ({
             id: tool.id,
             name: tool.name,
@@ -1052,21 +1044,22 @@ const useChatConfig = (
         }));
 
         const dataToSave = {
-            ...formData,
-            // Application center welcome/description: If not provided, use multilingual placeholder default
-            applicationCenterWelcomeMessage: (formData.applicationCenterWelcomeMessage?.trim?.() || t('chatConfig.appCenterWelcomePlaceholder')),
-            applicationCenterDescription: (formData.applicationCenterDescription?.trim?.() || t('chatConfig.appCenterDescriptionPlaceholder')),
-            linsightConfig: {
-                input_placeholder: formData.linsightConfig?.input_placeholder || '',
-                tools: processedTools,
-                linsight_entry: formData.linsightConfig?.linsight_entry || false,
-            }
+            linsight_entry: formData.linsightConfig?.linsight_entry ?? true,
+            input_placeholder: formData.linsightConfig?.input_placeholder || '',
+            tools: processedTools,
+            tab_display_name: trimmedName,
         };
 
         try {
-            const res = await setWorkstationConfigApi(dataToSave);
+            const res = await setLinsiConfigApi(dataToSave);
             if (res) {
-                setFormData(dataToSave);
+                setFormData(prev => ({
+                    ...prev,
+                    linsightConfig: {
+                        ...(prev.linsightConfig || {}),
+                        ...dataToSave,
+                    },
+                }));
                 toast({ variant: 'success', description: t('chatConfig.saveSuccess') });
                 return true;
             }

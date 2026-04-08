@@ -1,21 +1,17 @@
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { useRecoilValue } from "recoil";
+import { useChatContext } from "~/Providers";
+import { useGetFileConfig } from "~/data-provider";
 import {
-  supportsFiles,
-  mergeFileConfig,
-  isAgentsEndpoint,
   EndpointFileConfig,
   fileConfig as defaultFileConfig,
+  mergeFileConfig
 } from "~/data-provider/data-provider/src";
-import { useGetFileConfig } from "~/data-provider";
-import AttachFileMenu from "./AttachFileMenu";
-import { useChatContext } from "~/Providers";
 import { useFileHandling } from "~/hooks";
+import useLocalize from "~/hooks/useLocalize";
+import store from "~/store";
 import AttachFile from "./AttachFile";
 import FileRow from "./FileRow";
-import store from "~/store";
-import useLocalize from "~/hooks/useLocalize";
-import cn from "~/utils/cn";
 
 function FileFormWrapper({
   children,
@@ -24,10 +20,7 @@ function FileFormWrapper({
   disableInputs,
   disabledSearch,
   noUpload = false,
-  showVoice = false,
-  selectedOrgKbs = [],
-  setSelectedOrgKbs,
-  enableOrgKb = false,
+  showVoice = false
 }: {
   disableInputs: boolean;
   children?: React.ReactNode;
@@ -36,9 +29,6 @@ function FileFormWrapper({
   accept?: string;
   noUpload: boolean;
   showVoice?: boolean;
-  selectedOrgKbs: string[];
-  setSelectedOrgKbs: (value: string[]) => void;
-  enableOrgKb?: boolean;
 }) {
   const t = useLocalize();
   const [fileTotalTokens, setFileTotalTokens] = useState(0);
@@ -47,7 +37,6 @@ function FileFormWrapper({
   const { endpoint: _endpoint, endpointType } = conversation ?? {
     endpoint: null,
   };
-  const isAgents = useMemo(() => isAgentsEndpoint(_endpoint), [_endpoint]);
 
   const { handleFileChange, abortUpload } = useFileHandling({
     isLinsight: !fileTip,
@@ -62,11 +51,6 @@ function FileFormWrapper({
   const endpointFileConfig = fileConfig.endpoints[_endpoint ?? ""] as
     | EndpointFileConfig
     | undefined;
-
-  const endpointSupportsFiles: boolean =
-    supportsFiles[endpointType ?? _endpoint ?? ""] ?? false;
-  const isUploadDisabled =
-    (disableInputs || endpointFileConfig?.disabled) ?? false;
 
   const renderAttachFile = () => {
     // if (isAgents) {

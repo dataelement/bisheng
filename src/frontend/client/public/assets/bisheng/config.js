@@ -16,6 +16,10 @@ window.BRAND_CONFIG = {
         zh: "灵思Linsight",
         en: "Linsight"
     },
+    dailyFullName: {
+        zh: "日常模式",
+        en: "Daily Mode"
+    },
 
     // 4. Loading 图标配置
     // 支持相对路径 (如 /branding/loading.gif) 或 完整的 URL (如 https://cdn.com/icon.png)

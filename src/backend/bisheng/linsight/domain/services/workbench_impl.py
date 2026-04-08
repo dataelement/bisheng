@@ -13,10 +13,7 @@ from langchain_core.tools import BaseTool
 from loguru import logger
 
 from bisheng.api.services.knowledge_imp import decide_vectorstores, async_read_chunk_text
-from bisheng.linsight.domain.services.sop_manage import SOPManageService
 from bisheng.api.services.workstation import WorkStationService
-from bisheng.linsight.domain.schemas.linsight_schema import LinsightQuestionSubmitSchema, DownloadFilesSchema, \
-    SubmitFileSchema
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
@@ -31,13 +28,16 @@ from bisheng.core.logger import trace_id_var
 from bisheng.core.prompts.manager import get_prompt_manager
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.flow import FlowType
+from bisheng.database.models.session import MessageSessionDao, MessageSession
+from bisheng.interface.embeddings.custom import FakeEmbedding
+from bisheng.knowledge.domain.models.knowledge import KnowledgeRead, KnowledgeTypeEnum
 from bisheng.linsight.domain.models.linsight_execute_task import LinsightExecuteTaskDao
 from bisheng.linsight.domain.models.linsight_session_version import LinsightSessionVersionDao, SessionVersionStatusEnum, \
     LinsightSessionVersion
 from bisheng.linsight.domain.models.linsight_sop import LinsightSOPRecord
-from bisheng.database.models.session import MessageSessionDao, MessageSession
-from bisheng.interface.embeddings.custom import FakeEmbedding
-from bisheng.knowledge.domain.models.knowledge import KnowledgeRead, KnowledgeTypeEnum
+from bisheng.linsight.domain.schemas.linsight_schema import LinsightQuestionSubmitSchema, DownloadFilesSchema, \
+    SubmitFileSchema
+from bisheng.linsight.domain.services.sop_manage import SOPManageService
 from bisheng.llm.domain.llm import BishengLLM
 from bisheng.llm.domain.services import LLMService
 from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
@@ -294,7 +294,8 @@ class LinsightWorkbenchImpl:
         """Get and validate the workbench configuration"""
         workbench_conf = await LLMService.get_workbench_llm()
         if not workbench_conf or not workbench_conf.task_model:
-            raise cls.BishengLLMError("The task has been terminated, please contact the administrator to check the status of the Ideas task execution model")
+            raise cls.BishengLLMError(
+                "The task has been terminated, please contact the administrator to check the status of the Ideas task execution model")
         return workbench_conf
 
     @classmethod
@@ -924,8 +925,8 @@ class LinsightWorkbenchImpl:
         tool_ids = cls._extract_tool_ids(session_version.tools)
 
         # Tools to get workbench configurationsID
-        ws_config = await WorkStationService.aget_config()
-        config_tool_ids = cls._extract_tool_ids(ws_config.linsightConfig.tools or [])
+        linsight_config = await WorkStationService.get_linsight_config()
+        config_tool_ids = cls._extract_tool_ids(linsight_config.tools or [])
 
         # todo Better tool initialization scheme
         if need_upload and file_dir:
@@ -934,7 +935,8 @@ class LinsightWorkbenchImpl:
                                                                       user_id=session_version.user_id)
                 tools.extend(bisheng_code_tool)
             except Exception as e:
-                logger.error(f"Failed to initialize BiSheng code interpreter tool: session_version_id={session_version.id}, error={str(e)}")
+                logger.error(
+                    f"Failed to initialize BiSheng code interpreter tool: session_version_id={session_version.id}, error={str(e)}")
 
         # Filter Effective ToolsID
         valid_tool_ids = [tid for tid in tool_ids if tid in config_tool_ids]
@@ -1007,10 +1009,12 @@ class LinsightWorkbenchImpl:
                 content=sop_content,
             ))
         except cls.ToolsInitializationError as e:
-            logger.exception(f"Failed to initialize the Inspiration Workbench tool: session_version_id={session_version_model.id}, error={str(e)}")
+            logger.exception(
+                f"Failed to initialize the Inspiration Workbench tool: session_version_id={session_version_model.id}, error={str(e)}")
 
         except Exception as e:
-            logger.exception(f"Feedback regenerationSOPMisi Gagal: session_version_id={session_version_model.id}, error={str(e)}")
+            logger.exception(
+                f"Feedback regenerationSOPMisi Gagal: session_version_id={session_version_model.id}, error={str(e)}")
 
     @classmethod
     async def _get_history_summary(cls, session_version_id: str) -> List[str]:

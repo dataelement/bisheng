@@ -4,6 +4,7 @@ import { atom } from 'recoil';
 export type SelectedOrgKb = {
   id: string;
   name: string;
+  type: string;
 };
 const modelType = atomWithLocalStorage('modelType', '');
 const searchType = atomWithLocalStorage('searchType', '');

@@ -284,6 +284,8 @@ class WorkFlowService(BaseService):
                 )
             ]
             for one in event_input_schema.get('value', []):
+                if not one:
+                    continue
                 tmp = WorkflowInputItem(**one)
                 if tmp.key == 'dialog_files_content':
                     tmp.type = 'dialog_file'
