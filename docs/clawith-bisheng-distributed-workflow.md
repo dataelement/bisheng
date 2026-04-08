@@ -1,6 +1,7 @@
 # Clawith × Bisheng：分布式 Agent 协作架构
 
 > 2026-03-27
+> 状态：愿景草案。当前分支已落地的是 `Workflow Authoring MCP`，不包含本文里的 `Clawith Node` 运行时闭环。
 
 ## 核心想法
 

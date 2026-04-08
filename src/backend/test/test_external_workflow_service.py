@@ -51,6 +51,59 @@ def make_graph():
     }
 
 
+def make_condition_graph():
+    return {
+        'nodes': [{
+            'id': 'condition-1',
+            'data': {
+                'id': 'condition-1',
+                'type': 'condition',
+                'name': 'Condition Node',
+                'group_params': [{
+                    'params': [{
+                        'key': 'condition',
+                        'type': 'condition',
+                        'value': [{
+                            'id': 'case_a',
+                            'operator': 'and',
+                            'conditions': [{
+                                'id': 'rule_1',
+                                'left_var': 'score',
+                                'comparison_operation': 'greater_than',
+                                'right_value_type': 'const',
+                                'right_value': '80',
+                                'variable_key_value': {},
+                            }],
+                            'variable_key_value': {},
+                        }],
+                    }],
+                }],
+            },
+        }, {
+            'id': 'node-2',
+            'data': {
+                'id': 'node-2',
+                'type': 'output',
+                'name': 'Output Node',
+                'group_params': [],
+            },
+        }],
+        'edges': [{
+            'id': 'edge-1',
+            'source': 'condition-1',
+            'sourceHandle': 'case_a',
+            'target': 'node-2',
+            'targetHandle': 'input',
+        }, {
+            'id': 'edge-2',
+            'source': 'condition-1',
+            'sourceHandle': 'right_handle',
+            'target': 'node-2',
+            'targetHandle': 'input',
+        }],
+    }
+
+
 class TestExternalWorkflowService(IsolatedAsyncioTestCase):
     async def test_create_workflow_draft_uses_async_thread_wrapper(self):
         expected_flow = SimpleNamespace(id='flow-1')
@@ -387,3 +440,66 @@ class TestExternalWorkflowService(IsolatedAsyncioTestCase):
         self.assertEqual(persisted[0]['edges'][0]['sourceType'], 'llm')
         self.assertEqual(persisted[0]['edges'][0]['targetType'], 'output')
         self.assertEqual(persisted[1]['edges'], [])
+
+    async def test_get_condition_node_config_returns_cases_and_routes(self):
+        flow = SimpleNamespace(id='flow-1', name='demo', status=FlowStatus.OFFLINE.value)
+        version = SimpleNamespace(id=11, data=make_condition_graph(), is_current=1)
+
+        async def fake_get_editable_version(login_user, flow_id, version_id=None):
+            return flow, version
+
+        with patch.object(ExternalWorkflowService, '_get_editable_version', side_effect=fake_get_editable_version):
+            result = await ExternalWorkflowService.get_condition_node_config(
+                login_user=SimpleNamespace(user_id=1),
+                flow_id='flow-1',
+                node_id='condition-1',
+            )
+
+        self.assertEqual(result['node_id'], 'condition-1')
+        self.assertEqual(result['condition_cases'][0]['id'], 'case_a')
+        self.assertIn('case_a', result['route_handles'])
+        self.assertIn('right_handle', result['route_handles'])
+        self.assertEqual(result['outgoing_edges']['case_a'][0]['edge_id'], 'edge-1')
+
+    async def test_update_condition_node_persists_structured_cases(self):
+        flow = SimpleNamespace(id='flow-1', name='demo', status=FlowStatus.OFFLINE.value)
+        version = SimpleNamespace(id=11, data=make_condition_graph(), is_current=1)
+        persisted = []
+
+        async def fake_get_editable_version(login_user, flow_id, version_id=None):
+            return flow, version
+
+        def fake_validate(login_user, graph_data, flow_name, flow_id=None):
+            return None
+
+        def fake_update_version(version_info):
+            persisted.append(deepcopy(version_info.data))
+            return version_info
+
+        new_cases = [{
+            'id': 'case_b',
+            'operator': 'or',
+            'conditions': [{
+                'id': 'rule_2',
+                'left_var': 'intent',
+                'comparison_operation': 'equals',
+                'right_value_type': 'const',
+                'right_value': 'vip',
+                'variable_key_value': {},
+            }],
+            'variable_key_value': {},
+        }]
+
+        with patch.object(ExternalWorkflowService, '_get_editable_version', side_effect=fake_get_editable_version), \
+                patch.object(ExternalWorkflowService, '_validate_draft_graph', side_effect=fake_validate), \
+                patch.object(FlowVersionDao, 'update_version', side_effect=fake_update_version):
+            _, updated_version = await ExternalWorkflowService.update_condition_node(
+                login_user=SimpleNamespace(user_id=1),
+                flow_id='flow-1',
+                node_id='condition-1',
+                condition_cases=new_cases,
+            )
+
+        self.assertEqual(updated_version.id, 11)
+        self.assertEqual(persisted[0]['nodes'][0]['data']['group_params'][0]['params'][0]['value'][0]['id'], 'case_b')
+        self.assertTrue(persisted[0]['_external_workflow_meta']['draft'])

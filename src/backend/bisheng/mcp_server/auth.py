@@ -164,10 +164,9 @@ def create_mcp_access_token(login_user: LoginUser,
     expires_in = max(60, min(int(expires_in), _MCP_MAX_EXPIRES_IN))
     normalized_scopes = list(_normalize_scopes(scopes))
     claims = {
-        'sub': json.dumps({
-            'user_id': login_user.user_id,
-            'user_name': login_user.user_name,
-        }),
+        'sub': str(login_user.user_id),
+        'user_id': login_user.user_id,
+        'user_name': login_user.user_name,
         'iss': _MCP_ISSUER,
         'aud': _MCP_AUDIENCE,
         'iat': now,
@@ -202,13 +201,15 @@ async def _validate_mcp_access_token(token: str) -> tuple[UserPayload, tuple[str
     if payload.get('token_type') != _MCP_TOKEN_TYPE:
         raise JWTDecodeError(status_code=401, message='Unsupported MCP token type')
 
-    try:
-        subject = json.loads(payload.get('sub') or '{}')
-    except Exception as exc:
-        raise JWTDecodeError(status_code=401, message=f'Invalid MCP token subject: {exc}')
-
-    user_id = subject.get('user_id')
-    user_name = subject.get('user_name')
+    user_id = payload.get('user_id')
+    user_name = payload.get('user_name')
+    if not user_id or not user_name:
+        try:
+            subject = json.loads(payload.get('sub') or '{}')
+        except Exception as exc:
+            raise JWTDecodeError(status_code=401, message=f'Invalid MCP token subject: {exc}')
+        user_id = user_id or subject.get('user_id')
+        user_name = user_name or subject.get('user_name')
     parent_session_hash = payload.get('parent_session_hash')
     if not user_id or not user_name or not parent_session_hash:
         raise JWTDecodeError(status_code=401, message='MCP token payload is incomplete')
@@ -233,7 +234,8 @@ class McpAuthorizationMiddleware:
         token_ref: Token | None = None
         user_ref: Token | None = None
         scope_ref: Token | None = None
-        if scope.get('type') != 'http':
+        scope_type = scope.get('type')
+        if scope_type not in {'http', 'websocket'}:
             await self.app(scope, receive, send)
             return
 
@@ -242,44 +244,65 @@ class McpAuthorizationMiddleware:
         origin = headers.get('origin')
         host = headers.get('host', '')
 
-        if method == 'OPTIONS':
+        if scope_type == 'http' and method == 'OPTIONS':
             await self.app(scope, receive, send)
             return
 
         if origin and not _is_allowed_origin(origin, host):
-            await _error_response(
-                403,
-                'Origin is not allowed for Bisheng MCP',
-                error='forbidden_origin',
-            )(scope, receive, send)
+            if scope_type == 'http':
+                await _error_response(
+                    403,
+                    'Origin is not allowed for Bisheng MCP',
+                    error='forbidden_origin',
+                )(scope, receive, send)
+            else:
+                await send({
+                    'type': 'websocket.close',
+                    'code': 4403,
+                    'reason': 'Origin is not allowed for Bisheng MCP',
+                })
             return
 
         bearer_token = _parse_bearer_token(headers.get('authorization', ''))
         if not bearer_token:
-            await _error_response(
-                401,
-                'Missing Bisheng bearer token for MCP request',
-                error='invalid_request',
-                extra_headers={
-                    'WWW-Authenticate': _auth_header(
-                        'invalid_request',
-                        'Missing Bearer token',
-                    )
-                },
-            )(scope, receive, send)
+            if scope_type == 'http':
+                await _error_response(
+                    401,
+                    'Missing Bisheng bearer token for MCP request',
+                    error='invalid_request',
+                    extra_headers={
+                        'WWW-Authenticate': _auth_header(
+                            'invalid_request',
+                            'Missing Bearer token',
+                        )
+                    },
+                )(scope, receive, send)
+            else:
+                await send({
+                    'type': 'websocket.close',
+                    'code': 4401,
+                    'reason': 'Missing Bearer token',
+                })
             return
 
         try:
             login_user, token_scopes = await _validate_mcp_access_token(bearer_token)
         except JWTDecodeError as exc:
-            await _error_response(
-                401,
-                exc.message,
-                error='invalid_token',
-                extra_headers={
-                    'WWW-Authenticate': _auth_header('invalid_token', exc.message)
-                },
-            )(scope, receive, send)
+            if scope_type == 'http':
+                await _error_response(
+                    401,
+                    exc.message,
+                    error='invalid_token',
+                    extra_headers={
+                        'WWW-Authenticate': _auth_header('invalid_token', exc.message)
+                    },
+                )(scope, receive, send)
+            else:
+                await send({
+                    'type': 'websocket.close',
+                    'code': 4401,
+                    'reason': exc.message[:120],
+                })
             return
 
         token_ref = _current_access_token.set(bearer_token)

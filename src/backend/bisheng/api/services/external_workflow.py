@@ -21,12 +21,18 @@ from bisheng.workflow.common.node import BaseNodeData
 from bisheng.workflow.edges.edges import EdgeBase
 from bisheng.workflow.graph.workflow import Workflow
 from bisheng.workflow.authoring.registry import create_graph_node_payload
+from bisheng.workflow.nodes.condition.conidition_case import ConditionCases
 
 
 class ExternalWorkflowService:
     _DRAFT_META_KEY = '_external_workflow_meta'
     _DRAFT_SOURCE = 'clawith_mcp'
     _MAX_EXTERNAL_DRAFT_SCAN = 20
+    _WORKFLOW_VALIDATION_MAX_STEPS = 10
+    _WORKFLOW_VALIDATION_TIMEOUT_SECONDS = 10
+    _CONDITION_NODE_TYPE = 'condition'
+    _CONDITION_PARAM_KEY = 'condition'
+    _CONDITION_FALLBACK_HANDLE = 'right_handle'
     _SENSITIVE_KEY_PATTERNS = (
         'password',
         'token',
@@ -79,8 +85,8 @@ class ExternalWorkflowService:
             raise WorkflowNameExistsError()
 
     @classmethod
-    def _mark_graph_as_draft(cls, graph_data: dict) -> dict:
-        updated_graph = copy.deepcopy(graph_data)
+    def _mark_graph_as_draft(cls, graph_data: dict, *, in_place: bool = False) -> dict:
+        updated_graph = graph_data if in_place else copy.deepcopy(graph_data)
         current_meta = updated_graph.get(cls._DRAFT_META_KEY, {})
         if not isinstance(current_meta, dict):
             current_meta = {}
@@ -93,8 +99,8 @@ class ExternalWorkflowService:
         return updated_graph
 
     @classmethod
-    def _clear_graph_draft_marker(cls, graph_data: dict) -> dict:
-        updated_graph = copy.deepcopy(graph_data)
+    def _clear_graph_draft_marker(cls, graph_data: dict, *, in_place: bool = False) -> dict:
+        updated_graph = graph_data if in_place else copy.deepcopy(graph_data)
         updated_graph.pop(cls._DRAFT_META_KEY, None)
         return updated_graph
 
@@ -205,8 +211,8 @@ class ExternalWorkflowService:
                 user_id=login_user.user_id,
                 workflow_data=graph_data,
                 async_mode=False,
-                max_steps=10,
-                timeout=10,
+                max_steps=cls._WORKFLOW_VALIDATION_MAX_STEPS,
+                timeout=cls._WORKFLOW_VALIDATION_TIMEOUT_SECONDS,
                 callback=None,
             )
         except Exception as exc:
@@ -301,6 +307,15 @@ class ExternalWorkflowService:
         raise NotFoundError(msg=f'Workflow edge not found: {edge_id}')
 
     @staticmethod
+    def _get_node_type(node: dict) -> str:
+        return node.get('data', {}).get('type') or node.get('type', '')
+
+    @classmethod
+    def _assert_condition_node(cls, node: dict, node_id: str):
+        if cls._get_node_type(node) != cls._CONDITION_NODE_TYPE:
+            cls._raise_workflow_error(f'Workflow node {node_id} is not a condition node')
+
+    @staticmethod
     def _get_node_template(node: dict) -> dict:
         template = node.get('data', {}).get('node', {}).get('template')
         if not isinstance(template, dict):
@@ -366,6 +381,13 @@ class ExternalWorkflowService:
                 normalized_field.setdefault('key', key)
                 normalized_field.setdefault('label', field.get('display_name', key))
                 yield '', normalized_field
+
+    @classmethod
+    def _get_node_param_field(cls, node: dict, key: str) -> dict:
+        for _group_name, field in cls._iter_node_param_fields(node):
+            if field.get('key') == key:
+                return field
+        raise NotFoundError(msg=f'Workflow node param not found: {key}')
 
     @classmethod
     def _get_node_param_fields(cls, node: dict) -> dict[str, tuple[str, dict]]:
@@ -494,9 +516,26 @@ class ExternalWorkflowService:
     def _apply_node_initial_params(cls, node_payload: dict, initial_params: Optional[dict]) -> dict:
         if not initial_params:
             return node_payload
-        graph_data = {'nodes': [copy.deepcopy(node_payload)], 'edges': []}
-        patched_graph = cls._patch_node_template(graph_data, node_payload['id'], initial_params)
-        return patched_graph['nodes'][0]
+        updated_node = copy.deepcopy(node_payload)
+        cls._patch_node_fields(updated_node, initial_params)
+        return updated_node
+
+    @classmethod
+    def _patch_node_fields(cls, node: dict, updates: dict):
+        if not isinstance(updates, dict) or not updates:
+            cls._raise_workflow_error('Workflow node updates must be a non-empty JSON object')
+        fields = cls._get_node_param_fields(node)
+        missing_keys = []
+        for key, value in updates.items():
+            field_meta = fields.get(key)
+            if field_meta is None:
+                missing_keys.append(key)
+                continue
+            _group_name, field = field_meta
+            field['value'] = cls._coerce_param_value(field, value)
+        if missing_keys:
+            available = ', '.join(fields.keys())
+            raise NotFoundError(msg=f'Node params not found: {missing_keys}. Available params: {available}')
 
     @classmethod
     def _add_node_to_graph(cls,
@@ -624,23 +663,59 @@ class ExternalWorkflowService:
 
     @classmethod
     def _patch_node_template(cls, graph_data: dict, node_id: str, updates: dict) -> dict:
-        if not isinstance(updates, dict) or not updates:
-            cls._raise_workflow_error('Workflow node updates must be a non-empty JSON object')
         updated_graph = copy.deepcopy(graph_data)
         node = cls._find_node(updated_graph, node_id)
-        fields = cls._get_node_param_fields(node)
-        missing_keys = []
-        for key, value in updates.items():
-            field_meta = fields.get(key)
-            if field_meta is None:
-                missing_keys.append(key)
-                continue
-            _group_name, field = field_meta
-            field['value'] = cls._coerce_param_value(field, value)
-        if missing_keys:
-            available = ', '.join(fields.keys())
-            raise NotFoundError(msg=f'Node params not found: {missing_keys}. Available params: {available}')
+        cls._patch_node_fields(node, updates)
         return updated_graph
+
+    @classmethod
+    def _normalize_condition_cases(cls, condition_cases: list[dict]) -> list[dict]:
+        if not isinstance(condition_cases, list):
+            cls._raise_workflow_error('Condition node cases must be a list')
+        normalized_cases = []
+        seen_case_ids: set[str] = set()
+        for index, raw_case in enumerate(condition_cases):
+            if not isinstance(raw_case, dict):
+                cls._raise_workflow_error(f'Condition case at index {index} must be an object')
+            try:
+                normalized_case = ConditionCases(**raw_case).model_dump()
+            except Exception as exc:
+                cls._raise_workflow_error(f'Invalid condition case at index {index}: {exc}')
+            case_id = normalized_case['id']
+            if case_id in seen_case_ids:
+                cls._raise_workflow_error(f'Duplicate condition case id: {case_id}')
+            seen_case_ids.add(case_id)
+            normalized_cases.append(normalized_case)
+        return normalized_cases
+
+    @classmethod
+    def _get_condition_cases(cls, node: dict) -> list[dict]:
+        condition_field = cls._get_node_param_field(node, cls._CONDITION_PARAM_KEY)
+        raw_value = condition_field.get('value') or []
+        return cls._normalize_condition_cases(raw_value)
+
+    @classmethod
+    def _update_condition_cases_in_graph(cls, graph_data: dict, node_id: str, condition_cases: list[dict]) -> dict:
+        updated_graph = copy.deepcopy(graph_data)
+        node = cls._find_node(updated_graph, node_id)
+        cls._assert_condition_node(node, node_id)
+        condition_field = cls._get_node_param_field(node, cls._CONDITION_PARAM_KEY)
+        condition_field['value'] = cls._normalize_condition_cases(condition_cases)
+        return updated_graph
+
+    @classmethod
+    def _get_condition_outgoing_edges(cls, graph_data: dict, node_id: str) -> dict[str, list[dict[str, str]]]:
+        routes: dict[str, list[dict[str, str]]] = {}
+        for edge in graph_data.get('edges', []):
+            if edge.get('source') != node_id:
+                continue
+            source_handle = edge.get('sourceHandle') or ''
+            routes.setdefault(source_handle, []).append({
+                'edge_id': edge.get('id', ''),
+                'target_node_id': edge.get('target', ''),
+                'target_handle': edge.get('targetHandle', ''),
+            })
+        return routes
 
     @classmethod
     async def _get_workflow_with_write_access(cls, login_user: UserPayload, flow_id: str) -> Flow:
@@ -736,7 +811,7 @@ class ExternalWorkflowService:
             await FlowService.update_flow_hook(cls._internal_request(), login_user, flow)
 
         cls._validate_draft_graph(login_user, graph_data, flow_name=flow.name, flow_id=flow.id)
-        editable_version.data = cls._mark_graph_as_draft(graph_data)
+        editable_version.data = cls._mark_graph_as_draft(graph_data, in_place=True)
         editable_version = FlowVersionDao.update_version(editable_version)
         return flow, editable_version
 
@@ -788,6 +863,30 @@ class ExternalWorkflowService:
         }
 
     @classmethod
+    async def get_condition_node_config(cls,
+                                        login_user: UserPayload,
+                                        flow_id: str,
+                                        node_id: str,
+                                        version_id: Optional[int] = None) -> dict:
+        _, version = await cls._get_editable_version(login_user, flow_id, version_id)
+        node = cls._find_node(version.data, node_id)
+        cls._assert_condition_node(node, node_id)
+        condition_cases = cls._get_condition_cases(node)
+        route_handles = [one['id'] for one in condition_cases]
+        if cls._CONDITION_FALLBACK_HANDLE not in route_handles:
+            route_handles.append(cls._CONDITION_FALLBACK_HANDLE)
+        return {
+            'flow_id': flow_id,
+            'version_id': version.id,
+            'draft_revision': cls.get_graph_revision(version.data),
+            'node_id': node_id,
+            'node_name': node.get('data', {}).get('name') or node.get('data', {}).get('node', {}).get('display_name', ''),
+            'condition_cases': condition_cases,
+            'route_handles': route_handles,
+            'outgoing_edges': cls._get_condition_outgoing_edges(version.data, node_id),
+        }
+
+    @classmethod
     async def update_workflow_node_params(cls,
                                           login_user: UserPayload,
                                           flow_id: str,
@@ -799,7 +898,23 @@ class ExternalWorkflowService:
         cls._assert_expected_revision(editable_version.data, expected_revision)
         graph_data = cls._patch_node_template(editable_version.data, node_id, updates)
         cls._validate_draft_graph(login_user, graph_data, flow_name=flow.name, flow_id=flow.id)
-        editable_version.data = cls._mark_graph_as_draft(graph_data)
+        editable_version.data = cls._mark_graph_as_draft(graph_data, in_place=True)
+        editable_version = FlowVersionDao.update_version(editable_version)
+        return flow, editable_version
+
+    @classmethod
+    async def update_condition_node(cls,
+                                    login_user: UserPayload,
+                                    flow_id: str,
+                                    node_id: str,
+                                    condition_cases: list[dict],
+                                    version_id: Optional[int] = None,
+                                    expected_revision: Optional[int] = None) -> tuple[Flow, FlowVersion]:
+        flow, editable_version = await cls._get_editable_version(login_user, flow_id, version_id)
+        cls._assert_expected_revision(editable_version.data, expected_revision)
+        graph_data = cls._update_condition_cases_in_graph(editable_version.data, node_id, condition_cases)
+        cls._validate_draft_graph(login_user, graph_data, flow_name=flow.name, flow_id=flow.id)
+        editable_version.data = cls._mark_graph_as_draft(graph_data, in_place=True)
         editable_version = FlowVersionDao.update_version(editable_version)
         return flow, editable_version
 
@@ -825,7 +940,7 @@ class ExternalWorkflowService:
             initial_params=initial_params,
         )
         cls._validate_draft_graph(login_user, graph_data, flow_name=flow.name, flow_id=flow.id)
-        editable_version.data = cls._mark_graph_as_draft(graph_data)
+        editable_version.data = cls._mark_graph_as_draft(graph_data, in_place=True)
         editable_version = FlowVersionDao.update_version(editable_version)
         return flow, editable_version, node_id
 
@@ -842,7 +957,7 @@ class ExternalWorkflowService:
         cls._assert_expected_revision(editable_version.data, expected_revision)
         graph_data = cls._remove_node_from_graph(editable_version.data, node_id, cascade=cascade)
         cls._validate_draft_graph(login_user, graph_data, flow_name=flow.name, flow_id=flow.id)
-        editable_version.data = cls._mark_graph_as_draft(graph_data)
+        editable_version.data = cls._mark_graph_as_draft(graph_data, in_place=True)
         editable_version = FlowVersionDao.update_version(editable_version)
         return flow, editable_version
 
@@ -867,7 +982,7 @@ class ExternalWorkflowService:
             target_handle=target_handle,
         )
         cls._validate_draft_graph(login_user, graph_data, flow_name=flow.name, flow_id=flow.id)
-        editable_version.data = cls._mark_graph_as_draft(graph_data)
+        editable_version.data = cls._mark_graph_as_draft(graph_data, in_place=True)
         editable_version = FlowVersionDao.update_version(editable_version)
         return flow, editable_version, edge_id
 
@@ -894,7 +1009,7 @@ class ExternalWorkflowService:
             target_handle=target_handle,
         )
         cls._validate_draft_graph(login_user, graph_data, flow_name=flow.name, flow_id=flow.id)
-        editable_version.data = cls._mark_graph_as_draft(graph_data)
+        editable_version.data = cls._mark_graph_as_draft(graph_data, in_place=True)
         editable_version = FlowVersionDao.update_version(editable_version)
         return flow, editable_version, removed_edge_id
 

@@ -90,6 +90,20 @@ class WorkflowNodeParamsResult(BaseModel):
     error_code: Optional[int] = None
 
 
+class ConditionNodeResult(BaseModel):
+    ok: bool = True
+    flow_id: Optional[str] = None
+    version_id: Optional[int] = None
+    draft_revision: Optional[int] = None
+    node_id: Optional[str] = None
+    node_name: str = ''
+    condition_cases: list[dict[str, object]] = Field(default_factory=list)
+    route_handles: list[str] = Field(default_factory=list)
+    outgoing_edges: dict[str, list[dict[str, str]]] = Field(default_factory=dict)
+    message: str = 'SUCCESS'
+    error_code: Optional[int] = None
+
+
 class WorkflowConnectionResult(BaseModel):
     ok: bool = True
     service: str = 'bisheng-workflow-mcp'
@@ -165,6 +179,10 @@ def _node_list_error(exc: Exception) -> WorkflowNodeListResult:
 
 def _node_params_error(exc: Exception) -> WorkflowNodeParamsResult:
     return _error_result(WorkflowNodeParamsResult, exc)
+
+
+def _condition_node_error(exc: Exception) -> ConditionNodeResult:
+    return _error_result(ConditionNodeResult, exc)
 
 
 def _workflow_manifest_error(exc: Exception) -> WorkflowManifestResult:
@@ -361,6 +379,22 @@ def create_workflow_mcp_server():
                                              error_builder=_node_params_error)
 
     @mcp.tool()
+    async def get_condition_node(flow_id: str,
+                                 node_id: str,
+                                 version_id: int = 0) -> ConditionNodeResult:
+        """Read the structured routing configuration of one condition node."""
+        async def _op(login_user):
+            data = await ExternalWorkflowService.get_condition_node_config(
+                login_user=login_user,
+                flow_id=flow_id,
+                node_id=node_id,
+                version_id=version_id or None,
+            )
+            return ConditionNodeResult(**data)
+        return await _run_authenticated_tool('get_condition_node', _op, scope='workflow.read',
+                                             error_builder=_condition_node_error)
+
+    @mcp.tool()
     async def create_workflow_draft(name: str,
                                     graph_data: GraphData,
                                     description: str = '',
@@ -553,6 +587,32 @@ def create_workflow_mcp_server():
                 draft_revision=ExternalWorkflowService.get_graph_revision(version.data),
             )
         return await _run_authenticated_tool('update_workflow_node_params', _op, scope='workflow.write',
+                                             error_builder=_mutation_error)
+
+    @mcp.tool()
+    async def update_condition_node(flow_id: str,
+                                    node_id: str,
+                                    condition_cases: list[dict[str, object]],
+                                    version_id: int = 0,
+                                    expected_revision: int = 0) -> WorkflowMutationResult:
+        """Update the structured condition cases of one existing condition node."""
+        async def _op(login_user):
+            flow, version = await ExternalWorkflowService.update_condition_node(
+                login_user=login_user,
+                flow_id=flow_id,
+                node_id=node_id,
+                condition_cases=condition_cases,
+                version_id=version_id or None,
+                expected_revision=expected_revision if expected_revision >= 0 else None,
+            )
+            return WorkflowMutationResult(
+                flow_id=flow.id,
+                version_id=version.id,
+                status='draft',
+                draft_revision=ExternalWorkflowService.get_graph_revision(version.data),
+                node_id=node_id,
+            )
+        return await _run_authenticated_tool('update_condition_node', _op, scope='workflow.write',
                                              error_builder=_mutation_error)
 
     @mcp.tool()
