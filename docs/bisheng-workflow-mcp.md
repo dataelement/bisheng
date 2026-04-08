@@ -275,6 +275,13 @@ tool 权限要求：
 
 创建一个新的 workflow draft。
 
+行为说明：
+
+- `graph_data` 允许为空图
+- 如果初始图缺 `start`，MCP 会自动补一个 `start` 节点并连到入口节点
+- 如果初始图缺 `end`，MCP 会自动补一个 `end` 节点并连到终点节点
+- 对空图，MCP 会直接生成最小合法 scaffold：`start -> end`
+
 输入：
 
 ```json
@@ -283,17 +290,7 @@ tool 权限要求：
   "description": "created by agent",
   "guide_word": "",
   "graph_data": {
-    "nodes": [
-      {
-        "id": "start_1",
-        "data": {
-          "id": "start_1",
-          "type": "start",
-          "name": "Start",
-          "group_params": []
-        }
-      }
-    ],
+    "nodes": [],
     "edges": []
   }
 }

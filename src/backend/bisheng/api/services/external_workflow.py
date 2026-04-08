@@ -17,7 +17,7 @@ from bisheng.database.models.flow import Flow, FlowDao, FlowStatus, FlowType
 from bisheng.database.models.flow_version import FlowVersion, FlowVersionDao
 from bisheng.database.models.role_access import AccessType
 from bisheng.utils import generate_uuid
-from bisheng.workflow.common.node import BaseNodeData
+from bisheng.workflow.common.node import BaseNodeData, NodeType
 from bisheng.workflow.edges.edges import EdgeBase
 from bisheng.workflow.graph.workflow import Workflow
 from bisheng.workflow.authoring.registry import create_graph_node_payload
@@ -33,6 +33,12 @@ class ExternalWorkflowService:
     _CONDITION_NODE_TYPE = 'condition'
     _CONDITION_PARAM_KEY = 'condition'
     _CONDITION_FALLBACK_HANDLE = 'right_handle'
+    _DEFAULT_SOURCE_HANDLE = 'right_handle'
+    _DEFAULT_TARGET_HANDLE = 'left_handle'
+    _DEFAULT_HORIZONTAL_NODE_GAP = 320
+    _NOTE_NODE_TYPE = NodeType.NOTE.value
+    _START_NODE_TYPE = NodeType.START.value
+    _END_NODE_TYPE = NodeType.END.value
     _SENSITIVE_KEY_PATTERNS = (
         'password',
         'token',
@@ -557,6 +563,196 @@ class ExternalWorkflowService:
     def _next_graph_edge_id(cls) -> str:
         return f'edge_{generate_uuid()[:8]}'
 
+    @staticmethod
+    def _node_position_value(node: dict, axis: str) -> float:
+        position = node.get('position', {})
+        if not isinstance(position, dict):
+            return 0.0
+        value = position.get(axis, 0)
+        try:
+            return float(value)
+        except Exception:
+            return 0.0
+
+    @classmethod
+    def _node_type_matches(cls, node: dict, node_type: str) -> bool:
+        return cls._get_node_type(node) == node_type
+
+    @classmethod
+    def _find_nodes_by_type(cls, graph_data: dict, node_type: str) -> list[dict]:
+        return [node for node in graph_data.get('nodes', []) if cls._node_type_matches(node, node_type)]
+
+    @classmethod
+    def _build_graph_edge_payload(cls,
+                                  source_node_id: str,
+                                  target_node_id: str,
+                                  *,
+                                  source_type: str,
+                                  target_type: str,
+                                  source_handle: str = '',
+                                  target_handle: str = '',
+                                  edge_id: Optional[str] = None) -> dict:
+        return {
+            'id': edge_id or cls._next_graph_edge_id(),
+            'source': source_node_id,
+            'sourceHandle': source_handle or cls._DEFAULT_SOURCE_HANDLE,
+            'sourceType': source_type,
+            'target': target_node_id,
+            'targetHandle': target_handle or cls._DEFAULT_TARGET_HANDLE,
+            'targetType': target_type,
+        }
+
+    @classmethod
+    def _append_graph_edge_if_missing(cls,
+                                      graph_data: dict,
+                                      *,
+                                      source_node: dict,
+                                      target_node: dict,
+                                      source_handle: str = '',
+                                      target_handle: str = '') -> bool:
+        resolved_source_handle = source_handle or cls._DEFAULT_SOURCE_HANDLE
+        resolved_target_handle = target_handle or cls._DEFAULT_TARGET_HANDLE
+        for edge in graph_data.get('edges', []):
+            if (
+                edge.get('source') == source_node.get('id') and
+                edge.get('target') == target_node.get('id') and
+                edge.get('sourceHandle') == resolved_source_handle and
+                edge.get('targetHandle') == resolved_target_handle
+            ):
+                return False
+        graph_data.setdefault('edges', []).append(
+            cls._build_graph_edge_payload(
+                source_node.get('id', ''),
+                target_node.get('id', ''),
+                source_type=cls._get_node_type(source_node),
+                target_type=cls._get_node_type(target_node),
+                source_handle=resolved_source_handle,
+                target_handle=resolved_target_handle,
+            )
+        )
+        return True
+
+    @classmethod
+    def _get_root_nodes(cls, graph_data: dict) -> list[dict]:
+        incoming_counts = {
+            node.get('id', ''): 0
+            for node in graph_data.get('nodes', [])
+        }
+        for edge in graph_data.get('edges', []):
+            target_id = edge.get('target')
+            if target_id in incoming_counts:
+                incoming_counts[target_id] += 1
+        return [
+            node for node in graph_data.get('nodes', [])
+            if cls._get_node_type(node) not in {cls._NOTE_NODE_TYPE, cls._START_NODE_TYPE}
+            and incoming_counts.get(node.get('id', ''), 0) == 0
+        ]
+
+    @classmethod
+    def _get_terminal_nodes(cls, graph_data: dict) -> list[dict]:
+        outgoing_counts = {
+            node.get('id', ''): 0
+            for node in graph_data.get('nodes', [])
+        }
+        for edge in graph_data.get('edges', []):
+            source_id = edge.get('source')
+            if source_id in outgoing_counts:
+                outgoing_counts[source_id] += 1
+        return [
+            node for node in graph_data.get('nodes', [])
+            if cls._get_node_type(node) not in {cls._NOTE_NODE_TYPE, cls._END_NODE_TYPE}
+            and outgoing_counts.get(node.get('id', ''), 0) == 0
+        ]
+
+    @classmethod
+    def _build_scaffold_node(cls,
+                             node_type: str,
+                             *,
+                             node_id: Optional[str] = None,
+                             position_x: float = 0,
+                             position_y: float = 0) -> dict:
+        resolved_node_id = node_id or cls._next_graph_node_id(node_type)
+        node_payload = create_graph_node_payload(
+            node_type,
+            node_id=resolved_node_id,
+            position_x=position_x,
+            position_y=position_y,
+        )
+        if node_payload is None:
+            raise NotFoundError(msg=f'Workflow node template not found: {node_type}')
+        return node_payload
+
+    @classmethod
+    def _ensure_create_graph_scaffold(cls, graph_data: dict) -> dict:
+        if not isinstance(graph_data, dict):
+            return graph_data
+        nodes = graph_data.get('nodes')
+        edges = graph_data.get('edges')
+        if not isinstance(nodes, list) or not isinstance(edges, list):
+            return graph_data
+
+        updated_graph = copy.deepcopy(graph_data)
+        start_nodes = cls._find_nodes_by_type(updated_graph, cls._START_NODE_TYPE)
+        end_nodes = cls._find_nodes_by_type(updated_graph, cls._END_NODE_TYPE)
+
+        if not updated_graph['nodes']:
+            start_node = cls._build_scaffold_node(cls._START_NODE_TYPE, position_x=0, position_y=0)
+            end_node = cls._build_scaffold_node(
+                cls._END_NODE_TYPE,
+                position_x=cls._DEFAULT_HORIZONTAL_NODE_GAP,
+                position_y=0,
+            )
+            updated_graph['nodes'].extend([start_node, end_node])
+            cls._append_graph_edge_if_missing(updated_graph, source_node=start_node, target_node=end_node)
+            return updated_graph
+
+        if not start_nodes:
+            root_nodes = cls._get_root_nodes(updated_graph)
+            root_x_positions = [cls._node_position_value(node, 'x') for node in root_nodes]
+            root_y_positions = [cls._node_position_value(node, 'y') for node in root_nodes]
+            start_node = cls._build_scaffold_node(
+                cls._START_NODE_TYPE,
+                position_x=(min(root_x_positions) - cls._DEFAULT_HORIZONTAL_NODE_GAP) if root_x_positions else 0,
+                position_y=(sum(root_y_positions) / len(root_y_positions)) if root_y_positions else 0,
+            )
+            updated_graph['nodes'].append(start_node)
+            start_nodes = [start_node]
+            for root_node in root_nodes:
+                cls._append_graph_edge_if_missing(updated_graph, source_node=start_node, target_node=root_node)
+
+        if not end_nodes:
+            terminal_nodes = cls._get_terminal_nodes(updated_graph)
+            terminal_x_positions = [cls._node_position_value(node, 'x') for node in terminal_nodes]
+            terminal_y_positions = [cls._node_position_value(node, 'y') for node in terminal_nodes]
+            end_node = cls._build_scaffold_node(
+                cls._END_NODE_TYPE,
+                position_x=(max(terminal_x_positions) + cls._DEFAULT_HORIZONTAL_NODE_GAP) if terminal_x_positions else cls._DEFAULT_HORIZONTAL_NODE_GAP,
+                position_y=(sum(terminal_y_positions) / len(terminal_y_positions)) if terminal_y_positions else 0,
+            )
+            updated_graph['nodes'].append(end_node)
+            end_nodes = [end_node]
+            if terminal_nodes:
+                for terminal_node in terminal_nodes:
+                    terminal_type = cls._get_node_type(terminal_node)
+                    if terminal_type == cls._CONDITION_NODE_TYPE:
+                        for condition_case in cls._get_condition_cases(terminal_node):
+                            cls._append_graph_edge_if_missing(
+                                updated_graph,
+                                source_node=terminal_node,
+                                target_node=end_node,
+                                source_handle=condition_case['id'],
+                            )
+                        cls._append_graph_edge_if_missing(
+                            updated_graph,
+                            source_node=terminal_node,
+                            target_node=end_node,
+                            source_handle=cls._CONDITION_FALLBACK_HANDLE,
+                        )
+                    else:
+                        cls._append_graph_edge_if_missing(updated_graph, source_node=terminal_node, target_node=end_node)
+
+        return updated_graph
+
     @classmethod
     def _apply_node_initial_params(cls, node_payload: dict, initial_params: Optional[dict]) -> dict:
         if not initial_params:
@@ -788,6 +984,7 @@ class ExternalWorkflowService:
                                     description: Optional[str] = None,
                                     guide_word: Optional[str] = None) -> tuple[Flow, FlowVersion]:
         cls._assert_workflow_name_available(login_user, name)
+        graph_data = cls._ensure_create_graph_scaffold(graph_data)
         cls._validate_draft_graph(login_user, graph_data, flow_name=name)
 
         db_flow = Flow(

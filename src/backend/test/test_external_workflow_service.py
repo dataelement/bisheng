@@ -3,10 +3,11 @@ from types import SimpleNamespace
 from unittest import IsolatedAsyncioTestCase
 from unittest.mock import AsyncMock, patch
 
+from bisheng.api.services.flow import FlowService
 from bisheng.api.services.external_workflow import ExternalWorkflowService
 from bisheng.api.services.workflow import WorkFlowService
 from bisheng.common.errcode.flow import WorkFlowInitError, WorkFlowVersionUpdateError, WorkflowNameExistsError
-from bisheng.database.models.flow import FlowStatus
+from bisheng.database.models.flow import FlowDao, FlowStatus
 from bisheng.database.models.flow_version import FlowVersionDao
 
 
@@ -104,7 +105,173 @@ def make_condition_graph():
     }
 
 
+def make_large_graph():
+    nodes = [
+        {
+            'id': 'input-1',
+            'data': {
+                'id': 'input-1',
+                'type': 'input',
+                'name': 'Input Node',
+                'group_params': [],
+            },
+        },
+        {
+            'id': 'llm-1',
+            'data': {
+                'id': 'llm-1',
+                'type': 'llm',
+                'name': 'Planner',
+                'group_params': [{
+                    'name': 'model',
+                    'params': [{
+                        'key': 'temperature',
+                        'type': 'slide',
+                        'required': True,
+                        'scope': [0, 1],
+                        'value': 0.7,
+                    }],
+                }],
+            },
+        },
+        {
+            'id': 'condition-1',
+            'data': {
+                'id': 'condition-1',
+                'type': 'condition',
+                'name': 'Route',
+                'group_params': [{
+                    'params': [{
+                        'key': 'condition',
+                        'type': 'condition',
+                        'value': [{
+                            'id': 'case_a',
+                            'operator': 'and',
+                            'conditions': [{
+                                'id': 'rule_1',
+                                'left_var': 'score',
+                                'comparison_operation': 'greater_than',
+                                'right_value_type': 'const',
+                                'right_value': '80',
+                                'variable_key_value': {},
+                            }],
+                            'variable_key_value': {},
+                        }],
+                    }],
+                }],
+            },
+        },
+    ]
+    for index, node_type in enumerate(
+        ['tool', 'tool', 'code', 'agent', 'tool', 'tool', 'output', 'output', 'output'],
+        start=1,
+    ):
+        node_id = f'node-{index + 3}'
+        nodes.append({
+            'id': node_id,
+            'data': {
+                'id': node_id,
+                'type': node_type,
+                'name': f'{node_type}-{index}',
+                'group_params': [],
+            },
+        })
+
+    edges = [
+        {'id': 'edge-1', 'source': 'input-1', 'sourceHandle': 'output', 'target': 'llm-1', 'targetHandle': 'input'},
+        {'id': 'edge-2', 'source': 'llm-1', 'sourceHandle': 'output', 'target': 'condition-1', 'targetHandle': 'input'},
+        {'id': 'edge-3', 'source': 'condition-1', 'sourceHandle': 'case_a', 'target': 'node-4', 'targetHandle': 'input'},
+        {'id': 'edge-4', 'source': 'condition-1', 'sourceHandle': 'right_handle', 'target': 'node-5', 'targetHandle': 'input'},
+        {'id': 'edge-5', 'source': 'node-4', 'sourceHandle': 'output', 'target': 'node-6', 'targetHandle': 'input'},
+        {'id': 'edge-6', 'source': 'node-5', 'sourceHandle': 'output', 'target': 'node-7', 'targetHandle': 'input'},
+        {'id': 'edge-7', 'source': 'node-6', 'sourceHandle': 'output', 'target': 'node-8', 'targetHandle': 'input'},
+        {'id': 'edge-8', 'source': 'node-7', 'sourceHandle': 'output', 'target': 'node-9', 'targetHandle': 'input'},
+        {'id': 'edge-9', 'source': 'node-8', 'sourceHandle': 'output', 'target': 'node-10', 'targetHandle': 'input'},
+        {'id': 'edge-10', 'source': 'node-9', 'sourceHandle': 'output', 'target': 'node-11', 'targetHandle': 'input'},
+        {'id': 'edge-11', 'source': 'node-10', 'sourceHandle': 'output', 'target': 'node-12', 'targetHandle': 'input'},
+    ]
+    return {'nodes': nodes, 'edges': edges}
+
+
 class TestExternalWorkflowService(IsolatedAsyncioTestCase):
+    def test_ensure_create_graph_scaffold_builds_minimal_start_end_graph(self):
+        graph = ExternalWorkflowService._ensure_create_graph_scaffold({'nodes': [], 'edges': []})
+
+        self.assertEqual([node['data']['type'] for node in graph['nodes']], ['start', 'end'])
+        self.assertEqual(len(graph['edges']), 1)
+        self.assertEqual(graph['edges'][0]['source'], graph['nodes'][0]['id'])
+        self.assertEqual(graph['edges'][0]['target'], graph['nodes'][1]['id'])
+        self.assertEqual(graph['edges'][0]['sourceHandle'], 'right_handle')
+        self.assertEqual(graph['edges'][0]['targetHandle'], 'left_handle')
+
+    def test_ensure_create_graph_scaffold_wraps_initial_node_with_start_and_end(self):
+        graph = ExternalWorkflowService._ensure_create_graph_scaffold({
+            'nodes': [{
+                'id': 'input-1',
+                'position': {'x': 240, 'y': 32},
+                'data': {
+                    'id': 'input-1',
+                    'type': 'input',
+                    'name': 'Input Node',
+                    'group_params': [],
+                },
+            }],
+            'edges': [],
+        })
+
+        node_types = {node['id']: node['data']['type'] for node in graph['nodes']}
+        start_id = next(node_id for node_id, node_type in node_types.items() if node_type == 'start')
+        end_id = next(node_id for node_id, node_type in node_types.items() if node_type == 'end')
+
+        self.assertEqual(len(graph['nodes']), 3)
+        self.assertEqual(len(graph['edges']), 2)
+        self.assertTrue(any(edge['source'] == start_id and edge['target'] == 'input-1' for edge in graph['edges']))
+        self.assertTrue(any(edge['source'] == 'input-1' and edge['target'] == end_id for edge in graph['edges']))
+
+    def test_ensure_create_graph_scaffold_adds_condition_routes_to_end(self):
+        graph = ExternalWorkflowService._ensure_create_graph_scaffold({
+            'nodes': [{
+                'id': 'condition-1',
+                'position': {'x': 120, 'y': 48},
+                'data': {
+                    'id': 'condition-1',
+                    'type': 'condition',
+                    'name': 'Condition Node',
+                    'group_params': [{
+                        'params': [{
+                            'key': 'condition',
+                            'type': 'condition',
+                            'value': [{
+                                'id': 'case_a',
+                                'operator': 'and',
+                                'conditions': [],
+                                'variable_key_value': {},
+                            }],
+                        }],
+                    }],
+                },
+            }],
+            'edges': [],
+        })
+
+        node_types = {node['id']: node['data']['type'] for node in graph['nodes']}
+        start_id = next(node_id for node_id, node_type in node_types.items() if node_type == 'start')
+        end_id = next(node_id for node_id, node_type in node_types.items() if node_type == 'end')
+
+        self.assertTrue(any(edge['source'] == start_id and edge['target'] == 'condition-1' for edge in graph['edges']))
+        self.assertTrue(
+            any(
+                edge['source'] == 'condition-1' and edge['target'] == end_id and edge['sourceHandle'] == 'case_a'
+                for edge in graph['edges']
+            )
+        )
+        self.assertTrue(
+            any(
+                edge['source'] == 'condition-1' and edge['target'] == end_id and edge['sourceHandle'] == 'right_handle'
+                for edge in graph['edges']
+            )
+        )
+
     async def test_create_workflow_draft_uses_async_thread_wrapper(self):
         expected_flow = SimpleNamespace(id='flow-1')
         expected_version = SimpleNamespace(id=11, data=make_graph())
@@ -122,6 +289,37 @@ class TestExternalWorkflowService(IsolatedAsyncioTestCase):
         args = async_to_thread.await_args.args
         self.assertIs(args[0].__func__, ExternalWorkflowService._create_workflow_draft_sync.__func__)
         self.assertEqual(args[2], 'demo')
+
+    def test_create_workflow_draft_sync_validates_scaffolded_initial_graph(self):
+        captured = {}
+
+        def fake_validate(login_user, graph_data, flow_name, flow_id=None):
+            captured['graph_data'] = deepcopy(graph_data)
+
+        def fake_create_flow(flow_info, flow_type):
+            flow_info.id = 'flow-1'
+            return flow_info
+
+        def fake_get_current_version(flow_id):
+            return SimpleNamespace(id=11, data=deepcopy(captured['graph_data']))
+
+        with patch.object(ExternalWorkflowService, '_assert_workflow_name_available'), \
+                patch.object(ExternalWorkflowService, '_validate_draft_graph', side_effect=fake_validate), \
+                patch.object(FlowDao, 'create_flow', side_effect=fake_create_flow), \
+                patch.object(FlowVersionDao, 'get_version_by_flow', side_effect=fake_get_current_version), \
+                patch.object(FlowVersionDao, 'update_version', side_effect=lambda version: version), \
+                patch.object(FlowService, 'create_flow_hook'):
+            flow, version = ExternalWorkflowService._create_workflow_draft_sync(
+                login_user=SimpleNamespace(user_id=1),
+                name='demo',
+                graph_data={'nodes': [], 'edges': []},
+            )
+
+        self.assertEqual(flow.id, 'flow-1')
+        self.assertEqual(version.id, 11)
+        scaffold_types = [node['data']['type'] for node in captured['graph_data']['nodes']]
+        self.assertEqual(scaffold_types, ['start', 'end'])
+        self.assertEqual(len(captured['graph_data']['edges']), 1)
 
     def test_get_existing_external_draft_version_limits_recent_versions(self):
         captured = {'statements': []}
@@ -712,3 +910,101 @@ class TestExternalWorkflowService(IsolatedAsyncioTestCase):
 
         with self.assertRaises(WorkFlowInitError):
             ExternalWorkflowService._validate_special_node_routes(graph)
+
+    async def test_large_graph_editing_scenario_supports_sequential_mutations(self):
+        flow = SimpleNamespace(id='flow-1', name='complex-flow', status=FlowStatus.OFFLINE.value)
+        version = SimpleNamespace(
+            id=21,
+            data=ExternalWorkflowService._mark_graph_as_draft(make_large_graph()),
+            is_current=1,
+        )
+
+        async def fake_get_editable_version(login_user, flow_id, version_id=None):
+            return flow, version
+
+        def fake_update_version(version_info):
+            version.data = deepcopy(version_info.data)
+            return version_info
+
+        with patch.object(ExternalWorkflowService, '_get_editable_version', side_effect=fake_get_editable_version), \
+                patch.object(ExternalWorkflowService, '_validate_draft_graph'), \
+                patch.object(FlowVersionDao, 'update_version', side_effect=fake_update_version):
+            _, updated_version, added_node_id = await ExternalWorkflowService.add_workflow_node(
+                login_user=SimpleNamespace(user_id=1),
+                flow_id='flow-1',
+                node_type='tool',
+                name='Late Tool',
+                position_x=640,
+                position_y=240,
+                expected_revision=1,
+            )
+            self.assertEqual(updated_version.id, 21)
+            self.assertEqual(ExternalWorkflowService.get_graph_revision(version.data), 2)
+            self.assertTrue(any(node['id'] == added_node_id for node in version.data['nodes']))
+
+            _, _, added_edge_id = await ExternalWorkflowService.connect_workflow_nodes(
+                login_user=SimpleNamespace(user_id=1),
+                flow_id='flow-1',
+                source_node_id='node-8',
+                target_node_id=added_node_id,
+                source_handle='output',
+                target_handle='input',
+                expected_revision=2,
+            )
+            self.assertEqual(ExternalWorkflowService.get_graph_revision(version.data), 3)
+            self.assertTrue(any(edge['id'] == added_edge_id for edge in version.data['edges']))
+
+            await ExternalWorkflowService.update_workflow_node_params(
+                login_user=SimpleNamespace(user_id=1),
+                flow_id='flow-1',
+                node_id='llm-1',
+                updates={'temperature': 0.2},
+                expected_revision=3,
+            )
+            llm_node = next(node for node in version.data['nodes'] if node['id'] == 'llm-1')
+            self.assertEqual(llm_node['data']['group_params'][0]['params'][0]['value'], 0.2)
+            self.assertEqual(ExternalWorkflowService.get_graph_revision(version.data), 4)
+
+            await ExternalWorkflowService.update_condition_node(
+                login_user=SimpleNamespace(user_id=1),
+                flow_id='flow-1',
+                node_id='condition-1',
+                condition_cases=[{
+                    'id': 'case_a',
+                    'operator': 'and',
+                    'conditions': [{
+                        'id': 'rule_1',
+                        'left_var': 'score',
+                        'comparison_operation': 'greater_than_or_equal',
+                        'right_value_type': 'const',
+                        'right_value': '90',
+                        'variable_key_value': {},
+                    }],
+                    'variable_key_value': {},
+                }],
+                expected_revision=4,
+            )
+            condition_payload = next(
+                param for param in next(node for node in version.data['nodes'] if node['id'] == 'condition-1')['data'][
+                    'group_params'][0]['params']
+                if param['key'] == 'condition'
+            )
+            self.assertEqual(condition_payload['value'][0]['conditions'][0]['right_value'], '90')
+            self.assertEqual(ExternalWorkflowService.get_graph_revision(version.data), 5)
+
+            await ExternalWorkflowService.disconnect_workflow_edge(
+                login_user=SimpleNamespace(user_id=1),
+                flow_id='flow-1',
+                edge_id=added_edge_id,
+                expected_revision=5,
+            )
+            self.assertEqual(ExternalWorkflowService.get_graph_revision(version.data), 6)
+
+            await ExternalWorkflowService.remove_workflow_node(
+                login_user=SimpleNamespace(user_id=1),
+                flow_id='flow-1',
+                node_id=added_node_id,
+                expected_revision=6,
+            )
+            self.assertFalse(any(node['id'] == added_node_id for node in version.data['nodes']))
+            self.assertEqual(ExternalWorkflowService.get_graph_revision(version.data), 7)

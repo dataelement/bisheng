@@ -8,7 +8,11 @@ import httpx
 from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
 
+from bisheng.api.services.external_workflow import ExternalWorkflowService
 from bisheng.common.errcode.flow import WorkFlowInitError
+from bisheng.api.services.flow import FlowService
+from bisheng.database.models.flow import FlowDao
+from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.mcp_server.auth import McpAuthorizationMiddleware
 from bisheng.mcp_server.workflow import create_workflow_mcp_server
 from bisheng.workflow.authoring import WorkflowManifest
@@ -152,6 +156,43 @@ class TestWorkflowMcpE2E(IsolatedAsyncioTestCase):
         self.assertEqual(payload['version_id'], 11)
         self.assertEqual(payload['draft_revision'], 3)
         self.assertEqual(payload['node_id'], 'llm_1234')
+
+    async def test_streamable_http_create_workflow_draft_scaffolds_empty_graph(self):
+        session = await self._open_session(scopes=('workflow.write',))
+        captured = {}
+
+        def fake_validate_runtime(login_user, graph_data, flow_name, flow_id=None):
+            captured['graph_data'] = json.loads(json.dumps(graph_data))
+
+        def fake_create_flow(flow_info, flow_type):
+            flow_info.id = 'flow-1'
+            captured['created_graph'] = json.loads(json.dumps(flow_info.data))
+            return flow_info
+
+        def fake_get_current_version(flow_id):
+            return SimpleNamespace(id=11, data=json.loads(json.dumps(captured['created_graph'])))
+
+        with patch.object(ExternalWorkflowService, '_assert_workflow_name_available'), \
+                patch.object(ExternalWorkflowService, '_validate_workflow_runtime', side_effect=fake_validate_runtime), \
+                patch.object(FlowDao, 'create_flow', side_effect=fake_create_flow), \
+                patch.object(FlowVersionDao, 'get_version_by_flow', side_effect=fake_get_current_version), \
+                patch.object(FlowVersionDao, 'update_version', side_effect=lambda version: version), \
+                patch.object(FlowService, 'create_flow_hook'):
+            result = await session.call_tool(
+                'create_workflow_draft',
+                {
+                    'name': 'demo',
+                    'graph_data': {'nodes': [], 'edges': []},
+                },
+            )
+
+        payload = self._decode_tool_result(result)
+        self.assertTrue(payload['ok'])
+        self.assertEqual(payload['flow_id'], 'flow-1')
+        self.assertEqual(payload['version_id'], 11)
+        scaffold_types = [node['data']['type'] for node in captured['graph_data']['nodes']]
+        self.assertEqual(scaffold_types, ['start', 'end'])
+        self.assertEqual(len(captured['graph_data']['edges']), 1)
 
     async def test_streamable_http_returns_structured_validation_error_payload(self):
         session = await self._open_session()
