@@ -1119,12 +1119,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         retry_files = await KnowledgeFileDao.aget_file_by_ids(file_ids)
         all_file_ids = []
+        all_file_level_path = set()
         for file in retry_files:
             if file.knowledge_id != space_id:
                 continue
             if file.file_type == FileType.FILE.value and file.status == KnowledgeFileStatus.FAILED.value:
                 retry_knowledge_file_celery.delay(file.id)
                 all_file_ids.append(file.id)
+                all_file_level_path.add(file.file_level_path)
             elif file.file_type == FileType.DIR.value:
                 all_failed_files = await SpaceFileDao.get_children_by_prefix(knowledge_id=space_id,
                                                                              prefix=file.file_level_path + f"/{file.id}",
@@ -1133,10 +1135,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     if item.status == KnowledgeFileStatus.FAILED.value and item.file_type == FileType.FILE:
                         retry_knowledge_file_celery.delay(item.id)
                         all_file_ids.append(item.id)
+                        all_file_level_path.add(file.file_level_path)
         if all_file_ids:
             await KnowledgeFileDao.aupdate_file_status(all_file_ids, KnowledgeFileStatus.WAITING,
                                                        "batch_retry_failed_files")
             await KnowledgeDao.async_update_knowledge_update_time_by_id(space_id)
+        for one in all_file_level_path:
+            if one:
+                await self.update_folder_update_time(one)
         return True
 
     # ──────────────────────────── Batch Ops ───────────────────────────────────
