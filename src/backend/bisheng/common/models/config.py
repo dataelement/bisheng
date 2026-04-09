@@ -2,13 +2,12 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional
 
-from sqlalchemy import Column, DateTime, text
+from sqlalchemy import Column, DateTime, text, Text
+from sqlmodel import Field, select,Integer
 from sqlalchemy.dialects.mysql import LONGTEXT
-from sqlmodel import Field, select
-
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session, get_async_db_session
-
+from sqlalchemy.types import CLOB
 
 class ConfigKeyEnum(Enum):
     INIT_DB = 'initdb_config'  # Default System Configuration
@@ -37,7 +36,8 @@ class ConfigBase(SQLModelSerializable):
 
 
 class Config(ConfigBase, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
+    # id: Optional[int] = Field(default=None, primary_key=True)
+    id: Optional[int] = Field(default=None, sa_column=Column(Integer, primary_key=True, autoincrement=True))
 
     __table_args__ = {
         "mysql_charset": "utf8mb4",
@@ -72,8 +72,8 @@ class ConfigDao(ConfigBase):
     async def aget_config(cls, key: ConfigKeyEnum) -> Optional[Config]:
         async with get_async_db_session() as session:
             statement = select(Config).where(Config.key == key.value)
-            config = await session.exec(statement)
-            config = config.first()
+            config = await session.execute(statement)
+            config = config.scalars().first()
             return config
 
     @classmethod

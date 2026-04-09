@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any, List, Optional
 
-from sqlalchemy import Column, DateTime, delete, text
+from sqlalchemy import Column, DateTime, delete, text,Integer
 from sqlmodel import Field, select
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -21,7 +21,8 @@ class DatasetBase(SQLModelSerializable):
 
 
 class Dataset(DatasetBase, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
+    # id: Optional[int] = Field(default=None, primary_key=True)
+    id: Optional[int] = Field(default=None, sa_column=Column(Integer, primary_key=True, autoincrement=True))
 
 
 class DatasetCreate(DatasetBase):

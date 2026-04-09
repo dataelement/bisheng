@@ -1,4 +1,4 @@
-[project]
+[tool.poetry]
 name = "backend"
 version = "2.4.0"
 description = "BISHENG backend service"

@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Column, DateTime, Text, text
+from sqlalchemy import Column, DateTime, Text, text,Integer
 from sqlmodel import Field
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -21,7 +21,8 @@ class RecallBase(SQLModelSerializable):
 
 
 class RecallChunk(RecallBase, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
+    # id: Optional[int] = Field(default=None, primary_key=True)
+    id: Optional[int] = Field(default=None, sa_column=Column(Integer, primary_key=True, autoincrement=True))
 
 
 class RecallChunkRead(RecallBase):

@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List, Optional
 
-from sqlalchemy import Column, DateTime, delete, text, INT
+from sqlalchemy import Column, DateTime, delete, text,Integer, INT
 from sqlmodel import Field, select
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -32,7 +32,8 @@ class UserGroupBase(SQLModelSerializable):
 
 
 class UserGroup(UserGroupBase, table=True):
-    id: Optional[int] = Field(default=None, sa_column=Column(INT, primary_key=True, autoincrement=True))
+    # id: Optional[int] = Field(default=None, primary_key=True)
+    id: Optional[int] = Field(default=None, sa_column=Column(Integer, primary_key=True, autoincrement=True))
 
 
 class UserGroupRead(UserGroupBase):
@@ -89,8 +90,8 @@ class UserGroupDao(UserGroupBase):
         if group_id:
             statement = statement.where(UserGroup.group_id == group_id)
         async with get_async_db_session() as session:
-            result = await session.exec(statement)
-            return result.all()
+            result = await session.execute(statement)
+            return result.scalars().all()
 
     @classmethod
     def insert_user_group(cls, user_group: UserGroupCreate) -> UserGroup:

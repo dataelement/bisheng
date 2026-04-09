@@ -8,7 +8,8 @@ from sqlmodel import Field, Column, DateTime, text, select, func, update, col
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.database.models.user_group import UserGroupDao
-
+from sqlalchemy import String
+from bisheng.utils import generate_uuid
 
 class SensitiveStatus(Enum):
     PASS = 1  # Setuju
@@ -17,7 +18,8 @@ class SensitiveStatus(Enum):
 
 class MessageSessionBase(SQLModelSerializable):
     """ Conversation table """
-    chat_id: str = Field(default=None, primary_key=True, description='Session UniqueID')
+    # chat_id: str = Field(default=None, primary_key=True, description='Session UniqueID')
+    chat_id: str = Field(default_factory=generate_uuid, description='会话唯一ID', sa_column=Column(String, primary_key=True))
     name: Optional[str] = Field(default="", description='SessionName')
     flow_id: str = Field(default="", index=True, description='Apply UniqueID')
     flow_type: int = Field(description='App type. Skills, assistants, workflows')
@@ -88,7 +90,7 @@ class MessageSessionDao(MessageSessionBase):
     async def async_get_one(cls, chat_id: str) -> MessageSession | None:
         statement = select(MessageSession).where(MessageSession.chat_id == chat_id)
         async with get_async_db_session() as session:
-            return (await session.exec(statement)).first()
+            return (await session.execute(statement)).scalars().first()
 
     @classmethod
     def generate_filter_session_statement(cls,

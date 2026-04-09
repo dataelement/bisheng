@@ -1,0 +1,7 @@
+arch_version="x86_64"
+cpu_name="x86"
+os_name="centos7"
+kernel_version="3.10.0-957.el7.x86_64"
+gcc_version="gcc (GCC) 4.8.5 20150623 (Red Hat 4.8.5-36)"
+glibc_version="ldd (GNU libc) 2.17"
+openssl_version="OpenSSL 3.5.0"

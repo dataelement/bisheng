@@ -77,10 +77,30 @@ class FlowBase(SQLModelSerializable):
 
         return v
 
-
+# 自定义 JSON 类型：自动处理字符串与字典的转换
+from sqlalchemy.types import TypeDecorator, JSON
+import json
+class DMJSON(TypeDecorator):
+    impl = JSON  # 底层依赖达梦的 JSON 类型
+    def process_bind_param(self, value, dialect):
+        # 写入数据库：字典转 JSON 字符串
+        if value is None:
+            return None
+        return json.dumps(value)
+    def process_result_value(self, value, dialect):
+        # 读取数据库：JSON 字符串转字典
+        if value is None:
+            return None
+        if isinstance(value, str):
+            try:
+                return json.loads(value)
+            except json.JSONDecodeError:
+                return {}
+        return value
 class Flow(FlowBase, table=True):
-    id: str = Field(default_factory=generate_uuid, primary_key=True, unique=True)
-    data: Optional[Dict] = Field(default=None, sa_column=Column(JSON))
+    # id: str = Field(default_factory=generate_uuid, primary_key=True, unique=True)
+    id: str = Field(default_factory=generate_uuid, sa_column=Column(String, primary_key=True))
+    data: Optional[Dict] = Field(default=None, sa_column=Column(DMJSON))
 
 
 class FlowCreate(FlowBase):
@@ -169,8 +189,8 @@ class FlowDao(FlowBase):
     async def aget_flow_by_id(cls, flow_id: str) -> Optional[Flow]:
         async with get_async_db_session() as session:
             statement = select(Flow).where(Flow.id == flow_id)
-            result = await session.exec(statement)
-            return result.first()
+            result = await session.execute(statement)
+            return result.scalars().first()
 
     @classmethod
     def get_flow_by_idstr(cls, flow_id: str) -> Optional[Flow]:

@@ -3,13 +3,34 @@ from datetime import datetime
 from typing import Dict, List, Optional
 
 from pydantic import model_validator
-from sqlalchemy import JSON, Column, DateTime, String, text, func
+from sqlalchemy import JSON, Column, DateTime, String, text, func,Integer
 from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlmodel import Field, or_, select, Text, update, col
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.utils import md5_hash, generate_uuid
+# 自定义 JSON 类型：自动处理字符串与字典的转换
+from sqlalchemy.types import TypeDecorator, JSON
+import json
+class DMJSON(TypeDecorator):
+    impl = JSON  # 底层依赖达梦的 JSON 类型
+    def process_bind_param(self, value, dialect):
+        # 写入数据库：字典转 JSON 字符串
+        if value is None:
+            return None
+        return json.dumps(value)
+    def process_result_value(self, value, dialect):
+        # 读取数据库：JSON 字符串转字典
+        if value is None:
+            return None
+        if isinstance(value, str):
+            try:
+                return json.loads(value)
+            except json.JSONDecodeError:
+                return {}
+        return value
+
 from bisheng.utils.mask_data import JsonFieldMasker
 from ..const import AuthType, ToolPresetType
 
@@ -23,7 +44,7 @@ class GptsToolsBase(SQLModelSerializable):
     is_preset: int = Field(default=ToolPresetType.API.value,
                            description="The category of the tool, the historical reason field is not renamed")
     is_delete: int = Field(default=0, description='1 Indicates logical deletion')
-    api_params: Optional[List[Dict]] = Field(default=None, sa_column=Column(JSON),
+    api_params: Optional[List[Dict]] = Field(default=None, sa_column=Column(DMJSON),
                                              description='Used to storeapiParameter and other information')
     user_id: Optional[int] = Field(default=None, index=True, description='Create UserID， nullIndicates system creation')
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
@@ -33,9 +54,10 @@ class GptsToolsBase(SQLModelSerializable):
 
 
 class GptsToolsTypeBase(SQLModelSerializable):
-    id: Optional[int] = Field(default=None, index=True, primary_key=True)
-    name: str = Field(default='', sa_column=Column(String(length=1024)), description="Tool Category Name")
-    logo: Optional[str] = Field(default='', description="of the tool categorylogoFile URL")
+    # id: Optional[int] = Field(default=None, index=True, primary_key=True)
+    id: Optional[int] = Field(default=None, sa_column=Column(Integer, primary_key=True, autoincrement=True))
+    name: str = Field(default='', sa_column=Column(String(length=1024)), description="工具类别名字")
+    logo: Optional[str] = Field(default='', description="工具类别的logo文件地址")
     extra: Optional[str] = Field(default='{}', sa_column=Column(Text),
                                  description="Configuration information for the tool category to store the configuration information required for the tool category")
     description: str = Field(default='', description="Description of the tool category")
@@ -60,9 +82,10 @@ class GptsToolsTypeBase(SQLModelSerializable):
 class GptsTools(GptsToolsBase, table=True):
     __tablename__ = 't_gpts_tools'
     extra: Optional[str | dict] = Field(default=None, sa_column=Column(Text, index=False),
-                                        description='Used to store additional information, such as parameter requirements, including &initdb_conf_key Data field'
-                                                    'Indicates that the configuration information is obtained from the system configuration,For multi-level use.with ')
-    id: Optional[int] = Field(default=None, primary_key=True)
+                                        description='用来存储额外信息，比如参数需求等，包含 &initdb_conf_key 字段'
+                                                    '表示配置信息从系统配置里获取,多层级用.隔开')
+    # id: Optional[int] = Field(default=None, primary_key=True)
+    id: Optional[int] = Field(default=None, sa_column=Column(Integer, primary_key=True, autoincrement=True))
 
 
 class GptsToolsType(GptsToolsTypeBase, table=True):
@@ -208,8 +231,8 @@ class GptsToolsDao(GptsToolsBase):
             GptsTools.type.in_(tool_type_ids)).where(
             GptsTools.is_delete == 0).order_by(GptsTools.create_time.desc())
         async with get_async_db_session() as session:
-            result = await session.exec(statement)
-            return result.all()
+            result = await session.execute(statement)
+            return result.scalars().all()
 
     @classmethod
     def get_all_tool_type(cls, tool_type_ids: List[int]) -> List[GptsToolsType]:
@@ -254,8 +277,8 @@ class GptsToolsDao(GptsToolsBase):
                                                 GptsToolsType.is_delete == 0)
         statement = statement.order_by(GptsToolsType.update_time.desc())
         async with get_async_db_session() as session:
-            result = await session.exec(statement)
-            return result.all()
+            result = await session.execute(statement)
+            return result.scalars().all()
 
     @classmethod
     def _get_user_tool_type_statement(cls, user_id: int, extra_tool_type_ids: List[int] = None,
@@ -301,8 +324,8 @@ class GptsToolsDao(GptsToolsBase):
         """
         statement = cls._get_user_tool_type_statement(user_id, extra_tool_type_ids, include_preset, is_preset)
         async with get_async_db_session() as session:
-            result = await session.exec(statement)
-            return result.all()
+            result = await session.execute(statement)
+            return result.scalars().all()
 
     @classmethod
     def filter_tool_types_by_ids(cls, tool_type_ids: List[int], keyword: Optional[str] = None, page: int = 0,
@@ -468,5 +491,5 @@ class GptsToolsDao(GptsToolsBase):
     async def aget_tool_by_tool_key(cls, tool_key: str) -> GptsTools:
         statement = select(GptsTools).where(GptsTools.tool_key == tool_key)
         async with get_async_db_session() as session:
-            result = await session.exec(statement)
-            return result.first()
+            result = await session.execute(statement)
+            return result.scalars().first()

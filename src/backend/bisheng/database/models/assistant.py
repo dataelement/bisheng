@@ -3,7 +3,8 @@ from enum import Enum
 from typing import List, Optional, Tuple
 
 from sqlalchemy import JSON, Column, DateTime, Text, and_, func, or_, text
-from sqlmodel import Field, select, col
+from sqlalchemy import Integer,String
+from sqlmodel import Field, select
 
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.models.base import SQLModelSerializable
@@ -20,42 +21,46 @@ class AssistantStatus(Enum):
 
 
 class AssistantBase(SQLModelSerializable):
-    id: Optional[str] = Field(default_factory=generate_uuid, nullable=False, primary_key=True,
-                              description='Uniqueness quantificationID')
-    name: str = Field(default='', description='The assistant name.')
-    logo: str = Field(default='', description='logoimage URL')
-    desc: str = Field(default='', sa_column=Column(Text), description='Assistant description')
-    system_prompt: str = Field(default='', sa_column=Column(Text), description='System Prompt')
-    prompt: str = Field(default='', sa_column=Column(Text), description='User Visible Descriptor')
-    guide_word: Optional[str] = Field(default='', sa_column=Column(Text), description='Ice Breaker ')
-    guide_question: Optional[List] = Field(default_factory=list, sa_column=Column(JSON),
-                                           description='Facilitation Questions')
-    model_name: str = Field(default='', description='Corresponds to the only model in the model managementID')
-    temperature: float = Field(default=0.5, description='Model Temperature')
-    max_token: int = Field(default=32000, description='MaxtokenQuantity')
-    status: int = Field(default=AssistantStatus.OFFLINE.value, description='Whether the assistant is online')
-    user_id: int = Field(default=0, description='Create UserID')
-    is_delete: int = Field(default=0, description='Remove logo')
+    # id: Optional[str] = Field(default_factory=generate_uuid, nullable=False, primary_key=True, description='唯一ID')
+    id: Optional[str] = Field(default_factory=generate_uuid, description='唯一ID' , sa_column=Column(String, primary_key=True,))
+    name: str = Field(default='', description='助手名称')
+    logo: str = Field(default='', description='logo图片地址')
+    desc: str = Field(default='', sa_column=Column(Text), description='助手描述')
+    system_prompt: str = Field(default='', sa_column=Column(Text), description='系统提示词')
+    prompt: str = Field(default='', sa_column=Column(Text), description='用户可见描述词')
+    guide_word: Optional[str] = Field(default='', sa_column=Column(Text), description='开场白')
+    guide_question: Optional[List] = Field(default_factory=list, sa_column=Column(JSON), description='引导问题')
+    model_name: str = Field(default='', description='对应模型管理里模型的唯一ID')
+    temperature: float = Field(default=0.5, description='模型温度')
+    max_token: int = Field(default=32000, description='最大token数')
+    status: int = Field(default=AssistantStatus.OFFLINE.value, description='助手是否上线')
+    user_id: int = Field(default=0, description='创建用户ID')
+    is_delete: int = Field(default=0, description='删除标志')
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
-    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+    update_time: Optional[datetime] = Field(default=None,
+                                            sa_column=Column(DateTime,
+                                                             nullable=False,
+                                                             server_default=text(
+                                                                 'CURRENT_TIMESTAMP')))
 
 
 class AssistantLinkBase(SQLModelSerializable):
-    id: Optional[int] = Field(default=None, nullable=False, primary_key=True, description='Uniqueness quantificationID')
-    assistant_id: Optional[str] = Field(default=0, index=True, description='assistantID')
-    tool_id: Optional[int] = Field(default=0, index=True, description='ToolsID')
-    flow_id: Optional[str] = Field(default='', index=True, description='SkillID')
-    knowledge_id: Optional[int] = Field(default=0, index=True, description='The knowledge base uponID')
+    # id: Optional[int] = Field(default=None, nullable=False, primary_key=True, description='唯一ID')
+    id: Optional[int] = Field(default=None, description='唯一ID' , sa_column=Column(Integer, primary_key=True, autoincrement=True))
+    assistant_id: Optional[str] = Field(default=0, index=True, description='助手ID')
+    tool_id: Optional[int] = Field(default=0, index=True, description='工具ID')
+    flow_id: Optional[str] = Field(default='', index=True, description='技能ID')
+    knowledge_id: Optional[int] = Field(default=0, index=True, description='知识库ID')
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
 
 
 class Assistant(AssistantBase, table=True):
-    id: str = Field(default_factory=generate_uuid, primary_key=True, unique=True)
+    # id: str = Field(default_factory=generate_uuid, primary_key=True, unique=True)
+    id: str = Field(default_factory=generate_uuid, sa_column=Column(String, primary_key=True))
 
 
 class AssistantLink(AssistantLinkBase, table=True):
@@ -99,7 +104,7 @@ class AssistantDao(AssistantBase):
     async def aget_one_assistant(cls, assistant_id: str) -> Assistant:
         statement = select(Assistant).where(Assistant.id == assistant_id)
         async with get_async_db_session() as session:
-            return (await session.exec(statement)).first()
+            return (await session.execute(statement)).scalars().first()
 
     @classmethod
     def get_assistants_by_ids(cls, assistant_ids: List[str]) -> List[Assistant]:
@@ -289,8 +294,8 @@ class AssistantLinkDao(AssistantLink):
     async def get_assistant_link(cls, assistant_id: str) -> List[AssistantLink]:
         async with get_async_db_session() as session:
             statement = select(AssistantLink).where(AssistantLink.assistant_id == assistant_id)
-            result = await session.exec(statement)
-            return result.all()
+            result = await session.execute(statement)
+            return result.scalars().all()
 
     @classmethod
     def update_assistant_tool(cls, assistant_id: str, tool_list: List[int]):

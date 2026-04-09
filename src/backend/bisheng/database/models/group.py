@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Dict, List, Optional
 
-from sqlalchemy import Column, DateTime, delete, text, update
+from sqlalchemy import Column, DateTime, delete, text, update,Integer
 from sqlmodel import Field, select
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -23,8 +23,9 @@ class GroupBase(SQLModelSerializable):
 
 
 class Group(GroupBase, table=True):
-    # id = 2 Represents the default user group
-    id: Optional[int] = Field(default=None, primary_key=True)
+    # id = 2 表示默认用户组
+    # id: Optional[int] = Field(default=None, primary_key=True)
+    id: Optional[int] = Field(default=None, sa_column=Column(Integer, primary_key=True, autoincrement=True))
 
 
 class GroupRead(GroupBase):

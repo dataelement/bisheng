@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Column, DateTime, text
+from sqlalchemy import Column, DateTime, text,Integer
 from sqlmodel import Field
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -26,7 +26,8 @@ class ReportBase(SQLModelSerializable):
 
 class Report(ReportBase, table=True):
     __tablename__ = 't_report'
-    id: Optional[int] = Field(default=None, primary_key=True)
+    # id: Optional[int] = Field(default=None, primary_key=True)
+    id: Optional[int] = Field(default=None, sa_column=Column(Integer, primary_key=True, autoincrement=True))
 
 
 class ReportRead(ReportBase):

@@ -28,9 +28,10 @@ async def init_default_data():
     if await redis_client.asetNx('init_default_data', '1'):
         try:
             db_manager = await get_database_connection()
+            # await db_manager.delete_db_and_tables()
             await db_manager.create_db_and_tables()
             async with get_async_db_session() as session:
-                db_role = await session.exec(select(Role).limit(1))
+                db_role = await session.execute(select(Role).limit(1))
                 db_role = db_role.all()
                 if not db_role:
                     # Initialize system configuration, Admin has all permissions
@@ -56,8 +57,8 @@ async def init_default_data():
                                    third_id=WebMenuResource.KNOWLEDGE_SPACE.value),
                     ])
                     await session.commit()
-                # Add Default User Group
-                group = await session.exec(select(Group).limit(1))
+                # 添加默认用户组
+                group = await session.execute(select(Group).limit(1))
                 group = group.all()
                 if not group:
                     group = Group(id=DefaultGroup, group_name='Default user group', create_user=1, update_user=1)
@@ -65,7 +66,7 @@ async def init_default_data():
                     await session.commit()
                     await session.refresh(group)
 
-                user = await session.exec(select(User).limit(1))
+                user = await session.execute(select(User).limit(1))
                 user = user.all()
                 if not user and settings.admin:
                     md5 = hashlib.md5()
@@ -80,8 +81,20 @@ async def init_default_data():
                     await session.refresh(user)
                     await UserRoleDao.set_admin_user(user.user_id)
 
-                # Initialize preset application templates
-                templates = await session.exec(select(Template).limit(1))
+                component_db = await session.execute(select(Component).limit(1))
+                component_db = component_db.all()
+                if not component_db:
+                    db_components = []
+                    json_items = json.loads(read_from_conf('../database/data/component.json'))
+                    for item in json_items:
+                        for k, v in item.items():
+                            db_component = Component(name=k, user_id=1, user_name='admin', data=v)
+                            db_components.append(db_component)
+                    session.add_all(db_components)
+                    await session.commit()
+
+                # 初始化预置技能模板
+                templates = await session.execute(select(Template).limit(1))
                 templates = templates.all()
                 if not templates:
                     json_items = json.loads(read_from_conf('../database/data/template.json'))
@@ -89,8 +102,8 @@ async def init_default_data():
                         session.add(Template(**item))
                     await session.commit()
 
-                # Initialize preset tools list
-                preset_tools = await session.exec(select(GptsTools).limit(1))
+                # 初始化预置工具列表
+                preset_tools = await session.execute(select(GptsTools).limit(1))
                 preset_tools = preset_tools.all()
                 if not preset_tools:
                     preset_tools = []
@@ -100,8 +113,8 @@ async def init_default_data():
                         preset_tools.append(preset_tool)
                     session.add_all(preset_tools)
                     await session.commit()
-                # Initialize Preset Tool Categories
-                preset_tools_type = await session.exec(select(GptsToolsType).limit(1))
+                # 初始化预置工具类别
+                preset_tools_type = await session.execute(select(GptsToolsType).limit(1))
                 preset_tools_type = preset_tools_type.all()
                 if not preset_tools_type:
                     preset_tools_type = []
@@ -113,18 +126,45 @@ async def init_default_data():
                     await session.commit()
                     # Set the category the preset tool belongs to, needs to be consistent with the preset data, soidIs Fixed
                     for i in range(1, 7):
-                        await session.exec(update(GptsTools).where(GptsTools.id == i).values(type=i))
-                    # Tools under the category of Sky Eye Examination
+                        await session.execute(update(GptsTools).where(GptsTools.id == i).values(type=i))
+                    # 属于天眼查类别下的工具
                     tyc_types: List[int] = list(range(7, 18))
-                    await session.exec(
+                    await session.execute(
                         update(GptsTools).where(GptsTools.id.in_(tyc_types)).values(type=7))
                     # Instruments belonging to the financial category
                     jr_types: List[int] = list(range(18, 28))
-                    await session.exec(
+                    await session.execute(
                         update(GptsTools).where(GptsTools.id.in_(jr_types)).values(type=8))
                     await session.commit()
+                # 初始化配置可用于微调的基准模型
+                preset_models = await session.execute(select(SftModel).limit(1))
+                preset_models = preset_models.all()
+                if not preset_models:
+                    preset_models = []
+                    json_items = json.loads(read_from_conf('../database/data/sft_model.json'))
+                    for item in json_items:
+                        preset_model = SftModel(**item)
+                        preset_models.append(preset_model)
+                    session.add_all(preset_models)
+                    await session.commit()
 
-            # Initialize Databaseconfig
+                # 初始化补充默认的技能版本表
+                flow_version = await session.execute(select(FlowVersion).limit(1))
+                flow_version = flow_version.all()
+                if not flow_version:
+                    sql_query = text(
+                        "INSERT INTO `flowversion` (`name`, `flow_id`, `data`, `user_id`, `is_current`, `is_delete`) \
+                     select 'v0', `id` as flow_id, `data`, `user_id`, 1, 0 from `flow`;")
+                    await session.execute(sql_query)
+                    await session.commit()
+                    # 修改表单数据表
+                    sql_query = text(
+                        'UPDATE `t_variable_value` a SET a.version_id=(SELECT `id` from `flowversion` '
+                        'WHERE flow_id=a.flow_id and is_current=1)'
+                    )
+                    await session.execute(sql_query)
+                    await session.commit()
+            # 初始化数据库config
             await settings.init_config()
 
             # init dashboard data
@@ -134,6 +174,8 @@ async def init_default_data():
             # we can ignore it
             if 'already exists' not in str(exc):
                 logger.exception(f'Error creating DB and tables: {exc}')
+                import traceback
+                traceback.print_exc()
                 raise RuntimeError('Error creating DB and tables') from exc
         finally:
             await redis_client.adelete('init_default_data')
