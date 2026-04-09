@@ -916,7 +916,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         async def get_folder_name(tmp_file_level_path: str) -> str:
             if not tmp_file_level_path:
                 return ""
-            folder_ids = [int(fid) for fid in file_level_path.split("/") if fid]
+            folder_ids = [int(fid) for fid in tmp_file_level_path.split("/") if fid]
             not_exists_ids = [one for one in folder_ids if one not in folder_id2name]
             if not_exists_ids:
                 folder_list = await KnowledgeFileDao.aget_file_by_ids(folder_ids)
