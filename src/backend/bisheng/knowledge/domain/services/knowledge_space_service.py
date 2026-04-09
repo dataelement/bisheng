@@ -1256,11 +1256,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     os.makedirs(local_path, exist_ok=True)
                     continue
 
-                if not rec.object_name:  # no stored object – skip
+                target_object_name = rec.object_name
+                # If file source is CHANNEL, use preview_object_name to download the HTML file
+                if rec.file_source == FileSource.CHANNEL.value and rec.preview_file_object_name:
+                    target_object_name = rec.preview_file_object_name
+                    name, _ = os.path.splitext(rec.file_name)
+                    local_path = os.path.join(local_dir, f"{name}.html")
+
+                if not target_object_name:  # no stored object – skip
                     continue
 
                 try:
-                    response = minio.download_object_sync(object_name=rec.object_name)
+                    response = minio.download_object_sync(object_name=target_object_name)
                     with open(local_path, 'wb') as f:
                         for one in response.stream(65536):
                             f.write(one)
