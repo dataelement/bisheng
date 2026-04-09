@@ -86,7 +86,6 @@ export function useFileUpload({
             }));
             setUploadingFiles(prev => [...placeholders, ...prev]);
 
-            showToast({ message: localize("com_knowledge.processing_files", { 0: fileArray.length }), severity: NotificationSeverity.SUCCESS });
 
             // Upload each file and check for duplicates
             const normalPaths: string[] = [];
@@ -127,9 +126,11 @@ export function useFileUpload({
                         parent_id: currentFolderId ? Number(currentFolderId) : null,
                     });
                     await loadFiles(currentPage);
-                } catch {
-                    showToast({ message: localize("com_knowledge.file_register_failed"), severity: NotificationSeverity.ERROR });
+                } catch (e) {
+                    // showToast({ message: localize("com_knowledge.file_register_failed"), severity: NotificationSeverity.ERROR });
                 }
+            } else {
+                showToast({ message: localize("com_knowledge.processing_files", { 0: fileArray.length }), severity: NotificationSeverity.SUCCESS });
             }
 
             // Clear placeholders after list data has been updated

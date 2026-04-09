@@ -512,7 +512,7 @@ export function AddToKnowledgeModal({ open, onOpenChange, articleId }: AddToKnow
                 setPendingConfirm({ spaceId, parentFolderId });
                 setShowDuplicate(true);
             } else {
-                showToast({ message: localize("com_subscription.add_to_space_failed"), severity: NotificationSeverity.ERROR });
+                // showToast({ message: localize("com_subscription.add_to_space_failed"), severity: NotificationSeverity.ERROR });
             }
         } finally {
             setIsConfirming(false);

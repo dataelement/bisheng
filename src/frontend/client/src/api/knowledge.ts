@@ -961,7 +961,8 @@ export async function addFilesApi(
 ): Promise<KnowledgeFile[]> {
     const res = await request.post(
         `/api/v1/knowledge/space/${space_id}/files`,
-        data
+        data,
+        { showError: true }
     ) as ApiResponse<RawSpaceChild[]>;
     return (res?.data || []).map(raw => mapChild(raw, space_id));
 }
@@ -981,7 +982,10 @@ export async function addArticleToKnowledgeApi(
         article_ids,
         parent_id: parent_id ? Number(parent_id) : null,
         ...(force_replace ? { force_replace: true } : {}),
-    });
+    }, { showError: true });
+    if (res?.status_code !== undefined && res.status_code !== 200) {
+        throw { response: { data: res } };
+    }
     return res;
 }
 
