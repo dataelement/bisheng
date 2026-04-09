@@ -183,9 +183,11 @@ export function FileCard({
     return (
         <Card
             className={cn(
-                "group rounded-lg overflow-hidden border p-0 gap-0",
+                "group rounded-md overflow-hidden border-[0.5px] p-0 gap-0 shadow-none py-0",
                 cardOpensPreviewOrFolder ? "cursor-pointer" : "cursor-default",
-                isSelected ? "border-primary shadow-sm" : "hover:border-[#c9cdd4]",
+                isSelected
+                    ? "border-primary shadow-sm"
+                    : "border-[#ECECEC] hover:border-[#c9cdd4]",
                 hovered && "shadow-md"
             )}
             style={{

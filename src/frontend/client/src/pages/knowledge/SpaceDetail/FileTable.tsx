@@ -230,6 +230,8 @@ const SortableHeader = ({
     headerAlignEnd,
     /** true：排序图标在标题左侧（如文件大小列） */
     sortIconBeforeText,
+    /** false：左侧不分隔竖线（如紧贴复选框列的「文件名」表头） */
+    leadingBorder = true,
 }: {
     children: React.ReactNode;
     sortKey: string;
@@ -242,6 +244,7 @@ const SortableHeader = ({
     showShadow?: boolean;
     headerAlignEnd?: boolean;
     sortIconBeforeText?: boolean;
+    leadingBorder?: boolean;
 }) => {
     const isActive = currentSort?.key === sortKey;
     const direction = isActive ? currentSort.direction : "asc";
@@ -277,7 +280,8 @@ const SortableHeader = ({
         >
             <div
                 className={cn(
-                    "flex min-w-0 items-center gap-1.5 border-l pl-3",
+                    "flex min-w-0 items-center gap-1.5 pl-3",
+                    leadingBorder && "border-l",
                     headerAlignEnd && "w-full justify-end"
                 )}
             >
@@ -362,6 +366,7 @@ function FileTableHeader({
                     onResizeStart={onResizeStart}
                     stickyLeft={columnWidths.checkbox}
                     showShadow={showLeftShadow}
+                    leadingBorder={false}
                 >
                     {localize("com_knowledge.file_name")}</SortableHeader>
 

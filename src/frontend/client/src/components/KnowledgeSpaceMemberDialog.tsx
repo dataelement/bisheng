@@ -23,6 +23,7 @@ import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
+    DropdownMenuSeparator,
     DropdownMenuTrigger
 } from "~/components/ui/DropdownMenu";
 import {
@@ -227,9 +228,12 @@ export function KnowledgeSpaceMemberDialog({
                             {localize("member") || "订阅用户"}
                         </DropdownMenuItem>
                         {m.role === "member" && (
-                            <DropdownMenuItem onClick={() => setRemoveTarget(m)}>
-                                {localize("remove")}
-                            </DropdownMenuItem>
+                            <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={() => setRemoveTarget(m)}>
+                                    {localize("remove")}
+                                </DropdownMenuItem>
+                            </>
                         )}
                     </DropdownMenuContent>
                 </DropdownMenu>
@@ -270,9 +274,12 @@ export function KnowledgeSpaceMemberDialog({
                         {localize("member") || "订阅用户"}
                     </DropdownMenuItem>
                     {canCreatorManage && (
-                        <DropdownMenuItem onClick={() => setRemoveTarget(m)}>
-                            {localize("remove")}
-                        </DropdownMenuItem>
+                        <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => setRemoveTarget(m)}>
+                                {localize("remove")}
+                            </DropdownMenuItem>
+                        </>
                     )}
                 </DropdownMenuContent>
             </DropdownMenu>
@@ -289,12 +296,12 @@ export function KnowledgeSpaceMemberDialog({
                     className="z-[100] flex h-[600px] w-[700px] max-h-[600px] max-w-[700px] flex-col gap-0 overflow-hidden p-0 rounded-[10px]"
                     close={false}
                 >
-                    <DialogHeader className="flex shrink-0 flex-row items-center justify-between gap-3 px-6 py-4 sm:text-left">
-                        <DialogTitle className="m-0 text-[16px] font-semibold leading-[24px] text-[#1D2129]">
+                    <DialogHeader className="flex h-[48px] shrink-0 flex-row items-center justify-between gap-3 space-y-0 px-6 py-0 sm:text-left">
+                        <DialogTitle className="m-0 inline-flex items-center text-[16px] font-semibold leading-[24px] text-[#1D2129]">
                             {localize("com_subscription.management_member")}
                         </DialogTitle>
-                        <DialogClose className="shrink-0 rounded-md p-1 text-[#86909C] opacity-90 outline-none ring-offset-background transition-opacity hover:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
-                            <X className="size-4"/>
+                        <DialogClose className="inline-flex size-6 shrink-0 items-center justify-center rounded-md p-0 text-[#86909C] opacity-90 outline-none ring-offset-background transition-opacity hover:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+                            <X className="size-4" aria-hidden />
                             <span className="sr-only">Close</span>
                         </DialogClose>
                     </DialogHeader>
@@ -358,13 +365,13 @@ export function KnowledgeSpaceMemberDialog({
                         </div>
                     </div>
 
-                    <div className="flex h-[72px] shrink-0 items-center justify-end px-6 text-[12px]">
+                    <div className="flex h-[72px] shrink-0 items-center justify-end px-6 text-[14px]">
                         <div className="flex items-center gap-4">
                         <span className="shrink-0 leading-none">
                             <span className="text-[#4E5969]">{localize("com_subscription.member_pagination_1")}</span>
                             <span className="text-[#165DFF]">{total}</span>
                             <span className="text-[#4E5969]">{localize("com_subscription.member_pagination_2")}</span>
-                            <span className="text-[#165DFF]">{PAGE_SIZE}</span>
+                            <span className="text-[#4E5969]">{PAGE_SIZE}</span>
                             <span className="text-[#4E5969]">{localize("com_subscription.member_pagination_3")}</span>
                         </span>
                         <div className="flex shrink-0 items-center gap-1.5">
@@ -385,10 +392,10 @@ export function KnowledgeSpaceMemberDialog({
                                         <button
                                             type="button"
                                             className={cn(
-                                                "flex h-6 min-w-6 items-center justify-center rounded-[4px] px-1.5 text-[12px] transition-colors",
+                                                "flex h-6 min-w-6 items-center justify-center px-1.5 text-[14px] transition-colors",
                                                 p === page
-                                                    ? "border border-[#165DFF] text-[#165DFF]"
-                                                    : "border border-transparent text-[#4E5969] hover:text-[#165DFF]"
+                                                    ? "rounded-[8px] border border-[#165DFF] text-[#165DFF]"
+                                                    : "rounded-[4px] border border-transparent text-[#4E5969] hover:text-[#165DFF]"
                                             )}
                                             onClick={() => setPage(p)}
                                         >

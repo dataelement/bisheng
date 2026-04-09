@@ -93,7 +93,7 @@ export default function ChannelItem({
         >
             <div className="flex items-center gap-1 flex-1 min-w-0">
                 {/* 左侧图标保持不变 */}
-                <div className={`flex-shrink-0 flex items-center justify-center size-5 rounded-md ${isActive ? "bg-white border border-[#165dff]/20 shadow-sm" : ""}`}>
+                <div className={`flex-shrink-0 flex items-center justify-center size-5 rounded-md ${isActive ? "bg-white" : ""}`}>
                     {isActive ? (
                         <ChannelAppeffectIcon className="size-3.5" />
                     ) : (

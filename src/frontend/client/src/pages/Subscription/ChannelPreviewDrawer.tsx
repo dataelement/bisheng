@@ -1,6 +1,6 @@
-import { useLocalize } from "~/hooks";
+import { useLocalize, useScrollbarWhileScrolling } from "~/hooks";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronRight } from "lucide-react";
 import {
@@ -51,8 +51,7 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscrip
     const [currentPage, setCurrentPage] = useState(1);
     const [hasMore, setHasMore] = useState(false);
     const [loadingMore, setLoadingMore] = useState(false);
-    const [isBodyScrolling, setIsBodyScrolling] = useState(false);
-    const bodyScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const { onScroll: onScrollbarWhileScrolling, scrollingProps } = useScrollbarWhileScrolling();
 
     // 切换频道/关闭抽屉时，重置本地订阅交互态，避免状态串到下一条频道
     useEffect(() => {
@@ -233,12 +232,6 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscrip
         !isCreatorView &&
         effectiveSubscribeStatus !== "subscribed";
 
-    const handleBodyScroll = () => {
-        setIsBodyScrolling(true);
-        if (bodyScrollTimerRef.current) clearTimeout(bodyScrollTimerRef.current);
-        bodyScrollTimerRef.current = setTimeout(() => setIsBodyScrolling(false), 500);
-    };
-
     // Handle error — channel not found, inaccessible, or articles cannot be loaded
     useEffect(() => {
         if (open && (isDetailError || isArticlesError)) {
@@ -252,7 +245,7 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscrip
         <Sheet open={open} onOpenChange={onOpenChange}>
             <SheetContent
                 side="right"
-                className="w-[1000px] sm:max-w-[1000px] p-0 px-16 flex flex-col"
+                className="w-[1000px] sm:max-w-[1000px] p-0 px-16 flex flex-col h-full min-h-0 overflow-hidden"
                 hideClose
                 onCloseAutoFocus={(e) => e.preventDefault()}
             >
@@ -347,9 +340,9 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscrip
 
                         {/* Article List / Pending Message */}
                         <div
-                            className="flex-1 overflow-y-auto scroll-on-scroll px-6"
-                            onScroll={handleBodyScroll}
-                            data-scrolling={isBodyScrolling ? "true" : "false"}
+                            className="flex-1 min-h-0 overflow-y-auto scroll-on-scroll px-6"
+                            onScroll={onScrollbarWhileScrolling}
+                            {...scrollingProps}
                         >
                             {hideArticles ? (
                                 <div className="flex flex-col items-center justify-center h-full min-h-[400px]">

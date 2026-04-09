@@ -244,8 +244,11 @@ export function CrawlPreviewDialog({
                         >
                             <div className="flex items-center gap-3 p-3 rounded-lg">
                                 <Avatar className="w-10 h-10 border border-[#E5E6EB]">
-                                    {previewData.icon ? <AvatarImage src={previewData.icon} alt={previewData.name} /> : null}
-                                    <AvatarName name={previewData.name} className="text-xs" />
+                                    {previewData.icon ? (
+                                        <AvatarImage src={previewData.icon} alt={previewData.name} />
+                                    ) : (
+                                        <AvatarName name={previewData.name} className="text-xs" />
+                                    )}
                                 </Avatar>
                                 <div>
                                     <p className="text-[14px] font-medium text-[#1D2129]">

@@ -17,7 +17,7 @@ import {
     getSpaceInfoApi,
     subscribeSpaceApi
 } from "~/api/knowledge";
-import { useLocalize } from "~/hooks";
+import { useLocalize, useScrollbarWhileScrolling } from "~/hooks";
 
 interface KnowledgeSpacePreviewDrawerProps {
     spaceId: string | undefined;
@@ -35,6 +35,7 @@ export function KnowledgeSpacePreviewDrawer({
 }: KnowledgeSpacePreviewDrawerProps) {
     const localize = useLocalize();
     const { showToast } = useToastContext();
+    const { onScroll: onScrollbarWhileScrolling, scrollingProps } = useScrollbarWhileScrolling();
     const MAX_JOINED_SPACES = 50;
 
     const [space, setSpace] = useState<KnowledgeSpace | null>(null);
@@ -271,7 +272,7 @@ export function KnowledgeSpacePreviewDrawer({
         <Sheet open={open} onOpenChange={onOpenChange}>
             <SheetContent
                 side="right"
-                className="w-[1000px] sm:max-w-[1000px] p-0 px-12 flex flex-col h-full"
+                className="w-[1000px] sm:max-w-[1000px] p-0 px-12 flex flex-col h-full min-h-0 overflow-hidden"
                 hideClose
             >
                 <button
@@ -330,13 +331,15 @@ export function KnowledgeSpacePreviewDrawer({
                         </SheetHeader>
 
                         <div
-                            className="flex-1 overflow-y-auto px-6 py-4"
+                            className="flex-1 min-h-0 overflow-y-auto scroll-on-scroll px-6 py-4"
                             onScroll={(e) => {
+                                onScrollbarWhileScrolling();
                                 const el = e.currentTarget;
                                 if (el.scrollTop + el.clientHeight >= el.scrollHeight - 80) {
                                     void loadMoreChildren();
                                 }
                             }}
+                            {...scrollingProps}
                         >
                             {canViewFiles ? (
                                 <div className="space-y-2">

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type UIEvent } from "react";
 import { Search, ArrowLeft } from "lucide-react";
 import { Input } from "~/components/ui/Input";
 import { Button } from "~/components/ui/Button";
@@ -6,7 +6,7 @@ import { ChannelSquareCard } from "./ChannelSquareCard";
 import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
 import { getChannelSquareApi, subscribeManagerChannelApi } from "~/api/channels";
-import { useLocalize } from "~/hooks";
+import { useLocalize, useScrollbarWhileScrolling } from "~/hooks";
 
 type SquareStatus = "join" | "joined" | "pending" | "private" | "rejected";
 
@@ -59,6 +59,7 @@ export default function ChannelSquare({
   const [hasMorePage, setHasMorePage] = useState(true);
   const [allChannels, setAllChannels] = useState<SquareChannel[]>([]);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const { onScroll: onScrollShowScrollbar, scrollingProps } = useScrollbarWhileScrolling();
   const { showToast } = useToastContext();
   const localize = useLocalize();
   const [joiningId, setJoiningId] = useState<string | null>(null);
@@ -215,10 +216,10 @@ export default function ChannelSquare({
 
   const visibleChannels = filteredChannels;
 
-  useEffect(() => {
-    const node = scrollRef.current;
-    if (!node) return;
-    const onScroll = () => {
+  const handleListScroll = useCallback(
+    (e: UIEvent<HTMLDivElement>) => {
+      onScrollShowScrollbar();
+      const node = e.currentTarget;
       if (loadingMore || !hasMorePage) return;
       const threshold = 60;
       if (node.scrollTop + node.clientHeight >= node.scrollHeight - threshold) {
@@ -227,10 +228,9 @@ export default function ChannelSquare({
           setLoadingMore(false);
         });
       }
-    };
-    node.addEventListener("scroll", onScroll);
-    return () => node.removeEventListener("scroll", onScroll);
-  }, [hasMorePage, loadingMore, load, page]);
+    },
+    [hasMorePage, loadingMore, load, onScrollShowScrollbar, page]
+  );
 
   // 将频道分成每行3个
   const channelRows: typeof visibleChannels[] = [];
@@ -260,23 +260,25 @@ export default function ChannelSquare({
         )}
 
         {/* 主要内容 */}
-        <div className="relative max-w-[1140px] mx-auto w-full flex flex-col items-center justify-center pt-7 pb-5 px-4">
+        <div className="relative max-w-[1140px] mx-auto w-full flex flex-col items-center justify-center pt-7 pb-6 px-4">
 
           <h1 className="text-[26px] font-semibold text-[#335CFF] mb-1">
             {tTitle}
           </h1>
-          <p className="text-[13px] text-[#86909C] mb-3">
+          <p className="text-[13px] text-[#86909C]">
             {tSubtitle}
           </p>
-
-          {/* 搜索栏 */}
-
         </div>
       </div>
 
       {/* 频道列表区域 */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto bg-white">
-        <div className="relative w-full max-w-[480px] mx-auto mt-2 mb-1">
+      <div
+        ref={scrollRef}
+        className="flex-1 overflow-y-auto scroll-on-scroll bg-white"
+        onScroll={handleListScroll}
+        {...scrollingProps}
+      >
+        <div className="relative w-full max-w-[480px] mx-auto mb-6">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#8B8FA8] pointer-events-none" />
           <Input
             type="text"
@@ -291,7 +293,7 @@ export default function ChannelSquare({
             className="pl-9 h-8 text-[12px] rounded-md bg-white border-[#E5E6EB] focus:border-[#165DFF]"
           />
         </div>
-        <div className="max-w-[1032px] mx-auto px-4 py-4">
+        <div className="max-w-[1032px] mx-auto px-4 pb-4 pt-0">
 
           {channelRows.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 text-[#86909c]">

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Search, Trash2, Check, XIcon } from "lucide-react";
+import { Trash2, Check, XIcon } from "lucide-react";
 import { Dialog, DialogContent } from "~/components/ui/Dialog";
+import { ExpandableSearchField } from "~/components/ui/ExpandableSearchField";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "~/components/ui/Tabs";
 import { Button } from "~/components/ui/Button";
 import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
@@ -60,11 +61,6 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
     const [notifications, setNotifications] = useState<MessageItem[]>([]);
     const [searchQuery, setSearchQuery] = useState("");
     const [onlyUnread, setOnlyUnread] = useState(false);
-    const isReadAllSelected = !onlyUnread;
-    const [showSearch, setShowSearch] = useState(false);
-    const [hasSearched, setHasSearched] = useState(false);
-
-    const searchInputRef = useRef<HTMLInputElement | null>(null);
     /** Tracks row hover to toggle delete button (instead of relying on the time column hover). */
     const [dateSlotHoverId, setDateSlotHoverId] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
@@ -610,21 +606,36 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
             >
                 {/* Row 1: Avatar + message text + right slot */}
                 <div className="flex items-center gap-3">
-                    <Avatar className="size-9 flex-shrink-0">
-                        {userAvatar ? <AvatarImage src={userAvatar} alt={userName} /> : null}
-                        <AvatarName name={userName} className="text-xs" />
-                    </Avatar>
+                    <TooltipAnchor
+                        side="left"
+                        hideArrow
+                        className="shrink-0"
+                        tooltipClassName="box-border flex h-[64px] w-[151px] flex-col justify-center overflow-hidden rounded-[8px] border border-solid border-[#EBECF0] bg-white p-0 opacity-100 shadow-[0_4px_12px_rgba(0,0,0,0.08)] z-[100]"
+                        description={
+                            <div className="flex h-full w-full flex-col justify-center px-3 py-2">
+                                <div className="truncate text-[14px] font-normal leading-tight text-[#1D2129]">
+                                    {userName}
+                                </div>
+                                {userGroup ? (
+                                    <div className="mt-0.5 line-clamp-2 text-left text-[12px] font-normal leading-tight text-[#A9AEB8]">
+                                        {userGroup}
+                                    </div>
+                                ) : null}
+                            </div>
+                        }
+                    >
+                        <Avatar className="size-9 flex-shrink-0">
+                            {userAvatar ? (
+                                <AvatarImage src={userAvatar} alt={userName} />
+                            ) : (
+                                <AvatarName name={userName} className="text-xs" />
+                            )}
+                        </Avatar>
+                    </TooltipAnchor>
 
                     {/* Message text */}
                     <div className={cn("flex-1 min-w-0 text-[14px] flex items-center gap-1 flex-wrap", textColor)}>
-                        <TooltipAnchor
-                            description={userGroup ? `${userName} - ${userGroup}` : userName}
-                            side="top"
-                        >
-                            <span className="font-medium cursor-pointer hover:text-[#165dff] shrink-0">
-                                @{userName}
-                            </span>
-                        </TooltipAnchor>
+                        <span className="shrink-0 font-medium hover:text-[#165dff]">@{userName}</span>
                         <span className="min-w-0">
                             {textPrefix}
                             {canNavigateTarget && (
@@ -683,20 +694,27 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                         </span>
                     </div>
 
-                    {/* Right slot: shows delete when the whole row is hovered */}
-                    <div className="flex-shrink-0 h-7 flex items-center justify-end whitespace-nowrap min-w-[72px]">
-                        {showRightSlotDelete ? (
+                    {/* Right slot: fixed width so hover swap (时间 ↔ 删除) does not shrink flex-1 文案区导致 @名 换行/抖动 */}
+                    <div className="relative flex h-7 w-[184px] flex-shrink-0 items-center justify-end whitespace-nowrap">
+                        <span
+                            className={cn(
+                                "text-[14px] tabular-nums text-[#999999]",
+                                showRightSlotDelete && "invisible"
+                            )}
+                            aria-hidden={showRightSlotDelete}
+                        >
+                            {formatMessageTime(createdAt)}
+                        </span>
+                        {showRightSlotDelete && (
                             <button
                                 type="button"
                                 onClick={() => handleDelete(id)}
-                                className="appearance-none h-7 px-3 inline-flex items-center gap-1.5 text-[14px] text-[#4e5969] bg-white border border-[#e5e6eb] rounded-[6px] hover:text-[#f53f3f] hover:border-[#f53f3f] transition-colors active:translate-y-0"
+                                className="absolute right-0 top-1/2 h-7 -translate-y-1/2 appearance-none px-3 inline-flex items-center gap-1.5 text-[14px] text-[#4e5969] bg-white border border-[#e5e6eb] rounded-[6px] hover:text-[#f53f3f] hover:border-[#f53f3f] transition-colors active:translate-y-0"
                                 title={localize("com_notifications_delete")}
                             >
                                 <Trash2 className="size-4" />
                                 {localize("com_notifications_delete")}
                             </button>
-                        ) : (
-                            <span className="text-[14px] text-[#999999]">{formatMessageTime(createdAt)}</span>
                         )}
                     </div>
                 </div>
@@ -776,7 +794,7 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="w-[calc(100vw-80px)] max-w-[800px] h-[80vh] max-h-[800px] p-0 gap-0 rounded-2xl shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
+            <DialogContent className="w-[calc(100vw-80px)] max-w-[800px] h-[80vh] max-h-[800px] p-0 gap-0 rounded-2xl shadow-[0_8px_24px_rgba(0,0,0,0.12)] duration-500 ease-out [animation-duration:450ms] data-[state=closed]:[animation-duration:320ms]">
                 <div className="flex flex-col h-full overflow-hidden rounded-2xl">
                     <div className="flex items-center justify-between h-12 px-6 flex-shrink-0">
                         <h2 className="text-[16px] font-semibold text-[#1d2129]">{localize("com_notifications_title")}</h2>
@@ -816,70 +834,12 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                                     </TabsList>
 
                                     <div className="flex items-center gap-3">
-                                        <div
-                                            className={[
-                                                "flex items-center h-8 rounded-lg border bg-white overflow-hidden",
-                                                showSearch
-                                                    ? "w-[220px] border-[#024DE3]"
-                                                    : "w-8 border-[#E5E6EB] cursor-pointer hover:bg-[#F7F8FA]",
-                                            ].join(" ")}
-                                            style={{
-                                                transitionProperty: 'background-color',
-                                                transitionDuration: '350ms',
-                                                transitionTimingFunction: 'ease-in-out'
-                                            }}
-                                            onClick={() => {
-                                                if (!showSearch) {
-                                                    setShowSearch(true);
-                                                    requestAnimationFrame(() => searchInputRef.current?.focus());
-                                                }
-                                            }}
-                                            title={showSearch ? undefined : localize("com_notifications_search")}
-                                        >
-                                            <div
-                                                className={[
-                                                    "flex items-center justify-center px-[7px] h-full shrink-0",
-                                                    showSearch ? "text-[#024DE3]" : "text-[#86909C]",
-                                                ].join(" ")}
-                                                style={{
-                                                    transitionProperty: 'background-color',
-                                                    transitionDuration: '350ms',
-                                                    transitionTimingFunction: 'ease-in-out'
-                                                }}
-                                            >
-                                                <Search className="size-4" />
-                                            </div>
-                                            <input
-                                                ref={searchInputRef}
-                                                type="text"
-                                                placeholder={localize("com_notifications_search_placeholder")}
-                                                value={searchQuery}
-                                                onChange={(e) => setSearchQuery(e.target.value)}
-                                                onKeyDown={(e) => {
-                                                    if (e.key === "Enter" && searchQuery.trim()) setHasSearched(true);
-                                                }}
-                                                onBlur={() => {
-                                                    // Keep the search box open as long as there is content.
-                                                    // Only collapse when the user clears it.
-                                                    if (!searchQuery.trim()) {
-                                                        setShowSearch(false);
-                                                        setSearchQuery("");
-                                                        setHasSearched(false);
-                                                    }
-                                                }}
-                                                tabIndex={showSearch ? 0 : -1}
-                                                style={{
-                                                    fontWeight: 400,
-                                                    transitionProperty: 'background-color',
-                                                    transitionDuration: '350ms',
-                                                    transitionTimingFunction: 'ease-in-out'
-                                                }}
-                                                className={[
-                                                    "flex-1 h-full pr-3 text-[14px] font-normal text-[#1d2129] bg-transparent outline-none placeholder:text-[#C9CDD4] placeholder:font-normal",
-                                                    showSearch ? "opacity-100" : "opacity-0 pointer-events-none",
-                                                ].join(" ")}
-                                            />
-                                        </div>
+                                        <ExpandableSearchField
+                                            value={searchQuery}
+                                            onChange={setSearchQuery}
+                                            placeholder={localize("com_notifications_search_placeholder")}
+                                            titleWhenCollapsed={localize("com_notifications_search")}
+                                        />
 
                                         <Button
                                             type="button"

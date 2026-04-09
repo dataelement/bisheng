@@ -1,4 +1,4 @@
-import { Lock, BookOpen } from "lucide-react";
+import { Lock } from "lucide-react";
 import { Avatar, AvatarImage } from "~/components/ui/Avatar";
 import { Button } from "~/components/ui/Button";
 import { Card, CardContent } from "~/components/ui/Card";
@@ -56,11 +56,10 @@ export function ChannelSquareCard({
   return (
     <Card
       className={cn(
-        "flex-1 min-w-0 gap-0 p-0 transition-all cursor-pointer rounded-[8px] border border-solid border-[#E5E6EB] bg-white shadow-none",
-        "hover:border-[#335CFF] hover:shadow-[0_8px_20px_0_rgba(117,145,212,0.12)]",
-        "hover:bg-[linear-gradient(0deg,#FFF_0%,#FFF_100%),linear-gradient(110deg,#F9FBFE_0%,#FFF_50%,#F9FBFE_100%)]",
+        "flex-1 min-w-0 gap-0 p-0 cursor-pointer rounded-[8px] border-[0.5px] border-solid border-[#EBECF0] bg-[linear-gradient(110deg,#F9FBFE_0%,#FFF_50%,#F9FBFE_100%)] shadow-none transition-all",
+        "hover:border-[1px] hover:border-solid hover:border-[#335CFF] hover:bg-[linear-gradient(0deg,#FFF_0%,#FFF_100%),linear-gradient(110deg,#F9FBFE_0%,#FFF_50%,#F9FBFE_100%)] hover:shadow-[0_8px_20px_0_rgba(117,145,212,0.12)]",
         isHighlighted &&
-          "border-[#335CFF] bg-[linear-gradient(0deg,#FFF_0%,#FFF_100%),linear-gradient(110deg,#F9FBFE_0%,#FFF_50%,#F9FBFE_100%)] shadow-[0_8px_20px_0_rgba(117,145,212,0.12)]"
+          "border-[1px] border-solid border-[#335CFF] bg-[linear-gradient(0deg,#FFF_0%,#FFF_100%),linear-gradient(110deg,#F9FBFE_0%,#FFF_50%,#F9FBFE_100%)] shadow-[0_8px_20px_0_rgba(117,145,212,0.12)]"
       )}
       onClick={onPreview}
     >
@@ -69,7 +68,7 @@ export function ChannelSquareCard({
         <div className="flex items-center justify-between gap-2">
           {/* 标题不要 flex-1：短标题时宽度跟内容走，锁才能紧贴文字；长标题靠 shrink+truncate */}
           <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
-            <h3 className="m-0 min-w-0 shrink truncate text-[15px] font-bold leading-[22px] text-[#1D2129]">
+            <h3 className="m-0 min-w-0 shrink truncate text-[14px] font-bold leading-[20px] text-[#1D2129]">
               {title}
             </h3>
             {isPrivateOrReview && (

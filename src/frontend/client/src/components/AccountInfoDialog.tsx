@@ -170,19 +170,37 @@ export function AccountInfoDialog({
             resetForm();
             setIsEditing(false);
         } catch (error: any) {
-            // 处理错误响应
+            const codeRaw =
+                error?.statusCode ??
+                error?.response?.data?.status_code ??
+                error?.response?.data?.code;
+            const code =
+                typeof codeRaw === "string" ? parseInt(codeRaw, 10) : Number(codeRaw);
+
+            // 10603：当前密码错误（接口常以 HTTP 200 + body.status_code 返回，需在 API 层抛出后才能进此处）
+            if (code === 10603) {
+                showToast({
+                    message: localize("com_account_info_toast_wrong_old_password"),
+                    severity: NotificationSeverity.INFO
+                });
+                return;
+            }
+
             const errorMessage =
+                error?.response?.data?.status_message ||
                 error?.response?.data?.message ||
                 error?.message ||
                 localize("com_account_info_toast_password_change_failed");
 
-            // 根据错误信息判断是否是原密码错误
+            const msg = String(errorMessage);
+
             if (
-                errorMessage.includes("原密码") ||
-                errorMessage.includes("密码不正确") ||
-                errorMessage.includes("incorrect") ||
-                errorMessage.includes("Incorrect current password") ||
-                errorMessage.includes("current password")
+                msg.includes("原密码") ||
+                msg.includes("当前密码") ||
+                msg.includes("密码不正确") ||
+                msg.includes("incorrect") ||
+                msg.includes("Incorrect current password") ||
+                msg.includes("current password")
             ) {
                 showToast({
                     message: localize("com_account_info_toast_wrong_old_password"),
@@ -190,7 +208,7 @@ export function AccountInfoDialog({
                 });
             } else {
                 showToast({
-                    message: errorMessage,
+                    message: msg || localize("com_account_info_toast_password_change_failed"),
                     severity: NotificationSeverity.INFO
                 });
             }

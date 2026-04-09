@@ -67,7 +67,7 @@ const ExploreCard = ({ agent, onClick, onShare }: { agent: any, onClick: (agent:
 
             {/* 右侧内容 */}
             <div className="flex flex-[1_0_0] flex-col h-full items-start min-w-px relative">
-                <p className="font-['PingFang_SC'] font-medium leading-[22px] text-[#212121] text-[14px] truncate w-full">
+                <p className="font-['PingFang_SC'] font-medium leading-[20px] text-[#212121] text-[14px] truncate w-full">
                     {agent.name}
                 </p>
 

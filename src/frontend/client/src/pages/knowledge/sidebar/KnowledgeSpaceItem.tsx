@@ -7,7 +7,7 @@ import {
     Users,
     LogOut,
 } from "lucide-react";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { KnowledgeSpace, SpaceRole } from "~/api/knowledge";
 import { NotificationSeverity } from "~/common";
 import {
@@ -28,6 +28,65 @@ import {
 import { useConfirm, useToastContext } from "~/Providers";
 import { useLocalize } from "~/hooks";
 import { ChannelPinIcon } from "~/components/icons/channels";
+
+function SpaceNotebookIcon({ active }: { active: boolean }) {
+    const clipId = `nb-${useId().replace(/:/g, "")}`;
+    return (
+        <svg
+            width={14}
+            height={14}
+            viewBox="0 0 16 16"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            className={`size-3.5 shrink-0 ${active ? "text-[#165DFF]" : "text-[#818181]"}`}
+            aria-hidden
+        >
+            <g clipPath={`url(#${clipId})`}>
+                <path d="M16 0H0V16H16V0Z" fill="white" fillOpacity={0.01} />
+                <path
+                    d="M2.66699 1.99998C2.66699 1.63179 2.96547 1.33331 3.33366 1.33331H12.667C13.0352 1.33331 13.3337 1.63179 13.3337 1.99998V14C13.3337 14.3682 13.0352 14.6666 12.667 14.6666H3.33366C2.96547 14.6666 2.66699 14.3682 2.66699 14V1.99998Z"
+                    stroke="currentColor"
+                    strokeWidth={1.33333}
+                    strokeLinejoin="round"
+                />
+                <path
+                    d="M5.33301 1.33331V14.6666"
+                    stroke="currentColor"
+                    strokeWidth={1.33333}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                />
+                <path d="M8 4H10.6667" stroke="currentColor" strokeWidth={1.33333} strokeLinecap="round" strokeLinejoin="round" />
+                <path
+                    d="M8 6.66669H10.6667"
+                    stroke="currentColor"
+                    strokeWidth={1.33333}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                />
+                <path
+                    d="M3.33301 1.33331H7.33301"
+                    stroke="currentColor"
+                    strokeWidth={1.33333}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                />
+                <path
+                    d="M3.33301 14.6667H7.33301"
+                    stroke="currentColor"
+                    strokeWidth={1.33333}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                />
+            </g>
+            <defs>
+                <clipPath id={clipId}>
+                    <rect width={16} height={16} fill="white" />
+                </clipPath>
+            </defs>
+        </svg>
+    );
+}
 
 interface KnowledgeSpaceItemProps {
     space: KnowledgeSpace;
@@ -89,13 +148,8 @@ export default function KnowledgeSpaceItem({
             onClick={() => !isEditing && onSelect(space)}
         >
             <div className="flex items-center gap-1 flex-1 min-w-0">
-                <div className={`flex-shrink-0 flex items-center justify-center size-5 rounded-md ${isActive ? "bg-white border border-[#165dff]/20 shadow-sm" : ""}`}>
-                    <img
-                        src={`${__APP_ENV__.BASE_URL}/assets/channel/notebook-one.svg`}
-                        alt=""
-                        className="size-3.5 object-contain shrink-0"
-                        aria-hidden
-                    />
+                <div className={`flex-shrink-0 flex items-center justify-center size-5 rounded-md ${isActive ? "bg-white" : ""}`}>
+                    <SpaceNotebookIcon active={isActive} />
                 </div>
 
                 {isEditing ? (

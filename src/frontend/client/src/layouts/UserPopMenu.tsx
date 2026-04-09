@@ -89,9 +89,10 @@ export function UserPopMenu() {
             const el = triggerRef.current;
             if (!el) return;
             const r = el.getBoundingClientRect();
-            setMenuAlignOffset(-Math.round(r.left));
+            const marginX = 8;
             const marginBottom = 8;
-            // side=top + 负 sideOffset：面板下移，底缘贴近视口底（左下角）
+            // 与视口：左缘 8px；底缘 8px（side=top + sideOffset 将菜单底侧锚到视口底上方）
+            setMenuAlignOffset(marginX - Math.round(r.left));
             setMenuSideOffset(Math.round(r.top - (window.innerHeight - marginBottom)));
         };
         measure();
@@ -128,6 +129,7 @@ export function UserPopMenu() {
                     align="start"
                     alignOffset={menuAlignOffset}
                     sideOffset={menuSideOffset}
+                    collisionPadding={8}
                     onCloseAutoFocus={(e) => e.preventDefault()}
                     className="w-[200px] p-2 rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.08)] bg-white border-[#f0f0f0]"
                 >
@@ -153,15 +155,15 @@ export function UserPopMenu() {
 
                     {/* 3. 消息提醒 (保留逻辑) */}
                     <DropdownMenuItem
-                        className="group flex items-center justify-between px-3 py-1.5 cursor-pointer rounded-xl hover:bg-gray-50 focus:bg-gray-50 outline-none"
+                        className="group flex items-center justify-between px-3 py-1.5 font-normal cursor-pointer rounded-xl hover:bg-gray-50 focus:bg-gray-50 outline-none"
                         onClick={runMenuAction(handleNotificationsClick)}
                     >
                         <div className="flex items-center gap-3">
                             <Bell className="size-[18px] text-gray-600" />
-                            <span className="text-[14px] text-gray-700">{localize("com_notifications_title")}</span>
+                            <span className="text-[14px] font-normal text-gray-700">{localize("com_notifications_title")}</span>
                         </div>
                         {unreadCount > 0 && (
-                            <span className="bg-[#f53f3f] text-white text-[16px] font-medium px-2.5 -py-1 rounded-full min-w-[24px] text-center">
+                            <span className="min-w-[24px] rounded-full bg-[#f53f3f] px-2.5 text-center text-[12px] font-normal text-white leading-none tabular-nums flex h-5 items-center justify-center">
                                 {displayUnreadCount}
                             </span>
                         )}
@@ -169,10 +171,10 @@ export function UserPopMenu() {
 
                     {/* 4. 语言切换 */}
                     <DropdownMenuSub>
-                        <DropdownMenuSubTrigger className="flex items-center justify-between px-3 py-1.5 cursor-pointer rounded-xl hover:bg-gray-50 focus:bg-gray-50 outline-none">
+                        <DropdownMenuSubTrigger className="flex items-center justify-between px-3 py-1.5 font-normal cursor-pointer rounded-xl hover:bg-gray-50 focus:bg-gray-50 outline-none">
                             <div className="flex items-center gap-3">
                                 <Globe className="size-[18px] text-gray-600" />
-                                <span className="text-[14px] text-gray-700">{localize('com_nav_language')}</span>
+                                <span className="text-[14px] font-normal text-gray-700">{localize('com_nav_language')}</span>
                             </div>
                         </DropdownMenuSubTrigger>
                         <DropdownMenuSubContent className="rounded-xl border-gray-100 shadow-lg ml-2">
@@ -194,10 +196,10 @@ export function UserPopMenu() {
                     {/* 5. 退出登录 */}
                     <DropdownMenuItem
                         onClick={runMenuAction(logout)}
-                        className="group flex items-center gap-3 px-3 py-1.5 cursor-pointer rounded-xl hover:bg-red-50 focus:bg-red-50 outline-none mt-1 transition-colors !text-[#f53f3f] hover:!text-[#f53f3f] focus:!text-[#f53f3f]"
+                        className="group flex items-center gap-3 px-3 py-1.5 font-normal cursor-pointer rounded-xl hover:bg-red-50 focus:bg-red-50 outline-none mt-1 transition-colors !text-[#f53f3f] hover:!text-[#f53f3f] focus:!text-[#f53f3f]"
                     >
                         <LogOut className="size-[18px]" />
-                        <span className="text-[14px] font-medium">{localize('com_nav_log_out')}</span>
+                        <span className="text-[14px] font-normal">{localize('com_nav_log_out')}</span>
                     </DropdownMenuItem>
                 </DropdownMenuContent>
             </DropdownMenu>

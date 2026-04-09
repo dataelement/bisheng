@@ -63,7 +63,7 @@ export default function KnowledgeSquareCard({
             <CardContent className="flex flex-col gap-3 p-[12px]">
                 <div className="flex items-center justify-between gap-2">
                     <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
-                        <h3 className="m-0 min-w-0 shrink truncate text-[15px] font-bold leading-[22px] text-[#1D2129]">
+                        <h3 className="m-0 min-w-0 shrink truncate text-[14px] font-bold leading-[20px] text-[#1D2129]">
                             {space.name}
                         </h3>
                         {isPrivateOrLocked && (
