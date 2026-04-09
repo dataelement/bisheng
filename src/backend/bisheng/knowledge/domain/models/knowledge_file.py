@@ -162,7 +162,10 @@ class KnowledgeFileDao(KnowledgeFileBase):
     def get_file_simple_by_knowledge_id(cls, knowledge_id: int, page: int, page_size: int):
         offset = (page - 1) * page_size
         with get_sync_db_session() as session:
-            return session.query(KnowledgeFile.id, KnowledgeFile.object_name).filter(
+            return session.query(KnowledgeFile.id, KnowledgeFile.object_name,
+                                 KnowledgeFile.preview_file_object_name,
+                                 KnowledgeFile.bbox_object_name,
+                                 KnowledgeFile.thumbnails).filter(
                 KnowledgeFile.knowledge_id == knowledge_id).order_by(
                 KnowledgeFile.id.asc()).offset(offset).limit(page_size).all()
 

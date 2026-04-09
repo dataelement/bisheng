@@ -532,7 +532,7 @@ class KnowledgeDao(KnowledgeBase):
     @classmethod
     async def async_delete_knowledge(cls, knowledge_id: int, only_clear: bool = False):
         async with get_async_db_session() as session:
-            await session.exec(delete(Knowledge).where(col(Knowledge.id) == knowledge_id))
+            await session.exec(delete(KnowledgeFile).where(col(KnowledgeFile.id) == knowledge_id))
             if not only_clear:
                 await session.exec(delete(Knowledge).where(col(Knowledge.id) == knowledge_id))
             await session.commit()
