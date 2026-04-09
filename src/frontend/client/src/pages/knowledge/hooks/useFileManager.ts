@@ -53,8 +53,8 @@ export function useFileManager({ activeSpace, initialFolderId }: UseFileManagerO
 
     // ─── Load file/folder list ──────────────────────────────────────────
     const loadFiles = useCallback(
-        async (page: number = 1) => {
-            if (!activeSpace?.id) return;
+        async (page: number = 1): Promise<KnowledgeFile[]> => {
+            if (!activeSpace?.id) return [];
 
             setLoading(true);
             try {
@@ -86,8 +86,10 @@ export function useFileManager({ activeSpace, initialFolderId }: UseFileManagerO
                 setFiles(res.data);
                 setTotal(res.total);
                 setCurrentPage(page);
+                return res.data;
             } catch {
                 showToast({ message: localize("com_knowledge.load_file_list_failed"), severity: NotificationSeverity.ERROR });
+                return [];
             } finally {
                 setLoading(false);
             }
@@ -98,12 +100,16 @@ export function useFileManager({ activeSpace, initialFolderId }: UseFileManagerO
     // Track which initialFolderId has been consumed (value, not boolean)
     // so re-navigation to a different folder deep link works correctly.
     const consumedFolderIdRef = useRef<string | undefined>(undefined);
+    // Bumped on space switch to guarantee the filter effect fires even when
+    // search state was already empty (no dep change otherwise).
+    const [reloadToken, setReloadToken] = useState(0);
 
     // Reload files whenever active space or deep-link folder changes
     useEffect(() => {
         if (activeSpace) {
             setCurrentPage(1);
             setSearchQuery("");
+            setSearchTagIds([]);
             setStatusFilter([]);
 
             // If there's an unconsumed initial folder from URL, navigate there
@@ -136,20 +142,25 @@ export function useFileManager({ activeSpace, initialFolderId }: UseFileManagerO
             } else {
                 setCurrentFolderId(undefined);
                 setCurrentPath([]);
-                loadFiles(1);
+                // Bump token to trigger the filter effect on the NEXT render
+                // (when search state is already cleared), instead of calling
+                // loadFiles here with stale closure values.
+                setReloadToken(t => t + 1);
             }
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run when space or deep-link folder changes
     }, [activeSpace?.id, initialFolderId]);
 
-    // Reload files when folder navigation or filters change
+    // Reload files when folder navigation, filters, or space (via reloadToken) change.
+    // All state updates from the space effect are batched by React, so when this effect
+    // runs on the re-render, searchQuery/searchTagIds are already cleared.
     useEffect(() => {
         if (activeSpace) {
             setCurrentPage(1);
             loadFiles(1);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps -- loadFiles is stable via useCallback
-    }, [searchQuery, searchTagIds, searchScope, statusFilter, sortBy, sortDirection, currentFolderId]);
+    }, [searchQuery, searchTagIds, searchScope, statusFilter, sortBy, sortDirection, currentFolderId, reloadToken]);
 
     // ─── Auto-polling for pending files ─────────────────────────────────
     // Refresh the file list every 5s while any file on the current page

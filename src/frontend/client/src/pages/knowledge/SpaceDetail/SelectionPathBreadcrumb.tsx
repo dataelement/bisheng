@@ -41,7 +41,7 @@ export function SelectionPathBreadcrumb({
     };
 
     return (
-        <div className="flex items-center gap-0.5 text-sm text-[#86909c] min-w-0">
+        <div className="flex flex-wrap items-center gap-0.5 text-sm text-[#86909c] min-w-0 max-w-[60%]">
             {commonPath.map((item, index) => {
                 const isLast = index === commonPath.length - 1;
                 return (
@@ -50,7 +50,7 @@ export function SelectionPathBreadcrumb({
                         <button
                             type="button"
                             onClick={() => handleNavigate(item.id || undefined)}
-                            className={`hover:text-[#165dff] hover:underline cursor-pointer ${isLast && !isSingle ? "truncate max-w-[120px]" : "whitespace-nowrap"}`}
+                            className="hover:text-[#165dff] hover:underline cursor-pointer whitespace-nowrap"
                         >
                             {item.name}
                         </button>

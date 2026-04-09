@@ -575,7 +575,7 @@ export function KnowledgeSpaceContent({
             </div>
 
             {/* Footer */}
-            <div className="flex flex-shrink-0 items-center justify-between border-t border-[#e5e6eb] bg-white px-4 py-3">
+            <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-y-1 border-t border-[#e5e6eb] bg-white px-4 py-3">
                 {/* Left side: selection path (only in search mode with selections) */}
                 {isSearching && selectedFiles.size > 0 ? (
                     <SelectionPathBreadcrumb

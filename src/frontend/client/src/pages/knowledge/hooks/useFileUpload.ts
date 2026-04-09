@@ -12,6 +12,7 @@ import {
     addFilesApi,
     renameFileApi,
     deleteFileApi,
+    retryDuplicateFilesApi,
     type UploadFileResponse,
 } from "~/api/knowledge";
 import { NotificationSeverity } from "~/common";
@@ -19,12 +20,13 @@ import { useToastContext } from "~/Providers";
 import { getFileTypeFromName, MAX_FOLDER_DEPTH } from "../knowledgeUtils";
 import { useLocalize } from "~/hooks";
 
-/** A duplicate file entry detected during upload */
+/** A duplicate file entry detected from addFiles response (status === 3) */
 export interface DuplicateFileEntry {
-    file: File;
-    filePath: string;
-    repeatFileName: string;
-    repeatUpdateTime: string;
+    fileId: string;
+    fileName: string;
+    oldFileLevelPath: string;
+    /** Raw object from addFiles response, passed to retry API as-is */
+    rawObj: any;
 }
 
 interface UseFileUploadOptions {
@@ -87,85 +89,70 @@ export function useFileUpload({
             setUploadingFiles(prev => [...placeholders, ...prev]);
 
 
-            // Upload each file and check for duplicates
-            const normalPaths: string[] = [];
-            const duplicates: DuplicateFileEntry[] = [];
+            // Upload each file to server
+            const uploadedPaths: string[] = [];
 
             for (const file of fileArray) {
                 try {
                     const res: UploadFileResponse = await uploadFileToServerApi(activeSpace.id, file);
-                    if (res.repeat) {
-                        // Duplicate detected — collect for user confirmation
-                        duplicates.push({
-                            file,
-                            filePath: res.file_path,
-                            repeatFileName: res.repeat_file_name || file.name,
-                            repeatUpdateTime: res.repeat_update_time || "",
-                        });
-                    } else {
-                        normalPaths.push(res.file_path);
-                    }
+                    uploadedPaths.push(res.file_path);
                 } catch {
                     showToast({ message: localize("com_knowledge.file_upload_failed", { 0: file.name }), severity: NotificationSeverity.ERROR });
                 }
             }
 
-            // If all uploads failed, clear placeholders immediately and bail out
-            if (normalPaths.length === 0 && duplicates.length === 0) {
+            // If all uploads failed, clear placeholders and bail out
+            if (uploadedPaths.length === 0) {
                 setUploadingFiles(prev =>
                     prev.filter(f => !placeholders.some(p => p.id === f.id))
                 );
                 return;
             }
 
-            // Register non-duplicate files immediately
-            if (normalPaths.length > 0) {
-                try {
-                    await addFilesApi(activeSpace.id, {
-                        file_path: normalPaths,
-                        parent_id: currentFolderId ? Number(currentFolderId) : null,
-                    });
-                    await loadFiles(currentPage);
-                } catch (e) {
-                    // showToast({ message: localize("com_knowledge.file_register_failed"), severity: NotificationSeverity.ERROR });
+            // Register all uploaded files and check for duplicates from response
+            try {
+                const registeredFiles = await addFilesApi(activeSpace.id, {
+                    file_path: uploadedPaths,
+                    parent_id: currentFolderId ? Number(currentFolderId) : null,
+                });
+                // Detect duplicates: failed files with old_file_level_path indicate name conflict
+                const dupes = registeredFiles
+                    .filter(f => f.status === FileStatus.FAILED && f.oldFileLevelPath)
+                    .map(f => ({
+                        fileId: f.id,
+                        fileName: f.name,
+                        oldFileLevelPath: f.oldFileLevelPath || "",
+                        rawObj: (f as any)._raw,
+                    }));
+                if (dupes.length > 0) {
+                    setDuplicateFiles(dupes);
                 }
-            } else {
-                showToast({ message: localize("com_knowledge.processing_files", { 0: fileArray.length }), severity: NotificationSeverity.SUCCESS });
+                await loadFiles(currentPage);
+            } catch (e) {
+                // showToast({ message: localize("com_knowledge.file_register_failed"), severity: NotificationSeverity.ERROR });
             }
 
             // Clear placeholders after list data has been updated
             setUploadingFiles(prev =>
                 prev.filter(f => !placeholders.some(p => p.id === f.id))
             );
-
-            // Show duplicate confirmation dialog if any
-            if (duplicates.length > 0) {
-                setDuplicateFiles(duplicates);
-            }
         },
         [activeSpace, currentFolderId, currentPage, loadFiles, showToast]
     );
 
-    /** User chose to overwrite duplicate files */
+    /** User chose to replace duplicate files */
     const handleDuplicateOverwrite = useCallback(async () => {
         if (!activeSpace || duplicateFiles.length === 0) return;
-        const paths = duplicateFiles.map(d => d.filePath);
+        const fileObjs = duplicateFiles.map(d => d.rawObj).filter(Boolean);
         try {
-            await addFilesApi(activeSpace.id, {
-                file_path: paths,
-                parent_id: currentFolderId ? Number(currentFolderId) : null,
-            });
-            showToast({
-                message: localize("com_knowledge.upload_success_count", { 0: duplicateFiles.length }),
-                severity: NotificationSeverity.SUCCESS,
-            });
+            await retryDuplicateFilesApi(activeSpace.id, fileObjs);
             await loadFiles(currentPage);
         } catch {
             showToast({ message: localize("com_knowledge.file_register_failed"), severity: NotificationSeverity.ERROR });
         } finally {
             setDuplicateFiles([]);
         }
-    }, [activeSpace, duplicateFiles, currentFolderId, currentPage, loadFiles, showToast]);
+    }, [activeSpace, duplicateFiles, currentPage, loadFiles, showToast]);
 
     /** User chose NOT to overwrite — just discard duplicates */
     const handleDuplicateSkip = useCallback(() => {

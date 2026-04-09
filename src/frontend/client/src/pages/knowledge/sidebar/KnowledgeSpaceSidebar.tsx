@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { KnowledgeSpace, SortType, getMineSpacesApi, getJoinedSpacesApi } from "~/api/knowledge";
+import { KnowledgeSpace, SpaceSortType, getMineSpacesApi, getJoinedSpacesApi } from "~/api/knowledge";
 import { Button } from "~/components/ui/Button";
 import KnowledgeSpaceItem from "./KnowledgeSpaceItem";
 import { SectionHeader } from "./SectionHeader";
@@ -29,10 +29,10 @@ interface KnowledgeSpaceSidebarProps {
 }
 
 // Sort cycle: update_time → name → update_time
-const SORT_CYCLE = [SortType.UPDATE_TIME, SortType.NAME];
+const SORT_CYCLE = [SpaceSortType.UPDATE_TIME, SpaceSortType.NAME];
 
-function getSortLabel(sort: SortType, localize: any) {
-    return sort === SortType.NAME ? localize("com_knowledge.name") : localize("com_knowledge.recently_updated");
+function getSortLabel(sort: SpaceSortType, localize: any) {
+    return sort === SpaceSortType.NAME ? localize("com_knowledge.name") : localize("com_knowledge.recently_updated");
 }
 
 export function KnowledgeSpaceSidebar({
@@ -55,8 +55,8 @@ export function KnowledgeSpaceSidebar({
     };
     const [createdCollapsed, setCreatedCollapsed] = useState(false);
     const [joinedCollapsed, setJoinedCollapsed] = useState(false);
-    const [createdSortBy, setCreatedSortBy] = useState<SortType>(SortType.UPDATE_TIME);
-    const [joinedSortBy, setJoinedSortBy] = useState<SortType>(SortType.UPDATE_TIME);
+    const [createdSortBy, setCreatedSortBy] = useState<SpaceSortType>(SpaceSortType.UPDATE_TIME);
+    const [joinedSortBy, setJoinedSortBy] = useState<SpaceSortType>(SpaceSortType.UPDATE_TIME);
     const [isListScrolling, setIsListScrolling] = useState(false);
     const listScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 

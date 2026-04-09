@@ -15,7 +15,7 @@ import {
     KnowledgeSpace,
     SpaceRole,
     VisibilityType,
-    SortType,
+    SpaceSortType,
     getSpaceInfoApi,
     getMineSpacesApi,
     createSpaceApi,
@@ -299,8 +299,8 @@ export default function Knowledge() {
             try {
                 // Prefer cached "mine created" count (sidebar uses react-query) to avoid backend eventual consistency
                 // causing an off-by-one where the 31st is allowed and only the 32nd is blocked.
-                const cachedUpdate = queryClient.getQueryData<KnowledgeSpace[]>(["knowledgeSpaces", "mine", SortType.UPDATE_TIME]);
-                const cachedName = queryClient.getQueryData<KnowledgeSpace[]>(["knowledgeSpaces", "mine", SortType.NAME]);
+                const cachedUpdate = queryClient.getQueryData<KnowledgeSpace[]>(["knowledgeSpaces", "mine", SpaceSortType.UPDATE_TIME]);
+                const cachedName = queryClient.getQueryData<KnowledgeSpace[]>(["knowledgeSpaces", "mine", SpaceSortType.NAME]);
                 const cachedCountMax = Math.max(cachedUpdate?.length ?? 0, cachedName?.length ?? 0);
 
                 const mineSpaces = await getMineSpacesApi();
@@ -319,8 +319,8 @@ export default function Knowledge() {
                 // 如果校验接口失败，为避免阻塞用户操作，仍允许打开创建抽屉
                 // （可根据需要改成硬拦截）
                 // Fall back to cached count when possible; otherwise keep the original behavior.
-                const cachedUpdate = queryClient.getQueryData<KnowledgeSpace[]>(["knowledgeSpaces", "mine", SortType.UPDATE_TIME]);
-                const cachedName = queryClient.getQueryData<KnowledgeSpace[]>(["knowledgeSpaces", "mine", SortType.NAME]);
+                const cachedUpdate = queryClient.getQueryData<KnowledgeSpace[]>(["knowledgeSpaces", "mine", SpaceSortType.UPDATE_TIME]);
+                const cachedName = queryClient.getQueryData<KnowledgeSpace[]>(["knowledgeSpaces", "mine", SpaceSortType.NAME]);
                 const cachedCountMax = Math.max(cachedUpdate?.length ?? 0, cachedName?.length ?? 0);
 
                 if (cachedCountMax >= MAX_USER_SPACES) {
@@ -383,9 +383,9 @@ export default function Knowledge() {
 
                 // Optimistically update cached "mine created" lists so subsequent "create limit check"
                 // doesn't rely on backend propagation timing.
-                const createdKeys: Array<[string, string, SortType]> = [
-                    ["knowledgeSpaces", "mine", SortType.UPDATE_TIME],
-                    ["knowledgeSpaces", "mine", SortType.NAME],
+                const createdKeys: Array<[string, string, SpaceSortType]> = [
+                    ["knowledgeSpaces", "mine", SpaceSortType.UPDATE_TIME],
+                    ["knowledgeSpaces", "mine", SpaceSortType.NAME],
                 ];
                 for (const key of createdKeys) {
                     queryClient.setQueryData<KnowledgeSpace[]>(key, (prev) => {
@@ -614,29 +614,31 @@ export default function Knowledge() {
                 open={fileUpload.duplicateFiles.length > 0}
                 onOpenChange={(open) => !open && fileUpload.handleDuplicateSkip()}
             >
-                <DialogContent className="sm:max-w-[425px]" onPointerDownOutside={(e) => e.preventDefault()}>
+                <DialogContent className="sm:max-w-[460px]" onPointerDownOutside={(e) => e.preventDefault()}>
                     <DialogHeader>
-                        <DialogTitle>{localize("com_tools_file_detected")}</DialogTitle>
-                        <DialogDescription>
-                            {localize("com_tools_file_following")}
-                        </DialogDescription>
+                        <DialogTitle>{localize("com_knowledge.duplicate_file_title")}</DialogTitle>
                     </DialogHeader>
-                    <ul className="overflow-y-auto max-h-[300px] py-2">
-                        {fileUpload.duplicateFiles.map((entry, idx) => (
-                            <li key={idx} className="py-1 text-sm text-red-500">
-                                {entry.file.name}
-                                {entry.repeatFileName && entry.repeatFileName !== entry.file.name && (
-                                    <span className="text-gray-500">{` → ${entry.repeatFileName}`}</span>
-                                )}
-                            </li>
-                        ))}
+                    <ul className="overflow-y-auto max-h-[300px] py-2 space-y-1.5">
+                        {fileUpload.duplicateFiles.map((entry, idx) => {
+                            const name = entry.fileName;
+                            const ext = name.includes('.') ? name.slice(name.lastIndexOf('.')) : '';
+                            const base = name.includes('.') ? name.slice(0, name.lastIndexOf('.')) : name;
+                            const truncatedName = base.length > 10 ? base.slice(0, 10) + '....' + ext : name;
+                            const path = entry.oldFileLevelPath || '';
+                            return (
+                                <li key={idx} className="py-1 text-sm text-gray-700">
+                                    <span title={name}>{truncatedName}</span>
+                                    {path && <span className="ml-1 text-gray-400">({path})</span>}
+                                </li>
+                            );
+                        })}
                     </ul>
                     <DialogFooter>
                         <Button variant="outline" className="h-8" onClick={fileUpload.handleDuplicateSkip}>
-                            {localize("com_tools_file_not_overwrite")}
+                            {localize("com_knowledge.duplicate_cancel")}
                         </Button>
                         <Button className="h-8" onClick={fileUpload.handleDuplicateOverwrite}>
-                            {localize("com_tools_file_overwrite")}
+                            {localize("com_knowledge.duplicate_replace")}
                         </Button>
                     </DialogFooter>
                 </DialogContent>

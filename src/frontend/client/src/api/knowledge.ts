@@ -56,6 +56,12 @@ export enum SortType {
     UPDATE_TIME = "update_time"
 }
 
+/** Sort values accepted by space list APIs (mine/joined/managed) */
+export enum SpaceSortType {
+    NAME = "name",
+    UPDATE_TIME = "update_time"
+}
+
 /** Sort direction */
 export enum SortDirection {
     ASC = "asc",
@@ -143,6 +149,8 @@ export interface KnowledgeFile {
     fileNum?: number;
     /** Source of the file, e.g. 'channel' for subscription channel files */
     fileSource?: string;
+    /** Path of the existing duplicate file (when status is DUPLICATE) */
+    oldFileLevelPath?: string;
     // Transient UI-only fields
     isCreating?: boolean;
 }
@@ -352,6 +360,7 @@ function mapChild(raw: any, spaceId: string): KnowledgeFile {
         successFileNum: raw?.success_file_num !== undefined ? Number(raw.success_file_num) : undefined,
         fileNum: raw?.file_num !== undefined ? Number(raw.file_num) : undefined,
         fileSource: raw?.file_source,
+        oldFileLevelPath: raw?.old_file_level_path,
     };
 }
 
@@ -432,13 +441,10 @@ function mapRawFile(raw: RawKnowledgeFile): KnowledgeFile {
  */
 export async function getMineSpacesApi(params?: {
     order_by?: string;
-    sort_by?: string;
 }): Promise<KnowledgeSpace[]> {
-    const effectiveSort = params?.sort_by ?? params?.order_by;
     const res = await request.get<ApiResponse<RawKnowledgeSpace[]>>(`/api/v1/knowledge/space/mine`, {
         params: {
-            ...params,
-            sort_by: effectiveSort,
+            order_by: params?.order_by,
         },
     });
     return (res?.data || []).map(mapSpace);
@@ -449,13 +455,10 @@ export async function getMineSpacesApi(params?: {
  */
 export async function getJoinedSpacesApi(params?: {
     order_by?: string;
-    sort_by?: string;
 }): Promise<KnowledgeSpace[]> {
-    const effectiveSort = params?.sort_by ?? params?.order_by;
     const res = await request.get<ApiResponse<RawKnowledgeSpace[]>>(`/api/v1/knowledge/space/joined`, {
         params: {
-            ...params,
-            sort_by: effectiveSort,
+            order_by: params?.order_by,
         },
     });
     return (res?.data || []).map(mapSpace);
@@ -978,7 +981,14 @@ export async function addFilesApi(
         data,
         { showError: true }
     ) as ApiResponse<RawSpaceChild[]>;
-    return (res?.data || []).map(raw => mapChild(raw, space_id));
+    return (res?.data || []).map(raw => {
+        const file = mapChild(raw, space_id);
+        // Preserve raw object for status 3 (duplicate) so retry API can use it
+        if (raw?.status === 3) {
+            (file as any)._raw = raw;
+        }
+        return file;
+    });
 }
 
 /**
@@ -1048,6 +1058,18 @@ export async function batchDownloadApi(
     );
     // Response: { status_code, data: { url: "/tmp-dir/..." } }
     return res?.data?.url ?? res?.url ?? "";
+}
+
+/**
+ * Retry duplicate files (replace existing)
+ * POST /api/v1/knowledge/space/{space_id}/files/retry
+ * @param file_objs - raw file objects from addFilesApi response where status === 3
+ */
+export async function retryDuplicateFilesApi(
+    space_id: string,
+    file_objs: any[]
+): Promise<void> {
+    await request.post(`/api/v1/knowledge/space/${space_id}/files/retry`, { file_objs });
 }
 
 /**
