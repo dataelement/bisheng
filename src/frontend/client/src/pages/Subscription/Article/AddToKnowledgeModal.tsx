@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { useToastContext } from "~/Providers";
 import { generateUUID } from "~/utils";
 import {
-    getMineSpacesApi,
+    getManagedSpacesApi,
     getSpaceChildrenApi,
     createFolderApi,
     addArticleToKnowledgeApi,
@@ -286,7 +286,7 @@ export function AddToKnowledgeModal({ open, onOpenChange, articleId }: AddToKnow
     useEffect(() => {
         if (!open) return;
         setSpacesLoading(true);
-        getMineSpacesApi()
+        getManagedSpacesApi({ order_by: 'update_time' })
             .then((spaces) => {
                 const nodes: KnowledgeNode[] = spaces.map(s => ({
                     id: s.id,
@@ -506,13 +506,13 @@ export function AddToKnowledgeModal({ open, onOpenChange, articleId }: AddToKnow
                 })));
                 setPendingConfirm({ spaceId, parentFolderId });
                 setShowDuplicate(true);
-            } else if (errMsg.includes("duplicate") || errMsg.includes("重名") || errMsg.includes("already exists")) {
-                // Backend returned a text-based duplicate hint
-                setDuplicateFiles([{ name: errMsg, path: "" }]);
-                setPendingConfirm({ spaceId, parentFolderId });
-                setShowDuplicate(true);
-            } else {
-                // showToast({ message: localize("com_subscription.add_to_space_failed"), severity: NotificationSeverity.ERROR });
+                // } else if (errMsg.includes("duplicate") || errMsg.includes("重名") || errMsg.includes("already exists")) {
+                //     // Backend returned a text-based duplicate hint
+                //     setDuplicateFiles([{ name: errMsg, path: "" }]);
+                //     setPendingConfirm({ spaceId, parentFolderId });
+                //     setShowDuplicate(true);
+                // } else {
+                //     showToast({ message: localize("com_subscription.add_to_space_failed"), severity: NotificationSeverity.ERROR });
             }
         } finally {
             setIsConfirming(false);

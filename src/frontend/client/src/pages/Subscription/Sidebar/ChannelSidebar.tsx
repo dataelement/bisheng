@@ -26,6 +26,8 @@ interface ChannelSidebarProps {
     onChannelSettings: (channel: Channel) => void;
     /** Report created channel count back to parent so it doesn't need a duplicate query */
     onCreatedCountChange?: (count: number) => void;
+    /** When true, skip auto-selecting the first channel (e.g. share route is resolving) */
+    suppressAutoSelect?: boolean;
 }
 
 export function ChannelSidebar({
@@ -36,6 +38,7 @@ export function ChannelSidebar({
     onManageMembers,
     onChannelSettings,
     onCreatedCountChange,
+    suppressAutoSelect,
 }: ChannelSidebarProps) {
     const localize = useLocalize();
     const [collapsed, setCollapsed] = useState(false);
@@ -77,6 +80,7 @@ export function ChannelSidebar({
 
     // Default select first channel — wait until both queries have completed
     useEffect(() => {
+        if (suppressAutoSelect) return;
         if (!activeChannelId && createdFetched && subscribedFetched) {
             if (createdChannels.length > 0) {
                 onChannelSelect(createdChannels[0]);
@@ -84,7 +88,7 @@ export function ChannelSidebar({
                 onChannelSelect(subscribedChannels[0]);
             }
         }
-    }, [activeChannelId, createdChannels, subscribedChannels, createdFetched, subscribedFetched, onChannelSelect]);
+    }, [suppressAutoSelect, activeChannelId, createdChannels, subscribedChannels, createdFetched, subscribedFetched, onChannelSelect]);
 
     // Notify parent of created channel count changes
     useEffect(() => {

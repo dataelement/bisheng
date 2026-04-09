@@ -1311,7 +1311,7 @@
     "18020": "File does not exist",
     "18021": "A file with the same name or content already exists in this space",
     "18022": "File extension cannot be changed during rename",
-    "18023": "File name already exists in this space",
+    "18023": "The article already exists in the knowledge space",
     "18030": "Private knowledge spaces cannot be subscribed to",
     "18031": "You have already subscribed to or applied for this knowledge space",
     "18032": "You can subscribe to a maximum of 50 knowledge spaces",

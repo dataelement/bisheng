@@ -96,14 +96,19 @@ export default function Subscription() {
     }, [channelPluginGate, showToast, navigate, localize]);
 
     // Route-driven sync for preview drawer:
-    // entering /channel/share/:id always opens drawer immediately (including KeepAlive re-activate).
+    // manualPreviewChannelId (from plaza card click) opens drawer immediately.
+    // routePreviewChannelId (from share link) waits for the creator check in the
+    // validate-preview effect below — that effect calls setPreviewDrawerOpen(true)
+    // only after confirming the user is NOT the creator, avoiding the open-then-close flash.
     useEffect(() => {
-        if (routePreviewChannelId || manualPreviewChannelId) {
+        if (manualPreviewChannelId) {
             userClosedSharePreviewRef.current = false;
             setPreviewDrawerOpen(true);
             return;
         }
-        setPreviewDrawerOpen(false);
+        if (!routePreviewChannelId) {
+            setPreviewDrawerOpen(false);
+        }
     }, [routePreviewChannelId, manualPreviewChannelId, channelTabActivateEpoch]);
 
     // Validate preview channel when channelId route param is present.
@@ -193,6 +198,9 @@ export default function Subscription() {
 
                 if (cancelled) return;
                 if (userClosedSharePreviewRef.current) return;
+                // Not the creator — open preview drawer now (deferred to avoid flash
+                // when the creator shortcut would immediately close it).
+                setPreviewDrawerOpen(true);
             } catch {
                 if (cancelled) return;
                 showToast({
@@ -385,6 +393,7 @@ export default function Subscription() {
                     {/* left sidebar */}
                     <ChannelSidebar
                         activeChannelId={activeChannel?.id}
+                        suppressAutoSelect={!!previewChannelId}
                         onChannelSelect={handleChannelSelect}
                         onCreateChannel={handleCreateChannel}
                         onChannelSquare={handleChannelSquare}

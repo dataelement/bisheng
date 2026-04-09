@@ -7,8 +7,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  getMineSpacesApi,
-  getJoinedSpacesApi,
+  getManagedSpacesApi,
 } from "~/api/knowledge";
 import {
   DropdownMenu,
@@ -182,19 +181,8 @@ export const ChatKnowledge = ({
   const loadSpaces = useCallback(async () => {
     setSpaceFetching(true);
     try {
-      const [mine, joined] = await Promise.all([
-        getMineSpacesApi(),
-        getJoinedSpacesApi(),
-      ]);
-      // Merge and deduplicate by id
-      const merged = [...mine, ...joined];
-      const seen = new Set<string>();
-      const unique = merged.filter((s) => {
-        if (seen.has(s.id)) return false;
-        seen.add(s.id);
-        return true;
-      });
-      setAllSpaces(unique);
+      const spaces = await getManagedSpacesApi({ order_by: 'update_time' });
+      setAllSpaces(spaces);
     } catch (err) {
       console.error("[ChatKnowledge] Failed to load spaces:", err);
     } finally {

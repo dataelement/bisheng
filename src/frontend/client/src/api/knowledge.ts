@@ -462,6 +462,20 @@ export async function getJoinedSpacesApi(params?: {
 }
 
 /**
+ * Get all managed spaces (mine + joined, merged by backend)
+ */
+export async function getManagedSpacesApi(params?: {
+    order_by?: string;
+}): Promise<KnowledgeSpace[]> {
+    const res = await request.get<ApiResponse<RawKnowledgeSpace[]>>(`/api/v1/knowledge/space/managed`, {
+        params: {
+            order_by: params?.order_by ?? 'update_time',
+        },
+    });
+    return (res?.data || []).map(mapSpace);
+}
+
+/**
  * Get public knowledge square (paginated)
  */
 export async function getSquareSpacesApi(params?: {

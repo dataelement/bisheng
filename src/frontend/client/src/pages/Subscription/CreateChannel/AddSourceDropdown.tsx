@@ -110,7 +110,7 @@ export function AddSourceDropdown({
                     </div>
                     {sources.length > 0 && (
                         <div
-                            className="border-t border-[#E5E6EB] bg-[#F7F8FA] overflow-y-auto scroll-on-scroll"
+                            className="border-t border-[#E5E6EB] bg-[#F7F8FA] overflow-y-auto pb-4 scroll-on-scroll"
                             onScroll={handleCollapsedListScroll}
                             data-scrolling={isCollapsedListScrolling ? "true" : "false"}
                         >
@@ -120,65 +120,65 @@ export function AddSourceDropdown({
                                         className="flex items-center gap-3 py-2 px-4 hover:bg-[#EEEFF1]"
                                         onClick={(e) => e.stopPropagation()}
                                     >
-                                    <div className="w-8 h-8 rounded-full bg-[#E5E6EB] flex-shrink-0 overflow-hidden">
-                                        {s.avatar ? (
-                                            <img src={s.avatar} alt="" className="w-full h-full object-cover" />
-                                        ) : (
-                                            <div className="w-full h-full flex items-center justify-center text-[12px] text-[#86909C]">
-                                                {s.name[0]}
-                                            </div>
-                                        )}
-                                    </div>
-                                    <span className="flex-1 text-[14px] text-[#1D2129] truncate">
-                                        <span
-                                            className={cn(
-                                                "inline-flex items-center max-w-full align-middle",
-                                                s.type === "website" && s.url && "group/link text-[#1D2129] hover:text-[#165DFF] transition-colors"
+                                        <div className="w-8 h-8 rounded-full bg-[#E5E6EB] flex-shrink-0 overflow-hidden">
+                                            {s.avatar ? (
+                                                <img src={s.avatar} alt="" className="w-full h-full object-cover" />
+                                            ) : (
+                                                <div className="w-full h-full flex items-center justify-center text-[12px] text-[#86909C]">
+                                                    {s.name[0]}
+                                                </div>
                                             )}
-                                            onClick={
-                                                s.type === "website" && s.url
-                                                    ? (e) => {
-                                                        e.stopPropagation();
-                                                        window.open(s.url, "_blank");
-                                                    }
-                                                    : undefined
-                                            }
-                                        >
+                                        </div>
+                                        <span className="flex-1 text-[14px] text-[#1D2129] truncate">
                                             <span
                                                 className={cn(
-                                                    "truncate",
-                                                    s.type === "website" && s.url && "hover:underline"
+                                                    "inline-flex items-center max-w-full align-middle",
+                                                    s.type === "website" && s.url && "group/link text-[#1D2129] hover:text-[#165DFF] transition-colors"
+                                                )}
+                                                onClick={
+                                                    s.type === "website" && s.url
+                                                        ? (e) => {
+                                                            e.stopPropagation();
+                                                            window.open(s.url, "_blank");
+                                                        }
+                                                        : undefined
+                                                }
+                                            >
+                                                <span
+                                                    className={cn(
+                                                        "truncate",
+                                                        s.type === "website" && s.url && "hover:underline"
+                                                    )}
+                                                >
+                                                    {truncateName(s.name)}
+                                                </span>
+                                                {s.type === "website" && s.url && (
+                                                    <ChannelRightSmallUpIcon className="ml-0.5 w-4 h-4 opacity-0 group-hover/link:opacity-100 transition-opacity flex-shrink-0" />
+                                                )}
+                                            </span>
+                                            <span
+                                                className={cn(
+                                                    "text-[11px] px-0.5 rounded flex-shrink-0 ml-4",
+                                                    s.type !== "official_account" && "-ml-0",
+                                                    " border text-[#165DFF] border-[#165DFF]"  // 统一的白底蓝框蓝字
                                                 )}
                                             >
-                                                {truncateName(s.name)}
+                                                {s.type === "official_account" ? localize("com_subscription.official_account") : localize("com_subscription.website")}
                                             </span>
-                                            {s.type === "website" && s.url && (
-                                                <ChannelRightSmallUpIcon className="ml-0.5 w-4 h-4 opacity-0 group-hover/link:opacity-100 transition-opacity flex-shrink-0" />
-                                            )}
                                         </span>
-                                        <span
-                                            className={cn(
-                                                "text-[11px] px-0.5 rounded flex-shrink-0 ml-4",
-                                                s.type !== "official_account" && "-ml-0",
-                                                " border text-[#165DFF] border-[#165DFF]"  // 统一的白底蓝框蓝字
-                                            )}
+                                        <button
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onSourcesChange(sources.filter((x) => x.id !== s.id));
+                                            }}
+                                            className="p-1 rounded"
+                                            aria-label={localize("com_subscription.remove_source")}
                                         >
-                                            {s.type === "official_account" ? localize("com_subscription.official_account") : localize("com_subscription.website")}
-                                        </span>
-                                    </span>
-                                    <button
-                                        type="button"
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            onSourcesChange(sources.filter((x) => x.id !== s.id));
-                                        }}
-                                        className="p-1 rounded"
-                                        aria-label={localize("com_subscription.remove_source")}
-                                    >
-                                        <span className="inline-flex items-center justify-center w-3 h-3 border-[1px] border-[#F53F3F]">
-                                            <Minus className="size-3 text-[#F53F3F]" />
-                                        </span>
-                                    </button>
+                                            <span className="inline-flex items-center justify-center w-3 h-3 border-[1px] border-[#F53F3F]">
+                                                <Minus className="size-3 text-[#F53F3F]" />
+                                            </span>
+                                        </button>
                                     </div>
                                     {idx < arr.length - 1 && (
                                         <div
