@@ -29,6 +29,7 @@ from bisheng.common.services.config_service import settings
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
+from bisheng.database.models.session import MessageSessionDao
 from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum, KnowledgeDao
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.linsight.domain.models.linsight_session_version import LinsightSessionVersionDao, SessionVersionStatusEnum, \
@@ -234,6 +235,8 @@ async def generate_sop(
     if not session_version:
         raise NotFoundError.http_exception()
 
+    await MessageSessionDao.touch_session(session_version.session_id)
+
     example_sop = None
     if sop_id:
         sop_db = await SOPManageService.get_sop_by_id(sop_id)
@@ -329,6 +332,8 @@ async def modify_sop(
     if login_user.user_id != session_version_model.user_id:
         return UnAuthorizedError.return_resp()
 
+    await MessageSessionDao.touch_session(session_version_model.session_id)
+
     try:
         modify_res = await LinsightWorkbenchImpl.modify_sop(linsight_session_version_id=linsight_session_version_id,
                                                             sop_content=sop_content)
@@ -362,6 +367,8 @@ async def start_execute_sop(
                                         SessionVersionStatusEnum.IN_PROGRESS]:
         # The Inspiration session version has been completed or is being executed and cannot be executed again
         return LinsightSessionVersionRunningError.return_resp()
+
+    await MessageSessionDao.touch_session(session_version_model.session_id)
 
     from bisheng.linsight.worker import LinsightQueue
     try:
@@ -414,6 +421,8 @@ async def user_input(
     if login_user.user_id != session_version_model.user_id:
         return UnAuthorizedError.return_resp()
 
+    await MessageSessionDao.touch_session(session_version_model.session_id)
+
     state_message_manager = LinsightStateMessageManager(session_version_id=session_version_id)
 
     # If there are documents Process files first
@@ -456,6 +465,8 @@ async def submit_feedback(
 
     if login_user.user_id != session_version_model.user_id:
         return UnAuthorizedError.return_resp()
+
+    await MessageSessionDao.touch_session(session_version_model.session_id)
 
     if score is not None and 0 < score <= 5:
         session_version_model.score = score
@@ -536,6 +547,8 @@ async def terminate_execute(
     if session_version_model.status == SessionVersionStatusEnum.TERMINATED:
         # return resp_500(code=400, message="Execution terminated for Inspiration session version")
         return InvalidOperationError.return_resp()
+
+    await MessageSessionDao.touch_session(session_version_model.session_id)
 
     from bisheng.linsight.worker import LinsightQueue
     redis_client = await get_redis_client()

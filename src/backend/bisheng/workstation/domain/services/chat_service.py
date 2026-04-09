@@ -132,6 +132,10 @@ async def initialize_chat(data: APIChatCompletion, login_user: UserPayload):
     if conversation is None:
         raise ConversationNotFoundError()
 
+    if not is_new_conversation:
+        await MessageSessionDao.touch_session(conversation_id)
+        conversation = await MessageSessionDao.async_get_one(conversation_id)
+
     if data.overrideParentMessageId:
         message = await ChatMessageDao.aget_message_by_id(int(data.overrideParentMessageId))
     else:

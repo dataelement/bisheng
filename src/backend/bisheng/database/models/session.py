@@ -303,6 +303,15 @@ class MessageSessionDao(MessageSessionBase):
             await session.commit()
 
     @classmethod
+    async def touch_session(cls, chat_id: str):
+        statement = update(MessageSession).where(col(MessageSession.chat_id) == chat_id).values(
+            update_time=datetime.now()
+        )
+        async with get_async_db_session() as session:
+            await session.exec(statement)
+            await session.commit()
+
+    @classmethod
     def update_session_name_sync(cls, chat_id: str, name: str):
         statement = update(MessageSession).where(col(MessageSession.chat_id) == chat_id).values(
             name=name,
