@@ -62,7 +62,7 @@ export function UserPopMenu() {
             suppressMenuItemClicksRef.current = true;
             window.setTimeout(() => {
                 suppressMenuItemClicksRef.current = false;
-            }, 150);
+            }, 400);
         } else {
             suppressMenuItemClicksRef.current = false;
         }
@@ -70,8 +70,20 @@ export function UserPopMenu() {
         void refreshCount();
     };
 
-    /** MenuItem 的 onClick 与 Radix 的 handleSelect 组合：必须 preventDefault 才能阻止误触后的选中与关菜单 */
+    /** 菜单内非 Item 区域（头像、昵称 div）仍用 click */
     const runMenuAction = (fn: () => void) => (e: MouseEvent) => {
+        if (suppressMenuItemClicksRef.current) {
+            e.preventDefault();
+            return;
+        }
+        fn();
+    };
+
+    /**
+     * DropdownMenuItem 由 Radix 通过 onSelect 选中，仅用 onClick 无法阻止「打开瞬间同一指针落在退出登录」的误触。
+     * 在抑制窗口内必须 event.preventDefault() 才能取消本次选中。
+     */
+    const runMenuItemSelect = (fn: () => void) => (e: Event) => {
         if (suppressMenuItemClicksRef.current) {
             e.preventDefault();
             return;
@@ -156,7 +168,7 @@ export function UserPopMenu() {
                     {/* 3. 消息提醒 (保留逻辑) */}
                     <DropdownMenuItem
                         className="group flex items-center justify-between px-3 py-1.5 font-normal cursor-pointer rounded-xl hover:bg-gray-50 focus:bg-gray-50 outline-none"
-                        onClick={runMenuAction(handleNotificationsClick)}
+                        onSelect={runMenuItemSelect(handleNotificationsClick)}
                     >
                         <div className="flex items-center gap-3">
                             <Bell className="size-[18px] text-gray-600" />
@@ -178,15 +190,15 @@ export function UserPopMenu() {
                             </div>
                         </DropdownMenuSubTrigger>
                         <DropdownMenuSubContent className="rounded-xl border-gray-100 shadow-lg ml-2">
-                            <DropdownMenuItem className="py-2.5 px-3 rounded-lg" onClick={runMenuAction(() => changeLang('zh-Hans'))}>
+                            <DropdownMenuItem className="py-2.5 px-3 rounded-lg" onSelect={runMenuItemSelect(() => changeLang('zh-Hans'))}>
                                 <span className="flex-1 text-sm">中文</span>
                                 {langcode === 'zh-Hans' && <Check className="ml-2 size-4 text-blue-600" />}
                             </DropdownMenuItem>
-                            <DropdownMenuItem className="py-2.5 px-3 rounded-lg" onClick={runMenuAction(() => changeLang('en'))}>
+                            <DropdownMenuItem className="py-2.5 px-3 rounded-lg" onSelect={runMenuItemSelect(() => changeLang('en'))}>
                                 <span className="flex-1 text-sm">English</span>
                                 {langcode === 'en' && <Check className="ml-2 size-4 text-blue-600" />}
                             </DropdownMenuItem>
-                            <DropdownMenuItem className="py-2.5 px-3 rounded-lg" onClick={runMenuAction(() => changeLang('ja'))}>
+                            <DropdownMenuItem className="py-2.5 px-3 rounded-lg" onSelect={runMenuItemSelect(() => changeLang('ja'))}>
                                 <span className="flex-1 text-sm">日本語</span>
                                 {langcode === 'ja' && <Check className="ml-2 size-4 text-blue-600" />}
                             </DropdownMenuItem>
@@ -195,7 +207,7 @@ export function UserPopMenu() {
 
                     {/* 5. 退出登录 */}
                     <DropdownMenuItem
-                        onClick={runMenuAction(logout)}
+                        onSelect={runMenuItemSelect(logout)}
                         className="group flex items-center gap-3 px-3 py-1.5 font-normal cursor-pointer rounded-xl hover:bg-red-50 focus:bg-red-50 outline-none mt-1 transition-colors !text-[#f53f3f] hover:!text-[#f53f3f] focus:!text-[#f53f3f]"
                     >
                         <LogOut className="size-[18px]" />

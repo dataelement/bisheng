@@ -1,6 +1,6 @@
-import { Pin } from 'lucide-react';
 import type { AppItem } from '~/@types/app';
 import AppAvator from '~/components/Avator';
+import { ChannelPinIcon } from '~/components/icons/channels';
 import { cn } from '~/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '~/components/ui/Tooltip2';
 import { Button } from '~/components';
@@ -44,20 +44,24 @@ export function AgentCard({
           <Tooltip>
             <TooltipTrigger asChild>
               <button
+                type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   onTogglePin(agent);
                 }}
                 className={cn(
-                  'flex items-center justify-center p-1 rounded-[6px] transition-colors shrink-0',
+                  'flex shrink-0 items-center justify-center rounded-[6px] p-1 transition-colors',
                   isPinned
-                    ? 'border border-[#ececec]'
-                    : 'opacity-0 group-hover:opacity-100 hover:border-[#ececec] hover:border',
+                    ? 'opacity-100'
+                    : 'opacity-0 group-hover:opacity-100 hover:border hover:border-[#ececec]',
                 )}
               >
-                <Pin
-                  size={14}
-                  className={cn('text-gray-400', isPinned ? 'fill-gray-400' : '')}
+                <ChannelPinIcon
+                  className={cn(
+                    'w-[14px] h-[14px] flex-shrink-0',
+                    !isPinned && 'opacity-40',
+                  )}
+                  aria-hidden
                 />
               </button>
             </TooltipTrigger>

@@ -104,18 +104,18 @@ export function MultiSourceSelect({
                 <div className="p-3">
                     {/* 全部信息源 选项 */}
                     <div
-                        className="flex items-center py-[5px] space-x-2 hover:bg-slate-100 rounded-sm cursor-pointer transition-colors"
+                        className="flex w-full min-w-0 cursor-pointer items-center space-x-2 rounded-sm py-[5px] transition-colors hover:bg-slate-100"
                         onClick={handleSelectAll}
                     >
                         <Checkbox
                             id="source-all"
                             checked={value.length === 0}
                             onCheckedChange={handleSelectAll}
+                            onClick={(e) => e.stopPropagation()}
                         />
-                        <label
-                            htmlFor="source-all"
-                            className="text-sm leading-[22px] cursor-pointer flex-1"
-                        >{localize("com_subscription.all_sources")}</label>
+                        <span className="flex-1 text-sm leading-[22px]">
+                            {localize("com_subscription.all_sources")}
+                        </span>
                     </div>
 
                     <Separator className="my-2" />
@@ -125,20 +125,18 @@ export function MultiSourceSelect({
                         {options.map((option) => (
                             <div
                                 key={option.id}
-                                className="flex items-center space-x-2 py-[5px] hover:bg-slate-100 rounded-sm cursor-pointer transition-colors"
+                                className="flex w-full min-w-0 cursor-pointer items-center space-x-2 rounded-sm py-[5px] transition-colors hover:bg-slate-100"
                                 onClick={() => handleToggleItem(option.id)}
                             >
                                 <Checkbox
                                     id={`source-${option.id}`}
                                     checked={value.includes(option.id)}
                                     onCheckedChange={() => handleToggleItem(option.id)}
+                                    onClick={(e) => e.stopPropagation()}
                                 />
-                                <label
-                                    htmlFor={`source-${option.id}`}
-                                    className="text-sm leading-[22px] cursor-pointer flex-1"
-                                >
+                                <span className="min-w-0 flex-1 truncate text-sm leading-[22px]">
                                     {option.label}
-                                </label>
+                                </span>
                             </div>
                         ))}
                     </div>

@@ -22,6 +22,7 @@ import { useLocalize } from "~/hooks";
 import { addWebsiteSourceApi, crawlTempSourceApi, getFeedbackTips } from "~/api/channels";
 import type { InformationSource } from "~/api/channels";
 import { ChannelBookIcon, ChannelLoadingIcon, ChannelRightSmallUpIcon } from "~/components/icons/channels";
+import { cn } from "~/utils";
 
 interface CrawlPreviewDialogProps {
     open: boolean;
@@ -47,8 +48,6 @@ export function CrawlPreviewDialog({
     const [errorCode, setErrorCode] = useState<number | null>(null);
     const [feedbackTips, setFeedbackTips] = useState<string>(localize("com_subscription.send_crawl_requirement_to_email"));
     const [feedbackDialogOpen, setFeedbackDialogOpen] = useState(false);
-    const [isMainScrolling, setIsMainScrolling] = useState(false);
-    const mainScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [isArticlesScrolling, setIsArticlesScrolling] = useState(false);
     const articlesScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const requestIdRef = useRef(0);
@@ -190,14 +189,6 @@ export function CrawlPreviewDialog({
         })();
     };
 
-    if (!open) return null;
-
-    const handleMainScroll = () => {
-        setIsMainScrolling(true);
-        if (mainScrollTimerRef.current) clearTimeout(mainScrollTimerRef.current);
-        mainScrollTimerRef.current = setTimeout(() => setIsMainScrolling(false), 500);
-    };
-
     const handleArticlesScroll = () => {
         setIsArticlesScrolling(true);
         if (articlesScrollTimerRef.current) clearTimeout(articlesScrollTimerRef.current);
@@ -205,7 +196,7 @@ export function CrawlPreviewDialog({
     };
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog modal={false} open={open} onOpenChange={onOpenChange}>
             <DialogContent
                 className="w-[600px] h-[600px] max-w-[600px] flex flex-col bg-white text-[14px] [&>button]:hidden"
                 onPointerDownOutside={(e) => e.preventDefault()}
@@ -229,7 +220,7 @@ export function CrawlPreviewDialog({
 
                     {status === "loading" && (
                         <div className="flex-1 flex flex-col items-center justify-center py-12 gap-4">
-                            <ChannelLoadingIcon className="w-[100px] h-[100px]" />
+                            <ChannelLoadingIcon className="w-[120px] h-[120px]" />
                             <p className="text-[14px] text-[#4E5969]">
                                 {localize("com_subscription.crawling_waiting") || localize("com_subscription.crawling_please_wait")}
                             </p>
@@ -238,58 +229,68 @@ export function CrawlPreviewDialog({
 
                     {status === "success" && previewData && (
                         <div
-                            className="space-y-4 flex-1 min-h-0 overflow-y-auto scroll-on-scroll"
-                            onScroll={handleMainScroll}
-                            data-scrolling={isMainScrolling ? "true" : "false"}
+                            className={cn(
+                                "flex min-w-0 flex-col",
+                                previewData.articles?.length ? "min-h-0 flex-1" : "shrink-0"
+                            )}
                         >
-                            <div className="flex items-center gap-3 p-3 rounded-lg">
-                                <Avatar className="w-10 h-10 border border-[#E5E6EB]">
-                                    {previewData.icon ? (
-                                        <AvatarImage src={previewData.icon} alt={previewData.name} />
-                                    ) : (
-                                        <AvatarName name={previewData.name} className="text-xs" />
-                                    )}
-                                </Avatar>
-                                <div>
-                                    <p className="text-[14px] font-medium text-[#1D2129]">
-                                        {previewData.name}
-                                    </p>
-                                    <a
-                                        href={url}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="text-[12px] text-[#165DFF] hover:underline"
-                                    >
-                                        {url}
-                                    </a>
-                                </div>
-                            </div>
-                            {previewData.articles && previewData.articles.length > 0 && (
-                                <div className="rounded border border-[#E5E6EB] p-3">
-                                    <p className="text-[14px] font-medium text-[#212121] mb-2">
-                                        {localize("com_subscription.parsed_articles")}
-                                    </p>
-                                    <div
-                                        className="max-h-[200px] overflow-y-auto space-y-2 scroll-on-scroll"
-                                        onScroll={handleArticlesScroll}
-                                        data-scrolling={isArticlesScrolling ? "true" : "false"}
-                                    >
-                                        {previewData.articles.map((a, i) => (
-                                            <a
-                                                key={i}
-                                                href={a.url}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="group/item flex items-center text-[13px] text-[#165DFF] hover:text-[#335CFF] truncate"
-                                            >
-                                                <span className="mr-2 text-[10px] text-[#C9CDD4] leading-none flex-shrink-0">●</span>
-                                                <span className="truncate">{a.title}</span>
-                                                <ChannelRightSmallUpIcon className="ml-1 w-4 h-4 opacity-0 group-hover/item:opacity-100 transition-opacity flex-shrink-0" />
-                                            </a>
-                                        ))}
+                            <div
+                                className={cn(
+                                    "flex min-w-0 flex-col overflow-hidden rounded-lg border border-[#E5E6EB] p-3",
+                                    previewData.articles?.length ? "min-h-0 flex-1" : "shrink-0"
+                                )}
+                            >
+                                <div className="flex shrink-0 items-center gap-3">
+                                    <Avatar className="h-10 w-10 border border-[#E5E6EB]">
+                                        {previewData.icon ? (
+                                            <AvatarImage src={previewData.icon} alt={previewData.name} />
+                                        ) : (
+                                            <AvatarName name={previewData.name} className="text-xs" />
+                                        )}
+                                    </Avatar>
+                                    <div className="min-w-0">
+                                        <p className="text-[14px] font-medium text-[#1D2129]">
+                                            {previewData.name}
+                                        </p>
+                                        <a
+                                            href={url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="break-all text-[12px] text-[#165DFF] hover:underline"
+                                        >
+                                            {url}
+                                        </a>
                                     </div>
                                 </div>
-                            )}
+                                {previewData.articles && previewData.articles.length > 0 && (
+                                    <>
+                                        <p className="mb-2 mt-4 shrink-0 text-[14px] font-medium text-[#212121]">
+                                            {localize("com_subscription.parsed_articles")}
+                                        </p>
+                                        <div
+                                            className="min-h-0 flex-1 space-y-2 overflow-y-auto scroll-on-scroll pr-0.5"
+                                            onScroll={handleArticlesScroll}
+                                            data-scrolling={isArticlesScrolling ? "true" : "false"}
+                                        >
+                                            {previewData.articles.map((a, i) => (
+                                                <a
+                                                    key={i}
+                                                    href={a.url}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="group/item flex min-w-0 items-center truncate text-[13px] text-[#165DFF] hover:text-[#335CFF]"
+                                                >
+                                                    <span className="mr-2 h-[6px] w-[6px] flex-shrink-0 rounded-full bg-[#C9CDD4]" aria-hidden />
+                                                    <span className="min-w-0 truncate underline-offset-2 group-hover/item:underline">
+                                                        {a.title}
+                                                    </span>
+                                                    <ChannelRightSmallUpIcon className="ml-1 h-4 w-4 flex-shrink-0 text-inherit opacity-0 transition-opacity group-hover/item:opacity-100" />
+                                                </a>
+                                            ))}
+                                        </div>
+                                    </>
+                                )}
+                            </div>
                         </div>
                     )}
 
@@ -325,7 +326,7 @@ export function CrawlPreviewDialog({
                             <Button
                                 variant="secondary"
                                 onClick={handleCancel}
-                                className="h-8 rounded-[6px] px-4 inline-flex items-center justify-center leading-none text-[14px] font-normal border border-[#E5E6EB] bg-white text-[#4E5969] hover:bg-[#F7F8FA]"
+                                className="h-8 rounded-[6px] px-4 inline-flex items-center justify-center leading-none text-[14px] !font-normal border border-[#E5E6EB] bg-white text-[#4E5969] hover:bg-[#F7F8FA]"
                             >
                                 {localize("cancel")}
                             </Button>
@@ -333,7 +334,7 @@ export function CrawlPreviewDialog({
                                 <Button
                                     onClick={handleAddSource}
                                     disabled={status !== "success" || adding}
-                                    className="h-8 rounded-[6px] px-4 inline-flex items-center justify-center leading-none text-[14px] font-normal bg-[#165DFF] ml-2 hover:bg-[#4080FF] border border-[#165DFF] text-white disabled:opacity-50 gap-2"
+                                    className="h-8 rounded-[6px] px-4 inline-flex items-center justify-center leading-none text-[14px] !font-normal bg-[#165DFF] ml-2 hover:bg-[#4080FF] border border-[#165DFF] text-white disabled:opacity-50 gap-2"
                                 >
                                     {adding && <Loader2 className="size-4 animate-spin" />}
                                     {localize("com_subscription.add_source")}

@@ -5,7 +5,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '~/comp
 import { cn } from '~/utils';
 import AppAvator from '~/components/Avator';
 import { useAppSwitcher } from '~/pages/appChat/hooks/useAppSwitcher';
-import { useLocalize } from '~/hooks';
+import { useLocalize, useScrollbarWhileScrolling } from '~/hooks';
 
 /**
  * App switcher dropdown built with Popover + custom search input.
@@ -13,6 +13,7 @@ import { useLocalize } from '~/hooks';
  */
 export function AppSwitcherDropdown() {
   const localize = useLocalize();
+  const { onScroll, scrollingProps } = useScrollbarWhileScrolling();
   const {
     allApps,
     searchQuery,
@@ -69,7 +70,11 @@ export function AppSwitcherDropdown() {
         </div>
 
         {/* App list */}
-        <div className="flex-1 overflow-y-auto px-[8px] pb-[8px] flex flex-col gap-[4px] max-h-[268px]">
+        <div
+          className="flex-1 overflow-y-auto scroll-on-scroll px-[8px] pb-[8px] flex flex-col gap-[4px] max-h-[268px]"
+          onScroll={onScroll}
+          {...scrollingProps}
+        >
           {loading ? (
             <div className="flex items-center justify-center py-6">
               <Loader2 size={16} className="animate-spin text-gray-400" />

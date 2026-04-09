@@ -11,6 +11,7 @@ import { AddSpaceIcon, ShareOutlineIcon } from "~/components/icons";
 import { AddToKnowledgeModal } from "../Article/AddToKnowledgeModal";
 import { ChannelQuoteIcon } from "~/components/icons/channels";
 import { useAuthContext } from "~/hooks/AuthContext";
+import { ArticleFaviconCoverPlaceholder } from "./ArticleFaviconCoverPlaceholder";
 
 interface ArticleCardProps {
     article: Article;
@@ -64,7 +65,7 @@ export function ArticleCard({
     return (
         <>
         <div
-            className={`group cursor-pointer relative py-5 flex gap-6 border-b border-dashed border-gray-200 last:border-none`}
+            className="group relative flex cursor-pointer gap-6 border-b border-dashed border-[#E0E0E0] py-5 last:border-none"
             style={{
                 transitionProperty: 'background-color',
                 transitionDuration: '350ms',
@@ -72,18 +73,20 @@ export function ArticleCard({
             }}
             onClick={() => onSelect(article)}
         >
-            {/* 1. 左侧封面图 - 移动到左边，并调整比例 */}
-            {article.coverImage && (
+            {/* 1. 左侧封面：有配图用封面；无配图用信源 ico 双层模糊占位 */}
+            {article.coverImage ? (
                 <div className="size-[88px] flex-shrink-0 overflow-hidden rounded-sm">
                     <img
                         src={article.coverImage}
                         alt={article.title}
-                        className="w-full h-full object-cover group-hover:scale-105"
-                        style={{
-                            transitionProperty: 'background-color',
-                            transitionDuration: '350ms',
-                            transitionTimingFunction: 'ease-in-out'
-                        }}
+                        className="h-full w-full object-cover transition-transform duration-300 ease-in-out group-hover:scale-105"
+                    />
+                </div>
+            ) : (
+                <div className="transition-transform duration-300 ease-in-out group-hover:scale-105">
+                    <ArticleFaviconCoverPlaceholder
+                        iconUrl={article.sourceAvatar}
+                        alt={article.sourceName}
                     />
                 </div>
             )}
@@ -113,17 +116,17 @@ export function ArticleCard({
 
                 {/* 3. 底部元信息 - 来源和时间 */}
                 <div className="flex items-center justify-between mt-4 relative">
-                    <div className="flex items-center gap-2 text-xs">
-                        <div className="size-4 overflow-hidden">
+                    <div className="flex items-center gap-2 text-xs text-[#999]">
+                        <div className="size-4 shrink-0 overflow-hidden">
                             <img
                                 src={article.sourceAvatar}
                                 alt=""
-                                className="w-full h-full object-cover"
+                                className="h-full w-full object-cover"
                             />
                         </div>
-                        <span className="text-gray-800 max-w-40 truncate">{article.sourceName}</span>
-                        <span className="text-gray-400">|</span>
-                        <span className="text-gray-400">{formatTime(article.publishedAt)}</span>
+                        <span className="max-w-40 truncate">{article.sourceName}</span>
+                        <span className="mx-0.5 h-2.5 w-px shrink-0 bg-[#E0E0E0]" aria-hidden />
+                        <span>{formatTime(article.publishedAt)}</span>
                     </div>
 
                     {showArticleActions && (
