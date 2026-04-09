@@ -277,10 +277,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
     # ──────────────────────────── Listings ────────────────────────────────────
 
-    async def get_my_created_spaces(
-            self, order_by: str = 'update_time'
+    async def _format_member_spaces(
+            self, members: List[SpaceChannelMember], order_by: str
     ) -> List[KnowledgeRead]:
-        members = await SpaceChannelMemberDao.async_get_user_writable_members(self.login_user.user_id)
         if not members:
             return []
 
@@ -288,55 +287,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
             int(one.business_id): one for one in members
         }
         res = await KnowledgeDao.async_get_spaces_by_ids(list(members_map.keys()), order_by)
-        pinned_res = []
-        not_pinned_res = []
+        pinned_spaces = []
+        normal_spaces = []
         for one in res:
             member_conf = members_map.get(one.id)
             if not member_conf:
                 continue
 
-            if member_conf.is_pinned:
-                pinned_res.append(
-                    KnowledgeSpaceInfoResp(
-                        **one.model_dump(),
-                        is_pinned=True,
-                        user_role=member_conf.user_role,
-                        subscription_status=SpaceSubscriptionStatusEnum.SUBSCRIBED,
-                        is_followed=True,
-                    ))
-            else:
-                not_pinned_res.append(
-                    KnowledgeSpaceInfoResp(
-                        **one.model_dump(),
-                        is_pinned=False,
-                        user_role=member_conf.user_role,
-                        subscription_status=SpaceSubscriptionStatusEnum.SUBSCRIBED,
-                        is_followed=True,
-                    ))
-        return pinned_res + not_pinned_res
-
-    async def get_my_followed_spaces(
-            self, order_by: str = 'update_time'
-    ) -> List[KnowledgeRead]:
-        """
-        Return the spaces the current user follows (non-creator).
-        Pinned spaces always appear first; within each pinned/non-pinned group
-        the caller-specified order_by is applied.
-        """
-        # Fetch members ordered by is_pinned DESC so we know which are pinned
-        members = await SpaceChannelMemberDao.async_get_user_followed_members(self.login_user.user_id)
-        if not members:
-            return []
-
-        members_map = {}
-        for one in members:
-            members_map[int(one.business_id)] = one
-
-        res = await KnowledgeDao.async_get_spaces_by_ids(list(members_map.keys()), order_by)
-        pinned_spaces = []
-        normal_spaces = []
-        for one in res:
-            member_conf = members_map[one.id]
             if member_conf.is_pinned:
                 pinned_spaces.append(
                     KnowledgeSpaceInfoResp(
@@ -355,8 +312,31 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         subscription_status=SpaceSubscriptionStatusEnum.SUBSCRIBED,
                         is_followed=True,
                     ))
-
         return pinned_spaces + normal_spaces
+
+    async def get_my_created_spaces(
+            self, order_by: str = 'update_time'
+    ) -> List[KnowledgeRead]:
+        members = await SpaceChannelMemberDao.async_get_user_created_members(self.login_user.user_id)
+        return await self._format_member_spaces(members, order_by)
+
+    async def get_my_managed_spaces(
+            self, order_by: str = 'name'
+    ) -> List[KnowledgeRead]:
+        members = await SpaceChannelMemberDao.async_get_user_managed_members(self.login_user.user_id)
+        return await self._format_member_spaces(members, order_by)
+
+    async def get_my_followed_spaces(
+            self, order_by: str = 'update_time'
+    ) -> List[KnowledgeRead]:
+        """
+        Return the spaces the current user follows (non-creator).
+        Pinned spaces always appear first; within each pinned/non-pinned group
+        the caller-specified order_by is applied.
+        """
+        # Fetch members ordered by is_pinned DESC so we know which are pinned
+        members = await SpaceChannelMemberDao.async_get_user_followed_members(self.login_user.user_id)
+        return await self._format_member_spaces(members, order_by)
 
     async def pin_space(self, space_id: int, is_pinned: bool = True) -> bool:
         return await SpaceChannelMemberDao.pin_space_id(space_id, self.login_user.user_id, is_pinned)

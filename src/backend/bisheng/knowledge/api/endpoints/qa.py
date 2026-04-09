@@ -6,7 +6,7 @@ from fastapi import APIRouter, Body
 from sqlmodel import select
 
 from bisheng.api.v1.schemas import resp_200
-from bisheng.common.errcode.qa import BackendProcessingError
+from bisheng.common.errcode.knowledge import BackendProcessingError
 from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.recall_chunk import RecallChunk
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao

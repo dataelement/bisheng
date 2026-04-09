@@ -8,7 +8,6 @@ from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import ServerError
 from bisheng.common.schemas.api import resp_200, SSEResponse
 from bisheng.knowledge.api.dependencies import get_knowledge_space_service, get_knowledge_space_chat_service
-from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileStatus
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     KnowledgeSpaceCreateReq, KnowledgeSpaceUpdateReq,
     FolderCreateReq, FolderRenameReq,
@@ -16,7 +15,6 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     BatchDeleteReq, BatchDownloadReq,
     UpdateSpaceMemberRoleRequest, RemoveSpaceMemberRequest,
     ChatReq, ChatFolderReq, )
-from bisheng.api.v1.schemas import KnowledgeFileReProcess
 from bisheng.knowledge.domain.services.knowledge_space_chat_service import KnowledgeSpaceChatService
 from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 
@@ -94,6 +92,15 @@ async def get_my_created_spaces(
         svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
     spaces = await svc.get_my_created_spaces(order_by)
+    return resp_200(spaces)
+
+
+@router.get('/managed')
+async def get_my_managed_spaces(
+        order_by: str = 'name',
+        svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    spaces = await svc.get_my_managed_spaces(order_by)
     return resp_200(spaces)
 
 

@@ -290,10 +290,10 @@ class SpaceChannelMemberDao:
             return result.all()
 
     @classmethod
-    async def async_get_user_writable_members(cls, user_id: int) -> List[SpaceChannelMember]:
+    async def async_get_user_created_members(cls, user_id: int) -> List[SpaceChannelMember]:
         """
-        Async: Get all active writable space membership records for a user
-        (creator and admin), ordered by is_pinned DESC then create_time DESC.
+        Async: Get all active created space membership records for a user
+        (creator only), ordered by is_pinned DESC then create_time DESC.
         """
 
         statement = (
@@ -302,7 +302,31 @@ class SpaceChannelMemberDao:
                 SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
                 SpaceChannelMember.user_id == user_id,
                 SpaceChannelMember.status == MembershipStatusEnum.ACTIVE,
-                SpaceChannelMember.user_role.in_([UserRoleEnum.CREATOR, UserRoleEnum.ADMIN]),
+                SpaceChannelMember.user_role == UserRoleEnum.CREATOR,
+            )
+            .order_by(
+                SpaceChannelMember.is_pinned.desc(),
+                SpaceChannelMember.create_time.desc(),
+            )
+        )
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return result.all()
+
+    @classmethod
+    async def async_get_user_managed_members(cls, user_id: int) -> List[SpaceChannelMember]:
+        """
+        Async: Get all active managed space membership records for a user
+        (admin and creator), ordered by is_pinned DESC then create_time DESC.
+        """
+
+        statement = (
+            select(SpaceChannelMember)
+            .where(
+                SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
+                SpaceChannelMember.user_id == user_id,
+                SpaceChannelMember.status == MembershipStatusEnum.ACTIVE,
+                SpaceChannelMember.user_role.in_([UserRoleEnum.ADMIN, UserRoleEnum.CREATOR]),
             )
             .order_by(
                 SpaceChannelMember.is_pinned.desc(),
