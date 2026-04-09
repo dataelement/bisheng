@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import List, Optional, Dict, TYPE_CHECKING
 
 from fastapi import Request
+from loguru import logger
 
 from bisheng.api.v1.schemas import KnowledgeFileOne, FileProcessBase, ExcelRule
 from bisheng.common.dependencies.user_deps import UserPayload  # noqa: F401 – kept for type hints
@@ -907,6 +908,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             for one in roles:
                 default_file_size_limit = max(default_file_size_limit, one.knowledge_space_file_limit)
         default_file_size_limit = default_file_size_limit * 1024 * 1024 * 1024
+        logger.debug(f"space_file_size_limit: {default_file_size_limit}")
         current_total_file_size = int(await SpaceFileDao.get_user_total_file_size(self.login_user.user_id))
 
         folder_id2name = {}
