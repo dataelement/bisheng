@@ -1182,10 +1182,10 @@ class KnowledgeService(KnowledgeUtils):
         """ Get the original download address of the file with authentication """
         file = KnowledgeFileDao.query_by_id_sync(file_id)
         if not file:
-            raise NotFoundError()
-        knowledge_info = KnowledgeDao.query_by_id(file.id)
+            raise NotFoundError(msg="file not found")
+        knowledge_info = KnowledgeDao.query_by_id(file.knowledge_id)
         if not knowledge_info:
-            raise NotFoundError()
+            raise NotFoundError(msg="knowledge not found")
         if not login_user.access_check(knowledge_info.user_id, str(knowledge_info.id), AccessType.KNOWLEDGE):
             raise UnAuthorizedError()
         return cls.get_file_share_url(file=file)
@@ -1196,7 +1196,7 @@ class KnowledgeService(KnowledgeUtils):
         if file is None:
             file = KnowledgeFileDao.query_by_id_sync(file_id)
         if not file:
-            raise NotFoundError()
+            raise NotFoundError(msg="file not found")
         minio_client = get_minio_storage_sync()
         if file.preview_file_object_name:
             original_url = cls.get_file_share_url_with_empty(file.object_name)
