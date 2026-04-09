@@ -28,6 +28,52 @@ import AiModelSelect from "./AiModelSelect";
 import BooksIcon from "../ui/icon/Books";
 import BookOpen from "../ui/icon/BookOpen";
 
+const KbTag = ({ kb, onRemove }: { kb: any; onRemove?: () => void }) => {
+    const textRef = useRef<HTMLSpanElement>(null);
+    const [textW, setTextW] = useState<number | undefined>(undefined);
+
+    useLayoutEffect(() => {
+        const el = textRef.current;
+        if (el && textW === undefined) {
+            setTextW(Math.min(el.scrollWidth, 120));
+        }
+    }, [kb.name, textW]);
+
+    return (
+        <div
+            className="group flex items-center shrink-0
+                min-w-[44px] h-6 px-2
+                rounded-[4px] bg-white
+                text-xs text-slate-700
+                hover:bg-slate-50 transition-colors duration-200"
+        >
+            {kb.type === 'space' ? (
+                <BookOpen className="size-4 text-[#999] shrink-0 mr-1" />
+            ) : (
+                <BooksIcon className="size-4 text-[#999] shrink-0 mr-1" />
+            )}
+
+            <div
+                className="flex items-center overflow-hidden"
+                style={{ width: textW }}
+            >
+                <span ref={textRef} className="truncate min-w-0">{kb.name}</span>
+                {onRemove && (
+                    <button
+                        onClick={onRemove}
+                        className="shrink-0 flex items-center justify-center
+                            h-4 w-0 group-hover:w-4 overflow-hidden
+                            rounded-full hover:bg-slate-200
+                            text-slate-400 transition-all duration-200"
+                    >
+                        ✕
+                    </button>
+                )}
+            </div>
+        </div>
+    );
+};
+
 export interface AiChatInputFeatures {
     modelSelect?: boolean;
     knowledgeBase?: boolean;
@@ -265,49 +311,18 @@ const AiChatInput = memo(
 
                     {/* Selected knowledge base / space tags */}
                     {selectedOrgKbs && selectedOrgKbs.length > 0 && !isLingsi && (
-                        <div className="mx-2 mt-2 max-h-[100px] overflow-y-auto">
-                            <div className="flex flex-wrap gap-2">
+                        <div className="m-3 max-h-[72px] overflow-y-auto scrollbar-on-hover">
+                            <div className="flex flex-wrap gap-1">
                                 {selectedOrgKbs.map((kb) => (
-                                    <div
+                                    <KbTag
                                         key={kb.id}
-                                        className="group relative flex items-center gap-1
-                                            px-2 py-1 pr-6
-                                            rounded-full bg-white border border-slate-200
-                                            text-xs text-slate-700
-                                            max-w-[200px]
-                                            hover:bg-slate-50 transition-all duration-200"
-                                    >
-                                        {kb.type === 'space' ? (
-                                            <BookOpen
-                                                className="size-[14px] text-slate-500 shrink-0"
-                                            />
-                                        ) : (
-                                            <BooksIcon
-                                                className="size-[14px] text-slate-500 shrink-0"
-                                            />
-                                        )}
-
-                                        <span className="truncate flex-1 min-w-0 transition-all duration-200 group-hover:text-[11px]">
-                                            {kb.name}
-                                        </span>
-
-                                        {onSelectedOrgKbsChange && (
-                                            <button
-                                                onClick={() => {
-                                                    onSelectedOrgKbsChange(
-                                                        selectedOrgKbs.filter((i) => i.id !== kb.id)
-                                                    );
-                                                }}
-                                                className="absolute right-1 top-1/2 -translate-y-1/2
-                                                    opacity-0 group-hover:opacity-100
-                                                    w-4 h-4 flex items-center justify-center
-                                                    rounded-full hover:bg-slate-200
-                                                    text-slate-400 transition-opacity duration-200"
-                                            >
-                                                ✕
-                                            </button>
-                                        )}
-                                    </div>
+                                        kb={kb}
+                                        onRemove={onSelectedOrgKbsChange ? () => {
+                                            onSelectedOrgKbsChange(
+                                                selectedOrgKbs.filter((i) => i.id !== kb.id)
+                                            );
+                                        } : undefined}
+                                    />
                                 ))}
                             </div>
                         </div>

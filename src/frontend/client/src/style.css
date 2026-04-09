@@ -2992,3 +2992,23 @@ button.scroll-convo {
 .noscrollbar {
   scrollbar-width: none;
 }
+
+.scrollbar-on-hover {
+  scrollbar-width: none;
+}
+.scrollbar-on-hover:hover {
+  scrollbar-width: thin;
+}
+.scrollbar-on-hover::-webkit-scrollbar {
+  width: 0;
+}
+.scrollbar-on-hover:hover::-webkit-scrollbar {
+  width: 6px;
+}
+.scrollbar-on-hover::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+.scrollbar-on-hover::-webkit-scrollbar-track {
+  background: transparent;
+}
