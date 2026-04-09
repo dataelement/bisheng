@@ -247,9 +247,8 @@ const SortableHeader = ({
     const sortIconSrc = `${__APP_ENV__.BASE_URL}/assets/channel/sort-amount-${arrowDir}${isActive ? "-blue" : ""}.svg`;
     const sortIcon = (
         <img
-            className={`size-4 shrink-0 transition-opacity ${
-                isActive ? "opacity-100" : "opacity-0"
-            } group-hover:opacity-100`}
+            className={`size-4 shrink-0 transition-opacity ${isActive ? "opacity-100" : "opacity-0"
+                } group-hover:opacity-100`}
             src={sortIconSrc}
             alt=""
         />
@@ -663,7 +662,7 @@ function FileRow({
                                     onNavigateFolder?.();
                                     return;
                                 }
-                                if (!namePreviewable) return;
+                                // if (!namePreviewable) return;
                                 onPreview?.();
                             }}
                         >

@@ -152,6 +152,8 @@ export function KnowledgeSpaceContent({
 
     useEffect(() => {
         setSelectedFiles(new Set());
+        setSearchQuery("");
+        setSearchTagIds([]); // 切换空间时清空搜索条件
     }, [space.id]);
 
     const isAdmin = space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;

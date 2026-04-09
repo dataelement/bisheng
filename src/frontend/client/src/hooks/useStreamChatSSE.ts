@@ -78,6 +78,14 @@ export default function useStreamChatSSE(
             try {
                 const data = JSON.parse(e.data);
 
+                if (data.type === "end") {
+                    // Stream complete — skip content (it's the full duplicate),
+                    // send final accumulated text
+                    onFinal(buildFullText());
+                    onEnd();
+                    return;
+                }
+
                 // Extract content deltas from message object
                 const msg = data.message;
                 if (msg) {
@@ -87,13 +95,6 @@ export default function useStreamChatSSE(
                     if (msg.content) {
                         contentText += msg.content;
                     }
-                }
-
-                if (data.type === "end") {
-                    // Stream complete — send final accumulated text
-                    onFinal(buildFullText());
-                    onEnd();
-                    return;
                 }
 
                 // Intermediate stream event — send accumulated text so far
