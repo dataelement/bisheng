@@ -62,10 +62,6 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     }
   }, [activeConvoId]); // intentionally ONLY on activeConvoId — don't add navigate/conversationId
 
-  useEffect(() => {
-    (window as any).isLinsight = isLingsi;
-  }, [isLingsi]);
-
   // Reset lingsi mode when messages exist
   useEffect(() => {
     if (messages.length > 0) {

@@ -28,6 +28,7 @@ type UseFileHandling = {
   fileSetter?: FileSetter;
   fileFilter?: (file: File) => boolean;
   additionalMetadata?: Record<string, string | undefined>;
+  isLinsight?: boolean;
 };
 
 const useFileHandling = (params?: UseFileHandling) => {
@@ -173,6 +174,10 @@ const useFileHandling = (params?: UseFileHandling) => {
           formData.append(key, value);
         }
       }
+    }
+
+    if (params?.isLinsight) {
+      formData.append('isLinsight', 'true');
     }
 
     if (isAgentsEndpoint(endpoint)) {

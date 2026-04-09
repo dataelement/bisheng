@@ -471,6 +471,7 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
             accept={accept}
             showVoice={showVoice}
             fileTip={!isLingsi && !isVisual}
+            isLinsight={isLingsi}
             noUpload={!bsConfig?.fileUpload.enabled}
             disableInputs={disableInputs || audioOpening}
             disabledSearch={isSearch && !isLingsi}

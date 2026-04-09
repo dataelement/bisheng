@@ -155,7 +155,7 @@ export function FileCard({
             return;
         }
 
-        if (!isKnowledgeItemPreviewable(file)) return;
+        // if (!isKnowledgeItemPreviewable(file)) return;
 
         // Space square drawer sets disableClickNavigate to avoid relying on default navigation;
         // still honor explicit onPreview when provided.

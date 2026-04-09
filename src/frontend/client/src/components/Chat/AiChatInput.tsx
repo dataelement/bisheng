@@ -249,6 +249,7 @@ const AiChatInput = memo(
                             showVoice={showVoice}
                             accepts={accept}
                             disabled={filesDisabled}
+                            uploadMode={isLingsi ? 'linsight' : 'workstation'}
                             size={bsConfig?.uploaded_files_maximum_size || 50}
                             onChange={(files: any) => {
                                 setFileUploading(!files);
