@@ -26,6 +26,7 @@ import {
 } from "~/components/SidebarListMoreMenu";
 import ClosedIcon from "~/components/ui/icon/ClosedIcon";
 import { useConfirm, useToastContext } from "~/Providers";
+import { getFullWidthLength } from "~/utils";
 import {
     ChannelApplicationIcon,
     ChannelAppeffectIcon,
@@ -67,7 +68,7 @@ export default function ChannelItem({
         const newName = e.target.value.trim();
         setIsEditing(false);
         if (!newName) return
-        if (newName.length > 10) {
+        if (getFullWidthLength(newName) > 10) {
             return showToast({
                 message: localize("com_subscription.max_10_characters"),
                 severity: NotificationSeverity.ERROR

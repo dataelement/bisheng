@@ -105,9 +105,10 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
                 });
             }, uploadMode).then(response => {
                 const filePath = response.data.file_path; // Assuming the response contains the file ID
+                const fileId = response.data.file_id; // Server-returned file_id
                 filesRef.current = filesRef.current.map(f => {
                     if (f.id === id) {
-                        return { ...f, isUploading: false, filePath, progress: 100 }; // Set progress to 100 when uploaded
+                        return { ...f, isUploading: false, filePath, fileId, progress: 100 }; // Set progress to 100 when uploaded
                     }
                     return f;
                 });
@@ -116,7 +117,7 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
                 remainingUploadsRef.current -= 1; // Decrease the remaining uploads count
                 if (remainingUploadsRef.current === 0) {
                     // Once all files are uploaded, trigger onChange with the file IDs
-                    const uploadedFileIds = filesRef.current.filter(f => f.id).map(f => ({ file_id: f.id, filepath: f.filePath, type: f.type, name: f.name }));
+                    const uploadedFileIds = filesRef.current.filter(f => f.id).map(f => ({ file_id: f.fileId || f.id, filepath: f.filePath, type: f.type, name: f.name }));
                     onChange(uploadedFileIds); // Pass the file IDs to onChange
                 }
             }).catch((e) => {
@@ -126,7 +127,7 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
                 remainingUploadsRef.current -= 1; // Decrease the remaining uploads count
                 if (remainingUploadsRef.current === 0) {
                     // If no files remain, trigger onChange immediately
-                    const uploadedFileIds = filesRef.current.filter(f => f.id).map(f => ({ file_id: f.id, filepath: f.filePath, type: f.type, name: f.name }));
+                    const uploadedFileIds = filesRef.current.filter(f => f.id).map(f => ({ file_id: f.fileId || f.id, filepath: f.filePath, type: f.type, name: f.name }));
                     onChange(uploadedFileIds);
                 }
             });
@@ -135,7 +136,7 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
         // Wait for all files to finish uploading
         Promise.all(uploadPromises).then(() => {
             // Once all files are uploaded, trigger onChange with the file IDs
-            const uploadedFileIds = filesRef.current.filter(f => f.id).map(f => ({ file_id: f.id, filepath: f.filePath, type: f.type, name: f.name }));
+            const uploadedFileIds = filesRef.current.filter(f => f.id).map(f => ({ file_id: f.fileId || f.id, filepath: f.filePath, type: f.type, name: f.name }));
             onChange(uploadedFileIds); // Pass the file IDs to onChange
         });
     };
@@ -162,7 +163,7 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
 
         if (remainingUploadsRef.current === 0) {
             // If no files remain, trigger onChange immediately
-            const uploadedFileIds = filesRef.current.filter(f => f.id).map(f => ({ file_id: f.id, filepath: f.filePath, type: f.type, name: f.name }));
+            const uploadedFileIds = filesRef.current.filter(f => f.id).map(f => ({ file_id: f.fileId || f.id, filepath: f.filePath, type: f.type, name: f.name }));
             onChange(uploadedFileIds); // Trigger onChange with uploaded file IDs
         }
     };

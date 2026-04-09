@@ -108,10 +108,11 @@ export default function FilePreviewPage() {
         <Button
             variant="ghost"
             onClick={handleToggleAiAssistant}
-            className="h-8 px-1.5 text-sm gap-1 bg-gradient-to-br from-[#335CFF] to-[#7433FF] bg-clip-text text-transparent hover:text-transparent"
+            className="h-8 px-1.5 text-sm gap-1 hover:bg-accent"
         >
             <AiChatIcon className="size-3.5" />
-            {localize("com_knowledge.ai_assistant")}</Button>
+            <span className="ai-gradient-text">{localize("com_knowledge.ai_assistant")}</span>
+        </Button>
     );
 
     // Loading state while fetching preview URL

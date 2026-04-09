@@ -27,6 +27,7 @@ import {
 } from "~/components/SidebarListMoreMenu";
 import { useConfirm, useToastContext } from "~/Providers";
 import { useLocalize } from "~/hooks";
+import { getFullWidthLength } from "~/utils";
 import { ChannelPinIcon } from "~/components/icons/channels";
 
 function SpaceNotebookIcon({ active }: { active: boolean }) {
@@ -123,7 +124,7 @@ export default function KnowledgeSpaceItem({
         const newName = e.target.value.trim();
         setIsEditing(false);
         if (!newName) return
-        if (newName.length > 20) {
+        if (getFullWidthLength(newName) > 20) {
             return showToast({
                 message: localize("com_knowledge.max_20_chars_spaced"),
                 severity: NotificationSeverity.ERROR

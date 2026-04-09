@@ -306,7 +306,7 @@ export function FileCard({
                             )}
                             {!isAdmin && isFolder && file.fileNum != null && (
                                 <span className="text-xs text-[#86909c] whitespace-nowrap">
-                                    {localize("com_knowledge_items_count", { count: file.fileNum })}
+                                    {localize("com_knowledge_items_count", { count: file.successFileNum })}
                                 </span>
                             )}
                             {(!isFolder && file.tags && file.tags.length > 0) && (

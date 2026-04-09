@@ -14,6 +14,7 @@ import {
 import { Textarea } from "~/components/ui/Textarea";
 import { useLocalize } from "~/hooks";
 import { KnowledgeSpace, VisibilityType } from "~/api/knowledge";
+import { getFullWidthLength, truncateByFullWidth } from "~/utils";
 import { ChannelSuccessIcon } from "~/components/icons/channels";
 
 const MAX_SPACE_NAME = 20;
@@ -181,12 +182,12 @@ export function CreateKnowledgeSpaceDrawer({
                                         onCompositionEnd={(e) => {
                                             nameComposingRef.current = false;
                                             const v = e.currentTarget.value;
-                                            if (v.length > MAX_SPACE_NAME) {
+                                            if (getFullWidthLength(v) > MAX_SPACE_NAME) {
                                                 showToast({
                                                     message: localize("com_subscription.max_knowledge_space_name") || localize("com_knowledge.max_20_chars"),
                                                     severity: NotificationSeverity.WARNING
                                                 });
-                                                setName(v.slice(0, MAX_SPACE_NAME));
+                                                setName(truncateByFullWidth(v, MAX_SPACE_NAME));
                                             }
                                         }}
                                         onChange={(e) => {
@@ -195,12 +196,12 @@ export function CreateKnowledgeSpaceDrawer({
                                                 setName(v);
                                                 return;
                                             }
-                                            if (v.length > MAX_SPACE_NAME) {
+                                            if (getFullWidthLength(v) > MAX_SPACE_NAME) {
                                                 showToast({
                                                     message: localize("com_subscription.max_knowledge_space_name") || localize("com_knowledge.max_20_chars"),
                                                     severity: NotificationSeverity.WARNING
                                                 });
-                                                setName(v.slice(0, MAX_SPACE_NAME));
+                                                setName(truncateByFullWidth(v, MAX_SPACE_NAME));
                                             } else {
                                                 setName(v);
                                             }
@@ -209,7 +210,7 @@ export function CreateKnowledgeSpaceDrawer({
                                         className="h-11 border-[#E5E6EB] text-[14px] pr-16 bg-[#fff]"
                                     />
                                     <span className="absolute right-4 text-[12px] text-[#86909C]">
-                                        {name.length}/{MAX_SPACE_NAME}
+                                        {Math.ceil(getFullWidthLength(name))}/{MAX_SPACE_NAME}
                                     </span>
                                 </div>
                             </div>
@@ -228,12 +229,12 @@ export function CreateKnowledgeSpaceDrawer({
                                         onCompositionEnd={(e) => {
                                             descComposingRef.current = false;
                                             const v = e.currentTarget.value;
-                                            if (v.length > MAX_SPACE_DESC) {
+                                            if (getFullWidthLength(v) > MAX_SPACE_DESC) {
                                                 showToast({
                                                     message: localize("com_subscription.max_knowledge_space_desc") || localize("com_knowledge.max_200_chars"),
                                                     severity: NotificationSeverity.WARNING
                                                 });
-                                                setDescription(v.slice(0, MAX_SPACE_DESC));
+                                                setDescription(truncateByFullWidth(v, MAX_SPACE_DESC));
                                             }
                                         }}
                                         onChange={(e) => {
@@ -242,12 +243,12 @@ export function CreateKnowledgeSpaceDrawer({
                                                 setDescription(v);
                                                 return;
                                             }
-                                            if (v.length > MAX_SPACE_DESC) {
+                                            if (getFullWidthLength(v) > MAX_SPACE_DESC) {
                                                 showToast({
                                                     message: localize("com_subscription.max_knowledge_space_desc") || localize("com_knowledge.max_200_chars"),
                                                     severity: NotificationSeverity.WARNING
                                                 });
-                                                setDescription(v.slice(0, MAX_SPACE_DESC));
+                                                setDescription(truncateByFullWidth(v, MAX_SPACE_DESC));
                                             } else {
                                                 setDescription(v);
                                             }

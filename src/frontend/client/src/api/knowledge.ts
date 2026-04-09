@@ -475,7 +475,7 @@ export async function getManagedSpacesApi(params?: {
 }): Promise<KnowledgeSpace[]> {
     const res = await request.get<ApiResponse<RawKnowledgeSpace[]>>(`/api/v1/knowledge/space/managed`, {
         params: {
-            order_by: params?.order_by ?? 'update_time',
+            order_by: params?.order_by ?? 'name',
         },
     });
     return (res?.data || []).map(mapSpace);

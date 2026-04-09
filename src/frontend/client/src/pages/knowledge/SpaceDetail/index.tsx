@@ -13,6 +13,7 @@ import { KnowledgeSpaceHeader } from "./KnowledgeSpaceHeader";
 import { PaginationBar } from "./PaginationBar";
 import { SelectionPathBreadcrumb } from "./SelectionPathBreadcrumb";
 import { useLocalize, useScrollbarWhileScrolling } from "~/hooks";
+import { getFullWidthLength } from "~/utils";
 
 interface KnowledgeSpaceContentProps {
     space: KnowledgeSpace;
@@ -431,7 +432,7 @@ export function KnowledgeSpaceContent({
         if (!trimmed) {
             return isFolder && isCreating ? localize("com_knowledge.folder_name_empty") : localize("com_knowledge.name_empty");
         }
-        if (trimmed.length > 50) {
+        if (getFullWidthLength(trimmed) > 50) {
             return localize("com_knowledge.name_max_50");
         }
 

@@ -1,7 +1,6 @@
 import type { ConversationListResponse } from '~/types/chat';
 import { PermissionTypes, Permissions } from '~/types/chat';
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
-import { PanelLeftOpen } from 'lucide-react';
 import { useSearchContext } from '~/Providers';
 import { Conversations } from '~/components/Conversations';
 import { Spinner } from '~/components/svg';
@@ -16,6 +15,7 @@ import {
 } from '~/hooks';
 import { cn } from '~/utils';
 import AccountSettings from './AccountSettings';
+import NavToggle from './NavToggle';
 import NewChat from './NewChat';
 
 const Nav = ({
@@ -174,19 +174,15 @@ const Nav = ({
           </div>
         </div>
       </div>
-      {/* Desktop collapsed rail: match channel sidebar style */}
-      {!navVisible && !isSmallScreen && (
-        <div className="flex h-full w-12 flex-col items-center justify-start bg-white pt-4">
-          <button
-            type="button"
-            onClick={toggleNavVisible}
-            className="flex h-5 w-5 items-center justify-center rounded-md text-[#1d2129] hover:bg-slate-100"
-            aria-label={localize('com_nav_open_sidebar')}
-            title={localize('com_nav_open_sidebar')}
-          >
-            <PanelLeftOpen className="size-3.5" />
-          </button>
-        </div>
+      {!isSmallScreen && (
+        <NavToggle
+          navVisible={navVisible}
+          onToggle={toggleNavVisible}
+          isHovering={isHovering}
+          setIsHovering={setIsHovering}
+          className="fixed top-1/2 z-[50]"
+          translateX={236}
+        />
       )}
       {isSmallScreen && (
         <div

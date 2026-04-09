@@ -224,38 +224,46 @@ export const copyText = (text: string | HTMLElement): Promise<string | void> => 
   // Copy DOM element content
   if (typeof text !== 'string') return copyTextInDom(text);
 
-  // Try modern Clipboard API first, then fall back to textarea + execCommand.
-  // Firefox may silently fail with clipboard.writeText (resolves but clears
-  // clipboard) when not in a direct user-gesture synchronous context, so we
-  // always fall through to the legacy path on failure.
+  // Always run the legacy fallback first — it is synchronous and works reliably
+  // inside focus-trapped dialogs (Radix Dialog portals) where the async Clipboard
+  // API may silently resolve without actually writing in Firefox.
+  // If the fallback succeeds we are done; otherwise try the Clipboard API.
+  const fallbackOk = copyTextFallbackSync(text);
+  if (fallbackOk) return Promise.resolve();
+
   if (navigator.clipboard?.writeText) {
-    return navigator.clipboard.writeText(text).catch(() => copyTextFallback(text));
+    return navigator.clipboard.writeText(text);
   }
-  return copyTextFallback(text);
+  return Promise.reject(new Error('copy failed'));
 };
 
-/** Legacy fallback: create a hidden textarea, select its content, and execCommand('copy'). */
-function copyTextFallback(text: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const textarea = document.createElement('textarea');
-    textarea.value = text;
-    // Keep it off-screen but still in layout so Firefox can select it
-    textarea.style.position = 'fixed';
-    textarea.style.left = '-9999px';
-    textarea.style.top = '-9999px';
-    textarea.style.opacity = '0';
-    document.body.appendChild(textarea);
-    textarea.focus();
-    textarea.select();
-    try {
-      document.execCommand('copy');
-      resolve();
-    } catch {
-      reject(new Error('execCommand copy failed'));
-    } finally {
-      document.body.removeChild(textarea);
-    }
-  });
+/**
+ * Synchronous copy via a hidden textarea + execCommand.
+ * Appends inside the active dialog (if any) so that Radix focus-trap does not
+ * steal focus away from the textarea in Firefox.
+ * Returns true if execCommand reported success.
+ */
+function copyTextFallbackSync(text: string): boolean {
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.style.position = 'fixed';
+  textarea.style.left = '-9999px';
+  textarea.style.top = '-9999px';
+  textarea.style.opacity = '0';
+  // Append inside the active dialog to avoid focus-trap interference
+  const container = document.activeElement?.closest('[role="dialog"]') || document.body;
+  container.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+  let ok = false;
+  try {
+    ok = document.execCommand('copy');
+  } catch {
+    // execCommand can throw in rare cases
+  } finally {
+    container.removeChild(textarea);
+  }
+  return ok;
 }
 
 
@@ -284,6 +292,39 @@ export const generateUUID = (length: number) => {
   return uuid
 }
 
+
+/**
+ * Calculate the full-width length of a string.
+ * Full-width characters (e.g. CJK) count as 1, half-width characters (e.g. letters, digits) count as 0.5.
+ * Example: "你好world" => 2 + 5*0.5 = 4.5
+ */
+export function getFullWidthLength(str: string): number {
+  let len = 0;
+  for (let i = 0; i < str.length; i++) {
+    const code = str.charCodeAt(i);
+    if (code <= 0x7F) {
+      len += 0.5;
+    } else {
+      len += 1;
+    }
+  }
+  return len;
+}
+
+/**
+ * Truncate a string so that its full-width length does not exceed maxLen.
+ */
+export function truncateByFullWidth(str: string, maxLen: number): string {
+  let len = 0;
+  for (let i = 0; i < str.length; i++) {
+    const code = str.charCodeAt(i);
+    len += code <= 0x7F ? 0.5 : 1;
+    if (len > maxLen) {
+      return str.slice(0, i);
+    }
+  }
+  return str;
+}
 
 // 取后缀名
 export function getFileExtension(filename) {

@@ -18,6 +18,7 @@ import {
     batchUpdateTagsApi,
 } from "~/api/knowledge";
 import { useLocalize } from "~/hooks";
+import { getFullWidthLength } from "~/utils";
 
 interface EditTagsModalProps {
     isOpen: boolean;
@@ -89,7 +90,7 @@ export function EditTagsModal({
         const trimmed = inputValue.trim();
         if (!trimmed) return;
 
-        if (trimmed.length > 8) {
+        if (getFullWidthLength(trimmed) > 8) {
             showToast({ message: localize("com_knowledge.tags_char_limit_exceeded"), status: "error" });
             return;
         }

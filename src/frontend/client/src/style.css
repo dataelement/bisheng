@@ -2775,6 +2775,14 @@ button.scroll-convo {
   display: inline-block;
 }
 
+.ai-gradient-text {
+  background: linear-gradient(to bottom right, #335CFF, #7433FF);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  display: inline-block;
+}
+
 .lingsi-border-box {
   position: relative;
   width: 200px;

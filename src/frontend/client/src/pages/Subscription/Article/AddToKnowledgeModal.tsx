@@ -6,7 +6,7 @@ import { Input } from "~/components";
 import { Button } from "~/components/ui/Button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "~/components/ui/Dialog";
 import { useToastContext } from "~/Providers";
-import { generateUUID } from "~/utils";
+import { generateUUID, getFullWidthLength } from "~/utils";
 import {
     getManagedSpacesApi,
     getSpaceChildrenApi,
@@ -110,7 +110,7 @@ function InlineEdit({ defaultValue, onSave, onCancel, onValidate }: InlineEditPr
             onCancel();
             return;
         }
-        if (trimmed.length > 50) {
+        if (getFullWidthLength(trimmed) > 50) {
             onCancel();
             return;
         }
@@ -283,7 +283,7 @@ export function AddToKnowledgeModal({ open, onOpenChange, articleId }: AddToKnow
     useEffect(() => {
         if (!open) return;
         setSpacesLoading(true);
-        getManagedSpacesApi({ order_by: 'update_time' })
+        getManagedSpacesApi()
             .then((spaces) => {
                 const nodes: KnowledgeNode[] = spaces.map(s => ({
                     id: s.id,
@@ -398,7 +398,7 @@ export function AddToKnowledgeModal({ open, onOpenChange, articleId }: AddToKnow
 
     /** Save folder name — creates via API */
     const handleSaveEdit = async (id: string, name: string) => {
-        if (name.length > 50) {
+        if (getFullWidthLength(name) > 50) {
             showToast({ message: localize("com_subscription.folder_name_too_long"), severity: NotificationSeverity.WARNING });
             return;
         }

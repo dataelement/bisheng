@@ -330,10 +330,10 @@ export function KnowledgeSpaceHeader({
     const searchFieldClassName = toolbarCompact
         ? "relative min-w-0 w-full"
         : cn(
-              "relative min-w-0 w-full transition-[width,max-width,flex-grow] duration-200 ease-out",
-              "sm:flex-none sm:w-[450px] sm:max-w-[450px] sm:shrink-0",
-              "sm:focus-within:flex-1 sm:focus-within:w-auto sm:focus-within:max-w-none sm:focus-within:min-w-0"
-          );
+            "relative min-w-0 w-full transition-[width,max-width,flex-grow] duration-200 ease-out",
+            "sm:flex-none sm:w-[450px] sm:max-w-[450px] sm:shrink-0",
+            "sm:focus-within:flex-1 sm:focus-within:w-auto sm:focus-within:max-w-none sm:focus-within:min-w-0"
+        );
 
     return (
         <div className="space-y-4 pt-5">
@@ -433,12 +433,13 @@ export function KnowledgeSpaceHeader({
                 <div className="flex items-center gap-3 self-end sm:self-auto shrink-0 mt-2 sm:mt-0">
                     <Button
                         variant="ghost"
-                        className={`h-8 px-1.5 gap-1 font-normal bg-gradient-to-br from-[#335CFF] to-[#7433FF] bg-clip-text text-transparent hover:text-transparent ${isAiAssistantOpen ? 'bg-[#f0f5ff] rounded-md' : ''}`}
+                        className={`h-8 px-1.5 gap-1 font-normal hover:bg-accent ${isAiAssistantOpen ? 'bg-[#f0f5ff] rounded-md' : ''}`}
                         disabled={isSearching}
                         onClick={onToggleAiAssistant}
                     >
                         <AiChatIcon className="size-3.5" stroke={isSearching ? "#c9cdd4" : "#335CFF"} />
-                        {localize("com_knowledge.ai_assistant")}</Button>
+                        <span className={isSearching ? '' : 'ai-gradient-text'}>{localize("com_knowledge.ai_assistant")}</span>
+                    </Button>
 
                     {showShare && (
                         <Button

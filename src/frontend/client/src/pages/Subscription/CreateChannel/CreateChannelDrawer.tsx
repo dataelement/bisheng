@@ -35,7 +35,7 @@ import {
 } from "./FilterConditionEditor";
 import { validateCreateChannelForm } from "../channelUtils";
 import type { Channel, InformationSource } from "~/api/channels";
-import { cn } from "~/utils";
+import { cn, getFullWidthLength, truncateByFullWidth } from "~/utils";
 import { useLocalize } from "~/hooks";
 import { useCreateChannelForm } from "../hooks/useCreateChannelForm";
 
@@ -332,17 +332,16 @@ export function CreateChannelDrawer({
                                         value={form.channelName}
                                         onChange={(e) => {
                                             const v = e.target.value;
-                                            // 中文输入法组合输入阶段不做长度校验，避免提前触发提示
                                             if (isComposingName) {
                                                 form.setChannelName(v);
                                                 return;
                                             }
-                                            if (v.length > MAX_CHANNEL_NAME) {
+                                            if (getFullWidthLength(v) > MAX_CHANNEL_NAME) {
                                                 showToast({
                                                     message: localize("com_subscription.maximum_channel_name") || localize("com_subscription.max_10_characters"),
                                                     severity: NotificationSeverity.WARNING
                                                 });
-                                                form.setChannelName(v.slice(0, MAX_CHANNEL_NAME));
+                                                form.setChannelName(truncateByFullWidth(v, MAX_CHANNEL_NAME));
                                             } else {
                                                 form.setChannelName(v);
                                             }
@@ -351,12 +350,12 @@ export function CreateChannelDrawer({
                                         onCompositionEnd={(e) => {
                                             setIsComposingName(false);
                                             const v = e.currentTarget.value || "";
-                                            if (v.length > MAX_CHANNEL_NAME) {
+                                            if (getFullWidthLength(v) > MAX_CHANNEL_NAME) {
                                                 showToast({
                                                     message: localize("com_subscription.maximum_channel_name") || localize("com_subscription.max_10_characters"),
                                                     severity: NotificationSeverity.WARNING
                                                 });
-                                                form.setChannelName(v.slice(0, MAX_CHANNEL_NAME));
+                                                form.setChannelName(truncateByFullWidth(v, MAX_CHANNEL_NAME));
                                             } else {
                                                 form.setChannelName(v);
                                             }
@@ -365,7 +364,7 @@ export function CreateChannelDrawer({
                                         className="flex-1 h-8 text-[14px] border-[#E5E6EB]"
                                     />
                                     <span className="absolute right-4 flex-shrink-0 text-[12px] text-[#86909C]">
-                                        {form.channelName.length}/{MAX_CHANNEL_NAME}
+                                        {Math.ceil(getFullWidthLength(form.channelName))}/{MAX_CHANNEL_NAME}
                                     </span>
                                 </div>
                             </div>
@@ -380,17 +379,16 @@ export function CreateChannelDrawer({
                                         value={form.channelDesc}
                                         onChange={(e) => {
                                             const v = e.target.value;
-                                            // 中文输入法组合输入阶段不做长度校验，避免提前触发提示
                                             if (isComposingDesc) {
                                                 form.setChannelDesc(v);
                                                 return;
                                             }
-                                            if (v.length > MAX_CHANNEL_DESC) {
+                                            if (getFullWidthLength(v) > MAX_CHANNEL_DESC) {
                                                 showToast({
                                                     message: localize("com_subscription.maximum_channel_description") || localize("com_subscription.max_100_characters"),
                                                     severity: NotificationSeverity.WARNING
                                                 });
-                                                form.setChannelDesc(v.slice(0, MAX_CHANNEL_DESC));
+                                                form.setChannelDesc(truncateByFullWidth(v, MAX_CHANNEL_DESC));
                                             } else {
                                                 form.setChannelDesc(v);
                                             }
@@ -399,12 +397,12 @@ export function CreateChannelDrawer({
                                         onCompositionEnd={(e) => {
                                             setIsComposingDesc(false);
                                             const v = e.currentTarget.value || "";
-                                            if (v.length > MAX_CHANNEL_DESC) {
+                                            if (getFullWidthLength(v) > MAX_CHANNEL_DESC) {
                                                 showToast({
                                                     message: localize("com_subscription.maximum_channel_description") || localize("com_subscription.max_100_characters"),
                                                     severity: NotificationSeverity.WARNING
                                                 });
-                                                form.setChannelDesc(v.slice(0, MAX_CHANNEL_DESC));
+                                                form.setChannelDesc(truncateByFullWidth(v, MAX_CHANNEL_DESC));
                                             } else {
                                                 form.setChannelDesc(v);
                                             }

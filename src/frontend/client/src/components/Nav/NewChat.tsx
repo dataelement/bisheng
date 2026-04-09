@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { Search, PanelRightOpen, Plus } from 'lucide-react';
+import { Search, Plus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useRecoilValue } from 'recoil';
 import { icons } from '~/components/Chat/Menus/Endpoints/Icons';
@@ -105,11 +105,6 @@ export default function NewChat({
       <div className="" style={{ transform: 'none' }}>
         <div className="mb-4 flex items-center justify-between">
           <p className="font-medium text-[#212121] text-[14px]">{localize('com_nav_home')}</p>
-          {showToggleButton ? (
-            <div className="cursor-pointer rounded-md p-1 hover:bg-slate-100" onClick={toggleNav}>
-              <PanelRightOpen className="size-4 text-[#86909c]" />
-            </div>
-          ) : null}
         </div>
         <div className='flex gap-1 w-full'>
           {/* 新建btn */}

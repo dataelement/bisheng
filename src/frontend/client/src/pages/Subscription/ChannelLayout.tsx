@@ -1,5 +1,6 @@
 import React, { useState, useRef, useCallback } from "react";
 import { Article, Channel, getArticleDetailApi } from "~/api/channels";
+import NavToggle from "~/components/Nav/NavToggle";
 import { ArticleList } from "./ArticleList/ArticleList";
 import { ArticleDetail } from "./Article/ArticleDetail";
 import { useResizablePanel } from "./hooks/useResizablePanel";
@@ -15,6 +16,7 @@ const MIN_RIGHT_WIDTH = 480;
 export function ChannelLayout({ channel, onFullScreen }: ChannelLayoutProps) {
     const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
     const [detailLoading, setDetailLoading] = useState(false);
+    const [isToggleHovering, setIsToggleHovering] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
 
     const { leftWidth, isResizing, startResizing } = useResizablePanel({
@@ -92,23 +94,14 @@ export function ChannelLayout({ channel, onFullScreen }: ChannelLayoutProps) {
             {selectedArticle && (
                 <div className="relative flex-1 h-full min-w-[480px] bg-white">
                     {/* Collapse toggle — positioned on the left edge, vertically centered */}
-                    <div
-                        onClick={() => setSelectedArticle(null)}
-                        className="absolute top-1/2 -translate-y-1/2  z-[10] w-[24px] h-[32px] rounded-[6px] flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 transition-all duration-300 ease-in-out group"
-                    >
-                        <div className="relative w-[4px] h-[12px] flex flex-col items-center justify-center overflow-visible">
-                            {/* Top bar — pointing right (collapse direction) */}
-                            <div
-                                className="absolute top-1/2 w-[2px] h-[6px] bg-[#a9aeb8] rounded-full origin-bottom transition-transform duration-300 ease-in-out group-hover:bg-[#212121]"
-                                style={{ transform: 'translateY(-100%) rotate(-15deg)' }}
-                            />
-                            {/* Bottom bar */}
-                            <div
-                                className="absolute top-1/2 w-[2px] h-[6px] bg-[#a9aeb8] rounded-full origin-top transition-transform duration-300 ease-in-out group-hover:bg-[#212121]"
-                                style={{ transform: 'rotate(15deg)' }}
-                            />
-                        </div>
-                    </div>
+                    <NavToggle
+                        navVisible={true}
+                        onToggle={() => setSelectedArticle(null)}
+                        isHovering={isToggleHovering}
+                        setIsHovering={setIsToggleHovering}
+                        side="right"
+                        className="absolute top-1/2 z-[10]"
+                    />
                     <ArticleDetail
                         article={selectedArticle}
                         loading={detailLoading}

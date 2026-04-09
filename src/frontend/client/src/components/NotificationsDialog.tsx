@@ -657,6 +657,8 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                                             });
                                             return;
                                         }
+                                        const base = window.location.origin + (__APP_ENV__.BASE_URL || "");
+                                        const normalizedBase = base.endsWith("/") ? base.slice(0, -1) : base;
                                         if (target.targetType === "channel") {
                                             const route = isRejectedChannelJoinNotification(notification)
                                                 ? `/channel/share/${target.targetId}?square=1`
@@ -665,24 +667,21 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                                                 notificationId: notification.id,
                                                 route,
                                             });
-                                            navigate(route);
+                                            window.open(normalizedBase + route, "_blank");
                                         } else if (isRejectedKnowledgeSpaceJoinNotification(notification)) {
                                             const route = `/knowledge?square=1&previewSpace=${encodeURIComponent(target.targetId)}`;
-                                            window.dispatchEvent(new CustomEvent("knowledge-square-preview", {
-                                                detail: { spaceId: String(target.targetId) },
-                                            }));
                                             console.info("[NotificationsDialog] navigate", {
                                                 notificationId: notification.id,
                                                 route,
                                             });
-                                            navigate(route);
+                                            window.open(normalizedBase + route, "_blank");
                                         } else {
                                             const route = `/knowledge/space/${target.targetId}`;
                                             console.info("[NotificationsDialog] navigate", {
                                                 notificationId: notification.id,
                                                 route,
                                             });
-                                            navigate(route);
+                                            window.open(normalizedBase + route, "_blank");
                                         }
                                         onOpenChange?.(false);
                                     }}

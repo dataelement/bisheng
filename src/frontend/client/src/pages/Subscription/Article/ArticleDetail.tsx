@@ -248,10 +248,12 @@ export function ArticleDetail({ article, loading = false, screenFull = false, sh
                                 <span className="text-[#999]">{formatTime(article.publishedAt || '', true)}</span>
                             </div>}
                             {!aiAssistantOpen && <button
-                                className="flex items-center gap-1 text-xs transition-colors bg-gradient-to-br from-[#335CFF] to-[#7433FF] bg-clip-text text-transparent"
+                                className="flex items-center gap-1 text-xs transition-colors"
                                 onClick={() => onAiAssistant?.()}
                             >
-                                <AiChatIcon className="size-3.5 text-primary" />{localize("com_subscription.ai_assistant")}</button>}
+                                <AiChatIcon className="size-3.5 text-primary" />
+                                <span className="ai-gradient-text">{localize("com_subscription.ai_assistant")}</span>
+                            </button>}
                         </div>
                     </div>
                 </div>

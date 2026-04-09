@@ -217,7 +217,7 @@ export const ChatKnowledge = ({
   const loadSpaces = useCallback(async () => {
     setSpaceFetching(true);
     try {
-      const spaces = await getManagedSpacesApi({ order_by: 'update_time' });
+      const spaces = await getManagedSpacesApi();
       setAllSpaces(spaces);
     } catch (err) {
       console.error("[ChatKnowledge] Failed to load spaces:", err);

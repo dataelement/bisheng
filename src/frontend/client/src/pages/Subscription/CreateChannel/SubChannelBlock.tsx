@@ -3,6 +3,7 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { FilterConditionEditor, type FilterGroup, type FilterRelation } from "./FilterConditionEditor";
 import { ChannelEditIcon } from "~/components/icons/channels";
+import { getFullWidthLength, truncateByFullWidth } from "~/utils";
 
 const MAX_CHANNEL_NAME = 10;
 export interface SubChannelData {
@@ -69,8 +70,8 @@ export function SubChannelBlock({
     };
 
     const handleNameChange = (val: string) => {
-        const next = val.length > MAX_CHANNEL_NAME ? val.slice(0, MAX_CHANNEL_NAME) : val;
-        if (val.length > MAX_CHANNEL_NAME) onOverLimit?.();
+        const next = getFullWidthLength(val) > MAX_CHANNEL_NAME ? truncateByFullWidth(val, MAX_CHANNEL_NAME) : val;
+        if (getFullWidthLength(val) > MAX_CHANNEL_NAME) onOverLimit?.();
 
         // Sync immediately so parent state is always up to date when user clicks submit
         // (blur might not have fired yet depending on click timing).

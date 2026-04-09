@@ -12,6 +12,7 @@ import { useRecoilState } from 'recoil';
 import { bishengConfState } from '~/pages/appChat/store/atoms';
 import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import { useAuthContext, useLocalize, useScrollbarWhileScrolling } from '~/hooks';
+import { Tooltip, TooltipContent, TooltipTrigger } from '~/components/ui/Tooltip2';
 import store from '~/store';
 import { cn } from '~/utils';
 import { UserPopMenu } from './UserPopMenu';
@@ -24,22 +25,30 @@ const lastSectionPaths: Record<string, string> = {};
 interface SidebarItemProps {
   icon: React.ReactNode;
   to: string;
-  active: boolean; // 改为手动传入 active 状态
+  active: boolean;
+  label: string;
 }
 
-function SidebarItem({ icon, to, active }: SidebarItemProps) {
+function SidebarItem({ icon, to, active, label }: SidebarItemProps) {
   return (
-    <NavLink
-      to={to}
-      className={cn(
-        "flex items-center justify-center p-3 rounded-lg cursor-pointer transition-colors hover:bg-[#e6edfc]",
-        active && "bg-[#e6edfc]"
-      )}
-    >
-      {React.cloneElement(icon as React.ReactElement, {
-        className: cn("size-5", active ? "text-[#335CFF]" : "text-[#818181]"),
-      })}
-    </NavLink>
+    <Tooltip delayDuration={0}>
+      <TooltipTrigger asChild>
+        <NavLink
+          to={to}
+          className={cn(
+            "flex items-center justify-center p-3 rounded-lg cursor-pointer transition-colors hover:bg-[#e6edfc]",
+            active && "bg-[#e6edfc]"
+          )}
+        >
+          {React.cloneElement(icon as React.ReactElement, {
+            className: cn("size-5", active ? "text-[#335CFF]" : "text-[#818181]"),
+          })}
+        </NavLink>
+      </TooltipTrigger>
+      <TooltipContent side="right" sideOffset={8}>
+        {label}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -63,24 +72,28 @@ function Sidebar() {
       section: 'home',
       to: lastSectionPaths.home || '/c/new',
       icon: <HomeIcon />,
+      label: localize('com_nav_home'),
       isActive: /^\/(c|linsight)(\/|$)/.test(pathname),
     },
     {
       section: 'apps',
       to: lastSectionPaths.apps || '/apps',
       icon: <GlobeIcon />,
+      label: localize('com_nav_app_center'),
       isActive: matchPath('/app/:id/:fid/:type', pathname) !== null || pathname.startsWith('/apps'),
     },
     {
       section: 'channel',
       to: lastSectionPaths.channel || '/channel',
       icon: <LinkIcon />,
+      label: localize('com_ui_channel'),
       isActive: pathname.startsWith('/channel'),
     },
     {
       section: 'knowledge',
       to: lastSectionPaths.knowledge || '/knowledge',
       icon: <BookOpenIcon />,
+      label: localize('com_knowledge.knowledge_space'),
       isActive: pathname.startsWith('/knowledge'),
     },
   ].filter((l) => {
@@ -111,6 +124,7 @@ function Sidebar() {
               key={link.section}
               to={link.to}
               icon={link.icon}
+              label={link.label}
               active={link.isActive}
             />
           ))}

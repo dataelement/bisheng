@@ -117,7 +117,7 @@ export function useFileUpload({
                 });
                 // Detect duplicates: failed files with old_file_level_path indicate name conflict
                 const dupes = registeredFiles
-                    .filter(f => f.status === FileStatus.FAILED && f.oldFileLevelPath)
+                    .filter(f => f.status === FileStatus.FAILED)
                     .map(f => ({
                         fileId: f.id,
                         fileName: f.name,
