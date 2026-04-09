@@ -9,7 +9,7 @@ import { FileCard } from "./SpaceDetail/FileCard";
 import {
     KnowledgeFile,
     KnowledgeSpace,
-    SPACE_CHILDREN_STATUS_NUMS_EXCLUDE_FAILED,
+    SPACE_CHILDREN_STATUS_SUCCESS_ONLY,
     SpaceRole,
     VisibilityType,
     getJoinedSpacesApi,
@@ -48,12 +48,21 @@ export function KnowledgeSpacePreviewDrawer({
     const [parentNameStack, setParentNameStack] = useState<string[]>([]);
     const currentParentId = parentStack.length > 0 ? parentStack[parentStack.length - 1] : undefined;
 
-    /** /info 的 user_role 为 member 或 null（映射为 MEMBER）时，广场预览不展示失败文件（与空间内普通成员一致） */
-    const squarePreviewExcludeFailedFiles = (s: KnowledgeSpace | null) =>
-        !!s && s.role === SpaceRole.MEMBER;
+    /**
+     * 广场预览文件列表状态过滤（对齐 /space/{id}/info 的 user_role）：
+     * - creator / admin：不限制
+     * - member 与 user_role 为 null（映射为 member）：仅展示解析成功的文件
+     */
+    const getPreviewFileStatusFilter = (s: KnowledgeSpace): number[] | undefined => {
+        if (s.role === SpaceRole.CREATOR || s.role === SpaceRole.ADMIN) {
+            return undefined;
+        }
+        return SPACE_CHILDREN_STATUS_SUCCESS_ONLY;
+    };
 
     useEffect(() => {
         if (!open || !spaceId) return;
+        console.info("[KnowledgeSpacePreviewDrawer] open", { open, spaceId });
 
         setSpace(null);
         setStatus("none");
@@ -67,6 +76,13 @@ export function KnowledgeSpacePreviewDrawer({
         // 1) Top detail: GET /api/v1/knowledge/space/{space_id}/info
         getSpaceInfoApi(spaceId)
             .then(info => {
+                console.info("[KnowledgeSpacePreviewDrawer] loaded space info", {
+                    spaceId,
+                    visibility: info.visibility,
+                    subscriptionStatus: info.subscriptionStatus,
+                    isFollowed: info.isFollowed,
+                    isPending: info.isPending,
+                });
                 setSpace(info);
                 const sub = String(info.subscriptionStatus ?? "").toLowerCase();
                 // /info may still set is_followed when subscription_status is rejected; prefer explicit status.
@@ -85,6 +101,7 @@ export function KnowledgeSpacePreviewDrawer({
                 }
             })
             .catch(() => {
+                console.warn("[KnowledgeSpacePreviewDrawer] load space info failed", { spaceId });
                 showToast({ message: localize("com_knowledge.space_invalid_or_deleted"), severity: NotificationSeverity.WARNING });
                 onOpenChange(false);
             });
@@ -105,13 +122,13 @@ export function KnowledgeSpacePreviewDrawer({
         setChildrenTotal(0);
         setLoadingChildrenMore(false);
 
-        const memberView = squarePreviewExcludeFailedFiles(space);
+        const fileStatusFilter = getPreviewFileStatusFilter(space);
         getSpaceChildrenApi({
             space_id: space.id,
             ...(currentParentId ? { parent_id: currentParentId } : {}),
             page: 1,
             page_size: 20,
-            ...(memberView ? { file_status: SPACE_CHILDREN_STATUS_NUMS_EXCLUDE_FAILED } : {}),
+            ...(fileStatusFilter ? { file_status: fileStatusFilter } : {}),
         })
             .then(res => {
                 setFilesPreview(res.data);
@@ -132,13 +149,13 @@ export function KnowledgeSpacePreviewDrawer({
         const nextPage = childrenPage + 1;
         setLoadingChildrenMore(true);
         try {
-            const memberView = squarePreviewExcludeFailedFiles(space);
+            const fileStatusFilter = getPreviewFileStatusFilter(space);
             const res = await getSpaceChildrenApi({
                 space_id: space.id,
                 ...(currentParentId ? { parent_id: currentParentId } : {}),
                 page: nextPage,
                 page_size: 20,
-                ...(memberView ? { file_status: SPACE_CHILDREN_STATUS_NUMS_EXCLUDE_FAILED } : {}),
+                ...(fileStatusFilter ? { file_status: fileStatusFilter } : {}),
             });
             setFilesPreview(prev => [...prev, ...res.data]);
             setChildrenTotal(res.total);

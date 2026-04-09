@@ -6,6 +6,7 @@ import {
     DropdownMenuContent,
     DropdownMenuItem
 } from '~/components/ui/DropdownMenu';
+import { knowledgeSpaceDropdownSurfaceClassName } from '~/components/SidebarListMoreMenu';
 import { cn } from '~/utils';
 import { SpaceTag, getSpaceTagsApi } from '~/api/knowledge';
 import { useLocalize } from "~/hooks";
@@ -136,7 +137,10 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
                                 <ChevronDown className="size-3 shrink-0" />
                             </button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="start" className="min-w-[120px]">
+                        <DropdownMenuContent
+                            align="start"
+                            className={cn('min-w-[120px]', knowledgeSpaceDropdownSurfaceClassName)}
+                        >
                             <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setScope('current'); inputRef.current?.focus(); }}>{localize("com_knowledge.current_location")}</DropdownMenuItem>
                             <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setScope('all'); inputRef.current?.focus(); }}>{localize("com_knowledge.current_space")}</DropdownMenuItem>
                         </DropdownMenuContent>

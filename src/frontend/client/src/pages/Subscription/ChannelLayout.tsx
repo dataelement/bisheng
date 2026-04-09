@@ -78,12 +78,13 @@ export function ChannelLayout({ channel, onFullScreen }: ChannelLayoutProps) {
 
             {/* Splitter - only shown when an article is selected */}
             {selectedArticle && (
-                <div
-                    onMouseDown={startResizing}
-                    className={`group relative w-[1px] cursor-col-resize bg-[#f2f3f5] transition-all hover:bg-primary  active:bg-primary`}
-                >
-                    {/* Expand click area */}
-                    <div className="absolute inset-y-0 -left-1 -right-1 z-10" />
+                <div className="relative w-[1px] min-w-[1px] max-w-[1px] flex-none shrink-0">
+                    <div
+                        onMouseDown={startResizing}
+                        className="group absolute inset-y-0 left-1/2 z-10 flex w-4 -translate-x-1/2 cursor-col-resize justify-center"
+                    >
+                        <div className="pointer-events-none w-px self-stretch bg-[#f2f3f5] transition-[width,background-color] duration-150 group-hover:w-1 group-hover:bg-primary group-active:w-1 group-active:bg-primary" />
+                    </div>
                 </div>
             )}
 

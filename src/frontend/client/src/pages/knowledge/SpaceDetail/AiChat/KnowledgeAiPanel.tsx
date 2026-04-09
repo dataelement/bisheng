@@ -167,10 +167,10 @@ export function KnowledgeAiPanel({
             {/* Messages Area */}
             {messages.length === 0 && !activeChatId ? (
                 // Welcome screen
-                <div className="flex-1 flex flex-col items-center justify-center gap-4 text-center px-6">
+                <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
                     <img
-                        className="size-24 object-contain opacity-80"
-                        src={`${__APP_ENV__.BASE_URL}/assets/channel/empty.png`}
+                        className="mx-auto block size-[80px] object-contain"
+                        src={`${__APP_ENV__.BASE_URL}/assets/channel/ai-home.png`}
                         alt="AI Assistant"
                     />
                     <p className="text-sm text-[#86909c]">{welcomeText}</p>
@@ -186,6 +186,7 @@ export function KnowledgeAiPanel({
                     hideShare
                     hideHeaderTitle
                     flatMode
+                    knowledgeChatLayout
                     onPresetClick={() => { }}
                     onRegenerate={regenerate}
                 />

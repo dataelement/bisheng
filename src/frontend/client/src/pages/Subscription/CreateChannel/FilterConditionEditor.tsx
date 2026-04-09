@@ -9,6 +9,9 @@ import { ChannelMinusIcon, ChannelPlusIcon } from "~/components/icons/channels";
 
 const MAX_KEYWORDS_LEN = 200;
 const MAX_CONDITIONS_TOTAL = 20;
+/** plus.svg / minus.svg 为 32×32 Figma 导出，图形在 viewBox 内略偏左上，缩放后用位移做光学居中 */
+const FILTER_COND_ICON_SM = "block h-4 w-4 shrink-0 object-contain translate-x-px translate-y-px";
+const FILTER_COND_ICON_MD = "block h-8 w-8 shrink-0 object-contain translate-x-px translate-y-[3px]";
 
 export type FilterRelation = "and" | "or";
 
@@ -201,7 +204,7 @@ export function FilterConditionEditor({
                     className="flex items-center justify-center p-1.5 text-[#86909C] transition-colors w-8"
                     title={localize("com_subscription.add_condition")}
                 >
-                    <ChannelPlusIcon className="w-4 h-4" />
+                    <ChannelPlusIcon className={FILTER_COND_ICON_SM} />
                 </button>
             </div>
         );
@@ -231,10 +234,8 @@ export function FilterConditionEditor({
                         </span>
                         <RefreshCcw className="absolute size-3.5 opacity-0 group-hover/btn:opacity-100 transition-opacity pointer-events-none" />
                     </button>
-                    {/* 第一层连接线：实线+12px圆角，上下短横线等宽 */}
-                    <div className="absolute left-9 top-6 bottom-2 w-px bg-[#C9CDD4] rounded-[12px]" />
-                    <div className="absolute left-9 top-6 w-4 h-px bg-[#C9CDD4] rounded-[12px]" />
-                    <div className="absolute left-9 bottom-2 w-4 h-px bg-[#C9CDD4] rounded-[12px]" />
+                    {/* 第一层连接线：单元素连续圆角括号，更自然 */}
+                    <div className="absolute left-9 top-6 bottom-2 w-4 rounded-l-[11px] border-l border-y border-[#C9CDD4]" />
                 </>
             )}
 
@@ -269,18 +270,16 @@ export function FilterConditionEditor({
                                     </span>
                                     <RefreshCcw className="absolute size-3.5 opacity-0 group-hover/btn:opacity-100 transition-opacity pointer-events-none" />
                                 </button>
-                                {/* 第二层连接线：实线+12px圆角，上下短横线等宽 */}
-                                <div className="absolute left-9 top-4 bottom-3 w-px bg-[#C9CDD4] rounded-[12px]" />
-                                <div className="absolute left-9 top-4 w-4 h-px bg-[#C9CDD4] rounded-[12px]" />
-                                <div className="absolute left-9 bottom-3 w-4 h-px bg-[#C9CDD4] rounded-[12px]" />
+                                {/* 第二层连接线：单元素连续圆角括号，更自然 */}
+                                <div className="absolute left-9 top-4 bottom-1 w-[21px] rounded-l-[8px] border-l border-y border-[#C9CDD4]" />
                                 {!atTotalLimit && (
                                     <button
                                         type="button"
                                         onClick={() => addConditionInGroup(groupIndex)}
-                                        className="absolute left-14 bottom-1 flex items-center justify-center w-4 h-4 text-[#86909C] bg-white transition-colors"
+                                        className="absolute left-[57px] -bottom-2 flex items-center justify-center w-8 h-8 text-[#86909C] bg-white transition-colors"
                                         title={localize("com_subscription.add_condition_under_current_relation")}
                                     >
-                                        <ChannelPlusIcon className="w-4 h-4" />
+                                        <ChannelPlusIcon className={FILTER_COND_ICON_MD} />
                                     </button>
                                 )}
                             </>
@@ -295,8 +294,8 @@ export function FilterConditionEditor({
                                         group.conditions.length === 1 && "-ml-8"
                                     )}
                                 >
-                                    {/* 包含/不包含 */}
-                                    <div className="flex rounded-sm mt-1 border-[3px] border-[#F8F8F8] overflow-hidden flex-shrink-0">
+                                    {/* 包含/不包含：外 6px 圆角，选中项内 4px 圆角 */}
+                                    <div className="mt-1 flex flex-shrink-0 rounded-[6px] bg-[#F8F8F8] p-[2px]">
                                         <button
                                             type="button"
                                             onClick={() =>
@@ -305,11 +304,10 @@ export function FilterConditionEditor({
                                                 })
                                             }
                                             className={cn(
-                                                "px-1 py-1 text-[13px] transition-colors max-h-[26px]",
+                                                "flex-1 whitespace-nowrap rounded-[4px] px-2 py-1 text-center text-[13px] leading-[22px] transition-colors",
                                                 cond.include
-                                                    ? "bg-[#E8F3FF] text-[#335CFF]"
-
-                                                    : "bg-[#F8F8F8] text-[#818181] hover:bg-[#F2F3F5]"
+                                                    ? "bg-[#335CFF26] text-[#335CFF]"
+                                                    : "bg-transparent text-[#818181] hover:bg-[#F2F3F5]"
                                             )}
                                         >{localize("com_subscription.includes")}</button>
                                         <button
@@ -320,10 +318,10 @@ export function FilterConditionEditor({
                                                 })
                                             }
                                             className={cn(
-                                                "px-1 py-1 text-[13px] transition-colors max-h-[26px]",
+                                                "flex-1 whitespace-nowrap rounded-[4px] px-2 py-1 text-center text-[13px] leading-[22px] transition-colors",
                                                 !cond.include
-                                                    ? "bg-[#E8F3FF] text-[#335CFF]"
-                                                    : "bg-[#F8F8F8] text-[#818181] hover:bg-[#F2F3F5]"
+                                                    ? "bg-[#335CFF26] text-[#335CFF]"
+                                                    : "bg-transparent text-[#818181] hover:bg-[#F2F3F5]"
                                             )}
                                         >{localize("com_subscription.excludes")}</button>
                                     </div>
@@ -347,16 +345,16 @@ export function FilterConditionEditor({
                                     </div>
 
                                     {/* 第一层 & 第二层：可按配置隐藏首个条件删除 */}
-                                    <div className="flex items-center gap-1 mt-2.5 flex-shrink-0">
+                                    <div className="flex items-center gap-1  flex-shrink-0">
                                         {/* 第一层：group 仅 1 条时，这一条既是第一层，也有 + */}
                                         {group.conditions.length === 1 && !atTotalLimit && (
                                             <button
                                                 type="button"
                                                 onClick={() => addConditionInGroup(groupIndex)}
-                                                className="w-4 h-4 flex items-center justify-center text-[#86909C] transition-colors flex-shrink-0"
+                                                className="w-8 h-8 flex items-center justify-center text-[#86909C] transition-colors flex-shrink-0"
                                                 title={localize("com_subscription.add_condition_under_current_relation")}
                                             >
-                                                <ChannelPlusIcon className="w-4 h-4" />
+                                                <ChannelPlusIcon className={FILTER_COND_ICON_MD} />
                                             </button>
                                         )}
                                         {!(
@@ -373,10 +371,10 @@ export function FilterConditionEditor({
                                                             condIndex
                                                         )
                                                     }
-                                                    className="w-4 h-4 flex items-center justify-center text-[#86909C] hover:text-[#F53F3F] transition-colors flex-shrink-0"
+                                                    className="w-8 h-8 flex items-center justify-center text-[#86909C] hover:text-[#F53F3F] transition-colors flex-shrink-0"
                                                     title={localize("com_subscription.delete_this_condition")}
                                                 >
-                                                    <ChannelMinusIcon className="w-4 h-4" />
+                                                    <ChannelMinusIcon className={FILTER_COND_ICON_MD} />
                                                 </button>
                                             )}
                                     </div>
@@ -393,10 +391,10 @@ export function FilterConditionEditor({
                     <button
                         type="button"
                         onClick={addRootCondition}
-                        className="flex items-center justify-center w-4 h-4 text-[#165DFF] transition-colors"
+                        className="flex items-center justify-center w-8 h-8 text-[#165DFF] transition-colors"
                         title={localize("com_subscription.add_condition")}
                     >
-                        <ChannelPlusIcon className="w-4 h-4" />
+                        <ChannelPlusIcon className={FILTER_COND_ICON_MD} />
                     </button>
                 </div>
             )}

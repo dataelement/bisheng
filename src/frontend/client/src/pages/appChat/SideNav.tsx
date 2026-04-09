@@ -8,11 +8,15 @@ import { AppSwitcherDropdown } from '~/pages/appChat/components/AppSwitcherDropd
 import { AppSidebarConvoItem } from '~/pages/appChat/components/AppSidebarConvoItem';
 import { cn } from '~/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '~/components/ui/Tooltip2';
+import { useLocalize } from '~/hooks';
 
-import TodayItemIcon from '~/components/ui/icon/TodayItem';
+function formatConversationTimeGroupLabel(label: string, localize: (key: string) => string) {
+    return label.startsWith('com_ui_date_') || label.startsWith('com_') ? localize(label) : label;
+}
 
 export function SideNav() {
     const navigate = useNavigate();
+    const localize = useLocalize();
 
     // Current conversation's app data
     const chatState = useRecoilValue(currentChatState);
@@ -38,7 +42,7 @@ export function SideNav() {
                 >
                     <ChevronLeft size={16} className="text-[#212121]" />
                 </button>
-                <span className="text-[14px] font-medium leading-[22px]">应用对话</span>
+                <span className="text-[14px] font-medium leading-[22px]">{localize('com_app_chat_sidebar_title')}</span>
             </div>
 
             {/* App card */}
@@ -85,13 +89,13 @@ export function SideNav() {
                             onClick={shareApp}
                             className="flex-1 min-w-0 h-[28px] flex items-center justify-center bg-white border border-[#ececec] rounded-[6px] text-[14px] leading-[22px] hover:bg-gray-50 transition-colors"
                         >
-                            分享应用
+                            {localize('com_app_share_app')}
                         </button>
                         <button
                             onClick={createNewChat}
                             className="flex-1 min-w-0 h-[28px] flex items-center justify-center bg-white border border-[#ececec] rounded-[6px] text-[14px] leading-[22px] hover:bg-gray-50 transition-colors"
                         >
-                            开启新对话
+                            {localize('com_knowledge_start_new_chat')}
                         </button>
                     </div>
                 </div>
@@ -106,7 +110,7 @@ export function SideNav() {
                         <div key={groupIdx} className="flex flex-col">
                             {/* Time label */}
                             <div className="text-black opacity-60 px-[12px] pt-4 text-[12px] mb-1">
-                                {group.label}
+                                {formatConversationTimeGroupLabel(group.label, localize)}
                             </div>
                             {/* Items */}
                             <div className="flex flex-col">

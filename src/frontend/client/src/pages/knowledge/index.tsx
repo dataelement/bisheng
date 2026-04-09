@@ -66,13 +66,15 @@ export default function Knowledge() {
     const queryClient = useQueryClient();
     const { spaceId, folderId: urlFolderId } = useParams<{ spaceId?: string; folderId?: string }>();
     const path = location.pathname || "";
-    const isShareRoute = /^\/knowledge\/share\//.test(path);
-    const isDetailRoute = /^\/knowledge\/space\//.test(path);
+    const isShareRoute = /\/knowledge\/share\//.test(path);
+    const isDetailRoute = /\/knowledge\/space\//.test(path);
     const previewSpaceId = isShareRoute ? spaceId : undefined;
     const detailSpaceId = isDetailRoute ? spaceId : undefined;
     const [previewDrawerOpen, setPreviewDrawerOpen] = useState(false);
     const [squarePreviewSpaceId, setSquarePreviewSpaceId] = useState<string | undefined>();
     const [squarePreviewDrawerOpen, setSquarePreviewDrawerOpen] = useState(false);
+    const previewQueryCleanupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const [knowledgeTabActivateEpoch, setKnowledgeTabActivateEpoch] = useState(0);
     const [squareStatusOverride, setSquareStatusOverride] = useState<
         Record<string, "join" | "joined" | "pending" | "rejected">
     >({});
@@ -102,6 +104,10 @@ export default function Knowledge() {
         setShowKnowledgeSquare(false);
         setSquarePreviewDrawerOpen(false);
         setSquarePreviewSpaceId(undefined);
+        if (previewQueryCleanupTimerRef.current) {
+            clearTimeout(previewQueryCleanupTimerRef.current);
+            previewQueryCleanupTimerRef.current = null;
+        }
     });
 
     // ─── File management (list, pagination, search, sort, navigation) ────
@@ -110,6 +116,7 @@ export default function Knowledge() {
     // KeepAlive: refresh the file list every time the user navigates back to /knowledge.
     useActivate(() => {
         fileManager.loadFiles(fileManager.currentPage);
+        setKnowledgeTabActivateEpoch((e) => e + 1);
     });
 
     const fileUpload = useFileUpload({
@@ -163,13 +170,13 @@ export default function Knowledge() {
         return () => {
             cancelled = true;
         };
-    }, [detailSpaceId, knowledgePluginGate]);
+    }, [detailSpaceId, knowledgePluginGate, knowledgeTabActivateEpoch]);
 
     // 广场：?square=1；从消息提醒「拒绝加入知识空间」进入时带 previewSpace=，打开广场上的预览抽屉
     useEffect(() => {
         if (knowledgePluginGate === "loading" || knowledgePluginGate === "disabled") return;
         const path = location.pathname || "";
-        const isSpaceDetailPath = /^\/knowledge\/space\//.test(path);
+        const isSpaceDetailPath = /\/knowledge\/space\//.test(path);
 
         // 深链在空间内时不要被历史遗留的 ?square=1 拉回广场（侧边选空间常不更新 URL）
         if (isSpaceDetailPath) {
@@ -189,15 +196,61 @@ export default function Knowledge() {
         }
         const previewFromQuery = params.get("previewSpace");
         if (previewFromQuery) {
+            console.info("[Knowledge] previewSpace query detected", {
+                pathname: path,
+                search: location.search,
+                previewFromQuery,
+            });
             setShowKnowledgeSquare(true);
             setSquarePreviewSpaceId(previewFromQuery);
             setSquarePreviewDrawerOpen(true);
-            params.delete("previewSpace");
-            const nextSearch = params.toString();
-            const basePath = path || "/knowledge";
-            navigate(nextSearch ? `${basePath}?${nextSearch}` : basePath, { replace: true });
+            if (previewQueryCleanupTimerRef.current) {
+                clearTimeout(previewQueryCleanupTimerRef.current);
+            }
+            // Delay URL cleanup so state updates (open drawer + target id) land first.
+            previewQueryCleanupTimerRef.current = setTimeout(() => {
+                const cleanupParams = new URLSearchParams(location.search);
+                cleanupParams.delete("previewSpace");
+                const nextSearch = cleanupParams.toString();
+                const basePath = path || "/knowledge";
+                console.info("[Knowledge] cleanup previewSpace query", {
+                    from: location.search,
+                    to: nextSearch ? `${basePath}?${nextSearch}` : basePath,
+                    squarePreviewSpaceId: previewFromQuery,
+                    squarePreviewDrawerOpen: true,
+                });
+                navigate(nextSearch ? `${basePath}?${nextSearch}` : basePath, { replace: true });
+                previewQueryCleanupTimerRef.current = null;
+            }, 0);
         }
-    }, [location.search, location.pathname, navigate, knowledgePluginGate]);
+    }, [location.search, location.pathname, navigate, knowledgePluginGate, knowledgeTabActivateEpoch]);
+
+    // Fallback for consecutive notification clicks in the same tab/session:
+    // update square preview drawer immediately even when route diff is swallowed.
+    useEffect(() => {
+        const onPreviewFromNotification = (evt: Event) => {
+            const customEvt = evt as CustomEvent<{ spaceId?: string }>;
+            const sid = customEvt?.detail?.spaceId;
+            if (!sid) return;
+            setShowKnowledgeSquare(true);
+            setSquarePreviewSpaceId(String(sid));
+            setSquarePreviewDrawerOpen(true);
+        };
+        window.addEventListener("knowledge-square-preview", onPreviewFromNotification as EventListener);
+        return () => {
+            window.removeEventListener("knowledge-square-preview", onPreviewFromNotification as EventListener);
+        };
+    }, []);
+
+    useEffect(() => {
+        console.info("[Knowledge] square preview state", {
+            showKnowledgeSquare,
+            squarePreviewSpaceId,
+            squarePreviewDrawerOpen,
+            pathname: location.pathname,
+            search: location.search,
+        });
+    }, [showKnowledgeSquare, squarePreviewSpaceId, squarePreviewDrawerOpen, location.pathname, location.search]);
 
     // Share link guard: if /knowledge/share/:spaceId points to an invalid/private space,
     // or a space whose join policy changed (approval -> public), show toast and redirect to square.
@@ -271,7 +324,7 @@ export default function Knowledge() {
         return () => {
             cancelled = true;
         };
-    }, [previewSpaceId, knowledgePluginGate]);
+    }, [previewSpaceId, knowledgePluginGate, knowledgeTabActivateEpoch]);
 
     // ─── Space actions ──────────────────────────────────────────────────
     const handleSpaceSelect = async (space: KnowledgeSpace | null) => {
@@ -423,7 +476,10 @@ export default function Knowledge() {
         return (
             <div className="relative h-full flex">
                 <KnowledgeSquare
-                    onBack={() => setShowKnowledgeSquare(false)}
+                    onBack={() => {
+                        setShowKnowledgeSquare(false);
+                        navigate("/knowledge", { replace: true });
+                    }}
                     title={localize("com_knowledge.explore_square")}
                     subtitle={localize("com_knowledge.explore_more_spaces")}
                     searchPlaceholder={localize("com_knowledge.search_space_placeholder")}
@@ -532,11 +588,14 @@ export default function Knowledge() {
 
                     {/* Splitter */}
                     {aiPane.showAiAssistant && (
-                        <div
-                            onMouseDown={aiPane.startSplitResize}
-                            className="group relative w-[1px] cursor-col-resize bg-[#e5e6eb] transition-all hover:w-1 hover:bg-primary active:w-1 active:bg-primary z-20 shrink-0"
-                        >
-                            <div className="absolute inset-y-0 -left-1.5 -right-1.5 z-10" />
+                        <div className="relative z-20 w-[1px] min-w-[1px] max-w-[1px] flex-none shrink-0">
+                            {/* Flex 始终 1px；线条 1px → hover/active 时 w-1（与原实现一致），视觉上加宽不占额外 flex 宽度 */}
+                            <div
+                                onMouseDown={aiPane.startSplitResize}
+                                className="group absolute inset-y-0 left-1/2 z-10 flex w-4 -translate-x-1/2 cursor-col-resize justify-center"
+                            >
+                                <div className="pointer-events-none w-px self-stretch bg-[#e5e6eb] transition-[width,background-color] duration-150 group-hover:w-1 group-hover:bg-primary group-active:w-1 group-active:bg-primary" />
+                            </div>
                         </div>
                     )}
 

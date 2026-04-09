@@ -5,19 +5,27 @@ import {
     PinOff,
     Settings,
     Users,
-    X
 } from "lucide-react";
 import { useState } from "react";
 import { Channel, ChannelRole } from "~/api/channels";
 import { NotificationSeverity } from "~/common";
 import {
     DropdownMenu,
-    DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuTrigger
 } from "~/components/ui/DropdownMenu";
-import { useConfirm, useToastContext } from "~/Providers";
+import {
+    SidebarListMoreMenuContent,
+    SidebarListMoreMenuDivider,
+    sidebarListMoreMenuDangerIconClassName,
+    sidebarListMoreMenuDangerItemClassName,
+    sidebarListMoreMenuDangerLabelClassName,
+    sidebarListMoreMenuIconClassName,
+    sidebarListMoreMenuItemClassName,
+    sidebarListMoreMenuLabelClassName,
+} from "~/components/SidebarListMoreMenu";
 import ClosedIcon from "~/components/ui/icon/ClosedIcon";
+import { useConfirm, useToastContext } from "~/Providers";
 import {
     ChannelApplicationIcon,
     ChannelAppeffectIcon,
@@ -152,41 +160,46 @@ export default function ChannelItem({
                         </button>
                     </DropdownMenuTrigger>
 
-                    <DropdownMenuContent
-                        align="end"
-                        sideOffset={8}
-                        className="w-40 px-4 py-3 rounded-lg border-none shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]"
-                        onClick={(e) => e.stopPropagation()}
-                    >
+                    <SidebarListMoreMenuContent onClick={(e) => e.stopPropagation()}>
                         {type === "created" && (
                             <DropdownMenuItem
-                                className="py-2 px-0 cursor-pointer focus:bg-[#f2f3f5]"
+                                className={sidebarListMoreMenuItemClassName}
                                 onClick={() => onChannelSettings(channel)}
                             >
-                                <Settings className="size-4 mr-2 text-[#999999]" />
-                                <span className="text-[14px] text-[#1d2129]">{localize("com_subscription.channel_settings")}</span>
+                                <Settings className={sidebarListMoreMenuIconClassName} />
+                                <span className={sidebarListMoreMenuLabelClassName}>
+                                    {localize("com_subscription.channel_settings")}
+                                </span>
                             </DropdownMenuItem>
                         )}
                         {[ChannelRole.CREATOR, ChannelRole.ADMIN].includes(channel.role) && (
                             <DropdownMenuItem
-                                className="py-2 px-0 cursor-pointer focus:bg-[#f2f3f5]"
+                                className={sidebarListMoreMenuItemClassName}
                                 onClick={() => onManageMembers(channel)}
                             >
-                                <Users className="size-4 mr-2 text-[#999999]" />
-                                <span className="text-[14px] text-[#1d2129]">{localize("com_subscription.member_management")}</span>
+                                <Users className={sidebarListMoreMenuIconClassName} />
+                                <span className={sidebarListMoreMenuLabelClassName}>
+                                    {localize("com_subscription.member_management")}
+                                </span>
                             </DropdownMenuItem>
                         )}
                         <DropdownMenuItem
                             onClick={() => onPin(channel.id, !channel.isPinned, type)}
-                            className="py-2 px-0 cursor-pointer focus:bg-[#f2f3f5]"
+                            className={sidebarListMoreMenuItemClassName}
                         >
                             {channel.isPinned ? (
-                                <><PinOff className="size-4 mr-2 text-[#999999]" /><span className="text-[14px] text-[#1d2129]">{localize("com_subscription.unpin")}</span></>
+                                <>
+                                    <PinOff className={sidebarListMoreMenuIconClassName} />
+                                    <span className={sidebarListMoreMenuLabelClassName}>{localize("com_subscription.unpin")}</span>
+                                </>
                             ) : (
-                                <><Pin className="size-4 mr-2 text-[#999999]" /><span className="text-[14px] text-[#1d2129]">{localize("com_subscription.pin_channel")}</span></>
+                                <>
+                                    <Pin className={sidebarListMoreMenuIconClassName} />
+                                    <span className={sidebarListMoreMenuLabelClassName}>{localize("com_subscription.pin_channel")}</span>
+                                </>
                             )}
                         </DropdownMenuItem>
-                        <div className="h-px bg-[#f2f3f5] mx-2 my-1" />
+                        <SidebarListMoreMenuDivider />
 
                         <DropdownMenuItem
                             onClick={async () => {
@@ -201,12 +214,14 @@ export default function ChannelItem({
                                     type === "created" ? onDelete(channel.id) : onUnsubscribe(channel.id);
                                 }
                             }}
-                            className="py-2 px-0 cursor-pointer focus:bg-[#f2f3f5]"
+                            className={sidebarListMoreMenuDangerItemClassName}
                         >
-                            <ClosedIcon className="size-4 mr-2 text-[#999999]" />
-                            <span className="text-[14px] text-[#1d2129]">{type === "created" ? localize("com_subscription.dissolve_channel") : localize("com_subscription.unsubscribe")}</span>
+                            <ClosedIcon className={sidebarListMoreMenuDangerIconClassName} />
+                            <span className={sidebarListMoreMenuDangerLabelClassName}>
+                                {type === "created" ? localize("com_subscription.dissolve_channel") : localize("com_subscription.unsubscribe")}
+                            </span>
                         </DropdownMenuItem>
-                    </DropdownMenuContent>
+                    </SidebarListMoreMenuContent>
                 </DropdownMenu>
             </div>
         </div>

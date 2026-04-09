@@ -7,13 +7,18 @@ interface ConversationListProps {
   activeId?: string;
   onSelect: (conv: AppConversation) => void;
   onNewChat: () => void;
+  /** Pass useLocalize(); group.label is an i18n key for date buckets or a year string. */
+  localize: (key: string) => string;
+}
+
+function formatGroupHeading(label: string, localize: (key: string) => string) {
+  return label.startsWith('com_ui_date_') || label.startsWith('com_') ? localize(label) : label;
 }
 
 /**
  * Time-grouped conversation list for the app chat sidebar.
- * Groups: 今天 / 昨天 / 过去 7 天 / 过去 30 天 / {Year}
  */
-export function ConversationList({ groups, activeId, onSelect, onNewChat }: ConversationListProps) {
+export function ConversationList({ groups, activeId, onSelect, onNewChat, localize }: ConversationListProps) {
   if (groups.length === 0) {
     return null; // Parent will show ChatEmptyState
   }
@@ -23,7 +28,7 @@ export function ConversationList({ groups, activeId, onSelect, onNewChat }: Conv
       {groups.map((group) => (
         <div key={group.label} className="mb-2">
           <div className="px-2 mb-1 text-xs font-medium text-gray-400">
-            {group.label}
+            {formatGroupHeading(group.label, localize)}
           </div>
           {group.conversations.map((conv) => (
             <div

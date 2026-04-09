@@ -1,6 +1,7 @@
 import { Search, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { cn } from '~/utils';
+import { useLocalize } from '~/hooks';
 
 interface AppSearchBarProps {
   query: string;
@@ -14,6 +15,7 @@ interface AppSearchBarProps {
  * Collapses to an icon when empty + blurred, stays expanded when has content.
  */
 export function AppSearchBar({ query, onSearch, debounceMs = 300 }: AppSearchBarProps) {
+  const localize = useLocalize();
   const [isOpen, setIsOpen] = useState(false);
   const [localValue, setLocalValue] = useState(query);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -75,7 +77,7 @@ export function AppSearchBar({ query, onSearch, debounceMs = 300 }: AppSearchBar
             value={localValue}
             onChange={(e) => handleChange(e.target.value)}
             className="ml-2 w-full bg-transparent outline-none text-sm"
-            placeholder="搜索应用..."
+            placeholder={localize('com_app_search_placeholder')}
             onBlur={() => {
               if (!localValue) setIsOpen(false);
             }}

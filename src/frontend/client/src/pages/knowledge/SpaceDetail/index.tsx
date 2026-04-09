@@ -498,9 +498,9 @@ export function KnowledgeSpaceContent({
                 onExpandSidebar={onExpandSidebar}
             />
 
-            {/* Content Container (Scrollable) — 文件列表整体描边 */}
+            {/* Content Container (Scrollable) */}
             <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-                <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[6px] border-[0.5px] border-solid border-[#ECECEC] bg-white">
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
                     {displayFiles.length === 0 ? (
                         <div className="flex h-full flex-1 flex-col items-center justify-center py-10 text-center">
                             <img
@@ -521,7 +521,11 @@ export function KnowledgeSpaceContent({
                             </p>
                         </div>
                     ) : viewMode === "card" ? (
-                        <div className="flex-1 overflow-y-auto">
+                        <div
+                            className="flex-1 overflow-y-auto scroll-on-scroll"
+                            onScroll={cardScroll.onScroll}
+                            {...cardScroll.scrollingProps}
+                        >
                             <div
                                 ref={cardGridRef}
                                 className="grid w-full min-w-0 gap-4 py-4"
@@ -549,7 +553,11 @@ export function KnowledgeSpaceContent({
                         </div>
                     ) : (
                         <div className="flex min-h-0 min-w-0 flex-1 flex-col py-4">
-                            <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">
+                            <div
+                                className="min-h-0 min-w-0 flex-1 overflow-y-auto scroll-on-scroll"
+                                onScroll={listBodyScroll.onScroll}
+                                {...listBodyScroll.scrollingProps}
+                            >
                                 <FileTable files={displayFiles}
                                     selectedFiles={selectedFiles}
                                     handleSelectAll={handleSelectAll}

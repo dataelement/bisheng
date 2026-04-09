@@ -19,7 +19,7 @@ import { useGetBsConfig } from "~/hooks/queries/data-provider";
 import { useAuthContext } from "~/hooks";
 import MessageSource from "~/pages/appChat/components/MessageSource";
 import ResouceModal from "~/pages/appChat/components/ResouceModal";
-import { copyText } from "~/utils";
+import { copyText, cn } from "~/utils";
 import type { ChatMessage } from "~/api/chatApi";
 import Image from "~/components/Chat/Messages/Content/Image";
 import { FileIcon, getFileTypebyFileName } from "~/components/ui/icon/File/FileIcon";
@@ -33,6 +33,8 @@ interface AiMessageBubbleProps {
     siblingIdx?: number;
     siblingCount?: number;
     setSiblingIdx?: (idx: number) => void;
+    /** Knowledge space AI: gray user bubble, borderless assistant, 14px body, full width */
+    knowledgeChatLayout?: boolean;
 }
 
 // --- Copy button with feedback ---
@@ -125,7 +127,16 @@ function parseMessageText(text: string) {
 }
 
 const AiMessageBubble = memo(
-    ({ message, isLatest, isStreaming, onRegenerate, siblingIdx, siblingCount, setSiblingIdx }: AiMessageBubbleProps) => {
+    ({
+        message,
+        isLatest,
+        isStreaming,
+        onRegenerate,
+        siblingIdx,
+        siblingCount,
+        setSiblingIdx,
+        knowledgeChatLayout,
+    }: AiMessageBubbleProps) => {
         const isUser = message.isCreatedByUser;
 
         if (isUser) {
@@ -135,6 +146,7 @@ const AiMessageBubble = memo(
                     siblingIdx={siblingIdx}
                     siblingCount={siblingCount}
                     setSiblingIdx={setSiblingIdx}
+                    knowledgeChatLayout={knowledgeChatLayout}
                 />
             );
         }
@@ -147,6 +159,7 @@ const AiMessageBubble = memo(
                 siblingIdx={siblingIdx}
                 siblingCount={siblingCount}
                 setSiblingIdx={setSiblingIdx}
+                knowledgeChatLayout={knowledgeChatLayout}
             />
         );
     }
@@ -160,17 +173,19 @@ function UserBubble({
     siblingIdx,
     siblingCount,
     setSiblingIdx,
+    knowledgeChatLayout,
 }: {
     message: ChatMessage;
     siblingIdx?: number;
     siblingCount?: number;
     setSiblingIdx?: (idx: number) => void;
+    knowledgeChatLayout?: boolean;
 }) {
     const { user } = useAuthContext();
 
     return (
-        <div className="flex justify-end px-4 py-3">
-            <div className="max-w-[80%] min-w-0">
+        <div className={cn("flex justify-end py-3", knowledgeChatLayout ? "w-full px-4" : "px-4")}>
+            <div className={cn("min-w-0", knowledgeChatLayout ? "max-w-[min(92%,56rem)]" : "max-w-[80%]")}>
                 {/* Render uploaded files if any */}
                 {message.files && message.files.length > 0 && (
                     <div className="flex flex-wrap gap-2 mb-2 mt-1">
@@ -220,7 +235,14 @@ function UserBubble({
                     <div className="flex-1 min-w-0">
                         {/* Name (hidden by style only) */}
                         <div className="hidden rc-name select-none font-semibold text-base">{user?.username}</div>
-                        <div className="rounded-[10px] bg-[#E6EDFC] text-[#1d2129] px-3 py-2 text-sm whitespace-pre-wrap break-words">
+                        <div
+                            className={cn(
+                                "px-3 py-2 whitespace-pre-wrap break-words rounded-[2px]",
+                                knowledgeChatLayout
+                                    ? "bg-[#F2F3F5] text-[#4E5969] text-[14px] leading-[22px]"
+                                    : "rounded-[10px] bg-[#E6EDFC] text-[#1d2129] text-sm"
+                            )}
+                        >
                             {message.text}
                         </div>
                     </div>
@@ -246,6 +268,7 @@ function AssistantBubble({
     siblingIdx,
     siblingCount,
     setSiblingIdx,
+    knowledgeChatLayout,
 }: {
     message: ChatMessage;
     isLatest?: boolean;
@@ -254,6 +277,7 @@ function AssistantBubble({
     siblingIdx?: number;
     siblingCount?: number;
     setSiblingIdx?: (idx: number) => void;
+    knowledgeChatLayout?: boolean;
 }) {
     // Parse :::thinking::: and :::web::: from the raw text
     const { thinkingContent, webContent, regularContent } = useMemo(
@@ -267,8 +291,8 @@ function AssistantBubble({
     const showCursor = isLatest && isStreaming;
 
     return (
-        <div className="flex justify-start px-4 py-3">
-            <div className="max-w-[80%] min-w-0">
+        <div className={cn("flex justify-start py-3", knowledgeChatLayout ? "w-full px-4" : "px-4")}>
+            <div className={cn("min-w-0", knowledgeChatLayout ? "w-full max-w-none" : "max-w-[80%]")}>
                 {/* Avatar + name kept but hidden via style only */}
                 <div className="hidden gap-3">
                     <div className="shrink-0 w-6 h-6 rounded-full flex items-center justify-center">
@@ -290,12 +314,26 @@ function AssistantBubble({
 
                 {/* Error state */}
                 {message.error ? (
-                    <div className="text-sm text-red-500 bg-red-50 rounded-[10px] px-3 py-2">
+                    <div
+                        className={cn(
+                            "text-red-500 bg-red-50 px-3 py-2",
+                            knowledgeChatLayout
+                                ? "rounded-[2px] text-[14px] leading-[22px]"
+                                : "text-sm rounded-[10px]"
+                        )}
+                    >
                         {regularContent || "发生错误，请重试"}
                     </div>
                 ) : (
                     /* Main content — uses existing Markdown with citation support */
-                    <div className="rounded-[10px] bg-white border border-[#E5E6EB] px-3 py-2 bs-mkdown message-content text-sm overflow-hidden break-words [word-break:break-all]">
+                    <div
+                        className={cn(
+                            "bs-mkdown message-content overflow-hidden break-words [word-break:break-all]",
+                            knowledgeChatLayout
+                                ? "rounded-[2px] border-0 bg-transparent px-0 py-1 text-[14px] leading-[22px] [--markdown-font-size:14px]"
+                                : "rounded-[10px] bg-white border border-[#E5E6EB] px-3 py-2 text-sm"
+                        )}
+                    >
                         <Markdown
                             content={regularContent}
                             webContent={webContent}

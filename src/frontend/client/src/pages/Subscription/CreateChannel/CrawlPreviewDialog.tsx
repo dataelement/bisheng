@@ -312,7 +312,7 @@ export function CrawlPreviewDialog({
                         {(status === "success" || status === "error" || status === "singlePageWarning") ? (
                             <button
                                 type="button"
-                                className="text-[14px] text-[#999999]"
+                                className="text-[14px] text-[#999999] transition-colors hover:text-[#165DFF]"
                                 onClick={() => setFeedbackDialogOpen(true)}
                             >{localize("com_subscription.unsatisfied_with_crawl_submit_request")}</button>
                         ) : (

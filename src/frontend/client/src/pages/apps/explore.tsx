@@ -12,6 +12,8 @@ import { AgentNavigation } from './components/AgentNavigation'
 import { AppSearchBar } from './components/AppSearchBar'
 import { useToastContext } from "~/Providers";
 import { Button } from "~/components/ui/Button";
+import { useLocalize } from "~/hooks";
+import { NotificationSeverity } from "~/common";
 
 import { Diamond, Play, Sparkle, Cone, Circle, Cuboid } from "lucide-react"
 
@@ -44,6 +46,7 @@ const DecorativeShapes = () => (
 
 // --- 组件：智能体卡片 (广场版 Horizontal) ---
 const ExploreCard = ({ agent, onClick, onShare }: { agent: any, onClick: (agent: any) => void, onShare: (agent: any) => void }) => {
+    const localize = useLocalize();
     return (
         <div
             onClick={() => onClick(agent)}
@@ -70,7 +73,7 @@ const ExploreCard = ({ agent, onClick, onShare }: { agent: any, onClick: (agent:
 
                 {/* 描述区域：平时显示，hover时隐藏 */}
                 <p className="flex-[1_0_0] font-['PingFang_SC'] leading-[20px] text-[14px] text-[#A9AEB8] w-full line-clamp-2 break-words group-hover:hidden whitespace-normal mt-[2px]">
-                    {agent.description || agent.desc || "暂无描述内容..."}
+                    {agent.description || agent.desc || localize('com_app_no_description_placeholder')}
                 </p>
 
                 {/* 按纽区域：平时隐藏，hover时显示 */}
@@ -79,13 +82,13 @@ const ExploreCard = ({ agent, onClick, onShare }: { agent: any, onClick: (agent:
                         onClick={(e) => { e.stopPropagation(); onShare(agent); }}
                         className="bg-white border border-[#ececec] flex flex-[1_0_0] h-[28px] items-center justify-center px-[10px] rounded-[6px] text-[#212121] text-[14px] font-['PingFang_SC'] hover:bg-gray-50 transition-colors"
                     >
-                        分享应用
+                        {localize('com_app_share_app')}
                     </button>
                     <button
                         onClick={(e) => { e.stopPropagation(); onClick(agent); }}
                         className="bg-[#335cff] flex flex-[1_0_0] h-[28px] items-center justify-center px-[10px] rounded-[6px] text-white text-[14px] font-['PingFang_SC'] hover:bg-blue-600 transition-colors"
                     >
-                        开始对话
+                        {localize('com_app_start_chat')}
                     </button>
                 </div>
             </div>
@@ -110,6 +113,7 @@ export default function ExplorePlaza() {
     const queryClient = useQueryClient()
     const { setConversation } = store.useCreateConversationAtom(0);
     const { showToast } = useToastContext()
+    const localize = useLocalize()
 
     // Modify Fetch Function
     const fetchAgents = useCallback(async (query: string, categoryId: number | string, currentPage: number, isAppend: boolean) => {
@@ -199,9 +203,15 @@ export default function ExplorePlaza() {
         const shareUrl = getAppShareUrl(agent.id, agent.flow_type || agent.type);
         try {
             await copyText(shareUrl);
-            showToast?.({ message: '应用链接已复制到剪贴板', severity: 'success' });
+            showToast?.({
+                message: localize('com_app_share_link_copied'),
+                severity: NotificationSeverity.SUCCESS,
+            });
         } catch {
-            showToast?.({ message: '复制应用链接失败', severity: 'error' });
+            showToast?.({
+                message: localize('com_app_share_link_copy_failed'),
+                severity: NotificationSeverity.ERROR,
+            });
         }
     }
 
@@ -223,10 +233,10 @@ export default function ExplorePlaza() {
                 <DecorativeShapes />
                 <div className="flex flex-col items-center gap-[4px] max-w-[1000px] text-center z-10 w-full px-6">
                     <h1 className="font-['PingFang_SC'] font-semibold leading-[32px] text-[#335cff] text-[24px]">
-                        探索BISHENG的智能体
+                        {localize('com_app_center_welcome')}
                     </h1>
                     <p className="font-['PingFang_SC'] text-[#666] text-[14px] leading-[22px]">
-                        您可以在这里选择需要的智能体来进行生产与工作~
+                        {localize('com_app_center_description')}
                     </p>
                 </div>
             </div>
@@ -250,14 +260,14 @@ export default function ExplorePlaza() {
                     {loading && (
                         <div className="flex items-center gap-2 text-[#335cff]">
                             <Loader2 className="animate-spin" size={24} />
-                            <span className="text-sm font-['PingFang_SC']">正在加载更多智能体...</span>
+                            <span className="text-sm font-['PingFang_SC']">{localize('com_app_explore_loading_more')}</span>
                         </div>
                     )}
                     {!hasMore && agents.length > 0 && (
-                        <p className="text-[#a9aeb8] text-[12px] font-['PingFang_SC'] mt-4">—— 已经到底啦 ——</p>
+                        <p className="text-[#a9aeb8] text-[12px] font-['PingFang_SC'] mt-4">{localize('com_app_explore_end_of_list')}</p>
                     )}
                     {!loading && agents.length === 0 && (
-                        <p className="text-[#a9aeb8] text-[14px] font-['PingFang_SC'] mt-4 py-10">暂无找到相关的智能体</p>
+                        <p className="text-[#a9aeb8] text-[14px] font-['PingFang_SC'] mt-4 py-10">{localize('com_app_explore_no_agents')}</p>
                     )}
                 </div>
             </main>

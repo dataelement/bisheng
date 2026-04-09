@@ -155,11 +155,13 @@ export default function FilePreviewPage() {
 
             {/* Splitter */}
             {showAiAssistant && (
-                <div
-                    onMouseDown={startResizing}
-                    className="group relative w-[1px] cursor-col-resize bg-[#e5e6eb] transition-all hover:w-1 hover:bg-primary active:w-1 active:bg-primary z-20 shrink-0"
-                >
-                    <div className="absolute inset-y-0 -left-1.5 -right-1.5 z-10" />
+                <div className="relative z-20 w-[1px] min-w-[1px] max-w-[1px] flex-none shrink-0">
+                    <div
+                        onMouseDown={startResizing}
+                        className="group absolute inset-y-0 left-1/2 z-10 flex w-4 -translate-x-1/2 cursor-col-resize justify-center"
+                    >
+                        <div className="pointer-events-none w-px self-stretch bg-[#e5e6eb] transition-[width,background-color] duration-150 group-hover:w-1 group-hover:bg-primary group-active:w-1 group-active:bg-primary" />
+                    </div>
                 </div>
             )}
 

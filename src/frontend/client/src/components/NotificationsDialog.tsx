@@ -313,23 +313,39 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
     const getNotificationText = (notification: MessageItem) => {
         const targetName = getTargetName(notification);
         const actionCode = getSystemTextCode(notification);
-        const actionTextKey = NOTIFICATION_ACTION_TEXT_KEYS[actionCode];
+        const actionTextKey = NOTIFICATION_ACTION_TEXT_KEYS[actionCode] || (actionCode ? `com_notifications_action_${actionCode}` : "");
         const fallbackText = notification.content?.map((c) => c.content).filter(Boolean).join("") || "";
-        const text = actionTextKey
-            ? localize(actionTextKey as TranslationKeys, { target: targetName })
-            : fallbackText;
+        const safeLocalize = (key: string, vars?: Record<string, string>) => {
+            if (!key) return "";
+            const translated = localize(key as TranslationKeys, vars as any);
+            return translated && translated !== key ? translated : "";
+        };
+        const text =
+            safeLocalize(actionTextKey, { target: targetName }) ||
+            safeLocalize(
+                targetName ? "com_notifications_action_generic_with_target" : "com_notifications_action_generic",
+                targetName ? { target: targetName } : undefined
+            ) ||
+            fallbackText;
         const showApproval =
             isApprovalMessageType(notification.message_type, notification.action_code) &&
             isPendingApprovalStatus(notification.status);
         return { text, targetName, showApproval };
     };
 
-    /** 仅「拒绝了你加入知识空间的申请」类通知（action / system 文案码为 rejected_knowledge_space） */
+    const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const isRejectedKnowledgeSpaceJoinNotification = (notification: MessageItem): boolean => {
         const code = getSystemTextCode(notification);
         return (
             code === "rejected_knowledge_space" ||
             notification.action_code === "rejected_knowledge_space"
+        );
+    };
+    const isRejectedChannelJoinNotification = (notification: MessageItem): boolean => {
+        const code = getSystemTextCode(notification);
+        return (
+            code === "rejected_channel" ||
+            notification.action_code === "rejected_channel"
         );
     };
 
@@ -383,7 +399,11 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
             if (channelId) return { targetType: "channel", targetId: channelId };
         }
         if (businessType === "channel") {
-            const channelId = data?.channel_id ?? data?.business_id ?? (notification as any)?.business_id;
+            const channelId =
+                data?.channel_id ??
+                data?.business_id ??
+                meta?.business_id ??
+                (notification as any)?.business_id;
             if (channelId !== undefined && channelId !== null && String(channelId) !== "") {
                 return { targetType: "channel", targetId: String(channelId) };
             }
@@ -422,6 +442,7 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                 data?.businessId,
                 meta?.channel_id,
                 meta?.channelId,
+                meta?.business_id,
                 (notification as any)?.business_id
             );
             if (id) return { targetType: "channel", targetId: id };
@@ -493,8 +514,14 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
         const createdAt = notification.create_time;
         const approvalStatus = notification.status;
         const { text, targetName, showApproval } = getNotificationText(notification);
-        const canSplitTarget = Boolean(targetName) && text.includes(targetName);
-        const textPrefix = canSplitTarget ? text.split(targetName)[0] : text;
+        const target = getNotificationTarget(notification);
+        const targetSplitMatch = targetName
+            ? text.match(new RegExp(`^(.*?)([-—\\s]*${escapeRegExp(targetName)})(.*)$`))
+            : null;
+        const textPrefix = targetSplitMatch ? targetSplitMatch[1] : text;
+        const textSuffix = targetSplitMatch ? targetSplitMatch[3] : "";
+        const canNavigateTarget = Boolean(target && target.targetId && targetName);
+        const targetLabel = targetSplitMatch ? targetName : ` ${targetName}`;
 
         const isApproved = isApprovedStatus(approvalStatus) || isRejectedStatus(approvalStatus);
         const isSelfApplicationDecision = isSelfApplicationDecisionActionCode(notification.action_code);
@@ -600,30 +627,59 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                         </TooltipAnchor>
                         <span className="min-w-0">
                             {textPrefix}
-                            {canSplitTarget && (
+                            {canNavigateTarget && (
                                 <span
                                     className="font-medium cursor-pointer hover:text-[#165dff]"
                                     onClick={() => {
-                                        const target = getNotificationTarget(notification);
-                                        if (!target) return;
+                                        console.info("[NotificationsDialog] target click", {
+                                            notificationId: notification.id,
+                                            messageType: notification.message_type,
+                                            actionCode: notification.action_code,
+                                            systemTextCode: getSystemTextCode(notification),
+                                            targetName,
+                                            resolvedTarget: target,
+                                        });
+                                        if (!target) {
+                                            console.warn("[NotificationsDialog] target unresolved", {
+                                                notificationId: notification.id,
+                                                content: notification.content,
+                                            });
+                                            return;
+                                        }
                                         if (target.targetType === "channel") {
-                                            navigate(`/channel/${target.targetId}`);
-                                        } else if (
-                                            isRejectedKnowledgeSpaceJoinNotification(notification)
-                                        ) {
-                                            // 广场页 + KnowledgeSpacePreviewDrawer（与「前往广场」里点卡片预览一致）
-                                            navigate(
-                                                `/knowledge?square=1&previewSpace=${encodeURIComponent(target.targetId)}`
-                                            );
+                                            const route = isRejectedChannelJoinNotification(notification)
+                                                ? `/channel/share/${target.targetId}?square=1`
+                                                : `/channel/${target.targetId}`;
+                                            console.info("[NotificationsDialog] navigate", {
+                                                notificationId: notification.id,
+                                                route,
+                                            });
+                                            navigate(route);
+                                        } else if (isRejectedKnowledgeSpaceJoinNotification(notification)) {
+                                            const route = `/knowledge?square=1&previewSpace=${encodeURIComponent(target.targetId)}`;
+                                            window.dispatchEvent(new CustomEvent("knowledge-square-preview", {
+                                                detail: { spaceId: String(target.targetId) },
+                                            }));
+                                            console.info("[NotificationsDialog] navigate", {
+                                                notificationId: notification.id,
+                                                route,
+                                            });
+                                            navigate(route);
                                         } else {
-                                            navigate(`/knowledge/space/${target.targetId}`);
+                                            const route = `/knowledge/space/${target.targetId}`;
+                                            console.info("[NotificationsDialog] navigate", {
+                                                notificationId: notification.id,
+                                                route,
+                                            });
+                                            navigate(route);
                                         }
                                         onOpenChange?.(false);
                                     }}
                                 >
-                                    {targetName}
+                                    {targetLabel}
                                 </span>
                             )}
+                            {textSuffix}
                         </span>
                     </div>
 

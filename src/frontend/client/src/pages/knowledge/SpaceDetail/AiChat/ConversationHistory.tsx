@@ -21,6 +21,7 @@ import {
 } from "~/components/ui/DropdownMenu";
 import { Input } from "~/components/ui/Input";
 import type { FolderSession } from "~/api/chatApi";
+import { knowledgeSpaceDropdownSurfaceClassName } from "~/components/SidebarListMoreMenu";
 import { useLocalize } from "~/hooks";
 import { useToastContext } from "~/Providers";
 import { cn } from "~/utils";
@@ -235,7 +236,7 @@ export function ConversationHistory({
                                             </DropdownMenuTrigger>
                                             <DropdownMenuContent
                                                 align="end"
-                                                className="min-w-[140px]"
+                                                className={cn("min-w-[140px]", knowledgeSpaceDropdownSurfaceClassName)}
                                                 onClick={(e) => e.stopPropagation()}
                                             >
                                                 <DropdownMenuItem
@@ -254,7 +255,7 @@ export function ConversationHistory({
                                                         onDelete(session.chat_id);
                                                     }}
                                                 >
-                                                    <Trash2Icon className="size-4 mr-2" />
+                                                    <Trash2Icon className="size-4 mr-2 text-[#f53f3f]" />
                                                     {localize("com_notifications_delete")}
                                                 </DropdownMenuItem>
                                             </DropdownMenuContent>

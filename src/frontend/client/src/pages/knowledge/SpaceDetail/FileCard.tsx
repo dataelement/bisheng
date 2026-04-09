@@ -9,6 +9,7 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger
 } from "~/components/ui/DropdownMenu";
+import { knowledgeSpaceDropdownSurfaceClassName } from "~/components/SidebarListMoreMenu";
 import { cn } from "~/utils";
 import FileIconRenderer from "./FileIcon";
 import TagGroup from "./TagGroup";
@@ -210,8 +211,10 @@ export function FileCard({
 
                     <div
                         className={cn(
-                            "absolute top-2 right-2 z-10 flex items-center gap-1 transition-opacity",
-                            showCardActions ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                            "absolute top-2 right-2 z-20 flex items-center gap-1 transition-opacity",
+                            showCardActions
+                                ? "pointer-events-auto opacity-100"
+                                : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100"
                         )}
                     >
                         {showInlineDownloadButton && (
@@ -238,7 +241,11 @@ export function FileCard({
                                     </Button>
                                 </DropdownMenuTrigger>
 
-                                <DropdownMenuContent align="end" className="min-w-[120px]" onClick={(e) => e.stopPropagation()}>
+                                <DropdownMenuContent
+                                    align="end"
+                                    className={cn("min-w-[120px]", knowledgeSpaceDropdownSurfaceClassName)}
+                                    onClick={(e) => e.stopPropagation()}
+                                >
                                     {showMenuDownloadItem && (
                                         <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDownload(); }}>
                                             {localize("com_knowledge.download")}

@@ -16,7 +16,7 @@ interface TagPickerProps {
 
 export function TagPicker({ tags, searchText, onSelect, onClose }: TagPickerProps) {
     const localize = useLocalize();
-  const [activeIndex, setActiveIndex] = useState(0);
+    const [activeIndex, setActiveIndex] = useState(0);
     const containerRef = useRef<HTMLDivElement>(null);
 
     // Filter tags by search text
@@ -68,7 +68,6 @@ export function TagPicker({ tags, searchText, onSelect, onClose }: TagPickerProp
             className="absolute bottom-full left-0 right-0 mb-1 bg-white border border-[#e5e6eb] rounded-lg shadow-lg z-50 max-h-[200px] overflow-y-auto"
         >
             <div className="p-1.5">
-                <p className="text-xs text-[#86909c] px-2 py-1 mb-1">{localize("com_knowledge.select_tags_to_filter")}</p>
                 {filtered.map((tag, i) => (
                     <button
                         key={tag}

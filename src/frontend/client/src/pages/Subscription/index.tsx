@@ -262,10 +262,20 @@ export default function Subscription() {
     useEffect(() => {
         if (channelPluginGate === "loading" || channelPluginGate === "disabled") return;
         const params = new URLSearchParams(location.search);
-        if (params.get("square") === "1") {
+        const inSquare = params.get("square") === "1";
+        const path = location.pathname || "";
+        if (inSquare) {
+            console.info("[Subscription] route indicates square mode", { path, search: location.search });
             setShowChannelSquare(true);
+            return;
         }
-    }, [location.search, channelPluginGate]);
+        // Keep state aligned with URL: when navigating to /channel/:id from notifications,
+        // ensure we exit plaza mode so detail page can render.
+        if (/\/channel\/[^/]+/.test(path) && !path.includes("/channel/share/")) {
+            console.info("[Subscription] route indicates detail mode", { path, search: location.search });
+            setShowChannelSquare(false);
+        }
+    }, [location.search, location.pathname, channelPluginGate]);
 
     // KeepAlive: when leaving /channel, component is "deactivated" (effects may not run).
     // Reset square view so switching back lands on default channel page.

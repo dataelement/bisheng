@@ -158,7 +158,7 @@ export function UserPopMenu() {
                     >
                         <div className="flex items-center gap-3">
                             <Bell className="size-[18px] text-gray-600" />
-                            <span className="text-[14px] text-gray-700">消息提醒</span>
+                            <span className="text-[14px] text-gray-700">{localize("com_notifications_title")}</span>
                         </div>
                         {unreadCount > 0 && (
                             <span className="bg-[#f53f3f] text-white text-[16px] font-medium px-2.5 -py-1 rounded-full min-w-[24px] text-center">

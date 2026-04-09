@@ -4,6 +4,7 @@ import AppAvator from '~/components/Avator';
 import { cn } from '~/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '~/components/ui/Tooltip2';
 import { Button } from '~/components';
+import { useLocalize } from '~/hooks';
 
 interface AgentCardProps {
   agent: AppItem;
@@ -20,6 +21,7 @@ export function AgentCard({
   onStartChat,
   onShare,
 }: AgentCardProps) {
+  const localize = useLocalize();
   return (
     <div
       className={cn(
@@ -97,7 +99,7 @@ export function AgentCard({
           variant="outline"
           className="flex-1 flex justify-center items-center h-full rounded-[6px] text-[14px] "
         >
-          分享应用
+          {localize('com_app_share_app')}
         </Button>
         <Button
           onClick={(e) => {
@@ -106,7 +108,7 @@ export function AgentCard({
           }}
           className="flex-1 flex justify-center items-center h-full rounded-[6px] text-[14px]"
         >
-          开始对话
+          {localize('com_app_start_chat')}
         </Button>
       </div>
     </div>

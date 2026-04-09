@@ -30,6 +30,7 @@ import { SortType, SortDirection, FileStatus, FileType, KnowledgeFile } from "~/
 import { formatBytes } from "~/utils";
 import { useInlineRename } from "../hooks/useInlineRename";
 import { formatTime, isKnowledgeItemPreviewable } from "../knowledgeUtils";
+import { knowledgeSpaceDropdownSurfaceClassName } from "~/components/SidebarListMoreMenu";
 import { useLocalize, useScrollbarWhileScrolling } from "~/hooks";
 
 /** 状态列悬停：下载 / 更多 — 白底、细灰边、4px 圆角 */
@@ -50,6 +51,9 @@ const COLUMN_CONFIG = {
 } as const;
 
 type ColumnKey = keyof typeof COLUMN_CONFIG;
+
+/** 行末下载/更多：固定宽度条 + sticky right，表格压缩时仍贴在可视区域右侧，内容距右缘 12px */
+const ROW_ACTION_STRIP_PX = 80;
 
 // 不参与拖拽调整的列
 const NON_RESIZABLE_COLUMNS: ColumnKey[] = ["checkbox"];
@@ -303,6 +307,7 @@ function FileTableHeader({
     columnWidths,
     onResizeStart,
     showLeftShadow,
+    showRightShadow,
     sortBy,
     sortDirection,
     onSort,
@@ -314,6 +319,7 @@ function FileTableHeader({
     columnWidths: Record<ColumnKey, number>;
     onResizeStart: (key: ColumnKey, e: React.MouseEvent) => void;
     showLeftShadow: boolean;
+    showRightShadow: boolean;
     sortBy: SortType | undefined;
     sortDirection: SortDirection | undefined;
     onSort: (sortBy: SortType) => void;
@@ -416,8 +422,18 @@ function FileTableHeader({
                     </TableHead>
                 )}
 
-                {/* 占位空列，吸收多余由于 minWidth:100% 产生的宽度，防止所有固定宽度的列被等比例拉伸 */}
-                <TableHead className="pointer-events-none border-none bg-[rgb(251,251,251)] p-0" />
+                {/* 行末操作条占位：sticky 贴滚动容器右缘，宽度计入表宽 */}
+                <TableHead
+                    className={cn(
+                        "sticky right-0 z-[25] border-none border-l border-[#e5e6eb] bg-[rgb(251,251,251)] p-0",
+                        showRightShadow && "shadow-[-8px_0_12px_-6px_rgba(0,0,0,0.07)]"
+                    )}
+                    style={{
+                        width: ROW_ACTION_STRIP_PX,
+                        minWidth: ROW_ACTION_STRIP_PX,
+                        maxWidth: ROW_ACTION_STRIP_PX,
+                    }}
+                />
             </TableRow>
         </TableHeader>
     );
@@ -467,12 +483,17 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
             >
                 <table
                     className="w-full caption-bottom text-sm border-collapse"
-                    style={{ tableLayout: "fixed", width: totalWidth, minWidth: "100%" }}
+                    style={{
+                        tableLayout: "fixed",
+                        width: totalWidth + ROW_ACTION_STRIP_PX,
+                        minWidth: "100%",
+                    }}
                 >
                     <FileTableHeader
                         columnWidths={columnWidths}
                         onResizeStart={onResizeStart}
                         showLeftShadow={showLeftShadow}
+                        showRightShadow={showRightShadow}
                         sortBy={sortBy}
                         sortDirection={sortDirection}
                         onSort={onSort}
@@ -500,6 +521,7 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                                 onCancelCreate={onCancelCreate}
                                 columnWidths={columnWidths}
                                 showLeftShadow={showLeftShadow}
+                                showRightShadow={showRightShadow}
                             />
                         ))}
                     </TableBody>
@@ -509,7 +531,7 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
             {/* 右侧溢出阴影 */}
             {showRightShadow && (
                 <div
-                    className="absolute top-0 right-0 bottom-0 w-4 pointer-events-none z-30"
+                    className="absolute top-0 right-0 bottom-0 w-4 pointer-events-none z-20"
                     style={{
                         background: "linear-gradient(to left, rgba(0,0,0,0.06), transparent)",
                     }}
@@ -538,6 +560,7 @@ function FileRow({
     onCancelCreate,
     columnWidths,
     showLeftShadow,
+    showRightShadow,
 }: {
     file: KnowledgeFile;
     isSelected: boolean;
@@ -554,6 +577,7 @@ function FileRow({
     onCancelCreate?: () => void;
     columnWidths: Record<ColumnKey, number>;
     showLeftShadow: boolean;
+    showRightShadow: boolean;
 }) {
     const localize = useLocalize();
     const [moreMenuOpen, setMoreMenuOpen] = useState(false);
@@ -589,6 +613,8 @@ function FileRow({
     );
     const showMoreMenu = isAdmin;
     const namePreviewable = isKnowledgeItemPreviewable(file);
+    const [rowHovered, setRowHovered] = useState(false);
+    const showRowActions = rowHovered || moreMenuOpen;
 
     return (
         <TableRow
@@ -597,6 +623,8 @@ function FileRow({
                 // 取消 Table 默认 tr:hover 底色，整行颜色只由单元格 rowBg + group-hover 控制
                 "bg-transparent hover:bg-transparent"
             )}
+            onMouseEnter={() => setRowHovered(true)}
+            onMouseLeave={() => setRowHovered(false)}
         >
             {/* 复选框 — 左侧固定 */}
             <TableCell
@@ -750,14 +778,25 @@ function FileRow({
                 </TableCell>
             )}
 
-            {/* 占位列：吸收剩余宽度；行悬停操作按钮固定距表格右缘 12px */}
-            <TableCell className={cn("relative border-none p-0 pointer-events-none", rowBg)}>
+            {/* 行末操作条：sticky 贴滚动容器可视右缘，按钮距右缘 12px（表格压缩时不被裁切） */}
+            <TableCell
+                className={cn(
+                    "sticky right-0 z-[30] border-none border-l border-[#e5e6eb] p-0",
+                    rowBg,
+                    showRightShadow && "shadow-[-8px_0_12px_-6px_rgba(0,0,0,0.07)]"
+                )}
+                style={{
+                    width: ROW_ACTION_STRIP_PX,
+                    minWidth: ROW_ACTION_STRIP_PX,
+                    maxWidth: ROW_ACTION_STRIP_PX,
+                }}
+            >
                 <div
                     className={cn(
-                        "absolute right-[12px] top-1/2 z-[5] flex -translate-y-1/2 items-center gap-1 pointer-events-auto transition-opacity",
-                        moreMenuOpen
-                            ? "opacity-100"
-                            : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100"
+                        "flex h-full min-h-[44px] items-center justify-end gap-1 pr-[12px] pl-1 transition-opacity",
+                        showRowActions
+                            ? "pointer-events-auto opacity-100"
+                            : "pointer-events-none opacity-0"
                     )}
                 >
                     <button
@@ -778,7 +817,10 @@ function FileRow({
                                     <MoreVertical className="size-4" />
                                 </button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-32">
+                            <DropdownMenuContent
+                                align="end"
+                                className={cn("w-32", knowledgeSpaceDropdownSurfaceClassName)}
+                            >
                                 {!isFolder && (
                                     <DropdownMenuItem
                                         onClick={(e) => {

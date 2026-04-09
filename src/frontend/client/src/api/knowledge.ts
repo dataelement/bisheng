@@ -408,8 +408,11 @@ export function fileStatusToNumber(status: FileStatus): number {
     }
 }
 
-/** Backend `/children` filter: all statuses except FAILED (3). Used for 知识广场 when viewer is member-only. */
+/** Backend `/children` filter: all statuses except FAILED (3). Used when joined members browse the file list. */
 export const SPACE_CHILDREN_STATUS_NUMS_EXCLUDE_FAILED: number[] = [1, 2, 4, 5, 6];
+
+/** Backend `/children` filter: SUCCESS (2) only. Used for 广场预览 when user is not an active space member. */
+export const SPACE_CHILDREN_STATUS_SUCCESS_ONLY: number[] = [2];
 
 /** Map a raw knowledge file record to the frontend KnowledgeFile model */
 function mapRawFile(raw: RawKnowledgeFile): KnowledgeFile {

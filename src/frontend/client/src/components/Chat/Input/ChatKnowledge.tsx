@@ -234,8 +234,11 @@ export const ChatKnowledge = ({
 
       if (currentTypeCount >= MAX_KB_PER_TYPE) {
         showToast({
-          message: type === 'space' ? "知识空间数量已达上限" : "组织知识库数量已达上限",
-          status: "error"
+          message:
+            type === 'space'
+              ? localize('com_chat_knowledge_toast_space_limit')
+              : localize('com_chat_knowledge_toast_org_limit'),
+          status: 'error',
         });
         return;
       }
@@ -257,7 +260,7 @@ export const ChatKnowledge = ({
           disabled && "opacity-50 hover:border-slate-200 cursor-not-allowed"
         )}>
           <BookOpenText size={16} />
-          <span className="text-xs break-keep">知识库</span>
+          <span className="text-xs break-keep">{localize('com_tools_knowledge_base')}</span>
           <ChevronRight size={14} className="rotate-90 opacity-40" />
         </div>
       </DropdownMenuTrigger>
@@ -274,14 +277,14 @@ export const ChatKnowledge = ({
                   <span className="absolute -top-1 -right-1 size-2.5 bg-blue-500 rounded-full border-2 border-white" />
                 )}
               </div>
-              <span className="text-[14px] text-slate-700 font-normal">知识空间</span>
+              <span className="text-[14px] text-slate-700 font-normal">{localize('com_ui_knowledge_space')}</span>
             </div>
           </DropdownMenuSubTrigger>
 
           <DropdownMenuSubContent className="w-[280px] p-3 rounded-2xl shadow-2xl ml-2 border-slate-100 bg-white">
-            <p className="text-sm leading-5 py-1.5 mb-1 font-medium">知识空间</p>
+            <p className="text-sm leading-5 py-1.5 mb-1 font-medium">{localize('com_ui_knowledge_space')}</p>
             <KnowledgeListPanel
-              placeholder="搜索知识空间名称"
+              placeholder={localize('com_chat_knowledge_placeholder_search_space')}
               keyword={spaceKeyword}
               setKeyword={setSpaceKeyword}
               items={filteredSpaces}
@@ -290,7 +293,7 @@ export const ChatKnowledge = ({
               isFetching={spaceFetching}
               hasMore={false}
               onLoadMore={() => { }}
-              emptyText="暂无知识空间"
+              emptyText={localize('com_chat_knowledge_empty_no_spaces')}
             />
           </DropdownMenuSubContent>
         </DropdownMenuSub>
@@ -305,14 +308,14 @@ export const ChatKnowledge = ({
                   <span className="absolute -top-1 -right-1 size-2.5 bg-blue-500 rounded-full border-2 border-white" />
                 )}
               </div>
-              <span className="text-[14px] text-slate-700 font-normal">组织知识库</span>
+              <span className="text-[14px] text-slate-700 font-normal">{localize('com_tools_org_knowledge')}</span>
             </div>
           </DropdownMenuSubTrigger>
 
           <DropdownMenuSubContent className="w-[280px] p-3 rounded-2xl shadow-2xl ml-2 border-slate-100 bg-white">
-            <p className="text-sm leading-5 py-1.5 mb-1 font-medium">组织知识库</p>
+            <p className="text-sm leading-5 py-1.5 mb-1 font-medium">{localize('com_tools_org_knowledge')}</p>
             <KnowledgeListPanel
-              placeholder="搜索知识库名称"
+              placeholder={localize('com_tools_knowledge_base_search')}
               keyword={orgKeyword}
               setKeyword={setOrgKeyword}
               items={allOrgKbs}
@@ -321,7 +324,7 @@ export const ChatKnowledge = ({
               isFetching={orgFetching}
               hasMore={hasMoreOrg}
               onLoadMore={() => setOrgPage(p => p + 1)}
-              emptyText="暂无组织知识库"
+              emptyText={localize('com_chat_knowledge_empty_no_org_kbs')}
             />
           </DropdownMenuSubContent>
         </DropdownMenuSub>

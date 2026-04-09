@@ -1,4 +1,4 @@
-import { useLocalize } from "~/hooks";
+import { useLocalize, useScrollbarWhileScrolling } from "~/hooks";
 import { BookCopyIcon, ChevronDown, ChevronRight, FolderClosedIcon, Loader2, Plus, Search, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { NotificationSeverity } from "~/common";
@@ -221,17 +221,12 @@ function TreeNode({
                 {/* Add folder button (hover) */}
                 {!isEditing && (
                     <button
-                        className="shrink-0 opacity-0 group-hover:opacity-100 size-4 flex items-center justify-center rounded text-[#86909c] hover:text-primary"
+                        type="button"
+                        className="shrink-0 opacity-0 group-hover:opacity-100 h-8 w-8 flex items-center justify-center rounded text-[#86909c] hover:text-primary transition-colors duration-150"
                         title={localize("com_subscription.new_subfolder")}
                         onClick={e => { e.stopPropagation(); onAddFolder(node.id, node.level, node.spaceId); }}
-                        style={{
-                            paddingLeft: `${indent + 8}px`,
-                            transitionProperty: 'background-color',
-                            transitionDuration: '350ms',
-                            transitionTimingFunction: 'ease-in-out'
-                        }}
                     >
-                        <Plus className="size-4 text-primary" />
+                        <Plus className="shrink-0 w-4 h-4 text-primary" strokeWidth={2} />
                     </button>
                 )}
             </div>
@@ -266,6 +261,8 @@ function TreeNode({
 export function AddToKnowledgeModal({ open, onOpenChange, articleId }: AddToKnowledgeModalProps) {
     const localize = useLocalize();
     const { showToast } = useToastContext();
+    const { onScroll: onTreeScroll, scrollingProps: treeScrollProps } = useScrollbarWhileScrolling();
+    const { onScroll: onDupScroll, scrollingProps: dupScrollProps } = useScrollbarWhileScrolling();
     const [tree, setTree] = useState<KnowledgeNode[]>([]);
     const [search, setSearch] = useState("");
     const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -568,7 +565,12 @@ export function AddToKnowledgeModal({ open, onOpenChange, articleId }: AddToKnow
 
                     {/* Tree / Empty state */}
                     <div className="px-6 pt-4">
-                        <div className="p-3 w-[552px] overflow-auto border rounded-md" style={{ height: 340 }}>
+                        <div
+                            className="p-3 w-[552px] max-w-full overflow-y-auto overflow-x-hidden border rounded-md scroll-on-scroll"
+                            style={{ height: 340 }}
+                            onScroll={onTreeScroll}
+                            {...treeScrollProps}
+                        >
                             {spacesLoading ? (
                                 <div className="flex items-center justify-center h-full text-[#86909c]">
                                     <Loader2 className="size-5 animate-spin mr-2" />{localize("com_subscription.loading")}
@@ -624,7 +626,7 @@ export function AddToKnowledgeModal({ open, onOpenChange, articleId }: AddToKnow
                         >{localize("com_subscription.cancel")}</Button>
                         <Button
                             size="sm"
-                            onClick={handleConfirm}
+                            onClick={() => void handleConfirm()}
                             disabled={!selectedId || isConfirming}
                             className="h-8 px-4 text-sm rounded-md font-normal"
                         >
@@ -642,7 +644,11 @@ export function AddToKnowledgeModal({ open, onOpenChange, articleId }: AddToKnow
                             {localize("com_subscription.duplicate_files_title")}
                         </DialogTitle>
                     </DialogHeader>
-                    <div className="px-6 pb-2 max-h-[200px] overflow-y-auto">
+                    <div
+                        className="px-6 pb-2 max-h-[200px] overflow-y-auto scroll-on-scroll"
+                        onScroll={onDupScroll}
+                        {...dupScrollProps}
+                    >
                         {duplicateFiles.map((file, idx) => {
                             // Truncate file name > 10 chars with ellipsis
                             const displayName = file.name.length > 10

@@ -11,7 +11,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { SendIcon } from "~/components/svg";
 import { TagPicker } from "./TagPicker";
 import type { FolderChatTag } from "~/hooks/useFolderChat";
-import { useLocalize } from "~/hooks";
+import { useLocalize, useScrollbarWhileScrolling } from "~/hooks";
 import SpeechToTextComponent from "~/components/Voice/SpeechToText";
 import { useGetWorkbenchModelsQuery } from "~/hooks/queries/data-provider";
 
@@ -37,6 +37,7 @@ export function KnowledgeAiInput({
     onStop,
 }: KnowledgeAiInputProps) {
     const localize = useLocalize();
+    const inputBlockScroll = useScrollbarWhileScrolling();
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const badgeRef = useRef<HTMLSpanElement>(null);
     const [badgeIndentPx, setBadgeIndentPx] = useState<number | undefined>(undefined);
@@ -216,12 +217,16 @@ export function KnowledgeAiInput({
 
                 {/* Outer scroll: badge + textarea are one block so they scroll together; badge overlays first line only */}
                 <div className="p-3 pb-0">
-                    <div className="max-h-48 overflow-y-auto overflow-x-hidden pr-6">
+                    <div
+                        className="max-h-48 overflow-y-auto overflow-x-hidden scroll-on-scroll pr-6"
+                        onScroll={inputBlockScroll.onScroll}
+                        {...inputBlockScroll.scrollingProps}
+                    >
                         <div className="relative">
                             {selectedTag && (
                                 <span
                                     ref={badgeRef}
-                                    className={`absolute left-0 top-0 z-10 box-border inline-flex h-5 max-h-5 min-h-5 max-w-[min(240px,90%)] shrink-0 items-center rounded-[6px] px-0 text-xs font-medium leading-none ${TAG_TEXT_CLASS} select-none transition-[background-color,box-shadow] duration-150 ease-out`}
+                                    className={`absolute left-0 top-0 z-10 box-border inline-flex h-5 max-h-5 min-h-5 max-w-[min(240px,90%)] shrink-0 items-center rounded-[2px] px-0 text-xs font-medium leading-none ${TAG_TEXT_CLASS} select-none transition-[background-color,box-shadow] duration-150 ease-out`}
                                     style={{
                                         boxSizing: "border-box",
                                         backgroundColor: tagDeleteHighlight

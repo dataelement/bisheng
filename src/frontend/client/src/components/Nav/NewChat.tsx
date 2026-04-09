@@ -104,7 +104,7 @@ export default function NewChat({
     <div className="sticky left-0 right-0 top-0 z-50 bg-white">
       <div className="" style={{ transform: 'none' }}>
         <div className="mb-4 flex items-center justify-between">
-          <p className="font-medium text-[#212121] text-[14px]">首页</p>
+          <p className="font-medium text-[#212121] text-[14px]">{localize('com_nav_home')}</p>
           {showToggleButton ? (
             <div className="cursor-pointer rounded-md p-1 hover:bg-slate-100" onClick={toggleNav}>
               <PanelRightOpen className="size-4 text-[#86909c]" />
