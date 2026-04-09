@@ -23,7 +23,7 @@ const checkFileType = (file, accepts) => {
 };
 
 // @accepts '.png,.jpg'
-const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, onChange }, ref) => {
+const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, onChange, uploadMode }, ref) => {
     const t = useLocalize()
     const [files, setFiles] = useState([]);
     const filesRef = useRef([]);
@@ -103,7 +103,7 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
                     filesRef.current = updatedFiles;
                     return updatedFiles;
                 });
-            }).then(response => {
+            }, uploadMode).then(response => {
                 const filePath = response.data.file_path; // Assuming the response contains the file ID
                 filesRef.current = filesRef.current.map(f => {
                     if (f.id === id) {

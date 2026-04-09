@@ -152,7 +152,7 @@ export default function UserInput({ taskId, history = {}, disable = false, onSen
             formData.append("file_id", fileId)
             formData.append("file_name", file.name)
 
-            window.isLinsight = true // TODO: 临时方案，后续需要优化
+            formData.append("isLinsight", "true")
             uploadFile.mutate({
                 body: formData,
                 signal: abortController.signal,
