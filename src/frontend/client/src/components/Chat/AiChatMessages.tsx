@@ -202,7 +202,7 @@ export default function AiChatMessages({
                         alt="AI Assistant"
                     />
                     <p className="mt-[22px] text-center text-sm text-[#86909c]">
-                        {emptyStateHint ?? localize("com_knowledge.folder_qa_empty_hint")}
+                        {emptyStateHint ?? localize("com_knowledge.qa_current_article")}
                     </p>
                     {presetQuestions.length > 0 && (
                         <div className="w-full flex flex-col gap-3 pt-[22px]">

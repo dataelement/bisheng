@@ -48,7 +48,7 @@ export function KnowledgeAiPanel({
         enabled: !!spaceId,
     });
 
-  const {
+    const {
         messages,
         sessions,
         activeChatId,
@@ -65,7 +65,11 @@ export function KnowledgeAiPanel({
 
     const [showHistory, setShowHistory] = useState(false);
 
-    const folderQaHint = localize("com_knowledge.folder_qa_empty_hint");
+    // Empty-state hint depends on whether the panel is opened inside a folder
+    // (folderId is set) or at the space root.
+    const folderQaHint = folderId
+        ? localize("com_knowledge.qa_current_folder")
+        : localize("com_knowledge.qa_current_space");
 
     const handleSend = (
         text: string,

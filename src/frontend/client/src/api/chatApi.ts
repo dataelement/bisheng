@@ -203,6 +203,17 @@ export function parseStreamHistoryItem(raw: StreamHistoryItem): ChatMessage {
         } else {
             // User messages: { query, tags? }
             displayText = parsed.query || parsed.text || raw.message;
+            // Re-encode the first tag (if any) into the same `:::tag {...}:::`
+            // prefix the live send path uses, so the user bubble can render
+            // the chip after a history reload.
+            const firstTag = Array.isArray(parsed.tags) ? parsed.tags[0] : null;
+            if (firstTag && typeof firstTag.name === "string") {
+                const tagJson = JSON.stringify({
+                    id: Number(firstTag.id) || 0,
+                    name: firstTag.name,
+                });
+                displayText = `:::tag ${tagJson}:::\n${displayText}`;
+            }
         }
     } catch {
         displayText = raw.message || "";

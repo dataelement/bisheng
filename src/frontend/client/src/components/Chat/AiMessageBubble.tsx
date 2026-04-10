@@ -93,6 +93,32 @@ function SiblingSwitch({
 }
 
 /**
+ * Parse a leading `:::tag {"id":..,"name":".."}:::` block out of a user
+ * message and return the chip data + remaining text. The same on-the-wire
+ * encoding is produced by `useFolderChat.sendMessage` and rebuilt from
+ * persisted history in `parseStreamHistoryItem`, so the chip survives reloads.
+ */
+function parseUserMessageText(text: string): {
+    tag: { id: number; name: string } | null;
+    bodyText: string;
+} {
+    if (!text) return { tag: null, bodyText: "" };
+    const match = text.match(/^:::tag\s*([\s\S]*?):::\s*\n?/);
+    if (!match) return { tag: null, bodyText: text };
+    let tag: { id: number; name: string } | null = null;
+    try {
+        const parsed = JSON.parse(match[1].trim());
+        if (parsed && typeof parsed.name === "string") {
+            tag = { id: Number(parsed.id) || 0, name: parsed.name };
+        }
+    } catch {
+        // Malformed tag block — fall through and treat the whole thing as text
+        return { tag: null, bodyText: text };
+    }
+    return { tag, bodyText: text.slice(match[0].length) };
+}
+
+/**
  * Parse :::thinking xxx::: and :::web xxx::: from message text.
  * Returns { thinkingContent, webContent, regularContent }.
  */
@@ -183,6 +209,12 @@ function UserBubble({
 }) {
     const { user } = useAuthContext();
 
+    // Pull out the optional `:::tag {...}:::` chip prefix
+    const { tag, bodyText } = useMemo(
+        () => parseUserMessageText(message.text || ""),
+        [message.text]
+    );
+
     return (
         <div className={cn("flex justify-end py-3", knowledgeChatLayout ? "w-full px-4" : "px-4")}>
             <div className={cn("min-w-0", knowledgeChatLayout ? "max-w-[min(92%,56rem)]" : "max-w-[80%]")}>
@@ -243,13 +275,24 @@ function UserBubble({
                                     : "rounded-[10px] bg-[#E6EDFC] text-[#1d2129] text-sm"
                             )}
                         >
-                            {message.text}
+                            {tag && (
+                                <span
+                                    className="mr-1 inline-flex h-5 max-w-[min(240px,90%)] items-center rounded-[2px] px-1 align-[-2px] text-xs font-medium text-[#212121] select-none"
+                                    style={{ backgroundColor: "#335CFF59" }}
+                                    title={`#${tag.name}`}
+                                >
+                                    <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">
+                                        #{tag.name}
+                                    </span>
+                                </span>
+                            )}
+                            {bodyText}
                         </div>
                     </div>
                 </div>
                 {/* Action buttons */}
                 <div className="flex items-center justify-end gap-1 mt-1.5">
-                    <CopyButton text={message.text} />
+                    <CopyButton text={tag ? `#${tag.name} ${bodyText}` : message.text} />
                     {siblingIdx !== undefined && siblingCount !== undefined && setSiblingIdx && (
                         <SiblingSwitch siblingIdx={siblingIdx} siblingCount={siblingCount} setSiblingIdx={setSiblingIdx} />
                     )}
