@@ -247,6 +247,11 @@ class KnowledgeService(KnowledgeUtils):
             vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(login_user.user_id,
                                                                                 knowledge=db_knowledge,
                                                                                 metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
+            # Init Milvus schema avoiding SchemaNotReady concurrently
+            init_ids = vector_client.add_texts(texts=["init_schema"])
+            if init_ids:
+                vector_client.delete(ids=init_ids)
+
             es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=db_knowledge,
                                                                         metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
             es_client._store._create_index_if_not_exists()
