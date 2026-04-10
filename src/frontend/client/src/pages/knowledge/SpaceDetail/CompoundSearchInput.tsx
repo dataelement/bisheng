@@ -139,8 +139,8 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
             >
                 <Search className="size-4 text-[#86909c] shrink-0" />
 
-                {/* 范围选择：文件夹内始终展示，高亮表示已选范围；仅文案随 current / all 切换 */}
-                {!isRoot && (
+                {/* 范围选择：仅在输入框聚焦（或菜单已打开）时显示，高亮表示已选范围；仅文案随 current / all 切换 */}
+                {!isRoot && isExpanded && (
                     <DropdownMenu open={isScopeMenuOpen} onOpenChange={setIsScopeMenuOpen}>
                         <DropdownMenuTrigger asChild>
                             <button
