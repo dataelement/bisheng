@@ -199,9 +199,11 @@ export function CreateChannelDrawer({
             <Sheet open={open} onOpenChange={handleClose}>
                 <SheetContent
                     side="right"
-                    className="w-full max-w-[900px] sm:max-w-[1000px] bg-white pl-20 pr-20 flex flex-col"
+                    className="w-full max-w-[900px] sm:max-w-[1000px] overflow-y-auto scroll-on-scroll bg-white pl-20 pr-20 flex flex-col"
+                    onScroll={handleBodyScroll}
+                    data-scrolling={isBodyScrolling ? "true" : "false"}
                 >
-                    <SheetHeader className="ml-6 mr-6 pt-6 pb-4 border-b border-[#E5E6EB]">
+                    <SheetHeader className="sticky top-0 z-10 ml-6 mr-6 pt-6 pb-4 border-b border-[#E5E6EB] bg-white">
                         <SheetTitle className="text-[16px] -ml-4 font-medium text-[#1D2129]">
                             {isEditMode ? localize("com_subscription.channel_settings") : localize("com_subscription.create_channel")}
                         </SheetTitle>
@@ -228,11 +230,8 @@ export function CreateChannelDrawer({
                     ) : (
                         <div
                             className={cn(
-                                "flex-1 min-h-0 scroll-on-scroll px-6 py-5 space-y-5",
-                                form.showAddSourcePanel ? "overflow-visible" : "overflow-y-auto"
+                                "overflow-visible px-6 py-5 space-y-5"
                             )}
-                            onScroll={handleBodyScroll}
-                            data-scrolling={isBodyScrolling ? "true" : "false"}
                         >
                             {/* 添加信息源 */}
                             <div className="space-y-2">
@@ -602,7 +601,7 @@ export function CreateChannelDrawer({
 
                     {/* 底部操作按钮 */}
                     {(!form.showSuccess || isEditMode) && (
-                        <div className="flex justify-end gap-3 px-6 py-4 border-t border-[#E5E6EB] bg-white">
+                        <div className="sticky bottom-0 z-10 mt-auto flex justify-end gap-3 px-6 pt-10 pb-5 border-t border-[#E5E6EB] bg-white">
                             <Button
                                 variant="secondary"
                                 onClick={() => handleClose(false)}

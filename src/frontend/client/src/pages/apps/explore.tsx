@@ -26,7 +26,8 @@ const ExploreCard = ({ agent, onClick, onShare }: { agent: any, onClick: (agent:
             className={cn(
                 "group relative content-stretch flex h-[80px] items-center gap-[12px] overflow-clip rounded-[8px] p-[12px] transition-all cursor-pointer",
                 "border-[0.5px] border-solid border-[#EBECF0] bg-[linear-gradient(110deg,#F9FBFE_0%,#FFF_50%,#F9FBFE_100%)]",
-                "hover:border-[#335CFF] hover:shadow-[0_8px_20px_0_rgba(117,145,212,0.12)]",
+                "hover:shadow-[0_8px_20px_0_rgba(117,145,212,0.12)]",
+                "after:pointer-events-none after:absolute after:inset-0 after:rounded-[8px] after:border after:border-[#335CFF] after:opacity-0 after:transition-opacity group-hover:after:opacity-100",
                 "hover:bg-[linear-gradient(0deg,#FFF_0%,#FFF_100%),linear-gradient(110deg,#F9FBFE_0%,#FFF_50%,#F9FBFE_100%)]"
             )}
         >
@@ -45,7 +46,7 @@ const ExploreCard = ({ agent, onClick, onShare }: { agent: any, onClick: (agent:
                 </p>
 
                 {/* 描述区域：平时显示，hover时隐藏 */}
-                <p className="flex-[1_0_0] font-['PingFang_SC'] leading-[20px] text-[14px] text-[#A9AEB8] w-full line-clamp-2 break-words group-hover:hidden whitespace-normal mt-[2px]">
+                <p className="mt-[2px] flex-[1_0_0] w-full overflow-hidden text-ellipsis whitespace-normal font-['PingFang_SC'] text-[12px] leading-[18px] text-[#A9AEB8] line-clamp-2 group-hover:hidden">
                     {agent.description || agent.desc || localize('com_app_no_description_placeholder')}
                 </p>
 
@@ -74,6 +75,7 @@ export default function ExplorePlaza() {
     const [searchQuery, setSearchQuery] = useState("")
     const [agents, setAgents] = useState<any[]>([])
     const [loading, setLoading] = useState(false)
+    const [loadingMore, setLoadingMore] = useState(false)
     const [refreshTrigger, setRefreshTrigger] = useState(0)
 
     // --- 新增滚动加载相关状态 ---
@@ -90,8 +92,9 @@ export default function ExplorePlaza() {
 
     // Modify Fetch Function
     const fetchAgents = useCallback(async (query: string, categoryId: number | string, currentPage: number, isAppend: boolean) => {
-        if (loading) return;
-        setLoading(true);
+        if (loading || loadingMore) return;
+        if (isAppend) setLoadingMore(true);
+        else setLoading(true);
         try {
             const result = categoryId === 'uncategorized'
                 ? await getUncategorized(currentPage, pageSize, query)
@@ -110,9 +113,10 @@ export default function ExplorePlaza() {
             console.error("Failed to fetch agents:", error);
             if (!isAppend) setAgents([]);
         } finally {
-            setLoading(false);
+            if (isAppend) setLoadingMore(false);
+            else setLoading(false);
         }
-    }, [loading]);
+    }, [loading, loadingMore]);
 
     useEffect(() => {
         setPage(1);
@@ -129,7 +133,7 @@ export default function ExplorePlaza() {
     useEffect(() => {
         const observer = new IntersectionObserver((entries) => {
             const target = entries[0];
-            if (target.isIntersecting && !loading && hasMore) {
+            if (target.isIntersecting && !loading && !loadingMore && hasMore) {
                 setPage(prev => prev + 1);
             }
         }, { threshold: 0.1 });
@@ -139,7 +143,7 @@ export default function ExplorePlaza() {
         }
 
         return () => observer.disconnect();
-    }, [loading, hasMore]);
+    }, [loading, loadingMore, hasMore]);
 
     const handleCardClick = (agent: any) => {
         const _chatId = generateUUID(32)
@@ -169,7 +173,7 @@ export default function ExplorePlaza() {
                 updatedAt: ""
             });
         });
-        navigate(`/chat/${_chatId}/${flowId}/${flowType}`);
+        navigate(`/app/${_chatId}/${flowId}/${flowType}?from=explore`);
     }
 
     const handleShare = async (agent: any) => {
@@ -233,6 +237,12 @@ export default function ExplorePlaza() {
                     {loading && (
                         <div className="flex items-center gap-2 text-[#335cff]">
                             <Loader2 className="animate-spin" size={24} />
+                            <span className="text-sm font-['PingFang_SC']">{localize('com_app_explore_loading_more')}</span>
+                        </div>
+                    )}
+                    {!loading && loadingMore && (
+                        <div className="flex items-center gap-2 text-[#335cff]">
+                            <Loader2 className="animate-spin" size={20} />
                             <span className="text-sm font-['PingFang_SC']">{localize('com_app_explore_loading_more')}</span>
                         </div>
                     )}

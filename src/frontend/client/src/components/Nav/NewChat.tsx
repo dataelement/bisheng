@@ -104,7 +104,7 @@ export default function NewChat({
     <div className="sticky left-0 right-0 top-0 z-50 bg-white">
       <div className="" style={{ transform: 'none' }}>
         <div className="mb-4 flex items-center justify-between">
-          <p className="font-medium text-[#212121] text-[14px]">{localize('com_nav_home')}</p>
+          <p className="font-medium text-[#212121] text-[16px] ml-2">{localize('com_nav_home')}</p>
         </div>
         <div className='flex gap-1 w-full'>
           {/* 新建btn */}

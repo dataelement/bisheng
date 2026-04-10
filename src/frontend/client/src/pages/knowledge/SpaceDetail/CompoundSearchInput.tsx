@@ -30,6 +30,7 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
     const [selectedTags, setSelectedTags] = useState<SpaceTag[]>([]);
     const [keyword, setKeyword] = useState('');
     const [isFocused, setIsFocused] = useState(false);
+    const [isScopeMenuOpen, setIsScopeMenuOpen] = useState(false);
     const [spaceTags, setSpaceTags] = useState<SpaceTag[]>([]);
 
     const containerRef = useRef<HTMLDivElement>(null);
@@ -57,13 +58,14 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
     // Handle clicking outside to close the dropdown
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
+            if (isScopeMenuOpen) return;
             if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
                 setIsFocused(false);
             }
         };
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, []);
+    }, [isScopeMenuOpen]);
 
     const isSearching = selectedTags.length > 0 || keyword.trim().length > 0;
 
@@ -131,11 +133,31 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
 
                 {/* 范围选择：文件夹内始终展示，高亮表示已选范围；仅文案随 current / all 切换 */}
                 {!isRoot && (
-                    <DropdownMenu>
+                    <DropdownMenu
+                        onOpenChange={(open) => {
+                            setIsScopeMenuOpen(open);
+                            if (open) {
+                                // Keep search input focused while switching scope.
+                                inputRef.current?.focus();
+                                setIsFocused(true);
+                            } else {
+                                // Keep selected visual state right after choosing an item.
+                                requestAnimationFrame(() => {
+                                    inputRef.current?.focus();
+                                    setIsFocused(true);
+                                });
+                            }
+                        }}
+                    >
                         <DropdownMenuTrigger asChild>
                             <button
                                 type="button"
-                                className="flex items-center gap-1 h-6 max-w-[min(120px,40vw)] shrink-0 rounded px-2 text-sm outline-none transition-colors bg-[#E6EDFC] text-[#165DFF] hover:bg-[#DCE8FC]"
+                                className="flex w-[104px] items-center justify-between gap-1 h-6 shrink-0 rounded px-2 text-sm outline-none transition-colors bg-[#E6EDFC] text-[#165DFF] hover:bg-[#DCE8FC]"
+                                onMouseDown={(e) => {
+                                    // Prevent trigger click from stealing focus from input.
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                }}
                                 onClick={(e) => e.stopPropagation()}
                             >
                                 <span className="truncate">{scopeLabel}</span>
@@ -146,8 +168,8 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
                             align="start"
                             className={cn('min-w-[120px]', knowledgeSpaceDropdownSurfaceClassName)}
                         >
-                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setScope('current'); inputRef.current?.focus(); }}>{localize("com_knowledge.current_location")}</DropdownMenuItem>
-                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setScope('all'); inputRef.current?.focus(); }}>{localize("com_knowledge.current_space")}</DropdownMenuItem>
+                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setScope('current'); inputRef.current?.focus(); setIsFocused(true); }}>{localize("com_knowledge.current_location")}</DropdownMenuItem>
+                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setScope('all'); inputRef.current?.focus(); setIsFocused(true); }}>{localize("com_knowledge.current_space")}</DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
                 )}
@@ -209,7 +231,7 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
             </div>
 
             {/* Dropdown Panel — space tags */}
-            {isFocused && (
+            {isFocused && !isScopeMenuOpen && (
                 <div className="absolute top-full left-0 mt-1 min-w-[320px] max-w-full bg-white shadow-[0_4px_10px_rgba(0,0,0,0.1)] rounded-md z-50 p-3">
                     <div className="text-sm font-medium text-gray-800 mb-2">{localize("com_knowledge.existing_tags")}</div>
                     <div className="flex flex-wrap gap-2">

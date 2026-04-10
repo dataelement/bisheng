@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useRecoilState, useRecoilValue } from 'recoil';
 import { NotificationSeverity } from '~/common';
 import type { AppConversation, ConversationGroup } from '~/@types/app';
@@ -21,6 +21,7 @@ import { useLocalize } from '~/hooks';
  */
 export function useAppSidebar() {
   const navigate = useNavigate();
+  const location = useLocation();
   const localize = useLocalize();
   const { fid: flowId, type: flowType, conversationId } = useParams();
   const { showToast } = useToastContext();
@@ -87,15 +88,23 @@ export function useAppSidebar() {
       updatedAt: new Date().toISOString(),
       createdAt: new Date().toISOString(),
     }, ...prev]);
-    navigate(`/app/${chatId}/${flowId}/${flowType}`);
-  }, [flowId, flowType, navigate, setConversations]);
+    const from = new URLSearchParams(location.search).get('from');
+    const nextPath = from
+      ? `/app/${chatId}/${flowId}/${flowType}?from=${from}`
+      : `/app/${chatId}/${flowId}/${flowType}`;
+    navigate(nextPath);
+  }, [flowId, flowType, location.search, navigate, setConversations]);
 
   /** Switch to a specific conversation */
   const switchConversation = useCallback(
     (conv: AppConversation) => {
-      navigate(`/app/${conv.id}/${conv.flowId}/${conv.flowType}`);
+      const from = new URLSearchParams(location.search).get('from');
+      const nextPath = from
+        ? `/app/${conv.id}/${conv.flowId}/${conv.flowType}?from=${from}`
+        : `/app/${conv.id}/${conv.flowId}/${conv.flowType}`;
+      navigate(nextPath);
     },
-    [navigate],
+    [location.search, navigate],
   );
 
   /** Toggle sidebar visibility */
