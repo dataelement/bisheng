@@ -263,6 +263,7 @@ docker/mysql/data/*
 docker/office/bisheng/*.gz
 
 CLAUDE.md
+bisheng-sync.sh
 !src/backend/bisheng/telemetry_search/**/*.pyc
 
 docs

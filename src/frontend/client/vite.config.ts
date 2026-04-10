@@ -30,7 +30,7 @@ export default defineConfig(({ command }) => ({
       //   changeOrigin: true,
       // },
       '^(/workspace)?/bisheng': {
-        target: 'http://127.0.0.1:7860',
+        target: 'http://localhost:9000',
         changeOrigin: true,
         secure: false,
         rewrite: (path) => {
@@ -52,7 +52,7 @@ export default defineConfig(({ command }) => ({
         },
       },
       '/workspace/tmp-dir': {
-        target: 'http://192.168.106.120:3002',
+        target: 'http://localhost:9000',
         changeOrigin: true,
         secure: false,
         rewrite: (path) => {
