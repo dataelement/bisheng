@@ -155,6 +155,7 @@ export function AiAssistantPanel({
                 hideShare={isSimpleMode}
                 hideHeaderTitle
                 flatMode={isSimpleMode}
+                knowledgeChatLayout
                 onPresetClick={(q) => setInputText(q)}
                 onRegenerate={regenerate}
             />

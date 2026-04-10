@@ -1,5 +1,7 @@
 import { useLocalize } from "~/hooks";
 import {
+    LogOut,
+    MinimizeIcon,
     MoreHorizontal,
     Pin,
     PinOff,
@@ -24,14 +26,10 @@ import {
     sidebarListMoreMenuItemClassName,
     sidebarListMoreMenuLabelClassName,
 } from "~/components/SidebarListMoreMenu";
-import ClosedIcon from "~/components/ui/icon/ClosedIcon";
 import { useConfirm, useToastContext } from "~/Providers";
 import { getFullWidthLength } from "~/utils";
-import {
-    ChannelApplicationIcon,
-    ChannelAppeffectIcon,
-    ChannelPinIcon,
-} from "~/components/icons/channels";
+import { ChannelPinIcon } from "~/components/icons/channels";
+import { SpaceNotebookIcon } from "~/components/icons/SpaceNotebookIcon";
 
 interface ChannelItemProps {
     channel: Channel;
@@ -95,11 +93,7 @@ export default function ChannelItem({
             <div className="flex items-center gap-1 flex-1 min-w-0">
                 {/* 左侧图标保持不变 */}
                 <div className={`flex-shrink-0 flex items-center justify-center size-5 rounded-md ${isActive ? "bg-white" : ""}`}>
-                    {isActive ? (
-                        <ChannelAppeffectIcon className="size-3.5" />
-                    ) : (
-                        <ChannelApplicationIcon className="size-3.5" />
-                    )}
+                    <SpaceNotebookIcon active={isActive} />
                 </div>
 
                 {isEditing ? (
@@ -217,7 +211,11 @@ export default function ChannelItem({
                             }}
                             className={sidebarListMoreMenuDangerItemClassName}
                         >
-                            <ClosedIcon className={sidebarListMoreMenuDangerIconClassName} />
+                            {type === "created" ? (
+                                <MinimizeIcon className={sidebarListMoreMenuDangerIconClassName} />
+                            ) : (
+                                <LogOut className={sidebarListMoreMenuDangerIconClassName} />
+                            )}
                             <span className={sidebarListMoreMenuDangerLabelClassName}>
                                 {type === "created" ? localize("com_subscription.dissolve_channel") : localize("com_subscription.unsubscribe")}
                             </span>

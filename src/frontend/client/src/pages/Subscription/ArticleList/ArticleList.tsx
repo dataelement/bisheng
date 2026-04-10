@@ -3,6 +3,9 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Info } from "lucide-react";
 import {
     Article,
+    Channel,
+    getArticlesApi,
+    getChannelDetailApi,
     type ArticleSearchResultItem
 } from "~/api/channels";
 import { NotificationSeverity } from "~/common";
