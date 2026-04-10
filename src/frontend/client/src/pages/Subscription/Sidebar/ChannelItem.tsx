@@ -1,13 +1,5 @@
 import { useLocalize } from "~/hooks";
-import {
-    LogOut,
-    MinimizeIcon,
-    MoreHorizontal,
-    Pin,
-    PinOff,
-    Settings,
-    Users,
-} from "lucide-react";
+import { LogOut, MoreHorizontal, Pin, PinOff, Settings, Users } from "lucide-react";
 import { useState } from "react";
 import { Channel, ChannelRole } from "~/api/channels";
 import { NotificationSeverity } from "~/common";
@@ -29,6 +21,7 @@ import {
 import { useConfirm, useToastContext } from "~/Providers";
 import { getFullWidthLength } from "~/utils";
 import { ChannelPinIcon } from "~/components/icons/channels";
+import ClosedIcon from "~/components/ui/icon/ClosedIcon";
 import { SpaceNotebookIcon } from "~/components/icons/SpaceNotebookIcon";
 
 interface ChannelItemProps {
@@ -212,7 +205,7 @@ export default function ChannelItem({
                             className={sidebarListMoreMenuDangerItemClassName}
                         >
                             {type === "created" ? (
-                                <MinimizeIcon className={sidebarListMoreMenuDangerIconClassName} />
+                                <ClosedIcon className={sidebarListMoreMenuDangerIconClassName} />
                             ) : (
                                 <LogOut className={sidebarListMoreMenuDangerIconClassName} />
                             )}

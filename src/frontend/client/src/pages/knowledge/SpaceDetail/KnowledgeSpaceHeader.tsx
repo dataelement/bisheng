@@ -330,7 +330,7 @@ export function KnowledgeSpaceHeader({
         );
 
     return (
-        <div className="space-y-4 border-b border-[#e5e6eb] pt-5 pb-4">
+        <div className="space-y-4 pt-5 pb-4">
             {/* 面包屑 / Title */}
             <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
                 {/* 左侧：标题与信息 / 面包屑 */}

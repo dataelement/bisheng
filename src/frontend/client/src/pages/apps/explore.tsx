@@ -25,7 +25,7 @@ const ExploreCard = ({ agent, onClick, onShare }: { agent: any, onClick: (agent:
             onClick={() => onClick(agent)}
             className={cn(
                 "group relative content-stretch flex h-[80px] items-center gap-[12px] overflow-clip rounded-[8px] p-[12px] transition-all cursor-pointer",
-                "border border-solid border-[#E5E6EB] bg-white",
+                "border-[0.5px] border-solid border-[#EBECF0] bg-[linear-gradient(110deg,#F9FBFE_0%,#FFF_50%,#F9FBFE_100%)]",
                 "hover:border-[#335CFF] hover:shadow-[0_8px_20px_0_rgba(117,145,212,0.12)]",
                 "hover:bg-[linear-gradient(0deg,#FFF_0%,#FFF_100%),linear-gradient(110deg,#F9FBFE_0%,#FFF_50%,#F9FBFE_100%)]"
             )}

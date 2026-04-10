@@ -1,10 +1,10 @@
 import type { AppItem } from '~/@types/app';
 import AppAvator from '~/components/Avator';
-import { ChannelPinIcon } from '~/components/icons/channels';
-import { cn } from '~/utils';
+import { ChannelPinGrayIcon, ChannelPinIcon, ChannelUnpinGrayIcon } from '~/components/icons/channels';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '~/components/ui/Tooltip2';
 import { Button } from '~/components';
 import { useLocalize } from '~/hooks';
+import { cn } from '~/utils';
 
 interface AgentCardProps {
   agent: AppItem;
@@ -61,20 +61,12 @@ export function AgentCard({
                 }
               >
                 {isPinned ? (
-                  <span className="relative inline-flex size-[14px] items-center justify-center">
-                    <ChannelPinIcon
-                      className="absolute w-[14px] h-[14px] flex-shrink-0 transition-opacity group-hover/pin:opacity-0"
-                      aria-hidden
-                    />
-                    <img
-                      src={`${__APP_ENV__.BASE_URL}/assets/channel/notop.svg`}
-                      alt=""
-                      className="absolute size-[14px] object-contain opacity-0 transition-opacity group-hover/pin:opacity-100 pointer-events-none"
-                      aria-hidden
-                    />
+                  <span className="relative inline-flex size-[18px] items-center justify-center">
+                    <ChannelPinIcon className="absolute size-[18px] shrink-0 transition-opacity group-hover/pin:opacity-0" />
+                    <ChannelUnpinGrayIcon className="pointer-events-none absolute size-[18px] opacity-0 transition-opacity group-hover/pin:opacity-100" />
                   </span>
                 ) : (
-                  <ChannelPinIcon className="w-[14px] h-[14px] flex-shrink-0" aria-hidden />
+                  <ChannelPinGrayIcon className="size-[18px] shrink-0" />
                 )}
               </button>
             </TooltipTrigger>

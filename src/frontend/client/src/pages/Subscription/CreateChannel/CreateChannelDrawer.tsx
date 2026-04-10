@@ -227,7 +227,10 @@ export function CreateChannelDrawer({
                         />
                     ) : (
                         <div
-                            className="flex-1 min-h-0 overflow-y-auto scroll-on-scroll px-6 py-5 space-y-5"
+                            className={cn(
+                                "flex-1 min-h-0 scroll-on-scroll px-6 py-5 space-y-5",
+                                form.showAddSourcePanel ? "overflow-visible" : "overflow-y-auto"
+                            )}
                             onScroll={handleBodyScroll}
                             data-scrolling={isBodyScrolling ? "true" : "false"}
                         >

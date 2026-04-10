@@ -547,9 +547,9 @@ export function KnowledgeSpaceContent({
                             </div>
                         </div>
                     ) : (
-                        <div className="flex min-h-0 min-w-0 flex-1 flex-col py-4">
+                        <div className="flex min-h-0 min-w-0 flex-1 flex-col pb-4">
                             <div
-                                className="min-h-0 min-w-0 flex-1 overflow-y-auto scroll-on-scroll"
+                                className="min-h-0 min-w-0 flex-1 overflow-y-auto scroll-on-scroll border-t border-[#e5e6eb]"
                                 onScroll={listBodyScroll.onScroll}
                                 {...listBodyScroll.scrollingProps}
                             >

@@ -418,8 +418,13 @@ function FileTableHeader({
                 {/* 状态 — 不排序, only visible to admins */}
                 {isAdmin && (
                     <TableHead
-                        className="relative bg-[rgb(251,251,251)] p-0 pr-3 font-normal text-[#4e5969]"
-                        style={{ width: columnWidths.status, minWidth: columnWidths.status, maxWidth: columnWidths.status }}
+                        className="sticky z-[24] bg-[rgb(251,251,251)] p-0 pr-3 font-normal text-[#4e5969]"
+                        style={{
+                            width: columnWidths.status,
+                            minWidth: columnWidths.status,
+                            maxWidth: columnWidths.status,
+                            right: ROW_ACTION_STRIP_PX,
+                        }}
                     >
                         <div className="flex items-center gap-1.5 border-l pl-3">
                             {localize("com_knowledge.status")}</div>
@@ -767,8 +772,13 @@ function FileRow({
             {/* 状态（管理员） */}
             {isAdmin && (
                 <TableCell
-                    className={cn("py-3 align-middle", rowBg)}
-                    style={{ width: columnWidths.status, minWidth: columnWidths.status, maxWidth: columnWidths.status }}
+                    className={cn("sticky z-[24] py-3 align-middle", rowBg)}
+                    style={{
+                        width: columnWidths.status,
+                        minWidth: columnWidths.status,
+                        maxWidth: columnWidths.status,
+                        right: ROW_ACTION_STRIP_PX,
+                    }}
                 >
                     {isFolder ? (
                         <span className="whitespace-nowrap text-sm">

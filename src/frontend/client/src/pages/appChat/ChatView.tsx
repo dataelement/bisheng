@@ -23,6 +23,7 @@ export default function ChatView({ data, cid, v, readOnly }) {
     const { fid: flowId, type: flowType } = useParams();
     const chatState = useRecoilValue(currentChatState);
     const running = useRecoilValue(currentRunningState);
+    const conversations = useRecoilValue(appConversationsState);
     const [, setConversations] = useRecoilState(appConversationsState);
 
     // Lightweight createNewChat — avoids importing useAppSidebar which would
@@ -45,6 +46,7 @@ export default function ChatView({ data, cid, v, readOnly }) {
 
     /** 无消息且无需展示开场白 / 引导问题 / 工作流表单时显示主区域空状态 */
     const showChatEmptyState =
+        conversations.length === 0 &&
         messages.length === 0 &&
         !data?.guide_word &&
         !running?.inputForm &&

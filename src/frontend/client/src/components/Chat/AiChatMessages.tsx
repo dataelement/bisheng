@@ -31,6 +31,8 @@ interface AiChatMessagesProps {
     knowledgeChatLayout?: boolean;
     /** Overrides empty-state line under the illustration (e.g. knowledge folder QA hint from parent) */
     emptyStateHint?: string;
+    /** Optional width utility classes for the inner message column */
+    contentWidthClassName?: string;
     onPresetClick?: (question: string) => void;
     onRegenerate?: (parentMessageId: string) => void;
 }
@@ -124,6 +126,7 @@ export default function AiChatMessages({
     flatMode = false,
     knowledgeChatLayout = false,
     emptyStateHint,
+    contentWidthClassName,
     onPresetClick,
     onRegenerate,
 }: AiChatMessagesProps) {
@@ -255,7 +258,7 @@ export default function AiChatMessages({
                 <div
                     className={cn(
                         "flex w-full flex-col py-2",
-                        knowledgeChatLayout ? "max-w-none" : "max-w-[768px] mx-auto"
+                        contentWidthClassName ?? (knowledgeChatLayout ? "max-w-none" : "max-w-[768px] mx-auto")
                     )}
                 >
                     {flatMode ? (

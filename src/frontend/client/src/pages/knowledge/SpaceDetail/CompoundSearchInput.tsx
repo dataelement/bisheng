@@ -117,7 +117,8 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
         <div ref={containerRef} className={cn("relative w-full", className)}>
             <div
                 className={cn(
-                    "flex flex-wrap items-center w-full min-h-[32px] bg-white border rounded-md transition-all px-3 py-1 gap-1",
+                    "flex flex-nowrap items-center gap-1 w-full h-9 min-h-9 max-h-9 overflow-x-auto overflow-y-hidden",
+                    "bg-white border rounded-md transition-[border-color,box-shadow] px-2 sm:px-3",
                     isFocused ? "border-primary ring-1 ring-primary/20" : "border-[#e5e6eb] hover:border-primary/50"
                 )}
                 onClick={() => {
@@ -128,13 +129,17 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
             >
                 <Search className="size-4 text-[#86909c] shrink-0" />
 
-                {/* 范围选择：仅聚焦/激活时展示，默认只显示放大镜 + 占位输入 */}
-                {!isRoot && isFocused && (
+                {/* 范围选择：文件夹内始终展示，高亮表示已选范围；仅文案随 current / all 切换 */}
+                {!isRoot && (
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <button className="flex items-center gap-1 h-5 text-sm text-[#4e5969] hover:bg-gray-100 px-1 py-0.5 rounded cursor-pointer transition-colors max-w-[120px] shrink-0 outline-none">
+                            <button
+                                type="button"
+                                className="flex items-center gap-1 h-6 max-w-[min(120px,40vw)] shrink-0 rounded px-2 text-sm outline-none transition-colors bg-[#E6EDFC] text-[#165DFF] hover:bg-[#DCE8FC]"
+                                onClick={(e) => e.stopPropagation()}
+                            >
                                 <span className="truncate">{scopeLabel}</span>
-                                <ChevronDown className="size-3 shrink-0" />
+                                <ChevronDown className="size-3 shrink-0 opacity-80" />
                             </button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent
@@ -149,10 +154,14 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
 
                 {/* Selected Tags */}
                 {selectedTags.map((tag) => (
-                    <div key={tag.id} className="flex items-center h-[22px] gap-1 bg-[#f2f3f5] text-[#4e5969] text-sm px-2 py-1 rounded truncate max-w-[100px] shrink-0">
+                    <div key={tag.id} className="flex items-center h-[22px] gap-1 bg-[#f2f3f5] text-[#4e5969] text-sm px-2 rounded truncate max-w-[100px] shrink-0">
                         {tag.name}
                         <X
                             className="size-3 text-[#86909c] hover:text-[#4e5969] cursor-pointer shrink-0"
+                            onMouseDown={(e) => {
+                                // Keep input focused to avoid focus-within width flicker.
+                                e.preventDefault();
+                            }}
                             onClick={(e) => {
                                 e.stopPropagation();
                                 handleRemoveTag(tag.id);
@@ -184,6 +193,10 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
                 {isSearching && (
                     <button
                         className="ml-auto w-4 h-4 rounded-full bg-[#f2f3f5] flex items-center justify-center hover:bg-[#e5e6eb] shrink-0 transition-colors"
+                        onMouseDown={(e) => {
+                            // Keep input focused to avoid focus-within width flicker.
+                            e.preventDefault();
+                        }}
                         onClick={(e) => {
                             e.stopPropagation();
                             handleClearAll();
@@ -214,6 +227,10 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
                                             ? "bg-primary/10 text-primary border-transparent cursor-default"
                                             : "bg-[#f2f3f5] text-[#4e5969] border-[#f2f3f5] hover:bg-[#e5e6eb]"
                                     )}
+                                    onMouseDown={(e) => {
+                                        // Keep focus on input to avoid focus-within width flicker.
+                                        e.preventDefault();
+                                    }}
                                     onClick={(e) => {
                                         e.preventDefault();
                                         e.stopPropagation();
