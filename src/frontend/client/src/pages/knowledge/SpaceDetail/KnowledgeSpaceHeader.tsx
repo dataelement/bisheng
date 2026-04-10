@@ -326,7 +326,10 @@ export function KnowledgeSpaceHeader({
         : cn(
             "relative min-w-0 w-full transition-[width,max-width,flex-grow] duration-200 ease-out",
             "sm:flex-none sm:w-[450px] sm:max-w-[450px] sm:shrink-0",
-            "sm:focus-within:flex-1 sm:focus-within:w-auto sm:focus-within:max-w-none sm:focus-within:min-w-0"
+            // Driven by CompoundSearchInput's data-expanded attribute (input focus
+            // OR scope DropdownMenu open) — survives Radix portal moving focus
+            // outside the search field.
+            "sm:has-[[data-expanded=true]]:flex-1 sm:has-[[data-expanded=true]]:w-auto sm:has-[[data-expanded=true]]:max-w-none sm:has-[[data-expanded=true]]:min-w-0"
         );
 
     return (

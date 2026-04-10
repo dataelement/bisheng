@@ -185,7 +185,6 @@ export const ChatKnowledge = ({
   value: KnowledgeItem[];
   onChange: (val: KnowledgeItem[]) => void;
 }) => {
-  console.log('value :>> ', value);
   const localize = useLocalize();
   const PAGE_SIZE = 20;
   const MAX_KB_PER_TYPE = 50;
@@ -335,14 +334,19 @@ export const ChatKnowledge = ({
       <DropdownMenuContent ref={menuContentRef} align="start" className="w-[200px] p-1.5 rounded-2xl shadow-xl border-slate-100">
 
         {/* 知识空间 */}
-        <DropdownMenuSub open={openSub === 'space'} onOpenChange={() => {}}>
+        <DropdownMenuSub
+          open={openSub === 'space'}
+          onOpenChange={(o) => {
+            if (o) setOpenSub('space');
+            else setOpenSub((cur) => (cur === 'space' ? null : cur));
+          }}
+        >
           <DropdownMenuSubTrigger
             data-sub-key="space"
             className={cn(
               "flex items-center justify-between rounded-xl outline-none cursor-pointer",
               "!bg-transparent hover:!bg-transparent focus:!bg-transparent"
             )}
-            onPointerEnter={() => setOpenSub('space')}
           >
             <div className="flex items-center gap-3">
               <div className="relative">
@@ -382,14 +386,19 @@ export const ChatKnowledge = ({
         </DropdownMenuSub>
 
         {/* 组织知识库 */}
-        <DropdownMenuSub open={openSub === 'org'} onOpenChange={() => {}}>
+        <DropdownMenuSub
+          open={openSub === 'org'}
+          onOpenChange={(o) => {
+            if (o) setOpenSub('org');
+            else setOpenSub((cur) => (cur === 'org' ? null : cur));
+          }}
+        >
           <DropdownMenuSubTrigger
             data-sub-key="org"
             className={cn(
               "flex items-center justify-between rounded-xl outline-none cursor-pointer mt-0.5",
               "!bg-transparent hover:!bg-transparent focus:!bg-transparent"
             )}
-            onPointerEnter={() => setOpenSub('org')}
           >
             <div className="flex items-center gap-3">
               <div className="relative">

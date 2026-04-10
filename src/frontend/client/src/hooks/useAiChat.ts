@@ -79,7 +79,11 @@ export default function useAiChat(initialConversationId: string = "new", isLings
     }, [initialConversationId]);
 
     // --- Load existing messages when conversationId changes ---
-    // IMPORTANT: skip during active streaming to avoid clearing messages mid-stream
+    // Only re-runs when conversationId itself changes — NOT when streaming ends.
+    // (isStreaming intentionally excluded from deps: when SSE creates a new convo
+    // mid-stream we set the conversationId during streaming; if we re-ran on
+    // streaming end we'd refetch and overwrite the just-streamed messages,
+    // causing a visible flash on the first reply of a new chat.)
     useEffect(() => {
         if (isStreaming) return;
         if (!conversationId || conversationId === "new") {
@@ -95,7 +99,8 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                 console.error("Failed to load messages:", err);
                 setIsLoading(false);
             });
-    }, [conversationId, isStreaming]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally exclude isStreaming
+    }, [conversationId]);
 
     // --- Message tree (for rendering) ---
     const messagesTree = useMemo(() => {

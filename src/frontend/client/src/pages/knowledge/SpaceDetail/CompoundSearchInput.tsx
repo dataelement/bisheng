@@ -33,6 +33,12 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
     const [isScopeMenuOpen, setIsScopeMenuOpen] = useState(false);
     const [spaceTags, setSpaceTags] = useState<SpaceTag[]>([]);
 
+    // The search field is "expanded" whenever the user is interacting with it,
+    // either via input focus / tag dropdown or the scope DropdownMenu. The parent
+    // toolbar reads this via has-[[data-expanded=true]] to keep its width stable
+    // even when Radix portals the menu out of the focus tree.
+    const isExpanded = isFocused || isScopeMenuOpen;
+
     const containerRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
 
@@ -55,7 +61,9 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
         refreshTags();
     }, [spaceId, refreshTags]);
 
-    // Handle clicking outside to close the dropdown
+    // Handle clicking outside to close the dropdown.
+    // While the scope DropdownMenu is open its portaled content lives outside
+    // containerRef — skip the reset so the search field doesn't collapse.
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             if (isScopeMenuOpen) return;
@@ -116,7 +124,7 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
     const scopeLabel = scope === 'current' ? localize("com_knowledge.current_location") : localize("com_knowledge.current_space");
 
     return (
-        <div ref={containerRef} className={cn("relative w-full", className)}>
+        <div ref={containerRef} data-expanded={isExpanded ? 'true' : 'false'} className={cn("relative w-full", className)}>
             <div
                 className={cn(
                     "flex flex-nowrap items-center gap-1 w-full h-9 min-h-9 max-h-9 overflow-x-auto overflow-y-hidden",
@@ -133,31 +141,11 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
 
                 {/* 范围选择：文件夹内始终展示，高亮表示已选范围；仅文案随 current / all 切换 */}
                 {!isRoot && (
-                    <DropdownMenu
-                        onOpenChange={(open) => {
-                            setIsScopeMenuOpen(open);
-                            if (open) {
-                                // Keep search input focused while switching scope.
-                                inputRef.current?.focus();
-                                setIsFocused(true);
-                            } else {
-                                // Keep selected visual state right after choosing an item.
-                                requestAnimationFrame(() => {
-                                    inputRef.current?.focus();
-                                    setIsFocused(true);
-                                });
-                            }
-                        }}
-                    >
+                    <DropdownMenu open={isScopeMenuOpen} onOpenChange={setIsScopeMenuOpen}>
                         <DropdownMenuTrigger asChild>
                             <button
                                 type="button"
-                                className="flex w-[104px] items-center justify-between gap-1 h-6 shrink-0 rounded px-2 text-sm outline-none transition-colors bg-[#E6EDFC] text-[#165DFF] hover:bg-[#DCE8FC]"
-                                onMouseDown={(e) => {
-                                    // Prevent trigger click from stealing focus from input.
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                }}
+                                className="flex items-center gap-1 h-6 max-w-[min(120px,40vw)] shrink-0 rounded px-2 text-sm outline-none transition-colors bg-[#F7F7F7] text-[#212121] hover:bg-[#F1F1F1]"
                                 onClick={(e) => e.stopPropagation()}
                             >
                                 <span className="truncate">{scopeLabel}</span>
