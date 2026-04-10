@@ -424,6 +424,12 @@ function FileTableHeader({
                     </TableHead>
                 )}
 
+                {/* 行末锚点列（零宽）— 与 tbody 列结构保持一致，避免首屏出现多余空白 */}
+                <TableHead
+                    className="border-none bg-[rgb(251,251,251)] p-0"
+                    style={{ width: 0, minWidth: 0, maxWidth: 0 }}
+                />
+
             </TableRow>
         </TableHeader>
     );
@@ -604,12 +610,7 @@ function FileRow({
     const showRowActions = rowHovered || moreMenuOpen;
     const rowActions = (
         <div
-            className={cn(
-                "absolute right-3 top-1/2 z-[35] flex -translate-y-1/2 items-center gap-1 transition-opacity",
-                showRowActions
-                    ? "pointer-events-auto opacity-100"
-                    : "pointer-events-none opacity-0"
-            )}
+            className="absolute right-3 top-1/2 z-[35] flex -translate-y-1/2 items-center gap-1"
         >
             <button
                 type="button"
@@ -821,7 +822,6 @@ function FileRow({
                 style={{ width: columnWidths.updateTime, minWidth: columnWidths.updateTime, maxWidth: columnWidths.updateTime }}
             >
                 <span className="block truncate whitespace-nowrap">{formatTime(file.updatedAt)}</span>
-                {!isAdmin && rowActions}
             </TableCell>
 
             {/* 状态（管理员） */}
@@ -838,9 +838,15 @@ function FileRow({
                     ) : (
                         <StatusBadge status={file.status ?? FileStatus.WAITING} />
                     )}
-                    {rowActions}
                 </TableCell>
             )}
+            {/* 行末锚点：固定在可视区最右侧，按钮距右侧 12px，不受横向滚动影响 */}
+            <TableCell
+                className="sticky right-0 z-[34] overflow-visible border-none bg-transparent p-0"
+                style={{ width: 0, minWidth: 0, maxWidth: 0 }}
+            >
+                {showRowActions && rowActions}
+            </TableCell>
         </TableRow>
     );
 }
