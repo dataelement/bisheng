@@ -65,9 +65,7 @@ export function KnowledgeAiPanel({
 
     const [showHistory, setShowHistory] = useState(false);
 
-    const welcomeText = contextLabel === localize("com_knowledge.folder")
-        ? localize("com_knowledge.qa_current_folder")
-        : localize("com_knowledge.qa_current_space");
+    const folderQaHint = localize("com_knowledge.folder_qa_empty_hint");
 
     const handleSend = (
         text: string,
@@ -173,7 +171,7 @@ export function KnowledgeAiPanel({
                         src={`${__APP_ENV__.BASE_URL}/assets/channel/ai-home.png`}
                         alt="AI Assistant"
                     />
-                    <p className="text-sm text-[#86909c]">{welcomeText}</p>
+                    <p className="text-sm text-[#86909c]">{folderQaHint}</p>
                 </div>
             ) : (
                 <AiChatMessages
@@ -187,6 +185,7 @@ export function KnowledgeAiPanel({
                     hideHeaderTitle
                     flatMode
                     knowledgeChatLayout
+                    emptyStateHint={folderQaHint}
                     onPresetClick={() => { }}
                     onRegenerate={regenerate}
                 />

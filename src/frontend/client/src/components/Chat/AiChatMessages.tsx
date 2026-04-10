@@ -10,7 +10,7 @@ import { cn } from "~/utils";
 import AiMessageBubble from "./AiMessageBubble";
 import type { ChatMessage } from "~/api/chatApi";
 import { buildMessageTree } from "~/api/chatApi";
-import { useScrollbarWhileScrolling } from "~/hooks";
+import { useLocalize, useScrollbarWhileScrolling } from "~/hooks";
 import HeaderTitle from "./HeaderTitle";
 
 interface AiChatMessagesProps {
@@ -29,6 +29,8 @@ interface AiChatMessagesProps {
     flatMode?: boolean;
     /** Knowledge space AI panel: full-width column, 14px body, gray user / borderless assistant */
     knowledgeChatLayout?: boolean;
+    /** Overrides empty-state line under the illustration (e.g. knowledge folder QA hint from parent) */
+    emptyStateHint?: string;
     onPresetClick?: (question: string) => void;
     onRegenerate?: (parentMessageId: string) => void;
 }
@@ -121,9 +123,11 @@ export default function AiChatMessages({
     hideHeaderTitle = false,
     flatMode = false,
     knowledgeChatLayout = false,
+    emptyStateHint,
     onPresetClick,
     onRegenerate,
 }: AiChatMessagesProps) {
+    const localize = useLocalize();
     const scrollRef = useRef<HTMLDivElement>(null);
     const endRef = useRef<HTMLDivElement>(null);
     const msgListScroll = useScrollbarWhileScrolling();
@@ -197,8 +201,8 @@ export default function AiChatMessages({
                         src={`${__APP_ENV__.BASE_URL}/assets/channel/ai-home.png`}
                         alt="AI Assistant"
                     />
-                    <p className="text-sm mt-[22px] text-gray-800 text-center font-medium">
-                        AI 助手可以基于该文章内容进行问答
+                    <p className="mt-[22px] text-center text-sm text-[#86909c]">
+                        {emptyStateHint ?? localize("com_knowledge.folder_qa_empty_hint")}
                     </p>
                     {presetQuestions.length > 0 && (
                         <div className="w-full flex flex-col gap-3 pt-[22px]">
@@ -206,7 +210,7 @@ export default function AiChatMessages({
                                 <Button
                                     key={i}
                                     variant="ghost"
-                                    className="bg-gray-50 font-normal hover:bg-[#E6EDFC] active:bg-[#E6EDFC] text-sm text-gray-800 hover:text-[#165DFF] px-3 py-1 rounded-lg text-left flex items-center gap-1 group w-fit transition-colors"
+                                    className="bg-gray-50 px-3 py-1 text-left text-sm font-normal text-[#86909c] transition-colors hover:bg-[#E6EDFC] hover:text-[#165DFF] active:bg-[#E6EDFC] rounded-lg flex items-center gap-1 group w-fit"
                                     onClick={() => onPresetClick?.(q)}
                                 >
                                     <div className="size-4 flex items-center justify-center">
