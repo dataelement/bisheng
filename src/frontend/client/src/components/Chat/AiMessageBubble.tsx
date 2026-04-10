@@ -299,6 +299,7 @@ function AssistantBubble({
                         <Markdown
                             content={regularContent}
                             webContent={webContent}
+                            citations={message.citations}
                             showCursor={showCursor}
                             isLatestMessage={!!isLatest}
                         />

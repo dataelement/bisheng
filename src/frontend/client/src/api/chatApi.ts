@@ -14,6 +14,37 @@ const API = {
 };
 
 // --- Types ---
+export interface ChatCitationItem {
+    itemId?: string;
+    chunkId?: string;
+    chunkIndex?: number;
+    content?: string;
+    snippet?: string;
+    title?: string;
+    page?: number;
+    [key: string]: any;
+}
+
+export interface ChatCitation {
+    citationId: string;
+    type: string;
+    itemId?: string | null;
+    sourcePayload?: {
+        url?: string;
+        title?: string;
+        snippet?: string;
+        source?: string;
+        sourceUrl?: string;
+        previewUrl?: string;
+        downloadUrl?: string;
+        knowledgeName?: string;
+        documentName?: string;
+        items?: ChatCitationItem[];
+        [key: string]: any;
+    };
+    [key: string]: any;
+}
+
 export interface ChatMessage {
     messageId: string;
     parentMessageId: string;
@@ -34,6 +65,7 @@ export interface ChatMessage {
     searchResult?: SearchWebItem[];
     // Reference sources 
     references?: ReferenceSource[];
+    citations?: ChatCitation[] | null;
     files?: any[];
 }
 
@@ -343,4 +375,3 @@ export async function getFolderChatHistory(
     // Backend returns newest-first; reverse for chronological order
     return items.reverse().map(parseStreamHistoryItem);
 }
-
