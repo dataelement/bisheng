@@ -16,6 +16,7 @@ import { useToastContext } from "~/Providers";
 import { formatTime } from "~/utils";
 import { useArticleShare } from "../hooks/useArticleShare";
 import { AddToKnowledgeModal } from "./AddToKnowledgeModal";
+import { useAuthContext } from "~/hooks/AuthContext";
 
 interface ArticleDetailProps {
     article: Article;
@@ -194,7 +195,11 @@ export function ArticleDetail({ article, loading = false, screenFull = false, sh
     };
 
 
-    const hasKnowledge = true
+    // Check if user has knowledge_space permission from web_menu
+    const { user } = useAuthContext();
+    const hasKnowledge = Array.isArray((user as any)?.plugins)
+        ? ((user as any).plugins as string[]).includes('knowledge_space')
+        : true;
     return (
         <div className={`flex px-4 py-5 flex-col h-full  ${screenFull ? '' : 'border-l border-gray-100'}`}>
             {/* Top Toolbar */}
@@ -243,10 +248,12 @@ export function ArticleDetail({ article, loading = false, screenFull = false, sh
                                 <span className="text-[#999]">{formatTime(article.publishedAt || '', true)}</span>
                             </div>}
                             {!aiAssistantOpen && <button
-                                className="flex items-center gap-1 text-xs transition-colors bg-gradient-to-br from-[#335CFF] to-[#7433FF] bg-clip-text text-transparent"
+                                className="flex items-center gap-1 text-xs transition-colors"
                                 onClick={() => onAiAssistant?.()}
                             >
-                                <AiChatIcon className="size-3.5 text-primary" />{localize("com_subscription.ai_assistant")}</button>}
+                                <AiChatIcon className="size-3.5 text-primary" />
+                                <span className="ai-gradient-text">{localize("com_subscription.ai_assistant")}</span>
+                            </button>}
                         </div>
                     </div>
                 </div>
@@ -287,11 +294,11 @@ export function ArticleDetail({ article, loading = false, screenFull = false, sh
                                 <ZoomIn className="size-5" />{localize("com_subscription.zoom_in")}</button>
                             <button onClick={() => setScale(s => Math.max(0.5, s - 0.2))} className="hover:text-white flex items-center gap-1">
                                 <ZoomOut className="size-5" />{localize("com_subscription.zoom_out")}</button>
-                            <div className="w-px h-4 bg-white/20 mx-2" />
-                            <button onClick={handleCopy} className="hover:text-white flex items-center gap-1">
+                            {/* <div className="w-px h-4 bg-white/20 mx-2" /> */}
+                            {/* <button onClick={handleCopy} className="hover:text-white flex items-center gap-1">
                                 <Copy className="size-5" />{localize("com_subscription.copy")}</button>
                             <button onClick={handleDownload} className="hover:text-white flex items-center gap-1">
-                                <Download className="size-5" />{localize("com_subscription.download")}</button>
+                                <Download className="size-5" />{localize("com_subscription.download")}</button> */}
                         </div>
                         <button onClick={() => setPreviewUrl(null)} className="hover:text-white text-white bg-white/10 p-2 rounded-full">
                             <X className="size-8" />

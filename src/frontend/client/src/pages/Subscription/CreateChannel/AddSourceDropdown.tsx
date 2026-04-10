@@ -49,6 +49,44 @@ export function AddSourceDropdown({
     const collapsedListScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [isExpandedListScrolling, setIsExpandedListScrolling] = useState(false);
     const expandedListScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const rootRef = useRef<HTMLDivElement>(null);
+    const expandedPanelRef = useRef<HTMLDivElement>(null);
+    const mgrRef = useRef(mgr);
+    const isClosingRef = useRef(false);
+    mgrRef.current = mgr;
+
+    // 展开面板失焦或点击组件外部时收起，并应用当前勾选（与「确认添加」一致）；弹窗内操作不触发
+    useEffect(() => {
+        if (!expanded) return;
+        isClosingRef.current = false;
+        const root = rootRef.current;
+        if (!root) return;
+
+        const rootDialog = root.closest('[role="dialog"], [role="alertdialog"]');
+        const isInsideOtherDialog = (node: Node | null) => {
+            if (!(node instanceof Element)) return false;
+            const targetDialog = node.closest('[role="dialog"], [role="alertdialog"]');
+            return targetDialog != null && targetDialog !== rootDialog;
+        };
+
+        const closePanel = () => {
+            if (isClosingRef.current) return;
+            isClosingRef.current = true;
+            mgrRef.current.handleConfirm();
+        };
+
+        const onPointerDown = (e: PointerEvent) => {
+            const t = e.target as Node | null;
+            if (t && root.contains(t)) return;
+            if (isInsideOtherDialog(t)) return;
+            closePanel();
+        };
+
+        document.addEventListener("pointerdown", onPointerDown, true);
+        return () => {
+            document.removeEventListener("pointerdown", onPointerDown, true);
+        };
+    }, [expanded]);
 
     // 同步输入框展示值与已提交的搜索关键字（清空时）
     useEffect(() => {
@@ -91,17 +129,17 @@ export function AddSourceDropdown({
         }
     };
     return (
-        <div className="relative">
+        <div ref={rootRef} className="relative">
             {/* 没点击时：触发区+已选列表 同一灰色整体 */}
             {!expanded && (
                 <div
-                    className="rounded-lg border border-[#E5E6EB] bg-[#F7F8FA] overflow-hidden max-h-[480px] flex flex-col"
+                    className="flex max-h-[480px] flex-col overflow-hidden rounded-lg border border-[#E5E6EB]"
                     role="button"
                     tabIndex={0}
                     onClick={() => onExpandChange(true)}
                     onKeyDown={(e) => e.key === "Enter" && onExpandChange(true)}
                 >
-                    <div className="flex items-center gap-2 px-4 py-3 flex-shrink-0">
+                    <div className="flex shrink-0 items-center gap-2 bg-[#F7F7F7] px-4 py-3">
                         <Plus className="size-4 flex-shrink-0 text-[#86909C]" />
                         <span className="flex-1 text-[14px] text-[#86909C] text-left">{localize("com_subscription.add_official_accounts_and_webpages")}</span>
                         <span className="flex-shrink-0 text-[12px] text-[#86909C]">
@@ -110,78 +148,76 @@ export function AddSourceDropdown({
                     </div>
                     {sources.length > 0 && (
                         <div
-                            className="border-t border-[#E5E6EB] bg-[#F7F8FA] overflow-y-auto scroll-on-scroll"
+                            className="scroll-on-scroll overflow-y-auto border-t border-[#E5E6EB] bg-[#FBFBFB]"
                             onScroll={handleCollapsedListScroll}
                             data-scrolling={isCollapsedListScrolling ? "true" : "false"}
                         >
                             {[...sources].reverse().map((s, idx, arr) => (
-                                <div
-                                    key={s.id}
-                                    className={cn(
-                                        "flex items-center gap-3 py-2 px-4 hover:bg-[#EEEFF1]",
-                                        idx < arr.length - 1 && "border-b border-dashed border-[#D9D9D9]"
-                                    )}
-                                    onClick={(e) => e.stopPropagation()}
-                                >
-                                    <div className="w-8 h-8 rounded-full bg-[#E5E6EB] flex-shrink-0 overflow-hidden">
-                                        {s.avatar ? (
-                                            <img src={s.avatar} alt="" className="w-full h-full object-cover" />
-                                        ) : (
-                                            <div className="w-full h-full flex items-center justify-center text-[12px] text-[#86909C]">
-                                                {s.name[0]}
-                                            </div>
-                                        )}
-                                    </div>
-                                    <span className="flex-1 text-[14px] text-[#1D2129] truncate">
-                                        <span
-                                            className={cn(
-                                                "inline-flex items-center max-w-full align-middle",
-                                                s.type === "website" && s.url && "group/link text-[#1D2129] hover:text-[#165DFF] transition-colors"
+                                <div key={s.id}>
+                                    <div
+                                        className="flex items-center gap-3 py-2 px-4 hover:bg-[#EEEFF1]"
+                                        onClick={(e) => e.stopPropagation()}
+                                    >
+                                        <div className="w-8 h-8 rounded-full bg-[#E5E6EB] flex-shrink-0 overflow-hidden">
+                                            {s.avatar ? (
+                                                <img src={s.avatar} alt="" className="w-full h-full object-cover" />
+                                            ) : (
+                                                <div className="w-full h-full flex items-center justify-center text-[12px] text-[#86909C]">
+                                                    {s.name[0]}
+                                                </div>
                                             )}
-                                            onClick={
-                                                s.type === "website" && s.url
-                                                    ? (e) => {
-                                                        e.stopPropagation();
-                                                        window.open(s.url, "_blank");
-                                                    }
-                                                    : undefined
-                                            }
-                                        >
+                                        </div>
+                                        <span className="flex-1 text-[14px] text-[#1D2129] truncate">
                                             <span
                                                 className={cn(
-                                                    "truncate",
-                                                    s.type === "website" && s.url && "hover:underline"
+                                                    "inline-flex items-center max-w-full align-middle",
+                                                    s.type === "website" && s.url && "group/link text-[#1D2129] hover:text-[#165DFF] transition-colors"
                                                 )}
+                                                onClick={
+                                                    s.type === "website" && s.url
+                                                        ? (e) => {
+                                                            e.stopPropagation();
+                                                            window.open(s.url, "_blank");
+                                                        }
+                                                        : undefined
+                                                }
                                             >
-                                                {truncateName(s.name)}
+                                                <span
+                                                    className={cn(
+                                                        "truncate",
+                                                        s.type === "website" && s.url && "hover:underline"
+                                                    )}
+                                                >
+                                                    {truncateName(s.name)}
+                                                </span>
+                                                {s.type === "website" && s.url && (
+                                                    <ChannelRightSmallUpIcon className="ml-0.5 w-4 h-4 opacity-0 group-hover/link:opacity-100 transition-opacity flex-shrink-0" />
+                                                )}
                                             </span>
-                                            {s.type === "website" && s.url && (
-                                                <ChannelRightSmallUpIcon className="ml-0.5 w-4 h-4 opacity-0 group-hover/link:opacity-100 transition-opacity flex-shrink-0" />
-                                            )}
+                                            <span className="ml-2 flex-shrink-0 rounded border border-[#165DFF] px-0.5 text-[11px] text-[#165DFF]">
+                                                {s.type === "official_account" ? localize("com_subscription.official_account") : localize("com_subscription.website")}
+                                            </span>
                                         </span>
-                                        <span
-                                            className={cn(
-                                                "text-[11px] px-0.5 rounded flex-shrink-0 ml-4",
-                                                s.type !== "official_account" && "-ml-0",
-                                                " border text-[#165DFF] border-[#165DFF]"  // 统一的白底蓝框蓝字
-                                            )}
+                                        <button
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onSourcesChange(sources.filter((x) => x.id !== s.id));
+                                            }}
+                                            className="p-1 rounded"
+                                            aria-label={localize("com_subscription.remove_source")}
                                         >
-                                            {s.type === "official_account" ? localize("com_subscription.official_account") : localize("com_subscription.website")}
-                                        </span>
-                                    </span>
-                                    <button
-                                        type="button"
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            onSourcesChange(sources.filter((x) => x.id !== s.id));
-                                        }}
-                                        className="p-1 rounded"
-                                        aria-label={localize("com_subscription.remove_source")}
-                                    >
-                                        <span className="inline-flex items-center justify-center w-3 h-3 border-[1px] border-[#F53F3F]">
-                                            <Minus className="size-3 text-[#F53F3F]" />
-                                        </span>
-                                    </button>
+                                            <span className="inline-flex items-center justify-center w-3 h-3 border-[1px] border-[#F53F3F]">
+                                                <Minus className="size-3 text-[#F53F3F]" />
+                                            </span>
+                                        </button>
+                                    </div>
+                                    {idx < arr.length - 1 && (
+                                        <div
+                                            className="mx-[12px] border-b border-dashed border-[#D9D9D9]"
+                                            aria-hidden
+                                        />
+                                    )}
                                 </div>
                             ))}
                         </div>
@@ -201,8 +237,11 @@ export function AddSourceDropdown({
 
             {/* 添加时：输入框+Tab+列表 同一整体，高 z-index 浮动，实时搜索 */}
             {expanded && (
-                <div className="absolute left-0 right-0 top-0 z-[100] rounded-lg border border-[#E5E6EB] bg-white shadow-[0_4px_16px_rgba(0,0,0,0.12)] overflow-hidden min-w-[400px]">
-                    <div className="flex items-center gap-2 pb-0 mb-2 border-b border-[#E5E6EB]">
+                <div
+                    ref={expandedPanelRef}
+                    className="absolute left-0 right-0 top-0 z-[100] flex h-[440px] min-w-[400px] flex-col overflow-hidden rounded-lg border border-[#E5E6EB] bg-white shadow-[0_4px_16px_rgba(0,0,0,0.12)]"
+                >
+                    <div className="flex shrink-0 items-center gap-2 border-b border-[#E5E6EB] pb-0 mb-2">
                         <div className="relative flex-1 rounded-lg m-1">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#999999]" />
                             <Input
@@ -233,43 +272,42 @@ export function AddSourceDropdown({
                     </div>
                     {/* 仅非搜索时显示 Tab；搜索时混合展示，类型在名称后 */}
                     {!mgr.isSearchMode && (
-                        <div className="flex gap-4 px-4 border-b border-[#E5E6EB]">
-                            <button
-                                type="button"
-                                onClick={() => mgr.setActiveTab("official_account")}
-                                className={cn(
-                                    "pb-2 text-[14px] font-medium border-b-2 -mb-px",
-                                    mgr.activeTab === "official_account"
-                                        ? "text-[#165DFF] border-[#165DFF]"
-                                        : "text-[#86909C] border-transparent"
-                                )}
-                            >
-                                {localize("com_subscription.official_account")}
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => mgr.setActiveTab("website")}
-                                className={cn(
-                                    "pb-2 text-[14px] font-medium border-b-2 -mb-px",
-                                    mgr.activeTab === "website"
-                                        ? "text-[#165DFF] border-[#165DFF]"
-                                        : "text-[#86909C] border-transparent"
-                                )}
-                            >
-                                {localize("com_subscription.website")}
-                            </button>
+                        <div className="mx-3 shrink-0 border-b border-[#E5E6EB]">
+                            <div className="flex gap-4 px-1">
+                                <button
+                                    type="button"
+                                    onClick={() => mgr.setActiveTab("official_account")}
+                                    className={cn(
+                                        "pb-2 text-[14px] font-medium border-b-2 -mb-px",
+                                        mgr.activeTab === "official_account"
+                                            ? "text-[#165DFF] border-[#165DFF]"
+                                            : "text-[#86909C] border-transparent"
+                                    )}
+                                >
+                                    {localize("com_subscription.official_account")}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => mgr.setActiveTab("website")}
+                                    className={cn(
+                                        "pb-2 text-[14px] font-medium border-b-2 -mb-px",
+                                        mgr.activeTab === "website"
+                                            ? "text-[#165DFF] border-[#165DFF]"
+                                            : "text-[#86909C] border-transparent"
+                                    )}
+                                >
+                                    {localize("com_subscription.website")}
+                                </button>
+                            </div>
                         </div>
                     )}
                     <div
-                        className={cn(
-                            "overflow-y-auto scroll-on-scroll",
-                            mgr.viewMode === "list" ? "max-h-[420px]" : "h-[520px]"
-                        )}
+                        className="min-h-0 flex-1 overflow-y-auto scroll-on-scroll"
                         onScroll={handleExpandedListScroll}
                         data-scrolling={isExpandedListScrolling ? "true" : "false"}
                     >
                         {mgr.viewMode === "noResultNonUrl" && (
-                            <div className="h-[432px] flex flex-col items-center justify-center text-center">
+                            <div className="flex min-h-full flex-col items-center justify-center px-4 py-8 text-center">
                                 <div className="mb-4 rounded-full p-3">
                                     <ChannelBookIcon className="w-[120px] h-[120px] mb-5" />
                                 </div>
@@ -280,7 +318,7 @@ export function AddSourceDropdown({
                             </div>
                         )}
                         {mgr.viewMode === "noResultUrl" && (
-                            <div className="h-[432px] flex flex-col items-center justify-center text-center">
+                            <div className="flex min-h-full flex-col items-center justify-center px-4 py-8 text-center">
                                 <div className="mb-4">
                                     <img
                                         src={`${__APP_ENV__.BASE_URL}/assets/channel/empty.png`}
@@ -295,7 +333,7 @@ export function AddSourceDropdown({
                                     <Button
                                         variant="secondary"
                                         onClick={mgr.handleClearSearch}
-                                        className="h-8 rounded-[6px] min-w-[74px] inline-flex items-center justify-center leading-none border border-[#E5E6EB] bg-white text-[#4E5969]"
+                                        className="h-8 rounded-[6px] min-w-[74px] inline-flex items-center justify-center leading-none border border-[#E5E6EB] bg-white text-[14px] !font-normal text-[#4E5969]"
                                     >
                                         {localize("com_subscription.do_not_crawl")}
                                     </Button>
@@ -311,7 +349,7 @@ export function AddSourceDropdown({
                                             }
                                             onRequestCrawl(mgr.searchKeyword.trim());
                                         }}
-                                        className="h-8 rounded-[6px] min-w-[74px] inline-flex items-center justify-center leading-none bg-[#165DFF] hover:bg-[#4080FF]"
+                                        className="h-8 rounded-[6px] min-w-[74px] inline-flex items-center justify-center leading-none text-[14px] !font-normal text-white bg-[#165DFF] hover:bg-[#4080FF]"
                                     >
                                         {localize("com_subscription.confirm_crawl")}
                                     </Button>
@@ -319,7 +357,7 @@ export function AddSourceDropdown({
                             </div>
                         )}
                         {mgr.viewMode === "wechatProcessing" && (
-                            <div className="h-[432px] flex flex-col items-center justify-center text-center">
+                            <div className="flex min-h-full flex-col items-center justify-center px-4 py-8 text-center">
                                 <div className="mb-4">
                                     <ChannelLoadingIcon className="w-[120px] h-[120px]" />
                                 </div>
@@ -329,7 +367,7 @@ export function AddSourceDropdown({
                                 <Button
                                     variant="secondary"
                                     onClick={mgr.handleClearSearch}
-                                    className="h-8 rounded-[6px] min-w-[84px] inline-flex items-center justify-center leading-none border border-[#E5E6EB] bg-white text-[#4E5969]"
+                                    className="h-8 rounded-[6px] min-w-[84px] inline-flex items-center justify-center leading-none text-[14px] !font-normal border border-[#E5E6EB] bg-white text-[#4E5969]"
                                 >
                                     {localize("com_subscription.do_not_add")}
                                 </Button>
@@ -349,12 +387,12 @@ export function AddSourceDropdown({
                                                     key={source.id}
                                                     onClick={() => !dis && mgr.toggleSource(source)}
                                                     className={cn(
-                                                        "flex items-center gap-3 px-4 py-3 cursor-pointer",
+                                                        "grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 cursor-pointer",
                                                         dis && "opacity-60 cursor-not-allowed",
                                                         sel && "bg-[#E8F3FF]"
                                                     )}
                                                 >
-                                                    <div className="w-6 h-6 rounded-full bg-[#F2F3F5] overflow-hidden flex-shrink-0">
+                                                    <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#F2F3F5]">
                                                         {source.avatar ? (
                                                             <img src={source.avatar} alt="" className="w-full h-full object-cover" />
                                                         ) : (
@@ -363,48 +401,45 @@ export function AddSourceDropdown({
                                                             </div>
                                                         )}
                                                     </div>
-                                                    <span className="flex-1 text-[14px] text-[#1D2129] truncate">
+                                                    <span className="min-w-0 truncate text-[14px] text-[#1D2129]">
                                                         <span
                                                             className={cn(
-                                                                "inline-flex items-center max-w-full align-middle",
-                                                                source.type === "website" && source.url && "group/link cursor-pointer text-[#1D2129] hover:text-[#165DFF] transition-colors"
+                                                                "inline-flex max-w-full items-center align-middle",
+                                                                source.type === "website" && source.url && "group/link text-[#1D2129] hover:text-[#165DFF] transition-colors"
                                                             )}
                                                             onClick={
                                                                 source.type === "website" && source.url
                                                                     ? (e) => {
-                                                                        e.stopPropagation();
-                                                                        window.open(source.url, "_blank");
-                                                                    }
+                                                                          e.stopPropagation();
+                                                                          window.open(source.url, "_blank");
+                                                                      }
                                                                     : undefined
                                                             }
                                                         >
                                                             <span
                                                                 className={cn(
-                                                                    "truncate inline-block max-w-full",
+                                                                    "truncate",
                                                                     source.type === "website" && source.url && "hover:underline"
                                                                 )}
                                                             >
                                                                 {truncateName(source.name, MAX_NAME_DISPLAY)}
                                                             </span>
                                                             {source.type === "website" && source.url && (
-                                                                <ChannelRightSmallUpIcon className="ml-0.5 w-4 h-4 opacity-0 group-hover/link:opacity-100 transition-opacity flex-shrink-0" />
+                                                                <ChannelRightSmallUpIcon className="ml-0.5 w-4 h-4 flex-shrink-0 opacity-0 transition-opacity group-hover/link:opacity-100" />
                                                             )}
                                                         </span>
                                                         {mgr.isSearchMode && (
                                                             <span
-                                                                className={cn(
-                                                                    "ml-2 text-[12px] px-2 py-0.5 rounded flex-shrink-0",
-                                                                    source.type === "official_account"
-                                                                        ? "bg-[#E8F3FF] text-[#165DFF]"
-                                                                        : "bg-[#FFF7E8] text-[#F7BA2E]"
-                                                                )}
+                                                                className="ml-2 flex-shrink-0 rounded border border-[#165DFF] px-0.5 text-[11px] text-[#165DFF]"
                                                             >
-                                                                {source.type === "official_account" ? localize("com_subscription.official_account") : localize("com_subscription.website")}
+                                                                {source.type === "official_account"
+                                                                    ? localize("com_subscription.official_account")
+                                                                    : localize("com_subscription.website")}
                                                             </span>
                                                         )}
                                                     </span>
                                                     <div
-                                                        className="flex-shrink-0"
+                                                        className="flex h-6 w-6 flex-shrink-0 items-center justify-center"
                                                         onClick={(e) => e.stopPropagation()}
                                                     >
                                                         <Checkbox
@@ -422,7 +457,7 @@ export function AddSourceDropdown({
                         )}
                     </div>
                     {mgr.viewMode === "list" && (
-                        <div className="flex justify-between items-center px-4 py-3 border-t border-[#E5E6EB] ">
+                        <div className="flex shrink-0 justify-between items-center border-t border-[#E5E6EB] px-4 py-3">
                             <span className="text-[12px] text-[#86909C]">{localize("com_subscription.total_channel_sources")}{mgr.pendingSources.length}/{MAX_SOURCES}
                             </span>
                             <div className="flex gap-2">
@@ -438,7 +473,7 @@ export function AddSourceDropdown({
                                         if (!confirmed) return;
                                         mgr.handleCancel();
                                     }}
-                                    className="bg-white border h-8 rounded-[6px] inline-flex items-center justify-center leading-none border-[#E5E6EB]"
+                                    className="border border-[#E5E6EB] bg-white h-8 rounded-[6px] inline-flex items-center justify-center leading-none text-[14px] !font-normal text-[#4E5969]"
                                 >
                                     {localize("cancel")}
                                 </Button>
@@ -446,7 +481,7 @@ export function AddSourceDropdown({
                                     size="sm"
                                     onClick={mgr.handleConfirm}
                                     disabled={mgr.pendingSources.length === 0}
-                                    className="bg-[#165DFF] h-8 rounded-[6px] inline-flex items-center justify-center leading-none disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="bg-[#165DFF] h-8 rounded-[6px] inline-flex items-center justify-center leading-none text-[14px] !font-normal text-white disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     {localize("com_subscription.confirm_add")}
                                 </Button>
@@ -489,7 +524,7 @@ export function AddSourceDropdown({
                     <div className="px-6 pb-4 flex justify-end">
                         <AlertDialogAction
                             onClick={() => mgr.setWechatAddError(false)}
-                            className="h-8 px-6 rounded-[6px] inline-flex items-center justify-center leading-none border border-[#E5E6EB] bg-white text-[14px] text-[#4E5969] hover:bg-[#F7F8FA]"
+                            className="h-8 px-6 rounded-[6px] inline-flex items-center justify-center leading-none border border-[#E5E6EB] bg-white text-[14px] !font-normal text-[#4E5969] hover:bg-[#F7F8FA]"
                         >{localize("com_subscription.cancel")}</AlertDialogAction>
                     </div>
                 </AlertDialogContent>

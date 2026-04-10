@@ -18,6 +18,7 @@ import {
     batchUpdateTagsApi,
 } from "~/api/knowledge";
 import { useLocalize } from "~/hooks";
+import { getFullWidthLength } from "~/utils";
 
 interface EditTagsModalProps {
     isOpen: boolean;
@@ -89,7 +90,7 @@ export function EditTagsModal({
         const trimmed = inputValue.trim();
         if (!trimmed) return;
 
-        if (trimmed.length > 8) {
+        if (getFullWidthLength(trimmed) > 8) {
             showToast({ message: localize("com_knowledge.tags_char_limit_exceeded"), status: "error" });
             return;
         }
@@ -132,7 +133,10 @@ export function EditTagsModal({
 
     // Save: update file tags via API
     const handleSave = async () => {
+        const pendingText = inputValue.trim();
+
         setLoading(true);
+
         try {
             const tagIds = Array.from(selectedTagIds);
             if (isBatchMode && fileIds) {
@@ -145,7 +149,7 @@ export function EditTagsModal({
             } else if (fileId) {
                 // Single file overwrite mode
                 await updateFileTagsApi(spaceId, fileId, tagIds);
-                showToast({ message: localize("com_knowledge.tag_save_success"), status: "success" });
+                !pendingText && showToast({ message: localize("com_knowledge.tag_save_success"), status: "success" });
             }
             onSaved?.();
             // Invalidate shared spaceTags cache so search dropdown picks up new tags

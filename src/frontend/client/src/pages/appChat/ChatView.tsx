@@ -1,14 +1,14 @@
 import { useCallback, useMemo } from "react";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useRecoilState, useRecoilValue } from "recoil";
 import AppAvator from "~/components/Avator";
 import HeaderTitle from "~/components/Chat/HeaderTitle";
-import { useAuthContext } from "~/hooks";
+import { useAuthContext, useLocalize } from "~/hooks";
 import ChatInput from "./ChatInput";
 import ChatMessages from "./ChatMessages";
 import { ChatEmptyState } from "./components/ChatEmptyState";
 import { appConversationsState } from "./store/appSidebarAtoms";
-import { currentChatState } from "./store/atoms";
+import { currentChatState, currentRunningState } from "./store/atoms";
 import useChatHelpers from "./useChatHelpers";
 import { useWebSocket } from "./useWebsocket";
 import { generateUUID } from "~/utils";
@@ -18,10 +18,11 @@ export default function ChatView({ data, cid, v, readOnly }) {
     const help = useChatHelpers()
     useWebSocket(help)
 
-    const location = useLocation();
+    const localize = useLocalize();
     const navigate = useNavigate();
     const { fid: flowId, type: flowType } = useParams();
     const chatState = useRecoilValue(currentChatState);
+    const running = useRecoilValue(currentRunningState);
     const [, setConversations] = useRecoilState(appConversationsState);
 
     // Lightweight createNewChat — avoids importing useAppSidebar which would
@@ -31,7 +32,7 @@ export default function ChatView({ data, cid, v, readOnly }) {
         const chatId = generateUUID(32);
         setConversations((prev) => [{
             id: chatId,
-            title: 'New Chat',
+            title: localize('com_ui_new_chat'),
             flowId: flowId,
             flowType: Number(flowType),
             updatedAt: new Date().toISOString(),
@@ -42,26 +43,29 @@ export default function ChatView({ data, cid, v, readOnly }) {
 
     const messages = chatState?.messages || [];
 
-    // Only show empty state when navigated from continueChat with no history
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- router state untyped
-    const showEmpty = !!(location.state as any)?.emptyHistory && messages.length === 0;
+    /** 无消息且无需展示开场白 / 引导问题 / 工作流表单时显示主区域空状态 */
+    const showChatEmptyState =
+        messages.length === 0 &&
+        !data?.guide_word &&
+        !running?.inputForm &&
+        !(running?.guideWord?.length);
 
     const Logo = useMemo(() => {
         return <AppAvator className="size-6 min-w-6" url={data.logo} id={data.name} flowType={data.flow_type} />
     }, [data]);
 
     return <div className="relative h-full flex flex-col">
-        {!showEmpty && (
-            <HeaderTitle
-                readOnly={readOnly}
-                conversation={{ title: data.name, flowId: data.id, conversationId: cid, flowType: data.flow_type }}
-            />
-        )}
-        <div className="min-h-0 flex-1 bg-[position:0_100%] bg-repeat-x bg-[length:10px_432px]">
-            {showEmpty ? (
-                <ChatEmptyState onNewChat={createNewChat} />
+        <HeaderTitle
+            readOnly={readOnly}
+            conversation={{ title: data.name, flowId: data.id, conversationId: cid, flowType: data.flow_type }}
+        />
+        <div className="min-h-0 flex-1 flex flex-col bg-[position:0_100%] bg-repeat-x bg-[length:10px_432px]">
+            {showChatEmptyState ? (
+                <div className="flex min-h-0 flex-1 flex-col">
+                    <ChatEmptyState onNewChat={createNewChat} />
+                </div>
             ) : (
-                <div className="relative h-full max-w-[860px] mx-auto">
+                <div className="relative mx-auto h-full min-h-0 w-full max-w-[860px] flex-1">
                     <ChatMessages
                         useName={user?.username}
                         title={data.name}
@@ -69,9 +73,9 @@ export default function ChatView({ data, cid, v, readOnly }) {
                         readOnly={readOnly}
                         disabledSearch={data.flow_type === 10}
                     />
-                    {!readOnly && <ChatInput v={v} readOnly={readOnly} />}
                 </div>
             )}
+            {!readOnly && <ChatInput v={v} readOnly={readOnly} />}
         </div>
     </div>
 };

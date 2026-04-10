@@ -8,7 +8,6 @@ from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import ServerError
 from bisheng.common.schemas.api import resp_200, SSEResponse
 from bisheng.knowledge.api.dependencies import get_knowledge_space_service, get_knowledge_space_chat_service
-from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileStatus
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     KnowledgeSpaceCreateReq, KnowledgeSpaceUpdateReq,
     FolderCreateReq, FolderRenameReq,
@@ -93,6 +92,15 @@ async def get_my_created_spaces(
         svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
     spaces = await svc.get_my_created_spaces(order_by)
+    return resp_200(spaces)
+
+
+@router.get('/managed')
+async def get_my_managed_spaces(
+        order_by: str = 'name',
+        svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    spaces = await svc.get_my_managed_spaces(order_by)
     return resp_200(spaces)
 
 
@@ -361,6 +369,17 @@ async def batch_retry_failed_files(
         svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ):
     result = await svc.batch_retry_failed_files(space_id, file_ids)
+    return resp_200(result)
+
+
+@router.post('/{space_id}/files/retry')
+async def retry_space_files(
+        space_id: int,
+        req_data: dict = Body(...),
+        svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    """Retry files in a knowledge space with potentially new split rules"""
+    result = await svc.retry_space_files(space_id, req_data)
     return resp_200(result)
 
 

@@ -23,10 +23,47 @@ import SpeechToTextComponent from "~/components/Voice/SpeechToText";
 import { useGetWorkbenchModelsQuery } from "~/hooks/queries/data-provider";
 import InputFiles from "~/pages/appChat/components/InputFiles";
 import { useFileDropAndPaste } from "~/pages/appChat/useFileDropAndPaste";
+import { useScrollbarWhileScrolling } from "~/hooks";
 import { checkIfScrollable, cn, removeFocusRings } from "~/utils";
 import AiModelSelect from "./AiModelSelect";
 import BooksIcon from "../ui/icon/Books";
 import BookOpen from "../ui/icon/BookOpen";
+
+/** 超出该字数则省略；省略后为「前 5 字 + …」共 6 个显示单位（与产品规则一致） */
+const KB_TAG_MAX_CHARS = 5;
+
+function formatKbTagLabel(name: string): string {
+    const chars = Array.from(name);
+    if (chars.length <= KB_TAG_MAX_CHARS) return name;
+    return `${chars.slice(0, KB_TAG_MAX_CHARS).join("")}\u2026`;
+}
+
+const KbTag = ({ kb, onRemove }: { kb: any; onRemove?: () => void }) => {
+    const label = formatKbTagLabel(kb.name ?? "");
+    return (
+        <div className="group flex h-6 min-w-0 max-w-[160px] shrink-0 items-center rounded-[4px] bg-white px-2 text-xs text-slate-700 transition-colors duration-200 hover:bg-slate-50">
+            {kb.type === 'space' ? (
+                <BookOpen className="mr-1 size-4 shrink-0 text-[#999]" />
+            ) : (
+                <BooksIcon className="mr-1 size-4 shrink-0 text-[#999]" />
+            )}
+
+            <span className="min-w-0 flex-1 truncate text-left" title={kb.name}>
+                {label}
+            </span>
+            {onRemove && (
+                <button
+                    type="button"
+                    onClick={onRemove}
+                    className="ml-0.5 flex size-4 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-200"
+                    aria-label="Remove"
+                >
+                    ✕
+                </button>
+            )}
+        </div>
+    );
+};
 
 export interface AiChatInputFeatures {
     modelSelect?: boolean;
@@ -114,6 +151,7 @@ const AiChatInput = memo(
         /** True only while user is actively scrolling — drives .scroll-on-scroll (see style.css). */
         const [isTextareaScrolling, setIsTextareaScrolling] = useState(false);
         const textareaScrollHideTimerRef = useRef<number | null>(null);
+        const kbTagsScroll = useScrollbarWhileScrolling();
 
         const updateTextareaScrollable = useCallback(() => {
             const el = textAreaRef.current;
@@ -249,6 +287,7 @@ const AiChatInput = memo(
                             showVoice={showVoice}
                             accepts={accept}
                             disabled={filesDisabled}
+                            uploadMode={isLingsi ? 'linsight' : 'workstation'}
                             size={bsConfig?.uploaded_files_maximum_size || 50}
                             onChange={(files: any) => {
                                 setFileUploading(!files);
@@ -264,49 +303,22 @@ const AiChatInput = memo(
 
                     {/* Selected knowledge base / space tags */}
                     {selectedOrgKbs && selectedOrgKbs.length > 0 && !isLingsi && (
-                        <div className="mx-2 mt-2 max-h-[100px] overflow-y-auto">
-                            <div className="flex flex-wrap gap-2">
+                        <div
+                            className="m-3 max-h-[72px] overflow-y-auto scroll-on-scroll"
+                            onScroll={kbTagsScroll.onScroll}
+                            {...kbTagsScroll.scrollingProps}
+                        >
+                            <div className="flex flex-wrap gap-1">
                                 {selectedOrgKbs.map((kb) => (
-                                    <div
+                                    <KbTag
                                         key={kb.id}
-                                        className="group relative flex items-center gap-1
-                                            px-2 py-1 pr-6
-                                            rounded-full bg-white border border-slate-200
-                                            text-xs text-slate-700
-                                            max-w-[200px]
-                                            hover:bg-slate-50 transition-all duration-200"
-                                    >
-                                        {kb.type === 'space' ? (
-                                            <BookOpen
-                                                className="size-[14px] text-slate-500 shrink-0"
-                                            />
-                                        ) : (
-                                            <BooksIcon
-                                                className="size-[14px] text-slate-500 shrink-0"
-                                            />
-                                        )}
-
-                                        <span className="truncate flex-1 min-w-0 transition-all duration-200 group-hover:text-[11px]">
-                                            {kb.name}
-                                        </span>
-
-                                        {onSelectedOrgKbsChange && (
-                                            <button
-                                                onClick={() => {
-                                                    onSelectedOrgKbsChange(
-                                                        selectedOrgKbs.filter((i) => i.id !== kb.id)
-                                                    );
-                                                }}
-                                                className="absolute right-1 top-1/2 -translate-y-1/2
-                                                    opacity-0 group-hover:opacity-100
-                                                    w-4 h-4 flex items-center justify-center
-                                                    rounded-full hover:bg-slate-200
-                                                    text-slate-400 transition-opacity duration-200"
-                                            >
-                                                ✕
-                                            </button>
-                                        )}
-                                    </div>
+                                        kb={kb}
+                                        onRemove={onSelectedOrgKbsChange ? () => {
+                                            onSelectedOrgKbsChange(
+                                                selectedOrgKbs.filter((i) => i.id !== kb.id)
+                                            );
+                                        } : undefined}
+                                    />
                                 ))}
                             </div>
                         </div>
@@ -321,7 +333,7 @@ const AiChatInput = memo(
                         onPaste={handlePaste}
                         onScroll={handleTextareaScroll}
                         onHeightChange={updateTextareaScrollable}
-                        disabled={disabled}
+                        disabled={disabled || isStreaming}
                         placeholder={placeholder || bsConfig?.inputPlaceholder}
                         tabIndex={0}
                         data-testid="ai-chat-input"

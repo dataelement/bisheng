@@ -1069,7 +1069,9 @@
       "dashboard": "ダッシュボード",
       "system": "システム",
       "subscribe": "サブスクリプション",
-      "knowledgeSpace": "ナレッジスペース"
+      "subscription": "サブスクリプション",
+      "knowledgeSpace": "ナレッジスペース",
+      "knowledge_space": "ナレッジスペース"
     },
     "eventTypeEnum": {
       "createChat": "新規チャット作成",
@@ -1118,7 +1120,11 @@
       "user_login": "ユーザーログイン",
       "addTool": "ツール作成",
       "updateTool": "ツール編集",
-      "deleteTool": "ツール削除"
+      "deleteTool": "ツール削除",
+      "create_channel": "チャンネル作成",
+      "delete_channel": "チャンネル削除",
+      "create_knowledge_space": "ナレッジスペース作成",
+      "delete_knowledge_space": "ナレッジスペース削除"
     },
     "objectTypeEnum": {
       "none": "なし",
@@ -1132,7 +1138,9 @@
       "tool": "ツール",
       "dashboard": "ダッシュボード",
       "knowledge": "ナレッジベース",
-      "workstation": "ワークステーション（日常モード）"
+      "workstation": "ワークステーション（日常モード）",
+      "channel": "チャンネル",
+      "knowledge_space": "ナレッジスペース"
     },
     "appUsage": "アプリ利用状況",
     "systemOperations": "システム操作",
@@ -1540,6 +1548,7 @@
     "15022": "OpenAPI Schemaの解析に失敗しました：{{exception}}",
     "15023": "URLはhttp/httpsで始まる必要があります：{{url}}",
     "15024": "MCP設定解析に失敗しました：{{exception}}",
+    "15025": "システムはstdioモードのMCPツール追加を許可していません",
     "16000": "データセット名がすでに存在します",
     "17000": "ダッシュボードは最大20個まで作成可能です",
     "17005": "現在のロールにはこのダッシュボードへのアクセス権限がありません。必要な場合は管理者に連絡してください。",

@@ -48,7 +48,7 @@ export function KnowledgeAiPanel({
         enabled: !!spaceId,
     });
 
-  const {
+    const {
         messages,
         sessions,
         activeChatId,
@@ -59,12 +59,15 @@ export function KnowledgeAiPanel({
         createSession,
         switchSession,
         deleteSession,
+        renameSession,
         regenerate,
     } = useFolderChat(spaceId, folderId);
 
     const [showHistory, setShowHistory] = useState(false);
 
-    const welcomeText = contextLabel === localize("com_knowledge.folder")
+    // Empty-state hint depends on whether the panel is opened inside a folder
+    // (folderId is set) or at the space root.
+    const folderQaHint = folderId
         ? localize("com_knowledge.qa_current_folder")
         : localize("com_knowledge.qa_current_space");
 
@@ -88,6 +91,9 @@ export function KnowledgeAiPanel({
     const handleDeleteSession = (chatId: string) => {
         deleteSession(chatId);
     };
+
+    const handleRenameSession = (chatId: string, name: string) =>
+        renameSession(chatId, name);
 
     return (
         <div className="flex flex-col h-full bg-white relative">
@@ -163,13 +169,13 @@ export function KnowledgeAiPanel({
             {/* Messages Area */}
             {messages.length === 0 && !activeChatId ? (
                 // Welcome screen
-                <div className="flex-1 flex flex-col items-center justify-center gap-4 text-center px-6">
+                <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
                     <img
-                        className="size-24 object-contain opacity-80"
-                        src={`${__APP_ENV__.BASE_URL}/assets/channel/empty.png`}
+                        className="mx-auto block size-[80px] object-contain"
+                        src={`${__APP_ENV__.BASE_URL}/assets/channel/ai-home.png`}
                         alt="AI Assistant"
                     />
-                    <p className="text-sm text-[#86909c]">{welcomeText}</p>
+                    <p className="text-sm text-[#86909c]">{folderQaHint}</p>
                 </div>
             ) : (
                 <AiChatMessages
@@ -182,6 +188,8 @@ export function KnowledgeAiPanel({
                     hideShare
                     hideHeaderTitle
                     flatMode
+                    knowledgeChatLayout
+                    emptyStateHint={folderQaHint}
                     onPresetClick={() => { }}
                     onRegenerate={regenerate}
                 />
@@ -203,6 +211,7 @@ export function KnowledgeAiPanel({
                     activeChatId={activeChatId}
                     onSelect={handleHistorySelect}
                     onDelete={handleDeleteSession}
+                    onRename={handleRenameSession}
                     onClose={() => setShowHistory(false)}
                 />
             )}

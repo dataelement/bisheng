@@ -10,6 +10,7 @@ import { cn } from "~/utils";
 import AiMessageBubble from "./AiMessageBubble";
 import type { ChatMessage } from "~/api/chatApi";
 import { buildMessageTree } from "~/api/chatApi";
+import { useLocalize, useScrollbarWhileScrolling } from "~/hooks";
 import HeaderTitle from "./HeaderTitle";
 
 interface AiChatMessagesProps {
@@ -26,6 +27,10 @@ interface AiChatMessagesProps {
     hideHeaderTitle?: boolean;
     /** When true, renders messages as a flat list without tree/sibling navigation */
     flatMode?: boolean;
+    /** Knowledge space AI panel: full-width column, 14px body, gray user / borderless assistant */
+    knowledgeChatLayout?: boolean;
+    /** Overrides empty-state line under the illustration (e.g. knowledge folder QA hint from parent) */
+    emptyStateHint?: string;
     onPresetClick?: (question: string) => void;
     onRegenerate?: (parentMessageId: string) => void;
 }
@@ -40,12 +45,14 @@ function MessageTreeNode({
     totalMessages,
     currentIndex,
     onRegenerate,
+    knowledgeChatLayout,
 }: {
     siblings: ChatMessage[];
     isStreaming?: boolean;
     totalMessages: number;
     currentIndex: number;
     onRegenerate?: (parentMessageId: string) => void;
+    knowledgeChatLayout?: boolean;
 }) {
     // Local sibling index for this group of siblings
     const [siblingIdx, setSiblingIdx] = useState(0);
@@ -87,6 +94,7 @@ function MessageTreeNode({
                 siblingIdx={siblingIdx}
                 siblingCount={siblings.length}
                 setSiblingIdx={setSiblingIdx}
+                knowledgeChatLayout={knowledgeChatLayout}
             />
             {/* Recursively render children */}
             {children.length > 0 && (
@@ -96,6 +104,7 @@ function MessageTreeNode({
                     totalMessages={totalMessages}
                     currentIndex={currentIndex + 1}
                     onRegenerate={onRegenerate}
+                    knowledgeChatLayout={knowledgeChatLayout}
                 />
             )}
         </>
@@ -113,11 +122,16 @@ export default function AiChatMessages({
     hideShare = false,
     hideHeaderTitle = false,
     flatMode = false,
+    knowledgeChatLayout = false,
+    emptyStateHint,
     onPresetClick,
     onRegenerate,
 }: AiChatMessagesProps) {
+    const localize = useLocalize();
     const scrollRef = useRef<HTMLDivElement>(null);
     const endRef = useRef<HTMLDivElement>(null);
+    const msgListScroll = useScrollbarWhileScrolling();
+    const emptyPanelScroll = useScrollbarWhileScrolling();
     const [showScrollBtn, setShowScrollBtn] = useState(false);
     // Track whether user has manually scrolled up
     const isUserScrolledUp = useRef(false);
@@ -158,6 +172,7 @@ export default function AiChatMessages({
     // Show/hide scroll-to-bottom button and track user scroll position
     const handleScroll = () => {
         checkNearBottom();
+        msgListScroll.onScroll();
     };
 
     const scrollToBottom = () => {
@@ -170,15 +185,24 @@ export default function AiChatMessages({
     // --- Empty state ---
     if (!hasMessages && !isLoading) {
         return (
-            <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col items-center justify-center">
+            <div
+                className="flex-1 overflow-y-auto scroll-on-scroll px-5 py-4 flex flex-col items-center justify-center"
+                onScroll={emptyPanelScroll.onScroll}
+                {...emptyPanelScroll.scrollingProps}
+                style={{
+                    transitionProperty: 'background-color',
+                    transitionDuration: '350ms',
+                    transitionTimingFunction: 'ease-in-out'
+                }}
+            >
                 <div className="mb-6">
                     <img
                         className="size-[80px] object-contain mx-auto block"
                         src={`${__APP_ENV__.BASE_URL}/assets/channel/ai-home.png`}
                         alt="AI Assistant"
                     />
-                    <p className="text-sm mt-[22px] text-gray-800 text-center font-medium">
-                        AI 助手可以基于该文章内容进行问答
+                    <p className="mt-[22px] text-center text-sm text-[#86909c]">
+                        {emptyStateHint ?? localize("com_knowledge.qa_current_article")}
                     </p>
                     {presetQuestions.length > 0 && (
                         <div className="w-full flex flex-col gap-3 pt-[22px]">
@@ -186,7 +210,7 @@ export default function AiChatMessages({
                                 <Button
                                     key={i}
                                     variant="ghost"
-                                    className="bg-gray-50 hover:bg-[#E6EDFC] active:bg-[#E6EDFC] text-sm text-gray-800 hover:text-[#165DFF] px-3 py-1 rounded-lg text-left flex items-center gap-1 group w-fit transition-colors"
+                                    className="bg-gray-50 px-3 py-1 text-left text-sm font-normal text-[#86909c] transition-colors hover:bg-[#E6EDFC] hover:text-[#165DFF] active:bg-[#E6EDFC] rounded-lg flex items-center gap-1 group w-fit"
                                     onClick={() => onPresetClick?.(q)}
                                 >
                                     <div className="size-4 flex items-center justify-center">
@@ -224,10 +248,16 @@ export default function AiChatMessages({
             )}
             <div
                 ref={scrollRef}
-                className={`h-full overflow-y-auto ${hideHeaderTitle ? "pt-2" : "pt-14"}`}
+                className={`h-full overflow-y-auto scroll-on-scroll ${hideHeaderTitle ? "pt-2" : "pt-14"}`}
                 onScroll={handleScroll}
+                {...msgListScroll.scrollingProps}
             >
-                <div className="flex flex-col py-2 max-w-[768px] mx-auto">
+                <div
+                    className={cn(
+                        "flex w-full flex-col py-2",
+                        knowledgeChatLayout ? "max-w-none" : "max-w-[768px] mx-auto"
+                    )}
+                >
                     {flatMode ? (
                         /* Flat mode: render messages as a simple list */
                         messages.map((message, idx) => {
@@ -244,6 +274,7 @@ export default function AiChatMessages({
                                             ? () => onRegenerate?.(message.parentMessageId)
                                             : undefined
                                     }
+                                    knowledgeChatLayout={knowledgeChatLayout}
                                 />
                             );
                         })
@@ -256,6 +287,7 @@ export default function AiChatMessages({
                                 totalMessages={messages.length}
                                 currentIndex={0}
                                 onRegenerate={onRegenerate}
+                                knowledgeChatLayout={knowledgeChatLayout}
                             />
                         )
                     )}

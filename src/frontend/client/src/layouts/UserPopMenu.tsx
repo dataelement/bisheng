@@ -1,20 +1,20 @@
-import { Bell, Globe, LogOut, ChevronRight, Check } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Bell, Check, ChevronRight, Globe, LogOut } from "lucide-react";
+import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from "react";
 import { useRecoilState } from "recoil";
+import { AccountInfoDialog } from "~/components/AccountInfoDialog";
+import { NotificationsDialog } from "~/components/NotificationsDialog";
 import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
 import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
-    DropdownMenuTrigger,
     DropdownMenuSub,
+    DropdownMenuSubContent,
     DropdownMenuSubTrigger,
-    DropdownMenuSubContent
+    DropdownMenuTrigger
 } from "~/components/ui/DropdownMenu";
-import { AccountInfoDialog } from "~/components/AccountInfoDialog";
-import { NotificationsDialog } from "~/components/NotificationsDialog";
-import { useNotificationCount } from "~/hooks/useNotificationCount";
 import { useAuthContext, useLocalize } from "~/hooks";
+import { useNotificationCount } from "~/hooks/useNotificationCount";
 import store from "~/store";
 import { cn } from "~/utils";
 
@@ -240,6 +240,9 @@ function UserPopMenuDrawer() {
 
 function UserPopMenuRail() {
     const [dropdownOpen, setDropdownOpen] = useState(false);
+    const [menuAlignOffset, setMenuAlignOffset] = useState(0);
+    const [menuSideOffset, setMenuSideOffset] = useState(0);
+    const triggerRef = useRef<HTMLDivElement>(null);
     const [accountDialogOpen, setAccountDialogOpen] = useState(false);
     const [notificationsDialogOpen, setNotificationsDialogOpen] = useState(false);
 
@@ -251,6 +254,8 @@ function UserPopMenuRail() {
     const changeLang = (lang: string) => setLangcode(lang);
     const displayName = user?.username || "admin";
     const [avatarUrl, setAvatarUrl] = useState<string>(user?.avatar || "");
+    /** 避免打开瞬间菜单盖住头像时，同一套 pointer 事件的 click 落到下方菜单项（如退出登录） */
+    const suppressMenuItemClicksRef = useRef(false);
 
     const handleAccountInfoClick = () => {
         setAccountDialogOpen(true);
@@ -270,97 +275,164 @@ function UserPopMenuRail() {
     const displayUnreadCount = unreadCount > 99 ? "99+" : String(unreadCount);
     const handleDropdownOpenChange = (nextOpen: boolean) => {
         setDropdownOpen(nextOpen);
+        if (nextOpen) {
+            suppressMenuItemClicksRef.current = true;
+            window.setTimeout(() => {
+                suppressMenuItemClicksRef.current = false;
+            }, 400);
+        } else {
+            suppressMenuItemClicksRef.current = false;
+        }
+        // Open/close menu时都主动刷新一次未读计数
         void refreshCount();
     };
 
-    const avatarInner =
-        avatarUrl ? (
-            <AvatarImage src={avatarUrl} alt="User" />
-        ) : user?.avatar ? (
-            <AvatarImage src={user.avatar} alt="User" />
-        ) : (
-            <AvatarName name={user?.username} />
-        );
+    /** 菜单内非 Item 区域（头像、昵称 div）仍用 click */
+    const runMenuAction = (fn: () => void) => (e: MouseEvent) => {
+        if (suppressMenuItemClicksRef.current) {
+            e.preventDefault();
+            return;
+        }
+        fn();
+    };
 
-    const unreadDot = unreadCount > 0 && (
-        <div className="absolute -top-0.5 -right-0.5 z-20 size-2.5 bg-[#f53f3f] rounded-full ring-2 ring-white pointer-events-none" />
-    );
+    /**
+     * DropdownMenuItem 由 Radix 通过 onSelect 选中，仅用 onClick 无法阻止「打开瞬间同一指针落在退出登录」的误触。
+     * 在抑制窗口内必须 event.preventDefault() 才能取消本次选中。
+     */
+    const runMenuItemSelect = (fn: () => void) => (e: Event) => {
+        if (suppressMenuItemClicksRef.current) {
+            e.preventDefault();
+            return;
+        }
+        fn();
+    };
+
+    useLayoutEffect(() => {
+        if (!dropdownOpen) {
+            setMenuAlignOffset(0);
+            setMenuSideOffset(0);
+            return;
+        }
+        const measure = () => {
+            const el = triggerRef.current;
+            if (!el) return;
+            const r = el.getBoundingClientRect();
+            const marginX = 8;
+            const marginBottom = 8;
+            // 与视口：左缘 8px；底缘 8px（side=top + sideOffset 将菜单底侧锚到视口底上方）
+            setMenuAlignOffset(marginX - Math.round(r.left));
+            setMenuSideOffset(Math.round(r.top - (window.innerHeight - marginBottom)));
+        };
+        measure();
+        window.addEventListener("resize", measure);
+        return () => window.removeEventListener("resize", measure);
+    }, [dropdownOpen]);
 
     return (
         <>
             <DropdownMenu open={dropdownOpen} onOpenChange={handleDropdownOpenChange}>
                 <DropdownMenuTrigger asChild>
-                    <div className="relative size-10 cursor-pointer outline-none active:scale-95 transition-transform">
-                        <Avatar className="size-10 hover:opacity-90 transition-opacity">{avatarInner}</Avatar>
-                        {unreadDot}
+                    <div
+                        ref={triggerRef}
+                        className="relative size-10 cursor-pointer outline-none active:scale-95 transition-transform"
+                    >
+                        <Avatar className="size-10 hover:opacity-90 transition-opacity">
+                            {avatarUrl ? (
+                                <AvatarImage src={avatarUrl} alt="User" />
+                            ) : user?.avatar ? (
+                                <AvatarImage src={user.avatar} alt="User" />
+                            ) : (
+                                <AvatarName name={user?.username} />
+                            )}
+                        </Avatar>
+                        {/* 头像右上角红点 */}
+                        {unreadCount > 0 && (
+                            <div className="absolute -top-0.5 -right-0.5 z-20 size-2.5 bg-[#f53f3f] rounded-full ring-2 ring-white pointer-events-none" />
+                        )}
                     </div>
                 </DropdownMenuTrigger>
 
                 <DropdownMenuContent
                     side="top"
                     align="start"
-                    sideOffset={14}
-                    collisionPadding={12}
-                    className="w-[200px] p-2 rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.08)] bg-white border-[#f0f0f0]"
+                    alignOffset={menuAlignOffset}
+                    sideOffset={menuSideOffset}
+                    collisionPadding={8}
+                    onCloseAutoFocus={(e) => e.preventDefault()}
+                    className="w-[200px] gap-0 overflow-hidden rounded-2xl border border-[#e5e6eb] bg-white p-0 shadow-[0_4px_20px_rgba(0,0,0,0.08)]"
                 >
-                    <div className="flex items-center gap-3 px-3 py-1">
-                        <Avatar className="size-10 border border-gray-100" onClick={handleAccountInfoClick}>
-                            {avatarInner}
+                    {/* 1. 用户头部：默认与菜单白底一致，移入时再与菜单项 hover 同色 */}
+                    <div className="flex cursor-pointer items-center gap-3 rounded-t-2xl bg-transparent px-3 py-2.5 transition-colors hover:bg-[#e8eaed]">
+                        <Avatar className="size-10 border border-gray-100" onClick={runMenuAction(handleAccountInfoClick)}>
+                            {avatarUrl ? (
+                                <AvatarImage src={avatarUrl} alt="User" />
+                            ) : user?.avatar ? (
+                                <AvatarImage src={user.avatar} alt="User" />
+                            ) : (
+                                <AvatarName name={user?.username} />
+                            )}
                         </Avatar>
-                        <div className="flex flex-col justify-center overflow-hidden" onClick={handleAccountInfoClick}>
-                            <span className="text-[15px] font-medium text-gray-900 truncate">{displayName}</span>
+                        <div className="flex flex-col justify-center overflow-hidden" onClick={runMenuAction(handleAccountInfoClick)}>
+                            <span className="text-[15px] font-medium text-gray-900 truncate">
+                                {displayName}
+                            </span>
                         </div>
                     </div>
 
-                    <div className="h-px bg-gray-100 mx-3 my-1" />
+                    <div className="h-px w-full shrink-0 bg-[#e5e6eb]" />
 
-                    <DropdownMenuItem
-                        className="group flex items-center justify-between px-3 py-1.5 cursor-pointer rounded-xl hover:bg-gray-50 focus:bg-gray-50 outline-none"
-                        onClick={handleNotificationsClick}
-                    >
-                        <div className="flex items-center gap-3">
-                            <Bell className="size-[18px] text-gray-600" />
-                            <span className="text-[14px] text-gray-700">{localize("com_notifications_title")}</span>
-                        </div>
-                        {unreadCount > 0 && (
-                            <span className="bg-[#f53f3f] text-white text-[16px] font-medium px-2.5 -py-1 rounded-full min-w-[24px] text-center">
-                                {displayUnreadCount}
-                            </span>
-                        )}
-                    </DropdownMenuItem>
-
-                    <DropdownMenuSub>
-                        <DropdownMenuSubTrigger className="flex items-center justify-between px-3 py-1.5 cursor-pointer rounded-xl hover:bg-gray-50 focus:bg-gray-50 outline-none">
+                    <div className="flex flex-col gap-1 p-2 pt-1.5">
+                        {/* 3. 消息提醒 (保留逻辑) */}
+                        <DropdownMenuItem
+                            className="group flex cursor-pointer items-center justify-between rounded-xl px-3 py-1.5 font-normal outline-none data-[highlighted]:bg-[#e8eaed] focus:bg-[#e8eaed]"
+                            onSelect={runMenuItemSelect(handleNotificationsClick)}
+                        >
                             <div className="flex items-center gap-3">
-                                <Globe className="size-[18px] text-gray-600" />
-                                <span className="text-[14px] text-gray-700">{localize('com_nav_language')}</span>
-                            </div>
-                        </DropdownMenuSubTrigger>
-                        <DropdownMenuSubContent className="rounded-xl border-gray-100 shadow-lg ml-2">
-                            <DropdownMenuItem className="py-2.5 px-3 rounded-lg" onClick={() => changeLang('zh-Hans')}>
-                                <span className="flex-1 text-sm">中文</span>
-                                {langcode === 'zh-Hans' && <Check className="ml-2 size-4 text-blue-600" />}
-                            </DropdownMenuItem>
-                            <DropdownMenuItem className="py-2.5 px-3 rounded-lg" onClick={() => changeLang('en')}>
-                                <span className="flex-1 text-sm">English</span>
-                                {langcode === 'en' && <Check className="ml-2 size-4 text-blue-600" />}
-                            </DropdownMenuItem>
-                            <DropdownMenuItem className="py-2.5 px-3 rounded-lg" onClick={() => changeLang('ja')}>
-                                <span className="flex-1 text-sm">日本語</span>
-                                {langcode === 'ja' && <Check className="ml-2 size-4 text-blue-600" />}
-                            </DropdownMenuItem>
-                        </DropdownMenuSubContent>
-                    </DropdownMenuSub>
+                                <Bell className="size-[18px] text-gray-600" />
+                                <span className="text-[14px] font-normal text-gray-700">{localize("com_notifications_title")}</span>
+                            </div >
+                            {unreadCount > 0 && (
+                                <span className="min-w-[24px] rounded-full bg-[#f53f3f] px-2.5 text-center text-[12px] font-normal text-white leading-none tabular-nums flex h-5 items-center justify-center">
+                                    {displayUnreadCount}
+                                </span>
+                            )
+                            }
+                        </DropdownMenuItem >
 
-                    <DropdownMenuItem
-                        onClick={logout}
-                        className="group flex items-center gap-3 px-3 py-1.5 cursor-pointer rounded-xl hover:bg-red-50 focus:bg-red-50 outline-none mt-1 transition-colors !text-[#f53f3f] hover:!text-[#f53f3f] focus:!text-[#f53f3f]"
-                    >
-                        <LogOut className="size-[18px]" />
-                        <span className="text-[14px] font-medium">{localize('com_nav_log_out')}</span>
-                    </DropdownMenuItem>
-                </DropdownMenuContent>
-            </DropdownMenu>
+                        <DropdownMenuSub>
+                            <DropdownMenuSubTrigger className="flex cursor-pointer items-center justify-between rounded-xl px-3 py-1.5 font-normal outline-none data-[highlighted]:bg-[#e8eaed] data-[state=open]:bg-[#eceef2] focus:bg-[#e8eaed]">
+                                <div className="flex items-center gap-3">
+                                    <Globe className="size-[18px] text-gray-600" />
+                                    <span className="text-[14px] font-normal text-gray-700">{localize('com_nav_language')}</span>
+                                </div>
+                            </DropdownMenuSubTrigger>
+                            <DropdownMenuSubContent className="ml-2 rounded-xl border-[#e5e6eb] bg-white p-1 shadow-lg">
+                                <DropdownMenuItem className="rounded-lg px-3 py-2.5 data-[highlighted]:bg-[#e8eaed] focus:bg-[#e8eaed]" onSelect={runMenuItemSelect(() => changeLang('zh-Hans'))}>
+                                    <span className="flex-1 text-sm">中文</span>
+                                    {langcode === 'zh-Hans' && <Check className="ml-2 size-4 text-blue-600" />}
+                                </DropdownMenuItem>
+                                <DropdownMenuItem className="rounded-lg px-3 py-2.5 data-[highlighted]:bg-[#e8eaed] focus:bg-[#e8eaed]" onSelect={runMenuItemSelect(() => changeLang('en'))}>
+                                    <span className="flex-1 text-sm">English</span>
+                                    {langcode === 'en' && <Check className="ml-2 size-4 text-blue-600" />}
+                                </DropdownMenuItem>
+                                <DropdownMenuItem className="rounded-lg px-3 py-2.5 data-[highlighted]:bg-[#e8eaed] focus:bg-[#e8eaed]" onSelect={runMenuItemSelect(() => changeLang('ja'))}>
+                                    <span className="flex-1 text-sm">日本語</span>
+                                    {langcode === 'ja' && <Check className="ml-2 size-4 text-blue-600" />}
+                                </DropdownMenuItem>
+                            </DropdownMenuSubContent>
+                        </DropdownMenuSub>
+
+                        <DropdownMenuItem
+                            onSelect={runMenuItemSelect(logout)}
+                            className="group flex cursor-pointer items-center gap-3 rounded-xl px-3 py-1.5 font-normal outline-none transition-colors data-[highlighted]:bg-[#e8eaed] focus:bg-[#e8eaed] !text-[#f53f3f] data-[highlighted]:!text-[#f53f3f] focus:!text-[#f53f3f]"
+                        >
+                            <LogOut className="size-[18px]" />
+                            <span className="text-[14px] font-normal">{localize('com_nav_log_out')}</span>
+                        </DropdownMenuItem>
+                    </div >
+                </DropdownMenuContent >
+            </DropdownMenu >
 
             <AccountInfoDialog
                 open={accountDialogOpen}

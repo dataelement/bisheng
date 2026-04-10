@@ -9,6 +9,7 @@ import { FileCard } from "./SpaceDetail/FileCard";
 import {
     KnowledgeFile,
     KnowledgeSpace,
+    SPACE_CHILDREN_STATUS_SUCCESS_ONLY,
     SpaceRole,
     VisibilityType,
     getJoinedSpacesApi,
@@ -16,14 +17,14 @@ import {
     getSpaceInfoApi,
     subscribeSpaceApi
 } from "~/api/knowledge";
-import { useLocalize } from "~/hooks";
+import { useLocalize, useScrollbarWhileScrolling } from "~/hooks";
 
 interface KnowledgeSpacePreviewDrawerProps {
     spaceId: string | undefined;
     open: boolean;
     onOpenChange: (open: boolean) => void;
     /** Notify parent to sync square card status */
-    onSquareStatusChange?: (spaceId: string, status: "join" | "joined" | "pending") => void;
+    onSquareStatusChange?: (spaceId: string, status: "join" | "joined" | "pending" | "rejected") => void;
 }
 
 export function KnowledgeSpacePreviewDrawer({
@@ -34,10 +35,11 @@ export function KnowledgeSpacePreviewDrawer({
 }: KnowledgeSpacePreviewDrawerProps) {
     const localize = useLocalize();
     const { showToast } = useToastContext();
+    const { onScroll: onScrollbarWhileScrolling, scrollingProps } = useScrollbarWhileScrolling();
     const MAX_JOINED_SPACES = 50;
 
     const [space, setSpace] = useState<KnowledgeSpace | null>(null);
-    const [status, setStatus] = useState<"none" | "joined" | "pending">("none");
+    const [status, setStatus] = useState<"none" | "joined" | "pending" | "rejected">("none");
     const [subscribing, setSubscribing] = useState(false);
     const [filesPreview, setFilesPreview] = useState<KnowledgeFile[]>([]);
     const [childrenPage, setChildrenPage] = useState(1);
@@ -46,8 +48,22 @@ export function KnowledgeSpacePreviewDrawer({
     const [parentStack, setParentStack] = useState<string[]>([]);
     const [parentNameStack, setParentNameStack] = useState<string[]>([]);
     const currentParentId = parentStack.length > 0 ? parentStack[parentStack.length - 1] : undefined;
+
+    /**
+     * 广场预览文件列表状态过滤（对齐 /space/{id}/info 的 user_role）：
+     * - creator / admin：不限制
+     * - member 与 user_role 为 null（映射为 member）：仅展示解析成功的文件
+     */
+    const getPreviewFileStatusFilter = (s: KnowledgeSpace): number[] | undefined => {
+        if (s.role === SpaceRole.CREATOR || s.role === SpaceRole.ADMIN) {
+            return undefined;
+        }
+        return SPACE_CHILDREN_STATUS_SUCCESS_ONLY;
+    };
+
     useEffect(() => {
         if (!open || !spaceId) return;
+        console.info("[KnowledgeSpacePreviewDrawer] open", { open, spaceId });
 
         setSpace(null);
         setStatus("none");
@@ -61,8 +77,20 @@ export function KnowledgeSpacePreviewDrawer({
         // 1) Top detail: GET /api/v1/knowledge/space/{space_id}/info
         getSpaceInfoApi(spaceId)
             .then(info => {
+                console.info("[KnowledgeSpacePreviewDrawer] loaded space info", {
+                    spaceId,
+                    visibility: info.visibility,
+                    subscriptionStatus: info.subscriptionStatus,
+                    isFollowed: info.isFollowed,
+                    isPending: info.isPending,
+                });
                 setSpace(info);
-                if (info.isPending) {
+                const sub = String(info.subscriptionStatus ?? "").toLowerCase();
+                // /info may still set is_followed when subscription_status is rejected; prefer explicit status.
+                if (sub === "rejected") {
+                    setStatus("rejected");
+                    onSquareStatusChange?.(String(info.id), "rejected");
+                } else if (info.isPending) {
                     setStatus("pending");
                     onSquareStatusChange?.(String(info.id), "pending");
                 } else if (info.isFollowed) {
@@ -74,6 +102,7 @@ export function KnowledgeSpacePreviewDrawer({
                 }
             })
             .catch(() => {
+                console.warn("[KnowledgeSpacePreviewDrawer] load space info failed", { spaceId });
                 showToast({ message: localize("com_knowledge.space_invalid_or_deleted"), severity: NotificationSeverity.WARNING });
                 onOpenChange(false);
             });
@@ -94,11 +123,13 @@ export function KnowledgeSpacePreviewDrawer({
         setChildrenTotal(0);
         setLoadingChildrenMore(false);
 
+        const fileStatusFilter = getPreviewFileStatusFilter(space);
         getSpaceChildrenApi({
             space_id: space.id,
             ...(currentParentId ? { parent_id: currentParentId } : {}),
             page: 1,
             page_size: 20,
+            ...(fileStatusFilter ? { file_status: fileStatusFilter } : {}),
         })
             .then(res => {
                 setFilesPreview(res.data);
@@ -109,7 +140,7 @@ export function KnowledgeSpacePreviewDrawer({
                 setChildrenTotal(0);
             });
         // Include join/subscription signals so file list loads when async info maps to joined without subscription_status.
-    }, [space?.id, space?.visibility, space?.subscriptionStatus, space?.isFollowed, currentParentId, status]);
+    }, [space?.id, space?.role, space?.visibility, space?.subscriptionStatus, space?.isFollowed, currentParentId, status]);
 
     const loadMoreChildren = async () => {
         if (!space || !canViewFiles) return;
@@ -119,11 +150,13 @@ export function KnowledgeSpacePreviewDrawer({
         const nextPage = childrenPage + 1;
         setLoadingChildrenMore(true);
         try {
+            const fileStatusFilter = getPreviewFileStatusFilter(space);
             const res = await getSpaceChildrenApi({
                 space_id: space.id,
                 ...(currentParentId ? { parent_id: currentParentId } : {}),
                 page: nextPage,
                 page_size: 20,
+                ...(fileStatusFilter ? { file_status: fileStatusFilter } : {}),
             });
             setFilesPreview(prev => [...prev, ...res.data]);
             setChildrenTotal(res.total);
@@ -151,28 +184,42 @@ export function KnowledgeSpacePreviewDrawer({
     };
 
     const isPublic = space?.visibility === VisibilityType.PUBLIC;
+    const subscriptionRejected =
+        String(space?.subscriptionStatus ?? "").toLowerCase() === "rejected" || status === "rejected";
     // /info sometimes omits subscription_status but still sets is_followed for already-approved members.
     const canViewFiles =
         !!space &&
+        !subscriptionRejected &&
         (space.visibility === VisibilityType.PUBLIC ||
             (space.visibility === VisibilityType.APPROVAL &&
-                (space.subscriptionStatus === "subscribed" ||
+                (String(space.subscriptionStatus ?? "").toLowerCase() === "subscribed" ||
                     space.isFollowed === true ||
                     status === "joined")));
 
     const handleClickAction = () => {
         if (!space) return;
 
-        if (status === "joined" || status === "pending") return;
+        if (status === "joined" || status === "pending" || status === "rejected") return;
         if (subscribing) return;
+
+        const nextUiStatus: "joined" | "pending" = isPublic ? "joined" : "pending";
+        const prevUiStatus = status;
 
         (async () => {
             setSubscribing(true);
+            setStatus(nextUiStatus);
+            onSquareStatusChange?.(String(space.id), nextUiStatus);
+
+            const rollback = () => {
+                setStatus(prevUiStatus);
+                onSquareStatusChange?.(String(space.id), "join");
+            };
+
             try {
-                // Join/apply upper limit (includes followed + pending applications)
                 try {
                     const joinedSpaces = await getJoinedSpacesApi();
                     if (joinedSpaces.length >= MAX_JOINED_SPACES) {
+                        rollback();
                         showToast({
                             message: localize("com_knowledge.join_space_limit_reached_50"),
                             severity: NotificationSeverity.WARNING,
@@ -185,22 +232,17 @@ export function KnowledgeSpacePreviewDrawer({
 
                 await subscribeSpaceApi(space.id);
                 if (isPublic) {
-                    setStatus("joined");
-                    onSquareStatusChange?.(String(space.id), "joined");
                     showToast({ message: localize("com_knowledge.join_success"), severity: NotificationSeverity.SUCCESS });
                 } else {
-                    setStatus("pending");
-                    onSquareStatusChange?.(String(space.id), "pending");
                     showToast({ message: localize("com_knowledge.subscribe_apply_sent"), severity: NotificationSeverity.SUCCESS });
                 }
             } catch (e) {
+                rollback();
                 const rawMessage =
                     (e as any)?.message ||
                     (e as any)?.status_message ||
                     "";
 
-                // Backend errcode 18032: SpaceSubscribeLimitError
-                // Msg: "You can subscribe to a maximum of 50 knowledge spaces"
                 if (typeof rawMessage === "string" && rawMessage.includes("maximum of 50 knowledge spaces")) {
                     showToast({ message: localize("com_knowledge.join_space_limit_reached_50"), severity: NotificationSeverity.WARNING });
                 } else {
@@ -209,17 +251,17 @@ export function KnowledgeSpacePreviewDrawer({
                         localize("com_knowledge.operation_failed_retry");
                     showToast({ message, severity: NotificationSeverity.ERROR });
                 }
-            }
-            finally {
+            } finally {
                 setSubscribing(false);
             }
         })();
     };
 
     const getButtonConfig = () => {
-        // 仅把“订阅/申请”改成“加入”；“已订阅/申请中”保持原文案
+        // 仅把“订阅/申请”改成“加入”；“已订阅/申请中/已驳回”保持原文案
         if (status === "joined") return { label: localize("com_knowledge.subscribed"), variant: "secondary" as const, disabled: true };
         if (status === "pending") return { label: localize("com_knowledge.applying"), variant: "secondary" as const, disabled: true };
+        if (status === "rejected") return { label: localize("rejected"), variant: "secondary" as const, disabled: true };
         if (isPublic) return { label: localize("com_knowledge.join"), variant: "default" as const, disabled: subscribing };
         return { label: localize("com_knowledge.join"), variant: "outline" as const, disabled: subscribing };
     };
@@ -230,7 +272,7 @@ export function KnowledgeSpacePreviewDrawer({
         <Sheet open={open} onOpenChange={onOpenChange}>
             <SheetContent
                 side="right"
-                className="w-[1000px] sm:max-w-[1000px] p-0 px-12 flex flex-col h-full"
+                className="w-[1000px] sm:max-w-[1000px] p-0 px-12 flex flex-col h-full min-h-0 overflow-hidden"
                 hideClose
             >
                 <button
@@ -276,7 +318,7 @@ export function KnowledgeSpacePreviewDrawer({
                                     variant={btn.variant}
                                     className={`h-8 px-5 py-1 text-sm font-normal rounded-md flex-shrink-0 ${status === "joined"
                                         ? "bg-[#F2F3F5] text-[#86909C] border-[#E5E6EB]"
-                                        : status === "pending"
+                                        : status === "pending" || status === "rejected"
                                             ? "bg-[#F2F3F5] text-[#C9CDD4] border-[#E5E6EB]"
                                             : ""
                                         }`}
@@ -289,13 +331,15 @@ export function KnowledgeSpacePreviewDrawer({
                         </SheetHeader>
 
                         <div
-                            className="flex-1 overflow-y-auto px-6 py-4"
+                            className="flex-1 min-h-0 overflow-y-auto scroll-on-scroll px-6 py-4"
                             onScroll={(e) => {
+                                onScrollbarWhileScrolling();
                                 const el = e.currentTarget;
                                 if (el.scrollTop + el.clientHeight >= el.scrollHeight - 80) {
                                     void loadMoreChildren();
                                 }
                             }}
+                            {...scrollingProps}
                         >
                             {canViewFiles ? (
                                 <div className="space-y-2">
@@ -332,7 +376,7 @@ export function KnowledgeSpacePreviewDrawer({
                                                 <FileCard
                                                     key={f.id}
                                                     file={f}
-                                                    userRole={SpaceRole.MEMBER}
+                                                    userRole={space?.role ?? SpaceRole.MEMBER}
                                                     isSelected={false}
                                                     onSelect={() => { }}
                                                     onDownload={() => { }}

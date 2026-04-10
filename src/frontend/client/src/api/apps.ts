@@ -230,10 +230,20 @@ export async function getSourceChunksApi(chatId: string, messageId: number, keys
 /**
  * 聊天窗上传文件
  */
-export async function uploadChatFile(v, file: File, onProgress): Promise<any> {
+export async function uploadChatFile(v, file: File, onProgress, uploadMode?: 'linsight' | 'workstation'): Promise<any> {
     const formData = new FormData();
     formData.append("file", file);
-    return await request.post(`/api/v1/knowledge/upload`, formData, {
+    if (uploadMode) {
+        formData.append("endpoint", "custom");
+        formData.append("file_id", crypto.randomUUID());
+        formData.append("file_name", file.name);
+    }
+    const urlMap = {
+        linsight: '/api/v1/linsight/workbench/upload-file',
+        workstation: '/api/v1/workstation/files',
+    };
+    const url = uploadMode ? urlMap[uploadMode] : '/api/v1/knowledge/upload';
+    return await request.post(url, formData, {
         headers: {
             "Content-Type": "multipart/form-data"
         },

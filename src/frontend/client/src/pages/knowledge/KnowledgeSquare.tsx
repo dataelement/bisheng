@@ -5,7 +5,7 @@ import { Button } from "~/components/ui/Button";
 import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
 import { getJoinedSpacesApi, getSquareSpacesApi, subscribeSpaceApi, type KnowledgeSpace, VisibilityType } from "~/api/knowledge";
-import { useLocalize } from "~/hooks";
+import { useLocalize, useScrollbarWhileScrolling } from "~/hooks";
 import KnowledgeSquareCard from "./KnowledgeSquareCard";
 
 type SquareSpaceStatus = "join" | "joined" | "pending" | "rejected";
@@ -47,6 +47,7 @@ export default function KnowledgeSquare({
 
     const scrollRef = useRef<HTMLDivElement | null>(null);
     const searchImeComposingRef = useRef(false);
+    const { onScroll: onScrollbarWhileScrolling, scrollingProps } = useScrollbarWhileScrolling();
     const PAGE_SIZE = 20;
 
     const MAX_SEARCH_LEN = 40;
@@ -135,6 +136,7 @@ export default function KnowledgeSquare({
         if (!node) return;
 
         const onScroll = () => {
+            onScrollbarWhileScrolling();
             if (loadingMore || !hasMorePage) return;
             const threshold = 60;
             if (node.scrollTop + node.clientHeight >= node.scrollHeight - threshold) {
@@ -144,7 +146,7 @@ export default function KnowledgeSquare({
 
         node.addEventListener("scroll", onScroll);
         return () => node.removeEventListener("scroll", onScroll);
-    }, [hasMorePage, loadingMore, load, page]);
+    }, [hasMorePage, loadingMore, load, onScrollbarWhileScrolling, page]);
 
     const handleJoin = async (space: KnowledgeSpace) => {
         const nextStatus: SquareSpaceStatus =
@@ -155,10 +157,31 @@ export default function KnowledgeSquare({
         if (currentStatus !== "join") return;
         if (joiningId) return;
 
+        const prevSpaces = spaces;
+        setJoiningId(space.id);
+        setSpaces((prev) =>
+            prev.map((s) =>
+                s.id === space.id
+                    ? {
+                          ...s,
+                          squareStatus: nextStatus,
+                          isFollowed: nextStatus === "joined",
+                          isPending: nextStatus === "pending",
+                      }
+                    : s
+            )
+        );
+
+        const rollback = () => {
+            setSpaces(prevSpaces);
+            setJoiningId(null);
+        };
+
         // Join/apply upper limit (includes followed + pending applications)
         try {
             const joinedSpaces = await getJoinedSpacesApi();
             if (joinedSpaces.length >= MAX_JOINED_SPACES) {
+                rollback();
                 showToast({
                     message: localize("com_knowledge.join_space_limit_reached_50"),
                     severity: NotificationSeverity.WARNING,
@@ -169,26 +192,15 @@ export default function KnowledgeSquare({
             // If the limit check fails, keep the existing behavior instead of blocking.
         }
 
-        setJoiningId(space.id);
-        const prevSpaces = spaces;
-
         try {
             await subscribeSpaceApi(space.id);
-            setSpaces((prev) =>
-                prev.map((s) =>
-                    s.id === space.id
-                        ? { ...s, squareStatus: nextStatus, isFollowed: nextStatus === "joined", isPending: nextStatus === "pending" }
-                        : s
-                )
-            );
             if (nextStatus === "joined") {
                 showToast({ message: localize("com_knowledge.join_success"), severity: NotificationSeverity.SUCCESS });
             } else {
                 showToast({ message: `${tJoinPrefix}`, severity: NotificationSeverity.SUCCESS });
             }
         } catch (e) {
-            // rollback (keep original status/label)
-            setSpaces(prevSpaces);
+            rollback();
             const rawMessage =
                 (e as any)?.message ||
                 (e as any)?.status_message ||
@@ -233,14 +245,18 @@ export default function KnowledgeSquare({
                     </div>
                 )}
 
-                <div className="relative max-w-[1140px] mx-auto w-full flex flex-col items-center justify-center pt-7 pb-5 px-4">
-                    <h1 className="text-[26px] font-semibold text-[#335CFF] mb-1">{tTitle}</h1>
-                    <p className="text-[13px] text-[#86909C] mb-3">{tSubtitle}</p>
+                <div className="relative mx-auto flex w-full max-w-[1140px] flex-col items-center justify-center px-4 pb-6 pt-7">
+                    <h1 className="mb-1 text-[26px] font-semibold text-[#335CFF]">{tTitle}</h1>
+                    <p className="text-[13px] text-[#86909C]">{tSubtitle}</p>
                 </div>
             </div>
 
-            <div ref={scrollRef} className="flex-1 overflow-y-auto bg-white">
-                <div className="relative w-full max-w-[480px] mx-auto mt-2 mb-1">
+            <div
+                ref={scrollRef}
+                className="flex-1 overflow-y-auto scroll-on-scroll bg-white"
+                {...scrollingProps}
+            >
+                <div className="relative mx-auto mb-1 mt-6 w-full max-w-[480px]">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#8B8FA8] pointer-events-none" />
                     <Input
                         type="text"

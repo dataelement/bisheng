@@ -3,6 +3,7 @@ import {
     FileStatus,
     KnowledgeFile,
     KnowledgeSpace,
+    SpaceRole,
     SortDirection,
     SortType,
     fileStatusToNumber,
@@ -25,13 +26,15 @@ const PENDING_STATUSES: FileStatus[] = [
 
 interface UseFileManagerOptions {
     activeSpace: KnowledgeSpace | null;
+    /** Optional folder ID from URL deep link — navigate here on initial load */
+    initialFolderId?: string;
 }
 
 /**
  * Manages file list state: loading, pagination, search, sorting, folder navigation.
  * Extracted from the root Knowledge component.
  */
-export function useFileManager({ activeSpace }: UseFileManagerOptions) {
+export function useFileManager({ activeSpace, initialFolderId }: UseFileManagerOptions) {
     const localize = useLocalize();
     const [files, setFiles] = useState<KnowledgeFile[]>([]);
     const [currentPage, setCurrentPage] = useState(1);
@@ -51,15 +54,16 @@ export function useFileManager({ activeSpace }: UseFileManagerOptions) {
 
     // ─── Load file/folder list ──────────────────────────────────────────
     const loadFiles = useCallback(
-        async (page: number = 1) => {
-            if (!activeSpace?.id) return;
+        async (page: number = 1): Promise<KnowledgeFile[]> => {
+            if (!activeSpace?.id) return [];
 
             setLoading(true);
             try {
                 const isSearching = searchQuery.trim().length > 0 || searchTagIds.length > 0;
+                const isMember = activeSpace.role === SpaceRole.MEMBER;
                 const fileStatusNums = statusFilter.length > 0
                     ? statusFilter.map(fileStatusToNumber)
-                    : undefined;
+                    : isMember ? [2] : undefined;
                 const res = isSearching
                     ? await searchSpaceChildrenApi({
                         space_id: activeSpace.id,
@@ -84,8 +88,10 @@ export function useFileManager({ activeSpace }: UseFileManagerOptions) {
                 setFiles(res.data);
                 setTotal(res.total);
                 setCurrentPage(page);
+                return res.data;
             } catch {
                 showToast({ message: localize("com_knowledge.load_file_list_failed"), severity: NotificationSeverity.ERROR });
+                return [];
             } finally {
                 setLoading(false);
             }
@@ -93,27 +99,70 @@ export function useFileManager({ activeSpace }: UseFileManagerOptions) {
         [activeSpace?.id, searchQuery, searchTagIds, searchScope, statusFilter, sortBy, sortDirection, currentFolderId, pageSize, showToast]
     );
 
-    // Reload files whenever active space changes
+    // Track which initialFolderId has been consumed (value, not boolean)
+    // so re-navigation to a different folder deep link works correctly.
+    const consumedFolderIdRef = useRef<string | undefined>(undefined);
+    // Bumped on space switch to guarantee the filter effect fires even when
+    // search state was already empty (no dep change otherwise).
+    const [reloadToken, setReloadToken] = useState(0);
+
+    // Reload files whenever active space or deep-link folder changes
     useEffect(() => {
         if (activeSpace) {
             setCurrentPage(1);
-            setCurrentFolderId(undefined);
-            setCurrentPath([]);
             setSearchQuery("");
+            setSearchTagIds([]);
             setStatusFilter([]);
-            loadFiles(1);
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-run when space id changes
-    }, [activeSpace?.id]);
 
-    // Reload files when folder navigation or filters change
+            // If there's an unconsumed initial folder from URL, navigate there
+            if (initialFolderId && consumedFolderIdRef.current !== initialFolderId) {
+                consumedFolderIdRef.current = initialFolderId;
+                setCurrentFolderId(initialFolderId);
+                // Fetch parent chain for breadcrumb path
+                getFolderParentPathApi(activeSpace.id, initialFolderId)
+                    .then((parentPath) => {
+                        // parentPath excludes the folder itself — use last parent's children API
+                        // to find the actual folder name. Fallback to the ID string.
+                        const lastParentId = parentPath.length > 0
+                            ? parentPath[parentPath.length - 1].id
+                            : undefined;
+                        return getSpaceChildrenApi({
+                            space_id: activeSpace.id,
+                            parent_id: lastParentId,
+                            page: 1,
+                            page_size: 100,
+                        }).then((res) => {
+                            const folder = res.data.find(f => f.id === initialFolderId);
+                            const folderName = folder?.name || initialFolderId;
+                            setCurrentPath([...parentPath, { id: initialFolderId, name: folderName }]);
+                        });
+                    })
+                    .catch(() => {
+                        setCurrentPath([{ id: initialFolderId, name: initialFolderId }]);
+                    });
+                // Don't call loadFiles here — the currentFolderId change watcher effect will trigger it
+            } else {
+                setCurrentFolderId(undefined);
+                setCurrentPath([]);
+                // Bump token to trigger the filter effect on the NEXT render
+                // (when search state is already cleared), instead of calling
+                // loadFiles here with stale closure values.
+                setReloadToken(t => t + 1);
+            }
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run when space or deep-link folder changes
+    }, [activeSpace?.id, initialFolderId]);
+
+    // Reload files when folder navigation, filters, or space (via reloadToken) change.
+    // All state updates from the space effect are batched by React, so when this effect
+    // runs on the re-render, searchQuery/searchTagIds are already cleared.
     useEffect(() => {
         if (activeSpace) {
             setCurrentPage(1);
             loadFiles(1);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps -- loadFiles is stable via useCallback
-    }, [searchQuery, searchTagIds, searchScope, statusFilter, sortBy, sortDirection, currentFolderId]);
+    }, [searchQuery, searchTagIds, searchScope, statusFilter, sortBy, sortDirection, currentFolderId, reloadToken]);
 
     // ─── Auto-polling for pending files ─────────────────────────────────
     // Refresh the file list every 5s while any file on the current page

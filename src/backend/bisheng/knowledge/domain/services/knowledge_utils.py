@@ -182,3 +182,79 @@ class KnowledgeUtils(BaseService):
         folder_ids = file_level_path.split("/")
         folder_ids = [int(one) for one in folder_ids if one]
         SpaceFileDao.update_records_update_time_sync(folder_ids)
+
+    @classmethod
+    async def process_rebuild_file(cls, db_file, req_data, login_user_id: int, login_user_name: str):
+        """Shared logic to rebuild a knowledge file with new rules."""
+        from bisheng.api.v1.schemas import FileProcessBase
+        from bisheng.worker.knowledge import file_worker
+        from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao, KnowledgeFileStatus
+
+        split_rule_dict = req_data.model_dump(include=set(list(FileProcessBase.model_fields.keys())))
+        if req_data.excel_rule is not None:
+            split_rule_dict["excel_rule"] = req_data.excel_rule.model_dump()
+        db_file.split_rule = json.dumps(split_rule_dict)
+        db_file.status = KnowledgeFileStatus.WAITING.value
+        db_file.updater_id = login_user_id
+        db_file.updater_name = login_user_name
+        db_file = await KnowledgeFileDao.async_update(db_file)
+
+        preview_cache_key = cls.get_preview_cache_key(req_data.knowledge_id, file_path=req_data.file_path)
+        file_worker.retry_knowledge_file_celery.delay(db_file.id, preview_cache_key, req_data.callback_url)
+
+        return db_file
+
+    @classmethod
+    async def process_retry_files(cls, db_files, id2input: dict, login_user) -> Tuple[list, set]:
+        """Shared logic for retrying multiple files with updated configuration"""
+        from bisheng.core.storage.minio.minio_manager import get_minio_storage
+        from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao, KnowledgeFileStatus
+        from bisheng.worker.knowledge import file_worker
+
+        minio_client = await get_minio_storage()
+        file_level_path = set()
+        res = []
+
+        for file in db_files:
+            input_file = id2input.get(file.id)
+            new_file_name = file.file_name
+            try:
+                content = input_file.get("remark")
+                content = json.loads(content)
+                if content.get("new_name"):
+                    new_file_name = content.get("new_name")
+            except Exception as e:
+                pass
+
+            # file exist
+            file.object_name = input_file.get("object_name", file.object_name)
+            file_preview_cache_key = cls.get_preview_cache_key(
+                file.knowledge_id, input_file.get("file_path", "")
+            )
+
+            if file.object_name.startswith('tmp'):
+                # Moving Temporary Files to the Official Directory
+                new_object_name = cls.get_knowledge_file_object_name(file.id, file.object_name)
+                await minio_client.copy_object(source_object=file.object_name, dest_object=new_object_name,
+                                               source_bucket=minio_client.tmp_bucket,
+                                               dest_bucket=minio_client.bucket)
+                file.object_name = new_object_name
+            file.file_name = new_file_name
+            file.remark = ""
+            file.split_rule = input_file["split_rule"]
+            file.status = KnowledgeFileStatus.WAITING.value  # Parsing
+            file.updater_id = login_user.user_id
+            file.updater_name = login_user.user_name
+            file.file_level_path = input_file["file_level_path"]
+            if file.file_level_path:
+                file_level_path.add(file.file_level_path)
+
+            file = await KnowledgeFileDao.async_update(file)
+            res.append([file, file_preview_cache_key])
+
+        tmp = []
+        for one_file in res:
+            file_worker.retry_knowledge_file_celery.delay(one_file[0].id, one_file[1], None)
+            tmp.append(one_file[0])
+
+        return tmp, file_level_path

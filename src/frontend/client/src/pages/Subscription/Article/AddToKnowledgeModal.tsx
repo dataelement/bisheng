@@ -1,4 +1,4 @@
-import { useLocalize } from "~/hooks";
+import { useLocalize, useScrollbarWhileScrolling } from "~/hooks";
 import { BookCopyIcon, ChevronDown, ChevronRight, FolderClosedIcon, Loader2, Plus, Search, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { NotificationSeverity } from "~/common";
@@ -6,9 +6,9 @@ import { Input } from "~/components";
 import { Button } from "~/components/ui/Button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "~/components/ui/Dialog";
 import { useToastContext } from "~/Providers";
-import { generateUUID } from "~/utils";
+import { generateUUID, getFullWidthLength } from "~/utils";
 import {
-    getMineSpacesApi,
+    getManagedSpacesApi,
     getSpaceChildrenApi,
     createFolderApi,
     addArticleToKnowledgeApi,
@@ -110,7 +110,7 @@ function InlineEdit({ defaultValue, onSave, onCancel, onValidate }: InlineEditPr
             onCancel();
             return;
         }
-        if (trimmed.length > 50) {
+        if (getFullWidthLength(trimmed) > 50) {
             onCancel();
             return;
         }
@@ -171,9 +171,14 @@ function TreeNode({
     return (
         <div>
             <div
-                className={`group flex items-center gap-1.5 py-1 px-2 rounded-md cursor-pointer text-sm transition-colors select-none
+                className={`group flex items-center gap-1.5 py-1 px-2 rounded-md cursor-pointer text-sm select-none
                     ${isSelected ? "bg-[#EEF2FF] text-primary" : "hover:bg-gray-50"}`}
-                style={{ paddingLeft: `${indent + 8}px` }}
+                style={{
+                    paddingLeft: `${indent + 8}px`,
+                    transitionProperty: 'background-color',
+                    transitionDuration: '350ms',
+                    transitionTimingFunction: 'ease-in-out'
+                }}
                 onClick={() => onSelect(node.id)}
             >
                 {/* Expand toggle */}
@@ -201,7 +206,7 @@ function TreeNode({
                         defaultValue={node.name}
                         onValidate={(name) => {
                             if (nodes.some(node => node.name === name)) {
-                                showToast({ message: "Name cannot be identical to existing folder", severity: NotificationSeverity.WARNING });
+                                showToast({ message: localize("com_subscription.folder_name_duplicate"), severity: NotificationSeverity.WARNING });
                                 return false;
                             }
                             return true;
@@ -216,11 +221,12 @@ function TreeNode({
                 {/* Add folder button (hover) */}
                 {!isEditing && (
                     <button
-                        className="shrink-0 opacity-0 group-hover:opacity-100 size-4 flex items-center justify-center rounded hover:bg-[#dce4ff] text-[#86909c] hover:text-primary transition-all"
+                        type="button"
+                        className="shrink-0 opacity-0 group-hover:opacity-100 h-8 w-8 flex items-center justify-center rounded text-[#86909c] hover:text-primary transition-colors duration-150"
                         title={localize("com_subscription.new_subfolder")}
                         onClick={e => { e.stopPropagation(); onAddFolder(node.id, node.level, node.spaceId); }}
                     >
-                        <Plus className="size-4 text-primary" />
+                        <Plus className="shrink-0 w-4 h-4 text-primary" strokeWidth={2} />
                     </button>
                 )}
             </div>
@@ -255,6 +261,8 @@ function TreeNode({
 export function AddToKnowledgeModal({ open, onOpenChange, articleId }: AddToKnowledgeModalProps) {
     const localize = useLocalize();
     const { showToast } = useToastContext();
+    const { onScroll: onTreeScroll, scrollingProps: treeScrollProps } = useScrollbarWhileScrolling();
+    const { onScroll: onDupScroll, scrollingProps: dupScrollProps } = useScrollbarWhileScrolling();
     const [tree, setTree] = useState<KnowledgeNode[]>([]);
     const [search, setSearch] = useState("");
     const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -262,6 +270,10 @@ export function AddToKnowledgeModal({ open, onOpenChange, articleId }: AddToKnow
     const [editingId, setEditingId] = useState<string | null>(null);
     const [isConfirming, setIsConfirming] = useState(false);
     const [spacesLoading, setSpacesLoading] = useState(false);
+    // Duplicate file detection state
+    const [duplicateFiles, setDuplicateFiles] = useState<Array<{ name: string; path: string }>>([]);
+    const [showDuplicate, setShowDuplicate] = useState(false);
+    const [pendingConfirm, setPendingConfirm] = useState<{ spaceId: string; parentFolderId: string | null } | null>(null);
 
     // Filtered tree by search
     const displayTree = search.trim() ? filterTree(tree, search) : tree;
@@ -271,7 +283,7 @@ export function AddToKnowledgeModal({ open, onOpenChange, articleId }: AddToKnow
     useEffect(() => {
         if (!open) return;
         setSpacesLoading(true);
-        getMineSpacesApi()
+        getManagedSpacesApi()
             .then((spaces) => {
                 const nodes: KnowledgeNode[] = spaces.map(s => ({
                     id: s.id,
@@ -285,7 +297,7 @@ export function AddToKnowledgeModal({ open, onOpenChange, articleId }: AddToKnow
                 }));
                 setTree(nodes);
             })
-            .catch(() => showToast({ message: "加载空间列表失败", severity: NotificationSeverity.ERROR }))
+            .catch(() => showToast({ message: localize("com_subscription.load_space_list_failed"), severity: NotificationSeverity.ERROR }))
             .finally(() => setSpacesLoading(false));
     }, [open]);
 
@@ -356,7 +368,7 @@ export function AddToKnowledgeModal({ open, onOpenChange, articleId }: AddToKnow
     /** Create folder via API */
     const handleAddFolder = async (parentId: string, parentLevel: number, spaceId: string) => {
         if (parentLevel >= 10) {
-            showToast({ message: "Folder limit 10 levels reached", severity: NotificationSeverity.WARNING });
+            showToast({ message: localize("com_subscription.folder_depth_limit"), severity: NotificationSeverity.WARNING });
             return;
         }
         const code = generateUUID(12).toLocaleUpperCase()
@@ -386,8 +398,8 @@ export function AddToKnowledgeModal({ open, onOpenChange, articleId }: AddToKnow
 
     /** Save folder name — creates via API */
     const handleSaveEdit = async (id: string, name: string) => {
-        if (name.length > 50) {
-            showToast({ message: "Name cannot exceed 50 characters", severity: NotificationSeverity.WARNING });
+        if (getFullWidthLength(name) > 50) {
+            showToast({ message: localize("com_subscription.folder_name_too_long"), severity: NotificationSeverity.WARNING });
             return;
         }
 
@@ -419,7 +431,7 @@ export function AddToKnowledgeModal({ open, onOpenChange, articleId }: AddToKnow
                 })));
                 setSelectedId(created.id);
             } catch {
-                showToast({ message: "创建文件夹失败", severity: NotificationSeverity.ERROR });
+                showToast({ message: localize("com_subscription.create_folder_failed"), severity: NotificationSeverity.ERROR });
                 // Remove the temp node
                 setTree(prev => {
                     function removeNode(nodes: KnowledgeNode[]): KnowledgeNode[] {
@@ -452,24 +464,53 @@ export function AddToKnowledgeModal({ open, onOpenChange, articleId }: AddToKnow
     };
 
     /** Confirm — add article to selected space/folder */
-    const handleConfirm = async () => {
-        if (!selectedId || !articleId) return;
+    const handleConfirm = async (forceReplace = false) => {
+        if (!articleId) return;
+
+        // If forcing replace from the duplicate dialog, use pending params
+        const spaceId = forceReplace && pendingConfirm ? pendingConfirm.spaceId : (() => {
+            if (!selectedId) return null;
+            const node = findNode(tree, selectedId);
+            return node?.spaceId || null;
+        })();
+        const parentFolderId = forceReplace && pendingConfirm ? pendingConfirm.parentFolderId : (() => {
+            if (!selectedId) return null;
+            const node = findNode(tree, selectedId);
+            if (!node) return null;
+            return node.type === "space" ? null : selectedId;
+        })();
+
+        if (!spaceId) { setIsConfirming(false); return; }
+
         setIsConfirming(true);
-
-        // Find the selected node to determine spaceId and folderId
-        const node = findNode(tree, selectedId);
-        if (!node) { setIsConfirming(false); return; }
-
-        const spaceId = node.spaceId;
-        // If selected a space (root), parent_id = null; if a folder, parent_id = folderId
-        const parentFolderId = node.type === "space" ? null : selectedId;
-
         try {
-            await addArticleToKnowledgeApi(spaceId, [String(articleId)], parentFolderId);
-            showToast({ message: "已添加到知识空间", severity: NotificationSeverity.SUCCESS });
+            await addArticleToKnowledgeApi(spaceId, [String(articleId)], parentFolderId, forceReplace || undefined);
+            showToast({ message: localize("com_subscription.added_to_space_success"), severity: NotificationSeverity.SUCCESS });
+            setShowDuplicate(false);
+            setPendingConfirm(null);
+            setDuplicateFiles([]);
             onOpenChange(false);
-        } catch {
-            showToast({ message: "添加失败", severity: NotificationSeverity.ERROR });
+        } catch (err: any) {
+            // Check if error contains duplicate file info from backend
+            const errData = err?.response?.data;
+            const errMsg = errData?.status_message || errData?.message || "";
+            const dupFiles = errData?.data?.duplicate_files || errData?.duplicate_files;
+            if (dupFiles && Array.isArray(dupFiles) && dupFiles.length > 0) {
+                // Backend returned structured duplicate info
+                setDuplicateFiles(dupFiles.map((f: any) => ({
+                    name: f.name || f.file_name || "",
+                    path: f.path || f.file_path || "",
+                })));
+                setPendingConfirm({ spaceId, parentFolderId });
+                setShowDuplicate(true);
+                // } else if (errMsg.includes("duplicate") || errMsg.includes("重名") || errMsg.includes("already exists")) {
+                //     // Backend returned a text-based duplicate hint
+                //     setDuplicateFiles([{ name: errMsg, path: "" }]);
+                //     setPendingConfirm({ spaceId, parentFolderId });
+                //     setShowDuplicate(true);
+                // } else {
+                //     showToast({ message: localize("com_subscription.add_to_space_failed"), severity: NotificationSeverity.ERROR });
+            }
         } finally {
             setIsConfirming(false);
         }
@@ -483,6 +524,9 @@ export function AddToKnowledgeModal({ open, onOpenChange, articleId }: AddToKnow
             setEditingId(null);
             setExpandedIds(new Set());
             setTree([]);
+            setShowDuplicate(false);
+            setDuplicateFiles([]);
+            setPendingConfirm(null);
         }
         onOpenChange(val);
     };
@@ -490,100 +534,163 @@ export function AddToKnowledgeModal({ open, onOpenChange, articleId }: AddToKnow
     const isEmpty = !spacesLoading && tree.length === 0;
 
     return (
-        <Dialog open={open} onOpenChange={handleOpenChange}>
-            <DialogContent className="w-[600px] max-w-[90vw] p-0 gap-0 overflow-hidden rounded-xl">
-                {/* Header */}
-                <DialogHeader className="px-6 pt-3 pb-3">
-                    <DialogTitle className="font-semibold text-gray-800 leading-6">{localize("com_subscription.add_to_knowledge_space")}</DialogTitle>
-                </DialogHeader>
+        <>
+            <Dialog open={open} onOpenChange={handleOpenChange}>
+                <DialogContent className="w-[600px] max-w-[90vw] p-0 gap-0 overflow-hidden rounded-xl">
+                    {/* Header */}
+                    <DialogHeader className="px-6 pt-3 pb-3">
+                        <DialogTitle className="font-semibold text-gray-800 leading-6">{localize("com_subscription.add_to_knowledge_space")}</DialogTitle>
+                    </DialogHeader>
 
-                {/* Search */}
-                <div className="px-6 pt-3">
-                    <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-gray-400 pointer-events-none" />
-                        <Input
-                            value={search}
-                            onChange={e => setSearch(e.target.value)}
-                            placeholder={localize("com_subscription.search_knowledge_space_placeholder")}
-                            className="w-full h-8 pl-8 pr-8 text-sm rounded-md border border-gray-100 focus:outline-none"
-                        />
-                        {search && (
-                            <button
-                                className="absolute right-2.5 top-1/2 -translate-y-1/2"
-                                onClick={() => setSearch("")}
-                            >
-                                <X className="size-3.5 text-gray-400" />
-                            </button>
-                        )}
+                    {/* Search */}
+                    <div className="px-6 pt-3">
+                        <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-gray-400 pointer-events-none" />
+                            <Input
+                                value={search}
+                                onChange={e => setSearch(e.target.value)}
+                                placeholder={localize("com_subscription.search_knowledge_space_placeholder")}
+                                className="w-full h-8 pl-8 pr-8 text-sm rounded-md border border-gray-100 focus:outline-none"
+                            />
+                            {search && (
+                                <button
+                                    className="absolute right-2.5 top-1/2 -translate-y-1/2"
+                                    onClick={() => setSearch("")}
+                                >
+                                    <X className="size-3.5 text-gray-400" />
+                                </button>
+                            )}
+                        </div>
                     </div>
-                </div>
 
-                {/* Tree / Empty state */}
-                <div className="px-6 pt-4">
-                    <div className="p-3 w-[552px] overflow-auto border rounded-md" style={{ height: 340 }}>
-                        {spacesLoading ? (
-                            <div className="flex items-center justify-center h-full text-[#86909c]">
-                                <Loader2 className="size-5 animate-spin mr-2" />加载中...
-                            </div>
-                        ) : isEmpty ? (
-                            <div className="flex flex-col items-center justify-center h-full text-gray-800">
-                                <img
-                                    className="size-[120px] mb-4 object-contain opacity-90"
-                                    src={`${__APP_ENV__.BASE_URL}/assets/channel/empty.png`}
-                                    alt="empty"
-                                />
-                                <p className="text-sm">{localize("com_subscription.no_selectable_knowledge_space")}</p>
-                            </div>
-                        ) : displayTree.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center h-full text-gray-800">
-                                <img
-                                    className="size-[120px] mb-4 object-contain opacity-90"
-                                    src={`${__APP_ENV__.BASE_URL}/assets/channel/empty.png`}
-                                    alt="empty"
-                                />
-                                <p className="text-sm">{localize("com_subscription.no_matching_knowledge_space")}</p>
-                            </div>
-                        ) : (
-                            <div className="py-1">
-                                {displayTree.map(node => (
-                                    <TreeNode
-                                        key={node.id}
-                                        node={node}
-                                        nodes={displayTree}
-                                        selectedId={selectedId}
-                                        expandedIds={expandedIds}
-                                        editingId={editingId}
-                                        onSelect={handleSelect}
-                                        onToggle={toggleExpand}
-                                        onAddFolder={handleAddFolder}
-                                        onSaveEdit={handleSaveEdit}
-                                        onCancelEdit={handleCancelEdit}
-                                        searchMode={isSearchMode}
+                    {/* Tree / Empty state */}
+                    <div className="px-6 pt-4">
+                        <div
+                            className="p-3 w-[552px] max-w-full overflow-y-auto overflow-x-hidden border rounded-md scroll-on-scroll"
+                            style={{ height: 340 }}
+                            onScroll={onTreeScroll}
+                            {...treeScrollProps}
+                        >
+                            {spacesLoading ? (
+                                <div className="flex items-center justify-center h-full text-[#86909c]">
+                                    <Loader2 className="size-5 animate-spin mr-2" />{localize("com_subscription.loading")}
+                                </div>
+                            ) : isEmpty ? (
+                                <div className="flex flex-col items-center justify-center h-full text-gray-800">
+                                    <img
+                                        className="size-[120px] mb-4 object-contain opacity-90"
+                                        src={`${__APP_ENV__.BASE_URL}/assets/channel/empty.png`}
+                                        alt="empty"
                                     />
-                                ))}
-                            </div>
-                        )}
+                                    <p className="text-sm">{localize("com_subscription.no_selectable_knowledge_space")}</p>
+                                </div>
+                            ) : displayTree.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center h-full text-gray-800">
+                                    <img
+                                        className="size-[120px] mb-4 object-contain opacity-90"
+                                        src={`${__APP_ENV__.BASE_URL}/assets/channel/empty.png`}
+                                        alt="empty"
+                                    />
+                                    <p className="text-sm">{localize("com_subscription.no_matching_knowledge_space")}</p>
+                                </div>
+                            ) : (
+                                <div className="py-1">
+                                    {displayTree.map(node => (
+                                        <TreeNode
+                                            key={node.id}
+                                            node={node}
+                                            nodes={displayTree}
+                                            selectedId={selectedId}
+                                            expandedIds={expandedIds}
+                                            editingId={editingId}
+                                            onSelect={handleSelect}
+                                            onToggle={toggleExpand}
+                                            onAddFolder={handleAddFolder}
+                                            onSaveEdit={handleSaveEdit}
+                                            onCancelEdit={handleCancelEdit}
+                                            searchMode={isSearchMode}
+                                        />
+                                    ))}
+                                </div>
+                            )}
+                        </div>
                     </div>
-                </div>
 
-                {/* Footer */}
-                <DialogFooter className="px-5 py-3.5 mt-3 flex flex-row justify-end gap-1">
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleOpenChange(false)}
-                        className="h-8 px-4 text-sm rounded-md font-normal"
-                    >{localize("com_subscription.cancel")}</Button>
-                    <Button
-                        size="sm"
-                        onClick={handleConfirm}
-                        disabled={!selectedId || isConfirming}
-                        className="h-8 px-4 text-sm rounded-md font-normal"
+                    {/* Footer */}
+                    <DialogFooter className="px-5 py-3.5 mt-3 flex flex-row justify-end gap-1">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleOpenChange(false)}
+                            className="h-8 px-4 text-sm rounded-md font-normal"
+                        >{localize("com_subscription.cancel")}</Button>
+                        <Button
+                            size="sm"
+                            onClick={() => void handleConfirm()}
+                            disabled={!selectedId || isConfirming}
+                            className="h-8 px-4 text-sm rounded-md font-normal"
+                        >
+                            {isConfirming && <Loader2 className="size-3.5 mr-1.5 animate-spin" />}{localize("com_subscription.add")}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Duplicate File Confirmation Dialog */}
+            <Dialog open={showDuplicate} onOpenChange={setShowDuplicate}>
+                <DialogContent className="w-[480px] max-w-[90vw] p-0 gap-0 overflow-hidden rounded-xl">
+                    <DialogHeader className="px-6 pt-5 pb-3">
+                        <DialogTitle className="font-semibold text-gray-800 leading-6 text-sm">
+                            {localize("com_subscription.duplicate_files_title")}
+                        </DialogTitle>
+                    </DialogHeader>
+                    <div
+                        className="px-6 pb-2 max-h-[200px] overflow-y-auto scroll-on-scroll"
+                        onScroll={onDupScroll}
+                        {...dupScrollProps}
                     >
-                        {isConfirming && <Loader2 className="size-3.5 mr-1.5 animate-spin" />}{localize("com_subscription.add")}
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
+                        {duplicateFiles.map((file, idx) => {
+                            // Truncate file name > 10 chars with ellipsis
+                            const displayName = file.name.length > 10
+                                ? file.name.slice(0, 10) + "..." + (file.name.includes(".") ? file.name.slice(file.name.lastIndexOf(".")) : "")
+                                : file.name;
+                            return (
+                                <div key={idx} className="flex items-center gap-2 py-1.5 text-sm">
+                                    <span className="text-gray-800 font-medium truncate max-w-[200px]" title={file.name}>
+                                        {displayName}
+                                    </span>
+                                    {file.path && (
+                                        <span className="text-[#86909c] text-xs truncate max-w-[180px]" title={file.path}>
+                                            ({file.path})
+                                        </span>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                    <DialogFooter className="px-5 py-3.5 flex flex-row justify-end gap-1">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                                setShowDuplicate(false);
+                                setPendingConfirm(null);
+                                setDuplicateFiles([]);
+                            }}
+                            className="h-8 px-4 text-sm rounded-md font-normal"
+                        >{localize("com_subscription.cancel")}</Button>
+                        <Button
+                            size="sm"
+                            onClick={() => handleConfirm(true)}
+                            disabled={isConfirming}
+                            className="h-8 px-4 text-sm rounded-md font-normal"
+                        >
+                            {isConfirming && <Loader2 className="size-3.5 mr-1.5 animate-spin" />}
+                            {localize("com_subscription.replace")}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+        </>
     );
 }

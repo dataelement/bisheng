@@ -17,6 +17,7 @@ function FileFormWrapper({
   children,
   accept = "",
   fileTip = false,
+  isLinsight = false,
   disableInputs,
   disabledSearch,
   noUpload = false,
@@ -26,6 +27,7 @@ function FileFormWrapper({
   children?: React.ReactNode;
   disabledSearch: boolean;
   fileTip?: boolean;
+  isLinsight?: boolean;
   accept?: string;
   noUpload: boolean;
   showVoice?: boolean;
@@ -39,7 +41,7 @@ function FileFormWrapper({
   };
 
   const { handleFileChange, abortUpload } = useFileHandling({
-    isLinsight: !fileTip,
+    isLinsight,
   });
 
   const { data: fileConfig = defaultFileConfig } = useGetFileConfig({

@@ -41,7 +41,7 @@ class MultiRetriever(BaseRetriever):
 
     def parse_doc_with_score(self, docs_with_score: List[tuple[Document, float]]) -> List[Document]:
         """ parse documents with score to documents only """
-        docs_with_score.sort(key=lambda x: x[1])
+        docs_with_score.sort(key=lambda x: x[1], reverse=True)
         if self.finally_k > 0:
             docs_with_score = docs_with_score[:self.finally_k]
         return [doc for doc, _ in docs_with_score]

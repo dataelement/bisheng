@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Search, X, ChevronDown } from 'lucide-react';
 import {
     DropdownMenu,
@@ -6,6 +6,7 @@ import {
     DropdownMenuContent,
     DropdownMenuItem
 } from '~/components/ui/DropdownMenu';
+import { knowledgeSpaceDropdownSurfaceClassName } from '~/components/SidebarListMoreMenu';
 import { cn } from '~/utils';
 import { SpaceTag, getSpaceTagsApi } from '~/api/knowledge';
 import { useLocalize } from "~/hooks";
@@ -38,15 +39,20 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
         setScope(isRoot ? 'all' : 'current');
     }, [isRoot]);
 
+    // Fetch space tags from API
+    const refreshTags = useCallback(() => {
+        if (!spaceId) return;
+        getSpaceTagsApi(spaceId).then(setSpaceTags).catch(() => { });
+    }, [spaceId]);
+
     // Reset search state when switching to a different space
     useEffect(() => {
         setSelectedTags([]);
         setKeyword('');
         setIsFocused(false);
-        // Fetch space tags when spaceId changes
-        if (!spaceId) return;
-        getSpaceTagsApi(spaceId).then(setSpaceTags).catch(() => { });
-    }, [spaceId]);
+        setSpaceTags([]);
+        refreshTags();
+    }, [spaceId, refreshTags]);
 
     // Handle clicking outside to close the dropdown
     useEffect(() => {
@@ -116,13 +122,14 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
                 )}
                 onClick={() => {
                     inputRef.current?.focus();
+                    if (!isFocused) refreshTags();
                     setIsFocused(true);
                 }}
             >
                 <Search className="size-4 text-[#86909c] shrink-0" />
 
-                {/* Scope Select (Only if not at root) */}
-                {!isRoot && (
+                {/* 范围选择：仅聚焦/激活时展示，默认只显示放大镜 + 占位输入 */}
+                {!isRoot && isFocused && (
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                             <button className="flex items-center gap-1 h-5 text-sm text-[#4e5969] hover:bg-gray-100 px-1 py-0.5 rounded cursor-pointer transition-colors max-w-[120px] shrink-0 outline-none">
@@ -130,7 +137,10 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
                                 <ChevronDown className="size-3 shrink-0" />
                             </button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="start" className="min-w-[120px]">
+                        <DropdownMenuContent
+                            align="start"
+                            className={cn('min-w-[120px]', knowledgeSpaceDropdownSurfaceClassName)}
+                        >
                             <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setScope('current'); inputRef.current?.focus(); }}>{localize("com_knowledge.current_location")}</DropdownMenuItem>
                             <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setScope('all'); inputRef.current?.focus(); }}>{localize("com_knowledge.current_space")}</DropdownMenuItem>
                         </DropdownMenuContent>
@@ -167,7 +177,7 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
                     maxLength={100}
                     placeholder={selectedTags.length === 0 ? localize("com_knowledge.search_in_current_space") : ""}
                     className="flex-1 min-w-[50px] bg-transparent outline-none text-[13px] text-[#1d2129] placeholder:text-[#86909c] h-[22px]"
-                    onFocus={() => setIsFocused(true)}
+                    onFocus={() => { if (!isFocused) refreshTags(); setIsFocused(true); }}
                 />
 
                 {/* Clear button */}
@@ -187,7 +197,7 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
 
             {/* Dropdown Panel — space tags */}
             {isFocused && (
-                <div className="absolute top-full left-0 mt-1 min-w-[320px] max-w-full bg-white border border-[#e5e6eb] shadow-[0_4px_10px_rgba(0,0,0,0.1)] rounded-md z-50 p-3">
+                <div className="absolute top-full left-0 mt-1 min-w-[320px] max-w-full bg-white shadow-[0_4px_10px_rgba(0,0,0,0.1)] rounded-md z-50 p-3">
                     <div className="text-sm font-medium text-gray-800 mb-2">{localize("com_knowledge.existing_tags")}</div>
                     <div className="flex flex-wrap gap-2">
                         {spaceTags.length === 0 && (

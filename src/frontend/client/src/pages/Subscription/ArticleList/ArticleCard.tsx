@@ -1,5 +1,4 @@
 import { useLocalize } from "~/hooks";
-import { SquareArrowOutUpLeftIcon } from "lucide-react";
 import BookPlusIcon from "~/components/ui/icon/BookPlus";
 import { useState } from "react";
 import { Article } from "~/api/channels";
@@ -10,19 +9,33 @@ import { copyText } from "~/utils";
 import { AddSpaceIcon, ShareOutlineIcon } from "~/components/icons";
 import { AddToKnowledgeModal } from "../Article/AddToKnowledgeModal";
 import { ChannelQuoteIcon } from "~/components/icons/channels";
+import { useAuthContext } from "~/hooks/AuthContext";
+import { ArticleFaviconCoverPlaceholder } from "./ArticleFaviconCoverPlaceholder";
 
 interface ArticleCardProps {
     article: Article;
     onSelect: (article: Article) => void;
     isSelected: boolean;
     searchQuery?: string;
+    /** When false, hides add-to-knowledge and share (e.g. channel plaza preview drawer). */
+    showArticleActions?: boolean;
 }
 
-export function ArticleCard({ article, onSelect, isSelected, searchQuery }: ArticleCardProps) {
+export function ArticleCard({
+    article,
+    onSelect,
+    isSelected,
+    searchQuery,
+    showArticleActions = true,
+}: ArticleCardProps) {
     const localize = useLocalize();
     const [showKnowledgeModal, setShowKnowledgeModal] = useState(false);
     const { handleShare } = useArticleShare();
     const { showToast } = useToastContext();
+    const { user } = useAuthContext();
+    const hasKnowledge = Array.isArray((user as any)?.plugins)
+        ? ((user as any).plugins as string[]).includes('knowledge_space')
+        : true;
 
     // 格式化时间逻辑保持不变
     const formatTime = (dateString: string) => {
@@ -49,26 +62,37 @@ export function ArticleCard({ article, onSelect, isSelected, searchQuery }: Arti
         : null;
 
     return (
+        <>
         <div
-            className={`group cursor-pointer relative py-5 flex gap-6 transition-opacity border-b border-dashed border-gray-200 last:border-none`}
+            className="group relative flex cursor-pointer gap-6 border-b border-dashed border-[#E0E0E0] py-5 last:border-none"
+            style={{
+                transitionProperty: 'background-color',
+                transitionDuration: '350ms',
+                transitionTimingFunction: 'ease-in-out'
+            }}
             onClick={() => onSelect(article)}
         >
-            {/* 1. 左侧封面图 - 移动到左边，并调整比例 */}
-            {article.coverImage && (
+            {/* 1. 左侧封面：有配图用封面；无配图用信源 ico 双层模糊占位 */}
+            {article.coverImage ? (
                 <div className="size-[88px] flex-shrink-0 overflow-hidden rounded-sm">
                     <img
                         src={article.coverImage}
                         alt={article.title}
-                        className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                        className="h-full w-full object-cover transition-transform duration-300 ease-in-out group-hover:scale-105"
                     />
                 </div>
+            ) : (
+                <ArticleFaviconCoverPlaceholder
+                    iconUrl={article.sourceAvatar}
+                    alt={article.sourceName}
+                />
             )}
 
             {/* 2. 右侧内容区 */}
             <div className="flex-1 min-w-0 flex flex-col justify-between">
                 <div>
                     {/* 标题 - 搜索时使用 highlight HTML，非搜索时纯文本 */}
-                    <h3 className={`font-bold line-clamp-1 [&_em]:not-italic [&_em]:bg-[#FFBF00]/20 [&_em]:font-medium ${isSelected ? 'text-primary' : 'group-hover:text-primary'} ${article.isRead ? "text-[#989898]" : "text-gray-800"
+                    <h3 className={`font-medium line-clamp-1 [&_em]:not-italic [&_em]:bg-[#FFBF00]/20 [&_em]:font-medium ${isSelected ? 'text-primary' : 'group-hover:text-primary'} ${article.isRead ? "text-[#989898]" : "text-gray-800"
                         }`}>
                         {highlightTitle
                             ? <span dangerouslySetInnerHTML={{ __html: highlightTitle }} />
@@ -89,65 +113,72 @@ export function ArticleCard({ article, onSelect, isSelected, searchQuery }: Arti
 
                 {/* 3. 底部元信息 - 来源和时间 */}
                 <div className="flex items-center justify-between mt-4 relative">
-                    <div className="flex items-center gap-2 text-xs">
-                        <div className="size-4 overflow-hidden">
+                    <div className="flex items-center gap-2 text-xs text-[#999]">
+                        <div className="size-4 shrink-0 overflow-hidden">
                             <img
                                 src={article.sourceAvatar}
                                 alt=""
-                                className="w-full h-full object-cover"
+                                className="h-full w-full object-cover"
                             />
                         </div>
-                        <span className="text-gray-800 max-w-40 truncate">{article.sourceName}</span>
-                        <span className="text-gray-400">|</span>
-                        <span className="text-gray-400">{formatTime(article.publishedAt)}</span>
+                        <span className="max-w-40 truncate">{article.sourceName}</span>
+                        <span className="mx-0.5 h-2.5 w-px shrink-0 bg-[#E0E0E0]" aria-hidden />
+                        <span>{formatTime(article.publishedAt)}</span>
                     </div>
 
-                    {/* 4. Hover 操作按钮 - 按照截图移动到右下角 */}
-                    <div className="absolute right-0 flex items-center gap-3 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity">
-                        <button
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                setShowKnowledgeModal(true);
-                            }}
-                            className=" rounded-full bg-gray-50 flex items-center justify-center size-8 text-gray-800 hover:bg-gray-100 transition-colors cursor-pointer"
-                            title={localize("com_subscription.add_to_knowledge_space")}
-                        >
-                            <BookPlusIcon className="size-3.5" />
-                        </button>
-                        <button
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                handleShare(article);
-                                const shareText = localize("com_subscription.reading_article_share", { title: article.title, url: article.url });
-                                copyText(shareText)
-                                    .then(() => {
-                                        showToast({
-                                            message: localize("com_subscription.share_link_copied"),
-                                            severity: NotificationSeverity.SUCCESS
-                                        });
-                                    })
-                                    .catch(() => {
-                                        showToast({
-                                            message: localize("com_subscription.copy_failed_retry"),
-                                            severity: NotificationSeverity.ERROR
-                                        });
+                    {showArticleActions && (
+                        <div className="absolute right-0 flex items-center gap-3 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity">
+                            {hasKnowledge && (
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setShowKnowledgeModal(true);
+                                    }}
+                                    className=" rounded-full bg-gray-50 flex items-center justify-center size-8 text-gray-800 hover:bg-gray-100 transition-colors cursor-pointer"
+                                    title={localize("com_subscription.add_to_knowledge_space")}
+                                >
+                                    <BookPlusIcon className="size-3.5" />
+                                </button>
+                            )}
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleShare(article);
+                                    const shareText = localize("com_subscription.reading_article_share", {
+                                        title: article.title,
+                                        url: article.url,
                                     });
-                            }}
-                            className=" rounded-full bg-gray-50 flex items-center justify-center size-8 text-gray-800 hover:bg-gray-100 transition-colors cursor-pointer"
-                            title={localize("com_subscription.share")}
-                        >
-                            <ShareOutlineIcon className="size-3.5" />
-                        </button>
-                    </div>
+                                    copyText(shareText)
+                                        .then(() => {
+                                            showToast({
+                                                message: localize("com_subscription.share_link_copied"),
+                                                severity: NotificationSeverity.SUCCESS,
+                                            });
+                                        })
+                                        .catch(() => {
+                                            showToast({
+                                                message: localize("com_subscription.copy_failed_retry"),
+                                                severity: NotificationSeverity.ERROR,
+                                            });
+                                        });
+                                }}
+                                className=" rounded-full bg-gray-50 flex items-center justify-center size-8 text-gray-800 hover:bg-gray-100 transition-colors cursor-pointer"
+                                title={localize("com_subscription.share")}
+                            >
+                                <ShareOutlineIcon className="size-3.5" />
+                            </button>
+                        </div>
+                    )}
                 </div>
             </div>
+            </div>
 
-            {/* Add to Knowledge Space Modal */}
+            {/* Add to Knowledge Space Modal — rendered outside the card to avoid interaction interference */}
             <AddToKnowledgeModal
                 open={showKnowledgeModal}
                 onOpenChange={setShowKnowledgeModal}
                 articleId={article.id}
             />
-        </div>
+        </>
     );
 }

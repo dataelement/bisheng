@@ -1,5 +1,4 @@
 import {
-    BookText,
     MinimizeIcon,
     MoreHorizontal,
     Pin,
@@ -13,12 +12,24 @@ import { KnowledgeSpace, SpaceRole } from "~/api/knowledge";
 import { NotificationSeverity } from "~/common";
 import {
     DropdownMenu,
-    DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuTrigger
 } from "~/components/ui/DropdownMenu";
+import {
+    SidebarListMoreMenuContent,
+    SidebarListMoreMenuDivider,
+    sidebarListMoreMenuDangerIconClassName,
+    sidebarListMoreMenuDangerItemClassName,
+    sidebarListMoreMenuDangerLabelClassName,
+    sidebarListMoreMenuIconClassName,
+    sidebarListMoreMenuItemClassName,
+    sidebarListMoreMenuLabelClassName,
+} from "~/components/SidebarListMoreMenu";
 import { useConfirm, useToastContext } from "~/Providers";
 import { useLocalize } from "~/hooks";
+import { getFullWidthLength } from "~/utils";
+import { ChannelPinIcon } from "~/components/icons/channels";
+import { SpaceNotebookIcon } from "~/components/icons/SpaceNotebookIcon";
 
 interface KnowledgeSpaceItemProps {
     space: KnowledgeSpace;
@@ -46,7 +57,7 @@ export default function KnowledgeSpaceItem({
     onManageMembers,
 }: KnowledgeSpaceItemProps) {
     const localize = useLocalize();
-  const [isEditing, setIsEditing] = useState(false);
+    const [isEditing, setIsEditing] = useState(false);
     const [menuOpen, setMenuOpen] = useState(false);
     const { showToast } = useToastContext();
     const confirm = useConfirm()
@@ -55,7 +66,7 @@ export default function KnowledgeSpaceItem({
         const newName = e.target.value.trim();
         setIsEditing(false);
         if (!newName) return
-        if (newName.length > 20) {
+        if (getFullWidthLength(newName) > 20) {
             return showToast({
                 message: localize("com_knowledge.max_20_chars_spaced"),
                 severity: NotificationSeverity.ERROR
@@ -68,15 +79,20 @@ export default function KnowledgeSpaceItem({
 
     return (
         <div
-            className={`group flex items-center justify-between h-8 px-3 py-1.5 rounded-lg cursor-pointer transition-all border ${isActive
+            className={`group flex items-center justify-between h-8 px-3 py-1.5 rounded-lg cursor-pointer  border ${isActive
                 ? "bg-[#E6EDFC] border-primary shadow-sm"
                 : "border-transparent hover:bg-[#F7F7F7]"
                 }`}
+            style={{
+                transitionProperty: 'background-color',
+                transitionDuration: '350ms',
+                transitionTimingFunction: 'ease-in-out'
+            }}
             onClick={() => !isEditing && onSelect(space)}
         >
             <div className="flex items-center gap-1 flex-1 min-w-0">
-                <div className={`flex-shrink-0 flex items-center justify-center size-5 rounded-md ${isActive ? "bg-white border border-[#165dff]/20 shadow-sm" : ""}`}>
-                    <BookText className={`size-3 ${isActive ? "text-[#165dff]" : "text-[#86909c]"}`} />
+                <div className={`flex-shrink-0 flex items-center justify-center size-5 rounded-md ${isActive ? "bg-white" : ""}`}>
+                    <SpaceNotebookIcon active={isActive} />
                 </div>
 
                 {isEditing ? (
@@ -93,24 +109,18 @@ export default function KnowledgeSpaceItem({
                         onClick={(e) => e.stopPropagation()}
                     />
                 ) : (
-                    <div className="flex items-center gap-1 flex-1 min-w-0">
-                        <span onDoubleClick={() => setIsEditing(true)} className="text-[14px] truncate text-[#1d2129]">
+                    <div className="flex flex-1 min-w-0 items-center gap-1">
+                        <span onDoubleClick={() => setIsEditing(true)} className="truncate text-[14px] text-[#1d2129]">
                             {space.name}
                         </span>
+                        {space.isPinned && (
+                            <ChannelPinIcon className="h-[14px] w-[14px] shrink-0" aria-hidden />
+                        )}
                     </div>
                 )}
             </div>
 
-            <div className="flex items-center justify-end flex-shrink-0 w-8 h-5 relative">
-                {space.isPinned && (
-                    <div className={`
-                        absolute right-0 flex items-center justify-center p-1 pointer-events-none
-                        transition-opacity duration-200
-                        ${menuOpen ? "opacity-0" : "opacity-100 group-hover:opacity-0"}
-                    `}>
-                        <Pin className="size-3.5 text-[#5773B4] rotate-45" fill="#AEC9FF" />
-                    </div>
-                )}
+            <div className="relative flex h-5 w-8 flex-shrink-0 items-center justify-end">
                 <DropdownMenu onOpenChange={setMenuOpen}>
                     <DropdownMenuTrigger asChild>
                         <button
@@ -124,40 +134,47 @@ export default function KnowledgeSpaceItem({
                         </button>
                     </DropdownMenuTrigger>
 
-                    <DropdownMenuContent
-                        align="end"
-                        sideOffset={8}
-                        className="w-40 px-4 py-3 rounded-lg"
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        {type === "created" && <DropdownMenuItem
-                            className="py-2 px-0 cursor-pointer focus:bg-[#f2f3f5]"
-                            onClick={() => onSettings?.(space)}
-                        >
-                            <Settings className="size-4 mr-2 text-[#4e5969]" />
-                            <span className="">{localize("com_knowledge.space_settings")}</span>
-                        </DropdownMenuItem>}
+                    <SidebarListMoreMenuContent onClick={(e) => e.stopPropagation()}>
+                        {type === "created" && (
+                            <DropdownMenuItem
+                                className={sidebarListMoreMenuItemClassName}
+                                onClick={() => onSettings?.(space)}
+                            >
+                                <Settings className={sidebarListMoreMenuIconClassName} />
+                                <span className={sidebarListMoreMenuLabelClassName}>
+                                    {localize("com_knowledge.space_settings")}
+                                </span>
+                            </DropdownMenuItem>
+                        )}
                         {(type === "created" || space.role === SpaceRole.ADMIN) && (
                             <DropdownMenuItem
-                                className="py-2 px-0 cursor-pointer focus:bg-[#f2f3f5]"
+                                className={sidebarListMoreMenuItemClassName}
                                 onClick={() => onManageMembers?.(space)}
                             >
-                                <Users className="size-4 mr-2 text-[#4e5969]" />
-                                <span className="text-[14px] text-[#1d2129]">{localize("com_knowledge.member_management")}</span>
+                                <Users className={sidebarListMoreMenuIconClassName} />
+                                <span className={sidebarListMoreMenuLabelClassName}>
+                                    {localize("com_knowledge.member_management")}
+                                </span>
                             </DropdownMenuItem>
                         )}
                         <DropdownMenuItem
                             onClick={() => onPin(space.id, !space.isPinned)}
-                            className="py-2 px-0 cursor-pointer focus:bg-[#f2f3f5]"
+                            className={sidebarListMoreMenuItemClassName}
                         >
                             {space.isPinned ? (
-                                <><PinOff className="size-4 mr-2 text-[#4e5969]" /><span className="text-[14px] text-[#1d2129]">{localize("com_knowledge.unpin")}</span></>
+                                <>
+                                    <PinOff className={sidebarListMoreMenuIconClassName} />
+                                    <span className={sidebarListMoreMenuLabelClassName}>{localize("com_knowledge.unpin")}</span>
+                                </>
                             ) : (
-                                <><Pin className="size-4 mr-2 text-[#4e5969]" /><span className="text-[14px] text-[#1d2129]">{localize("com_knowledge.pin_space")}</span></>
+                                <>
+                                    <Pin className={sidebarListMoreMenuIconClassName} />
+                                    <span className={sidebarListMoreMenuLabelClassName}>{localize("com_knowledge.pin_space")}</span>
+                                </>
                             )}
                         </DropdownMenuItem>
 
-                        <div className="h-px bg-[#f2f3f5] mx-2 my-1" />
+                        <SidebarListMoreMenuDivider />
 
                         <DropdownMenuItem
                             onClick={async () => {
@@ -174,12 +191,18 @@ export default function KnowledgeSpaceItem({
                                     type === "created" ? onDelete(space.id) : onLeave(space.id);
                                 }
                             }}
-                            className="text-[#f53f3f] py-2 px-0 cursor-pointer focus:bg-[#f2f3f5] focus:text-[#f53f3f]"
+                            className={sidebarListMoreMenuDangerItemClassName}
                         >
-                            {type === "created" ? <MinimizeIcon className="size-4 mr-2" /> : <LogOut className="size-4 mr-2" />}
-                            <span className="text-[14px] font-medium">{type === "created" ? localize("com_knowledge.delete_space") : localize("com_knowledge.exit_space_short")}</span>
+                            {type === "created" ? (
+                                <MinimizeIcon className={sidebarListMoreMenuDangerIconClassName} />
+                            ) : (
+                                <LogOut className={sidebarListMoreMenuDangerIconClassName} />
+                            )}
+                            <span className={sidebarListMoreMenuDangerLabelClassName}>
+                                {type === "created" ? localize("com_knowledge.delete_space") : localize("com_knowledge.exit_space_short")}
+                            </span>
                         </DropdownMenuItem>
-                    </DropdownMenuContent>
+                    </SidebarListMoreMenuContent>
                 </DropdownMenu>
             </div>
         </div>

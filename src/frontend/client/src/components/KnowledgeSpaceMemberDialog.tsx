@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronLeft, ChevronRight, Search } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Search, X } from "lucide-react";
 import {
     type KnowledgeSpace,
     type SpaceMember,
@@ -14,6 +14,7 @@ import { cn } from "~/utils";
 import { Button } from "~/components/ui/Button";
 import {
     Dialog,
+    DialogClose,
     DialogContent,
     DialogHeader,
     DialogTitle
@@ -22,6 +23,7 @@ import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
+    DropdownMenuSeparator,
     DropdownMenuTrigger
 } from "~/components/ui/DropdownMenu";
 import {
@@ -199,35 +201,39 @@ export function KnowledgeSpaceMemberDialog({
 
     const getRoleActionMenu = (m: SpaceMember) => {
         if (!canManageMembers || m.role === "creator") {
-            return <span className="text-[14px] text-[#4E5969]">{getRoleLabel(m.role, localize)}</span>;
+            return <span className="text-[14px] text-[#999]">{getRoleLabel(m.role, localize)}</span>;
         }
 
         if (canAdminManage) {
             if (m.role === "admin") {
-                return <span className="text-[14px] text-[#4E5969]">{getRoleLabel(m.role, localize)}</span>;
+                return <span className="text-[14px] text-[#999]">{getRoleLabel(m.role, localize)}</span>;
             }
             return (
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                        <button className="inline-flex items-center gap-1 text-[14px] text-[#4E5969] hover:text-[#165DFF]">
+                        <button className="inline-flex items-center gap-1 text-[14px] text-[#999] hover:text-[#165DFF]">
                             {getRoleLabel(m.role, localize)}
                             <ChevronDown className="size-3.5" />
                         </button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-28">
+                    <DropdownMenuContent align="end" className="z-[120] w-28">
                         <DropdownMenuItem
                             className={cn(
                                 "cursor-default",
-                                m.role === "member" && "bg-[#E8F3FF] text-[#165DFF]"
+                                m.role === "member" &&
+                                    "bg-[#E8F3FF] text-[#165DFF] data-[highlighted]:bg-[#E8F3FF] data-[highlighted]:text-[#165DFF]"
                             )}
                             onClick={(e) => e.preventDefault()}
                         >
                             {localize("member") || "订阅用户"}
                         </DropdownMenuItem>
                         {m.role === "member" && (
-                            <DropdownMenuItem onClick={() => setRemoveTarget(m)}>
-                                {localize("remove")}
-                            </DropdownMenuItem>
+                            <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={() => setRemoveTarget(m)}>
+                                    {localize("remove")}
+                                </DropdownMenuItem>
+                            </>
                         )}
                     </DropdownMenuContent>
                 </DropdownMenu>
@@ -237,14 +243,17 @@ export function KnowledgeSpaceMemberDialog({
         return (
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                    <button className="inline-flex items-center gap-1 text-[14px] text-[#4E5969] hover:text-[#165DFF]">
+                    <button className="inline-flex items-center gap-1 text-[14px] text-[#999] hover:text-[#165DFF]">
                         {getRoleLabel(m.role, localize)}
                         <ChevronDown className="size-3.5" />
                     </button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-28">
+                <DropdownMenuContent align="end" className="z-[120] w-28">
                     <DropdownMenuItem
-                        className={cn(m.role === "admin" && "bg-[#E8F3FF] text-[#165DFF]")}
+                        className={cn(
+                            m.role === "admin" &&
+                                "bg-[#E8F3FF] text-[#165DFF] data-[highlighted]:bg-[#E8F3FF] data-[highlighted]:text-[#165DFF]"
+                        )}
                         onClick={() => {
                             if (!canCreatorManage || m.role === "admin" || m.role === "creator") return;
                             handlePromoteAdmin(m);
@@ -253,7 +262,10 @@ export function KnowledgeSpaceMemberDialog({
                         {localize("admin") || "管理员"}
                     </DropdownMenuItem>
                     <DropdownMenuItem
-                        className={cn(m.role === "member" && "bg-[#E8F3FF] text-[#165DFF]")}
+                        className={cn(
+                            m.role === "member" &&
+                                "bg-[#E8F3FF] text-[#165DFF] data-[highlighted]:bg-[#E8F3FF] data-[highlighted]:text-[#165DFF]"
+                        )}
                         onClick={() => {
                             if (!canCreatorManage || m.role === "member") return;
                             handleDemoteToMember(m);
@@ -262,9 +274,12 @@ export function KnowledgeSpaceMemberDialog({
                         {localize("member") || "订阅用户"}
                     </DropdownMenuItem>
                     {canCreatorManage && (
-                        <DropdownMenuItem onClick={() => setRemoveTarget(m)}>
-                            {localize("remove")}
-                        </DropdownMenuItem>
+                        <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => setRemoveTarget(m)}>
+                                {localize("remove")}
+                            </DropdownMenuItem>
+                        </>
                     )}
                 </DropdownMenuContent>
             </DropdownMenu>
@@ -276,25 +291,33 @@ export function KnowledgeSpaceMemberDialog({
     return (
         <>
             <Dialog open={open} onOpenChange={onOpenChange}>
-                <DialogContent className="max-w-[760px] p-0 gap-0 rounded-[10px]">
-                    <DialogHeader className="px-5 pt-5 pb-3 border-b border-[#E5E6EB]">
-                        <DialogTitle className="text-[16px] text-[#1D2129]">
+                <DialogContent
+                    overlayClassName="z-[100]"
+                    className="z-[100] flex h-[600px] w-[700px] max-h-[600px] max-w-[700px] flex-col gap-0 overflow-hidden p-0 rounded-[10px]"
+                    close={false}
+                >
+                    <DialogHeader className="flex h-[48px] shrink-0 flex-row items-center justify-between gap-3 space-y-0 px-6 py-0 sm:text-left">
+                        <DialogTitle className="m-0 inline-flex items-center text-[16px] font-semibold leading-[24px] text-[#1D2129]">
                             {localize("com_subscription.management_member")}
                         </DialogTitle>
+                        <DialogClose className="inline-flex size-6 shrink-0 items-center justify-center rounded-md p-0 text-[#86909C] opacity-90 outline-none ring-offset-background transition-opacity hover:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+                            <X className="size-4" aria-hidden />
+                            <span className="sr-only">Close</span>
+                        </DialogClose>
                     </DialogHeader>
 
-                    <div className="px-5 pt-3 pb-0">
+                    <div className="flex min-h-0 flex-1 flex-col px-6 pt-3 pb-0">
                         <div className="relative mb-3">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#C9CDD4]" />
                             <input
                                 value={keyword}
                                 onChange={(e) => setKeyword(e.target.value)}
                                 placeholder={localize("com_subscription.search_user_placeholder") || "请输入用户名进行搜索"}
-                                className="w-full h-9 pl-9 pr-3 rounded border border-[#E5E6EB] text-[14px] focus:outline-none focus:border-[#165DFF]"
+                                className="h-8 w-full rounded-[6px] border border-[#E5E6EB] pl-9 pr-3 text-[14px] text-[#1D2129] placeholder:text-[#999] focus:border-[#165DFF] focus:outline-none"
                             />
                         </div>
 
-                        <div className="h-[360px] overflow-y-auto">
+                        <div className="min-h-0 flex-1 overflow-y-auto">
                             {loading ? (
                                 <div className="h-full flex items-center justify-center text-[13px] text-[#86909C]">
                                     {localize("loading") || "加载中..."}
@@ -314,7 +337,7 @@ export function KnowledgeSpaceMemberDialog({
                                 pagedMembers.map((m) => (
                                     <div
                                         key={m.user_id}
-                                        className="h-10 px-1 flex items-center gap-2.5 border-b border-[#F2F3F5] last:border-0"
+                                        className="flex h-10 items-center gap-2.5 px-1"
                                     >
                                         <div className="w-[200px] min-w-[200px] flex items-center gap-2.5">
                                             <div className="size-6 rounded-full bg-[#C9CDD4] text-white text-[11px] flex items-center justify-center">
@@ -328,7 +351,7 @@ export function KnowledgeSpaceMemberDialog({
                                             </div>
                                         </div>
                                         <div
-                                            className="flex-1 min-w-0 text-[12px] text-[#86909C] truncate"
+                                            className="flex-1 min-w-0 text-[12px] text-[#999] truncate"
                                             title={(m.groups || []).join("、")}
                                         >
                                             {truncateText((m.groups || []).join("、"), MAX_GROUP_LEN)}
@@ -342,15 +365,19 @@ export function KnowledgeSpaceMemberDialog({
                         </div>
                     </div>
 
-                    <div className="h-11 px-5 border-t border-[#E5E6EB] flex items-center justify-between text-[12px] text-[#4E5969]">
-                        <span className="text-[#86909C]">
-                            {localize("com_subscription.total_members") || "总成员数"}：
-                            <span className="text-[#165DFF] ml-1">{total}</span>
+                    <div className="flex h-[72px] shrink-0 items-center justify-end px-6 text-[14px]">
+                        <div className="flex items-center gap-4">
+                        <span className="shrink-0 leading-none">
+                            <span className="text-[#4E5969]">{localize("com_subscription.member_pagination_1")}</span>
+                            <span className="text-[#165DFF]">{total}</span>
+                            <span className="text-[#4E5969]">{localize("com_subscription.member_pagination_2")}</span>
+                            <span className="text-[#4E5969]">{PAGE_SIZE}</span>
+                            <span className="text-[#4E5969]">{localize("com_subscription.member_pagination_3")}</span>
                         </span>
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex shrink-0 items-center gap-1.5">
                             <Button
                                 variant="ghost"
-                                className="h-7 w-7 p-0 text-[#86909C] disabled:opacity-40"
+                                className="h-7 w-7 shrink-0 p-0 text-[#4E5969] hover:bg-transparent hover:text-[#165DFF] disabled:opacity-40"
                                 disabled={page <= 1}
                                 onClick={() => setPage(Math.max(1, page - 1))}
                             >
@@ -361,13 +388,14 @@ export function KnowledgeSpaceMemberDialog({
                                 const showDots = prev && p - prev > 1;
                                 return (
                                     <div key={`page-${p}`} className="flex items-center gap-1.5">
-                                        {showDots && <span className="text-[#86909C]">...</span>}
+                                        {showDots && <span className="text-[#4E5969]">...</span>}
                                         <button
+                                            type="button"
                                             className={cn(
-                                                "h-6 min-w-6 px-1 rounded-full text-[12px] border transition-colors",
+                                                "flex h-6 min-w-6 items-center justify-center px-1.5 text-[14px] transition-colors",
                                                 p === page
-                                                    ? "border-[#165DFF] text-[#165DFF]"
-                                                    : "border-transparent text-[#4E5969] hover:text-[#165DFF]"
+                                                    ? "rounded-[8px] border border-[#165DFF] text-[#165DFF]"
+                                                    : "rounded-[4px] border border-transparent text-[#4E5969] hover:text-[#165DFF]"
                                             )}
                                             onClick={() => setPage(p)}
                                         >
@@ -378,12 +406,13 @@ export function KnowledgeSpaceMemberDialog({
                             })}
                             <Button
                                 variant="ghost"
-                                className="h-7 w-7 p-0 text-[#86909C] disabled:opacity-40"
+                                className="h-7 w-7 shrink-0 p-0 text-[#4E5969] hover:bg-transparent hover:text-[#165DFF] disabled:opacity-40"
                                 disabled={page >= totalPages}
                                 onClick={() => setPage(Math.min(totalPages, page + 1))}
                             >
                                 <ChevronRight className="size-3.5" />
                             </Button>
+                        </div>
                         </div>
                     </div>
                 </DialogContent>

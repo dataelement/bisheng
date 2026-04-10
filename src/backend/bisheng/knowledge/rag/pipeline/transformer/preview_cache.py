@@ -24,9 +24,8 @@ class PreviewCacheTransformer(BaseDocumentTransformer):
             for key, val in all_chunk_info.items():
                 one_metadata = val["metadata"]
                 one_metadata.update(self.file_metadata)
-                for k in one_metadata:
-                    if k not in knowledge_metadata_fields:
-                        del one_metadata[k]
+                for k in one_metadata.keys() - knowledge_metadata_fields:
+                    del one_metadata[k]
                 doc = Document(
                     page_content=KnowledgeUtils.aggregate_chunk_metadata(val["text"], one_metadata),
                     metadata=one_metadata,
@@ -35,9 +34,8 @@ class PreviewCacheTransformer(BaseDocumentTransformer):
         else:
             # aggregate chunk
             for doc in documents:
-                for k in list(doc.metadata.keys()):
-                    if k not in knowledge_metadata_fields:
-                        doc.metadata.pop(k)
+                for k in doc.metadata.keys() - knowledge_metadata_fields:
+                    del doc.metadata[k]
                 doc.metadata.update(self.file_metadata)
                 doc.page_content = KnowledgeUtils.aggregate_chunk_metadata(doc.page_content, doc.metadata)
 

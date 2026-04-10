@@ -1,6 +1,6 @@
 import { ChevronDown, ChevronRight, PlusSquare } from "lucide-react";
 import * as RadioGroup from "@radix-ui/react-radio-group";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useConfirm, useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
 import {
@@ -34,13 +34,22 @@ import {
 } from "./FilterConditionEditor";
 import { validateCreateChannelForm } from "../channelUtils";
 import type { Channel, InformationSource } from "~/api/channels";
-import { cn } from "~/utils";
+import { cn, getFullWidthLength, truncateByFullWidth } from "~/utils";
 import { useLocalize } from "~/hooks";
 import { useCreateChannelForm } from "../hooks/useCreateChannelForm";
 
 const MAX_CHANNEL_NAME = 10;
 const MAX_CHANNEL_DESC = 100;
 const MAX_SUB_CHANNELS = 6;
+
+/** 可见方式 / 权限：主标题（私有、需审核、公开）— 与创建知识空间一致 */
+const PERMISSION_OPTION_TEXT_CLASS =
+    "text-[14px] font-normal leading-[22px] tracking-normal text-[#212121]";
+/** 表单说明/辅助文案：14px / 400 / #999999 */
+const FORM_HINT_TEXT_CLASS = "text-[14px] font-normal text-[#999999]";
+const PERMISSION_OPTION_FONT: CSSProperties = {
+    fontFamily: '"PingFang SC", "PingFang TC", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif',
+};
 
 export type { SubChannelData };
 
@@ -218,7 +227,7 @@ export function CreateChannelDrawer({
                         />
                     ) : (
                         <div
-                            className="flex-1 overflow-y-auto scroll-on-scroll px-6 py-5 space-y-5"
+                            className="flex-1 min-h-0 overflow-y-auto scroll-on-scroll px-6 py-5 space-y-5"
                             onScroll={handleBodyScroll}
                             data-scrolling={isBodyScrolling ? "true" : "false"}
                         >
@@ -252,17 +261,16 @@ export function CreateChannelDrawer({
                                         value={form.channelName}
                                         onChange={(e) => {
                                             const v = e.target.value;
-                                            // 中文输入法组合输入阶段不做长度校验，避免提前触发提示
                                             if (isComposingName) {
                                                 form.setChannelName(v);
                                                 return;
                                             }
-                                            if (v.length > MAX_CHANNEL_NAME) {
+                                            if (getFullWidthLength(v) > MAX_CHANNEL_NAME) {
                                                 showToast({
                                                     message: localize("com_subscription.maximum_channel_name") || localize("com_subscription.max_10_characters"),
                                                     severity: NotificationSeverity.WARNING
                                                 });
-                                                form.setChannelName(v.slice(0, MAX_CHANNEL_NAME));
+                                                form.setChannelName(truncateByFullWidth(v, MAX_CHANNEL_NAME));
                                             } else {
                                                 form.setChannelName(v);
                                             }
@@ -271,12 +279,12 @@ export function CreateChannelDrawer({
                                         onCompositionEnd={(e) => {
                                             setIsComposingName(false);
                                             const v = e.currentTarget.value || "";
-                                            if (v.length > MAX_CHANNEL_NAME) {
+                                            if (getFullWidthLength(v) > MAX_CHANNEL_NAME) {
                                                 showToast({
                                                     message: localize("com_subscription.maximum_channel_name") || localize("com_subscription.max_10_characters"),
                                                     severity: NotificationSeverity.WARNING
                                                 });
-                                                form.setChannelName(v.slice(0, MAX_CHANNEL_NAME));
+                                                form.setChannelName(truncateByFullWidth(v, MAX_CHANNEL_NAME));
                                             } else {
                                                 form.setChannelName(v);
                                             }
@@ -285,7 +293,7 @@ export function CreateChannelDrawer({
                                         className="flex-1 h-8 text-[14px] border-[#E5E6EB]"
                                     />
                                     <span className="absolute right-4 flex-shrink-0 text-[12px] text-[#86909C]">
-                                        {form.channelName.length}/{MAX_CHANNEL_NAME}
+                                        {Math.ceil(getFullWidthLength(form.channelName))}/{MAX_CHANNEL_NAME}
                                     </span>
                                 </div>
                             </div>
@@ -300,17 +308,16 @@ export function CreateChannelDrawer({
                                         value={form.channelDesc}
                                         onChange={(e) => {
                                             const v = e.target.value;
-                                            // 中文输入法组合输入阶段不做长度校验，避免提前触发提示
                                             if (isComposingDesc) {
                                                 form.setChannelDesc(v);
                                                 return;
                                             }
-                                            if (v.length > MAX_CHANNEL_DESC) {
+                                            if (getFullWidthLength(v) > MAX_CHANNEL_DESC) {
                                                 showToast({
                                                     message: localize("com_subscription.maximum_channel_description") || localize("com_subscription.max_100_characters"),
                                                     severity: NotificationSeverity.WARNING
                                                 });
-                                                form.setChannelDesc(v.slice(0, MAX_CHANNEL_DESC));
+                                                form.setChannelDesc(truncateByFullWidth(v, MAX_CHANNEL_DESC));
                                             } else {
                                                 form.setChannelDesc(v);
                                             }
@@ -319,18 +326,18 @@ export function CreateChannelDrawer({
                                         onCompositionEnd={(e) => {
                                             setIsComposingDesc(false);
                                             const v = e.currentTarget.value || "";
-                                            if (v.length > MAX_CHANNEL_DESC) {
+                                            if (getFullWidthLength(v) > MAX_CHANNEL_DESC) {
                                                 showToast({
                                                     message: localize("com_subscription.maximum_channel_description") || localize("com_subscription.max_100_characters"),
                                                     severity: NotificationSeverity.WARNING
                                                 });
-                                                form.setChannelDesc(v.slice(0, MAX_CHANNEL_DESC));
+                                                form.setChannelDesc(truncateByFullWidth(v, MAX_CHANNEL_DESC));
                                             } else {
                                                 form.setChannelDesc(v);
                                             }
                                         }}
                                         placeholder={localize("com_subscription.enter_channel_description")}
-                                        className="min-h-[80px] text-[14px] bg-white border-[#E5E6EB] pr-14"
+                                        className="min-h-[80px] text-[14px] bg-[#fff] rounded-[6px] border-[#E5E6EB] pr-14"
                                     />
                                 </div>
                             </div>
@@ -343,7 +350,18 @@ export function CreateChannelDrawer({
                                 </Label>
                                 <RadioGroup.Root
                                     value={form.visibility}
-                                    onValueChange={(v) => form.setVisibility(v as any)}
+                                    onValueChange={async (v) => {
+                                        // In edit mode, show confirmation when switching to private
+                                        if (isEditMode && v === "private" && form.visibility !== "private") {
+                                            const confirmed = await confirm({
+                                                description: localize("com_subscription.confirm_change_to_private"),
+                                                confirmText: localize("com_subscription.change_to_private"),
+                                                cancelText: localize("com_subscription.cancel"),
+                                            });
+                                            if (!confirmed) return;
+                                        }
+                                        form.setVisibility(v as any);
+                                    }}
                                     className="flex flex-col gap-3"
                                 >
                                     {[
@@ -374,13 +392,16 @@ export function CreateChannelDrawer({
                                             >
                                                 <RadioGroup.Indicator className="h-1.5 w-1.5 rounded-full bg-white" />
                                             </RadioGroup.Item>
-                                            <div className="flex">
-                                                <span className="text-[14px] text-[#1D2129]">
+                                            <div className="flex flex-wrap items-baseline gap-x-2">
+                                                <span
+                                                    className={PERMISSION_OPTION_TEXT_CLASS}
+                                                    style={PERMISSION_OPTION_FONT}
+                                                >
                                                     {opt.label}
                                                 </span>
-                                                <p className="text-[15px] text-[#86909C] mt-0.5 ml-2">
+                                                <span className={FORM_HINT_TEXT_CLASS}>
                                                     {opt.desc}
-                                                </p>
+                                                </span>
                                             </div>
                                         </label>
                                     ))}
@@ -393,7 +414,7 @@ export function CreateChannelDrawer({
                                     <Label className="text-[14px] text-[#1D2129]">
                                         <span className="text-[#F53F3F] mr-1">*</span>
                                         {localize("com_subscription.is_publish_plaza")}
-                                        <span className="ml-2 text-[12px] text-[#86909C]">{localize("com_subscription.publish_to_square_description")}</span>
+                                        <span className={cn("ml-2", FORM_HINT_TEXT_CLASS)}>{localize("com_subscription.publish_to_square_description")}</span>
                                     </Label>
                                     <RadioGroup.Root
                                         value={form.publishToSquare}
@@ -428,7 +449,7 @@ export function CreateChannelDrawer({
                                     <div>
                                         <Label className="text-[14px] flex text-[#1D2129]">
                                             {localize("com_subscription.channel_content_filter")}
-                                            <p className="text-[12px] text-[#86909C] ml-2 mt-0.5">
+                                            <p className={cn("ml-2 mt-0.5", FORM_HINT_TEXT_CLASS)}>
                                                 {localize("com_subscription.only_filter_criteria")}
                                             </p>
                                         </Label>
@@ -487,7 +508,7 @@ export function CreateChannelDrawer({
                                     <div>
                                         <Label className="text-[14px] flex text-[#1D2129]">
                                             {localize("com_subscription.create_sub_channel")}
-                                            <p className="text-[12px] text-[#86909C] ml-2 mt-0.5">
+                                            <p className={cn("ml-2 mt-0.5", FORM_HINT_TEXT_CLASS)}>
                                                 {localize("com_subscription.subscribe_same_filters")}
                                             </p>
                                         </Label>
@@ -502,7 +523,7 @@ export function CreateChannelDrawer({
                                     />
                                 </div>
                                 {form.createSubChannel && (
-                                    <div className="">
+                                    <div className="overflow-hidden border border-[#E5E6EB] divide-y divide-[#E5E6EB]">
                                         {form.subChannels.map((sub) => (
                                             <SubChannelBlock
                                                 key={sub.id}
@@ -526,7 +547,7 @@ export function CreateChannelDrawer({
                                                             localize(
                                                                 "com_subscription.sub_channel_name_duplicate"
                                                             ) || "子频道名称已存在，请更换",
-                                                        severity: NotificationSeverity.WARNING,
+                                                        severity: NotificationSeverity.WARNING
                                                     });
                                                 }}
                                                 onRemove={() => form.handleRemoveSubChannel(sub.id)}
@@ -551,7 +572,10 @@ export function CreateChannelDrawer({
                                                 }
                                                 onEmptyName={() =>
                                                     showToast({
-                                                        message: localize("com_subscription.sub_channel_name_cannot_be_empty"),
+                                                        message:
+                                                            localize(
+                                                                "com_subscription.sub_channel_name_cannot_be_empty"
+                                                            ),
                                                         severity: NotificationSeverity.WARNING
                                                     })
                                                 }
@@ -561,9 +585,9 @@ export function CreateChannelDrawer({
                                             <button
                                                 type="button"
                                                 onClick={form.handleAddSubChannel}
-                                                className="flex w-full h-8 rounded-[6px] items-center gap-3 px-4 text-[14px] leading-none border border-[#E5E6EB] bg-[#F7F8FA] transition-colors"
+                                                className="flex h-12 w-full items-center gap-3 rounded-none bg-[#F8F8F8] px-4 text-left text-[14px] leading-none transition-colors hover:bg-[#F2F3F5]"
                                             >
-                                                <PlusSquare className="size-4 text-[#86909C]" />
+                                                <PlusSquare className="size-4 shrink-0 text-[#86909C]" />
                                                 <span>{localize("com_subscription.add_sub_channel")}</span>
                                             </button>
                                         )}
@@ -579,7 +603,7 @@ export function CreateChannelDrawer({
                             <Button
                                 variant="secondary"
                                 onClick={() => handleClose(false)}
-                                className="h-8 rounded-[6px] px-5 inline-flex items-center justify-center leading-none bg-[#F2F3F5] hover:bg-[#E5E6EB] border-none text-[14px] text-[#4E5969]"
+                                className="h-8 rounded-[6px] px-4 inline-flex items-center justify-center leading-none bg-[#F2F3F5] hover:bg-[#E5E6EB] border-none text-[14px] !font-normal text-[#4E5969]"
                             >
                                 {localize("cancel")}
                             </Button>
@@ -636,7 +660,7 @@ export function CreateChannelDrawer({
                                         form.setSubmitting(false);
                                     }
                                 }}
-                                className="h-8 rounded-[6px] px-5 inline-flex items-center justify-center leading-none bg-[#165DFF] hover:bg-[#4080FF] text-white border-none text-[14px] disabled:opacity-50"
+                                className="h-8 rounded-[6px] px-4 inline-flex items-center justify-center leading-none bg-[#165DFF] hover:bg-[#4080FF] text-white border-none text-[14px] !font-normal disabled:opacity-50"
                             >
                                 {isEditMode
                                     ? form.submitting ? localize("com_subscription.saving") : localize("com_subscription.save")

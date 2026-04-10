@@ -9,7 +9,7 @@ from bisheng.common.errcode import BaseErrorCode
 def main():
     json_file = "all_error_code.json"
     all_code = {}
-    print("This is a demo function in bisheng.common.demo module.")
+    print("This is a function for generate all error code json for frontend.")
     error_code_path = os.path.join(os.path.dirname(__file__), '../common/errcode')
     for root, dirs, files in os.walk(error_code_path):
         for file in files:

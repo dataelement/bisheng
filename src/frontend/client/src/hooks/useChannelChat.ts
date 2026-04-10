@@ -140,6 +140,8 @@ export default function useChannelChat(articleDocId: string) {
                 text: text.trim(),
             };
 
+            // Lock input immediately — don't wait for SSE open event
+            setIsStreaming(true);
             setSseSubmission(buildSubmission(payload, responseMessageId));
         },
         [articleDocId, isStreaming, buildSubmission]
@@ -191,6 +193,7 @@ export default function useChannelChat(articleDocId: string) {
                 text: parentMsg.text?.trim() || "",
             };
 
+            setIsStreaming(true);
             setSseSubmission(buildSubmission(payload, newResponseId));
         },
         [articleDocId, isStreaming, buildSubmission]

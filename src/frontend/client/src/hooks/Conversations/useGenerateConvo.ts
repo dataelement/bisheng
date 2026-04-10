@@ -1,6 +1,7 @@
 import { useRecoilValue } from 'recoil';
 import { useCallback, useRef, useEffect } from 'react';
 import { useGetModelsQuery } from '~/hooks/queries';
+import useLocalize from '~/hooks/useLocalize';
 import { LocalStorageKeys, isAssistantsEndpoint } from '~/types/chat';
 import type {
   TPreset,
@@ -26,6 +27,7 @@ const useGenerateConvo = ({
   rootIndex: number;
   setConversation?: SetterOrUpdater<TConversation | null>;
 }) => {
+  const localize = useLocalize();
   const modelsQuery = useGetModelsQuery();
   const assistantsListMap = useAssistantListMap();
   const { data: endpointsConfig = {} as TEndpointsConfig } = useGetEndpointsQuery();
@@ -61,7 +63,7 @@ const useGenerateConvo = ({
     } = {}) => {
       let conversation = {
         conversationId: 'new',
-        title: 'New Chat',
+        title: localize('com_ui_new_chat'),
         endpoint: null,
         ...template,
         createdAt: '',

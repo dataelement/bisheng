@@ -1,8 +1,7 @@
-import { Database } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import * as RadioGroup from "@radix-ui/react-radio-group";
 import { NotificationSeverity } from "~/common";
-import { useToastContext } from "~/Providers";
+import { useConfirm, useToastContext } from "~/Providers";
 import { Button } from "~/components/ui/Button";
 import { Input } from "~/components/ui/Input";
 import { Label } from "~/components/ui/Label";
@@ -15,9 +14,20 @@ import {
 import { Textarea } from "~/components/ui/Textarea";
 import { useLocalize } from "~/hooks";
 import { KnowledgeSpace, VisibilityType } from "~/api/knowledge";
+import { cn, getFullWidthLength, truncateByFullWidth } from "~/utils";
+import { ChannelSuccessIcon } from "~/components/icons/channels";
 
 const MAX_SPACE_NAME = 20;
 const MAX_SPACE_DESC = 200;
+
+/** 权限项文案：PingFang SC / 14px / 22px 行高 / 400 / #212121 */
+const PERMISSION_OPTION_TEXT_CLASS =
+    "text-[14px] font-normal leading-[22px] tracking-normal text-[#212121]";
+/** 权限项说明：14px / 400 / #999999 */
+const FORM_HINT_TEXT_CLASS = "text-[14px] font-normal text-[#999999]";
+const PERMISSION_OPTION_FONT: CSSProperties = {
+    fontFamily: '"PingFang SC", "PingFang TC", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif',
+};
 
 export type JoinPolicy = "private" | "review" | "public";
 export type PublishToSquare = "yes" | "no";
@@ -49,6 +59,7 @@ export function CreateKnowledgeSpaceDrawer({
     editingSpace,
 }: CreateKnowledgeSpaceDrawerProps) {
     const { showToast } = useToastContext();
+    const confirm = useConfirm();
     const localize = useLocalize();
     const [name, setName] = useState("");
     const [description, setDescription] = useState("");
@@ -126,31 +137,33 @@ export function CreateKnowledgeSpaceDrawer({
                 </SheetHeader>
 
                 {showSuccess ? (
-                    <div className="flex-1 flex flex-col items-center justify-center">
-                        <Database className="size-16 text-[#165DFF] mb-5" strokeWidth={1.5} />
-                        <div className="text-[30px] font-semibold text-[#1D2129] mb-8">
-                            {localize("com_subscription.create_knowledge_space_success")}
-                        </div>
-                        <div className="flex items-center gap-3">
-                            <Button
-                                variant="secondary"
-                                className="h-10 px-5 border border-[#E5E6EB] bg-white text-[#4E5969]"
-                                onClick={() => {
-                                    onViewSpace?.();
-                                    onOpenChange(false);
-                                }}
-                            >
-                                {localize("com_subscription.goto_knowledge_space")}
-                            </Button>
-                            <Button
-                                className="h-10 px-5 bg-[#165DFF] hover:bg-[#4080FF] text-white"
-                                onClick={() => {
-                                    onManageMembers?.();
-                                    onOpenChange(false);
-                                }}
-                            >
-                                {localize("com_subscription.member_management")}
-                            </Button>
+                    <div className="flex flex-1 flex-col items-center justify-center py-16">
+                        <div className="flex flex-col items-center">
+                            <ChannelSuccessIcon className="h-[120px] w-[120px] mb-5" />
+                            <div className="mb-8 text-center text-[20px] font-normal text-[#1D2129]">
+                                {localize("com_subscription.create_knowledge_space_success")}
+                            </div>
+                            <div className="flex gap-3">
+                                <Button
+                                    variant="secondary"
+                                    className="inline-flex h-8 min-w-[100px] items-center justify-center rounded-[6px] border border-[#165DFF] bg-white px-4 text-[14px] font-normal leading-none text-[#165DFF] hover:bg-[#E8F3FF]"
+                                    onClick={() => {
+                                        onViewSpace?.();
+                                        onOpenChange(false);
+                                    }}
+                                >
+                                    {localize("com_subscription.goto_knowledge_space")}
+                                </Button>
+                                <Button
+                                    className="inline-flex h-8 min-w-[100px] items-center justify-center rounded-[6px] bg-[#165DFF] px-4 text-[14px] font-normal leading-none text-white hover:bg-[#4080FF]"
+                                    onClick={() => {
+                                        onManageMembers?.();
+                                        onOpenChange(false);
+                                    }}
+                                >
+                                    {localize("com_subscription.member_management")}
+                                </Button>
+                            </div>
                         </div>
                     </div>
                 ) : (
@@ -159,7 +172,7 @@ export function CreateKnowledgeSpaceDrawer({
                             {/* 知识空间名称 */}
                             <div className="space-y-2">
                                 <Label className="text-sm text-[#1D2129] font-medium">
-                                    <span className="text-[#F53F3F]">*</span>
+                                    <span className="text-[#F53F3F] mr-1">*</span>
                                     {localize("com_subscription.knowledge_space_name")}
                                 </Label>
                                 <div className="relative flex items-center gap-2">
@@ -171,12 +184,12 @@ export function CreateKnowledgeSpaceDrawer({
                                         onCompositionEnd={(e) => {
                                             nameComposingRef.current = false;
                                             const v = e.currentTarget.value;
-                                            if (v.length > MAX_SPACE_NAME) {
+                                            if (getFullWidthLength(v) > MAX_SPACE_NAME) {
                                                 showToast({
                                                     message: localize("com_subscription.max_knowledge_space_name") || localize("com_knowledge.max_20_chars"),
                                                     severity: NotificationSeverity.WARNING
                                                 });
-                                                setName(v.slice(0, MAX_SPACE_NAME));
+                                                setName(truncateByFullWidth(v, MAX_SPACE_NAME));
                                             }
                                         }}
                                         onChange={(e) => {
@@ -185,21 +198,21 @@ export function CreateKnowledgeSpaceDrawer({
                                                 setName(v);
                                                 return;
                                             }
-                                            if (v.length > MAX_SPACE_NAME) {
+                                            if (getFullWidthLength(v) > MAX_SPACE_NAME) {
                                                 showToast({
                                                     message: localize("com_subscription.max_knowledge_space_name") || localize("com_knowledge.max_20_chars"),
                                                     severity: NotificationSeverity.WARNING
                                                 });
-                                                setName(v.slice(0, MAX_SPACE_NAME));
+                                                setName(truncateByFullWidth(v, MAX_SPACE_NAME));
                                             } else {
                                                 setName(v);
                                             }
                                         }}
                                         placeholder={localize("com_subscription.enter_knowledge_space_name")}
-                                        className="h-11 border-[#E5E6EB] text-[14px] pr-16"
+                                        className="h-11 border-[#E5E6EB] text-[14px] pr-16 bg-[#fff]"
                                     />
                                     <span className="absolute right-4 text-[12px] text-[#86909C]">
-                                        {name.length}/{MAX_SPACE_NAME}
+                                        {Math.ceil(getFullWidthLength(name))}/{MAX_SPACE_NAME}
                                     </span>
                                 </div>
                             </div>
@@ -218,12 +231,12 @@ export function CreateKnowledgeSpaceDrawer({
                                         onCompositionEnd={(e) => {
                                             descComposingRef.current = false;
                                             const v = e.currentTarget.value;
-                                            if (v.length > MAX_SPACE_DESC) {
+                                            if (getFullWidthLength(v) > MAX_SPACE_DESC) {
                                                 showToast({
                                                     message: localize("com_subscription.max_knowledge_space_desc") || localize("com_knowledge.max_200_chars"),
                                                     severity: NotificationSeverity.WARNING
                                                 });
-                                                setDescription(v.slice(0, MAX_SPACE_DESC));
+                                                setDescription(truncateByFullWidth(v, MAX_SPACE_DESC));
                                             }
                                         }}
                                         onChange={(e) => {
@@ -232,18 +245,18 @@ export function CreateKnowledgeSpaceDrawer({
                                                 setDescription(v);
                                                 return;
                                             }
-                                            if (v.length > MAX_SPACE_DESC) {
+                                            if (getFullWidthLength(v) > MAX_SPACE_DESC) {
                                                 showToast({
                                                     message: localize("com_subscription.max_knowledge_space_desc") || localize("com_knowledge.max_200_chars"),
                                                     severity: NotificationSeverity.WARNING
                                                 });
-                                                setDescription(v.slice(0, MAX_SPACE_DESC));
+                                                setDescription(truncateByFullWidth(v, MAX_SPACE_DESC));
                                             } else {
                                                 setDescription(v);
                                             }
                                         }}
                                         placeholder={localize("com_subscription.enter_knowledge_space_description")}
-                                        className="min-h-[104px] border-[#E5E6EB] text-[14px]"
+                                        className="min-h-[104px] rounded-[6px] border-[#E5E6EB] bg-[#fff] text-[14px]"
                                     />
                                 </div>
                             </div>
@@ -256,7 +269,17 @@ export function CreateKnowledgeSpaceDrawer({
                                 </Label>
                                 <RadioGroup.Root
                                     value={joinPolicy}
-                                    onValueChange={(v) => setJoinPolicy(v as JoinPolicy)}
+                                    onValueChange={async (v) => {
+                                        if (mode === "edit" && v === "private" && joinPolicy !== "private") {
+                                            const confirmed = await confirm({
+                                                description: localize("com_subscription.confirm_knowledge_change_to_private"),
+                                                confirmText: localize("com_subscription.change_to_private"),
+                                                cancelText: localize("com_subscription.cancel"),
+                                            });
+                                            if (!confirmed) return;
+                                        }
+                                        setJoinPolicy(v as JoinPolicy);
+                                    }}
                                     className="flex flex-col gap-3"
                                 >
                                     {[
@@ -286,13 +309,16 @@ export function CreateKnowledgeSpaceDrawer({
                                             >
                                                 <RadioGroup.Indicator className="h-1.5 w-1.5 rounded-full bg-white" />
                                             </RadioGroup.Item>
-                                            <div className="flex">
-                                                <span className="text-[14px] text-[#1D2129]">
+                                            <div className="flex flex-wrap items-baseline gap-x-2">
+                                                <span
+                                                    className={PERMISSION_OPTION_TEXT_CLASS}
+                                                    style={PERMISSION_OPTION_FONT}
+                                                >
                                                     {opt.label}
                                                 </span>
-                                                <p className="text-[14px] text-[#999999] mt-0.5 ml-2">
+                                                <span className={FORM_HINT_TEXT_CLASS}>
                                                     {opt.desc}
-                                                </p>
+                                                </span>
                                             </div>
                                         </label>
                                     ))}
@@ -304,7 +330,7 @@ export function CreateKnowledgeSpaceDrawer({
                                 <div className="space-y-3">
                                     <Label className="text-[14px] text-[#1D2129]">
                                         <span className="text-[#F53F3F]">*</span>
-                                        {localize("com_knowledge.publish_to_square")}<span className="ml-2 text-[14px] text-[#999999]">
+                                        {localize("com_knowledge.publish_to_square")}<span className={cn("ml-2", FORM_HINT_TEXT_CLASS)}>
                                             {localize("com_knowledge.publish_desc")}</span>
                                     </Label>
                                     <RadioGroup.Root
@@ -341,12 +367,12 @@ export function CreateKnowledgeSpaceDrawer({
                     <div className="px-6 py-3 border-t border-[#E5E6EB] flex items-center justify-end gap-2 bg-white">
                         <Button
                             variant="secondary"
-                            className="h-9 border border-[#E5E6EB] bg-white text-[#4E5969]"
+                            className="h-8 rounded-[6px] border border-[#E5E6EB] bg-white text-[14px] font-normal text-[#4E5969]"
                             onClick={() => onOpenChange(false)}
                         >
                             {localize("com_knowledge.cancel")}</Button>
                         <Button
-                            className="h-9 bg-[#165DFF] hover:bg-[#4080FF] text-white"
+                            className="h-8 rounded-[6px] bg-[#165DFF] hover:bg-[#4080FF] text-[14px] font-normal text-white"
                             onClick={handleConfirm}
                         >
                             {mode === "edit" ? localize("com_knowledge.save") : localize("com_knowledge.confirm_create")}

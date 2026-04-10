@@ -1,6 +1,8 @@
 import type { AppItem } from '~/@types/app';
-import { Share2, Plus, ArrowLeftRight } from 'lucide-react';
+import { Plus, ArrowLeftRight } from 'lucide-react';
 import AppAvator from '~/components/Avator';
+import { ShareOutlineIcon } from '~/components/icons';
+import { useLocalize } from '~/hooks';
 
 interface AppInfoCardProps {
   app: AppItem;
@@ -21,6 +23,7 @@ export function AppInfoCard({
   onSwitchApp,
   switchDisabled,
 }: AppInfoCardProps) {
+  const localize = useLocalize();
   return (
     <div className="px-4 mb-6">
       <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm">
@@ -54,15 +57,15 @@ export function AppInfoCard({
             onClick={onShare}
             className="flex items-center justify-center gap-1 py-2 px-1 text-sm border border-gray-100 rounded-lg hover:bg-gray-50 text-gray-600 transition-colors"
           >
-            <Share2 size={14} />
-            分享应用
+            <ShareOutlineIcon className="size-[14px] shrink-0" />
+            {localize('com_app_share_app')}
           </button>
           <button
             onClick={onNewChat}
             className="flex items-center justify-center gap-1 py-2 px-1 text-sm border border-gray-100 rounded-lg hover:bg-gray-50 text-gray-600 transition-colors"
           >
             <Plus size={14} />
-            开启新对话
+            {localize('com_knowledge_start_new_chat')}
           </button>
         </div>
       </div>

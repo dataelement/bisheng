@@ -5,10 +5,7 @@ import {
     FolderPlus,
     ChevronDown,
     ChevronRight,
-    Home,
     Info,
-    PanelLeftOpenIcon,
-    ArrowDownNarrowWideIcon,
     FunnelIcon,
     Download,
     Tag,
@@ -26,11 +23,17 @@ import {
     DropdownMenuSeparator,
     DropdownMenuCheckboxItem
 } from "~/components/ui/DropdownMenu";
+import { knowledgeSpaceDropdownSurfaceClassName } from "~/components/SidebarListMoreMenu";
 import { Button } from "~/components/ui/Button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
 import { ShareOutlineIcon, AiChatIcon } from "~/components/icons";
+import { SingleIconButtonSortGlyph } from "~/components/icons/channels";
 import { useToastContext } from "~/Providers";
 import { useLocalize } from "~/hooks";
+import { useLayoutEffect, useRef, useState } from "react";
+
+/** 工具栏实际宽度小于此值时：搜索独占一行，第二行为视图/筛选（左）与新增/批量（右）。阈值偏大以免中等宽度仍挤在一行。 */
+const TOOLBAR_COMPACT_MAX_WIDTH = 1040;
 
 interface KnowledgeSpaceHeaderProps {
     space: KnowledgeSpace;
@@ -60,8 +63,6 @@ interface KnowledgeSpaceHeaderProps {
     onBatchDelete: () => void;
     onToggleAiAssistant?: () => void;
     isAiAssistantOpen?: boolean;
-    sidebarCollapsed?: boolean;
-    onExpandSidebar?: () => void;
 }
 
 export function KnowledgeSpaceHeader({
@@ -89,11 +90,25 @@ export function KnowledgeSpaceHeader({
     onBatchRetry,
     onBatchDelete,
     onToggleAiAssistant,
-    isAiAssistantOpen,
-    sidebarCollapsed,
-    onExpandSidebar
+    isAiAssistantOpen
 }: KnowledgeSpaceHeaderProps) {
     const localize = useLocalize();
+    const toolbarMeasureRef = useRef<HTMLDivElement>(null);
+    const [toolbarCompact, setToolbarCompact] = useState(false);
+
+    useLayoutEffect(() => {
+        const el = toolbarMeasureRef.current;
+        if (!el) return;
+        const update = () => {
+            const w = el.getBoundingClientRect().width;
+            setToolbarCompact(w > 0 && w < TOOLBAR_COMPACT_MAX_WIDTH);
+        };
+        update();
+        const ro = new ResizeObserver(() => update());
+        ro.observe(el);
+        return () => ro.disconnect();
+    }, []);
+
     const isAdmin = space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
     const showShare = space.visibility !== VisibilityType.PRIVATE;
     const { showToast } = useToastContext();
@@ -115,27 +130,213 @@ export function KnowledgeSpaceHeader({
             showToast({ message: localize("com_knowledge.copy_failed_retry"), status: "error" });
         }
     };
-    // Debug log removed during refactoring
+
+    const showToolbarActions = isAdmin || selectedCount > 1;
+
+    const viewFilterSortCluster = (
+        <div className="flex min-w-0 shrink-0 items-center gap-3">
+            <div className="inline-flex h-8 shrink-0 items-stretch rounded-md border border-[#e5e6eb] bg-white p-[3px] text-sm">
+                <button
+                    type="button"
+                    onClick={() => setViewMode("list")}
+                    className={cn(
+                        "flex min-w-[36px] flex-1 items-center justify-center rounded-[4px] px-2 transition-colors",
+                        viewMode === "list"
+                            ? "bg-[#E6EDFC] text-[#165DFF]"
+                            : "text-[#4e5969] hover:bg-[#f2f3f5]"
+                    )}
+                >
+                    <List className="size-4 shrink-0" />
+                </button>
+                <button
+                    type="button"
+                    onClick={() => setViewMode("card")}
+                    className={cn(
+                        "flex min-w-[36px] flex-1 items-center justify-center rounded-[4px] px-2 transition-colors",
+                        viewMode === "card"
+                            ? "bg-[#E6EDFC] text-[#165DFF]"
+                            : "text-[#4e5969] hover:bg-[#f2f3f5]"
+                    )}
+                >
+                    <LayoutGrid className="size-4 shrink-0" />
+                </button>
+            </div>
+
+            {space.role !== SpaceRole.MEMBER && (
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button
+                            variant="outline"
+                            className={cn(
+                                "inline-flex h-8 w-8 min-h-8 min-w-8 shrink-0 items-center justify-center gap-0 rounded-md p-0 font-normal border-[#e5e6eb]",
+                                statusFilter.length > 0
+                                    ? "border-[#024DE3] bg-[#E6EDFC] text-[#024DE3] hover:bg-[#E6EDFC]"
+                                    : "bg-white text-gray-700 hover:bg-[#f7f8fa]"
+                            )}
+                        >
+                            <FunnelIcon className={cn("size-4", statusFilter.length > 0 ? "text-[#024DE3]" : "text-gray-700")} />
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className={knowledgeSpaceDropdownSurfaceClassName}>
+                        <div className="px-2 py-1.5 text-xs font-medium text-[#86909c]">{localize("com_knowledge.status")}</div>
+                        <DropdownMenuCheckboxItem
+                            checked={statusFilter.includes(FileStatus.UPLOADING)}
+                            onCheckedChange={(checked) => onFilterStatus(FileStatus.UPLOADING, checked)}
+                            onSelect={(e) => e.preventDefault()}
+                        >
+                            {localize("com_knowledge.uploading_status")}
+                        </DropdownMenuCheckboxItem>
+                        <DropdownMenuCheckboxItem
+                            checked={statusFilter.includes(FileStatus.WAITING)}
+                            onCheckedChange={(checked) => onFilterStatus(FileStatus.WAITING, checked)}
+                            onSelect={(e) => e.preventDefault()}
+                        >
+                            {localize("com_knowledge.queueing_status")}
+                        </DropdownMenuCheckboxItem>
+                        <DropdownMenuCheckboxItem
+                            checked={statusFilter.includes(FileStatus.PROCESSING)}
+                            onCheckedChange={(checked) => onFilterStatus(FileStatus.PROCESSING, checked)}
+                            onSelect={(e) => e.preventDefault()}
+                        >
+                            {localize("com_knowledge.parsing_status")}
+                        </DropdownMenuCheckboxItem>
+                        <DropdownMenuCheckboxItem
+                            checked={statusFilter.includes(FileStatus.REBUILDING)}
+                            onCheckedChange={(checked) => onFilterStatus(FileStatus.REBUILDING, checked)}
+                            onSelect={(e) => e.preventDefault()}
+                        >
+                            {localize("com_knowledge.rebuilding_status")}
+                        </DropdownMenuCheckboxItem>
+                        <DropdownMenuCheckboxItem
+                            checked={statusFilter.includes(FileStatus.SUCCESS)}
+                            onCheckedChange={(checked) => onFilterStatus(FileStatus.SUCCESS, checked)}
+                            onSelect={(e) => e.preventDefault()}
+                        >
+                            {localize("com_knowledge.success")}
+                        </DropdownMenuCheckboxItem>
+                        <DropdownMenuCheckboxItem
+                            checked={statusFilter.includes(FileStatus.FAILED)}
+                            onCheckedChange={(checked) => onFilterStatus(FileStatus.FAILED, checked)}
+                            onSelect={(e) => e.preventDefault()}
+                        >
+                            {localize("com_knowledge.fail")}
+                        </DropdownMenuCheckboxItem>
+                        <DropdownMenuCheckboxItem
+                            checked={statusFilter.includes(FileStatus.TIMEOUT)}
+                            onCheckedChange={(checked) => onFilterStatus(FileStatus.TIMEOUT, checked)}
+                            onSelect={(e) => e.preventDefault()}
+                        >
+                            {localize("com_knowledge.timeout")}
+                        </DropdownMenuCheckboxItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            )}
+
+            {viewMode === "card" && (
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button
+                            variant="outline"
+                            className="inline-flex h-8 w-8 min-h-8 min-w-8 shrink-0 items-center justify-center gap-0 rounded-md border border-[#e5e6eb] bg-white p-0 font-normal text-gray-700"
+                        >
+                            <SingleIconButtonSortGlyph className="size-4 shrink-0" aria-hidden />
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className={knowledgeSpaceDropdownSurfaceClassName}>
+                        <div className="px-2 py-1.5 text-xs font-medium text-[#86909c]">{localize("com_knowledge.sort_field")}</div>
+                        <DropdownMenuItem onClick={() => onSort(SortType.NAME)}>
+                            {localize("com_knowledge.sort_by_name_label")}
+                            {sortBy === SortType.NAME && (sortDirection === SortDirection.ASC ? "↑" : "↓")}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => onSort(SortType.TYPE)}>
+                            {localize("com_knowledge.sort_by_type_label")}
+                            {sortBy === SortType.TYPE && (sortDirection === SortDirection.ASC ? "↑" : "↓")}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => onSort(SortType.UPDATE_TIME)}>
+                            {localize("com_knowledge.sort_by_update_time_label")}
+                            {sortBy === SortType.UPDATE_TIME && (sortDirection === SortDirection.ASC ? "↑" : "↓")}
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            )}
+        </div>
+    );
+
+    const batchAndAddActions = showToolbarActions && (
+        <div className="flex shrink-0 items-center gap-2">
+            {selectedCount > 1 && (
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button size="sm" variant="outline" className="h-8 rounded-md border-[#e5e6eb] font-normal text-[#4e5969]">
+                            {localize("com_knowledge.batch_operation")}
+                            <ChevronDown className="ml-1 size-4" />
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className={knowledgeSpaceDropdownSurfaceClassName}>
+                        <DropdownMenuItem onClick={onBatchDownload} className="cursor-pointer">
+                            <Download className="mr-2 size-4" />
+                            {localize("com_knowledge.batch_download")}
+                        </DropdownMenuItem>
+                        {isAdmin && !hasFoldersSelected && (
+                            <DropdownMenuItem onClick={onBatchTag} className="cursor-pointer">
+                                <Tag className="mr-2 size-4" />
+                                {localize("com_knowledge.batch_add_tags")}
+                            </DropdownMenuItem>
+                        )}
+                        {isAdmin && hasFailedFiles && (
+                            <DropdownMenuItem onClick={onBatchRetry} className="cursor-pointer">
+                                <RotateCcw className="mr-2 size-4" />
+                                {localize("com_knowledge.batch_retry")}
+                            </DropdownMenuItem>
+                        )}
+                        {isAdmin && (
+                            <DropdownMenuItem onClick={onBatchDelete} className="cursor-pointer text-[#f53f3f] focus:text-[#f53f3f]">
+                                <Trash2 className="mr-2 size-4" />
+                                {localize("com_knowledge.batch_delete")}
+                            </DropdownMenuItem>
+                        )}
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            )}
+            {isAdmin && (
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button size="sm" className="h-8 rounded-md px-4 font-normal" disabled={isSearching}>
+                            {localize("com_knowledge.add_new")}
+                            <ChevronDown className="ml-1 size-4" />
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className={knowledgeSpaceDropdownSurfaceClassName}>
+                        <DropdownMenuItem onClick={onCreateFolder} className="cursor-pointer">
+                            <FolderPlus className="mr-2 size-4" />
+                            {localize("com_knowledge.new_folder")}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={onTriggerUpload} className="cursor-pointer">
+                            <Upload className="mr-2 size-4" />
+                            {localize("com_knowledge.upload_file")}
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            )}
+        </div>
+    );
+
+    const searchFieldClassName = toolbarCompact
+        ? "relative min-w-0 w-full"
+        : cn(
+            "relative min-w-0 w-full transition-[width,max-width,flex-grow] duration-200 ease-out",
+            "sm:flex-none sm:w-[450px] sm:max-w-[450px] sm:shrink-0",
+            "sm:focus-within:flex-1 sm:focus-within:w-auto sm:focus-within:max-w-none sm:focus-within:min-w-0"
+        );
 
     return (
-        <div className="pt-5 space-y-4">
+        <div className="space-y-4 border-b border-[#e5e6eb] pt-5 pb-4">
             {/* 面包屑 / Title */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
                 {/* 左侧：标题与信息 / 面包屑 */}
                 <div className="flex items-center gap-1 text-sm flex-wrap w-full sm:w-auto">
                     {currentPath.length === 0 ? (
                         <div className="flex items-center gap-1">
-                            {sidebarCollapsed && (
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon"
-                                    className="w-7 h-7 text-[#86909c] hover:text-[#4e5969]"
-                                    onClick={onExpandSidebar}
-                                >
-                                    <PanelLeftOpenIcon className="size-4" />
-                                </Button>
-                            )}
                             <h1 className="text-base text-[#1d2129]">{space.name}</h1>
                             <Tooltip>
                                 <TooltipTrigger className="cursor-pointer">
@@ -215,17 +416,18 @@ export function KnowledgeSpaceHeader({
                 <div className="flex items-center gap-3 self-end sm:self-auto shrink-0 mt-2 sm:mt-0">
                     <Button
                         variant="ghost"
-                        className={`h-8 px-1.5 gap-1 bg-gradient-to-br from-[#335CFF] to-[#7433FF] bg-clip-text text-transparent hover:text-transparent ${isAiAssistantOpen ? 'bg-[#f0f5ff] rounded-md' : ''}`}
+                        className={`h-8 px-1.5 gap-1 font-normal hover:bg-accent ${isAiAssistantOpen ? 'bg-[#f0f5ff] rounded-md' : ''}`}
                         disabled={isSearching}
                         onClick={onToggleAiAssistant}
                     >
                         <AiChatIcon className="size-3.5" stroke={isSearching ? "#c9cdd4" : "#335CFF"} />
-                        {localize("com_knowledge.ai_assistant")}</Button>
+                        <span className={isSearching ? '' : 'ai-gradient-text'}>{localize("com_knowledge.ai_assistant")}</span>
+                    </Button>
 
                     {showShare && (
                         <Button
                             variant="ghost"
-                            className="h-8 px-1.5 gap-1 transition-colors"
+                            className="h-8 px-1.5 gap-1 font-normal transition-colors"
                             onClick={handleShare}
                         >
                             <ShareOutlineIcon className="size-4 text-gray-800" />
@@ -234,179 +436,35 @@ export function KnowledgeSpaceHeader({
                 </div>
             </div>
 
-            {/* Toolbar */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                {/* { Left side: search & toggle & filter } */}
-                <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full sm:w-auto">
-                    {/* Search */}
-                    <div className="flex-1 sm:flex-none flex items-center gap-2 w-full sm:w-auto">
-                        <div className="relative flex-1 sm:flex-none sm:w-[450px]">
+            {/* Toolbar：宽屏一行（搜索 + 视图/筛选 + 右侧操作）；窄内容区（宽度小于 TOOLBAR_COMPACT_MAX_WIDTH）两行：仅搜索，其次为视图/筛选与新增/批量 */}
+            <div ref={toolbarMeasureRef} className="w-full min-w-0">
+                {toolbarCompact ? (
+                    <div className="flex flex-col gap-3">
+                        <div className={searchFieldClassName}>
                             <CompoundSearchInput
                                 spaceId={space.id}
                                 isRoot={currentPath.length === 0}
                                 onSearch={onSearch}
                             />
                         </div>
-                    </div>
-
-                    <div className="flex items-center gap-3 w-full sm:w-auto">
-                        {/* View Mode & Extra drop (Placeholder for bulk operations if needed, currently view mode) */}
-                        <div className="flex border rounded-md p-0.5 text-sm h-8 shrink-0">
-                            <button
-                                onClick={() => setViewMode("list")}
-                                className={cn(
-                                    "px-2.5 flex items-center justify-center transition-colors rounded",
-                                    viewMode === "list" ? "bg-primary/15 text-primary" : "text-[#4e5969] hover:bg-[#f2f3f5]"
-                                )}
-                            >
-                                <List className="size-4" />
-                            </button>
-                            <button
-                                onClick={() => setViewMode("card")}
-                                className={cn(
-                                    "px-2.5 flex items-center justify-center transition-colors rounded",
-                                    viewMode === "card" ? "bg-primary/15 text-primary" : "text-[#4e5969] hover:bg-[#f2f3f5]"
-                                )}
-                            >
-                                <LayoutGrid className="size-4" />
-                            </button>
+                        <div className="flex min-w-0 items-center justify-between gap-2">
+                            {viewFilterSortCluster}
+                            {batchAndAddActions}
                         </div>
-
-                        {/* Status filter — visible in both card and list views */}
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button
-                                    variant="outline"
-                                    size="icon"
-                                    className={cn(
-                                        "h-8 w-8 p-0 font-normal border-[#e5e6eb]",
-                                        statusFilter.length > 0
-                                            ? "bg-[#E6EDFC] border-[#024DE3] text-[#024DE3] hover:bg-[#E6EDFC]"
-                                            : "bg-white text-gray-700 hover:bg-[#f7f8fa]"
-                                    )}
-                                >
-                                    <FunnelIcon className={cn("size-4", statusFilter.length > 0 ? "text-[#024DE3]" : "text-gray-700")} />
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start">
-                                <div className="px-2 py-1.5 text-xs font-medium text-[#86909c]">{localize("com_knowledge.status")}</div>
-                                <DropdownMenuCheckboxItem
-                                    checked={statusFilter.includes(FileStatus.UPLOADING)}
-                                    onCheckedChange={(checked) => onFilterStatus(FileStatus.UPLOADING, checked)}
-                                >
-                                    {localize("com_knowledge.uploading_status")}</DropdownMenuCheckboxItem>
-                                <DropdownMenuCheckboxItem
-                                    checked={statusFilter.includes(FileStatus.WAITING)}
-                                    onCheckedChange={(checked) => onFilterStatus(FileStatus.WAITING, checked)}
-                                >
-                                    {localize("com_knowledge.queueing_status")}</DropdownMenuCheckboxItem>
-                                <DropdownMenuCheckboxItem
-                                    checked={statusFilter.includes(FileStatus.PROCESSING)}
-                                    onCheckedChange={(checked) => onFilterStatus(FileStatus.PROCESSING, checked)}
-                                >
-                                    {localize("com_knowledge.parsing_status")}</DropdownMenuCheckboxItem>
-                                <DropdownMenuCheckboxItem
-                                    checked={statusFilter.includes(FileStatus.REBUILDING)}
-                                    onCheckedChange={(checked) => onFilterStatus(FileStatus.REBUILDING, checked)}
-                                >
-                                    {localize("com_knowledge.rebuilding_status")}</DropdownMenuCheckboxItem>
-                                <DropdownMenuCheckboxItem
-                                    checked={statusFilter.includes(FileStatus.SUCCESS)}
-                                    onCheckedChange={(checked) => onFilterStatus(FileStatus.SUCCESS, checked)}
-                                >
-                                    {localize("com_knowledge.success")}</DropdownMenuCheckboxItem>
-                                <DropdownMenuCheckboxItem
-                                    checked={statusFilter.includes(FileStatus.FAILED)}
-                                    onCheckedChange={(checked) => onFilterStatus(FileStatus.FAILED, checked)}
-                                >
-                                    {localize("com_knowledge.fail")}</DropdownMenuCheckboxItem>
-                                <DropdownMenuCheckboxItem
-                                    checked={statusFilter.includes(FileStatus.TIMEOUT)}
-                                    onCheckedChange={(checked) => onFilterStatus(FileStatus.TIMEOUT, checked)}
-                                >
-                                    {localize("com_knowledge.timeout")}</DropdownMenuCheckboxItem>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-
-                        {/* Sort dropdown — card view only (list view uses column header sorting) */}
-                        {viewMode === "card" && (
-                            <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                    <Button variant="outline" size="icon" className="h-8 w-8 p-0 font-normal text-gray-700 bg-white border-[#e5e6eb]">
-                                        <ArrowDownNarrowWideIcon className="size-4" />
-                                    </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="start">
-                                    <div className="px-2 py-1.5 text-xs font-medium text-[#86909c]">{localize("com_knowledge.sort_field")}</div>
-                                    <DropdownMenuItem onClick={() => onSort(SortType.NAME)}>
-                                        {localize("com_knowledge.sort_by_name_label")}{sortBy === SortType.NAME && (sortDirection === SortDirection.ASC ? "↑" : "↓")}
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => onSort(SortType.TYPE)}>
-                                        {localize("com_knowledge.sort_by_type_label")}{sortBy === SortType.TYPE && (sortDirection === SortDirection.ASC ? "↑" : "↓")}
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => onSort(SortType.UPDATE_TIME)}>
-                                        {localize("com_knowledge.sort_by_update_time_label")}{sortBy === SortType.UPDATE_TIME && (sortDirection === SortDirection.ASC ? "↑" : "↓")}
-                                    </DropdownMenuItem>
-                                </DropdownMenuContent>
-                            </DropdownMenu>
-                        )}
                     </div>
-                </div>
-
-                {/* Actions */}
-                {(isAdmin || selectedCount > 1) && (
-                    <div className="flex items-center gap-2 self-end sm:self-auto shrink-0 mt-2 sm:mt-0">
-                        {selectedCount > 1 && (
-                            <>
-                                {/* <Button variant="ghost" size="sm" className="h-8 font-normal text-[#4e5969]" onClick={onClearSelection}>
-                                    取消选择
-                                </Button> */}
-                                <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                        <Button size="sm" variant="outline" className="h-8 font-normal rounded-md border-[#e5e6eb] text-[#4e5969]">
-                                            {localize("com_knowledge.batch_operation")}<ChevronDown className="size-4 ml-1" />
-                                        </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end">
-                                        <DropdownMenuItem onClick={onBatchDownload} className="cursor-pointer">
-                                            <Download className="size-4 mr-2" />
-                                            {localize("com_knowledge.batch_download")}</DropdownMenuItem>
-                                        {isAdmin && !hasFoldersSelected && (
-                                            <DropdownMenuItem onClick={onBatchTag} className="cursor-pointer">
-                                                <Tag className="size-4 mr-2" />
-                                                {localize("com_knowledge.batch_add_tags")}</DropdownMenuItem>
-                                        )}
-                                        {isAdmin && hasFailedFiles && (
-                                            <DropdownMenuItem onClick={onBatchRetry} className="cursor-pointer">
-                                                <RotateCcw className="size-4 mr-2" />
-                                                {localize("com_knowledge.batch_retry")}</DropdownMenuItem>
-                                        )}
-                                        {isAdmin && (
-                                            <DropdownMenuItem onClick={onBatchDelete} className="cursor-pointer text-[#f53f3f] focus:text-[#f53f3f]">
-                                                <Trash2 className="size-4 mr-2" />
-                                                {localize("com_knowledge.batch_delete")}</DropdownMenuItem>
-                                        )}
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
-                            </>
-                        )}
-                        {isAdmin && (
-                            <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                    <Button size="sm" className="h-8 font-normal rounded-md" disabled={isSearching}>
-                                        {localize("com_knowledge.add_new")}<ChevronDown className="size-4 ml-1" />
-                                    </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                    <DropdownMenuItem onClick={onCreateFolder} className="cursor-pointer">
-                                        <FolderPlus className="size-4 mr-2" />
-                                        {localize("com_knowledge.new_folder")}</DropdownMenuItem>
-                                    <DropdownMenuItem onClick={onTriggerUpload} className="cursor-pointer">
-                                        <Upload className="size-4 mr-2" />
-                                        {localize("com_knowledge.upload_file")}</DropdownMenuItem>
-                                </DropdownMenuContent>
-                            </DropdownMenu>
-                        )}
+                ) : (
+                    <div className="flex min-w-0 items-center justify-between gap-3">
+                        <div className="flex min-w-0 flex-1 items-center gap-3">
+                            <div className={searchFieldClassName}>
+                                <CompoundSearchInput
+                                    spaceId={space.id}
+                                    isRoot={currentPath.length === 0}
+                                    onSearch={onSearch}
+                                />
+                            </div>
+                            {viewFilterSortCluster}
+                        </div>
+                        {batchAndAddActions}
                     </div>
                 )}
             </div>

@@ -1078,7 +1078,9 @@
       "dashboard": "Dashboard",
       "system": "System",
       "subscribe": "Subscription",
-      "knowledgeSpace": "Knowledge Space"
+      "subscription": "Subscription",
+      "knowledgeSpace": "Knowledge Space",
+      "knowledge_space": "Knowledge Space"
     },
     "eventTypeEnum": {
       "createChat": "Create Session",
@@ -1127,7 +1129,11 @@
       "user_login": "User Login",
       "addTool": "Create Tool",
       "updateTool": "Edit Tool",
-      "deleteTool": "Delete Tool"
+      "deleteTool": "Delete Tool",
+      "create_channel": "Create Channel",
+      "delete_channel": "Delete Channel",
+      "create_knowledge_space": "Create Knowledge Space",
+      "delete_knowledge_space": "Delete Knowledge Space"
     },
     "objectTypeEnum": {
       "none": "None",
@@ -1141,7 +1147,9 @@
       "tool": "Tool",
       "dashboard": "Dashboard",
       "knowledge": "Knowledge Base",
-      "workstation": "Workbench (Daily Mode)"
+      "workstation": "Workbench (Daily Mode)",
+      "channel": "Channel",
+      "knowledge_space": "Knowledge Space"
     },
     "appUsage": "App Usage",
     "systemOperations": "System Operations",
@@ -1583,6 +1591,7 @@
     "15022": "OpenAPI schema parse error: {{exception}}",
     "15023": "Server URLs must start with http or https: {{url}}",
     "15024": "MCP config parse error: {{exception}}",
+    "15025": "System does not allow adding stdio mode MCP tools",
     "16000": "Dataset name already exists",
     "17000": "A maximum of 20 dashboards can be created",
     "17005": "Your current role does not have permission to access this dashboard. Please contact the administrator if needed.",

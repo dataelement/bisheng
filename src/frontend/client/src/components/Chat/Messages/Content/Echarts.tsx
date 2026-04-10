@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { Button } from "~/components/ui"
 import { copyText } from "~/utils"
 import { loadScript } from "./Mermaid"
-import { useLocalize } from "~/hooks"
+import { useLocalize, useScrollbarWhileScrolling } from "~/hooks"
 
 export default function ECharts({ option }: { option: string }) {
     const [mode, setMode] = useState<"chart" | "code">("chart")
@@ -15,6 +15,7 @@ export default function ECharts({ option }: { option: string }) {
     const containerRef = useRef<HTMLDivElement>(null)
     const localize = useLocalize();
     const codeRef = useRef<HTMLElement>(null)
+    const echartsCodeScroll = useScrollbarWhileScrolling()
 
     useEffect(() => {
         loadScript("echarts")
@@ -148,7 +149,11 @@ export default function ECharts({ option }: { option: string }) {
                     )}
                     <div ref={domRef} style={{ height: 400 }} className={mode === "chart" && echartsLib ? "block" : "hidden"} />
                     <div className={mode === "code" ? "block relative" : "hidden"}>
-                        <pre className="p-4 overflow-x-auto text-sm leading-relaxed max-h-[500px] overflow-y-auto mt-0 bg-transparent">
+                        <pre
+                            className="p-4 overflow-x-auto text-sm leading-relaxed max-h-[500px] overflow-y-auto scroll-on-scroll mt-0 bg-transparent"
+                            onScroll={echartsCodeScroll.onScroll}
+                            {...echartsCodeScroll.scrollingProps}
+                        >
                             <code ref={codeRef} className="text-slate-500 font-mono whitespace-pre-wrap break-words">{codeStr}</code>
                         </pre>
                     </div>

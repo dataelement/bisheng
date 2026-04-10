@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Search, Trash2, Check, XIcon } from "lucide-react";
+import { Trash2, Check, XIcon } from "lucide-react";
 import { Dialog, DialogContent } from "~/components/ui/Dialog";
+import { ExpandableSearchField } from "~/components/ui/ExpandableSearchField";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "~/components/ui/Tabs";
 import { Button } from "~/components/ui/Button";
 import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
@@ -60,11 +61,6 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
     const [notifications, setNotifications] = useState<MessageItem[]>([]);
     const [searchQuery, setSearchQuery] = useState("");
     const [onlyUnread, setOnlyUnread] = useState(false);
-    const isReadAllSelected = !onlyUnread;
-    const [showSearch, setShowSearch] = useState(false);
-    const [hasSearched, setHasSearched] = useState(false);
-
-    const searchInputRef = useRef<HTMLInputElement | null>(null);
     /** Tracks row hover to toggle delete button (instead of relying on the time column hover). */
     const [dateSlotHoverId, setDateSlotHoverId] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
@@ -313,15 +309,40 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
     const getNotificationText = (notification: MessageItem) => {
         const targetName = getTargetName(notification);
         const actionCode = getSystemTextCode(notification);
-        const actionTextKey = NOTIFICATION_ACTION_TEXT_KEYS[actionCode];
+        const actionTextKey = NOTIFICATION_ACTION_TEXT_KEYS[actionCode] || (actionCode ? `com_notifications_action_${actionCode}` : "");
         const fallbackText = notification.content?.map((c) => c.content).filter(Boolean).join("") || "";
-        const text = actionTextKey
-            ? localize(actionTextKey as TranslationKeys, { target: targetName })
-            : fallbackText;
+        const safeLocalize = (key: string, vars?: Record<string, string>) => {
+            if (!key) return "";
+            const translated = localize(key as TranslationKeys, vars as any);
+            return translated && translated !== key ? translated : "";
+        };
+        const text =
+            safeLocalize(actionTextKey, { target: targetName }) ||
+            safeLocalize(
+                targetName ? "com_notifications_action_generic_with_target" : "com_notifications_action_generic",
+                targetName ? { target: targetName } : undefined
+            ) ||
+            fallbackText;
         const showApproval =
             isApprovalMessageType(notification.message_type, notification.action_code) &&
             isPendingApprovalStatus(notification.status);
         return { text, targetName, showApproval };
+    };
+
+    const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const isRejectedKnowledgeSpaceJoinNotification = (notification: MessageItem): boolean => {
+        const code = getSystemTextCode(notification);
+        return (
+            code === "rejected_knowledge_space" ||
+            notification.action_code === "rejected_knowledge_space"
+        );
+    };
+    const isRejectedChannelJoinNotification = (notification: MessageItem): boolean => {
+        const code = getSystemTextCode(notification);
+        return (
+            code === "rejected_channel" ||
+            notification.action_code === "rejected_channel"
+        );
     };
 
     const getNotificationTarget = (notification: MessageItem): { targetType: "channel" | "space"; targetId: string } | null => {
@@ -368,11 +389,17 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
             /knowledge_space/i.test(systemText) ||
             /space/i.test(systemText);
 
-        if (businessType === "channel_id" && data?.channel_id) {
-            return { targetType: "channel", targetId: String(data.channel_id) };
+        // BusinessContentItem serializes id as metadata.business_id (no nested data.channel_id)
+        if (businessType === "channel_id") {
+            const channelId = pickId(data?.channel_id, meta?.business_id, data?.business_id);
+            if (channelId) return { targetType: "channel", targetId: channelId };
         }
         if (businessType === "channel") {
-            const channelId = data?.channel_id ?? data?.business_id ?? (notification as any)?.business_id;
+            const channelId =
+                data?.channel_id ??
+                data?.business_id ??
+                meta?.business_id ??
+                (notification as any)?.business_id;
             if (channelId !== undefined && channelId !== null && String(channelId) !== "") {
                 return { targetType: "channel", targetId: String(channelId) };
             }
@@ -411,6 +438,7 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                 data?.businessId,
                 meta?.channel_id,
                 meta?.channelId,
+                meta?.business_id,
                 (notification as any)?.business_id
             );
             if (id) return { targetType: "channel", targetId: id };
@@ -477,13 +505,19 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                 .split(/[,/]/)
                 .map((g) => g.trim())
                 .filter(Boolean);
-        const userGroup = groupNames.join(" / ");
+        const userGroup = groupNames.join("、");
         const userAvatar = userMeta?.avatar || userMeta?.user_avatar || "";
         const createdAt = notification.create_time;
         const approvalStatus = notification.status;
         const { text, targetName, showApproval } = getNotificationText(notification);
-        const canSplitTarget = Boolean(targetName) && text.includes(targetName);
-        const textPrefix = canSplitTarget ? text.split(targetName)[0] : text;
+        const target = getNotificationTarget(notification);
+        const targetSplitMatch = targetName
+            ? text.match(new RegExp(`^(.*?)([-—\\s]*${escapeRegExp(targetName)})(.*)$`))
+            : null;
+        const textPrefix = targetSplitMatch ? targetSplitMatch[1] : text;
+        const textSuffix = targetSplitMatch ? targetSplitMatch[3] : "";
+        const canNavigateTarget = Boolean(target && target.targetId && targetName);
+        const targetLabel = targetSplitMatch ? targetName : ` ${targetName}`;
 
         const isApproved = isApprovedStatus(approvalStatus) || isRejectedStatus(approvalStatus);
         const isSelfApplicationDecision = isSelfApplicationDecisionActionCode(notification.action_code);
@@ -529,7 +563,12 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                 key={id}
                 data-message-id={id}
                 data-message-type={notification.message_type}
-                className="flex flex-col gap-2 px-3 py-6 hover:bg-[#f7f8fa] transition-colors duration-[350ms] ease-in-out"
+                className="flex flex-col gap-2 px-3 py-6 hover:bg-[#f7f8fa] "
+                style={{
+                    transitionProperty: 'background-color',
+                    transitionDuration: '350ms',
+                    transitionTimingFunction: 'ease-in-out'
+                }}
                 onMouseEnter={onRowMouseEnter}
                 onMouseLeave={onRowMouseLeave}
                 ref={(node) => {
@@ -567,57 +606,114 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
             >
                 {/* Row 1: Avatar + message text + right slot */}
                 <div className="flex items-center gap-3">
-                    <Avatar className="size-9 flex-shrink-0">
-                        {userAvatar ? <AvatarImage src={userAvatar} alt={userName} /> : null}
-                        <AvatarName name={userName} className="text-xs" />
-                    </Avatar>
+                    <TooltipAnchor
+                        side="left"
+                        hideArrow
+                        className="shrink-0"
+                        tooltipClassName="box-border flex h-[64px] w-[151px] flex-col justify-center overflow-hidden rounded-[8px] border border-solid border-[#EBECF0] bg-white p-0 opacity-100 shadow-[0_4px_12px_rgba(0,0,0,0.08)] z-[100]"
+                        description={
+                            <div className="flex h-full w-full flex-col justify-center px-3 py-2">
+                                <div className="truncate text-[14px] font-normal leading-tight text-[#1D2129]">
+                                    {userName}
+                                </div>
+                                {userGroup ? (
+                                    <div className="mt-0.5 line-clamp-2 text-left text-[12px] font-normal leading-tight text-[#A9AEB8]">
+                                        {userGroup}
+                                    </div>
+                                ) : null}
+                            </div>
+                        }
+                    >
+                        <Avatar className="size-9 flex-shrink-0">
+                            {userAvatar ? (
+                                <AvatarImage src={userAvatar} alt={userName} />
+                            ) : (
+                                <AvatarName name={userName} className="text-xs" />
+                            )}
+                        </Avatar>
+                    </TooltipAnchor>
 
                     {/* Message text */}
                     <div className={cn("flex-1 min-w-0 text-[14px] flex items-center gap-1 flex-wrap", textColor)}>
-                        <TooltipAnchor
-                            description={userGroup ? `${userName} - ${userGroup}` : userName}
-                            side="top"
-                        >
-                            <span className="font-medium cursor-pointer hover:text-[#165dff] shrink-0">
-                                @{userName}
-                            </span>
-                        </TooltipAnchor>
+                        <span className="shrink-0 font-medium hover:text-[#165dff]">@{userName}</span>
                         <span className="min-w-0">
                             {textPrefix}
-                            {canSplitTarget && (
+                            {canNavigateTarget && (
                                 <span
                                     className="font-medium cursor-pointer hover:text-[#165dff]"
                                     onClick={() => {
-                                        const target = getNotificationTarget(notification);
-                                        if (!target) return;
+                                        console.info("[NotificationsDialog] target click", {
+                                            notificationId: notification.id,
+                                            messageType: notification.message_type,
+                                            actionCode: notification.action_code,
+                                            systemTextCode: getSystemTextCode(notification),
+                                            targetName,
+                                            resolvedTarget: target,
+                                        });
+                                        if (!target) {
+                                            console.warn("[NotificationsDialog] target unresolved", {
+                                                notificationId: notification.id,
+                                                content: notification.content,
+                                            });
+                                            return;
+                                        }
+                                        const base = window.location.origin + (__APP_ENV__.BASE_URL || "");
+                                        const normalizedBase = base.endsWith("/") ? base.slice(0, -1) : base;
                                         if (target.targetType === "channel") {
-                                            navigate(`/channel/${target.targetId}`);
+                                            const route = isRejectedChannelJoinNotification(notification)
+                                                ? `/channel/share/${target.targetId}?square=1`
+                                                : `/channel/${target.targetId}`;
+                                            console.info("[NotificationsDialog] navigate", {
+                                                notificationId: notification.id,
+                                                route,
+                                            });
+                                            window.open(normalizedBase + route, "_blank");
+                                        } else if (isRejectedKnowledgeSpaceJoinNotification(notification)) {
+                                            const route = `/knowledge?square=1&previewSpace=${encodeURIComponent(target.targetId)}`;
+                                            console.info("[NotificationsDialog] navigate", {
+                                                notificationId: notification.id,
+                                                route,
+                                            });
+                                            window.open(normalizedBase + route, "_blank");
                                         } else {
-                                            navigate(`/knowledge/space/${target.targetId}`);
+                                            const route = `/knowledge/space/${target.targetId}`;
+                                            console.info("[NotificationsDialog] navigate", {
+                                                notificationId: notification.id,
+                                                route,
+                                            });
+                                            window.open(normalizedBase + route, "_blank");
                                         }
                                         onOpenChange?.(false);
                                     }}
                                 >
-                                    {targetName}
+                                    {targetLabel}
                                 </span>
                             )}
+                            {textSuffix}
                         </span>
                     </div>
 
-                    {/* Right slot: shows delete when the whole row is hovered */}
-                    <div className="flex-shrink-0 h-7 flex items-center justify-end whitespace-nowrap min-w-[72px]">
-                        {showRightSlotDelete ? (
+                    {/* Right slot: fixed width so hover swap (时间 ↔ 删除) does not shrink flex-1 文案区导致 @名 换行/抖动 */}
+                    <div className="relative flex h-7 w-[184px] flex-shrink-0 items-center justify-end whitespace-nowrap">
+                        <span
+                            className={cn(
+                                "text-[14px] tabular-nums text-[#999999]",
+                                showRightSlotDelete && "invisible"
+                            )}
+                            aria-hidden={showRightSlotDelete}
+                        >
+                            {formatMessageTime(createdAt)}
+                        </span>
+                        {showRightSlotDelete && (
                             <button
                                 type="button"
                                 onClick={() => handleDelete(id)}
-                                className="appearance-none h-7 px-3 inline-flex items-center gap-1.5 text-[14px] text-[#4e5969] bg-white border border-[#e5e6eb] rounded-[6px] hover:text-[#f53f3f] hover:border-[#f53f3f] transition-colors active:translate-y-0"
+                                className="absolute right-0 top-1/2 h-7 -translate-y-1/2 appearance-none px-3 inline-flex items-center gap-1.5 text-[14px] text-[#4e5969] bg-white border border-[#e5e6eb] rounded-[6px] hover:text-[#f53f3f] hover:border-[#f53f3f] transition-colors active:translate-y-0"
                                 title={localize("com_notifications_delete")}
                             >
                                 <Trash2 className="size-4" />
                                 {localize("com_notifications_delete")}
                             </button>
-                        ) : (
-                            <span className="text-[14px] text-[#999999]">{formatMessageTime(createdAt)}</span>
                         )}
                     </div>
                 </div>
@@ -697,7 +793,7 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="w-[calc(100vw-80px)] max-w-[800px] h-[80vh] max-h-[800px] p-0 gap-0 rounded-2xl shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
+            <DialogContent className="w-[calc(100vw-80px)] max-w-[800px] h-[80vh] max-h-[800px] p-0 gap-0 rounded-2xl shadow-[0_8px_24px_rgba(0,0,0,0.12)] duration-500 ease-out [animation-duration:450ms] data-[state=closed]:[animation-duration:320ms]">
                 <div className="flex flex-col h-full overflow-hidden rounded-2xl">
                     <div className="flex items-center justify-between h-12 px-6 flex-shrink-0">
                         <h2 className="text-[16px] font-semibold text-[#1d2129]">{localize("com_notifications_title")}</h2>
@@ -737,57 +833,12 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                                     </TabsList>
 
                                     <div className="flex items-center gap-3">
-                                        <div
-                                            className={[
-                                                "flex items-center h-8 rounded-lg border bg-white overflow-hidden",
-                                                "transition-[width,border-color] duration-[350ms] ease-in-out",
-                                                showSearch
-                                                    ? "w-[220px] border-[#024DE3]"
-                                                    : "w-8 border-[#E5E6EB] cursor-pointer hover:bg-[#F7F8FA]",
-                                            ].join(" ")}
-                                            onClick={() => {
-                                                if (!showSearch) {
-                                                    setShowSearch(true);
-                                                    requestAnimationFrame(() => searchInputRef.current?.focus());
-                                                }
-                                            }}
-                                            title={showSearch ? undefined : localize("com_notifications_search")}
-                                        >
-                                            <div
-                                                className={[
-                                                    "flex items-center justify-center px-[7px] h-full shrink-0 transition-colors duration-[350ms] ease-in-out",
-                                                    showSearch ? "text-[#024DE3]" : "text-[#86909C]",
-                                                ].join(" ")}
-                                            >
-                                                <Search className="size-4" />
-                                            </div>
-                                            <input
-                                                ref={searchInputRef}
-                                                type="text"
-                                                placeholder={localize("com_notifications_search_placeholder")}
-                                                value={searchQuery}
-                                                onChange={(e) => setSearchQuery(e.target.value)}
-                                                onKeyDown={(e) => {
-                                                    if (e.key === "Enter" && searchQuery.trim()) setHasSearched(true);
-                                                }}
-                                                onBlur={() => {
-                                                    // Keep the search box open as long as there is content.
-                                                    // Only collapse when the user clears it.
-                                                    if (!searchQuery.trim()) {
-                                                        setShowSearch(false);
-                                                        setSearchQuery("");
-                                                        setHasSearched(false);
-                                                    }
-                                                }}
-                                                tabIndex={showSearch ? 0 : -1}
-                                                style={{ fontWeight: 400 }}
-                                                className={[
-                                                    "flex-1 h-full pr-3 text-[14px] font-normal text-[#1d2129] bg-transparent outline-none placeholder:text-[#C9CDD4] placeholder:font-normal",
-                                                    "transition-opacity duration-[350ms] ease-in-out",
-                                                    showSearch ? "opacity-100" : "opacity-0 pointer-events-none",
-                                                ].join(" ")}
-                                            />
-                                        </div>
+                                        <ExpandableSearchField
+                                            value={searchQuery}
+                                            onChange={setSearchQuery}
+                                            placeholder={localize("com_notifications_search_placeholder")}
+                                            titleWhenCollapsed={localize("com_notifications_search")}
+                                        />
 
                                         <Button
                                             type="button"

@@ -1067,7 +1067,9 @@
       "dashboard": "看板",
       "system": "系统",
       "subscribe": "订阅",
-      "knowledgeSpace": "知识空间"
+      "subscription": "订阅",
+      "knowledgeSpace": "知识空间",
+      "knowledge_space": "知识空间"
     },
     "eventTypeEnum": {
       "createChat": "新建会话",
@@ -1134,7 +1136,9 @@
       "tool": "工具",
       "dashboard": "统计看板",
       "knowledge": "知识库",
-      "workstation": "工作台（日常模式）"
+      "workstation": "工作台（日常模式）",
+      "channel": "频道",
+      "knowledge_space": "知识空间"
     },
     "appUsage": "应用使用",
     "systemOperations": "系统操作",
@@ -1544,6 +1548,7 @@
     "15022": "openapi schema解析报错，请检查内容是否符合json或者yaml格式: {{exception}}",
     "15023": "server中的url必须以http或者https开头: {{url}}",
     "15024": "mcp工具配置解析失败，请检查内容是否符合mcp配置格式: {{exception}}",
+    "15025": "系统不允许添加 stdio 模式 MCP 工具",
     "16000": "数据集名称已存在",
     "17000": "最多允许创建 20 个看板",
     "17005": "您当前角色没有访问此看板的权限。如有需要，请联系管理员开通。",

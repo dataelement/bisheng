@@ -9,7 +9,7 @@ export default function NavToggle({
   setIsHovering,
   side = 'left',
   className = '',
-  translateX = true,
+  translateX,
 }: {
   onToggle: () => void;
   navVisible: boolean;
@@ -17,7 +17,8 @@ export default function NavToggle({
   setIsHovering: (isHovering: boolean) => void;
   side?: 'left' | 'right';
   className?: string;
-  translateX?: boolean;
+  /** Pixel offset when sidebar is visible. Pass a number (e.g. 280) to enable, or omit/0 to disable. */
+  translateX?: number;
 }) {
   const localize = useLocalize();
   const transition = {
@@ -33,10 +34,14 @@ export default function NavToggle({
     <div
       className={cn(
         className,
-        '-translate-y-1/2 transition-transform',
-        navVisible ? 'rotate-0' : 'rotate-180',
-        navVisible && translateX ? 'translate-x-[260px]' : 'translate-x-0 ',
+        'transition-transform duration-300',
+        !translateX && '-translate-y-1/2',
+        !translateX && (navVisible ? 'rotate-0' : 'rotate-180'),
       )}
+      style={translateX ? {
+        transition: 'transform 0.3s ease',
+        transform: `translateX(${navVisible ? translateX : 0}px) translateY(-50%) ${navVisible ? '' : 'rotate(180deg)'}`,
+      } : undefined}
       onMouseEnter={() => setIsHovering(true)}
       onMouseLeave={() => setIsHovering(false)}
     >
@@ -63,13 +68,12 @@ export default function NavToggle({
             style={{
               ...transition,
               // Keep the expand handle clearly visible when sidebar is collapsed.
-              opacity: !navVisible || isHovering ? 1 : 0.25,
+              opacity: isHovering ? 1 : 0.25,
             }}
           >
             <div
               className={cn(
-                "flex h-6 w-6 flex-col items-center rounded-md",
-                !navVisible ? "bg-white shadow-sm border border-[#e5e6eb]" : ""
+                "flex h-6 w-6 flex-col items-center rounded-md"
               )}
             >
               {/* Top bar */}

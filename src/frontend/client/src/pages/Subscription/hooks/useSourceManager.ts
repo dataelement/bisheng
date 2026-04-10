@@ -74,12 +74,29 @@ export function useSourceManager(
         prevExpanded.current = expanded;
     }, [expanded, sources]);
 
-    const allSourcesByTab = activeTab === "official_account" ? wechatSources : websiteSources;
+    // 爬取/新增的信源会先进入父级 sources → pendingSources，可能尚未出现在管理端搜索接口结果里；
+    // 合并进展示列表，否则 URL 搜索仍会判定「无结果」而卡在「网站尚未入库」页。
+    const mergedWechat = useMemo(() => {
+        const ids = new Set(wechatSources.map((s) => s.id));
+        const extra = pendingSources.filter(
+            (s) => s.type === "official_account" && !ids.has(s.id)
+        );
+        return extra.length ? [...wechatSources, ...extra] : wechatSources;
+    }, [wechatSources, pendingSources]);
+
+    const mergedWebsite = useMemo(() => {
+        const ids = new Set(websiteSources.map((s) => s.id));
+        const extra = pendingSources.filter((s) => s.type === "website" && !ids.has(s.id));
+        return extra.length ? [...websiteSources, ...extra] : websiteSources;
+    }, [websiteSources, pendingSources]);
+
     const filteredSources = useMemo(() => {
         const kw = searchKeyword.trim().toLowerCase();
         const kwNorm = normalizeUrlForSearch(searchKeyword);
-        if (!kw) return allSourcesByTab;
-        const combined = [...wechatSources, ...websiteSources];
+        if (!kw) {
+            return activeTab === "official_account" ? mergedWechat : mergedWebsite;
+        }
+        const combined = [...mergedWechat, ...mergedWebsite];
         return combined.filter(
             (s) =>
                 s.name.toLowerCase().includes(kw) ||
@@ -88,7 +105,7 @@ export function useSourceManager(
                     normalizeUrlForSearch(s.url).includes(kwNorm)
                 ))
         );
-    }, [allSourcesByTab, searchKeyword, wechatSources, websiteSources]);
+    }, [activeTab, searchKeyword, mergedWechat, mergedWebsite]);
 
     const isSearchMode = searchKeyword.trim().length > 0;
     const workingSources = expanded ? pendingSources : sources;

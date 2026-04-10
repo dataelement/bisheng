@@ -468,8 +468,10 @@ export const uploadImage = (
   data: FormData,
   signal?: AbortSignal | null,
 ): Promise<f.TFileUpload> => {
+  const isLinsight = data.get('isLinsight') === 'true';
+  data.delete('isLinsight');
   const requestConfig = signal ? { signal } : undefined;
-  return request.postMultiPart(endpoints.images(), data, requestConfig).then(res => {
+  return request.postMultiPart(endpoints.images(isLinsight), data, requestConfig).then(res => {
     if (!res.data.temp_file_id) {
       res.data.temp_file_id = data.get('file_id')
       res.data.type = res.data.type || "image"
@@ -480,8 +482,10 @@ export const uploadImage = (
 };
 
 export const uploadFile = (data: FormData, signal?: AbortSignal | null): Promise<f.TFileUpload> => {
+  const isLinsight = data.get('isLinsight') === 'true';
+  data.delete('isLinsight');
   const requestConfig = signal ? { signal } : undefined;
-  return request.postMultiPart(endpoints.images(), data, requestConfig).then(res => {
+  return request.postMultiPart(endpoints.images(isLinsight), data, requestConfig).then(res => {
     if (!res.data.temp_file_id) {
       res.data.temp_file_id = data.get('file_id')
       res.data.filename = decodeURIComponent(res.data.file_name)

@@ -5,7 +5,7 @@ import {
   Loader2,
   SearchIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   getMineSpacesApi,
   getJoinedSpacesApi,
@@ -47,6 +47,42 @@ function useDebounce<T>(value: T, delay: number): T {
   return debouncedValue;
 }
 
+const MAX_SUB_HEIGHT = 320;
+const BOTTOM_GAP = 8;
+
+function useSubMenuLayout(menuRef: React.RefObject<HTMLDivElement | null>, triggerKey: string, open: boolean) {
+  const [alignOffset, setAlignOffset] = useState(0);
+  const [maxH, setMaxH] = useState<number>(MAX_SUB_HEIGHT);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+
+    const update = () => {
+      const menuEl = menuRef.current;
+      if (!menuEl) return;
+
+      const menuRect = menuEl.getBoundingClientRect();
+
+      const trigger = menuEl.querySelector<HTMLElement>(`[data-sub-key="${triggerKey}"]`);
+      if (trigger) {
+        const triggerRect = trigger.getBoundingClientRect();
+        setAlignOffset(Math.round(menuRect.top - triggerRect.top));
+      } else {
+        setAlignOffset(0);
+      }
+
+      const available = window.innerHeight - menuRect.top - BOTTOM_GAP;
+      setMaxH(Math.min(Math.max(available, 0), MAX_SUB_HEIGHT));
+    };
+
+    requestAnimationFrame(update);
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, [open, menuRef, triggerKey]);
+
+  return { alignOffset, maxH };
+}
+
 // --- 子组件：列表面板 ---
 const KnowledgeListPanel = ({
   placeholder,
@@ -79,12 +115,12 @@ const KnowledgeListPanel = ({
   };
 
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex flex-col gap-1 min-h-0 flex-1">
       {/* 搜索框 */}
-      <div className="relative">
+      <div className="relative shrink-0">
         <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
         <Input
-          className="h-8 text-xs bg-slate-50 border-none pl-8 focus-visible:ring-1 focus-visible:ring-blue-500/20"
+          className="h-[28px] text-xs bg-white border border-[#ECECEC] rounded-[6px] pl-8 focus-visible:ring-1 focus-visible:ring-blue-500/20"
           placeholder={placeholder}
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
@@ -94,7 +130,7 @@ const KnowledgeListPanel = ({
 
       {/* 滚动列表 */}
       <div
-        className="max-h-[300px] overflow-y-auto custom-scrollbar flex flex-col gap-0.5"
+        className="overflow-y-auto flex flex-col gap-0.5 scrollbar-on-hover min-h-0 flex-1"
         onScroll={handleScroll}
       >
         {items.map((item) => {
@@ -182,19 +218,33 @@ export const ChatKnowledge = ({
   const loadSpaces = useCallback(async () => {
     setSpaceFetching(true);
     try {
+      // Fetch "mine" + "joined" in parallel and merge into a single list
       const [mine, joined] = await Promise.all([
         getMineSpacesApi(),
         getJoinedSpacesApi(),
       ]);
-      // Merge and deduplicate by id
-      const merged = [...mine, ...joined];
-      const seen = new Set<string>();
-      const unique = merged.filter((s) => {
-        if (seen.has(s.id)) return false;
+      // Dedupe by id (a space could in principle appear in both lists)
+      const seen = new Set<string | number>();
+      const merged: any[] = [];
+      for (const s of [...mine, ...joined]) {
+        if (seen.has(s.id)) continue;
         seen.add(s.id);
-        return true;
+        merged.push(s);
+      }
+      // Sort A–Z, English (ASCII-leading) names first, then Chinese names.
+      // Within each bucket, compare with the appropriate locale so that
+      // pinyin order is used for CJK and natural order for ASCII.
+      merged.sort((a, b) => {
+        const an = (a.name || "").trim();
+        const bn = (b.name || "").trim();
+        const aIsEn = an.length > 0 && an.charCodeAt(0) < 128;
+        const bIsEn = bn.length > 0 && bn.charCodeAt(0) < 128;
+        if (aIsEn !== bIsEn) return aIsEn ? -1 : 1;
+        return an.localeCompare(bn, aIsEn ? "en" : "zh-Hans-u-co-pinyin", {
+          sensitivity: "base",
+        });
       });
-      setAllSpaces(unique);
+      setAllSpaces(merged);
     } catch (err) {
       console.error("[ChatKnowledge] Failed to load spaces:", err);
     } finally {
@@ -246,8 +296,11 @@ export const ChatKnowledge = ({
 
       if (currentTypeCount >= MAX_KB_PER_TYPE) {
         showToast({
-          message: type === 'space' ? "知识空间数量已达上限" : "组织知识库数量已达上限",
-          status: "error"
+          message:
+            type === 'space'
+              ? localize('com_chat_knowledge_toast_space_limit')
+              : localize('com_chat_knowledge_toast_org_limit'),
+          status: 'error',
         });
         return;
       }
@@ -260,25 +313,37 @@ export const ChatKnowledge = ({
 
   const hasAnySelection = value.length > 0;
 
+  const [openSub, setOpenSub] = useState<'space' | 'org' | null>(null);
+  const menuContentRef = useRef<HTMLDivElement>(null);
+  const spaceLayout = useSubMenuLayout(menuContentRef, 'space', openSub === 'space');
+  const orgLayout = useSubMenuLayout(menuContentRef, 'org', openSub === 'org');
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger disabled={disabled}>
         <div className={cn(
-          "flex bg-white items-center gap-2 h-7 px-3 rounded-full border border-slate-200 text-gray-500 cursor-pointer hover:border-blue-400 transition-all outline-none disabled:opacity-0 max-[575px]:px-2 max-[575px]:gap-1",
-          hasAnySelection && "bg-blue-50 border-blue-200 text-blue-600",
+          "flex bg-white items-center gap-2 h-7 px-3 rounded-full border border-slate-200 text-gray-500 cursor-pointer hover:border-blue-400 transition-all outline-none disabled:opacity-0",
+          hasAnySelection && "!bg-[rgba(20,59,255,0.10)] !border-[#0253E8] text-[#0253E8] shadow-[0_1px_2px_0_rgba(0,0,0,0.05)]",
           disabled && "opacity-50 hover:border-slate-200 cursor-not-allowed"
         )}>
           <BookOpenText size={16} />
-          <span className="text-xs break-keep max-[575px]:sr-only">知识库</span>
-          <ChevronRight size={14} className="rotate-90 opacity-40 max-[575px]:hidden" />
+          <span className="text-xs break-keep">{localize('com_tools_knowledge_base')}</span>
+          <ChevronRight size={14} className={cn("rotate-90", hasAnySelection ? "opacity-100" : "opacity-40")} />
         </div>
       </DropdownMenuTrigger>
 
-      <DropdownMenuContent align="start" className="w-[200px] p-1.5 rounded-2xl shadow-xl border-slate-100">
+      <DropdownMenuContent ref={menuContentRef} align="start" className="w-[200px] p-1.5 rounded-2xl shadow-xl border-slate-100">
 
         {/* 知识空间 */}
-        <DropdownMenuSub>
-          <DropdownMenuSubTrigger className="flex items-center justify-between rounded-xl hover:bg-slate-50 focus:bg-slate-50 outline-none cursor-pointer">
+        <DropdownMenuSub open={openSub === 'space'} onOpenChange={() => { }}>
+          <DropdownMenuSubTrigger
+            data-sub-key="space"
+            className={cn(
+              "flex items-center justify-between rounded-xl outline-none cursor-pointer",
+              "!bg-transparent hover:!bg-transparent focus:!bg-transparent"
+            )}
+            onPointerEnter={() => setOpenSub('space')}
+          >
             <div className="flex items-center gap-3">
               <div className="relative">
                 <BookOpen className="size-[18px] text-slate-600" />
@@ -286,14 +351,23 @@ export const ChatKnowledge = ({
                   <span className="absolute -top-1 -right-1 size-2.5 bg-blue-500 rounded-full border-2 border-white" />
                 )}
               </div>
-              <span className="text-[14px] text-slate-700 font-normal">知识空间</span>
+              <span className="text-[14px] text-slate-700 font-normal">{localize('com_ui_knowledge_space')}</span>
             </div>
           </DropdownMenuSubTrigger>
 
-          <DropdownMenuSubContent className="w-[280px] p-3 rounded-2xl shadow-2xl ml-2 border-slate-100 bg-white">
-            <p className="text-sm leading-5 py-1.5 mb-1 font-medium">知识空间</p>
+          <DropdownMenuSubContent
+            alignOffset={spaceLayout.alignOffset}
+            className="w-[280px] p-3 rounded-2xl shadow-2xl ml-2 border-slate-100 bg-white flex flex-col overflow-hidden"
+            style={{
+              '--tw-enter-duration': '0.35s',
+              '--tw-enter-easing': 'ease-in-out',
+              height: spaceLayout.maxH,
+              maxHeight: MAX_SUB_HEIGHT,
+            } as React.CSSProperties}
+          >
+            <p className="text-sm leading-5 py-1.5 mb-1 font-medium shrink-0">{localize('com_ui_knowledge_space')}</p>
             <KnowledgeListPanel
-              placeholder="搜索知识空间名称"
+              placeholder={localize('com_chat_knowledge_placeholder_search_space')}
               keyword={spaceKeyword}
               setKeyword={setSpaceKeyword}
               items={filteredSpaces}
@@ -302,14 +376,21 @@ export const ChatKnowledge = ({
               isFetching={spaceFetching}
               hasMore={false}
               onLoadMore={() => { }}
-              emptyText="暂无知识空间"
+              emptyText={localize('com_chat_knowledge_empty_no_spaces')}
             />
           </DropdownMenuSubContent>
         </DropdownMenuSub>
 
         {/* 组织知识库 */}
-        <DropdownMenuSub>
-          <DropdownMenuSubTrigger className="flex items-center justify-between rounded-xl hover:bg-slate-50 focus:bg-slate-50 outline-none cursor-pointer mt-0.5">
+        <DropdownMenuSub open={openSub === 'org'} onOpenChange={() => { }}>
+          <DropdownMenuSubTrigger
+            data-sub-key="org"
+            className={cn(
+              "flex items-center justify-between rounded-xl outline-none cursor-pointer mt-0.5",
+              "!bg-transparent hover:!bg-transparent focus:!bg-transparent"
+            )}
+            onPointerEnter={() => setOpenSub('org')}
+          >
             <div className="flex items-center gap-3">
               <div className="relative">
                 <BooksIcon className="size-[18px] opacity-70" />
@@ -317,14 +398,23 @@ export const ChatKnowledge = ({
                   <span className="absolute -top-1 -right-1 size-2.5 bg-blue-500 rounded-full border-2 border-white" />
                 )}
               </div>
-              <span className="text-[14px] text-slate-700 font-normal">组织知识库</span>
+              <span className="text-[14px] text-slate-700 font-normal">{localize('com_tools_org_knowledge')}</span>
             </div>
           </DropdownMenuSubTrigger>
 
-          <DropdownMenuSubContent className="w-[280px] p-3 rounded-2xl shadow-2xl ml-2 border-slate-100 bg-white">
-            <p className="text-sm leading-5 py-1.5 mb-1 font-medium">组织知识库</p>
+          <DropdownMenuSubContent
+            alignOffset={orgLayout.alignOffset}
+            className="w-[280px] p-3 rounded-2xl shadow-2xl ml-2 border-slate-100 bg-white flex flex-col overflow-hidden"
+            style={{
+              '--tw-enter-duration': '0.35s',
+              '--tw-enter-easing': 'ease-in-out',
+              height: orgLayout.maxH,
+              maxHeight: MAX_SUB_HEIGHT,
+            } as React.CSSProperties}
+          >
+            <p className="text-sm leading-5 py-1.5 mb-1 font-medium shrink-0">{localize('com_tools_org_knowledge')}</p>
             <KnowledgeListPanel
-              placeholder="搜索知识库名称"
+              placeholder={localize('com_tools_knowledge_base_search')}
               keyword={orgKeyword}
               setKeyword={setOrgKeyword}
               items={allOrgKbs}
@@ -333,7 +423,7 @@ export const ChatKnowledge = ({
               isFetching={orgFetching}
               hasMore={hasMoreOrg}
               onLoadMore={() => setOrgPage(p => p + 1)}
-              emptyText="暂无组织知识库"
+              emptyText={localize('com_chat_knowledge_empty_no_org_kbs')}
             />
           </DropdownMenuSubContent>
         </DropdownMenuSub>

@@ -1,28 +1,35 @@
 import { useLocalize } from "~/hooks";
 import {
+    LogOut,
+    MinimizeIcon,
     MoreHorizontal,
     Pin,
     PinOff,
     Settings,
     Users,
-    X
 } from "lucide-react";
 import { useState } from "react";
 import { Channel, ChannelRole } from "~/api/channels";
 import { NotificationSeverity } from "~/common";
 import {
     DropdownMenu,
-    DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuTrigger
 } from "~/components/ui/DropdownMenu";
-import { useConfirm, useToastContext } from "~/Providers";
-import ClosedIcon from "~/components/ui/icon/ClosedIcon";
 import {
-    ChannelApplicationIcon,
-    ChannelAppeffectIcon,
-    ChannelPinIcon,
-} from "~/components/icons/channels";
+    SidebarListMoreMenuContent,
+    SidebarListMoreMenuDivider,
+    sidebarListMoreMenuDangerIconClassName,
+    sidebarListMoreMenuDangerItemClassName,
+    sidebarListMoreMenuDangerLabelClassName,
+    sidebarListMoreMenuIconClassName,
+    sidebarListMoreMenuItemClassName,
+    sidebarListMoreMenuLabelClassName,
+} from "~/components/SidebarListMoreMenu";
+import { useConfirm, useToastContext } from "~/Providers";
+import { getFullWidthLength } from "~/utils";
+import { ChannelPinIcon } from "~/components/icons/channels";
+import { SpaceNotebookIcon } from "~/components/icons/SpaceNotebookIcon";
 
 interface ChannelItemProps {
     channel: Channel;
@@ -59,7 +66,7 @@ export default function ChannelItem({
         const newName = e.target.value.trim();
         setIsEditing(false);
         if (!newName) return
-        if (newName.length > 10) {
+        if (getFullWidthLength(newName) > 10) {
             return showToast({
                 message: localize("com_subscription.max_10_characters"),
                 severity: NotificationSeverity.ERROR
@@ -72,20 +79,21 @@ export default function ChannelItem({
 
     return (
         <div
-            className={`group flex items-center justify-between h-8 px-3 py-1.5 rounded-lg cursor-pointer transition-all duration-[350ms] ease-in-out border ${isActive
+            className={`group flex items-center justify-between h-8 px-3 py-1.5 rounded-lg cursor-pointer border ${isActive
                 ? "bg-[#E6EDFC] border-primary shadow-sm"
                 : "border-transparent hover:bg-[#F7F7F7]"
                 }`}
+            style={{
+                transitionProperty: 'background-color',
+                transitionDuration: '350ms',
+                transitionTimingFunction: 'ease-in-out'
+            }}
             onClick={() => !isEditing && onSelect(channel)}
         >
             <div className="flex items-center gap-1 flex-1 min-w-0">
                 {/* 左侧图标保持不变 */}
-                <div className={`flex-shrink-0 flex items-center justify-center size-5 rounded-md ${isActive ? "bg-white border border-[#165dff]/20 shadow-sm" : ""}`}>
-                    {isActive ? (
-                        <ChannelAppeffectIcon className="size-3.5" />
-                    ) : (
-                        <ChannelApplicationIcon className="size-3.5" />
-                    )}
+                <div className={`flex-shrink-0 flex items-center justify-center size-5 rounded-md ${isActive ? "bg-white" : ""}`}>
+                    <SpaceNotebookIcon active={isActive} />
                 </div>
 
                 {isEditing ? (
@@ -120,9 +128,15 @@ export default function ChannelItem({
                     <span className={`
                         absolute right-0 flex items-center justify-center
                         text-[10px] px-1.5 py-[1px] rounded-md font-medium bg-[#335CFF33]/20 text-primary
-                        transition-opacity duration-200
                         ${menuOpen ? "opacity-0" : "group-hover:opacity-0"}
-                    `}>
+                    `}
+                        style={{
+                            transitionProperty: 'background-color',
+                            transitionDuration: '350ms',
+                            // transitionDelay: '100ms',
+                            transitionTimingFunction: 'ease-in-out'
+                        }}
+                    >
                         {channel.unreadCount}
                     </span>
                 )}
@@ -132,7 +146,7 @@ export default function ChannelItem({
                     <DropdownMenuTrigger asChild>
                         <button
                             className={`
-                                absolute right-0 flex items-center justify-center p-1 rounded-md hover:bg-black/5 transition-opacity duration-200 outline-none
+                                absolute right-0 flex items-center justify-center p-1 rounded-md hover:bg-black/5 outline-none
                                 ${menuOpen ? "opacity-100 z-10" : "opacity-0 group-hover:opacity-100 z-10"}
                             `}
                             onClick={(e) => e.stopPropagation()}
@@ -141,41 +155,46 @@ export default function ChannelItem({
                         </button>
                     </DropdownMenuTrigger>
 
-                    <DropdownMenuContent
-                        align="end"
-                        sideOffset={8}
-                        className="w-40 px-4 py-3 rounded-lg border-none shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]"
-                        onClick={(e) => e.stopPropagation()}
-                    >
+                    <SidebarListMoreMenuContent onClick={(e) => e.stopPropagation()}>
                         {type === "created" && (
                             <DropdownMenuItem
-                                className="py-2 px-0 cursor-pointer focus:bg-[#f2f3f5]"
+                                className={sidebarListMoreMenuItemClassName}
                                 onClick={() => onChannelSettings(channel)}
                             >
-                                <Settings className="size-4 mr-2 text-[#999999]" />
-                                <span className="text-[14px] text-[#1d2129]">{localize("com_subscription.channel_settings")}</span>
+                                <Settings className={sidebarListMoreMenuIconClassName} />
+                                <span className={sidebarListMoreMenuLabelClassName}>
+                                    {localize("com_subscription.channel_settings")}
+                                </span>
                             </DropdownMenuItem>
                         )}
                         {[ChannelRole.CREATOR, ChannelRole.ADMIN].includes(channel.role) && (
                             <DropdownMenuItem
-                                className="py-2 px-0 cursor-pointer focus:bg-[#f2f3f5]"
+                                className={sidebarListMoreMenuItemClassName}
                                 onClick={() => onManageMembers(channel)}
                             >
-                                <Users className="size-4 mr-2 text-[#999999]" />
-                                <span className="text-[14px] text-[#1d2129]">{localize("com_subscription.member_management")}</span>
+                                <Users className={sidebarListMoreMenuIconClassName} />
+                                <span className={sidebarListMoreMenuLabelClassName}>
+                                    {localize("com_subscription.member_management")}
+                                </span>
                             </DropdownMenuItem>
                         )}
                         <DropdownMenuItem
                             onClick={() => onPin(channel.id, !channel.isPinned, type)}
-                            className="py-2 px-0 cursor-pointer focus:bg-[#f2f3f5]"
+                            className={sidebarListMoreMenuItemClassName}
                         >
                             {channel.isPinned ? (
-                                <><PinOff className="size-4 mr-2 text-[#999999]" /><span className="text-[14px] text-[#1d2129]">{localize("com_subscription.unpin")}</span></>
+                                <>
+                                    <PinOff className={sidebarListMoreMenuIconClassName} />
+                                    <span className={sidebarListMoreMenuLabelClassName}>{localize("com_subscription.unpin")}</span>
+                                </>
                             ) : (
-                                <><Pin className="size-4 mr-2 text-[#999999]" /><span className="text-[14px] text-[#1d2129]">{localize("com_subscription.pin_channel")}</span></>
+                                <>
+                                    <Pin className={sidebarListMoreMenuIconClassName} />
+                                    <span className={sidebarListMoreMenuLabelClassName}>{localize("com_subscription.pin_channel")}</span>
+                                </>
                             )}
                         </DropdownMenuItem>
-                        <div className="h-px bg-[#f2f3f5] mx-2 my-1" />
+                        <SidebarListMoreMenuDivider />
 
                         <DropdownMenuItem
                             onClick={async () => {
@@ -190,12 +209,18 @@ export default function ChannelItem({
                                     type === "created" ? onDelete(channel.id) : onUnsubscribe(channel.id);
                                 }
                             }}
-                            className="py-2 px-0 cursor-pointer focus:bg-[#f2f3f5]"
+                            className={sidebarListMoreMenuDangerItemClassName}
                         >
-                            <ClosedIcon className="size-4 mr-2 text-[#999999]" />
-                            <span className="text-[14px] text-[#1d2129]">{type === "created" ? localize("com_subscription.dissolve_channel") : localize("com_subscription.unsubscribe")}</span>
+                            {type === "created" ? (
+                                <MinimizeIcon className={sidebarListMoreMenuDangerIconClassName} />
+                            ) : (
+                                <LogOut className={sidebarListMoreMenuDangerIconClassName} />
+                            )}
+                            <span className={sidebarListMoreMenuDangerLabelClassName}>
+                                {type === "created" ? localize("com_subscription.dissolve_channel") : localize("com_subscription.unsubscribe")}
+                            </span>
                         </DropdownMenuItem>
-                    </DropdownMenuContent>
+                    </SidebarListMoreMenuContent>
                 </DropdownMenu>
             </div>
         </div>

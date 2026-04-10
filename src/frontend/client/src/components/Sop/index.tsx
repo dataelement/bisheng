@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
+import { useActivate } from 'react-activation';
 import { checkSopQueueStatus, getCaseDetail, getLinsightSessionVersionList, getLinsightTaskList } from '~/api/linsight';
 import { useGetLinsightToolList, useGetOrgToolList, useGetPersonalToolList } from '~/hooks/queries/data-provider';
 import { useGenerateSop, useLinsightManager } from '~/hooks/useLinsightManager';
@@ -123,9 +124,22 @@ export const useLinsightData = ({ vid, sopId, conversationId, shareToken }
         }
     };
 
+    // KeepAlive restore: when navigating back to /linsight/new, reset stale state
+    // so useGenerateSop watches submissionState('new') instead of the old versionId.
+    useActivate(() => {
+        const path = window.location.pathname;
+        if (path.endsWith('/linsight/new') || path.endsWith('/linsight')) {
+            if (versionId !== 'new') {
+                setVersionId('new');
+                setVersions([]);
+            }
+        }
+    });
+
     // 加载会话版本和任务
     useEffect(() => {
-        if (!conversationId || conversationId === 'new' || !(linsightTools && PersonalTool && orgTools)) {
+        // if (!conversationId || conversationId === 'new' || !(linsightTools && PersonalTool && orgTools)) {
+        if (!conversationId || conversationId === 'new' || !(linsightTools && orgTools)) {
             return;
         }
 

@@ -157,7 +157,7 @@ export const useWebSocket = (helpers) => {
             helpers.stopShow(false)
             helpers.message.closeAllLogMsg(helpers.chatId);
             // Generate title for new conversations after first round completes
-            triggerGenTitle()
+            // triggerGenTitle()
         }
 
         // messages
@@ -196,6 +196,7 @@ export const useWebSocket = (helpers) => {
         } else if (data.category === 'stream_msg') {
             // helpers.flow.flow_type === 10 && helpers.reRunShow(true) // 成环的工作流不展示重跑按钮
             helpers.message.streamMsg(helpers.chatId, data)
+            if (data.type === 'end') triggerGenTitle()
         } else if (data.category === 'end_cover' && data.type === 'end_cover') {
             _ws.send(JSON.stringify({ action: 'stop' }))
             return helpers.message.endMsg(helpers.chatId, data)
@@ -219,7 +220,7 @@ export const useWebSocket = (helpers) => {
             } else if (data.type === 'close') {
                 helpers.message.skillCloseMsg()
                 // Generate title for new conversations after first round completes
-                triggerGenTitle()
+                // triggerGenTitle()
             }
 
             return

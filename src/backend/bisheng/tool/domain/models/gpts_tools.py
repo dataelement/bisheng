@@ -4,6 +4,7 @@ from typing import Dict, List, Optional
 
 from pydantic import model_validator
 from sqlalchemy import JSON, Column, DateTime, String, text, func
+from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlmodel import Field, or_, select, Text, update, col
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -16,12 +17,14 @@ from ..const import AuthType, ToolPresetType
 class GptsToolsBase(SQLModelSerializable):
     name: str = Field(sa_column=Column(String(length=125), index=True))
     logo: Optional[str] = Field(default=None, sa_column=Column(String(length=512), index=False))
-    desc: Optional[str] = Field(default=None, sa_column=Column(String(length=2048), index=False))
+    desc: Optional[str] = Field(default=None, sa_column=Column(LONGTEXT, index=False))
     tool_key: str = Field(sa_column=Column(String(length=125), index=False))
     type: int = Field(default=0, description='of the category to which they belongID')
-    is_preset: int = Field(default=ToolPresetType.API.value, description="The category of the tool, the historical reason field is not renamed")
+    is_preset: int = Field(default=ToolPresetType.API.value,
+                           description="The category of the tool, the historical reason field is not renamed")
     is_delete: int = Field(default=0, description='1 Indicates logical deletion')
-    api_params: Optional[List[Dict]] = Field(default=None, sa_column=Column(JSON), description='Used to storeapiParameter and other information')
+    api_params: Optional[List[Dict]] = Field(default=None, sa_column=Column(JSON),
+                                             description='Used to storeapiParameter and other information')
     user_id: Optional[int] = Field(default=None, index=True, description='Create UserID， nullIndicates system creation')
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
@@ -36,12 +39,16 @@ class GptsToolsTypeBase(SQLModelSerializable):
     extra: Optional[str] = Field(default='{}', sa_column=Column(Text),
                                  description="Configuration information for the tool category to store the configuration information required for the tool category")
     description: str = Field(default='', description="Description of the tool category")
-    server_host: Optional[str] = Field(default='', description="The access root address of the custom tool, which must behttporhttpsWhat/the beginning?")
+    server_host: Optional[str] = Field(default='',
+                                       description="The access root address of the custom tool, which must behttporhttpsWhat/the beginning?")
     auth_method: Optional[int] = Field(default=0, description="Authentication method of tool category")
-    api_key: Optional[str] = Field(default='', description="Tool Authenticationapi_key", sa_column=Column(String(length=2048)),
+    api_key: Optional[str] = Field(default='', description="Tool Authenticationapi_key",
+                                   sa_column=Column(String(length=2048)),
                                    max_length=1000)
-    auth_type: Optional[str] = Field(default=AuthType.BASIC.value, description="Authentication method of tool authentication")
-    is_preset: Optional[int] = Field(default=ToolPresetType.API.value, description="The category of the tool, the historical reason field is not renamed")
+    auth_type: Optional[str] = Field(default=AuthType.BASIC.value,
+                                     description="Authentication method of tool authentication")
+    is_preset: Optional[int] = Field(default=ToolPresetType.API.value,
+                                     description="The category of the tool, the historical reason field is not renamed")
     user_id: Optional[int] = Field(default=None, index=True, description='Create UserID， nullIndicates system creation')
     is_delete: int = Field(default=0, description='1 Indicates logical deletion')
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
@@ -65,10 +72,13 @@ class GptsToolsType(GptsToolsTypeBase, table=True):
 
 
 class GptsToolsTypeRead(GptsToolsTypeBase):
-    openapi_schema: Optional[str] = Field(default="", description="of the tool categoryschemaContent, complies withopenapiSpecified Data")
-    children: Optional[List[GptsTools]] = Field(default_factory=list, description="List of tools under the Tools category")
+    openapi_schema: Optional[str] = Field(default="",
+                                          description="of the tool categoryschemaContent, complies withopenapiSpecified Data")
+    children: Optional[List[GptsTools]] = Field(default_factory=list,
+                                                description="List of tools under the Tools category")
     parameter_name: Optional[str] = Field(default="", description="Custom request header parameter name")
-    api_location: Optional[str] = Field(default="", description="Custom Request Header Parameter Position header or query")
+    api_location: Optional[str] = Field(default="",
+                                        description="Custom Request Header Parameter Position header or query")
     write: Optional[bool] = Field(default=False, description="Do you have write access")
 
     @model_validator(mode="after")

@@ -84,12 +84,46 @@ export const ChannelNotebookOneIcon: React.FC<ChannelIconProps> = (props) => (
   </svg>
 );
 
+/** 与 `public/assets/channel/SingleIconButton.svg` 内芯图形一致（无圆角底框），用于知识空间卡片视图排序按钮 */
+export const SingleIconButtonSortGlyph: React.FC<ChannelIconProps> = (props) => (
+  <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
+    <path
+      d="M2 3.8333H9.6667"
+      stroke="currentColor"
+      strokeWidth="1.33333"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M2 8.1667H9.6667"
+      stroke="currentColor"
+      strokeWidth="1.33333"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M12 3.8333V12.5L14 10.1667"
+      stroke="currentColor"
+      strokeWidth="1.33333"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M2 12.5H9.6667"
+      stroke="currentColor"
+      strokeWidth="1.33333"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
 export const ChannelExchangeFourIcon: React.FC<ChannelIconProps> = (props) => (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
-    <path d="M12.0781 6.61804H3.91993" stroke="#818181" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" />
-    <path d="M12.0781 6.61898L9.56791 4.10876" stroke="#818181" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" />
-    <path d="M3.92188 9.38141H12.0801" stroke="#818181" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" />
-    <path d="M3.92188 9.38041L6.43209 11.8906" stroke="#818181" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M12.0781 6.61804H3.91993" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M12.0781 6.61898L9.56791 4.10876" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M3.92188 9.38141H12.0801" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M3.92188 9.38041L6.43209 11.8906" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 );
 
@@ -194,19 +228,22 @@ export const ChannelSuccessIcon: React.FC<ChannelIconProps> = (props) => (
   </svg>
 );
 
-export const ChannelPlusIcon: React.FC<ChannelIconProps> = (props) => (
-  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
-    <rect x="0.5" y="0.5" width="11" height="11" rx="1" stroke="#335CFF" />
-    <path d="M6.01503 2.50049L6.00586 9.50049" stroke="#335CFF" strokeLinecap="round" strokeLinejoin="round" />
-    <path d="M2.50049 6H9.50049" stroke="#335CFF" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
+export const ChannelPlusIcon: React.FC<React.ImgHTMLAttributes<HTMLImageElement>> = (props) => (
+  <img
+    src={`${__APP_ENV__.BASE_URL}/assets/channel/plus.svg`}
+    alt=""
+    draggable={false}
+    {...props}
+  />
 );
 
-export const ChannelMinusIcon: React.FC<ChannelIconProps> = (props) => (
-  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
-    <rect x="0.5" y="0.5" width="11" height="11" rx="1" stroke="#818181" />
-    <path d="M2.625 6H9.625" stroke="#818181" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
+export const ChannelMinusIcon: React.FC<React.ImgHTMLAttributes<HTMLImageElement>> = (props) => (
+  <img
+    src={`${__APP_ENV__.BASE_URL}/assets/channel/minus.svg`}
+    alt=""
+    draggable={false}
+    {...props}
+  />
 );
 
 export const ChannelQuoteIcon: React.FC<ChannelIconProps> = (props) => (

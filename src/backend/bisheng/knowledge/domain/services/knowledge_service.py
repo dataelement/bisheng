@@ -1,4 +1,3 @@
-import copy
 import json
 import math
 import os
@@ -10,7 +9,6 @@ from fastapi import BackgroundTasks, Request
 from loguru import logger
 from pymilvus import Collection
 
-from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.services.knowledge_imp import (
     KnowledgeUtils,
     delete_knowledge_file_vectors,
@@ -24,7 +22,6 @@ from bisheng.api.v1.schemas import (
     KnowledgeFileProcess,
     UpdatePreviewFileChunk, ExcelRule, KnowledgeFileReProcess,
 )
-from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.constants.vectorstore_metadata import KNOWLEDGE_RAG_METADATA_SCHEMA
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError, ServerError
@@ -33,14 +30,9 @@ from bisheng.common.errcode.knowledge import (
     KnowledgeExistError,
     KnowledgeNoEmbeddingError, KnowledgeNotQAError, KnowledgeFileFailedError,
 )
-from bisheng.common.errcode.knowledge import KnowledgeNotExistError, KnowledgeMetadataFieldConflictError, \
-    KnowledgeMetadataFieldExistError, KnowledgeMetadataFieldNotExistError, KnowledgeMetadataFieldImmutableError
-from bisheng.common.schemas.telemetry.event_data_schema import NewKnowledgeBaseEventData
-from bisheng.common.services import telemetry_service
 from bisheng.core.ai import FakeEmbeddings
 from bisheng.core.cache.redis_manager import get_redis_client_sync, get_redis_client
 from bisheng.core.cache.utils import file_download, async_file_download
-from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync, get_minio_storage
 from bisheng.database.models.group_resource import (
     GroupResource,
@@ -67,376 +59,60 @@ from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository 
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_repository import KnowledgeRepository
 from bisheng.knowledge.domain.schemas.knowledge_schema import AddKnowledgeMetadataFieldsReq, \
     UpdateKnowledgeMetadataFieldsReq
+from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import KnowledgeAuditTelemetryService
+from bisheng.knowledge.domain.services.knowledge_metadata_service import KnowledgeMetadataService
+from bisheng.knowledge.domain.services.knowledge_permission_service import KnowledgePermissionService
 from bisheng.llm.domain.const import LLMModelType
 from bisheng.llm.domain.models import LLMDao
 from bisheng.user.domain.models.user import UserDao
 from bisheng.user.domain.models.user_role import UserRoleDao
 from bisheng.utils import generate_uuid, generate_knowledge_index_name
-from bisheng.utils import get_request_ip
-from bisheng.utils.util import retry_async
 
 
 class KnowledgeService(KnowledgeUtils):
     """Service class for managing knowledge domain operations."""
 
+    permission_service = KnowledgePermissionService()
+    audit_telemetry_service = KnowledgeAuditTelemetryService()
+
     def __init__(self, knowledge_repository: 'KnowledgeRepository',
-                 knowledge_file_repository: 'KnowledgeFileRepository'):
+                 knowledge_file_repository: 'KnowledgeFileRepository',
+                 permission_service: KnowledgePermissionService = None,
+                 audit_telemetry_service: KnowledgeAuditTelemetryService = None,
+                 metadata_service: KnowledgeMetadataService = None):
         self.knowledge_repository = knowledge_repository
         self.knowledge_file_repository = knowledge_file_repository
+        self.permission_service = permission_service or self.__class__.permission_service
+        self.audit_telemetry_service = audit_telemetry_service or self.__class__.audit_telemetry_service
+        self.metadata_service = metadata_service or KnowledgeMetadataService(
+            knowledge_repository=self.knowledge_repository,
+            knowledge_file_repository=self.knowledge_file_repository,
+            permission_service=self.permission_service,
+        )
 
     async def add_metadata_fields(self, login_user: UserPayload, add_metadata_fields: AddKnowledgeMetadataFieldsReq):
-        """Add metadata fields to a knowledge entity."""
-
-        knowledge_model = await self.knowledge_repository.find_by_id(entity_id=add_metadata_fields.knowledge_id)
-
-        if not knowledge_model:
-            raise KnowledgeNotExistError()
-
-        # Permission check
-        if not await login_user.async_access_check(
-                knowledge_model.user_id, str(knowledge_model.id), AccessType.KNOWLEDGE_WRITE
-        ):
-            raise UnAuthorizedError()
-
-        # Initialize metadata_fields if it's None
-        if knowledge_model.metadata_fields is None:
-            knowledge_model.metadata_fields = []
-
-        existing_field_names = {field["field_name"] for field in knowledge_model.metadata_fields}
-
-        # Built field names
-        built_field_names = [item.field_name for item in KNOWLEDGE_RAG_METADATA_SCHEMA]
-
-        # Determine if the added field conflicts with an existing field
-        for field in add_metadata_fields.metadata_fields:
-            if field.field_name in existing_field_names:
-                raise KnowledgeMetadataFieldExistError(field_name=field.field_name)
-            elif field.field_name in built_field_names:
-                raise KnowledgeMetadataFieldConflictError(field_name=field.field_name)
-
-        metadata_fields = copy.deepcopy(knowledge_model.metadata_fields)
-        # Add new metadata fields, avoiding duplicates
-        for field in add_metadata_fields.metadata_fields:
-            if field.field_name not in existing_field_names:
-                metadata_fields.append(field.model_dump())
-
-        knowledge_model.metadata_fields = metadata_fields
-
-        knowledge_model = await self.knowledge_repository.update(knowledge_model)
-
-        return knowledge_model
-
-    #  Update Milvus and Elasticsearch metadata field names
-    async def update_vectorstore_metadata_field_names(self, invoke_user_id: int, knowledge_model, field_name_map):
-        """Update metadata field names in Milvus and Elasticsearch vector stores."""
-        # Update Milvus metadata field names
-        # milvus_vectorstore = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(knowledge=knowledge_model)
-        # Implement Milvus metadata field name update logic here
-
-        # Update Elasticsearch metadata field names
-        # es_vectorstore = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=knowledge_model)
-        # Implement Elasticsearch metadata field name update logic here
-
-        knowledge_model_files = await self.knowledge_file_repository.find_all(knowledge_id=knowledge_model.id)
-
-        vector_client = await KnowledgeRag.init_knowledge_milvus_vectorstore(invoke_user_id, knowledge=knowledge_model,
-                                                                             metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
-
-        es_client = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge=knowledge_model,
-                                                                     metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
-
-        # Requestmilvus
-        @retry_async(delay=3)
-        async def request_milvus(new_data):
-            # Bulk Update Data
-            await vector_client.aclient.upsert(collection_name=vector_client.collection_name, data=new_data)
-
-        # Requestes
-        @retry_async(delay=3)
-        async def request_es(request_body):
-            await es_client.client.update_by_query(
-                index=knowledge_model.index_name,
-                body=request_body
-            )
-
-        for knowledge_file in knowledge_model_files:
-            # Update Milvus metadata
-            # Implement Milvus metadata field name update logic for each knowledge file here
-
-            # Query all vectors in this knowledge file in Milvus.
-            search_result = await vector_client.aclient.query(collection_name=knowledge_model.collection_name,
-                                                              filter=f"document_id == {knowledge_file.id}", limit=10000)
-
-            # Modify User Metadata Field Name
-            for item in search_result:
-                for old_field_name, new_field_name in field_name_map.items():
-                    if old_field_name in item["user_metadata"]:
-                        item["user_metadata"][new_field_name] = item["user_metadata"].pop(old_field_name)
-
-            # Bulk Update Data
-            await request_milvus(search_result)
-
-            # Update Elasticsearch metadata
-            # Implement Elasticsearch metadata field name update logic for each knowledge file here
-
-            # Use update_by_query to update eligible documents
-            script_lines = []
-            for old_field_name, new_field_name in field_name_map.items():
-                script_lines.append(
-                    f"if (ctx._source.metadata.user_metadata.containsKey('{old_field_name}')) " +
-                    "{ ctx._source.metadata.user_metadata['" + new_field_name + "'] = " +
-                    "ctx._source.metadata.user_metadata.remove('" + old_field_name + "'); }"
-                )
-            script_source = " ".join(script_lines)
-            body = {
-                "script": {
-                    "source": script_source,
-                    "lang": "painless"
-                },
-                "query": {
-                    "term": {"metadata.document_id": knowledge_file.id}
-                }
-            }
-            # Update es
-            await request_es(body)
-
-            # Update knowledge file's user_metadata field
-            user_metadata_dict = copy.deepcopy(knowledge_file.user_metadata)
-            for old_field_name, new_field_name in field_name_map.items():
-                user_metadata = user_metadata_dict.pop(old_field_name, None)
-                if user_metadata is not None:
-                    user_metadata["updated_at"] = int(datetime.now().timestamp())
-                    user_metadata[new_field_name] = user_metadata
-
-            knowledge_file.user_metadata = user_metadata_dict
-
-            await self.knowledge_file_repository.update(knowledge_file)
+        return await self.metadata_service.add_metadata_fields(login_user, add_metadata_fields)
 
     async def update_metadata_fields(self, login_user: UserPayload,
                                      update_metadata_fields: UpdateKnowledgeMetadataFieldsReq,
                                      background_tasks: BackgroundTasks):
-        """Update metadata field names in a knowledge entity."""
-
-        knowledge_model = await self.knowledge_repository.find_by_id(entity_id=update_metadata_fields.knowledge_id)
-
-        if not knowledge_model:
-            raise KnowledgeNotExistError()
-
-        # Permission check
-        if not await login_user.async_access_check(
-                knowledge_model.user_id, str(knowledge_model.id), AccessType.KNOWLEDGE_WRITE
-        ):
-            raise UnAuthorizedError()
-
-        if knowledge_model.metadata_fields is None:
-            return knowledge_model  # No metadata fields to update
-
-        # Built field names
-        built_field_names = [item.field_name for item in KNOWLEDGE_RAG_METADATA_SCHEMA]
-
-        existing_field_names = {field["field_name"] for field in knowledge_model.metadata_fields}
-
-        for field in update_metadata_fields.metadata_fields:
-            if field.old_field_name in built_field_names:
-                raise KnowledgeMetadataFieldImmutableError(field_name=field.old_field_name)
-            elif field.new_field_name in built_field_names:
-                raise KnowledgeMetadataFieldConflictError(field_name=field.new_field_name)
-            elif field.new_field_name in existing_field_names:
-                raise KnowledgeMetadataFieldExistError(field_name=field.new_field_name)
-            elif field.old_field_name not in existing_field_names:
-                raise KnowledgeMetadataFieldNotExistError(field_name=field.old_field_name)
-
-        field_name_map = {
-            field_update.old_field_name: field_update.new_field_name
-            for field_update in update_metadata_fields.metadata_fields
-        }
-
-        # Check if all old field names exist and new field names do not exist
-        for old_field_name in field_name_map.keys():
-            if old_field_name not in existing_field_names or field_name_map[old_field_name] in existing_field_names:
-                return knowledge_model
-
-        metadata_fields = copy.deepcopy(knowledge_model.metadata_fields)
-
-        # Update metadata field names
-        for i, field in enumerate(metadata_fields):
-            if field["field_name"] in field_name_map:
-                metadata_fields[i]["field_name"] = field_name_map[field["field_name"]]
-                metadata_fields[i]["updated_at"] = int(datetime.now().timestamp())
-
-        knowledge_model.metadata_fields = metadata_fields
-
-        knowledge_model = await self.knowledge_repository.update(knowledge_model)
-
-        # Milvus and ES metadata field name update logic
-        background_tasks.add_task(
-            self.update_vectorstore_metadata_field_names,
-            login_user.user_id,
-            knowledge_model,
-            field_name_map
+        return await self.metadata_service.update_metadata_fields(
+            login_user=login_user,
+            update_metadata_fields=update_metadata_fields,
+            background_tasks=background_tasks,
         )
-
-        return knowledge_model
-
-    async def delete_vectorstore_metadata_fields(self, invoke_user_id: int, knowledge_model, field_names: list[str]):
-        """Delete metadata fields in Milvus and Elasticsearch vector stores."""
-        # Delete Milvus metadata fields
-        # milvus_vectorstore = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(knowledge=knowledge_model)
-        # Implement Milvus metadata field deletion logic here
-
-        # Delete Elasticsearch metadata fields
-        # es_vectorstore = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=knowledge_model)
-        # Implement Elasticsearch metadata field deletion logic here
-
-        knowledge_model_files = await self.knowledge_file_repository.find_all(knowledge_id=knowledge_model.id)
-
-        vector_client = await KnowledgeRag.init_knowledge_milvus_vectorstore(invoke_user_id, knowledge=knowledge_model,
-                                                                             metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
-
-        es_client = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge=knowledge_model,
-                                                                     metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
-
-        # Requestmilvus
-        @retry_async(delay=3)
-        async def request_milvus(new_data):
-            # Bulk Update Data
-            await vector_client.aclient.upsert(collection_name=vector_client.collection_name, data=new_data)
-
-        # Requestes
-        @retry_async(delay=3)
-        async def request_es(request_body):
-            await es_client.client.update_by_query(
-                index=knowledge_model.index_name,
-                body=request_body
-            )
-
-        for knowledge_file in knowledge_model_files:
-            # Delete Milvus metadata fields
-            # Implement Milvus metadata field deletion logic for each knowledge file here
-
-            # Query all vectors in this knowledge file in Milvus.
-            search_result = await vector_client.aclient.query(collection_name=knowledge_model.collection_name,
-                                                              filter=f"document_id == {knowledge_file.id}", limit=10000)
-
-            # Delete the specified metadata field
-            for item in search_result:
-                for field_name in field_names:
-                    if field_name in item["user_metadata"]:
-                        del item["user_metadata"][field_name]
-
-            # Bulk Update Data
-            await request_milvus(search_result)
-
-            # Delete Elasticsearch metadata fields
-            # Implement Elasticsearch metadata field deletion logic for each knowledge file here
-
-            # Use update_by_query to update eligible documents
-            script_lines = []
-            for field_name in field_names:
-                script_lines.append(
-                    f"ctx._source.metadata.user_metadata.remove('{field_name}');"
-                )
-            script_source = " ".join(script_lines)
-
-            body = {
-                "script": {
-                    "source": script_source,
-                    "lang": "painless"
-                },
-                "query": {
-                    "term": {"metadata.document_id": knowledge_file.id}
-                }
-            }
-
-            # Update es
-            await request_es(body)
-
-            # Update knowledge file's user_metadata field
-            knowledge_file.user_metadata = {
-                key: value for key, value in knowledge_file.user_metadata.items()
-                if key not in field_names
-            }
-
-            await self.knowledge_file_repository.update(knowledge_file)
 
     async def delete_metadata_fields(self, login_user: UserPayload, knowledge_id: int, field_names: list[str],
                                      background_tasks: BackgroundTasks):
-        """Delete metadata fields from a knowledge entity."""
-
-        knowledge_model = await self.knowledge_repository.find_by_id(entity_id=knowledge_id)
-
-        if not knowledge_model:
-            raise KnowledgeNotExistError()
-
-        # Permission check
-        if not await login_user.async_access_check(
-                knowledge_model.user_id, str(knowledge_model.id), AccessType.KNOWLEDGE_WRITE
-        ):
-            raise UnAuthorizedError()
-
-        # Initialize metadata_fields if it's None
-        if knowledge_model.metadata_fields is None:
-            knowledge_model.metadata_fields = []
-
-        existing_field_names = [field["field_name"] for field in knowledge_model.metadata_fields]
-
-        # Check if all field names to be deleted exist
-        for field_name in field_names:
-            if field_name not in existing_field_names:
-                raise KnowledgeMetadataFieldNotExistError(field_name=field_name)
-
-        # Filter out metadata fields to be deleted
-        metadata_fields = [
-            field for field in knowledge_model.metadata_fields
-            if field['field_name'] not in field_names
-        ]
-
-        knowledge_model.metadata_fields = metadata_fields
-
-        knowledge_model = await self.knowledge_repository.update(knowledge_model)
-
-        # Milvus and ES metadata field deletion logic
-        background_tasks.add_task(
-            self.delete_vectorstore_metadata_fields,
-            login_user.user_id,
-            knowledge_model,
-            field_names
+        return await self.metadata_service.delete_metadata_fields(
+            login_user=login_user,
+            knowledge_id=knowledge_id,
+            field_names=field_names,
+            background_tasks=background_tasks,
         )
 
-        return knowledge_model
-
     async def list_metadata_fields(self, default_user, knowledge_id):
-        """
-        List metadata fields of a knowledge entity.
-        Args:
-            default_user:
-            knowledge_id:
-
-        Returns:
-
-        """
-
-        knowledge_model = await self.knowledge_repository.find_by_id(entity_id=knowledge_id)
-
-        if not knowledge_model:
-            raise KnowledgeNotExistError()
-
-        # Permission check
-        if not await default_user.async_access_check(
-                knowledge_model.user_id, str(knowledge_model.id), AccessType.KNOWLEDGE
-        ):
-            raise UnAuthorizedError()
-
-        if knowledge_model.metadata_fields is None:
-            knowledge_model.metadata_fields = []
-
-        # Sortmetadata_fields by updated_at desc
-        knowledge_model.metadata_fields.sort(key=lambda x: x.get("updated_at", 0), reverse=True)
-
-        return {
-            "knowledge_id": knowledge_model.id,
-            "metadata_fields": knowledge_model.metadata_fields or []
-        }
+        return await self.metadata_service.list_metadata_fields(default_user, knowledge_id)
 
     @classmethod
     def get_all_knowledge_by_time_range(cls, start_data: datetime, end_data: datetime, page: int = 1,
@@ -557,7 +233,8 @@ class KnowledgeService(KnowledgeUtils):
         return cls.create_knowledge_base(request, login_user, db_knowledge)
 
     @classmethod
-    def create_knowledge_base(cls, request, login_user: UserPayload, db_knowledge: Knowledge) -> Knowledge:
+    def create_knowledge_base(cls, request, login_user: UserPayload, db_knowledge: Knowledge,
+                              skip_hook: bool = False) -> Knowledge:
         # generate index_name and collection_name
         db_knowledge.index_name = generate_knowledge_index_name()
         db_knowledge.collection_name = db_knowledge.index_name
@@ -570,6 +247,11 @@ class KnowledgeService(KnowledgeUtils):
             vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(login_user.user_id,
                                                                                 knowledge=db_knowledge,
                                                                                 metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
+            # Init Milvus schema avoiding SchemaNotReady concurrently
+            init_ids = vector_client.add_texts(texts=["init_schema"])
+            if init_ids:
+                vector_client.delete(ids=init_ids)
+
             es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=db_knowledge,
                                                                         metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
             es_client._store._create_index_if_not_exists()
@@ -577,7 +259,8 @@ class KnowledgeService(KnowledgeUtils):
             logger.exception("create knowledge index name error")
 
         # Handling the next steps in creating a Knowledge Base
-        cls.create_knowledge_hook(request, login_user, db_knowledge)
+        if not skip_hook:
+            cls.create_knowledge_hook(request, login_user, db_knowledge)
         return db_knowledge
 
     @classmethod
@@ -599,19 +282,8 @@ class KnowledgeService(KnowledgeUtils):
                 )
             GroupResourceDao.insert_group_batch(batch_resource)
 
-        # Log Audit Logs
-        AuditLogService.create_knowledge(
-            login_user, get_request_ip(request), knowledge.id
-        )
-
-        telemetry_service.log_event_sync(user_id=login_user.user_id,
-                                         event_type=BaseTelemetryTypeEnum.NEW_KNOWLEDGE_BASE,
-                                         trace_id=trace_id_var.get(),
-                                         event_data=NewKnowledgeBaseEventData(
-                                             kb_id=knowledge.id,
-                                             kb_name=knowledge.name,
-                                             kb_type=knowledge.type
-                                         ))
+        cls.audit_telemetry_service.audit_create_knowledge(login_user, request, knowledge)
+        cls.audit_telemetry_service.telemetry_new_knowledge(login_user, knowledge)
 
         return True
 
@@ -671,9 +343,7 @@ class KnowledgeService(KnowledgeUtils):
         # DeletemysqlDATA
         KnowledgeDao.delete_knowledge(knowledge_id, only_clear)
 
-        telemetry_service.log_event_sync(user_id=login_user.user_id,
-                                         event_type=BaseTelemetryTypeEnum.DELETE_KNOWLEDGE_BASE,
-                                         trace_id=trace_id_var.get())
+        cls.audit_telemetry_service.telemetry_delete_knowledge(login_user)
 
         if not only_clear:
             cls.delete_knowledge_hook(request, login_user, knowledge)
@@ -707,8 +377,7 @@ class KnowledgeService(KnowledgeUtils):
             f"delete_knowledge_hook id={knowledge.id}, user: {login_user.user_id}"
         )
 
-        # Delete Knowledge Base Audit Log
-        AuditLogService.delete_knowledge(login_user, get_request_ip(request), knowledge)
+        cls.audit_telemetry_service.audit_delete_knowledge(login_user, request, knowledge)
 
         # Purge resources under user groups
         GroupResourceDao.delete_group_resource_by_third_id(
@@ -732,8 +401,10 @@ class KnowledgeService(KnowledgeUtils):
             )
             for file in file_list:
                 minio_client.remove_object_sync(object_name=str(file[0]))
-                if file[1]:
-                    minio_client.remove_object_sync(object_name=file[1])
+                for object_name in file[1:]:
+                    if not object_name:
+                        continue
+                    minio_client.remove_object_sync(object_name=object_name)
 
     @classmethod
     def get_upload_file_original_name(cls, file_name: str) -> str:
@@ -772,10 +443,11 @@ class KnowledgeService(KnowledgeUtils):
         3: ocrIdentifiedbbox
         """
         knowledge = await KnowledgeDao.aquery_by_id(req_data.knowledge_id)
-        if not await login_user.async_access_check(
-                knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE_WRITE
-        ):
-            raise UnAuthorizedError.http_exception()
+        await cls.permission_service.ensure_knowledge_write_async(
+            login_user=login_user,
+            owner_user_id=knowledge.user_id,
+            knowledge_id=knowledge.id,
+        )
 
         file_path = req_data.file_list[0].file_path
         excel_rule = req_data.file_list[0].excel_rule
@@ -829,7 +501,11 @@ class KnowledgeService(KnowledgeUtils):
             raise ValueError("File resolution is empty")
 
         parse_type = type(pipeline.loader).__name__ if pipeline.loader else "local"
-        partitions = None
+        partitions = {}
+        if hasattr(pipeline.loader, "bbox_list") and pipeline.loader.bbox_list:
+            for text_bbox in pipeline.loader.bbox_list:
+                bbox_key = "-".join([str(int(one)) for one in text_bbox.bbox])
+                partitions[f"{text_bbox.page}-{bbox_key}"] = text_bbox.model_dump()
 
         texts = [doc.page_content for doc in result.documents]
         metadatas = [doc.metadata for doc in result.documents]
@@ -867,10 +543,11 @@ class KnowledgeService(KnowledgeUtils):
             cls, request: Request, login_user: UserPayload, req_data: UpdatePreviewFileChunk
     ):
         knowledge = await KnowledgeDao.aquery_by_id(req_data.knowledge_id)
-        if not await login_user.async_access_check(
-                knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE_WRITE
-        ):
-            raise UnAuthorizedError.http_exception()
+        await cls.permission_service.ensure_knowledge_write_async(
+            login_user=login_user,
+            owner_user_id=knowledge.user_id,
+            knowledge_id=knowledge.id,
+        )
 
         cache_key = cls.get_preview_cache_key(req_data.knowledge_id, req_data.file_path)
         chunk_info = await cls.async_get_preview_cache(cache_key, req_data.chunk_index)
@@ -984,8 +661,6 @@ class KnowledgeService(KnowledgeUtils):
         :param req_data:
         :return:
         """
-        from bisheng.worker.knowledge import file_worker
-
         knowledge = await KnowledgeDao.async_query_by_id(req_data.knowledge_id)
         if not knowledge:
             raise NotFoundError.http_exception()
@@ -999,85 +674,41 @@ class KnowledgeService(KnowledgeUtils):
         if not db_file:
             raise NotFoundError.http_exception()
 
-        split_rule_dict = req_data.model_dump(include=set(list(FileProcessBase.model_fields.keys())))
-        if req_data.excel_rule is not None:
-            split_rule_dict["excel_rule"] = req_data.excel_rule.model_dump()
-        db_file.split_rule = json.dumps(split_rule_dict)
-        db_file.status = KnowledgeFileStatus.WAITING.value  # Parsing
-        db_file.updater_id = login_user.user_id
-        db_file.updater_name = login_user.user_name
-        db_file = await KnowledgeFileDao.async_update(db_file)
-
-        preview_cache_key = cls.get_preview_cache_key(req_data.knowledge_id, file_path=req_data.file_path)
-        file_worker.retry_knowledge_file_celery.delay(db_file.id, preview_cache_key, req_data.callback_url)
+        db_file = await cls.process_rebuild_file(db_file, req_data, login_user.user_id, login_user.user_name)
 
         return db_file.model_dump()
 
     @classmethod
-    def retry_files(
+    async def retry_files(
             cls,
             request: Request,
             login_user: UserPayload,
-            background_tasks: BackgroundTasks,
             req_data: dict,
     ):
-        from bisheng.worker.knowledge import file_worker
 
         db_file_retry = req_data.get("file_objs")
         if not db_file_retry:
             return []
         id2input = {file.get("id"): file for file in db_file_retry}
         file_ids = list(id2input.keys())
-        db_files: List[KnowledgeFile] = KnowledgeFileDao.select_list(file_ids=file_ids)
+        db_files: List[KnowledgeFile] = await KnowledgeFileDao.aget_file_by_ids(file_ids=file_ids)
         if not db_files:
             return []
-        knowledge = KnowledgeDao.query_by_id(db_files[0].knowledge_id)
+        knowledge = await KnowledgeDao.aquery_by_id(db_files[0].knowledge_id)
         if not knowledge:
             raise NotFoundError.http_exception()
-        if not login_user.access_check(
+        if not await login_user.async_access_check(
                 knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE_WRITE
         ):
             raise UnAuthorizedError.http_exception()
-        res = []
 
         req_data["knowledge_id"] = knowledge.id
 
-        minio_client = get_minio_storage_sync()
-        file_level_path = set()
+        tmp, file_level_path = await cls.process_retry_files(db_files, id2input, login_user)
 
-        for file in db_files:
-            input_file = id2input.get(file.id)
-
-            # file exist
-            file.object_name = input_file.get("object_name", file.object_name)
-            file_preview_cache_key = KnowledgeUtils.get_preview_cache_key(
-                file.knowledge_id, input_file.get("file_path", "")
-            )
-
-            if file.object_name.startswith('tmp'):
-                # Moving Temporary Files to the Official Directory
-                new_object_name = KnowledgeUtils.get_knowledge_file_object_name(file.id, file.object_name)
-                minio_client.copy_object_sync(source_object=file.object_name, dest_object=new_object_name,
-                                              source_bucket=minio_client.tmp_bucket,
-                                              dest_bucket=minio_client.bucket)
-                file.object_name = new_object_name
-            file.file_name = input_file.get("file_name", None) or file.file_name
-            file.remark = ""
-            file.split_rule = input_file["split_rule"]
-            file.status = KnowledgeFileStatus.WAITING.value  # Parsing
-            file.updater_id = login_user.user_id
-            file.updater_name = login_user.user_name
-            file_level_path.add(file.file_level_path)
-
-            file = KnowledgeFileDao.update(file)
-            res.append([file, file_preview_cache_key])
-        tmp = []
-        for one_file in res:
-            file_worker.retry_knowledge_file_celery.delay(one_file[0].id, one_file[1], None)
-            tmp.append(one_file[0])
         cls.upload_knowledge_file_hook(request, login_user, knowledge, tmp)
         for one in file_level_path:
-            cls.update_folder_update_time_sync(one)
+            await cls.update_folder_update_time(one)
         return []
 
     @classmethod
@@ -1097,9 +728,7 @@ class KnowledgeService(KnowledgeUtils):
         file_name = ""
         for one in file_list:
             file_name += "\n\n" + one.file_name
-        AuditLogService.upload_knowledge_file(
-            login_user, get_request_ip(request), knowledge.id, file_name
-        )
+        cls.audit_telemetry_service.audit_upload_knowledge_file(login_user, request, knowledge, file_list)
 
     @classmethod
     def process_one_file(
@@ -1166,11 +795,7 @@ class KnowledgeService(KnowledgeUtils):
             **file_kwargs if file_kwargs else {},
         )
         db_file = KnowledgeFileDao.add_file(db_file)
-        telemetry_service.log_event_sync(
-            user_id=login_user.user_id,
-            event_type=BaseTelemetryTypeEnum.NEW_KNOWLEDGE_FILE,
-            trace_id=trace_id_var.get(),
-        )
+        cls.audit_telemetry_service.telemetry_new_knowledge_file(login_user)
         # Saving original files
         db_file.object_name = KnowledgeUtils.get_knowledge_file_object_name(db_file.id, db_file.file_name)
         minio_client.put_object_sync(bucket_name=minio_client.bucket, object_name=db_file.object_name,
@@ -1298,9 +923,7 @@ class KnowledgeService(KnowledgeUtils):
         # <g id="Bold">Medical Treatment:</g>vectordb
         delete_knowledge_file_vectors(file_ids)
         KnowledgeFileDao.delete_batch(file_ids)
-        telemetry_service.log_event_sync(user_id=login_user.user_id,
-                                         event_type=BaseTelemetryTypeEnum.DELETE_KNOWLEDGE_FILE,
-                                         trace_id=trace_id_var.get())
+        cls.audit_telemetry_service.telemetry_delete_knowledge_file(login_user)
 
         # Delete Audit Log for Knowledge Base Files
         cls.delete_knowledge_file_hook(
@@ -1324,14 +947,7 @@ class KnowledgeService(KnowledgeUtils):
         logger.info(
             f"act=delete_knowledge_file_hook user={login_user.user_name} knowledge_id={knowledge_id}"
         )
-        # Log Audit Logs
-        # Log Audit Logs
-        file_name = ""
-        for one in file_list:
-            file_name += "\n\n" + one.file_name
-        AuditLogService.delete_knowledge_file(
-            login_user, get_request_ip(request), knowledge_id, file_name
-        )
+        cls.audit_telemetry_service.audit_delete_knowledge_file(login_user, request, knowledge_id, file_list)
 
     @classmethod
     def judge_knowledge_access(cls, login_user: UserPayload, knowledge_id: int, access_type: AccessType) -> Knowledge:
@@ -1571,10 +1187,10 @@ class KnowledgeService(KnowledgeUtils):
         """ Get the original download address of the file with authentication """
         file = KnowledgeFileDao.query_by_id_sync(file_id)
         if not file:
-            raise NotFoundError()
-        knowledge_info = KnowledgeDao.query_by_id(file.id)
+            raise NotFoundError(msg="file not found")
+        knowledge_info = KnowledgeDao.query_by_id(file.knowledge_id)
         if not knowledge_info:
-            raise NotFoundError()
+            raise NotFoundError(msg="knowledge not found")
         if not login_user.access_check(knowledge_info.user_id, str(knowledge_info.id), AccessType.KNOWLEDGE):
             raise UnAuthorizedError()
         return cls.get_file_share_url(file=file)
@@ -1585,7 +1201,7 @@ class KnowledgeService(KnowledgeUtils):
         if file is None:
             file = KnowledgeFileDao.query_by_id_sync(file_id)
         if not file:
-            raise NotFoundError()
+            raise NotFoundError(msg="file not found")
         minio_client = get_minio_storage_sync()
         if file.preview_file_object_name:
             original_url = cls.get_file_share_url_with_empty(file.object_name)

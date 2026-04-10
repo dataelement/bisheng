@@ -5,14 +5,30 @@ import request from "./request";
  * @param oldPassword 原密码
  * @param newPassword 新密码
  */
+function normalizeApiStatusCode(res: any): number | undefined {
+  const raw = res?.status_code ?? res?.code;
+  if (raw === undefined || raw === null) return undefined;
+  const n = typeof raw === "string" ? parseInt(raw, 10) : Number(raw);
+  return Number.isNaN(n) ? undefined : n;
+}
+
 export async function updatePasswordApi(data: {
   oldPassword: string;
   newPassword: string;
 }): Promise<any> {
-  return await request.post(`/api/v1/user/change_password`, {
+  const res: any = await request.post(`/api/v1/user/change_password`, {
     password: data.oldPassword,
     new_password: data.newPassword,
   });
+  const code = normalizeApiStatusCode(res);
+  if (code !== undefined && code !== 200) {
+    const msg = String(res?.status_message ?? res?.message ?? "").trim();
+    const err = new Error(msg || "change_password_failed");
+    (err as any).statusCode = code;
+    (err as any).apiResponse = res;
+    throw err;
+  }
+  return res;
 }
 
 /**

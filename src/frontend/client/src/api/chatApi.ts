@@ -235,6 +235,17 @@ export function parseStreamHistoryItem(raw: StreamHistoryItem): ChatMessage {
         } else {
             // User messages: { query, tags? }
             displayText = parsed.query || parsed.text || raw.message;
+            // Re-encode the first tag (if any) into the same `:::tag {...}:::`
+            // prefix the live send path uses, so the user bubble can render
+            // the chip after a history reload.
+            const firstTag = Array.isArray(parsed.tags) ? parsed.tags[0] : null;
+            if (firstTag && typeof firstTag.name === "string") {
+                const tagJson = JSON.stringify({
+                    id: Number(firstTag.id) || 0,
+                    name: firstTag.name,
+                });
+                displayText = `:::tag ${tagJson}:::\n${displayText}`;
+            }
         }
     } catch {
         displayText = raw.message || "";
@@ -299,6 +310,8 @@ export interface FolderSession {
     chat_id: string;
     flow_id: string;
     flow_name: string;
+    /** User-visible title; may be empty until renamed or title generation */
+    name?: string | null;
     create_time: string;
     update_time: string;
     [key: string]: any;
@@ -350,6 +363,17 @@ export async function deleteFolderSession(
         `/api/v1/knowledge/space/${spaceId}/chat/folder/session`,
         { data: body }
     );
+}
+
+/** Rename a chat session (POST /api/v1/chat/conversation/rename) */
+export async function renameConversation(
+    chatId: string,
+    name: string
+): Promise<void> {
+    await http.post(`/api/v1/chat/conversation/rename`, {
+        conversationId: chatId,
+        name: name.trim(),
+    });
 }
 
 /** Fetch folder/space chat history for a specific session */

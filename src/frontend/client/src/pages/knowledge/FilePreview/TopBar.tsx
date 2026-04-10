@@ -3,6 +3,29 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "~/components";
 import { cn } from "~/utils";
 
+/** 与 `public/assets/channel/grid-three.svg` 同形，描边用 currentColor 以便 active/hover 变色 */
+function SidebarToggleIcon({ className }: { className?: string }) {
+    return (
+        <svg
+            className={cn("size-4 shrink-0", className)}
+            viewBox="0 0 16 16"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            aria-hidden
+        >
+            <path
+                d="M13.1 2H2.9C2.40294 2 2 2.40294 2 2.9V13.1C2 13.5971 2.40294 14 2.9 14H13.1C13.5971 14 14 13.5971 14 13.1V2.9C14 2.40294 13.5971 2 13.1 2Z"
+                stroke="currentColor"
+                strokeWidth="1.33333"
+            />
+            <path d="M5 2V14" stroke="currentColor" strokeWidth="1.33333" strokeLinecap="round" />
+            <path d="M5 4.90088H2" stroke="currentColor" strokeWidth="1.33333" strokeLinecap="round" />
+            <path d="M5 8H2" stroke="currentColor" strokeWidth="1.33333" strokeLinecap="round" />
+            <path d="M5 11.0991H2" stroke="currentColor" strokeWidth="1.33333" strokeLinecap="round" />
+        </svg>
+    );
+}
+
 interface TopBarProps {
     fileName: string;
     /** Show sidebar toggle */
@@ -75,25 +98,23 @@ export function TopBar({
                         <Button
                             variant="ghost"
                             className={cn(
-                                "h-8 w-8 rounded-md p-1.5 border",
+                                "group h-8 w-8 rounded-md border p-1.5",
                                 sidebarOpen
-                                    ? "bg-primary/10 border-primary"
-                                    : "bg-white border-[#e5e6eb] hover:bg-[#f7f8fa]"
+                                    ? "border-primary bg-primary/10"
+                                    : "border-[#e5e6eb] bg-white hover:bg-[#f7f8fa]"
                             )}
-                            onClick={onToggleSidebar}>
-                            <img
+                            onClick={onToggleSidebar}
+                        >
+                            <SidebarToggleIcon
                                 className={cn(
-                                    "size-4",
-                                    // public/assets/channel/grid-three.svg is blue by default; when sidebar is closed, grey it out.
-                                    sidebarOpen ? "" : "grayscale brightness-75"
+                                    "transition-colors",
+                                    sidebarOpen ? "text-primary" : "text-[#86909c] group-hover:text-[#4e5969]"
                                 )}
-                                src={`${__APP_ENV__.BASE_URL}/assets/channel/grid-three.svg`}
-                                alt=""
                             />
                         </Button>
                     </div>
                 )}
-                <span className="text-xl font-semibold text-gray-800 flex-1">
+                <span className="text-xl font-semibold text-gray-800 flex-1 break-all">
                     {fileName}
                 </span>
             </div>

@@ -13,6 +13,7 @@ import {
   sidebarVisibleState,
 } from '~/pages/appChat/store/appSidebarAtoms';
 import { generateUUID } from '~/utils';
+import { useLocalize } from '~/hooks';
 
 /**
  * Hook for the app chat sidebar.
@@ -20,6 +21,7 @@ import { generateUUID } from '~/utils';
  */
 export function useAppSidebar() {
   const navigate = useNavigate();
+  const localize = useLocalize();
   const { fid: flowId, type: flowType, conversationId } = useParams();
   const { showToast } = useToastContext();
   const showToastRef = useRef(showToast);
@@ -30,6 +32,8 @@ export function useAppSidebar() {
   const [sidebarVisible, setSidebarVisible] = useRecoilState(sidebarVisibleState);
 
   const [loading, setLoading] = useState(false);
+  // Track whether we previously had conversations (to distinguish initial empty from delete-all)
+  const hadConversationsRef = useRef(false);
 
   /** Fetch conversation list for the current app and return it. */
   const fetchConversations = useCallback(async (): Promise<AppConversation[]> => {
@@ -51,10 +55,12 @@ export function useAppSidebar() {
       });
       setConversations(list);
 
-      // Notify when no conversation history exists for this app
-      if (list.length === 0) {
+      // Show toast only when user deletes all conversations (non-empty → empty),
+      // not on initial load when no history exists
+      if (list.length === 0 && hadConversationsRef.current) {
         showToastRef.current?.({ message: '历史会话已删除', severity: NotificationSeverity.ERROR });
       }
+      hadConversationsRef.current = list.length > 0;
       return list;
     } catch {
       console.error('Failed to fetch app conversations');
@@ -75,7 +81,7 @@ export function useAppSidebar() {
     // and the auto-select guard won't redirect away from it.
     setConversations((prev) => [{
       id: chatId,
-      title: 'New Chat',
+      title: localize('com_ui_new_chat'),
       flowId: flowId,
       flowType: Number(flowType),
       updatedAt: new Date().toISOString(),
@@ -120,12 +126,18 @@ export function useAppSidebar() {
       if (hasAutoSelectedRef.current === flowId) return;
       hasAutoSelectedRef.current = flowId!;
 
-      // Auto-select the most recent conversation when the current
-      // conversationId doesn't match any existing conversation
-      // (e.g. freshly opened from app center with a generated UUID).
-      if (list.length > 0 && conversationId && !list.some(c => c.id === conversationId)) {
-        const latest = list[0];
-        navigate(`/app/${latest.id}/${latest.flowId}/${latest.flowType}`, { replace: true });
+      // When the current conversationId doesn't match any existing conversation
+      // (e.g. freshly opened from app center with a generated UUID), prepend a
+      // placeholder so the sidebar shows it immediately — same as createNewChat.
+      if (conversationId && !list.some(c => c.id === conversationId)) {
+        setConversations((prev) => [{
+          id: conversationId,
+          title: localize('com_ui_new_chat'),
+          flowId: flowId!,
+          flowType: Number(flowType),
+          updatedAt: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+        }, ...prev]);
       }
     });
     // Only re-run when fetchConversations identity changes (i.e. flowId changes).

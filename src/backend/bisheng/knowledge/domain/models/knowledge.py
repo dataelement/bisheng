@@ -164,6 +164,14 @@ class KnowledgeDao(KnowledgeBase):
             session.commit()
 
     @classmethod
+    async def async_update_knowledge_update_time_by_id(cls, knowledge_id: int):
+        statement = update(Knowledge).where(col(Knowledge.id) == knowledge_id).values(
+            update_time=text('NOW()'))
+        async with get_async_db_session() as session:
+            await session.exec(statement)
+            await session.commit()
+
+    @classmethod
     def query_by_id(cls, knowledge_id: int) -> Knowledge:
         with get_sync_db_session() as session:
             return session.get(Knowledge, knowledge_id)
@@ -524,7 +532,7 @@ class KnowledgeDao(KnowledgeBase):
     @classmethod
     async def async_delete_knowledge(cls, knowledge_id: int, only_clear: bool = False):
         async with get_async_db_session() as session:
-            await session.exec(delete(Knowledge).where(col(Knowledge.id) == knowledge_id))
+            await session.exec(delete(KnowledgeFile).where(col(KnowledgeFile.knowledge_id) == knowledge_id))
             if not only_clear:
                 await session.exec(delete(Knowledge).where(col(Knowledge.id) == knowledge_id))
             await session.commit()

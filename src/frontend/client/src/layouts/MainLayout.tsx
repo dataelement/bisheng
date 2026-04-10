@@ -13,7 +13,8 @@ import { useRecoilState } from 'recoil';
 import { useMediaQuery } from '~/hooks';
 import { bishengConfState } from '~/pages/appChat/store/atoms';
 import { useGetBsConfig } from '~/hooks/queries/data-provider';
-import { useAuthContext, useLocalize } from '~/hooks';
+import { useAuthContext, useLocalize, useScrollbarWhileScrolling } from '~/hooks';
+import { Tooltip, TooltipContent, TooltipTrigger } from '~/components/ui/Tooltip2';
 import store from '~/store';
 import { cn } from '~/utils';
 import { UserPopMenu } from './UserPopMenu';
@@ -23,37 +24,39 @@ import { UserPopMenu } from './UserPopMenu';
 // always reads the latest value in the same render cycle.
 const lastSectionPaths: Record<string, string> = {};
 
+function appsSectionLinkTarget(): string {
+  const p = lastSectionPaths.apps;
+  if (!p) return '/apps';
+  return p.startsWith('/apps/explore') ? '/apps' : p;
+}
+
 interface SidebarItemProps {
   icon: React.ReactNode;
   to: string;
-  active: boolean; // 改为手动传入 active 状态
-  label?: string;
-  showLabel?: boolean;
+  active: boolean;
+  label: string;
 }
 
-function SidebarItem({ icon, to, active, label, showLabel }: SidebarItemProps) {
+function SidebarItem({ icon, to, active, label }: SidebarItemProps) {
   return (
-    <NavLink
-      to={to}
-      className={cn(
-        showLabel ? "flex flex-col items-center justify-center p-3 rounded-lg cursor-pointer transition-colors hover:bg-[#e6edfc] gap-1" : "flex items-center justify-center p-3 rounded-lg cursor-pointer transition-colors hover:bg-[#e6edfc]",
-        active && "bg-[#e6edfc]"
-      )}
-    >
-      {React.cloneElement(icon as React.ReactElement, {
-        className: cn("size-5", active ? "text-[#335CFF]" : "text-[#818181]"),
-      })}
-      {showLabel && label ? (
-        <span
+    <Tooltip delayDuration={0}>
+      <TooltipTrigger asChild>
+        <NavLink
+          to={to}
           className={cn(
-            "text-[11px] leading-4 font-['PingFang_SC']",
-            active ? "text-[#335CFF]" : "text-[#818181]"
+            "flex items-center justify-center p-3 rounded-lg cursor-pointer transition-colors hover:bg-[#e6edfc]",
+            active && "bg-[#e6edfc]"
           )}
         >
-          {label}
-        </span>
-      ) : null}
-    </NavLink>
+          {React.cloneElement(icon as React.ReactElement, {
+            className: cn("size-5", active ? "text-[#335CFF]" : "text-[#818181]"),
+          })}
+        </NavLink>
+      </TooltipTrigger>
+      <TooltipContent side="right" sideOffset={8}>
+        {label}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -86,28 +89,28 @@ function Sidebar({ mobileSidebarOpen }: { mobileSidebarOpen: boolean }) {
       section: 'home',
       to: lastSectionPaths.home || '/c/new',
       icon: <HomeIcon />,
-      label: '首页',
+      label: localize('com_nav_home'),
       isActive: /^\/(c|linsight)(\/|$)/.test(pathname),
     },
     {
       section: 'apps',
-      to: lastSectionPaths.apps || '/apps',
+      to: appsSectionLinkTarget(),
       icon: <GlobeIcon />,
-      label: '应用',
+      label: localize('com_nav_app_center'),
       isActive: matchPath('/app/:id/:fid/:type', pathname) !== null || pathname.startsWith('/apps'),
     },
     {
       section: 'channel',
       to: lastSectionPaths.channel || '/channel',
       icon: <LinkIcon />,
-      label: '订阅',
+      label: localize('com_ui_channel'),
       isActive: pathname.startsWith('/channel'),
     },
     {
       section: 'knowledge',
       to: lastSectionPaths.knowledge || '/knowledge',
       icon: <BookOpenIcon />,
-      label: '知识库',
+      label: localize('com_knowledge.knowledge_space'),
       isActive: pathname.startsWith('/knowledge'),
     },
   ].filter((l) => {
@@ -149,6 +152,7 @@ function Sidebar({ mobileSidebarOpen }: { mobileSidebarOpen: boolean }) {
               key={link.section}
               to={link.to}
               icon={link.icon}
+              label={link.label}
               active={link.isActive}
               label={(link as any).label}
               showLabel={showAppLabels}
@@ -193,6 +197,7 @@ export default function MainLayout() {
       // ignore
     }
   }, [isMobile, isAppSection, mobileSidebarOpen]);
+  const { onScroll: onOutletScroll, scrollingProps: outletScrollingProps } = useScrollbarWhileScrolling();
 
   // Auth guard: redirect to login when user query finishes without a valid user.
   // The 401 interceptor in request.ts already handles production redirect,
@@ -219,18 +224,21 @@ export default function MainLayout() {
 
   // Track last visited path per sidebar section.
   // Runs synchronously before Sidebar renders in the same cycle.
-  if (/^\/(c|linsight)(\/|$)/.test(pathname))       lastSectionPaths.home = pathname;
-  else if (/^\/(apps|app)(\/|$)/.test(pathname))     lastSectionPaths.apps = pathname;
-  else if (/^\/channel(\/|$)/.test(pathname))        lastSectionPaths.channel = pathname;
-  else if (pathname.startsWith('/knowledge'))          lastSectionPaths.knowledge = pathname;
+  if (/^\/(c|linsight)(\/|$)/.test(pathname)) lastSectionPaths.home = pathname;
+  else if (/^\/(apps|app)(\/|$)/.test(pathname)) {
+    // 应用广场是应用中心的子页；从其它模块再点「应用」时应回到应用中心，而非恢复广场路由
+    lastSectionPaths.apps = pathname.startsWith('/apps/explore') ? '/apps' : pathname;
+  } else if (/^\/channel(\/|$)/.test(pathname)) lastSectionPaths.channel = pathname;
+  else if (pathname.startsWith('/knowledge')) lastSectionPaths.knowledge = pathname;
 
   // Each sidebar tab gets its own KeepAlive cache key so switching
   // between tabs triggers cache/restore instead of re-rendering.
   const cacheKey = (() => {
-    if (/^\/(c|linsight)(\/|$)/.test(pathname)) return 'chat_tab';
-    if (/^\/(apps|app)(\/|$)/.test(pathname))   return 'apps_tab';
-    if (/^\/channel(\/|$)/.test(pathname))      return 'channel_tab';
-    if (pathname.startsWith('/knowledge'))        return 'knowledge_tab';
+    if (/^\/linsight(\/|$)/.test(pathname)) return 'linsight_tab';
+    if (/^\/c(\/|$)/.test(pathname)) return 'chat_tab';
+    if (/^\/(apps|app)(\/|$)/.test(pathname)) return 'apps_tab';
+    if (/^\/channel(\/|$)/.test(pathname)) return 'channel_tab';
+    if (pathname.startsWith('/knowledge')) return 'knowledge_tab';
     return 'other';
   })();
 
@@ -243,17 +251,11 @@ export default function MainLayout() {
           id={cacheKey}
           saveScroll={true}
         >
-          <div className='bg-white rounded-xl shadow-xl overflow-hidden h-[calc(100vh-16px)] relative'>
-            {isMobile && isAppsArea && (
-              <button
-                type="button"
-                aria-label={mobileSidebarOpen ? '收起侧边栏' : '展开侧边栏'}
-                onClick={() => setMobileSidebarOpen((v) => !v)}
-                className="absolute top-[8px] left-[10px] z-[70] size-9 rounded-md bg-transparent border-0 hover:bg-[#f2f3f5] flex items-center justify-center"
-              >
-                {mobileSidebarOpen ? <X className="size-4 text-[#1d2129]" /> : <Menu className="size-4 text-[#1d2129]" />}
-              </button>
-            )}
+          <div
+            className="h-[calc(100vh-16px)] overflow-y-auto overscroll-y-contain scroll-on-scroll rounded-xl bg-white shadow-xl"
+            onScroll={onOutletScroll}
+            {...outletScrollingProps}
+          >
             {outlet}
           </div>
         </KeepAlive>

@@ -108,10 +108,11 @@ export default function FilePreviewPage() {
         <Button
             variant="ghost"
             onClick={handleToggleAiAssistant}
-            className="h-8 px-1.5 text-sm gap-1 bg-gradient-to-br from-[#335CFF] to-[#7433FF] bg-clip-text text-transparent hover:text-transparent"
+            className="h-8 px-1.5 text-sm gap-1 hover:bg-accent"
         >
             <AiChatIcon className="size-3.5" />
-            {localize("com_knowledge.ai_assistant")}</Button>
+            <span className="ai-gradient-text">{localize("com_knowledge.ai_assistant")}</span>
+        </Button>
     );
 
     // Loading state while fetching preview URL
@@ -155,11 +156,13 @@ export default function FilePreviewPage() {
 
             {/* Splitter */}
             {showAiAssistant && (
-                <div
-                    onMouseDown={startResizing}
-                    className="group relative w-[1px] cursor-col-resize bg-[#e5e6eb] transition-all hover:w-1 hover:bg-primary active:w-1 active:bg-primary z-20 shrink-0"
-                >
-                    <div className="absolute inset-y-0 -left-1.5 -right-1.5 z-10" />
+                <div className="relative z-20 w-[1px] min-w-[1px] max-w-[1px] flex-none shrink-0">
+                    <div
+                        onMouseDown={startResizing}
+                        className="group absolute inset-y-0 left-1/2 z-10 flex w-4 -translate-x-1/2 cursor-col-resize justify-center"
+                    >
+                        <div className="pointer-events-none w-px self-stretch bg-[#e5e6eb] transition-[width,background-color] duration-150 group-hover:w-1 group-hover:bg-primary group-active:w-1 group-active:bg-primary" />
+                    </div>
                 </div>
             )}
 

@@ -12,7 +12,8 @@ import { FileTable } from "./FileTable";
 import { KnowledgeSpaceHeader } from "./KnowledgeSpaceHeader";
 import { PaginationBar } from "./PaginationBar";
 import { SelectionPathBreadcrumb } from "./SelectionPathBreadcrumb";
-import { useLocalize } from "~/hooks";
+import { useLocalize, useScrollbarWhileScrolling } from "~/hooks";
+import { getFullWidthLength } from "~/utils";
 
 interface KnowledgeSpaceContentProps {
     space: KnowledgeSpace;
@@ -41,8 +42,6 @@ interface KnowledgeSpaceContentProps {
     onToggleAiAssistant?: () => void;
     isAiAssistantOpen?: boolean;
     onCreateSpace?: () => void;
-    sidebarCollapsed?: boolean;
-    onExpandSidebar?: () => void;
 }
 
 export function KnowledgeSpaceContent({
@@ -72,10 +71,10 @@ export function KnowledgeSpaceContent({
     onToggleAiAssistant,
     isAiAssistantOpen,
     onCreateSpace,
-    sidebarCollapsed,
-    onExpandSidebar,
 }: KnowledgeSpaceContentProps) {
     const localize = useLocalize();
+    const cardScroll = useScrollbarWhileScrolling();
+    const listBodyScroll = useScrollbarWhileScrolling();
     const displayFiles = [
         ...(creatingFolder ? [creatingFolder] : []),
         ...uploadingFiles,
@@ -150,6 +149,8 @@ export function KnowledgeSpaceContent({
 
     useEffect(() => {
         setSelectedFiles(new Set());
+        setSearchQuery("");
+        setSearchTagIds([]); // 切换空间时清空搜索条件
     }, [space.id]);
 
     const isAdmin = space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
@@ -291,7 +292,7 @@ export function KnowledgeSpaceContent({
                 // Single file: use preview_url for channel files, original_url for others
                 const previewData = await getFilePreviewApi(String(space.id), fileId);
                 const downloadUrl = file?.fileSource === 'channel'
-                    ? previewData.preview_url
+                    ? previewData.preview_url || previewData.original_url
                     : previewData.original_url;
                 if (!downloadUrl) { showToast({ message: localize("com_knowledge.get_download_link_failed"), status: "error" }); return; }
                 triggerUrlDownload(downloadUrl, file?.name);
@@ -427,7 +428,7 @@ export function KnowledgeSpaceContent({
         if (!trimmed) {
             return isFolder && isCreating ? localize("com_knowledge.folder_name_empty") : localize("com_knowledge.name_empty");
         }
-        if (trimmed.length > 50) {
+        if (getFullWidthLength(trimmed) > 50) {
             return localize("com_knowledge.name_max_50");
         }
 
@@ -448,7 +449,7 @@ export function KnowledgeSpaceContent({
 
     return (
         <div
-            className="px-4 flex-1 flex flex-col h-full overflow-hidden relative rounded-lg"
+            className="flex h-full min-w-0 flex-1 flex-col overflow-hidden rounded-lg px-4"
             onDragEnter={handleDragEnter}
             onDragLeave={handleDragLeave}
             onDragOver={handleDragOver}
@@ -490,86 +491,94 @@ export function KnowledgeSpaceContent({
                 onBatchDelete={handleBatchDelete}
                 onToggleAiAssistant={onToggleAiAssistant}
                 isAiAssistantOpen={isAiAssistantOpen}
-                sidebarCollapsed={sidebarCollapsed}
-                onExpandSidebar={onExpandSidebar}
             />
 
             {/* Content Container (Scrollable) */}
-            <div className="flex-1 min-w-0 min-h-0 flex flex-col">
-                {displayFiles.length === 0 ? (
-                    <div className="flex flex-1 flex-col items-center justify-center py-10 text-center h-full">
-                        <img
-                            className="size-[120px] mb-4 object-contain opacity-90"
-                            src={`${__APP_ENV__.BASE_URL}/assets/channel/empty.png`}
-                            alt="empty"
-                        />
-                        <p className="text-[14px] leading-6 text-[#4E5969]">
-                            {searchQuery ? localize("com_knowledge.no_matched_file") : isAdmin ? localize("com_knowledge.no_file_here_please") : localize("com_knowledge.no_file_here")}
-                            {isAdmin && !searchQuery && (
-                                <span
-                                    className="cursor-pointer text-[#165DFF] transition-colors hover:text-[#4080FF] active:text-[#0E42D2]"
-                                    onClick={triggerUpload}
-                                >
-                                    {localize("com_knowledge.upload_file")}
-                                </span>
-                            )}
-                        </p>
-                    </div>
-                ) : viewMode === "card" ? (
-                    <div className="flex-1 overflow-y-auto">
-                        <div
-                            ref={cardGridRef}
-                            className="py-4 grid gap-4 w-full min-w-0"
-                            style={{ gridTemplateColumns: `repeat(${cardCols}, minmax(0, 1fr))` }}
-                        >
-                            {displayFiles.map((file) => (
-                                <FileCard
-                                    key={file.id}
-                                    file={file}
-                                    userRole={space.role}
-                                    isSelected={selectedFiles.has(file.id)}
-                                    onSelect={(selected) => handleSelectFile(file.id, selected)}
-                                    onDownload={() => handleSingleDownload(file.id)}
-                                    onRename={(newName) => onRenameFile(file.id, newName)}
-                                    onDelete={() => handleDelete(file.id)}
-                                    onEditTags={() => handleOpenEditTags(file.id)}
-                                    onRetry={() => handleSingleRetry(file.id)}
-                                    onNavigateFolder={() => onNavigateFolder(file.id)}
-                                    onPreview={handlePreviewFile}
-                                    onValidateName={(newName) => validateFileName(newName, file.type === FileType.FOLDER, file.id, !!file.isCreating)}
-                                    onCancelCreate={onCancelCreateFolder}
-                                />
-                            ))}
-                        </div>
-                    </div>
-                ) : (
-                    <div className="flex-1 min-h-0 min-w-0 flex flex-col py-4">
-                        <div className="flex-1 overflow-y-auto">
-                            <FileTable files={displayFiles}
-                                selectedFiles={selectedFiles}
-                                handleSelectAll={handleSelectAll}
-                                handleSelectFile={handleSelectFile}
-                                isAdmin={isAdmin}
-                                onDownload={(id) => handleSingleDownload(id)}
-                                onEditTags={(id) => handleOpenEditTags(id)}
-                                onRename={(id, newName) => onRenameFile(id, newName)}
-                                onDelete={(id) => handleDelete(id)}
-                                onRetry={(id) => handleSingleRetry(id)}
-                                onNavigateFolder={(id) => onNavigateFolder(id)}
-                                onPreview={(id) => handlePreviewFile(id)}
-                                onValidateName={validateFileName}
-                                onCancelCreate={onCancelCreateFolder}
-                                sortBy={sortBy}
-                                sortDirection={sortDirection}
-                                onSort={handleSort}
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
+                    {displayFiles.length === 0 ? (
+                        <div className="flex h-full flex-1 flex-col items-center justify-center py-10 text-center">
+                            <img
+                                className="size-[120px] mb-4 object-contain opacity-90"
+                                src={`${__APP_ENV__.BASE_URL}/assets/channel/empty.png`}
+                                alt="empty"
                             />
+                            <p className="text-[14px] leading-6 text-[#4E5969]">
+                                {searchQuery ? localize("com_knowledge.no_matched_file") : isAdmin ? localize("com_knowledge.no_file_here_please") : localize("com_knowledge.no_file_here")}
+                                {isAdmin && !searchQuery && (
+                                    <span
+                                        className="cursor-pointer text-[#165DFF] transition-colors hover:text-[#4080FF] active:text-[#0E42D2]"
+                                        onClick={triggerUpload}
+                                    >
+                                        {localize("com_knowledge.upload_file")}
+                                    </span>
+                                )}
+                            </p>
                         </div>
-                    </div>
-                )}
+                    ) : viewMode === "card" ? (
+                        <div
+                            className="flex-1 overflow-y-auto scroll-on-scroll"
+                            onScroll={cardScroll.onScroll}
+                            {...cardScroll.scrollingProps}
+                        >
+                            <div
+                                ref={cardGridRef}
+                                className="grid w-full min-w-0 gap-4 py-4"
+                                style={{ gridTemplateColumns: `repeat(${cardCols}, minmax(0, 1fr))` }}
+                            >
+                                {displayFiles.map((file) => (
+                                    <FileCard
+                                        key={file.id}
+                                        file={file}
+                                        userRole={space.role}
+                                        isSelected={selectedFiles.has(file.id)}
+                                        onSelect={(selected) => handleSelectFile(file.id, selected)}
+                                        onDownload={() => handleSingleDownload(file.id)}
+                                        onRename={(newName) => onRenameFile(file.id, newName)}
+                                        onDelete={() => handleDelete(file.id)}
+                                        onEditTags={() => handleOpenEditTags(file.id)}
+                                        onRetry={() => handleSingleRetry(file.id)}
+                                        onNavigateFolder={() => onNavigateFolder(file.id)}
+                                        onPreview={handlePreviewFile}
+                                        onValidateName={(newName) => validateFileName(newName, file.type === FileType.FOLDER, file.id, !!file.isCreating)}
+                                        onCancelCreate={onCancelCreateFolder}
+                                    />
+                                ))}
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="flex min-h-0 min-w-0 flex-1 flex-col py-4">
+                            <div
+                                className="min-h-0 min-w-0 flex-1 overflow-y-auto scroll-on-scroll"
+                                onScroll={listBodyScroll.onScroll}
+                                {...listBodyScroll.scrollingProps}
+                            >
+                                <FileTable files={displayFiles}
+                                    selectedFiles={selectedFiles}
+                                    handleSelectAll={handleSelectAll}
+                                    handleSelectFile={handleSelectFile}
+                                    isAdmin={isAdmin}
+                                    onDownload={(id) => handleSingleDownload(id)}
+                                    onEditTags={(id) => handleOpenEditTags(id)}
+                                    onRename={(id, newName) => onRenameFile(id, newName)}
+                                    onDelete={(id) => handleDelete(id)}
+                                    onRetry={(id) => handleSingleRetry(id)}
+                                    onNavigateFolder={(id) => onNavigateFolder(id)}
+                                    onPreview={(id) => handlePreviewFile(id)}
+                                    onValidateName={validateFileName}
+                                    onCancelCreate={onCancelCreateFolder}
+                                    sortBy={sortBy}
+                                    sortDirection={sortDirection}
+                                    onSort={handleSort}
+                                />
+                            </div>
+                        </div>
+                    )}
+                </div>
             </div>
 
             {/* Footer */}
-            <div className="py-3 px-4 flex items-center justify-between border-t border-[#e5e6eb] flex-shrink-0 bg-white">
+            <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-y-1 border-t border-[#e5e6eb] bg-white px-4 py-3">
                 {/* Left side: selection path (only in search mode with selections) */}
                 {isSearching && selectedFiles.size > 0 ? (
                     <SelectionPathBreadcrumb

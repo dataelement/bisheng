@@ -1,5 +1,5 @@
 import * as pdfjsLib from "pdfjs-dist";
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import { cn } from "~/utils";
 
 interface SidebarProps {
@@ -62,6 +62,7 @@ function ThumbnailItem({
 }) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const rendered = useRef(false);
+    const [itemHeight, setItemHeight] = useState<number>(200);
 
     const render = useCallback(async () => {
         if (rendered.current || !canvasRef.current) return;
@@ -80,6 +81,9 @@ function ThumbnailItem({
             canvas.height = scaledViewport.height;
             canvas.style.width = `${thumbWidth}px`;
             canvas.style.height = `${scaledViewport.height}px`;
+
+            // 更新容器高度：canvas高度 + 底部文字及边距预估
+            setItemHeight(scaledViewport.height + 24);
 
             const ctx = canvas.getContext("2d");
             if (!ctx) return;
@@ -102,14 +106,14 @@ function ThumbnailItem({
             data-page={pageNumber}
             onClick={onClick}
             className={cn(
-                "cursor-pointer rounded-md overflow-hidden border-2 transition-colors flex flex-col items-center relative",
+                "cursor-pointer rounded-md overflow-hidden border-2 transition-colors flex flex-col items-center justify-center relative shrink-0",
                 isActive
                     ? "border-[#165dff] shadow-sm"
                     : "border-transparent hover:border-[#c9cdd4]"
             )}
-            style={{ minHeight: '200px' }}
+            style={{ height: itemHeight }}
         >
-            <canvas ref={canvasRef} className="w-full block" />
+            <canvas ref={canvasRef} className="w-full block shrink-0" />
             {!isActive && (
                 <div className="absolute inset-0 bg-black/40 pointer-events-none" />
             )}

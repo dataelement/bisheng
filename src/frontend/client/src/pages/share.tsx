@@ -34,7 +34,7 @@ export default function Share() {
         }
 
         getShareParamsApi(shareToken).then(res => {
-            if (res.status_code === 404) {
+            if ([404, 500].includes(res.status_code)) {
                 console.log('404 page')
                 return navigate('/404', { replace: true })
             }

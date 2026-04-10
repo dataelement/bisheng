@@ -1,18 +1,72 @@
-import { ChevronLeft, Plus, Share2 } from 'lucide-react';
+import { ChevronLeft } from 'lucide-react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useRecoilValue } from 'recoil';
-import { currentChatState } from '~/pages/appChat/store/atoms';
-import { useAppSidebar } from '~/pages/appChat/hooks/useAppSidebar';
 import AppAvator from '~/components/Avator';
-import { AppSwitcherDropdown } from '~/pages/appChat/components/AppSwitcherDropdown';
-import { AppSidebarConvoItem } from '~/pages/appChat/components/AppSidebarConvoItem';
-import { cn } from '~/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '~/components/ui/Tooltip2';
+import { useLocalize } from '~/hooks';
+import { AppSidebarConvoItem } from '~/pages/appChat/components/AppSidebarConvoItem';
+import { AppSwitcherDropdown } from '~/pages/appChat/components/AppSwitcherDropdown';
+import { useAppSidebar } from '~/pages/appChat/hooks/useAppSidebar';
+import { currentChatState } from '~/pages/appChat/store/atoms';
+import { cn } from '~/utils';
 
-import TodayItemIcon from '~/components/ui/icon/TodayItem';
+function formatConversationTimeGroupLabel(label: string, localize: (key: string) => string) {
+    return label.startsWith('com_ui_date_') || label.startsWith('com_') ? localize(label) : label;
+}
+
+/** 仅当单行 truncate 实际溢出时显示完整文案的 Tooltip */
+function TruncatedLineTooltip({ text, className }: { text: string; className?: string }) {
+    const ref = useRef<HTMLParagraphElement>(null);
+    const [truncated, setTruncated] = useState(false);
+
+    const measure = useCallback(() => {
+        const el = ref.current;
+        if (!el) return;
+        setTruncated(el.scrollWidth > el.clientWidth + 1);
+    }, []);
+
+    useLayoutEffect(() => {
+        measure();
+    }, [text, measure]);
+
+    useEffect(() => {
+        const el = ref.current;
+        if (!el || typeof ResizeObserver === 'undefined') return;
+        const ro = new ResizeObserver(measure);
+        ro.observe(el);
+        return () => ro.disconnect();
+    }, [measure]);
+
+    const pClassName = cn(className, truncated && 'cursor-default');
+
+    if (!truncated) {
+        return (
+            <p ref={ref} className={pClassName}>
+                {text}
+            </p>
+        );
+    }
+
+    return (
+        <TooltipProvider delayDuration={300}>
+            <Tooltip>
+                <TooltipTrigger asChild>
+                    <p ref={ref} className={pClassName}>
+                        {text}
+                    </p>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" align="start" className="max-w-[200px]">
+                    {text}
+                </TooltipContent>
+            </Tooltip>
+        </TooltipProvider>
+    );
+}
 
 export function SideNav() {
     const navigate = useNavigate();
+    const localize = useLocalize();
 
     // Current conversation's app data
     const chatState = useRecoilValue(currentChatState);
@@ -38,7 +92,7 @@ export function SideNav() {
                 >
                     <ChevronLeft size={16} className="text-[#212121]" />
                 </button>
-                <span className="text-[14px] font-medium leading-[22px]">应用对话</span>
+                <span className="text-[14px] font-medium leading-[22px]">{localize('com_app_chat_sidebar_title')}</span>
             </div>
 
             {/* App card */}
@@ -65,18 +119,10 @@ export function SideNav() {
                                     <AppSwitcherDropdown />
                                 </div>
                             </div>
-                            <TooltipProvider delayDuration={300}>
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        <p className="text-[12px] text-[#a9aeb8] leading-[19.5px] truncate cursor-default">
-                                            {flowData?.description || '暂无描述信息'}
-                                        </p>
-                                    </TooltipTrigger>
-                                    <TooltipContent side="bottom" align="start" className="max-w-[200px]">
-                                        {flowData?.description || '暂无描述信息'}
-                                    </TooltipContent>
-                                </Tooltip>
-                            </TooltipProvider>
+                            <TruncatedLineTooltip
+                                text={flowData?.description || '暂无描述信息'}
+                                className="text-[12px] text-[#a9aeb8] leading-[19.5px] truncate"
+                            />
                         </div>
                     </div>
 
@@ -86,31 +132,38 @@ export function SideNav() {
                             type="button"
                             className="flex-1 min-w-0 h-[28px] flex items-center justify-center gap-1 bg-white border border-[#ececec] rounded-[6px] text-[14px] leading-[22px] hover:bg-gray-50 transition-colors max-[575px]:px-2"
                         >
-                            <Share2 className="size-4 shrink-0 text-[#212121] hidden max-[575px]:block" aria-hidden />
-                            <span className="max-[575px]:sr-only">分享应用</span>
+                            {localize('com_app_share_app')}
                         </button>
                         <button
                             onClick={createNewChat}
                             type="button"
                             className="flex-1 min-w-0 h-[28px] flex items-center justify-center gap-1 bg-white border border-[#ececec] rounded-[6px] text-[14px] leading-[22px] hover:bg-gray-50 transition-colors max-[576px]:px-2"
                         >
-                            <Plus className="size-4 shrink-0 text-[#212121] hidden max-[576px]:block" aria-hidden />
-                            <span className="max-[576px]:sr-only">开启新对话</span>
+                            {localize('com_knowledge_start_new_chat')}
                         </button>
                     </div>
                 </div>
             </div>
 
             {/* Conversation list */}
-            <div className="flex-1 overflow-y-auto pb-[20px] flex flex-col">
+            <div className="flex-1 overflow-y-auto pb-[20px] flex flex-col min-h-0">
                 {groups.length === 0 ? (
-                    <div className="text-center text-gray-400 text-sm py-10">还没有任何历史对话</div>
+                    <div className="flex flex-1 flex-col items-center justify-center min-h-[120px] px-3 py-6">
+                        <img
+                            src={`${__APP_ENV__.BASE_URL || ''}/assets/channel/ai-home.png`}
+                            alt=""
+                            className="mb-2 h-14 w-14 object-contain shrink-0"
+                        />
+                        <p className="text-center text-[12px] leading-[19.5px] text-[#86909c]">
+                            {localize('com_app_chat_sidebar_empty')}
+                        </p>
+                    </div>
                 ) : (
                     groups.map((group, groupIdx) => (
                         <div key={groupIdx} className="flex flex-col">
                             {/* Time label */}
                             <div className="text-black opacity-60 px-[12px] pt-4 text-[12px] mb-1">
-                                {group.label}
+                                {formatConversationTimeGroupLabel(group.label, localize)}
                             </div>
                             {/* Items */}
                             <div className="flex flex-col">

@@ -80,7 +80,7 @@ export const LoginPage = () => {
                     location.href = `${__APP_ENV__.BASE_URL}${location.pathname}` === '/' ? rootUrl : location.href
                 }
             }), (error) => {
-                if (error.indexOf('过期') !== -1) { // 有时间改为 code 判断
+                if (error?.code === 10601) { // 密码过期
                     localStorage.setItem('account', mail)
                     navigate('/reset', { state: { noback: true } })
                     return true // Skip the default error toast; resetPwd page shows its own

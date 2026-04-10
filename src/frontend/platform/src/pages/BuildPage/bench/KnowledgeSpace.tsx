@@ -115,7 +115,7 @@ export default function KnowledgeSpace() {
                             </>
                         </div>
                     </div>
-                    <div className="flex justify-end gap-4 absolute bottom-4 right-4">
+                    <div className="flex justify-end gap-4 absolute bottom-1 right-4">
                         <Preview onBeforView={handleSave} />
                         <Button onClick={handleSave}>{t('save')}</Button>
                     </div>
@@ -130,7 +130,7 @@ const useKnowledgeConfig = () => {
     const { t } = useTranslation();
     const [formData, setFormData] = useState<KnowledgeConfigForm>({
         systemPrompt: t('chatConfig.systemPrompt2'),
-        userPrompt: '',
+        userPrompt: t('chatConfig.retrievedAndQuestion'),
         maxChunkSize: 15000,
     });
 
@@ -142,15 +142,22 @@ const useKnowledgeConfig = () => {
     // 初始化时从后台读取配置
     useEffect(() => {
         getKnowledgeConfigApi().then((res) => {
-            if (!res) return;
-            const cfg = res as any;
-            const systemPromptFromRes = cfg.system_prompt ?? cfg.systemPrompt;
-            const userPromptFromRes = cfg.user_prompt ?? cfg.userPrompt;
-            const maxChunkSizeFromRes = cfg.max_chunk_size ?? cfg.maxTokens;
+            // Interceptor returns response.data.data — null when no config row exists yet.
+            const cfg = res != null && typeof res === 'object' ? (res as Record<string, unknown>) : null;
+            const systemPromptFromRes = cfg?.system_prompt ?? cfg?.systemPrompt;
+            const userPromptFromRes = cfg?.user_prompt ?? cfg?.userPrompt;
+            const maxChunkSizeFromRes = cfg?.max_chunk_size ?? cfg?.maxTokens;
+            const defaultUser = t('chatConfig.retrievedAndQuestion');
+            const normalizeNonEmptyString = (value: unknown): string | undefined => {
+                if (typeof value !== 'string') return undefined;
+                const trimmed = value.trim();
+                // Treat empty string / whitespace-only as "API empty" and do not override defaults.
+                return trimmed ? value : undefined;
+            };
             setFormData((prev) => ({
                 ...prev,
-                systemPrompt: systemPromptFromRes || t('chatConfig.systemPrompt2'),
-                userPrompt: userPromptFromRes ?? prev.userPrompt,
+                systemPrompt: normalizeNonEmptyString(systemPromptFromRes) ?? t('chatConfig.systemPrompt2'),
+                userPrompt: normalizeNonEmptyString(userPromptFromRes) ?? defaultUser,
                 maxChunkSize: typeof maxChunkSizeFromRes === 'number' ? maxChunkSizeFromRes : prev.maxChunkSize,
             }));
         });

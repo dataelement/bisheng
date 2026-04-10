@@ -1,4 +1,5 @@
 import * as React from "react"
+import cn from "~/utils/cn"
 
 const Avatar = React.forwardRef<
   HTMLSpanElement,
@@ -6,7 +7,7 @@ const Avatar = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <span
     ref={ref}
-    className={`relative flex h-10 w-10 shrink-0 overflow-hidden rounded-full ${className || ''}`}
+    className={cn("relative flex h-10 w-10 shrink-0 overflow-hidden rounded-full", className)}
     {...props}
   />
 ))
@@ -18,7 +19,7 @@ const AvatarImage = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <img
     ref={ref}
-    className={`aspect-square h-full w-full ${className || ''}`}
+    className={cn("aspect-square h-full w-full", className)}
     {...props}
   />
 ))
@@ -31,21 +32,20 @@ interface AvatarNameProps extends React.HTMLAttributes<HTMLDivElement> {
 const AvatarName = React.forwardRef<HTMLDivElement, AvatarNameProps>(
   ({ className, name, ...props }, ref) => {
 
+    // 与频道/知识空间成员管理一致：仅取首字符（拉丁字母大写）
     const getInitials = (str?: string) => {
-      if (!str) return '';
-      const cleanStr = str.trim();
-
-      if (/^[a-zA-Z]/.test(cleanStr)) {
-        return cleanStr.slice(0, 2).toUpperCase();
-      }
-
-      return cleanStr.slice(0, 1);
+      const trimmed = (str || "").trim();
+      return (trimmed[0] || "?").toUpperCase();
     };
 
+    // 默认灰底白字，与频道/知识空间成员管理列表一致（避免与 bg-primary 蓝色兜底混用）
     return (
       <div
         ref={ref}
-        className={`flex h-full w-full items-center justify-center aspect-square bg-primary text-white font-medium ${className || ''}`}
+        className={cn(
+          "flex h-full w-full items-center justify-center aspect-square rounded-full bg-[#C9CDD4] text-white font-medium tracking-tight",
+          className
+        )}
         {...props}
       >
         {getInitials(name)}

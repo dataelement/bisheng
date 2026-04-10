@@ -154,7 +154,7 @@ export const agents = ({ path = '', options }: { path?: string; options?: object
 
 export const files = () => '/api/files';
 
-export const images = () => window.isLinsight ? '/api/v1/linsight/workbench/upload-file' : `/api/v1/workstation/files`;
+export const images = (isLinsight?: boolean) => isLinsight ? '/api/v1/linsight/workbench/upload-file' : `/api/v1/workstation/files`;
 
 export const avatar = () => `${images()}/avatar`;
 

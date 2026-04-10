@@ -5,12 +5,15 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '~/comp
 import { cn } from '~/utils';
 import AppAvator from '~/components/Avator';
 import { useAppSwitcher } from '~/pages/appChat/hooks/useAppSwitcher';
+import { useLocalize, useScrollbarWhileScrolling } from '~/hooks';
 
 /**
  * App switcher dropdown built with Popover + custom search input.
  * No cmdk or heavy dependencies — all filtering handled in useAppSwitcher hook.
  */
 export function AppSwitcherDropdown() {
+  const localize = useLocalize();
+  const { onScroll, scrollingProps } = useScrollbarWhileScrolling();
   const {
     allApps,
     searchQuery,
@@ -38,7 +41,7 @@ export function AppSwitcherDropdown() {
       <TooltipProvider delayDuration={200}>
         <Tooltip>
           <TooltipTrigger asChild>{trigger}</TooltipTrigger>
-          <TooltipContent>暂无可切换应用</TooltipContent>
+          <TooltipContent>{localize('com_app_switcher_no_apps_tooltip')}</TooltipContent>
         </Tooltip>
       </TooltipProvider>
     );
@@ -59,7 +62,7 @@ export function AppSwitcherDropdown() {
             <input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="搜索应用名称"
+              placeholder={localize('com_app_search_by_name')}
               className="flex-1 bg-transparent border-none outline-none text-[13px] text-[#212121] placeholder:text-[#a9aeb8]"
               autoFocus
             />
@@ -67,14 +70,18 @@ export function AppSwitcherDropdown() {
         </div>
 
         {/* App list */}
-        <div className="flex-1 overflow-y-auto px-[8px] pb-[8px] flex flex-col gap-[4px] max-h-[268px]">
+        <div
+          className="flex-1 overflow-y-auto scroll-on-scroll px-[8px] pb-[8px] flex flex-col gap-[4px] max-h-[268px]"
+          onScroll={onScroll}
+          {...scrollingProps}
+        >
           {loading ? (
             <div className="flex items-center justify-center py-6">
               <Loader2 size={16} className="animate-spin text-gray-400" />
             </div>
           ) : allApps.length === 0 ? (
             <div className="text-center py-6 text-[13px] text-gray-400">
-              未找到相关应用
+              {localize('com_app_no_matching_apps')}
             </div>
           ) : (
             allApps.map((app: AppItem & { is_pinned?: boolean; top?: boolean }) => {

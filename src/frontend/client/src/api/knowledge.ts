@@ -56,6 +56,12 @@ export enum SortType {
     UPDATE_TIME = "update_time"
 }
 
+/** Sort values accepted by space list APIs (mine/joined/managed) */
+export enum SpaceSortType {
+    NAME = "name",
+    UPDATE_TIME = "update_time"
+}
+
 /** Sort direction */
 export enum SortDirection {
     ASC = "asc",
@@ -95,8 +101,8 @@ export interface KnowledgeSpace {
     // Used only by the "square explore" UI
     isFollowed?: boolean;
     isPending?: boolean;
-    // join | joined | pending
-    squareStatus?: "join" | "joined" | "pending";
+    // join | joined | pending | rejected (square list & preview)
+    squareStatus?: "join" | "joined" | "pending" | "rejected";
 
     /** Optional subscription status (e.g. "subscribed") from detail APIs */
     subscriptionStatus?: string;
@@ -143,6 +149,8 @@ export interface KnowledgeFile {
     fileNum?: number;
     /** Source of the file, e.g. 'channel' for subscription channel files */
     fileSource?: string;
+    /** Path of the existing duplicate file (when status is DUPLICATE) */
+    oldFileLevelPath?: string;
     // Transient UI-only fields
     isCreating?: boolean;
 }
@@ -352,6 +360,7 @@ function mapChild(raw: any, spaceId: string): KnowledgeFile {
         successFileNum: raw?.success_file_num !== undefined ? Number(raw.success_file_num) : undefined,
         fileNum: raw?.file_num !== undefined ? Number(raw.file_num) : undefined,
         fileSource: raw?.file_source,
+        oldFileLevelPath: raw?.old_file_level_path,
     };
 }
 
@@ -399,6 +408,12 @@ export function fileStatusToNumber(status: FileStatus): number {
     }
 }
 
+/** Backend `/children` filter: all statuses except FAILED (3). Used when joined members browse the file list. */
+export const SPACE_CHILDREN_STATUS_NUMS_EXCLUDE_FAILED: number[] = [1, 2, 4, 5, 6];
+
+/** Backend `/children` filter: SUCCESS (2) only. Used for 广场预览 when user is not an active space member. */
+export const SPACE_CHILDREN_STATUS_SUCCESS_ONLY: number[] = [2];
+
 /** Map a raw knowledge file record to the frontend KnowledgeFile model */
 function mapRawFile(raw: RawKnowledgeFile): KnowledgeFile {
     const isFolder = raw.file_type === 0;
@@ -429,13 +444,10 @@ function mapRawFile(raw: RawKnowledgeFile): KnowledgeFile {
  */
 export async function getMineSpacesApi(params?: {
     order_by?: string;
-    sort_by?: string;
 }): Promise<KnowledgeSpace[]> {
-    const effectiveSort = params?.sort_by ?? params?.order_by;
     const res = await request.get<ApiResponse<RawKnowledgeSpace[]>>(`/api/v1/knowledge/space/mine`, {
         params: {
-            ...params,
-            sort_by: effectiveSort,
+            order_by: params?.order_by,
         },
     });
     return (res?.data || []).map(mapSpace);
@@ -446,13 +458,24 @@ export async function getMineSpacesApi(params?: {
  */
 export async function getJoinedSpacesApi(params?: {
     order_by?: string;
-    sort_by?: string;
 }): Promise<KnowledgeSpace[]> {
-    const effectiveSort = params?.sort_by ?? params?.order_by;
     const res = await request.get<ApiResponse<RawKnowledgeSpace[]>>(`/api/v1/knowledge/space/joined`, {
         params: {
-            ...params,
-            sort_by: effectiveSort,
+            order_by: params?.order_by,
+        },
+    });
+    return (res?.data || []).map(mapSpace);
+}
+
+/**
+ * Get all managed spaces (mine + joined, merged by backend)
+ */
+export async function getManagedSpacesApi(params?: {
+    order_by?: string;
+}): Promise<KnowledgeSpace[]> {
+    const res = await request.get<ApiResponse<RawKnowledgeSpace[]>>(`/api/v1/knowledge/space/managed`, {
+        params: {
+            order_by: params?.order_by ?? 'name',
         },
     });
     return (res?.data || []).map(mapSpace);
@@ -552,10 +575,14 @@ export async function getSquareSpacesApi(params?: {
             const isReleased = Boolean(rawAny?.is_released ?? itemAny?.is_released);
             const isFollowed = subscriptionStatus === "subscribed";
             const isPending = subscriptionStatus === "pending";
-            const squareStatus: "join" | "joined" | "pending" =
-                subscriptionStatus === "subscribed" ? "joined"
-                    : subscriptionStatus === "pending" ? "pending"
-                        : "join";
+            const squareStatus: "join" | "joined" | "pending" | "rejected" =
+                subscriptionStatus === "subscribed"
+                    ? "joined"
+                    : subscriptionStatus === "pending"
+                        ? "pending"
+                        : subscriptionStatus === "rejected"
+                            ? "rejected"
+                            : "join";
 
             const fileNum = itemAny?.file_num ?? rawAny?.file_num ?? rawAny?.fileNum ?? itemAny?.fileNum ?? 0;
             const followerNum =
@@ -954,9 +981,17 @@ export async function addFilesApi(
 ): Promise<KnowledgeFile[]> {
     const res = await request.post(
         `/api/v1/knowledge/space/${space_id}/files`,
-        data
+        data,
+        { showError: true }
     ) as ApiResponse<RawSpaceChild[]>;
-    return (res?.data || []).map(raw => mapChild(raw, space_id));
+    return (res?.data || []).map(raw => {
+        const file = mapChild(raw, space_id);
+        // Preserve raw object for status 3 (duplicate) so retry API can use it
+        if (raw?.status === 3) {
+            (file as any)._raw = raw;
+        }
+        return file;
+    });
 }
 
 /**
@@ -966,13 +1001,19 @@ export async function addFilesApi(
 export async function addArticleToKnowledgeApi(
     knowledge_id: string,
     article_ids: string[],
-    parent_id?: string | null
-): Promise<void> {
-    await request.post(`/api/v1/channel/manager/articles/add_to_knowledge_space`, {
+    parent_id?: string | null,
+    force_replace?: boolean
+): Promise<any> {
+    const res = await request.post(`/api/v1/channel/manager/articles/add_to_knowledge_space`, {
         knowledge_id: Number(knowledge_id),
         article_ids,
         parent_id: parent_id ? Number(parent_id) : null,
-    });
+        ...(force_replace ? { force_replace: true } : {}),
+    }, { showError: true });
+    if (res?.status_code !== undefined && res.status_code !== 200) {
+        throw { response: { data: res } };
+    }
+    return res;
 }
 
 /**
@@ -1020,6 +1061,18 @@ export async function batchDownloadApi(
     );
     // Response: { status_code, data: { url: "/tmp-dir/..." } }
     return res?.data?.url ?? res?.url ?? "";
+}
+
+/**
+ * Retry duplicate files (replace existing)
+ * POST /api/v1/knowledge/space/{space_id}/files/retry
+ * @param file_objs - raw file objects from addFilesApi response where status === 3
+ */
+export async function retryDuplicateFilesApi(
+    space_id: string,
+    file_objs: any[]
+): Promise<void> {
+    await request.post(`/api/v1/knowledge/space/${space_id}/files/retry`, { file_objs });
 }
 
 /**

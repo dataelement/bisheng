@@ -27,7 +27,7 @@ const repeatFileI18nRmark = (files, t) => files.map(file => {
     const { new_name, old_name } = JSON.parse(file.remark);
     return {
       ...file,
-      remark: t('fileExists', { name1: new_name, name2: old_name })
+      remarkExt: t('fileExists', { name1: new_name, name2: old_name })
     }
   } catch (e) {
     return file;
@@ -76,7 +76,7 @@ export default function FilesUpload() {
       setRepeatFiles(_repeatFiles.map(file => ({
         ...file,
         file_name: file.fileName,
-        remark: t('fileExists', { name1: file.fileName, name2: file.fileName })
+        remarkExt: t('fileExists', { name1: file.fileName, name2: file.fileName })
       })));
     } else {
       setCurrentStep(2);

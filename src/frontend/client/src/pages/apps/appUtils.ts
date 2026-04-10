@@ -1,12 +1,10 @@
 import type { AppConversation, ConversationGroup } from '~/@types/app';
+import { dateKeys } from '~/utils/convos';
 
 /**
  * Group conversations by time dimension.
- * Groups: 今天 / 昨天 / 过去 7 天 / 过去 30 天 / {Year}
- *
- * - "过去 7 天" excludes today and yesterday
- * - "过去 30 天" excludes the past 7 days
- * - Year groups for anything older than 30 days
+ * Group labels are i18n keys (com_ui_date_*); pass through localize() when rendering.
+ * Years use numeric string labels (e.g. "2024").
  */
 export function groupConversationsByTime(
   conversations: AppConversation[],
@@ -29,21 +27,25 @@ export function groupConversationsByTime(
     const d = new Date(conv.updatedAt);
 
     if (d >= todayStart) {
-      (buckets['今天'] ??= []).push(conv);
+      (buckets[dateKeys.today] ??= []).push(conv);
     } else if (d >= yesterdayStart) {
-      (buckets['昨天'] ??= []).push(conv);
+      (buckets[dateKeys.yesterday] ??= []).push(conv);
     } else if (d >= past7Start) {
-      (buckets['过去 7 天'] ??= []).push(conv);
+      (buckets[dateKeys.previous7Days] ??= []).push(conv);
     } else if (d >= past30Start) {
-      (buckets['过去 30 天'] ??= []).push(conv);
+      (buckets[dateKeys.previous30Days] ??= []).push(conv);
     } else {
       const year = String(d.getFullYear());
       (yearBuckets[year] ??= []).push(conv);
     }
   }
 
-  // Ordered output: 今天 → 昨天 → 过去 7 天 → 过去 30 天 → years desc
-  const orderedLabels = ['今天', '昨天', '过去 7 天', '过去 30 天'];
+  const orderedLabels = [
+    dateKeys.today,
+    dateKeys.yesterday,
+    dateKeys.previous7Days,
+    dateKeys.previous30Days,
+  ];
   const result: ConversationGroup[] = orderedLabels
     .filter((label) => buckets[label]?.length)
     .map((label) => ({ label, conversations: buckets[label] }));

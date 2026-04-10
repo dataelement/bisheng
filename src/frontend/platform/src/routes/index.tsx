@@ -131,9 +131,9 @@ const privateRouter = [
   // 独立会话页
   { path: "/chat/assistant/auth/:id/", element: <ChatPro type={AppNumType.ASSISTANT} />, errorElement: <RouteErrorBoundary /> },
   { path: "/chat/flow/auth/:id/", element: <ChatPro type={AppNumType.FLOW} />, errorElement: <RouteErrorBoundary /> },
-  { path: "/chat/skill/auth/:id/", element: <ChatPro />, errorElement: <RouteErrorBoundary /> },
+  // { path: "/chat/skill/auth/:id/", element: <ChatPro />, errorElement: <RouteErrorBoundary /> },
   { path: "/chat", element: <SkillChatPage />, errorElement: <RouteErrorBoundary /> },
-  { path: "/chat/:id/", element: <ChatShare />, errorElement: <RouteErrorBoundary /> },
+  // { path: "/chat/:id/", element: <ChatShare />, errorElement: <RouteErrorBoundary /> },
   { path: "/chat/flow/:id/", element: <ChatShare type={AppNumType.FLOW} />, errorElement: <RouteErrorBoundary /> },
   { path: "/chat/assistant/:id/", element: <ChatAssitantShare />, errorElement: <RouteErrorBoundary /> },
   { path: "/report/:id/", element: <Report />, errorElement: <RouteErrorBoundary /> },

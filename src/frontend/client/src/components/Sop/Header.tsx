@@ -34,7 +34,13 @@ export const Header = ({ isLoading, chatId, isSharePage, setVersionId, versionId
             }
 
             <div className="flex items-center gap-3">
-                {!isSharePage && <ShareChat type='linsight_session' chatId={linsight?.session_id} versionId={versionId} />}
+                {!isSharePage && (
+                    <ShareChat
+                        type="linsight_session"
+                        chatId={linsight?.session_id}
+                        versionId={versionId}
+                    />
+                )}
 
                 <Popover>
                     <PopoverTrigger asChild>

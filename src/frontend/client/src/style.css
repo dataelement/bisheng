@@ -2775,6 +2775,14 @@ button.scroll-convo {
   display: inline-block;
 }
 
+.ai-gradient-text {
+  background: linear-gradient(to bottom right, #335CFF, #7433FF);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  display: inline-block;
+}
+
 .lingsi-border-box {
   position: relative;
   width: 200px;
@@ -2991,4 +2999,24 @@ button.scroll-convo {
 
 .noscrollbar {
   scrollbar-width: none;
+}
+
+.scrollbar-on-hover {
+  scrollbar-width: none;
+}
+.scrollbar-on-hover:hover {
+  scrollbar-width: thin;
+}
+.scrollbar-on-hover::-webkit-scrollbar {
+  width: 0;
+}
+.scrollbar-on-hover:hover::-webkit-scrollbar {
+  width: 6px;
+}
+.scrollbar-on-hover::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+.scrollbar-on-hover::-webkit-scrollbar-track {
+  background: transparent;
 }

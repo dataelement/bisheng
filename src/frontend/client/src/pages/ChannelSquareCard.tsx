@@ -1,4 +1,4 @@
-import { Lock, BookOpen } from "lucide-react";
+import { Lock } from "lucide-react";
 import { Avatar, AvatarImage } from "~/components/ui/Avatar";
 import { Button } from "~/components/ui/Button";
 import { Card, CardContent } from "~/components/ui/Card";
@@ -56,20 +56,23 @@ export function ChannelSquareCard({
   return (
     <Card
       className={cn(
-        "flex-1 min-w-0 py-2 transition-all cursor-pointer border-[#E5E6EB] hover:border-[#BDD0FF] hover:shadow-sm bg-white",
-        isHighlighted && "border-[#7EA6FF] shadow-[0px_4px_12px_0px_rgba(22,93,255,0.12)]"
+        "flex-1 min-w-0 gap-0 p-0 cursor-pointer rounded-[8px] border-[0.5px] border-solid border-[#EBECF0] bg-[linear-gradient(110deg,#F9FBFE_0%,#FFF_50%,#F9FBFE_100%)] shadow-none transition-all",
+        "hover:border-[1px] hover:border-solid hover:border-[#335CFF] hover:bg-[linear-gradient(0deg,#FFF_0%,#FFF_100%),linear-gradient(110deg,#F9FBFE_0%,#FFF_50%,#F9FBFE_100%)] hover:shadow-[0_8px_20px_0_rgba(117,145,212,0.12)]",
+        isHighlighted &&
+          "border-[1px] border-solid border-[#335CFF] bg-[linear-gradient(0deg,#FFF_0%,#FFF_100%),linear-gradient(110deg,#F9FBFE_0%,#FFF_50%,#F9FBFE_100%)] shadow-[0_8px_20px_0_rgba(117,145,212,0.12)]"
       )}
       onClick={onPreview}
     >
-      <CardContent className="">
+      <CardContent className="flex flex-col gap-3 p-[12px]">
         {/* 标题和按钮 */}
-        <div className="flex items-center justify-between mt-1 mb-3">
-          <div className="flex items-center gap-2 flex-1 min-w-0">
-            <h3 className="font-bold text-[15px] text-[#1D2129] truncate">
+        <div className="flex items-center justify-between gap-2">
+          {/* 标题不要 flex-1：短标题时宽度跟内容走，锁才能紧贴文字；长标题靠 shrink+truncate */}
+          <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
+            <h3 className="m-0 min-w-0 shrink truncate text-[14px] font-bold leading-[20px] text-[#1D2129]">
               {title}
             </h3>
             {isPrivateOrReview && (
-              <Lock className="size-3.5 text-[#818181] flex-shrink-0" />
+              <Lock className="size-3.5 shrink-0 text-[#818181]" aria-hidden />
             )}
           </div>
           <Button
@@ -77,7 +80,7 @@ export function ChannelSquareCard({
             size="sm"
             disabled={buttonConfig.disabled}
             className={cn(
-              "h-6 px-2.5 text-[12px] rounded-md flex-shrink-0 ml-2 border",
+              "h-[28px] min-h-[28px] px-2.5 text-[12px] font-normal rounded-md flex-shrink-0 ml-2 border",
               buttonConfig.variant === "secondary" &&
               "bg-[#F7F8FA] hover:bg-[#F2F3F5] text-[#86909C] border-[#E5E6EB]",
               buttonConfig.variant === "outline" &&
@@ -94,26 +97,29 @@ export function ChannelSquareCard({
 
         {/* 描述：两行截断，hover 显示完整 tooltip */}
         <p
-          className="text-[12px] text-[#86909C] line-clamp-2 leading-[18px] truncate mb-3"
+          className="m-0 line-clamp-2 truncate text-[14px] leading-[20px] text-[#A9AEB8]"
           title={description}
         >
           {description}
         </p>
 
         {/* 创建者和统计信息 */}
-        <div className="flex items-center gap-2.5 text-[12px] text-[#86909C]">
+        <div className="flex items-center gap-2.5 text-[14px] leading-[20px] text-[#86909C]">
           <div className="flex items-center gap-1.5">
             {creatorAvatars && creatorAvatars.length > 0 ? (
-              <div className="flex -space-x-2">
+              <div className="flex -space-x-1.5">
                 {creatorAvatars.slice(0, 3).map((src, idx) => (
-                  <Avatar key={idx} className="border border-white h-6 w-6">
-                    <AvatarImage src={src} alt={creator} />
+                  <Avatar
+                    key={idx}
+                    className="h-[20px] w-[20px] border border-white"
+                  >
+                    <AvatarImage src={src} alt={creator} className="object-cover" />
                   </Avatar>
                 ))}
               </div>
             ) : (
-              <Avatar className="border border-white h-6 w-6">
-                <AvatarImage src="/default-avatar.png" alt={creator} />
+              <Avatar className="h-[20px] w-[20px] border border-white">
+                <AvatarImage src="/default-avatar.png" alt={creator} className="object-cover" />
               </Avatar>
             )}
           </div>

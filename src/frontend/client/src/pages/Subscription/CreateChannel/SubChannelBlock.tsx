@@ -3,6 +3,7 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { FilterConditionEditor, type FilterGroup, type FilterRelation } from "./FilterConditionEditor";
 import { ChannelEditIcon } from "~/components/icons/channels";
+import { getFullWidthLength, truncateByFullWidth } from "~/utils";
 
 const MAX_CHANNEL_NAME = 10;
 export interface SubChannelData {
@@ -69,8 +70,8 @@ export function SubChannelBlock({
     };
 
     const handleNameChange = (val: string) => {
-        const next = val.length > MAX_CHANNEL_NAME ? val.slice(0, MAX_CHANNEL_NAME) : val;
-        if (val.length > MAX_CHANNEL_NAME) onOverLimit?.();
+        const next = getFullWidthLength(val) > MAX_CHANNEL_NAME ? truncateByFullWidth(val, MAX_CHANNEL_NAME) : val;
+        if (getFullWidthLength(val) > MAX_CHANNEL_NAME) onOverLimit?.();
 
         // Sync immediately so parent state is always up to date when user clicks submit
         // (blur might not have fired yet depending on click timing).
@@ -79,8 +80,8 @@ export function SubChannelBlock({
     };
 
     return (
-        <div className="border border-t-[#E5E6EB] overflow-hidden">
-            <div className="h-12 flex items-center justify-between gap-2 px-3 bg-[#F7F8FA]">
+        <div className="overflow-hidden">
+            <div className="h-12 flex items-center justify-between gap-2 px-3 bg-[#F8F8F8]">
                 <button
                     type="button"
                     onClick={onToggleCollapse}
@@ -99,7 +100,7 @@ export function SubChannelBlock({
                         onChange={(e) => handleNameChange(e.target.value)}
                         onBlur={handleSave}
                         onKeyDown={(e) => e.key === "Enter" && handleSave()}
-                        className="h-[26px] flex-1 min-w-0 px-2 text-[14px] border border-[#E5E6EB] rounded focus:outline-none focus:ring-1 focus:ring-[#165DFF]"
+                        className="h-[26px] flex-1 min-w-0 px-2 text-[14px] text-[#212121] placeholder:text-[#999999] border border-[#E5E6EB] rounded focus:outline-none focus:ring-1 focus:ring-[#165DFF]"
                         placeholder={localize("com_subscription.sub_channel_name")}
                     />
                 ) : (

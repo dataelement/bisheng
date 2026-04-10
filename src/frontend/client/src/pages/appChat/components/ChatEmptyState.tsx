@@ -1,29 +1,31 @@
+import { useLocalize } from '~/hooks';
+
 interface ChatEmptyStateProps {
   onNewChat: () => void;
 }
 
+const AI_HOME_IMG = `${__APP_ENV__.BASE_URL || ''}/assets/channel/ai-home.png`;
+
 /**
- * Empty state for chat area when there are no conversations.
- * Centered illustration with prompt text and a clickable link to start a new chat.
- * Matches Figma design node 2916:10272.
+ * 应用对话主区空状态：居中插画 + 提示文案，「开始新对话」可点击跳转新会话。
  */
 export function ChatEmptyState({ onNewChat }: ChatEmptyStateProps) {
+  const localize = useLocalize();
   return (
-    <div className="flex flex-col items-center justify-center h-full text-center px-4">
-      {/* Illustration image */}
-      <img 
-        src={`${__APP_ENV__.BASE_URL || ''}/assets/channel/ai-home.png`} 
-        alt="Empty chat" 
-        className="w-[80px] h-[80px] mb-[22px] object-contain"
+    <div className="flex h-full min-h-0 w-full flex-col items-center justify-center px-4 text-center">
+      <img
+        src={AI_HOME_IMG}
+        alt=""
+        className="mb-[22px] h-20 w-20 object-contain"
       />
-      {/* Prompt text */}
-      <p className="text-[14px] text-[#86909c] leading-[22px]">
-        还没有任何历史对话，
+      <p className="max-w-[280px] text-[14px] leading-[22px] text-[#86909c]">
+        {localize('com_app_chat_empty_line1')}
         <button
+          type="button"
           onClick={onNewChat}
-          className="text-primary hover:underline font-medium cursor-pointer bg-transparent border-none p-0 inline"
+          className="inline border-none bg-transparent p-0 font-medium text-primary hover:underline"
         >
-          开始一个新的对话吧
+          {localize('com_app_chat_empty_cta')}
         </button>
       </p>
     </div>

@@ -1,22 +1,36 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSetRecoilState } from "recoil";
-import { X, Eye, EyeOff, Check, Camera } from "lucide-react";
+import { X, Eye, EyeOff, Camera } from "lucide-react";
 import { Avatar, AvatarImage } from "~/components/ui/Avatar";
 import { Button } from "~/components/ui/Button";
 import { Input } from "~/components/ui/Input";
 import { Dialog, DialogContent } from "~/components/ui/Dialog";
+import { cn } from "~/utils";
 import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
 import { updatePasswordApi, uploadUserAvatarFileApi, getPublicKeyApi } from "~/api/user";
 import { JSEncrypt } from 'jsencrypt';
 import store from "~/store";
 import { QueryKeys } from "~/types/chat";
+import { useLocalize } from "~/hooks";
 
 
 interface PasswordStrength {
     minLength: boolean;
     hasAllRequired: boolean;
+}
+
+function PasswordStrengthRow({ met, children }: { met: boolean; children: ReactNode }) {
+    return (
+        <div className="flex items-start gap-2 text-[12px] leading-5">
+            <span
+                className={cn("mt-[5px] size-1.5 shrink-0 rounded-full", met ? "bg-[#25C298]" : "bg-[#c9cdd4]")}
+                aria-hidden
+            />
+            <span className={cn(met ? "text-[#25C298]" : "text-[#86909c]")}>{children}</span>
+        </div>
+    );
 }
 
 interface AccountInfoDialogProps {
@@ -34,6 +48,7 @@ export function AccountInfoDialog({
     avatarUrl = "/path-to-avatar.png",
     onAvatarUpdated,
 }: AccountInfoDialogProps) {
+    const localize = useLocalize();
     const [isEditing, setIsEditing] = useState(false);
     const { showToast } = useToastContext();
     const queryClient = useQueryClient();
@@ -117,7 +132,7 @@ export function AccountInfoDialog({
         // 校验原密码是否为空
         if (!oldPassword) {
             showToast({
-                message: "请输入原密码",
+                message: localize("com_account_info_toast_enter_old_password"),
                 severity: NotificationSeverity.INFO
             });
             return;
@@ -126,7 +141,7 @@ export function AccountInfoDialog({
         // 校验新密码是否一致
         if (newPassword !== confirmPassword) {
             showToast({
-                message: "新密码两次输入不一致",
+                message: localize("com_auth_password_not_match"),
                 severity: NotificationSeverity.INFO
             });
             return;
@@ -137,7 +152,7 @@ export function AccountInfoDialog({
             const encryptedNew = await encryptPassword(newPassword);
             if (!encryptedOld || !encryptedNew) {
                 showToast({
-                    message: "密码加密失败，请稍后重试",
+                    message: localize("com_account_info_toast_encrypt_failed"),
                     severity: NotificationSeverity.ERROR
                 });
                 return;
@@ -147,7 +162,7 @@ export function AccountInfoDialog({
 
             // 修改成功
             showToast({
-                message: "密码已修改",
+                message: localize("com_account_info_toast_password_updated"),
                 severity: NotificationSeverity.SUCCESS
             });
 
@@ -155,18 +170,45 @@ export function AccountInfoDialog({
             resetForm();
             setIsEditing(false);
         } catch (error: any) {
-            // 处理错误响应
-            const errorMessage = error?.response?.data?.message || error?.message || "密码修改失败";
+            const codeRaw =
+                error?.statusCode ??
+                error?.response?.data?.status_code ??
+                error?.response?.data?.code;
+            const code =
+                typeof codeRaw === "string" ? parseInt(codeRaw, 10) : Number(codeRaw);
 
-            // 根据错误信息判断是否是原密码错误
-            if (errorMessage.includes("原密码") || errorMessage.includes("密码不正确") || errorMessage.includes("incorrect")) {
+            // 10603：当前密码错误（接口常以 HTTP 200 + body.status_code 返回，需在 API 层抛出后才能进此处）
+            if (code === 10603) {
                 showToast({
-                    message: "原密码不正确，请重新输入",
+                    message: localize("com_account_info_toast_wrong_old_password"),
+                    severity: NotificationSeverity.INFO
+                });
+                return;
+            }
+
+            const errorMessage =
+                error?.response?.data?.status_message ||
+                error?.response?.data?.message ||
+                error?.message ||
+                localize("com_account_info_toast_password_change_failed");
+
+            const msg = String(errorMessage);
+
+            if (
+                msg.includes("原密码") ||
+                msg.includes("当前密码") ||
+                msg.includes("密码不正确") ||
+                msg.includes("incorrect") ||
+                msg.includes("Incorrect current password") ||
+                msg.includes("current password")
+            ) {
+                showToast({
+                    message: localize("com_account_info_toast_wrong_old_password"),
                     severity: NotificationSeverity.INFO
                 });
             } else {
                 showToast({
-                    message: errorMessage,
+                    message: msg || localize("com_account_info_toast_password_change_failed"),
                     severity: NotificationSeverity.INFO
                 });
             }
@@ -213,7 +255,7 @@ export function AccountInfoDialog({
         const allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
         if (!allowedTypes.includes(file.type)) {
             showToast({
-                message: "仅支持上传图片文件",
+                message: localize("com_account_info_toast_images_only"),
                 severity: NotificationSeverity.WARNING
             });
             e.target.value = "";
@@ -234,13 +276,13 @@ export function AccountInfoDialog({
             setCurrentAvatarUrl(viewUrl);
             onAvatarUpdated?.(viewUrl);
             showToast({
-                message: "头像更新成功",
+                message: localize("com_account_info_toast_avatar_updated"),
                 severity: NotificationSeverity.SUCCESS
             });
         } catch (error) {
             console.error("upload avatar error", error);
             showToast({
-                message: "头像上传失败，请重试",
+                message: localize("com_account_info_toast_avatar_upload_failed"),
                 severity: NotificationSeverity.ERROR
             });
         }
@@ -261,20 +303,32 @@ export function AccountInfoDialog({
         }
     };
 
+    const inputClassName =
+        "h-9 rounded-md border border-[#ECECEC] bg-white pr-10 text-[14px] text-[#1d2129] placeholder:text-[#c9cdd4] focus-visible:border-[#165dff] focus-visible:ring-1 focus-visible:ring-[#165dff]";
+
     return (
         <Dialog open={open} onOpenChange={handleOpenChange}>
             <DialogContent
-                className="w-[480px] p-0 rounded-2xl shadow-[0_8px_24px_rgba(0,0,0,0.12)] flex flex-col overflow-hidden
-                max-[576px]:w-[calc(100vw-16px)] max-[576px]:max-w-none max-[576px]:h-[calc(100vh-16px)] max-[576px]:max-h-[calc(100vh-16px)]"
+                close={false}
+                className="flex h-[600px] max-h-[calc(100vh-32px)] w-[600px] max-w-[calc(100vw-32px)] flex-col gap-0 overflow-hidden rounded-lg border border-[#ECECEC] bg-white p-0 shadow-[0_8px_24px_rgba(15,23,42,0.12)]"
             >
-                {/* 标题栏 */}
-                <div className="flex items-center justify-between px-6 py-4 border-b border-[#f2f3f5] max-[576px]:px-4">
-                    <h2 className="text-[16px] font-semibold text-[#1d2129]">账号信息</h2>
+                {/* 标题栏 600×48 — 设计稿 */}
+                <div className="flex h-12 w-full shrink-0 items-center justify-between px-6">
+                    <h2 className="text-[16px] font-semibold leading-6 text-[#1d2129]">
+                        {localize("com_account_info_title")}
+                    </h2>
+                    <button
+                        type="button"
+                        onClick={() => handleOpenChange(false)}
+                        className="flex size-8 shrink-0 items-center justify-center rounded-md text-[#86909c] transition-colors hover:bg-[#f2f3f5] hover:text-[#1d2129]"
+                        aria-label={localize("com_ui_close")}
+                    >
+                        <X className="size-4" />
+                    </button>
                 </div>
 
-                {/* 内容区域 */}
-                <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5 -mt-10 max-[576px]:px-4 max-[576px]:pb-0">
-                    {/* 隐藏的头像上传 input */}
+                {/* 内容区：552 宽、稿内约 462 高区块 + 边距，整体在 600×600 内不滚动 */}
+                <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-6 py-4">
                     <input
                         ref={fileInputRef}
                         type="file"
@@ -282,138 +336,160 @@ export function AccountInfoDialog({
                         className="hidden"
                         onChange={handleAvatarChange}
                     />
-                    {/* 基本信息 */}
-                    <div>
-                        <h3 className="text-[14px] font-medium text-[#1d2129] mb-3">基本信息</h3>
-                        <div className="flex items-center gap-3 p-3 bg-[#f7f8fa] rounded-lg">
-                            <button
-                                type="button"
-                                onClick={handleAvatarClick}
-                                title="更换头像"
-                                className="relative group rounded-full shrink-0 outline-none focus-visible:ring-2 focus-visible:ring-[#165dff] focus-visible:ring-offset-2"
-                            >
-                                <Avatar className="size-12">
-                                    <AvatarImage src={currentAvatarUrl} alt={username} />
-                                </Avatar>
-                                <div className="absolute inset-0 rounded-full bg-[rgba(0,0,0,0.45)] opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 flex flex-col items-center justify-center gap-0.5 text-white transition-opacity px-1">
-                                    <Camera className="size-3.5 shrink-0" aria-hidden />
-                                    <span className="text-[10px] leading-tight text-center">
-                                        更换
-                                        <br />
-                                        头像
-                                    </span>
-                                </div>
-                            </button>
-                            <div className="flex items-center text-[14px]">
-                                <span className="text-[#1d2129] font-medium">{username}</span>
-                                <span className="text-[#86909c] ml-1">(用户名)</span>
-                            </div>
-                        </div>
-                    </div>
 
-                    {/* 安全设置 */}
-                    <div>
-                        <h3 className="text-[14px] font-medium text-[#1d2129] mb-3">安全设置</h3>
-
-                        {!isEditing ? (
-                            /* 密码显示状态 */
-                            <div className="flex items-center justify-between p-3 bg-[#f7f8fa] rounded-lg">
-                                <div className="flex items-center gap-2">
-                                    <span className="text-[14px] text-[#4e5969]">密码</span>
-                                    <span className="text-[14px] text-[#1d2129]">••••••••••••</span>
-                                </div>
+                    <div className="mx-auto flex w-[552px] max-w-[min(728px,100%)] flex-col gap-5">
+                        <section className="flex flex-col gap-5">
+                            <h3 className="text-[14px] font-semibold leading-5 text-[#212121]">
+                                {localize("com_account_info_basic_info")}
+                            </h3>
+                            <div className="flex items-center gap-4 border-b border-[#f2f3f5] pb-3">
                                 <button
-                                    onClick={() => setIsEditing(true)}
-                                    className="text-[14px] text-[#165dff] hover:text-[#4080ff] transition-colors"
+                                    type="button"
+                                    onClick={handleAvatarClick}
+                                    title={localize("com_account_info_change_avatar")}
+                                    className="group relative shrink-0 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-[#165dff] focus-visible:ring-offset-2"
                                 >
-                                    修改
+                                    <Avatar className="size-14 ring-1 ring-[#f2f3f5]">
+                                        <AvatarImage src={currentAvatarUrl} alt={username} />
+                                    </Avatar>
+                                    <div className="absolute inset-0 flex items-center justify-center rounded-full bg-[rgba(0,0,0,0.55)] opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+                                        <Camera className="size-6 text-white" aria-hidden />
+                                    </div>
                                 </button>
+                                <p className="min-w-0 text-[14px] leading-6 text-[#212121]">
+                                    <span className="font-medium">{username}</span>
+                                    <span>{localize("com_account_info_username_suffix")}</span>
+                                </p>
                             </div>
-                        ) : (
-                            /* 修改密码表单 */
-                            <div className="space-y-4">
-                                {/* 原密码 */}
-                                <div>
-                                    <label className="block text-[14px] text-[#4e5969] mb-2">原密码</label>
-                                    <div className="relative">
-                                        <Input
-                                            type={showOldPassword ? "text" : "password"}
-                                            value={oldPassword}
-                                            onChange={(e) => setOldPassword(e.target.value)}
-                                            placeholder="请输入原密码"
-                                            className="pr-10 h-9 text-[14px] bg-white border-[#e5e6eb] focus:border-[#165dff] focus:ring-1 focus:ring-[#165dff]"
-                                        />
-                                        <button
-                                            type="button"
-                                            onClick={() => setShowOldPassword(!showOldPassword)}
-                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-[#86909c] hover:text-[#4e5969]"
-                                        >
-                                            {showOldPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-                                        </button>
-                                    </div>
-                                </div>
+                        </section>
 
-                                {/* 新密码 */}
-                                <div>
-                                    <label className="block text-[14px] text-[#4e5969] mb-2">新密码</label>
-                                    <div className="relative">
-                                        <Input
-                                            type={showNewPassword ? "text" : "password"}
-                                            value={newPassword}
-                                            onChange={handleNewPasswordChange}
-                                            placeholder="请输入新密码"
-                                            className="pr-10 h-9 text-[14px] bg-white border-[#e5e6eb] focus:border-[#165dff] focus:ring-1 focus:ring-[#165dff]"
-                                        />
-                                        <button
-                                            type="button"
-                                            onClick={() => setShowNewPassword(!showNewPassword)}
-                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-[#86909c] hover:text-[#4e5969]"
-                                        >
-                                            {showNewPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-                                        </button>
-                                    </div>
+                        <section className="flex flex-col gap-5">
+                            <h3 className="text-[14px] font-semibold leading-5 text-[#1d2129]">
+                                {localize("com_account_info_security_settings")}
+                            </h3>
 
-                                    {/* 密码强度提示 */}
-                                    <div className="mt-2 space-y-1">
-                                        <div className={`flex items-center gap-1.5 text-[12px] transition-colors ${passwordStrength.minLength ? 'text-[#00b42a]' : 'text-[#86909c]'
-                                            }`}>
-                                            <Check className={`size-3 ${passwordStrength.minLength ? 'opacity-100' : 'opacity-30'
-                                                }`} />
-                                            <span>至少 8 个字符</span>
-                                        </div>
-                                        <div className={`flex items-center gap-1.5 text-[12px] transition-colors ${passwordStrength.hasAllRequired ? 'text-[#00b42a]' : 'text-[#86909c]'
-                                            }`}>
-                                            <Check className={`size-3 ${passwordStrength.hasAllRequired ? 'opacity-100' : 'opacity-30'
-                                                }`} />
-                                            <span>包含大小写字母、数字和字符</span>
+                            {!isEditing ? (
+                                <div className="flex items-center justify-between gap-4">
+                                    <div className="min-w-0">
+                                        <div className="mb-1 text-[14px] text-[#86909c]">{localize("com_auth_password")}</div>
+                                        <div className="text-[14px] tracking-[0.12em] text-[#1d2129]">
+                                            ••••••••••••••••
                                         </div>
                                     </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsEditing(true)}
+                                        className="h-8 shrink-0 rounded-md border border-[#e5e6eb] bg-white px-4 text-[14px] text-[#1d2129] transition-colors hover:bg-[#f7f8fa]"
+                                    >
+                                        {localize("com_account_info_edit")}
+                                    </button>
                                 </div>
+                            ) : (
+                                <div className="flex flex-col gap-5">
+                                    <div>
+                                        <label className="mb-1 block text-[14px] text-[#4e5969]" htmlFor="account-old-pwd">
+                                            {localize("com_account_info_old_password")}
+                                        </label>
+                                        <div className="relative">
+                                            <Input
+                                                id="account-old-pwd"
+                                                type={showOldPassword ? "text" : "password"}
+                                                value={oldPassword}
+                                                onChange={(e) => setOldPassword(e.target.value)}
+                                                placeholder={localize("com_account_info_placeholder_old_password")}
+                                                className={inputClassName}
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowOldPassword(!showOldPassword)}
+                                                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#86909c] hover:text-[#4e5969]"
+                                            >
+                                                {showOldPassword ? <Eye className="size-4" /> : <EyeOff className="size-4" />}
+                                            </button>
+                                        </div>
+                                    </div>
 
-                                {/* 确认密码 */}
-                                <div>
-                                    <label className="block text-[14px] text-[#4e5969] mb-2">确认密码</label>
-                                    <div className="relative">
-                                        <Input
-                                            type={showConfirmPassword ? "text" : "password"}
-                                            value={confirmPassword}
-                                            onChange={(e) => setConfirmPassword(e.target.value)}
-                                            placeholder="请再次输入新密码"
-                                            className="pr-10 h-9 text-[14px] bg-white border-[#e5e6eb] focus:border-[#165dff] focus:ring-1 focus:ring-[#165dff]"
-                                        />
+                                    <div>
+                                        <label className="mb-1 block text-[14px] text-[#4e5969]" htmlFor="account-new-pwd">
+                                            {localize("com_account_info_new_password")}
+                                        </label>
+                                        <div className="relative">
+                                            <Input
+                                                id="account-new-pwd"
+                                                type={showNewPassword ? "text" : "password"}
+                                                value={newPassword}
+                                                onChange={handleNewPasswordChange}
+                                                placeholder={localize("com_account_info_placeholder_new_password")}
+                                                className={inputClassName}
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowNewPassword(!showNewPassword)}
+                                                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#86909c] hover:text-[#4e5969]"
+                                            >
+                                                {showNewPassword ? <Eye className="size-4" /> : <EyeOff className="size-4" />}
+                                            </button>
+                                        </div>
+
+                                        <div className="mt-2 flex flex-col gap-1.5">
+                                            <p className="text-[12px] text-[#86909c]">{localize("com_account_info_password_strength")}</p>
+                                            <PasswordStrengthRow met={passwordStrength.minLength}>
+                                                {localize("com_account_info_password_rule_min")}
+                                            </PasswordStrengthRow>
+                                            <PasswordStrengthRow met={passwordStrength.hasAllRequired}>
+                                                {localize("com_account_info_password_rule_complex")}
+                                            </PasswordStrengthRow>
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label className="mb-1 block text-[14px] text-[#4e5969]" htmlFor="account-confirm-pwd">
+                                            {localize("com_auth_password_confirm")}
+                                        </label>
+                                        <div className="relative">
+                                            <Input
+                                                id="account-confirm-pwd"
+                                                type={showConfirmPassword ? "text" : "password"}
+                                                value={confirmPassword}
+                                                onChange={(e) => setConfirmPassword(e.target.value)}
+                                                placeholder={localize("com_account_info_placeholder_confirm_password")}
+                                                className={inputClassName}
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                                                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#86909c] hover:text-[#4e5969]"
+                                            >
+                                                {showConfirmPassword ? <Eye className="size-4" /> : <EyeOff className="size-4" />}
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex items-center justify-end gap-4">
                                         <button
                                             type="button"
-                                            onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-[#86909c] hover:text-[#4e5969]"
+                                            onClick={handleCancel}
+                                            className="text-[14px] text-[#4e5969] transition-colors hover:text-[#1d2129]"
                                         >
-                                            {showConfirmPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                                            {localize("cancel")}
                                         </button>
+                                        <Button
+                                            type="button"
+                                            onClick={handleSubmit}
+                                            disabled={isSubmitDisabled()}
+                                            className={cn(
+                                                "h-9 rounded-md px-5 text-[14px] font-normal text-white disabled:opacity-100",
+                                                isSubmitDisabled()
+                                                    ? "cursor-not-allowed bg-[#7399E4] hover:bg-[#7399E4]"
+                                                    : "bg-[#0253E8] hover:bg-[#0246cc]"
+                                            )}
+                                        >
+                                            {localize("com_account_info_confirm_change")}
+                                        </Button>
                                     </div>
                                 </div>
-
-                                {/* 按钮组移到弹窗底部 footer（不依赖 sticky） */}
-                            </div>
-                        )}
+                            )}
+                        </section>
                     </div>
                 </div>
                 {isEditing ? (
@@ -430,11 +506,10 @@ export function AccountInfoDialog({
                         <Button
                             onClick={handleSubmit}
                             disabled={isSubmitDisabled()}
-                            className={`h-8 px-4 text-[14px] ${
-                                isSubmitDisabled()
+                            className={`h-8 px-4 text-[14px] ${isSubmitDisabled()
                                     ? 'bg-[#e5e6eb] text-[#c9cdd4] cursor-not-allowed hover:bg-[#e5e6eb]'
                                     : 'bg-[#165dff] text-white hover:bg-[#4080ff]'
-                            } max-[576px]:flex-1 max-[576px]:w-1/2 max-[576px]:px-0`}
+                                } max-[576px]:flex-1 max-[576px]:w-1/2 max-[576px]:px-0`}
                         >
                             确认修改
                         </Button>
