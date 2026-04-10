@@ -376,7 +376,7 @@ export function KnowledgeSpacePreviewDrawer({
                                                 <FileCard
                                                     key={f.id}
                                                     file={f}
-                                                    userRole={SpaceRole.MEMBER}
+                                                    userRole={space?.role ?? SpaceRole.MEMBER}
                                                     isSelected={false}
                                                     onSelect={() => { }}
                                                             onDownload={() => { }}

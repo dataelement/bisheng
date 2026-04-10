@@ -1,7 +1,6 @@
 import { ChevronDown, ChevronRight, PlusSquare } from "lucide-react";
 import * as RadioGroup from "@radix-ui/react-radio-group";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { flushSync } from "react-dom";
 import { useConfirm, useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
 import {
@@ -65,30 +64,6 @@ export interface CreateChannelFormData {
     subChannels: SubChannelData[];
 }
 
-function serializeChannelDrawerForm(form: CreateChannelFormData): string {
-    const sources = [...form.sources]
-        .map((s) => ({
-            id: s.id,
-            name: s.name,
-            type: s.type,
-            url: s.url ?? "",
-            avatar: s.avatar ?? "",
-        }))
-        .sort((a, b) => a.id.localeCompare(b.id));
-    return JSON.stringify({
-        sources,
-        channelName: form.channelName.trim(),
-        channelDesc: form.channelDesc.trim(),
-        visibility: form.visibility,
-        publishToSquare: form.publishToSquare,
-        contentFilter: form.contentFilter,
-        filterGroups: form.filterGroups,
-        topFilterRelation: form.topFilterRelation,
-        createSubChannel: form.createSubChannel,
-        subChannels: form.subChannels,
-    });
-}
-
 interface CreateChannelDrawerProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
@@ -116,9 +91,23 @@ export function CreateChannelDrawer({
     const [isComposingName, setIsComposingName] = useState(false);
     const [isComposingDesc, setIsComposingDesc] = useState(false);
     const initedChannelIdRef = useRef<string | null>(null);
-    /** 爬取弹窗关闭时 Radix 可能同步触发 Sheet 的 onOpenChange(false)；此处挡住误关，避免误判「空白表单」并 reset */
-    const suppressSheetCloseRef = useRef(false);
-    const formCloseBaselineRef = useRef<string | null>(null);
+
+    const isCreateFormPristine = () => {
+        // 仅用于“创建频道”场景：未做任何修改时，关闭不需要二次确认
+        return (
+            !isEditMode &&
+            form.sources.length === 0 &&
+            !form.channelName.trim() &&
+            !form.channelDesc.trim() &&
+            form.visibility === "review" &&
+            form.publishToSquare === "yes" &&
+            !form.contentFilter &&
+            form.filterGroups.length === 0 &&
+            form.topFilterRelation === "and" &&
+            !form.createSubChannel &&
+            form.subChannels.length === 0
+        );
+    };
     const [isBodyScrolling, setIsBodyScrolling] = useState(false);
     const bodyScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -170,76 +159,14 @@ export function CreateChannelDrawer({
         form.setSources
     ]);
 
-    useEffect(() => {
-        if (!open) {
-            formCloseBaselineRef.current = null;
-            return;
-        }
-        if (formCloseBaselineRef.current !== null) return;
-
-        if (isEditMode && editingChannel) {
-            if (initedChannelIdRef.current !== editingChannel.id) return;
-            const srcInfos = (editingChannel as { source_infos?: unknown[] }).source_infos;
-            const nSync = Array.isArray(srcInfos) ? srcInfos.length : 0;
-            const srcList = (editingChannel as { source_list?: string[] }).source_list;
-            const nAsync = srcList?.length ?? 0;
-            const expectedSources = nSync > 0 ? nSync : nAsync;
-            if (expectedSources > 0 && form.sources.length === 0) return;
-        }
-
-        formCloseBaselineRef.current = serializeChannelDrawerForm({
-            sources: form.sources,
-            channelName: form.channelName,
-            channelDesc: form.channelDesc,
-            visibility: form.visibility,
-            publishToSquare: form.publishToSquare,
-            contentFilter: form.contentFilter,
-            filterGroups: form.filterGroups,
-            topFilterRelation: form.topFilterRelation,
-            createSubChannel: form.createSubChannel,
-            subChannels: form.subChannels,
-        });
-    }, [
-        open,
-        isEditMode,
-        editingChannel,
-        form.sources,
-        form.channelName,
-        form.channelDesc,
-        form.visibility,
-        form.publishToSquare,
-        form.contentFilter,
-        form.filterGroups,
-        form.topFilterRelation,
-        form.createSubChannel,
-        form.subChannels,
-    ]);
-
     const handleClose = async (nextOpen: boolean) => {
-        if (!nextOpen && suppressSheetCloseRef.current) {
-            return;
-        }
         if (!nextOpen) {
             if (form.showSuccess) {
                 form.resetForm();
                 onOpenChange(false);
                 return;
             }
-            const currentSnap = serializeChannelDrawerForm({
-                sources: form.sources,
-                channelName: form.channelName,
-                channelDesc: form.channelDesc,
-                visibility: form.visibility,
-                publishToSquare: form.publishToSquare,
-                contentFilter: form.contentFilter,
-                filterGroups: form.filterGroups,
-                topFilterRelation: form.topFilterRelation,
-                createSubChannel: form.createSubChannel,
-                subChannels: form.subChannels,
-            });
-            const unchangedFromOpen =
-                formCloseBaselineRef.current !== null && currentSnap === formCloseBaselineRef.current;
-            if (unchangedFromOpen) {
+            if (isCreateFormPristine()) {
                 form.resetForm();
                 onOpenChange(false);
                 return;
@@ -754,15 +681,10 @@ export function CreateChannelDrawer({
                     form.setSourceSearchResetToken((t) => t + 1);
                 }}
                 onAddSource={(source) => {
-                    suppressSheetCloseRef.current = true;
-                    flushSync(() => {
-                        form.setSources((prev) => [...prev, source]);
-                    });
+                    form.setSources((prev) => [...prev, source]);
                     form.setCrawlDialogOpen(false);
+                    // 添加成功后回到「添加信息源」面板，并展示选中状态
                     form.setShowAddSourcePanel(true);
-                    queueMicrotask(() => {
-                        suppressSheetCloseRef.current = false;
-                    });
                 }}
             />
         </>

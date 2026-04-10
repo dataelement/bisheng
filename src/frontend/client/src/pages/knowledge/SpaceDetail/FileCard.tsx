@@ -299,14 +299,13 @@ export function FileCard({
                     <div className="flex items-center justify-between mt-1 min-w-0 gap-2">
                         <div className="flex items-center flex-1 min-w-0 min-h-[24px]">
                             {isAdmin && isFolder && file.fileNum != null && (
-                                <div className="text-xs font-medium leading-none">
-                                    <span className="text-emerald-500 font-normal">{file.successFileNum ?? 0}</span>
-                                    <span className="text-[#86909c] font-normal">/{file.fileNum}</span>
-                                </div>
+                                <span className="text-xs text-[#86909c] whitespace-nowrap">
+                                    {localize("com_knowledge_items_count", { count: file.fileNum ?? 0 })}
+                                </span>
                             )}
                             {!isAdmin && isFolder && file.fileNum != null && (
                                 <span className="text-xs text-[#86909c] whitespace-nowrap">
-                                    {localize("com_knowledge_items_count", { count: file.successFileNum })}
+                                    {localize("com_knowledge_items_count", { count: file.successFileNum ?? 0 })}
                                 </span>
                             )}
                             {(!isFolder && file.tags && file.tags.length > 0) && (

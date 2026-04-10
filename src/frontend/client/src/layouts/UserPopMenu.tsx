@@ -143,10 +143,10 @@ export function UserPopMenu() {
                     sideOffset={menuSideOffset}
                     collisionPadding={8}
                     onCloseAutoFocus={(e) => e.preventDefault()}
-                    className="w-[200px] p-2 rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.08)] bg-white border-[#f0f0f0]"
+                    className="w-[200px] gap-0 overflow-hidden rounded-2xl border border-[#e5e6eb] bg-white p-0 shadow-[0_4px_20px_rgba(0,0,0,0.08)]"
                 >
-                    {/* 1. 用户头部信息 */}
-                    <div className="flex items-center gap-3 px-3 py-1">
+                    {/* 1. 用户头部：与菜单项 hover 同色 */}
+                    <div className="flex items-center gap-3 bg-[#e8eaed] px-3 py-2.5 rounded-t-2xl">
                         <Avatar className="size-10 border border-gray-100" onClick={runMenuAction(handleAccountInfoClick)}>
                             {avatarUrl ? (
                                 <AvatarImage src={avatarUrl} alt="User" />
@@ -163,11 +163,12 @@ export function UserPopMenu() {
                         </div>
                     </div>
 
-                    <div className="h-px bg-gray-100 mx-3 my-1" />
+                    <div className="h-px w-full shrink-0 bg-[#e5e6eb]" />
 
+                    <div className="flex flex-col gap-1 p-2 pt-1.5">
                     {/* 3. 消息提醒 (保留逻辑) */}
                     <DropdownMenuItem
-                        className="group flex items-center justify-between px-3 py-1.5 font-normal cursor-pointer rounded-xl hover:bg-gray-50 focus:bg-gray-50 outline-none"
+                        className="group flex cursor-pointer items-center justify-between rounded-xl px-3 py-1.5 font-normal outline-none data-[highlighted]:bg-[#e8eaed] focus:bg-[#e8eaed]"
                         onSelect={runMenuItemSelect(handleNotificationsClick)}
                     >
                         <div className="flex items-center gap-3">
@@ -183,22 +184,22 @@ export function UserPopMenu() {
 
                     {/* 4. 语言切换 */}
                     <DropdownMenuSub>
-                        <DropdownMenuSubTrigger className="flex items-center justify-between px-3 py-1.5 font-normal cursor-pointer rounded-xl hover:bg-gray-50 focus:bg-gray-50 outline-none">
+                        <DropdownMenuSubTrigger className="flex cursor-pointer items-center justify-between rounded-xl px-3 py-1.5 font-normal outline-none data-[highlighted]:bg-[#e8eaed] data-[state=open]:bg-[#eceef2] focus:bg-[#e8eaed]">
                             <div className="flex items-center gap-3">
                                 <Globe className="size-[18px] text-gray-600" />
                                 <span className="text-[14px] font-normal text-gray-700">{localize('com_nav_language')}</span>
                             </div>
                         </DropdownMenuSubTrigger>
-                        <DropdownMenuSubContent className="rounded-xl border-gray-100 shadow-lg ml-2">
-                            <DropdownMenuItem className="py-2.5 px-3 rounded-lg" onSelect={runMenuItemSelect(() => changeLang('zh-Hans'))}>
+                        <DropdownMenuSubContent className="ml-2 rounded-xl border-[#e5e6eb] bg-white p-1 shadow-lg">
+                            <DropdownMenuItem className="rounded-lg px-3 py-2.5 data-[highlighted]:bg-[#e8eaed] focus:bg-[#e8eaed]" onSelect={runMenuItemSelect(() => changeLang('zh-Hans'))}>
                                 <span className="flex-1 text-sm">中文</span>
                                 {langcode === 'zh-Hans' && <Check className="ml-2 size-4 text-blue-600" />}
                             </DropdownMenuItem>
-                            <DropdownMenuItem className="py-2.5 px-3 rounded-lg" onSelect={runMenuItemSelect(() => changeLang('en'))}>
+                            <DropdownMenuItem className="rounded-lg px-3 py-2.5 data-[highlighted]:bg-[#e8eaed] focus:bg-[#e8eaed]" onSelect={runMenuItemSelect(() => changeLang('en'))}>
                                 <span className="flex-1 text-sm">English</span>
                                 {langcode === 'en' && <Check className="ml-2 size-4 text-blue-600" />}
                             </DropdownMenuItem>
-                            <DropdownMenuItem className="py-2.5 px-3 rounded-lg" onSelect={runMenuItemSelect(() => changeLang('ja'))}>
+                            <DropdownMenuItem className="rounded-lg px-3 py-2.5 data-[highlighted]:bg-[#e8eaed] focus:bg-[#e8eaed]" onSelect={runMenuItemSelect(() => changeLang('ja'))}>
                                 <span className="flex-1 text-sm">日本語</span>
                                 {langcode === 'ja' && <Check className="ml-2 size-4 text-blue-600" />}
                             </DropdownMenuItem>
@@ -208,11 +209,12 @@ export function UserPopMenu() {
                     {/* 5. 退出登录 */}
                     <DropdownMenuItem
                         onSelect={runMenuItemSelect(logout)}
-                        className="group flex items-center gap-3 px-3 py-1.5 font-normal cursor-pointer rounded-xl hover:bg-red-50 focus:bg-red-50 outline-none mt-1 transition-colors !text-[#f53f3f] hover:!text-[#f53f3f] focus:!text-[#f53f3f]"
+                        className="group flex cursor-pointer items-center gap-3 rounded-xl px-3 py-1.5 font-normal outline-none transition-colors data-[highlighted]:bg-[#e8eaed] focus:bg-[#e8eaed] !text-[#f53f3f] data-[highlighted]:!text-[#f53f3f] focus:!text-[#f53f3f]"
                     >
                         <LogOut className="size-[18px]" />
                         <span className="text-[14px] font-normal">{localize('com_nav_log_out')}</span>
                     </DropdownMenuItem>
+                    </div>
                 </DropdownMenuContent>
             </DropdownMenu>
 
