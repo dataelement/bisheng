@@ -22,6 +22,12 @@ import { UserPopMenu } from './UserPopMenu';
 // always reads the latest value in the same render cycle.
 const lastSectionPaths: Record<string, string> = {};
 
+function appsSectionLinkTarget(): string {
+  const p = lastSectionPaths.apps;
+  if (!p) return '/apps';
+  return p.startsWith('/apps/explore') ? '/apps' : p;
+}
+
 interface SidebarItemProps {
   icon: React.ReactNode;
   to: string;
@@ -77,7 +83,7 @@ function Sidebar() {
     },
     {
       section: 'apps',
-      to: lastSectionPaths.apps || '/apps',
+      to: appsSectionLinkTarget(),
       icon: <GlobeIcon />,
       label: localize('com_nav_app_center'),
       isActive: matchPath('/app/:id/:fid/:type', pathname) !== null || pathname.startsWith('/apps'),
@@ -180,8 +186,10 @@ export default function MainLayout() {
   // Track last visited path per sidebar section.
   // Runs synchronously before Sidebar renders in the same cycle.
   if (/^\/(c|linsight)(\/|$)/.test(pathname)) lastSectionPaths.home = pathname;
-  else if (/^\/(apps|app)(\/|$)/.test(pathname)) lastSectionPaths.apps = pathname;
-  else if (/^\/channel(\/|$)/.test(pathname)) lastSectionPaths.channel = pathname;
+  else if (/^\/(apps|app)(\/|$)/.test(pathname)) {
+    // 应用广场是应用中心的子页；从其它模块再点「应用」时应回到应用中心，而非恢复广场路由
+    lastSectionPaths.apps = pathname.startsWith('/apps/explore') ? '/apps' : pathname;
+  } else if (/^\/channel(\/|$)/.test(pathname)) lastSectionPaths.channel = pathname;
   else if (pathname.startsWith('/knowledge')) lastSectionPaths.knowledge = pathname;
 
   // Each sidebar tab gets its own KeepAlive cache key so switching
@@ -205,7 +213,7 @@ export default function MainLayout() {
           saveScroll={true}
         >
           <div
-            className="h-[calc(100vh-16px)] overflow-y-auto scroll-on-scroll rounded-xl bg-white shadow-xl"
+            className="h-[calc(100vh-16px)] overflow-y-auto overscroll-y-contain scroll-on-scroll rounded-xl bg-white shadow-xl"
             onScroll={onOutletScroll}
             {...outletScrollingProps}
           >

@@ -144,9 +144,18 @@ export function SideNav() {
             </div>
 
             {/* Conversation list */}
-            <div className="flex-1 overflow-y-auto pb-[20px] flex flex-col">
+            <div className="flex-1 overflow-y-auto pb-[20px] flex flex-col min-h-0">
                 {groups.length === 0 ? (
-                    <div className="text-center text-gray-400 text-sm py-10">还没有任何历史对话</div>
+                    <div className="flex flex-1 flex-col items-center justify-center min-h-[120px] px-3 py-6">
+                        <img
+                            src={`${__APP_ENV__.BASE_URL || ''}/assets/channel/ai-home.png`}
+                            alt=""
+                            className="mb-2 h-14 w-14 object-contain shrink-0"
+                        />
+                        <p className="text-center text-[12px] leading-[19.5px] text-[#86909c]">
+                            {localize('com_app_chat_sidebar_empty')}
+                        </p>
+                    </div>
                 ) : (
                     groups.map((group, groupIdx) => (
                         <div key={groupIdx} className="flex flex-col">

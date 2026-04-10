@@ -15,34 +15,7 @@ import { Button } from "~/components/ui/Button";
 import { useLocalize } from "~/hooks";
 import { NotificationSeverity } from "~/common";
 
-import { Diamond, Play, Sparkle, Cone, Circle, Cuboid } from "lucide-react"
-
-// --- 组件：装饰背景元素 (保持一定视觉效果) ---
-const DecorativeShapes = () => (
-    <div className="absolute inset-0 pointer-events-none overflow-hidden flex justify-center">
-        {/* 取消固定 1368px 宽度，让其直接在全宽容器中基于百分比/相对位置布局 */}
-        <div className="relative w-full max-w-[1400px] h-full">
-            <div className="absolute left-[65%] top-[25px] rotate-12 text-blue-200">
-                <Circle size={20} className="opacity-80" />
-            </div>
-            <div className="absolute left-[35%] top-[70px] text-[#d0ddff]">
-                <Cuboid size={24} className="opacity-80" />
-            </div>
-            <div className="absolute left-[32%] top-[20px] rotate-[-20deg] text-[#d0ddff]">
-                <Diamond size={20} className="fill-[#d0ddff] opacity-80" />
-            </div>
-            <div className="absolute left-[70%] top-[60px] rotate-[20deg] text-[#335cff]">
-                <Sparkle size={18} className="fill-[#335cff] opacity-40" />
-            </div>
-            <div className="absolute left-[26%] top-[40px] rotate-[-15deg] text-blue-300">
-                <Play size={18} className="opacity-60" />
-            </div>
-            <div className="absolute left-[75%] top-[30px] rotate-[10deg] text-[#d0ddff]">
-                <Cone size={22} className="opacity-80" />
-            </div>
-        </div>
-    </div>
-)
+const APP_TAB_BANNER = `${__APP_ENV__.BASE_URL || ''}/assets/channel/apptab.svg`
 
 // --- 组件：智能体卡片 (广场版 Horizontal) ---
 const ExploreCard = ({ agent, onClick, onShare }: { agent: any, onClick: (agent: any) => void, onShare: (agent: any) => void }) => {
@@ -216,26 +189,26 @@ export default function ExplorePlaza() {
     }
 
     return (
-        <div className="h-screen bg-white pb-20 overflow-auto flex flex-col items-center">
-            {/* 顶部标题栏 */}
-            <div className="w-full bg-[#fafcff] flex flex-col items-center justify-center py-[32px] overflow-hidden relative shrink-0">
-                {/* 返回按钮：固定在头部左上 */}
-                <div className="absolute left-4 top-4 z-[20]">
+        <div className="flex w-full flex-col items-center bg-white pb-16">
+            {/* 顶部横幅：背景图尺寸与知识广场（KnowledgeSquare tabbg）相同 — bg-cover + center */}
+            <div
+                className="relative w-full shrink-0 overflow-hidden border-b border-[#F0F1F5] bg-cover bg-center bg-no-repeat"
+                style={{ backgroundImage: `url(${APP_TAB_BANNER})` }}
+            >
+                <div className="absolute left-4 top-4 z-10">
                     <Button
                         variant="ghost"
                         onClick={() => navigate('/apps')}
-                        className="h-7 w-7 p-0 rounded-md border border-[#E5E6EB] bg-white text-[#4E5969] hover:bg-[#F7F8FA] hover:text-[#335cff]"
+                        className="h-7 w-7 rounded-md border border-[#E5E6EB] bg-white p-0 text-[#4E5969] hover:bg-[#F7F8FA] hover:text-[#335CFF]"
                     >
                         <ArrowLeft className="size-3.5" />
                     </Button>
                 </div>
-
-                <DecorativeShapes />
-                <div className="flex flex-col items-center gap-[4px] max-w-[1000px] text-center z-10 w-full px-6">
-                    <h1 className="font-['PingFang_SC'] font-semibold leading-[32px] text-[#335cff] text-[24px]">
+                <div className="relative mx-auto flex w-full max-w-[1140px] flex-col items-center justify-center px-4 pb-5 pt-7 text-center">
+                    <h1 className="mb-1 font-['PingFang_SC'] text-[26px] font-semibold text-[#335CFF]">
                         {localize('com_app_center_welcome')}
                     </h1>
-                    <p className="font-['PingFang_SC'] text-[#666] text-[14px] leading-[22px]">
+                    <p className="mb-3 max-w-[640px] font-['PingFang_SC'] text-[13px] leading-[22px] text-[#86909C]">
                         {localize('com_app_center_description')}
                     </p>
                 </div>
