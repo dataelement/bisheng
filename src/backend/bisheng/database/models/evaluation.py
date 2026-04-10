@@ -7,7 +7,6 @@ from sqlmodel import Field, select
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session
-from bisheng.database.models.base import SQLModelSerializable
 # 自定义 JSON 类型：自动处理字符串与字典的转换
 from sqlalchemy.types import TypeDecorator, JSON
 import json
@@ -61,7 +60,7 @@ class EvaluationBase(SQLModelSerializable):
                                             sa_column=Column(DateTime, nullable=False,
                                                              server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
 
 
 class Evaluation(EvaluationBase, table=True):

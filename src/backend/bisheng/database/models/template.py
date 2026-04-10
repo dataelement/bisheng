@@ -5,12 +5,14 @@ from pydantic import model_validator
 from sqlalchemy import JSON, Column, DateTime, text, String
 from sqlmodel import Field
 
-from bisheng.database.models.base import SQLModelSerializable
 from sqlalchemy import Integer
 
 # 自定义 JSON 类型：自动处理字符串与字典的转换
 from sqlalchemy.types import TypeDecorator, JSON
 import json
+
+from backend.bisheng.common.models.base import SQLModelSerializable
+from backend.bisheng.database.models.flow import FlowType
 class DMJSON(TypeDecorator):
     impl = JSON  # 底层依赖达梦的 JSON 类型
     def process_bind_param(self, value, dialect):
@@ -41,10 +43,10 @@ class TemplateBase(SQLModelSerializable):
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
 
 
-class Template(TemplateSkillBase, table=True):
+class Template(TemplateBase, table=True):
     # id: Optional[int] = Field(default=None, primary_key=True)
     id: Optional[int] = Field(default=None, sa_column=Column(Integer, primary_key=True, autoincrement=True))
 
