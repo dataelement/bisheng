@@ -11,7 +11,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { SendIcon } from "~/components/svg";
 import { TagPicker } from "./TagPicker";
 import type { FolderChatTag } from "~/hooks/useFolderChat";
-import { useLocalize, useScrollbarWhileScrolling } from "~/hooks";
+import { useLocalize } from "~/hooks";
 import SpeechToTextComponent from "~/components/Voice/SpeechToText";
 import { useGetWorkbenchModelsQuery } from "~/hooks/queries/data-provider";
 
@@ -37,7 +37,6 @@ export function KnowledgeAiInput({
     onStop,
 }: KnowledgeAiInputProps) {
     const localize = useLocalize();
-    const inputBlockScroll = useScrollbarWhileScrolling();
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const badgeRef = useRef<HTMLSpanElement>(null);
     const [badgeIndentPx, setBadgeIndentPx] = useState<number | undefined>(undefined);
@@ -228,11 +227,7 @@ export function KnowledgeAiInput({
 
                 {/* Outer scroll: badge + textarea are one block so they scroll together; badge overlays first line only */}
                 <div className="p-3 pb-0">
-                    <div
-                        className="max-h-48 overflow-y-auto overflow-x-hidden scroll-on-scroll pr-6"
-                        onScroll={inputBlockScroll.onScroll}
-                        {...inputBlockScroll.scrollingProps}
-                    >
+                    <div className="max-h-48 overflow-y-auto overflow-x-hidden scrollbar-on-hover pr-6">
                         <div className="relative">
                             {selectedTag && (
                                 <span

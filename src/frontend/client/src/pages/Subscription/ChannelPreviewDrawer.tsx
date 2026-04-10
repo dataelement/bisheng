@@ -1,4 +1,4 @@
-import { useLocalize, useScrollbarWhileScrolling } from "~/hooks";
+import { useLocalize } from "~/hooks";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -51,7 +51,6 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscrip
     const [currentPage, setCurrentPage] = useState(1);
     const [hasMore, setHasMore] = useState(false);
     const [loadingMore, setLoadingMore] = useState(false);
-    const { onScroll: onScrollbarWhileScrolling, scrollingProps } = useScrollbarWhileScrolling();
 
     // 切换频道/关闭抽屉时，重置本地订阅交互态，避免状态串到下一条频道
     useEffect(() => {
@@ -339,11 +338,7 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscrip
                         </SheetHeader>
 
                         {/* Article List / Pending Message */}
-                        <div
-                            className="flex-1 min-h-0 overflow-y-auto scroll-on-scroll px-6"
-                            onScroll={onScrollbarWhileScrolling}
-                            {...scrollingProps}
-                        >
+                        <div className="flex-1 min-h-0 overflow-y-auto scrollbar-on-hover px-6">
                             {hideArticles ? (
                                 <div className="flex flex-col items-center justify-center h-full min-h-[400px]">
                                     <img

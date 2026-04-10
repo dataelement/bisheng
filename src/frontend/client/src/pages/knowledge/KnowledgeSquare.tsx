@@ -5,7 +5,7 @@ import { Button } from "~/components/ui/Button";
 import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
 import { getJoinedSpacesApi, getSquareSpacesApi, subscribeSpaceApi, type KnowledgeSpace, VisibilityType } from "~/api/knowledge";
-import { useLocalize, useScrollbarWhileScrolling } from "~/hooks";
+import { useLocalize } from "~/hooks";
 import KnowledgeSquareCard from "./KnowledgeSquareCard";
 
 type SquareSpaceStatus = "join" | "joined" | "pending" | "rejected";
@@ -47,7 +47,6 @@ export default function KnowledgeSquare({
 
     const scrollRef = useRef<HTMLDivElement | null>(null);
     const searchImeComposingRef = useRef(false);
-    const { onScroll: onScrollbarWhileScrolling, scrollingProps } = useScrollbarWhileScrolling();
     const PAGE_SIZE = 20;
 
     const MAX_SEARCH_LEN = 40;
@@ -136,7 +135,6 @@ export default function KnowledgeSquare({
         if (!node) return;
 
         const onScroll = () => {
-            onScrollbarWhileScrolling();
             if (loadingMore || !hasMorePage) return;
             const threshold = 60;
             if (node.scrollTop + node.clientHeight >= node.scrollHeight - threshold) {
@@ -146,7 +144,7 @@ export default function KnowledgeSquare({
 
         node.addEventListener("scroll", onScroll);
         return () => node.removeEventListener("scroll", onScroll);
-    }, [hasMorePage, loadingMore, load, onScrollbarWhileScrolling, page]);
+    }, [hasMorePage, loadingMore, load, page]);
 
     const handleJoin = async (space: KnowledgeSpace) => {
         const nextStatus: SquareSpaceStatus =
@@ -253,8 +251,7 @@ export default function KnowledgeSquare({
 
             <div
                 ref={scrollRef}
-                className="flex-1 overflow-y-auto scroll-on-scroll bg-white"
-                {...scrollingProps}
+                className="flex-1 overflow-y-auto scrollbar-on-hover bg-white"
             >
                 <div className="relative mx-auto mb-1 mt-6 w-full max-w-[480px]">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#8B8FA8] pointer-events-none" />

@@ -31,7 +31,7 @@ import { formatBytes } from "~/utils";
 import { useInlineRename } from "../hooks/useInlineRename";
 import { formatTime, isKnowledgeItemPreviewable } from "../knowledgeUtils";
 import { knowledgeSpaceDropdownSurfaceClassName } from "~/components/SidebarListMoreMenu";
-import { useLocalize, useScrollbarWhileScrolling } from "~/hooks";
+import { useLocalize } from "~/hooks";
 
 /** 状态列悬停：下载 / 更多 — 白底、细灰边、4px 圆角 */
 const FILE_ROW_ACTION_BTN_CLASS =
@@ -477,7 +477,6 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
     const { columnWidths, onResizeStart, totalWidth } = useResizableColumns();
     const scrollRef = useRef<HTMLDivElement>(null);
     const { showLeftShadow, showRightShadow } = useScrollShadow(scrollRef);
-    const { onScroll: onTableHScroll, scrollingProps: tableHScrollProps } = useScrollbarWhileScrolling();
 
     const isAllSelected = files.length > 0 && files.every((f) => selectedFiles.has(f.id));
     const isIndeterminate = !isAllSelected && files.some((f) => selectedFiles.has(f.id));
@@ -487,9 +486,7 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
             {/* 横向滚动限制在容器内，不撑开整页 */}
             <div
                 ref={scrollRef}
-                className="max-w-full overflow-x-auto overflow-y-visible scroll-on-scroll"
-                onScroll={onTableHScroll}
-                {...tableHScrollProps}
+                className="max-w-full overflow-x-auto overflow-y-visible scrollbar-on-hover"
             >
                 <table
                     className="w-full caption-bottom text-sm border-collapse"

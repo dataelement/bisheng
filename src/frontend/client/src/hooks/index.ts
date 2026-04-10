@@ -32,4 +32,3 @@ export { default as useSpeechToText } from './Input/useSpeechToText';
 export { default as useTextToSpeech } from './Input/useTextToSpeech';
 export { default as useGenerationsByLatest } from './useGenerationsByLatest';
 export { default as useDocumentTitle } from './useDocumentTitle';
-export { useScrollbarWhileScrolling } from './useScrollbarWhileScrolling';

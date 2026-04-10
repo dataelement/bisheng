@@ -1,6 +1,6 @@
 import type { AppItem } from '~/@types/app';
 import AppAvator from '~/components/Avator';
-import { ChannelPinGrayIcon, ChannelPinIcon, ChannelUnpinGrayIcon } from '~/components/icons/channels';
+import { ChannelPinIcon } from '~/components/icons/channels';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '~/components/ui/Tooltip2';
 import { Button } from '~/components';
 import { useLocalize } from '~/hooks';
@@ -60,14 +60,14 @@ export function AgentCard({
                   isPinned ? localize('com_app_unpin_tooltip') : localize('com_app_pin_tooltip')
                 }
               >
-                {isPinned ? (
+                {/* {isPinned ? (
                   <span className="relative inline-flex size-[18px] items-center justify-center">
                     <ChannelPinIcon className="absolute size-[18px] shrink-0 transition-opacity group-hover/pin:opacity-0" />
                     <ChannelUnpinGrayIcon className="pointer-events-none absolute size-[18px] opacity-0 transition-opacity group-hover/pin:opacity-100" />
                   </span>
                 ) : (
                   <ChannelPinGrayIcon className="size-[18px] shrink-0" />
-                )}
+                )} */}
               </button>
             </TooltipTrigger>
             <TooltipContent>

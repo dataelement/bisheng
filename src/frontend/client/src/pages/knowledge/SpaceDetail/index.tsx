@@ -12,7 +12,7 @@ import { FileTable } from "./FileTable";
 import { KnowledgeSpaceHeader } from "./KnowledgeSpaceHeader";
 import { PaginationBar } from "./PaginationBar";
 import { SelectionPathBreadcrumb } from "./SelectionPathBreadcrumb";
-import { useLocalize, useScrollbarWhileScrolling } from "~/hooks";
+import { useLocalize } from "~/hooks";
 import { getFullWidthLength } from "~/utils";
 
 interface KnowledgeSpaceContentProps {
@@ -73,8 +73,6 @@ export function KnowledgeSpaceContent({
     onCreateSpace,
 }: KnowledgeSpaceContentProps) {
     const localize = useLocalize();
-    const cardScroll = useScrollbarWhileScrolling();
-    const listBodyScroll = useScrollbarWhileScrolling();
     const displayFiles = [
         ...(creatingFolder ? [creatingFolder] : []),
         ...uploadingFiles,
@@ -516,11 +514,7 @@ export function KnowledgeSpaceContent({
                             </p>
                         </div>
                     ) : viewMode === "card" ? (
-                        <div
-                            className="flex-1 overflow-y-auto scroll-on-scroll"
-                            onScroll={cardScroll.onScroll}
-                            {...cardScroll.scrollingProps}
-                        >
+                        <div className="flex-1 overflow-y-auto scrollbar-on-hover">
                             <div
                                 ref={cardGridRef}
                                 className="grid w-full min-w-0 gap-4 py-4"
@@ -548,11 +542,7 @@ export function KnowledgeSpaceContent({
                         </div>
                     ) : (
                         <div className="flex min-h-0 min-w-0 flex-1 flex-col pb-4">
-                            <div
-                                className="min-h-0 min-w-0 flex-1 overflow-y-auto scroll-on-scroll border-t border-[#e5e6eb]"
-                                onScroll={listBodyScroll.onScroll}
-                                {...listBodyScroll.scrollingProps}
-                            >
+                            <div className="min-h-0 min-w-0 flex-1 overflow-y-auto scrollbar-on-hover border-t border-[#e5e6eb]">
                                 <FileTable files={displayFiles}
                                     selectedFiles={selectedFiles}
                                     handleSelectAll={handleSelectAll}

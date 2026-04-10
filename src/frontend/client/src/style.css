@@ -3002,21 +3002,45 @@ button.scroll-convo {
 }
 
 .scrollbar-on-hover {
-  scrollbar-width: none;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color 0.3s ease;
 }
 .scrollbar-on-hover:hover {
-  scrollbar-width: thin;
+  scrollbar-color: rgba(100, 116, 139, 0.4) transparent;
 }
 .scrollbar-on-hover::-webkit-scrollbar {
-  width: 0;
-}
-.scrollbar-on-hover:hover::-webkit-scrollbar {
-  width: 6px;
-}
-.scrollbar-on-hover::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 9999px;
+  width: 8px;
+  height: 8px;
 }
 .scrollbar-on-hover::-webkit-scrollbar-track {
   background: transparent;
+}
+.scrollbar-on-hover::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  transition: background-color 0.3s ease;
+}
+.scrollbar-on-hover:hover::-webkit-scrollbar-thumb {
+  background-color: rgba(100, 116, 139, 0.4);
+}
+.scrollbar-on-hover:hover::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(100, 116, 139, 0.65);
+}
+.scrollbar-on-hover:hover::-webkit-scrollbar-thumb:active {
+  background-color: rgba(100, 116, 139, 0.8);
+}
+.dark .scrollbar-on-hover:hover {
+  scrollbar-color: rgba(203, 213, 225, 0.25) transparent;
+}
+.dark .scrollbar-on-hover:hover::-webkit-scrollbar-thumb {
+  background-color: rgba(203, 213, 225, 0.25);
+}
+.dark .scrollbar-on-hover:hover::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(203, 213, 225, 0.45);
+}
+.dark .scrollbar-on-hover:hover::-webkit-scrollbar-thumb:active {
+  background-color: rgba(203, 213, 225, 0.6);
 }
