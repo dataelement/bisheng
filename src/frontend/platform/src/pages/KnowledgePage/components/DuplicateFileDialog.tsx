@@ -13,7 +13,7 @@ const DialogWithRepeatFiles = ({
                 </DialogHeader>
                 <ul className="overflow-y-auto max-h-[400px] py-2">
                     {repeatFiles.map(el => (
-                        <li key={el.id} className="py-1 text-red-500 text-sm">{el.remark}</li>
+                        <li key={el.id} className="py-1 text-red-500 text-sm">{el.remarkExt || el.remark}</li>
                     ))}
                 </ul>
                 <DialogFooter>
