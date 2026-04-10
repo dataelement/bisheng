@@ -150,7 +150,7 @@ export function SideNav() {
             <div className="flex-1 overflow-y-auto pb-[20px] flex flex-col min-h-0">
                 {groups.length === 0 ? (
                     <div className="flex flex-1 items-center justify-center min-h-[120px] px-3 py-6">
-                        <p className="text-center text-[12px] leading-[19.5px] text-[#86909c]">
+                        <p className="text-center text-[14px] leading-[19.5px] text-[#86909c]">
                             {localize('com_app_chat_sidebar_empty')}
                         </p>
                     </div>
