@@ -1281,21 +1281,20 @@ class KnowledgeService(KnowledgeUtils):
         knowldge_dict.pop("id")
         knowldge_dict.pop("create_time")
         knowldge_dict.pop("update_time", None)
-        knowldge_dict["user_id"] = login_user.user_id
-        knowldge_dict["index_name"] = generate_knowledge_index_name()
-        knowldge_dict["collection_name"] = knowldge_dict["index_name"]
+        knowldge_dict.pop("collection_name", None)
+        knowldge_dict.pop("index_name", None)
         knowldge_dict["name"] = f"{knowledge.name} Copy"[:200] if not knowledge_name else knowledge_name[:200]
 
         knowldge_dict["state"] = KnowledgeState.UNPUBLISHED.value
         knowledge_new = Knowledge(**knowldge_dict)
-        target_knowlege = await KnowledgeDao.async_insert_one(knowledge_new)
-        # celery not yetok
+
+        target_knowlege = cls.create_knowledge_base(request, login_user, knowledge_new)
+
         params = {
             "source_knowledge_id": knowledge.id,
             "target_id": target_knowlege.id,
             "login_user_id": login_user.user_id,
         }
-        cls.create_knowledge_hook(request, login_user, target_knowlege)
         file_worker.file_copy_celery.delay(params)
         return target_knowlege
 
