@@ -7,7 +7,8 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
-  getManagedSpacesApi,
+  getMineSpacesApi,
+  getJoinedSpacesApi,
 } from "~/api/knowledge";
 import {
   DropdownMenu,
@@ -217,8 +218,33 @@ export const ChatKnowledge = ({
   const loadSpaces = useCallback(async () => {
     setSpaceFetching(true);
     try {
-      const spaces = await getManagedSpacesApi();
-      setAllSpaces(spaces);
+      // Fetch "mine" + "joined" in parallel and merge into a single list
+      const [mine, joined] = await Promise.all([
+        getMineSpacesApi(),
+        getJoinedSpacesApi(),
+      ]);
+      // Dedupe by id (a space could in principle appear in both lists)
+      const seen = new Set<string | number>();
+      const merged: any[] = [];
+      for (const s of [...mine, ...joined]) {
+        if (seen.has(s.id)) continue;
+        seen.add(s.id);
+        merged.push(s);
+      }
+      // Sort A–Z, English (ASCII-leading) names first, then Chinese names.
+      // Within each bucket, compare with the appropriate locale so that
+      // pinyin order is used for CJK and natural order for ASCII.
+      merged.sort((a, b) => {
+        const an = (a.name || "").trim();
+        const bn = (b.name || "").trim();
+        const aIsEn = an.length > 0 && an.charCodeAt(0) < 128;
+        const bIsEn = bn.length > 0 && bn.charCodeAt(0) < 128;
+        if (aIsEn !== bIsEn) return aIsEn ? -1 : 1;
+        return an.localeCompare(bn, aIsEn ? "en" : "zh-Hans-u-co-pinyin", {
+          sensitivity: "base",
+        });
+      });
+      setAllSpaces(merged);
     } catch (err) {
       console.error("[ChatKnowledge] Failed to load spaces:", err);
     } finally {
