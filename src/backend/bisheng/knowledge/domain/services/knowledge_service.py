@@ -1,6 +1,7 @@
 import json
 import math
 import os
+import time
 from datetime import datetime
 from typing import Any, Dict, List, Tuple
 from urllib.parse import urlparse
@@ -57,6 +58,7 @@ from bisheng.knowledge.domain.models.knowledge_file import (
 )
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository import KnowledgeFileRepository
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_repository import KnowledgeRepository
+from bisheng.knowledge.domain.schemas.knowledge_rag_schema import Metadata
 from bisheng.knowledge.domain.schemas.knowledge_schema import AddKnowledgeMetadataFieldsReq, \
     UpdateKnowledgeMetadataFieldsReq
 from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import KnowledgeAuditTelemetryService
@@ -248,7 +250,21 @@ class KnowledgeService(KnowledgeUtils):
                                                                                 knowledge=db_knowledge,
                                                                                 metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
             # Init Milvus schema avoiding SchemaNotReady concurrently
-            init_ids = vector_client.add_texts(texts=["init_schema"])
+            # Need to provide non-nullable fields to satisfy Milvus schema constraints
+            init_ids = vector_client.add_texts(
+                texts=["init_schema"],
+                metadatas=[Metadata(document_id=0,
+                                    knowledge_id=db_knowledge.id,
+                                    abstract="",
+                                    chunk_index=1,
+                                    bbox="",
+                                    page=0,
+                                    upload_time=int(time.time()),
+                                    update_time=int(time.time()),
+                                    uploader="",
+                                    updater="",
+                                    user_metadata={}).model_dump()]
+            )
             if init_ids:
                 vector_client.delete(ids=init_ids)
 
