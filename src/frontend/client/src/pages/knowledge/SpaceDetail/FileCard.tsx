@@ -1,4 +1,4 @@
-import { Circle, Download, MoreVertical, X } from "lucide-react";
+import { Circle, Download, Edit, MoreVertical, RefreshCw, Tag, Trash2, X } from "lucide-react";
 import { useState } from "react";
 import { FileStatus, FileType, KnowledgeFile, SpaceRole } from "~/api/knowledge";
 import { Button, Checkbox } from "~/components";
@@ -249,7 +249,11 @@ export function FileCard({
                                     onClick={(e) => e.stopPropagation()}
                                 >
                                     {showMenuDownloadItem && (
-                                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDownload(); }}>
+                                        <DropdownMenuItem
+                                            onClick={(e) => { e.stopPropagation(); onDownload(); }}
+                                            className="flex items-center"
+                                        >
+                                            <Download className="mr-2 size-4 shrink-0" />
                                             {localize("com_knowledge.download")}
                                         </DropdownMenuItem>
                                     )}
@@ -257,7 +261,11 @@ export function FileCard({
                                     {isAdmin && (
                                         <>
                                             {!isFolder && (
-                                                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEditTags(); }}>
+                                                <DropdownMenuItem
+                                                    onClick={(e) => { e.stopPropagation(); onEditTags(); }}
+                                                    className="flex items-center"
+                                                >
+                                                    <Tag className="mr-2 size-4 shrink-0" />
                                                     {localize("com_knowledge.edit_tags")}
                                                 </DropdownMenuItem>
                                             )}
@@ -266,18 +274,25 @@ export function FileCard({
                                                     e.stopPropagation();
                                                     startRenaming();
                                                 }}
+                                                className="flex items-center"
                                             >
+                                                <Edit className="mr-2 size-4 shrink-0" />
                                                 {localize("com_knowledge.rename")}
                                             </DropdownMenuItem>
                                             {hasRetryOption && (
-                                                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onRetry?.(); }}>
+                                                <DropdownMenuItem
+                                                    onClick={(e) => { e.stopPropagation(); onRetry?.(); }}
+                                                    className="flex items-center"
+                                                >
+                                                    <RefreshCw className="mr-2 size-4 shrink-0" />
                                                     {localize("com_knowledge.retry")}
                                                 </DropdownMenuItem>
                                             )}
                                             <DropdownMenuItem
                                                 onClick={(e) => { e.stopPropagation(); onDelete(); }}
-                                                className="text-[#f53f3f] focus:text-[#f53f3f]"
+                                                className="flex items-center text-[#f53f3f] focus:text-[#f53f3f]"
                                             >
+                                                <Trash2 className="mr-2 size-4 shrink-0" />
                                                 {localize("com_knowledge.delete")}
                                             </DropdownMenuItem>
                                         </>

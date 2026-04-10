@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo } from 'react';
-import { Share2Icon } from 'lucide-react';
 import { useForm, Controller } from 'react-hook-form';
 import { Permissions } from '~/types/chat';
 import type {
@@ -7,6 +6,7 @@ import type {
   TStartupConfig,
   TUpdatePromptGroupPayload,
 } from '~/types/chat';
+import { ShareOutlineIcon } from '~/components/icons';
 import {
   Button,
   Switch,
@@ -92,7 +92,7 @@ const SharePrompt = ({ group, disabled }: { group?: TPromptGroup; disabled: bool
           className="h-10 w-10 border border-transparent bg-blue-500/90 p-0.5 transition-all hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-800"
           disabled={disabled}
         >
-          <Share2Icon className="size-5 cursor-pointer text-white" />
+          <ShareOutlineIcon className="size-5 cursor-pointer text-white" />
         </Button>
       </OGDialogTrigger>
       <OGDialogContent className="w-11/12 max-w-lg" role="dialog" aria-labelledby="dialog-title">

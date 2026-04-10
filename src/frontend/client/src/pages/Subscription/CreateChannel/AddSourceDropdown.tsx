@@ -49,6 +49,44 @@ export function AddSourceDropdown({
     const collapsedListScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [isExpandedListScrolling, setIsExpandedListScrolling] = useState(false);
     const expandedListScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const rootRef = useRef<HTMLDivElement>(null);
+    const expandedPanelRef = useRef<HTMLDivElement>(null);
+    const mgrRef = useRef(mgr);
+    const isClosingRef = useRef(false);
+    mgrRef.current = mgr;
+
+    // 展开面板失焦或点击组件外部时收起，并应用当前勾选（与「确认添加」一致）；弹窗内操作不触发
+    useEffect(() => {
+        if (!expanded) return;
+        isClosingRef.current = false;
+        const root = rootRef.current;
+        if (!root) return;
+
+        const rootDialog = root.closest('[role="dialog"], [role="alertdialog"]');
+        const isInsideOtherDialog = (node: Node | null) => {
+            if (!(node instanceof Element)) return false;
+            const targetDialog = node.closest('[role="dialog"], [role="alertdialog"]');
+            return targetDialog != null && targetDialog !== rootDialog;
+        };
+
+        const closePanel = () => {
+            if (isClosingRef.current) return;
+            isClosingRef.current = true;
+            mgrRef.current.handleConfirm();
+        };
+
+        const onPointerDown = (e: PointerEvent) => {
+            const t = e.target as Node | null;
+            if (t && root.contains(t)) return;
+            if (isInsideOtherDialog(t)) return;
+            closePanel();
+        };
+
+        document.addEventListener("pointerdown", onPointerDown, true);
+        return () => {
+            document.removeEventListener("pointerdown", onPointerDown, true);
+        };
+    }, [expanded]);
 
     // 同步输入框展示值与已提交的搜索关键字（清空时）
     useEffect(() => {
@@ -91,7 +129,7 @@ export function AddSourceDropdown({
         }
     };
     return (
-        <div className="relative">
+        <div ref={rootRef} className="relative">
             {/* 没点击时：触发区+已选列表 同一灰色整体 */}
             {!expanded && (
                 <div
@@ -110,7 +148,7 @@ export function AddSourceDropdown({
                     </div>
                     {sources.length > 0 && (
                         <div
-                            className="scroll-on-scroll overflow-y-auto border-t border-[#E5E6EB] bg-[#FBFBFB] pb-4"
+                            className="scroll-on-scroll overflow-y-auto border-t border-[#E5E6EB] bg-[#FBFBFB]"
                             onScroll={handleCollapsedListScroll}
                             data-scrolling={isCollapsedListScrolling ? "true" : "false"}
                         >
@@ -156,13 +194,7 @@ export function AddSourceDropdown({
                                                     <ChannelRightSmallUpIcon className="ml-0.5 w-4 h-4 opacity-0 group-hover/link:opacity-100 transition-opacity flex-shrink-0" />
                                                 )}
                                             </span>
-                                            <span
-                                                className={cn(
-                                                    "text-[11px] px-0.5 rounded flex-shrink-0 ml-4",
-                                                    s.type !== "official_account" && "-ml-0",
-                                                    " border text-[#165DFF] border-[#165DFF]"  // 统一的白底蓝框蓝字
-                                                )}
-                                            >
+                                            <span className="ml-2 flex-shrink-0 rounded border border-[#165DFF] px-0.5 text-[11px] text-[#165DFF]">
                                                 {s.type === "official_account" ? localize("com_subscription.official_account") : localize("com_subscription.website")}
                                             </span>
                                         </span>
@@ -205,7 +237,10 @@ export function AddSourceDropdown({
 
             {/* 添加时：输入框+Tab+列表 同一整体，高 z-index 浮动，实时搜索 */}
             {expanded && (
-                <div className="absolute left-0 right-0 top-0 z-[100] flex h-[440px] min-w-[400px] flex-col overflow-hidden rounded-lg border border-[#E5E6EB] bg-white shadow-[0_4px_16px_rgba(0,0,0,0.12)]">
+                <div
+                    ref={expandedPanelRef}
+                    className="absolute left-0 right-0 top-0 z-[100] flex h-[440px] min-w-[400px] flex-col overflow-hidden rounded-lg border border-[#E5E6EB] bg-white shadow-[0_4px_16px_rgba(0,0,0,0.12)]"
+                >
                     <div className="flex shrink-0 items-center gap-2 border-b border-[#E5E6EB] pb-0 mb-2">
                         <div className="relative flex-1 rounded-lg m-1">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#999999]" />
@@ -395,10 +430,7 @@ export function AddSourceDropdown({
                                                         </span>
                                                         {mgr.isSearchMode && (
                                                             <span
-                                                                className={cn(
-                                                                    "ml-4 flex-shrink-0 rounded border border-[#165DFF] px-0.5 text-[11px] text-[#165DFF]",
-                                                                    source.type !== "official_account" && "-ml-0"
-                                                                )}
+                                                                className="ml-2 flex-shrink-0 rounded border border-[#165DFF] px-0.5 text-[11px] text-[#165DFF]"
                                                             >
                                                                 {source.type === "official_account"
                                                                     ? localize("com_subscription.official_account")

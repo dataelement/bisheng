@@ -5,7 +5,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { cn } from "~/utils";
-import { useLocalize } from "~/hooks";
+import { useLocalize, useScrollbarWhileScrolling } from "~/hooks";
 
 interface TagPickerProps {
     tags: string[];
@@ -18,6 +18,7 @@ export function TagPicker({ tags, searchText, onSelect, onClose }: TagPickerProp
     const localize = useLocalize();
     const [activeIndex, setActiveIndex] = useState(0);
     const containerRef = useRef<HTMLDivElement>(null);
+    const listScroll = useScrollbarWhileScrolling();
 
     // Filter tags by search text
     const filtered = tags.filter(t =>
@@ -65,7 +66,9 @@ export function TagPicker({ tags, searchText, onSelect, onClose }: TagPickerProp
     return (
         <div
             ref={containerRef}
-            className="absolute bottom-full left-0 right-0 mb-1 bg-white border border-[#e5e6eb] rounded-lg shadow-lg z-50 max-h-[200px] overflow-y-auto"
+            className="absolute bottom-full left-0 right-0 mb-1 bg-white border border-[#e5e6eb] rounded-lg shadow-lg z-50 max-h-[200px] overflow-y-auto scroll-on-scroll"
+            onScroll={listScroll.onScroll}
+            {...listScroll.scrollingProps}
         >
             <div className="p-1.5">
                 {filtered.map((tag, i) => (

@@ -145,8 +145,8 @@ export function UserPopMenu() {
                     onCloseAutoFocus={(e) => e.preventDefault()}
                     className="w-[200px] gap-0 overflow-hidden rounded-2xl border border-[#e5e6eb] bg-white p-0 shadow-[0_4px_20px_rgba(0,0,0,0.08)]"
                 >
-                    {/* 1. 用户头部：与菜单项 hover 同色 */}
-                    <div className="flex items-center gap-3 bg-[#e8eaed] px-3 py-2.5 rounded-t-2xl">
+                    {/* 1. 用户头部：默认与菜单白底一致，移入时再与菜单项 hover 同色 */}
+                    <div className="flex cursor-pointer items-center gap-3 rounded-t-2xl bg-transparent px-3 py-2.5 transition-colors hover:bg-[#e8eaed]">
                         <Avatar className="size-10 border border-gray-100" onClick={runMenuAction(handleAccountInfoClick)}>
                             {avatarUrl ? (
                                 <AvatarImage src={avatarUrl} alt="User" />

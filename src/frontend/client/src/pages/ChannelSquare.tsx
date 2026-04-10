@@ -260,9 +260,9 @@ export default function ChannelSquare({
         )}
 
         {/* 主要内容 */}
-        <div className="relative max-w-[1140px] mx-auto w-full flex flex-col items-center justify-center pt-7 pb-6 px-4">
+        <div className="relative mx-auto flex w-full max-w-[1140px] flex-col items-center justify-center px-4 pb-6 pt-7">
 
-          <h1 className="text-[26px] font-semibold text-[#335CFF] mb-1">
+          <h1 className="mb-1 text-[26px] font-semibold text-[#335CFF]">
             {tTitle}
           </h1>
           <p className="text-[13px] text-[#86909C]">
@@ -278,7 +278,7 @@ export default function ChannelSquare({
         onScroll={handleListScroll}
         {...scrollingProps}
       >
-        <div className="relative w-full max-w-[480px] mx-auto mb-6">
+        <div className="relative mx-auto mb-6 mt-0 w-full max-w-[480px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#8B8FA8] pointer-events-none" />
           <Input
             type="text"

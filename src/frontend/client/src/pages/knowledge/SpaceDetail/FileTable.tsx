@@ -771,8 +771,9 @@ function FileRow({
                     style={{ width: columnWidths.status, minWidth: columnWidths.status, maxWidth: columnWidths.status }}
                 >
                     {isFolder ? (
-                        <span className="whitespace-nowrap text-sm text-[#86909c]">
-                            {localize("com_knowledge_items_count", { count: file.fileNum ?? 0 })}
+                        <span className="whitespace-nowrap text-sm">
+                            <span className="text-[#00b42a]">{file.successFileNum ?? 0}</span>
+                            <span className="text-[#86909c]">/{file.fileNum ?? 0}</span>
                         </span>
                     ) : (
                         <StatusBadge status={file.status ?? FileStatus.WAITING} />

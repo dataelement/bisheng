@@ -42,8 +42,6 @@ interface KnowledgeSpaceContentProps {
     onToggleAiAssistant?: () => void;
     isAiAssistantOpen?: boolean;
     onCreateSpace?: () => void;
-    sidebarCollapsed?: boolean;
-    onExpandSidebar?: () => void;
 }
 
 export function KnowledgeSpaceContent({
@@ -73,8 +71,6 @@ export function KnowledgeSpaceContent({
     onToggleAiAssistant,
     isAiAssistantOpen,
     onCreateSpace,
-    sidebarCollapsed,
-    onExpandSidebar,
 }: KnowledgeSpaceContentProps) {
     const localize = useLocalize();
     const cardScroll = useScrollbarWhileScrolling();
@@ -495,8 +491,6 @@ export function KnowledgeSpaceContent({
                 onBatchDelete={handleBatchDelete}
                 onToggleAiAssistant={onToggleAiAssistant}
                 isAiAssistantOpen={isAiAssistantOpen}
-                sidebarCollapsed={sidebarCollapsed}
-                onExpandSidebar={onExpandSidebar}
             />
 
             {/* Content Container (Scrollable) */}

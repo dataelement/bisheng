@@ -376,6 +376,7 @@
   "com_invite_title": "$t(linsight) Invitation Code",
   "com_knowledge_add_file": "Add File",
   "com_knowledge_items_count": "{{count}} items",
+  "com_knowledge_folder_parse_ratio": "{{success}}/{{total}}",
   "com_knowledge_start_new_chat": "Start a new chat",
   "com_knowledge_failed": "Failed",
   "com_knowledge_model_switching": "Model Vector Switching",

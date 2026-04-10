@@ -5,9 +5,7 @@ import {
     FolderPlus,
     ChevronDown,
     ChevronRight,
-    Home,
     Info,
-    PanelLeftOpenIcon,
     FunnelIcon,
     Download,
     Tag,
@@ -65,8 +63,6 @@ interface KnowledgeSpaceHeaderProps {
     onBatchDelete: () => void;
     onToggleAiAssistant?: () => void;
     isAiAssistantOpen?: boolean;
-    sidebarCollapsed?: boolean;
-    onExpandSidebar?: () => void;
 }
 
 export function KnowledgeSpaceHeader({
@@ -94,9 +90,7 @@ export function KnowledgeSpaceHeader({
     onBatchRetry,
     onBatchDelete,
     onToggleAiAssistant,
-    isAiAssistantOpen,
-    sidebarCollapsed,
-    onExpandSidebar
+    isAiAssistantOpen
 }: KnowledgeSpaceHeaderProps) {
     const localize = useLocalize();
     const toolbarMeasureRef = useRef<HTMLDivElement>(null);
@@ -336,24 +330,13 @@ export function KnowledgeSpaceHeader({
         );
 
     return (
-        <div className="space-y-4 pt-5">
+        <div className="space-y-4 border-b border-[#e5e6eb] pt-5 pb-4">
             {/* 面包屑 / Title */}
             <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
                 {/* 左侧：标题与信息 / 面包屑 */}
                 <div className="flex items-center gap-1 text-sm flex-wrap w-full sm:w-auto">
                     {currentPath.length === 0 ? (
                         <div className="flex items-center gap-1">
-                            {sidebarCollapsed && (
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon"
-                                    className="w-7 h-7 text-[#86909c] hover:text-[#4e5969]"
-                                    onClick={onExpandSidebar}
-                                >
-                                    <PanelLeftOpenIcon className="size-5" />
-                                </Button>
-                            )}
                             <h1 className="text-base text-[#1d2129]">{space.name}</h1>
                             <Tooltip>
                                 <TooltipTrigger className="cursor-pointer">

@@ -128,8 +128,8 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
             >
                 <Search className="size-4 text-[#86909c] shrink-0" />
 
-                {/* Scope Select (Only if not at root) */}
-                {!isRoot && (
+                {/* 范围选择：仅聚焦/激活时展示，默认只显示放大镜 + 占位输入 */}
+                {!isRoot && isFocused && (
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                             <button className="flex items-center gap-1 h-5 text-sm text-[#4e5969] hover:bg-gray-100 px-1 py-0.5 rounded cursor-pointer transition-colors max-w-[120px] shrink-0 outline-none">
@@ -197,7 +197,7 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
 
             {/* Dropdown Panel — space tags */}
             {isFocused && (
-                <div className="absolute top-full left-0 mt-1 min-w-[320px] max-w-full bg-white border border-[#e5e6eb] shadow-[0_4px_10px_rgba(0,0,0,0.1)] rounded-md z-50 p-3">
+                <div className="absolute top-full left-0 mt-1 min-w-[320px] max-w-full bg-white shadow-[0_4px_10px_rgba(0,0,0,0.1)] rounded-md z-50 p-3">
                     <div className="text-sm font-medium text-gray-800 mb-2">{localize("com_knowledge.existing_tags")}</div>
                     <div className="flex flex-wrap gap-2">
                         {spaceTags.length === 0 && (

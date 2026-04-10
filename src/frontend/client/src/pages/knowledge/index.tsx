@@ -581,8 +581,6 @@ export default function Knowledge() {
                             onToggleAiAssistant={aiPane.handleToggleAiAssistant}
                             isAiAssistantOpen={aiPane.showAiAssistant}
                             onCreateSpace={handleCreateSpace}
-                            sidebarCollapsed={sidebarCollapsed}
-                            onExpandSidebar={() => setSidebarCollapsed(false)}
                         />
                     </div>
 

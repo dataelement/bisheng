@@ -3,9 +3,12 @@ import {
     forwardRef,
     useCallback,
     useEffect,
+    useLayoutEffect,
+    useRef,
     useState,
     type FocusEventHandler,
     type KeyboardEventHandler,
+    type MutableRefObject,
 } from "react";
 import { cn } from "~/utils";
 
@@ -42,11 +45,28 @@ export const ExpandableSearchField = forwardRef<HTMLInputElement, ExpandableSear
             containerClassName,
             onKeyDown,
             onBlur,
+            onFocus,
             disabled,
             ...inputProps
         },
         ref
     ) {
+        const inputRef = useRef<HTMLInputElement | null>(null);
+        const wasExpandedRef = useRef(false);
+        const [inputFocused, setInputFocused] = useState(false);
+
+        const setInputRef = useCallback(
+            (el: HTMLInputElement | null) => {
+                inputRef.current = el;
+                if (typeof ref === "function") {
+                    ref(el);
+                } else if (ref) {
+                    (ref as MutableRefObject<HTMLInputElement | null>).current = el;
+                }
+            },
+            [ref]
+        );
+
         const [showExpanded, setShowExpanded] = useState(() => !!value.trim());
 
         useEffect(() => {
@@ -55,20 +75,35 @@ export const ExpandableSearchField = forwardRef<HTMLInputElement, ExpandableSear
 
         const expanded = showExpanded || !!value.trim();
 
+        /** 展开且聚焦：蓝框（编辑态）；展开有失焦但有内容：灰框（仅展示关键词） */
+        const showActiveChrome = expanded && inputFocused;
+
+        /** 收起 → 展开后立刻聚焦（父组件常不传 ref，原先 ref.current 恒为 null 导致无法聚焦） */
+        useLayoutEffect(() => {
+            if (expanded && !wasExpandedRef.current) {
+                inputRef.current?.focus({ preventScroll: true });
+            }
+            wasExpandedRef.current = expanded;
+        }, [expanded]);
+
         const focusInput = useCallback(() => {
             requestAnimationFrame(() => {
-                if (ref && typeof ref !== "function") {
-                    ref.current?.focus();
-                }
+                inputRef.current?.focus({ preventScroll: true });
             });
-        }, [ref]);
+        }, []);
 
         const handleKeyDown: KeyboardEventHandler<HTMLInputElement> = (e) => {
             onKeyDown?.(e);
         };
 
+        const handleFocus: FocusEventHandler<HTMLInputElement> = (e) => {
+            onFocus?.(e);
+            setInputFocused(true);
+        };
+
         const handleBlur: FocusEventHandler<HTMLInputElement> = (e) => {
             onBlur?.(e);
+            setInputFocused(false);
             const v = e.currentTarget.value.trim();
             if (!v) {
                 setShowExpanded(false);
@@ -83,7 +118,10 @@ export const ExpandableSearchField = forwardRef<HTMLInputElement, ExpandableSear
                     "flex items-center h-8 rounded-lg border bg-white overflow-hidden shrink-0 select-none",
                     "transition-[width,border-color,background-color] duration-300 ease-out motion-reduce:transition-none",
                     expanded
-                        ? cn(expandedWidthClassName, "border-[#024DE3]")
+                        ? cn(
+                              expandedWidthClassName,
+                              showActiveChrome ? "border-[#024DE3]" : "border-[#E5E6EB]"
+                          )
                         : "w-8 border-[#E5E6EB] cursor-pointer hover:bg-[#F7F8FA]",
                     disabled && "pointer-events-none opacity-50",
                     containerClassName
@@ -99,13 +137,13 @@ export const ExpandableSearchField = forwardRef<HTMLInputElement, ExpandableSear
                 <div
                     className={cn(
                         "flex items-center justify-center px-[7px] h-full shrink-0 transition-colors duration-300 ease-out",
-                        expanded ? "text-[#024DE3]" : "text-[#86909C]"
+                        showActiveChrome ? "text-[#024DE3]" : "text-[#86909C]"
                     )}
                 >
                     <Search className="size-4 shrink-0" aria-hidden />
                 </div>
                 <input
-                    ref={ref}
+                    ref={setInputRef}
                     type="search"
                     inputMode="search"
                     autoComplete="off"
@@ -114,6 +152,7 @@ export const ExpandableSearchField = forwardRef<HTMLInputElement, ExpandableSear
                     value={value}
                     onChange={(e) => onChange(e.target.value)}
                     onKeyDown={handleKeyDown}
+                    onFocus={handleFocus}
                     onBlur={handleBlur}
                     tabIndex={expanded ? 0 : -1}
                     className={cn(

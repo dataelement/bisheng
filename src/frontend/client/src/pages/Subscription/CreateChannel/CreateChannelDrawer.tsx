@@ -45,6 +45,8 @@ const MAX_SUB_CHANNELS = 6;
 /** 可见方式 / 权限：主标题（私有、需审核、公开）— 与创建知识空间一致 */
 const PERMISSION_OPTION_TEXT_CLASS =
     "text-[14px] font-normal leading-[22px] tracking-normal text-[#212121]";
+/** 表单说明/辅助文案：14px / 400 / #999999 */
+const FORM_HINT_TEXT_CLASS = "text-[14px] font-normal text-[#999999]";
 const PERMISSION_OPTION_FONT: CSSProperties = {
     fontFamily: '"PingFang SC", "PingFang TC", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif',
 };
@@ -397,7 +399,7 @@ export function CreateChannelDrawer({
                                                 >
                                                     {opt.label}
                                                 </span>
-                                                <span className="text-[14px] font-normal text-[#999]">
+                                                <span className={FORM_HINT_TEXT_CLASS}>
                                                     {opt.desc}
                                                 </span>
                                             </div>
@@ -412,7 +414,7 @@ export function CreateChannelDrawer({
                                     <Label className="text-[14px] text-[#1D2129]">
                                         <span className="text-[#F53F3F] mr-1">*</span>
                                         {localize("com_subscription.is_publish_plaza")}
-                                        <span className="ml-2 text-[12px] text-[#86909C]">{localize("com_subscription.publish_to_square_description")}</span>
+                                        <span className={cn("ml-2", FORM_HINT_TEXT_CLASS)}>{localize("com_subscription.publish_to_square_description")}</span>
                                     </Label>
                                     <RadioGroup.Root
                                         value={form.publishToSquare}
@@ -447,7 +449,7 @@ export function CreateChannelDrawer({
                                     <div>
                                         <Label className="text-[14px] flex text-[#1D2129]">
                                             {localize("com_subscription.channel_content_filter")}
-                                            <p className="text-[12px] text-[#86909C] ml-2 mt-0.5">
+                                            <p className={cn("ml-2 mt-0.5", FORM_HINT_TEXT_CLASS)}>
                                                 {localize("com_subscription.only_filter_criteria")}
                                             </p>
                                         </Label>
@@ -506,7 +508,7 @@ export function CreateChannelDrawer({
                                     <div>
                                         <Label className="text-[14px] flex text-[#1D2129]">
                                             {localize("com_subscription.create_sub_channel")}
-                                            <p className="text-[12px] text-[#86909C] ml-2 mt-0.5">
+                                            <p className={cn("ml-2 mt-0.5", FORM_HINT_TEXT_CLASS)}>
                                                 {localize("com_subscription.subscribe_same_filters")}
                                             </p>
                                         </Label>

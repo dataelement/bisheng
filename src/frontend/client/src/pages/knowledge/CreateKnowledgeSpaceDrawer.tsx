@@ -14,7 +14,7 @@ import {
 import { Textarea } from "~/components/ui/Textarea";
 import { useLocalize } from "~/hooks";
 import { KnowledgeSpace, VisibilityType } from "~/api/knowledge";
-import { getFullWidthLength, truncateByFullWidth } from "~/utils";
+import { cn, getFullWidthLength, truncateByFullWidth } from "~/utils";
 import { ChannelSuccessIcon } from "~/components/icons/channels";
 
 const MAX_SPACE_NAME = 20;
@@ -23,6 +23,8 @@ const MAX_SPACE_DESC = 200;
 /** 权限项文案：PingFang SC / 14px / 22px 行高 / 400 / #212121 */
 const PERMISSION_OPTION_TEXT_CLASS =
     "text-[14px] font-normal leading-[22px] tracking-normal text-[#212121]";
+/** 权限项说明：14px / 400 / #999999 */
+const FORM_HINT_TEXT_CLASS = "text-[14px] font-normal text-[#999999]";
 const PERMISSION_OPTION_FONT: CSSProperties = {
     fontFamily: '"PingFang SC", "PingFang TC", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif',
 };
@@ -314,7 +316,7 @@ export function CreateKnowledgeSpaceDrawer({
                                                 >
                                                     {opt.label}
                                                 </span>
-                                                <span className="text-[14px] font-normal text-[#999]">
+                                                <span className={FORM_HINT_TEXT_CLASS}>
                                                     {opt.desc}
                                                 </span>
                                             </div>
@@ -328,7 +330,7 @@ export function CreateKnowledgeSpaceDrawer({
                                 <div className="space-y-3">
                                     <Label className="text-[14px] text-[#1D2129]">
                                         <span className="text-[#F53F3F]">*</span>
-                                        {localize("com_knowledge.publish_to_square")}<span className="ml-2 text-[14px] font-normal text-[#999999]">
+                                        {localize("com_knowledge.publish_to_square")}<span className={cn("ml-2", FORM_HINT_TEXT_CLASS)}>
                                             {localize("com_knowledge.publish_desc")}</span>
                                     </Label>
                                     <RadioGroup.Root

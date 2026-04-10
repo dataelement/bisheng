@@ -23,6 +23,7 @@ import SpeechToTextComponent from "~/components/Voice/SpeechToText";
 import { useGetWorkbenchModelsQuery } from "~/hooks/queries/data-provider";
 import InputFiles from "~/pages/appChat/components/InputFiles";
 import { useFileDropAndPaste } from "~/pages/appChat/useFileDropAndPaste";
+import { useScrollbarWhileScrolling } from "~/hooks";
 import { checkIfScrollable, cn, removeFocusRings } from "~/utils";
 import AiModelSelect from "./AiModelSelect";
 import BooksIcon from "../ui/icon/Books";
@@ -47,20 +48,19 @@ const KbTag = ({ kb, onRemove }: { kb: any; onRemove?: () => void }) => {
                 <BooksIcon className="mr-1 size-4 shrink-0 text-[#999]" />
             )}
 
-            <div className="flex min-w-0 flex-1 items-center overflow-hidden">
-                <span className="min-w-0 whitespace-nowrap" title={kb.name}>
-                    {label}
-                </span>
-                {onRemove && (
-                    <button
-                        type="button"
-                        onClick={onRemove}
-                        className="flex h-4 w-0 shrink-0 items-center justify-center overflow-hidden rounded-full text-slate-400 transition-all duration-200 hover:bg-slate-200 group-hover:w-4"
-                    >
-                        ✕
-                    </button>
-                )}
-            </div>
+            <span className="min-w-0 flex-1 truncate text-left" title={kb.name}>
+                {label}
+            </span>
+            {onRemove && (
+                <button
+                    type="button"
+                    onClick={onRemove}
+                    className="ml-0.5 flex size-4 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-200"
+                    aria-label="Remove"
+                >
+                    ✕
+                </button>
+            )}
         </div>
     );
 };
@@ -151,6 +151,7 @@ const AiChatInput = memo(
         /** True only while user is actively scrolling — drives .scroll-on-scroll (see style.css). */
         const [isTextareaScrolling, setIsTextareaScrolling] = useState(false);
         const textareaScrollHideTimerRef = useRef<number | null>(null);
+        const kbTagsScroll = useScrollbarWhileScrolling();
 
         const updateTextareaScrollable = useCallback(() => {
             const el = textAreaRef.current;
@@ -302,7 +303,11 @@ const AiChatInput = memo(
 
                     {/* Selected knowledge base / space tags */}
                     {selectedOrgKbs && selectedOrgKbs.length > 0 && !isLingsi && (
-                        <div className="m-3 max-h-[72px] overflow-y-auto scrollbar-on-hover">
+                        <div
+                            className="m-3 max-h-[72px] overflow-y-auto scroll-on-scroll"
+                            onScroll={kbTagsScroll.onScroll}
+                            {...kbTagsScroll.scrollingProps}
+                        >
                             <div className="flex flex-wrap gap-1">
                                 {selectedOrgKbs.map((kb) => (
                                     <KbTag

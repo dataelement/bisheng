@@ -1,15 +1,8 @@
 import { useLocalize } from "~/hooks";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-    Info,
-    SquareArrowOutUpLeftIcon
-} from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Info } from "lucide-react";
 import {
     Article,
-    Channel,
-    getArticlesApi,
-    getChannelDetailApi,
     type ArticleSearchResultItem
 } from "~/api/channels";
 import { NotificationSeverity } from "~/common";
@@ -24,6 +17,7 @@ import { ArticleCard } from "./ArticleCard";
 import { MultiSourceSelect } from "./MultiSourceSelect";
 import { SearchInput } from "./SearchInput";
 import { ShareOutlineIcon } from "~/components/icons/ShareOutlineIcon";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 interface ArticleListProps {
     channel: Channel;
