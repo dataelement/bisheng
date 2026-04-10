@@ -82,6 +82,7 @@ export default function ExplorePlaza() {
     const [page, setPage] = useState(1);
     const [hasMore, setHasMore] = useState(true);
     const loaderRef = useRef<HTMLDivElement>(null);
+    const loadMoreLockRef = useRef(false);
     const pageSize = 20;
 
     const navigate = useNavigate()
@@ -121,6 +122,7 @@ export default function ExplorePlaza() {
     useEffect(() => {
         setPage(1);
         setHasMore(true);
+        loadMoreLockRef.current = false;
         fetchAgents(searchQuery, activeTabId, 1, false);
     }, [searchQuery, activeTabId, refreshTrigger]);
 
@@ -131,9 +133,22 @@ export default function ExplorePlaza() {
     }, [page]);
 
     useEffect(() => {
+        if (!loadingMore) {
+            loadMoreLockRef.current = false;
+        }
+    }, [loadingMore]);
+
+    useEffect(() => {
         const observer = new IntersectionObserver((entries) => {
             const target = entries[0];
-            if (target.isIntersecting && !loading && !loadingMore && hasMore) {
+            if (
+                target.isIntersecting &&
+                !loading &&
+                !loadingMore &&
+                hasMore &&
+                !loadMoreLockRef.current
+            ) {
+                loadMoreLockRef.current = true;
                 setPage(prev => prev + 1);
             }
         }, { threshold: 0.1 });
