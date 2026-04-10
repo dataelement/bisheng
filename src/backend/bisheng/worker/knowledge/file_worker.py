@@ -200,7 +200,7 @@ def copy_vector(
 
     es_db = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=target_knowledge)
     if es_db:
-        insert_es(source_data, es_db)
+        insert_es(source_data, es_db, index_name=target_knowledge.index_name)
 
 
 def create_milvus_col_and_es_index(source_konwledge: Knowledge, target_knowledge: Knowledge):
@@ -244,7 +244,7 @@ def insert_milvus(li: List, fields: list, target: Milvus):
     logger.info("copy_done pk_size={}", len(res_list))
 
 
-def insert_es(li: List, target: ElasticsearchStore):
+def insert_es(li: List, target: ElasticsearchStore, index_name: str):
     from elasticsearch.helpers import bulk
 
     res_list = []
@@ -256,7 +256,7 @@ def insert_es(li: List, target: ElasticsearchStore):
         metadata = data
         request = {
             "_op_type": "index",
-            "_index": target.index_name,
+            "_index": index_name,
             "text": text,
             "metadata": metadata,
             "_id": ids[i],
@@ -264,7 +264,7 @@ def insert_es(li: List, target: ElasticsearchStore):
         requests.append(request)
     bulk(target.client, requests)
 
-    target.client.indices.refresh(index=target.index_name)
+    target.client.indices.refresh(index=index_name)
     logger.info("copy_es_done pk_size={}", len(res_list))
 
 
