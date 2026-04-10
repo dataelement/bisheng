@@ -288,7 +288,7 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
       host: 192.168.106.114
       username: root
       password:
-        from_secret: sshpwd_114
+        from_secret: sshpwd
       port: 22
       command_timeout: 10m
       script:
