@@ -56,7 +56,7 @@ def _login(client: httpx.Client) -> str:
     assert pubkey_resp.status_code == 200
     public_key_pem = pubkey_resp.json()['data']['public_key']
 
-    admin_password = os.environ.get('E2E_ADMIN_PASSWORD', 'dataelem')
+    admin_password = os.environ.get('E2E_ADMIN_PASSWORD', 'Bisheng@top1')
     public_key = serialization.load_pem_public_key(public_key_pem.encode())
     encrypted = public_key.encrypt(admin_password.encode(), padding.PKCS1v15())
     encrypted_password = base64.b64encode(encrypted).decode()
