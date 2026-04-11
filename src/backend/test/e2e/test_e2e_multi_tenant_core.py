@@ -56,8 +56,9 @@ def _login(client: httpx.Client) -> str:
     assert pubkey_resp.status_code == 200
     public_key_pem = pubkey_resp.json()['data']['public_key']
 
+    admin_password = os.environ.get('E2E_ADMIN_PASSWORD', 'dataelem')
     public_key = serialization.load_pem_public_key(public_key_pem.encode())
-    encrypted = public_key.encrypt(b'admin123', padding.PKCS1v15())
+    encrypted = public_key.encrypt(admin_password.encode(), padding.PKCS1v15())
     encrypted_password = base64.b64encode(encrypted).decode()
 
     login_resp = client.post(
@@ -146,14 +147,14 @@ class TestE2EMultiTenantCore:
         """
         headers = {'Cookie': f'access_token_cookie={admin_token}'}
 
-        # List flows
+        # List workflows — basic read API regression
         resp = client.get(
-            f'{API_BASE}/flows',
+            f'{API_BASE}/workflow/list',
             params={'page_num': 1, 'page_size': 5},
             headers=headers,
         )
         assert resp.status_code == 200
         body = resp.json()
         assert body['status_code'] == 200, (
-            f'AC-11 FAIL: List flows failed: {body}'
+            f'AC-11 FAIL: List workflows failed: {body}'
         )
