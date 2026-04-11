@@ -149,18 +149,20 @@ CREATE TABLE IF NOT EXISTS knowledge (
 TABLE_DEPARTMENT = """\
 CREATE TABLE IF NOT EXISTS department (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    tenant_id INTEGER NOT NULL DEFAULT 1,
+    dept_id VARCHAR(64) NOT NULL UNIQUE,
     name VARCHAR(128) NOT NULL,
     parent_id INTEGER,
-    path VARCHAR(1024),
-    level INTEGER DEFAULT 0,
+    tenant_id INTEGER NOT NULL DEFAULT 1,
+    path VARCHAR(512) NOT NULL DEFAULT '',
     sort_order INTEGER DEFAULT 0,
     source VARCHAR(32) DEFAULT 'local',
-    external_id VARCHAR(255),
-    admin_user_id INTEGER,
+    external_id VARCHAR(128),
     status VARCHAR(16) DEFAULT 'active',
+    default_role_ids JSON,
+    create_user INTEGER,
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    UNIQUE(source, external_id)
 )"""
 
 TABLE_USER_DEPARTMENT = """\
@@ -169,6 +171,7 @@ CREATE TABLE IF NOT EXISTS user_department (
     user_id INTEGER NOT NULL,
     department_id INTEGER NOT NULL,
     is_primary INTEGER DEFAULT 1,
+    source VARCHAR(32) DEFAULT 'local',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
     UNIQUE(user_id, department_id)
 )"""

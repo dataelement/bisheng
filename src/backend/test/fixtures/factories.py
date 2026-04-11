@@ -86,3 +86,62 @@ def create_test_user(
         {'user_name': user_name},
     ).mappings().one()
     return dict(row)
+
+
+def create_department(
+    session: Session,
+    dept_id: str = 'BS@test1',
+    name: str = 'Test Dept',
+    tenant_id: int = 1,
+    parent_id: int = None,
+    path: str = '',
+    **kwargs,
+) -> dict:
+    """Insert a department record and return it as a dict."""
+    cols = 'dept_id, name, tenant_id, path'
+    vals = ':dept_id, :name, :tenant_id, :path'
+    params = {
+        'dept_id': dept_id, 'name': name,
+        'tenant_id': tenant_id, 'path': path,
+    }
+    if parent_id is not None:
+        cols += ', parent_id'
+        vals += ', :parent_id'
+        params['parent_id'] = parent_id
+
+    for k, v in kwargs.items():
+        cols += f', {k}'
+        vals += f', :{k}'
+        params[k] = v
+
+    session.execute(text(
+        f'INSERT INTO department ({cols}) VALUES ({vals})'
+    ), params)
+    session.flush()
+
+    row = session.execute(
+        text('SELECT * FROM department WHERE dept_id = :dept_id'),
+        {'dept_id': dept_id},
+    ).mappings().one()
+    return dict(row)
+
+
+def create_user_department(
+    session: Session,
+    user_id: int,
+    department_id: int,
+    is_primary: int = 1,
+    source: str = 'local',
+) -> dict:
+    """Insert a user_department association and return it as a dict."""
+    session.execute(text(
+        'INSERT INTO user_department (user_id, department_id, is_primary, source) '
+        'VALUES (:uid, :did, :primary, :source)'
+    ), {'uid': user_id, 'did': department_id, 'primary': is_primary, 'source': source})
+    session.flush()
+
+    row = session.execute(
+        text('SELECT * FROM user_department WHERE user_id = :uid AND department_id = :did'),
+        {'uid': user_id, 'did': department_id},
+    ).mappings().one()
+    return dict(row)
