@@ -39,17 +39,30 @@ class DatabaseManager(BaseContextManager[DatabaseConnectionManager]):
 
     async def _async_initialize(self) -> DatabaseConnectionManager:
         """Initialize Database Connection Manager"""
-        return DatabaseConnectionManager(
+        conn_manager = DatabaseConnectionManager(
             self.database_url,
             **self.engine_config
         )
+        self._register_tenant_filter()
+        return conn_manager
 
     def _sync_initialize(self) -> DatabaseConnectionManager:
         """Synchronization Initialization"""
-        return DatabaseConnectionManager(
+        conn_manager = DatabaseConnectionManager(
             self.database_url,
             **self.engine_config
         )
+        self._register_tenant_filter()
+        return conn_manager
+
+    @staticmethod
+    def _register_tenant_filter():
+        """Register tenant filter events after models are loaded."""
+        try:
+            from bisheng.core.database.tenant_filter import register_tenant_filter_events
+            register_tenant_filter_events()
+        except Exception as e:
+            logger.warning(f'Failed to register tenant filter events: {e}')
 
     async def _async_cleanup(self) -> None:
         """Clean up database resources"""

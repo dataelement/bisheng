@@ -56,6 +56,9 @@ async def init_default_data():
                                    third_id=WebMenuResource.KNOWLEDGE_SPACE.value),
                     ])
                     await session.commit()
+                # Initialize default tenant (F001)
+                await _init_default_tenant(session)
+
                 # Add Default User Group
                 group = await session.exec(select(Group).limit(1))
                 group = group.all()
@@ -149,6 +152,53 @@ def read_from_conf(file_path: str) -> str:
         content = f.read()
 
     return content
+
+
+async def _init_default_tenant(session):
+    """Idempotently create the default tenant (id=1) and backfill user_tenant.
+
+    Called during init_default_data() to ensure the default tenant exists.
+    Uses bypass_tenant_filter() since tenant filter events might be active.
+    """
+    from bisheng.core.context.tenant import DEFAULT_TENANT_ID, bypass_tenant_filter
+    from bisheng.database.models.tenant import Tenant, UserTenant
+
+    with bypass_tenant_filter():
+        existing = (await session.exec(
+            select(Tenant).where(Tenant.id == DEFAULT_TENANT_ID)
+        )).first()
+        if existing:
+            return
+
+        tenant = Tenant(
+            id=DEFAULT_TENANT_ID,
+            tenant_code='default',
+            tenant_name='Default Tenant',
+            status='active',
+        )
+        session.add(tenant)
+        await session.commit()
+
+        # Backfill user_tenant for users without any tenant association
+        users_without_tenant = (await session.exec(
+            select(User.user_id).where(
+                User.user_id.notin_(
+                    select(UserTenant.user_id)
+                )
+            )
+        )).all()
+
+        for uid in users_without_tenant:
+            session.add(UserTenant(
+                user_id=uid,
+                tenant_id=DEFAULT_TENANT_ID,
+                is_default=1,
+            ))
+
+        if users_without_tenant:
+            await session.commit()
+
+    logger.info(f'Default tenant initialized (id={DEFAULT_TENANT_ID})')
 
 
 def upload_preset_minio_file():
