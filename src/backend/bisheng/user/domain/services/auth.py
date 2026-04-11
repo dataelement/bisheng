@@ -97,13 +97,17 @@ class LoginUser(BaseModel):
     user_name: str = Field(default="")
     user_role: List[int] = Field(default_factory=list, description="Users GroupsIDVertical")
     group_cache: Dict[int, Any] = Field(default_factory=dict, description="User Group Cache")
+    tenant_id: int = Field(default=1, description="Current tenant ID")
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        from bisheng.core.context.tenant import DEFAULT_TENANT_ID
+
         self.user_id = kwargs.get('user_id')
         self.user_name = kwargs.get('user_name')
         self.user_role = kwargs.get('user_role')
         self.group_cache = kwargs.get('group_cache', {})
+        self.tenant_id = kwargs.get('tenant_id', DEFAULT_TENANT_ID)
 
         if not self.user_role:
             self.user_role = []
@@ -255,11 +259,13 @@ class LoginUser(BaseModel):
 
     # some methods related to AuthJwt
     @classmethod
-    def create_access_token(cls, user: User, auth_jwt: AuthJwt) -> str:
-        """ Create access for userstoken """
+    def create_access_token(cls, user: User, auth_jwt: AuthJwt, tenant_id: int = None) -> str:
+        """ Create access token for user, includes tenant_id in payload. """
+        from bisheng.core.context.tenant import DEFAULT_TENANT_ID
         payload = {
             'user_id': user.user_id,
-            'user_name': user.user_name
+            'user_name': user.user_name,
+            'tenant_id': tenant_id or DEFAULT_TENANT_ID,
         }
         token = auth_jwt.create_access_token(subject=payload)
         return token
@@ -274,23 +280,36 @@ class LoginUser(BaseModel):
         auth_jwt.unset_access_token()
 
     @classmethod
-    async def init_login_user(cls, user_id: int, user_name: str) -> Self:
+    async def init_login_user(cls, user_id: int, user_name: str, tenant_id: int = None) -> Self:
+        from bisheng.core.context.tenant import DEFAULT_TENANT_ID
         user_roles = await UserRoleDao.aget_user_roles(user_id)
         role_ids = [user_role.role_id for user_role in user_roles]
-        login_user = cls(user_id=user_id, user_name=user_name, user_role=role_ids)
+        login_user = cls(
+            user_id=user_id, user_name=user_name, user_role=role_ids,
+            tenant_id=tenant_id or DEFAULT_TENANT_ID,
+        )
         return login_user
 
     @classmethod
-    def init_login_user_sync(cls, user_id: int, user_name: str) -> Self:
+    def init_login_user_sync(cls, user_id: int, user_name: str, tenant_id: int = None) -> Self:
+        from bisheng.core.context.tenant import DEFAULT_TENANT_ID
         user_roles = UserRoleDao.get_user_roles(user_id)
         role_ids = [user_role.role_id for user_role in user_roles]
-        login_user = cls(user_id=user_id, user_name=user_name, user_role=role_ids)
+        login_user = cls(
+            user_id=user_id, user_name=user_name, user_role=role_ids,
+            tenant_id=tenant_id or DEFAULT_TENANT_ID,
+        )
         return login_user
 
     @classmethod
     async def get_login_user(cls, auth_jwt: AuthJwt = Depends()) -> Self:
+        from bisheng.core.context.tenant import DEFAULT_TENANT_ID
         subject = auth_jwt.get_subject()
-        return await cls.init_login_user(user_id=subject['user_id'], user_name=subject['user_name'])
+        return await cls.init_login_user(
+            user_id=subject['user_id'],
+            user_name=subject['user_name'],
+            tenant_id=subject.get('tenant_id', DEFAULT_TENANT_ID),
+        )
 
     @classmethod
     async def get_admin_user(cls, auth_jwt: AuthJwt = Depends()) -> Self:
@@ -301,8 +320,13 @@ class LoginUser(BaseModel):
 
     @classmethod
     async def get_login_user_from_ws(cls, websocket: WebSocket, auth_jwt: AuthJwt = Depends(), t: str = None) -> Self:
+        from bisheng.core.context.tenant import DEFAULT_TENANT_ID
         subject = auth_jwt.get_subject(auth_from="websocket", websocket=websocket, token=t)
-        return await cls.init_login_user(user_id=subject['user_id'], user_name=subject['user_name'])
+        return await cls.init_login_user(
+            user_id=subject['user_id'],
+            user_name=subject['user_name'],
+            tenant_id=subject.get('tenant_id', DEFAULT_TENANT_ID),
+        )
 
     @classmethod
     async def get_admin_user_from_ws(cls, websocket: WebSocket, auth_jwt: AuthJwt = Depends(), t: str = None) -> Self:
