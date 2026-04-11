@@ -18,6 +18,12 @@ Created by F000-test-infrastructure.
 import sys
 from unittest.mock import MagicMock
 
+# Pre-mock celery before any bisheng module can import it (settings.py uses celery.schedules).
+# Must happen before the MultiTenantConf import below, which traverses the config chain.
+for _mod in ('celery', 'celery.schedules', 'celery.app', 'celery.app.task'):
+    if _mod not in sys.modules:
+        sys.modules[_mod] = MagicMock()
+
 from bisheng.core.config.multi_tenant import MultiTenantConf
 
 # Union of all modules that cause circular dependency issues during test import.

@@ -58,6 +58,8 @@ async def init_default_data():
                     await session.commit()
                 # Initialize default tenant (F001)
                 await _init_default_tenant(session)
+                # Initialize default root department (F002)
+                await _init_default_root_department(session)
 
                 # Add Default User Group
                 group = await session.exec(select(Group).limit(1))
@@ -199,6 +201,46 @@ async def _init_default_tenant(session):
             await session.commit()
 
     logger.info(f'Default tenant initialized (id={DEFAULT_TENANT_ID})')
+
+
+async def _init_default_root_department(session):
+    """Idempotently create the default root department for the default tenant.
+
+    Called during init_default_data() after _init_default_tenant().
+    Uses bypass_tenant_filter() since tenant filter events might be active.
+
+    Part of F002-department-tree.
+    """
+    from bisheng.core.context.tenant import DEFAULT_TENANT_ID, bypass_tenant_filter
+    from bisheng.database.models.department import Department
+    from bisheng.database.models.tenant import Tenant
+
+    with bypass_tenant_filter():
+        # Check if default tenant exists and has no root_dept_id yet
+        tenant = (await session.exec(
+            select(Tenant).where(Tenant.id == DEFAULT_TENANT_ID)
+        )).first()
+        if tenant is None or tenant.root_dept_id is not None:
+            return
+
+        dept = Department(
+            dept_id='BS@root',
+            name='Default Organization',
+            parent_id=None,
+            tenant_id=DEFAULT_TENANT_ID,
+            path='',
+            source='local',
+            status='active',
+        )
+        session.add(dept)
+        await session.flush()
+        await session.refresh(dept)
+
+        dept.path = f'/{dept.id}/'
+        tenant.root_dept_id = dept.id
+        await session.commit()
+
+    logger.info(f'Default root department initialized (id={dept.id})')
 
 
 def upload_preset_minio_file():
