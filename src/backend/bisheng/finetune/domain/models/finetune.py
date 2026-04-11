@@ -3,7 +3,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 
 from pydantic import field_validator, BaseModel, model_validator
-from sqlalchemy import Select
+from sqlalchemy import Select, Text
 from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlmodel import JSON, Column, DateTime, Field, func, select, text, update, col
 
@@ -47,7 +47,7 @@ class FinetuneBase(SQLModelSerializable):
     train_data: Optional[List[Dict]] = Field(default=None, sa_column=Column(JSON), description='Personal Training Dataset Information')
     preset_data: Optional[List[Dict]] = Field(default=None, sa_column=Column(JSON), description='Preset training dataset information')
     status: int = Field(default=FinetuneStatus.TRAINING.value, index=True, description='Status of the training task')
-    reason: Optional[str] = Field(default='', sa_column=Column(LONGTEXT), description='Task Failure Reason')
+    reason: Optional[str] = Field(default='', sa_column=Column(Text), description='Task Failure Reason')
     log_path: Optional[str] = Field(default='', max_length=512, description='Training log inminioPath on')
     report: Optional[Dict] = Field(default=None, sa_column=Column(JSON), description='Assessment report data for training tasks')
     user_id: int = Field(default=None, index=True, description='creatorID')
@@ -55,7 +55,7 @@ class FinetuneBase(SQLModelSerializable):
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
 
     # Check training set data format
     @classmethod

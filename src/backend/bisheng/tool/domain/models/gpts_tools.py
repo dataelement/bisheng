@@ -17,7 +17,7 @@ from ..const import AuthType, ToolPresetType
 class GptsToolsBase(SQLModelSerializable):
     name: str = Field(sa_column=Column(String(length=125), index=True))
     logo: Optional[str] = Field(default=None, sa_column=Column(String(length=512), index=False))
-    desc: Optional[str] = Field(default=None, sa_column=Column(LONGTEXT, index=False))
+    desc: Optional[str] = Field(default=None, sa_column=Column(Text, index=False))
     tool_key: str = Field(sa_column=Column(String(length=125), index=False))
     type: int = Field(default=0, description='of the category to which they belongID')
     is_preset: int = Field(default=ToolPresetType.API.value,
@@ -29,7 +29,7 @@ class GptsToolsBase(SQLModelSerializable):
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
 
 
 class GptsToolsTypeBase(SQLModelSerializable):
@@ -54,7 +54,7 @@ class GptsToolsTypeBase(SQLModelSerializable):
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
 
 
 class GptsTools(GptsToolsBase, table=True):

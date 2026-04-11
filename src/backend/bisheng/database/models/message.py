@@ -3,6 +3,7 @@ from enum import Enum
 from typing import Dict, List, Optional, Tuple
 
 from loguru import logger
+from sqlalchemy import Integer
 from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlmodel import (JSON, Column, DateTime, Field, String, Text, case, delete, func, not_, or_,
                       select, text, update, col)
@@ -23,7 +24,7 @@ class MessageBase(SQLModelSerializable):
     mark_status: Optional[int] = Field(index=False, default=1, description='Tag status')
     mark_user: Optional[int] = Field(default=None, index=False, description='Flagging User')
     mark_user_name: Optional[str] = Field(default=None, index=False, description='Flagging User')
-    message: Optional[str] = Field(default=None, sa_column=Column(LONGTEXT), description='Chat Message')
+    message: Optional[str] = Field(default=None, sa_column=Column(Text), description='Chat Message')
     extra: Optional[str] = Field(default=None, sa_column=Column(Text), description='Connection information, etc.')
     type: str = Field(index=False, description='Type of Message')
     category: str = Field(index=False, max_length=32, description='Message category, questionetc.')
@@ -47,11 +48,12 @@ class MessageBase(SQLModelSerializable):
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
 
 
 class ChatMessage(MessageBase, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
+    # id: Optional[int] = Field(default=None, primary_key=True)
+    id: Optional[int] = Field(default=None, sa_column=Column(Integer, primary_key=True, autoincrement=True))
     receiver: Optional[Dict] = Field(default=None, sa_column=Column(JSON))
 
     # Key: Set table level character set to utf8mb4

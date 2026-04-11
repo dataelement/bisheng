@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Dict, Optional
 
 from pydantic import model_validator
-from sqlalchemy import JSON, Column, DateTime, text, String
+from sqlalchemy import JSON, Column, DateTime, Integer, text, String
 from sqlmodel import Field
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -21,11 +21,12 @@ class TemplateBase(SQLModelSerializable):
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
 
 
 class Template(TemplateBase, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
+    # id: Optional[int] = Field(default=None, primary_key=True)
+    id: Optional[int] = Field(default=None, sa_column=Column(Integer, primary_key=True, autoincrement=True))
 
 
 class TemplateRead(TemplateBase):

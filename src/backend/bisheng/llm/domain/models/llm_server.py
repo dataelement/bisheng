@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Dict, List, Optional
 
-from sqlalchemy import CHAR, JSON, Column, DateTime, Text, UniqueConstraint, delete, text, update
+from sqlalchemy import CHAR, JSON, Column, DateTime, Integer, Text, UniqueConstraint, delete, text, update
 from sqlmodel import Field, select, col
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -22,7 +22,7 @@ class LLMServerBase(SQLModelSerializable):
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
 
 
 class LLMModelBase(SQLModelSerializable):
@@ -40,20 +40,22 @@ class LLMModelBase(SQLModelSerializable):
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
 
 
 class LLMServer(LLMServerBase, table=True):
     __tablename__ = 'llm_server'
 
-    id: Optional[int] = Field(default=None, nullable=False, primary_key=True, description='Service UniqueID')
+    # id: Optional[int] = Field(default=None, nullable=False, primary_key=True, description='Service UniqueID')
+    id: Optional[int] = Field(default=None, sa_column=Column(Integer, primary_key=True, autoincrement=True), description='Service UniqueID')
 
 
 class LLMModel(LLMModelBase, table=True):
     __tablename__ = 'llm_model'
     __table_args__ = (UniqueConstraint('server_id', 'model_name', name='server_model_uniq'),)
 
-    id: Optional[int] = Field(default=None, nullable=False, primary_key=True, description='Model UniqueID')
+    # id: Optional[int] = Field(default=None, nullable=False, primary_key=True, description='Model UniqueID')
+    id: Optional[int] = Field(default=None, sa_column=Column(Integer, primary_key=True, autoincrement=True),description='Model UniqueID')
 
 
 class LLMDao:

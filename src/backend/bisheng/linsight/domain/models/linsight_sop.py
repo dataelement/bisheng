@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Optional, Dict, Any, List, Literal
 
 from loguru import logger
-from sqlalchemy import update
+from sqlalchemy import Integer, update,Text
 from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlmodel import Field, select, delete, col, or_, func, Column, Text, DateTime, text, CHAR
 
@@ -20,7 +20,7 @@ class LinsightSOPBase(SQLModelSerializable):
     description: Optional[str] = Field(default=None, description='SOPDescription', sa_column=Column(Text))
     user_id: int = Field(..., description='UsersID', foreign_key="user.user_id", nullable=False)
     content: str = Field(..., description='SOPContents',
-                         sa_column=Column(LONGTEXT, nullable=False, comment="SOPContents"))
+                         sa_column=Column(Text, nullable=False, comment="SOPContents"))
 
     rating: Optional[int] = Field(default=0, ge=0, le=5, description='SOPScore, Range0-5')
     showcase: Optional[bool] = Field(default=False, index=True, description='Whether to display it on the homepage as a featured case')
@@ -33,7 +33,7 @@ class LinsightSOPBase(SQLModelSerializable):
     create_time: datetime = Field(default_factory=datetime.now, description='Creation Time',
                                   sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=True, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=True, server_default=text('CURRENT_TIMESTAMP')))
 
 
 class LinsightSOP(LinsightSOPBase, table=True):
@@ -41,7 +41,8 @@ class LinsightSOP(LinsightSOPBase, table=True):
     Inspiration SOPModels
     """
     __tablename__ = "linsight_sop"
-    id: Optional[int] = Field(default=None, primary_key=True, description='SOPUniqueness quantificationID')
+    # id: Optional[int] = Field(default=None, primary_key=True, description='SOPUniqueness quantificationID')
+    id: Optional[int] = Field(default=None, sa_column=Column(Integer, primary_key=True, autoincrement=True))
 
 
 class LinsightSOPRecord(SQLModelSerializable, table=True):
@@ -49,12 +50,13 @@ class LinsightSOPRecord(SQLModelSerializable, table=True):
     InspirationSOPRun the record sheet to record the results generated during the execution of the Ideasop
     """
     __tablename__ = "linsight_sop_record"
-    id: Optional[int] = Field(default=None, primary_key=True, description='SOPRecord UniqueID')
+    # id: Optional[int] = Field(default=None, primary_key=True, description='SOPRecord UniqueID')
+    id: Optional[int] = Field(default=None, sa_column=Column(Integer, primary_key=True, autoincrement=True))
     name: str = Field(..., description='SOPPart Name', sa_column=Column(Text, nullable=False))
     description: Optional[str] = Field(default=None, description='SOPDescription', sa_column=Column(Text))
     user_id: int = Field(..., description='UsersID', foreign_key="user.user_id", nullable=False)
     content: str = Field(..., description='SOPContents',
-                         sa_column=Column(LONGTEXT, nullable=False, comment="SOPContents"))
+                         sa_column=Column(Text, nullable=False, comment="SOPContents"))
 
     rating: Optional[int] = Field(default=0, ge=0, le=5, description='SOPScore, Range0-5')
     execute_feedback: Optional[str] = Field(None, description='Execution Result Feedback Information', sa_type=Text, nullable=True)
@@ -62,7 +64,7 @@ class LinsightSOPRecord(SQLModelSerializable, table=True):
     create_time: datetime = Field(default_factory=datetime.now, description='Creation Time',
                                   sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=True, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=True, server_default=text('CURRENT_TIMESTAMP')))
 
 
 class LinsightSOPDao(LinsightSOPBase):

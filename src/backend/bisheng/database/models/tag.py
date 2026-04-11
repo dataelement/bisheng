@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional, List, Dict
 
-from sqlalchemy import Column, DateTime, String, UniqueConstraint
+from sqlalchemy import Column, DateTime, Integer, String, UniqueConstraint
 from sqlmodel import Field, select, delete, and_, func, text, col
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -27,11 +27,12 @@ class TagBase(SQLModelSerializable):
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')), description="Creation Time")
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
 
 
 class Tag(TagBase, table=True):
-    id: Optional[int] = Field(default=None, index=True, primary_key=True, description="Tag UniqueID")
+    # id: Optional[int] = Field(default=None, index=True, primary_key=True, description="Tag UniqueID")
+    id: Optional[int] = Field(default=None, sa_column=Column(Integer, primary_key=True, autoincrement=True), description="Tag UniqueID")
 
 
 class TagLinkBase(SQLModelSerializable):
@@ -45,12 +46,12 @@ class TagLinkBase(SQLModelSerializable):
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')), description="Creation Time")
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
 
 
 class TagLink(TagLinkBase, table=True):
     __table_args__ = (UniqueConstraint('resource_id', 'resource_type', 'tag_id', name='resource_tag_uniq'),)
-    id: Optional[int] = Field(default=None, index=True, primary_key=True, description="Tag Association UniqueID")
+    id: Optional[int] = Field(default=None, sa_column=Column(Integer, primary_key=True, autoincrement=True), description="Tag Association UniqueID")
 
 
 class TagDao(Tag):

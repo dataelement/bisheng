@@ -78,6 +78,6 @@ class InboxMessage(SQLModelSerializable, table=True):
         default=None,
         sa_column=Column(
             DateTime, nullable=True,
-            server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')
+            server_default=text('CURRENT_TIMESTAMP')
         )
     )

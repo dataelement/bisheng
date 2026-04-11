@@ -22,8 +22,11 @@ class DatabaseConnectionManager:
     """
 
     def __init__(self, database_url: str, **engine_kwargs):
-        self.database_url = database_url
+        self.database_url = database_url.replace("dmAsync", "dmPython")
+        logger.debug(f"初始化 DatabaseConnectionManager with URL: {self.database_url}")
         self.async_database_url = self._convert_to_async_url(database_url)
+        # self.async_database_url = database_url
+        logger.debug(f"初始化异步数据库 URL: {self.async_database_url}")
         self.engine_kwargs = engine_kwargs
 
         self._engine: Optional[Engine] = None

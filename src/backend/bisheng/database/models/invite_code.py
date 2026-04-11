@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Optional, List
 
+from sqlalchemy import Integer
 from sqlmodel import Field, Column, text, DateTime, select, update
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -22,11 +23,12 @@ class InviteCodeBase(SQLModelSerializable):
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
 
 
 class InviteCode(InviteCodeBase, table=True):
-    id: Optional[int] = Field(default=None, index=True, primary_key=True, description='Uniqueness quantificationID')
+    # id: Optional[int] = Field(default=None, index=True, primary_key=True, description='Uniqueness quantificationID')
+    id: Optional[int] = Field(default=None, sa_column=Column(Integer, primary_key=True, autoincrement=True), description='Uniqueness quantificationID')
 
 
 class InviteCodeDao(InviteCodeBase):

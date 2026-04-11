@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List, Optional
 
-from sqlalchemy import Column, DateTime, text, func, delete, and_, UniqueConstraint
+from sqlalchemy import Column, DateTime, Integer, text, func, delete, and_, UniqueConstraint
 from sqlmodel import Field, select
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -20,12 +20,13 @@ class RoleBase(SQLModelSerializable):
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
 
 
 class Role(RoleBase, table=True):
     __table_args__ = (UniqueConstraint('group_id', 'role_name', name='group_role_name_uniq'),)
-    id: Optional[int] = Field(default=None, primary_key=True)
+    # id: Optional[int] = Field(default=None, primary_key=True)
+    id: Optional[int] = Field(default=None, sa_column=Column(Integer, primary_key=True, autoincrement=True))
 
 
 class RoleRead(RoleBase):

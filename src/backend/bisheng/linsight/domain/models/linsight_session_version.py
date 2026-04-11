@@ -73,7 +73,7 @@ class LinsightSessionVersion(LinsightSessionVersionBase, table=True):
     create_time: datetime = Field(default_factory=datetime.now, description='Creation Time',
                                   sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=True, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=True, server_default=text('CURRENT_TIMESTAMP')))
 
     __tablename__ = "linsight_session_version"
 

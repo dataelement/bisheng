@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional
 
-from sqlalchemy import Column, DateTime, text
+from sqlalchemy import Column, DateTime, Integer, text, Text
 from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlmodel import Field, select
 
@@ -28,7 +28,7 @@ class ConfigKeyEnum(Enum):
 
 class ConfigBase(SQLModelSerializable):
     key: str = Field(index=True, unique=True)
-    value: str = Field(sa_column=Column(LONGTEXT))
+    value: str = Field(sa_column=Column(Text, nullable=False))
     comment: Optional[str] = Field(default=None, index=False)
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
@@ -37,7 +37,7 @@ class ConfigBase(SQLModelSerializable):
 
 
 class Config(ConfigBase, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: Optional[int] = Field(default=None, sa_column=Column(Integer, primary_key=True, autoincrement=True))
 
     __table_args__ = {
         "mysql_charset": "utf8mb4",

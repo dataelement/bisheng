@@ -3,7 +3,7 @@ from enum import Enum
 from typing import List, Optional, Union
 
 from pydantic import BaseModel
-from sqlalchemy import Column, DateTime, text
+from sqlalchemy import Column, DateTime, Integer, text
 from sqlmodel import Field, select, delete, col
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -17,11 +17,11 @@ class RoleAccessBase(SQLModelSerializable):
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
 
 
 class RoleAccess(RoleAccessBase, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: Optional[int] = Field(default=None, sa_column=Column(Integer, primary_key=True, autoincrement=True))
 
 
 class RoleAccessRead(RoleAccessBase):
