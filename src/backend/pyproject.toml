@@ -84,3 +84,24 @@ dependencies = [
     "json-repair>=0.55.0",
     "arxiv>=2.4.0"
 ]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "pytest-cov>=5.0",
+    "fakeredis[lua]>=2.21",
+    "aiosqlite>=0.21.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["test"]
+python_files = ["test_*.py"]
+asyncio_mode = "auto"
+markers = [
+    "e2e: end-to-end tests requiring a running backend (deselect with '-m not e2e')",
+    "slow: tests that take more than 5 seconds",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning:sqlalchemy.*",
+]
