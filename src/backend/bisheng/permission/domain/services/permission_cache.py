@@ -106,25 +106,26 @@ class PermissionCache:
     async def invalidate_user(cls, user_id: int) -> None:
         """Invalidate all permission cache entries for a user.
 
-        Uses SCAN to find keys matching perm:*:{user_id}:* pattern.
+        Uses two SCAN passes with exact prefixes to avoid false matches.
         """
         try:
             redis = await cls._get_redis()
             if redis is None:
                 return
 
-            # Use raw async connection for SCAN
             conn = redis.async_connection
-            pattern = f'{KEY_PREFIX}*:{user_id}:*'
-            cursor = 0
             deleted = 0
-            while True:
-                cursor, keys = await conn.scan(cursor=cursor, match=pattern, count=100)
-                if keys:
-                    await conn.delete(*keys)
-                    deleted += len(keys)
-                if cursor == 0:
-                    break
+            # Scan with exact prefixes to avoid matching user_id=1 against user_id=11
+            for prefix in (f'{KEY_PREFIX}chk:{user_id}:', f'{KEY_PREFIX}lst:{user_id}:'):
+                pattern = f'{prefix}*'
+                cursor = 0
+                while True:
+                    cursor, keys = await conn.scan(cursor=cursor, match=pattern, count=100)
+                    if keys:
+                        await conn.delete(*keys)
+                        deleted += len(keys)
+                    if cursor == 0:
+                        break
 
             if deleted:
                 logger.debug('Invalidated %d cache entries for user %d', deleted, user_id)

@@ -59,13 +59,15 @@ class FGAClient:
         body = {
             'authorization_model_id': self._model_id,
             'checks': [
-                {'tuple_key': {'user': c['user'], 'relation': c['relation'], 'object': c['object']}}
-                for c in checks
+                {
+                    'tuple_key': {'user': c['user'], 'relation': c['relation'], 'object': c['object']},
+                    'correlation_id': str(i),
+                }
+                for i, c in enumerate(checks)
             ],
         }
         data = await self._post(f'/stores/{self._store_id}/batch-check', body)
         results = data.get('result', {})
-        # Results keyed by correlation_id (index-based)
         return [
             results.get(str(i), {}).get('allowed', False)
             for i in range(len(checks))

@@ -86,9 +86,11 @@ class FGAManager(BaseContextManager[FGAClient]):
         raise TypeError('FGAManager only supports async initialization')
 
     async def _async_cleanup(self) -> None:
+        global _fga_client
         instance = self._instance
         if instance:
             await instance.close()
+            _fga_client = None
             logger.info('FGAClient closed')
 
     def _sync_cleanup(self) -> None:

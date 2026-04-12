@@ -1,7 +1,7 @@
 """Celery beat task: retry failed OpenFGA tuple operations (T10, AC-04).
 
 Runs every 30 seconds via beat schedule. Picks up pending FailedTuples,
-retries the write/delete via FGAClient, and updates status accordingly.
+batches them by action type, retries via FGAClient, and updates status.
 
 Retry policy:
   - Max 3 attempts (configurable per-tuple via max_retries)
@@ -31,8 +31,9 @@ def retry_failed_tuples():
 
 
 async def _retry_failed_tuples_async():
-    """Async implementation of the retry logic."""
+    """Async implementation: batch writes, then batch deletes, fall back to per-item on error."""
     from bisheng.database.models.failed_tuple import FailedTupleDao
+    from bisheng.core.openfga.manager import get_fga_client
 
     pending = await FailedTupleDao.aget_pending(limit=100)
     if not pending:
@@ -40,56 +41,74 @@ async def _retry_failed_tuples_async():
 
     logger.info('Processing %d pending failed tuples', len(pending))
 
-    fga = _get_fga_client()
+    fga = get_fga_client()
     if fga is None:
         logger.warning('FGAClient not available, skipping retry cycle')
         return
 
-    for item in pending:
-        try:
-            tuple_dict = {
-                'user': item.fga_user,
-                'relation': item.relation,
-                'object': item.object,
-            }
+    # Group by action for batch processing
+    write_items = [item for item in pending if item.action == 'write']
+    delete_items = [item for item in pending if item.action == 'delete']
 
-            if item.action == 'write':
-                await fga.write_tuples(writes=[tuple_dict])
-            elif item.action == 'delete':
-                await fga.write_tuples(deletes=[tuple_dict])
-            else:
-                logger.warning('Unknown action %s for FailedTuple %d', item.action, item.id)
-                continue
-
-            # Success
-            await FailedTupleDao.aupdate_succeeded(item.id)
-            logger.debug('Retry succeeded for FailedTuple %d', item.id)
-
-        except Exception as e:
-            error_msg = str(e)[:500]
-
-            if item.retry_count + 1 >= item.max_retries:
-                # Exceeded max retries — mark as dead
-                await FailedTupleDao.amark_dead(item.id, error_msg)
-                logger.critical(
-                    'FailedTuple %d exceeded max retries (%d), marked as dead. '
-                    'Action=%s user=%s relation=%s object=%s error=%s',
-                    item.id, item.max_retries, item.action,
-                    item.fga_user, item.relation, item.object, error_msg,
-                )
-            else:
-                # Increment retry count
-                await FailedTupleDao.aupdate_retry(item.id, error_msg)
-                logger.warning(
-                    'Retry %d/%d failed for FailedTuple %d: %s',
-                    item.retry_count + 1, item.max_retries, item.id, error_msg,
-                )
+    # Try batch write first
+    await _retry_batch(fga, write_items, 'write', FailedTupleDao)
+    await _retry_batch(fga, delete_items, 'delete', FailedTupleDao)
 
 
-def _get_fga_client():
-    """Get FGAClient instance. Returns None if unavailable."""
+async def _retry_batch(fga, items, action: str, dao) -> None:
+    """Attempt a batch FGA call; on failure, fall back to per-item retry."""
+    if not items:
+        return
+
+    tuples = [
+        {'user': item.fga_user, 'relation': item.relation, 'object': item.object}
+        for item in items
+    ]
+
     try:
-        from bisheng.core.openfga.manager import get_fga_client
-        return get_fga_client()
+        if action == 'write':
+            await fga.write_tuples(writes=tuples)
+        else:
+            await fga.write_tuples(deletes=tuples)
+
+        # Batch succeeded — mark all as succeeded
+        for item in items:
+            await dao.aupdate_succeeded(item.id)
+        logger.info('Batch retry succeeded for %d %s tuples', len(items), action)
+
     except Exception:
-        return None
+        # Batch failed — fall back to per-item retry
+        logger.debug('Batch %s failed, falling back to per-item retry', action)
+        for item in items:
+            await _retry_single(fga, item, action, dao)
+
+
+async def _retry_single(fga, item, action: str, dao) -> None:
+    """Retry a single tuple. Update status based on result."""
+    try:
+        tuple_dict = {
+            'user': item.fga_user, 'relation': item.relation, 'object': item.object,
+        }
+        if action == 'write':
+            await fga.write_tuples(writes=[tuple_dict])
+        else:
+            await fga.write_tuples(deletes=[tuple_dict])
+
+        await dao.aupdate_succeeded(item.id)
+
+    except Exception as e:
+        error_msg = str(e)[:500]
+        if item.retry_count + 1 >= item.max_retries:
+            await dao.amark_dead(item.id, error_msg)
+            logger.critical(
+                'FailedTuple %d exceeded max retries (%d), marked as dead. '
+                'Action=%s user=%s relation=%s object=%s error=%s',
+                item.id, item.max_retries, item.action,
+                item.fga_user, item.relation, item.object, error_msg,
+            )
+        else:
+            await dao.aupdate_retry(item.id, error_msg)
+            logger.warning(
+                'Retry %d/%d failed for FailedTuple %d: %s',
+                item.retry_count + 1, item.max_retries, item.id, error_msg,
+            )

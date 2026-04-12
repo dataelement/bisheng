@@ -13,7 +13,7 @@ All methods are @classmethod — no instance state.
 from __future__ import annotations
 
 import logging
-from typing import List, Optional, TYPE_CHECKING
+from typing import List, Optional
 
 from bisheng.core.openfga.exceptions import FGAConnectionError
 from bisheng.permission.domain.schemas.permission_schema import (
@@ -25,9 +25,6 @@ from bisheng.permission.domain.schemas.permission_schema import (
     PermissionLevel,
 )
 from bisheng.permission.domain.schemas.tuple_operation import TupleOperation
-
-if TYPE_CHECKING:
-    pass
 
 logger = logging.getLogger(__name__)
 
@@ -63,10 +60,11 @@ class PermissionService:
 
         # L3: OpenFGA check
         try:
-            fga = cls._get_fga_client()
+            fga = cls._get_fga()
             if fga is None:
                 logger.warning('FGAClient not available, falling back to owner check')
-                return cls._sync_owner_fallback(user_id, object_type, object_id)
+                creator_id = await cls._get_resource_creator(object_type, object_id)
+                return creator_id is not None and creator_id == user_id
 
             allowed = await fga.check(
                 user=f'user:{user_id}',
@@ -119,7 +117,7 @@ class PermissionService:
             return cached
 
         try:
-            fga = cls._get_fga_client()
+            fga = cls._get_fga()
             if fga is None:
                 logger.warning('FGAClient not available for list_objects')
                 return []
@@ -161,78 +159,44 @@ class PermissionService:
         """Grant or revoke permissions on a resource.
 
         Expands department subjects to include sub-departments when include_children=True.
-        Failures are recorded in FailedTuple (INV-4), not raised.
+        Delegates to batch_write_tuples() for FGA writes + FailedTuple compensation.
         """
-        writes: list[dict] = []
-        deletes: list[dict] = []
+        operations: List[TupleOperation] = []
         affected_user_ids: set[int] = set()
+        fga_object = f'{object_type}:{object_id}'
 
-        # Process grants
         for grant in (grants or []):
             fga_users = await cls._expand_subject(
                 grant.subject_type, grant.subject_id, grant.include_children,
             )
             for fga_user in fga_users:
-                writes.append({
-                    'user': fga_user,
-                    'relation': grant.relation,
-                    'object': f'{object_type}:{object_id}',
-                })
+                operations.append(TupleOperation(
+                    action='write', user=fga_user, relation=grant.relation, object=fga_object,
+                ))
             if grant.subject_type == 'user':
                 affected_user_ids.add(grant.subject_id)
 
-        # Process revokes
         for revoke in (revokes or []):
             fga_users = await cls._expand_subject(
                 revoke.subject_type, revoke.subject_id, revoke.include_children,
             )
             for fga_user in fga_users:
-                deletes.append({
-                    'user': fga_user,
-                    'relation': revoke.relation,
-                    'object': f'{object_type}:{object_id}',
-                })
+                operations.append(TupleOperation(
+                    action='delete', user=fga_user, relation=revoke.relation, object=fga_object,
+                ))
             if revoke.subject_type == 'user':
                 affected_user_ids.add(revoke.subject_id)
 
-        if not writes and not deletes:
+        if not operations:
             return
 
-        try:
-            fga = cls._get_fga_client()
-            if fga is None:
-                # Record all as failed tuples
-                ops = []
-                for w in writes:
-                    ops.append(TupleOperation(action='write', user=w['user'], relation=w['relation'], object=w['object']))
-                for d in deletes:
-                    ops.append(TupleOperation(action='delete', user=d['user'], relation=d['relation'], object=d['object']))
-                await cls._save_failed_tuples(ops, 'FGAClient not available')
-                return
+        await cls.batch_write_tuples(operations)
 
-            await fga.write_tuples(writes=writes or None, deletes=deletes or None)
-
-            # Invalidate cache for affected users
+        # Invalidate cache for directly affected users
+        if affected_user_ids:
             from bisheng.permission.domain.services.permission_cache import PermissionCache
             for uid in affected_user_ids:
                 await PermissionCache.invalidate_user(uid)
-
-        except FGAConnectionError as e:
-            logger.error('OpenFGA unreachable during authorize: %s', e)
-            ops = []
-            for w in writes:
-                ops.append(TupleOperation(action='write', user=w['user'], relation=w['relation'], object=w['object']))
-            for d in deletes:
-                ops.append(TupleOperation(action='delete', user=d['user'], relation=d['relation'], object=d['object']))
-            await cls._save_failed_tuples(ops, str(e))
-        except Exception as e:
-            logger.error('Error during authorize: %s', e)
-            ops = []
-            for w in writes:
-                ops.append(TupleOperation(action='write', user=w['user'], relation=w['relation'], object=w['object']))
-            for d in deletes:
-                ops.append(TupleOperation(action='delete', user=d['user'], relation=d['relation'], object=d['object']))
-            await cls._save_failed_tuples(ops, str(e))
 
     @classmethod
     async def batch_write_tuples(cls, operations: List[TupleOperation]) -> None:
@@ -253,7 +217,7 @@ class PermissionService:
         ]
 
         try:
-            fga = cls._get_fga_client()
+            fga = cls._get_fga()
             if fga is None:
                 await cls._save_failed_tuples(operations, 'FGAClient not available')
                 return
@@ -277,7 +241,7 @@ class PermissionService:
         Returns list of {"user": ..., "relation": ..., "object": ...}.
         """
         try:
-            fga = cls._get_fga_client()
+            fga = cls._get_fga()
             if fga is None:
                 return []
 
@@ -309,7 +273,7 @@ class PermissionService:
             return PermissionLevel.owner.value
 
         try:
-            fga = cls._get_fga_client()
+            fga = cls._get_fga()
             if fga is None:
                 return None
 
@@ -413,24 +377,6 @@ class PermissionService:
             return None
 
     @classmethod
-    def _sync_owner_fallback(cls, user_id: int, object_type: str, object_id: str) -> bool:
-        """Synchronous owner fallback when FGA is completely unavailable."""
-        try:
-            if object_type in ('workflow', 'assistant'):
-                from bisheng.database.models.flow import FlowDao
-                flow = FlowDao.get_flow_by_id(object_id)
-                return flow is not None and flow.user_id == user_id
-
-            if object_type == 'knowledge_space':
-                from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
-                ks = KnowledgeDao.query_by_id(int(object_id))
-                return ks is not None and ks.user_id == user_id
-
-            return False
-        except Exception:
-            return False
-
-    @classmethod
     async def _save_failed_tuples(
         cls,
         operations: List[TupleOperation],
@@ -462,11 +408,8 @@ class PermissionService:
                 'CRITICAL: Failed to record failed tuples (data loss risk): %s', e,
             )
 
-    @classmethod
-    def _get_fga_client(cls):
-        """Get FGAClient instance from app context. Returns None if unavailable."""
-        try:
-            from bisheng.core.openfga.manager import get_fga_client
-            return get_fga_client()
-        except Exception:
-            return None
+    @staticmethod
+    def _get_fga():
+        """Get FGAClient from app context. Returns None if unavailable."""
+        from bisheng.core.openfga.manager import get_fga_client
+        return get_fga_client()
