@@ -10,7 +10,7 @@ raw SQL must manually add ``WHERE tenant_id = X``.
 """
 
 import logging
-from typing import Set
+from typing import Optional, Set
 
 from sqlalchemy import event
 from sqlmodel import Session
@@ -26,6 +26,9 @@ logger = logging.getLogger(__name__)
 _tenant_aware_tables: Set[str] = set()
 _initialized: bool = False
 
+# Tables that have a tenant_id column but use it as a FK, not as isolation field.
+_EXCLUDED_TABLES: Set[str] = {'user_tenant'}
+
 
 def _discover_tenant_aware_tables() -> Set[str]:
     """Discover tables that have a ``tenant_id`` column from SQLModel metadata.
@@ -37,7 +40,7 @@ def _discover_tenant_aware_tables() -> Set[str]:
 
     tables = set()
     for table_name, table in SQLModel.metadata.tables.items():
-        if 'tenant_id' in table.c:
+        if 'tenant_id' in table.c and table_name not in _EXCLUDED_TABLES:
             tables.add(table_name)
     logger.debug(f'Discovered {len(tables)} tenant-aware tables: {tables}')
     return tables
@@ -147,12 +150,12 @@ def _get_tenant_tables_from_statement(stmt):
     return tables
 
 
-def _get_table_name_from_class(cls) -> str:
+def _get_table_name_from_class(cls) -> Optional[str]:
     """Get __tablename__ from an ORM class."""
-    return getattr(cls, '__tablename__', None) or getattr(cls, '__name__', '').lower()
+    return getattr(cls, '__tablename__', None)
 
 
-def _get_table_name(obj) -> str:
+def _get_table_name(obj) -> Optional[str]:
     """Get table name from an ORM instance."""
     cls = type(obj)
     return _get_table_name_from_class(cls)

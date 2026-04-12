@@ -51,18 +51,12 @@ from bisheng.user.domain.services.auth import AuthJwt, LoginUser
 
 
 def _make_auth_jwt():
-    """Create an AuthJwt instance with test configuration."""
-    auth = AuthJwt.__new__(AuthJwt)
-    auth.req = None
-    auth.res = None
-    auth.jwt_secret = 'test-secret-key'
-    auth.cookie_conf = MagicMock()
-    auth.cookie_conf.jwt_token_expire_time = 86400
-    auth.cookie_conf.jwt_iss = 'bisheng'
-    auth._access_cookie_key = 'access_token_cookie'
-    auth._encode_algorithm = 'HS256'
-    auth._decode_algorithms = ['HS256']
-    return auth
+    """Create an AuthJwt instance with test configuration.
+
+    Works because the pre-mock above sets config_service.settings
+    with matching jwt_secret and cookie_conf values.
+    """
+    return AuthJwt()
 
 
 class TestJwtTenantId:
