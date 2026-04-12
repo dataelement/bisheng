@@ -40,10 +40,16 @@ class RoleBase(SQLModelSerializable):
 
 
 class Role(RoleBase, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    tenant_id: int = Field(
+        default=1,
+        sa_column=Column(Integer, nullable=False, server_default=text('1'),
+                         index=True, comment='Tenant ID'),
+    )
+
     __table_args__ = (
         UniqueConstraint('tenant_id', 'role_type', 'role_name', name='uk_tenant_roletype_rolename'),
     )
-    id: Optional[int] = Field(default=None, primary_key=True)
 
 
 class RoleRead(RoleBase):
