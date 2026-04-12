@@ -1,7 +1,7 @@
 """Celery beat task: retry failed OpenFGA tuple operations (T10, AC-04).
 
-Runs every 30 seconds via beat schedule. Picks up pending FailedTuples,
-batches them by action type, retries via FGAClient, and updates status.
+Runs every 30 seconds via beat schedule. Uses a Redis distributed lock to
+prevent concurrent processing of the same pending tuples.
 
 Retry policy:
   - Max 3 attempts (configurable per-tuple via max_retries)
@@ -19,6 +19,9 @@ from bisheng.worker.main import bisheng_celery
 
 logger = logging.getLogger(__name__)
 
+LOCK_KEY = 'bisheng:lock:retry_failed_tuples'
+LOCK_TTL = 60  # seconds — must be > typical execution time
+
 
 @bisheng_celery.task(acks_late=True)
 def retry_failed_tuples():
@@ -31,28 +34,38 @@ def retry_failed_tuples():
 
 
 async def _retry_failed_tuples_async():
-    """Async implementation: batch writes, then batch deletes, fall back to per-item on error."""
+    """Async implementation: acquire lock, batch writes, then batch deletes."""
     from bisheng.database.models.failed_tuple import FailedTupleDao
     from bisheng.core.openfga.manager import get_fga_client
 
-    pending = await FailedTupleDao.aget_pending(limit=100)
-    if not pending:
-        return
+    # Distributed lock to prevent concurrent Beat fires from processing same rows
+    redis = await _get_redis()
+    if redis:
+        acquired = await redis.asetNx(LOCK_KEY, 1, expiration=LOCK_TTL)
+        if not acquired:
+            logger.debug('retry_failed_tuples: lock held by another worker, skipping')
+            return
+    try:
+        pending = await FailedTupleDao.aget_pending(limit=100)
+        if not pending:
+            return
 
-    logger.info('Processing %d pending failed tuples', len(pending))
+        logger.info('Processing %d pending failed tuples', len(pending))
 
-    fga = get_fga_client()
-    if fga is None:
-        logger.warning('FGAClient not available, skipping retry cycle')
-        return
+        fga = get_fga_client()
+        if fga is None:
+            logger.warning('FGAClient not available, skipping retry cycle')
+            return
 
-    # Group by action for batch processing
-    write_items = [item for item in pending if item.action == 'write']
-    delete_items = [item for item in pending if item.action == 'delete']
+        write_items = [item for item in pending if item.action == 'write']
+        delete_items = [item for item in pending if item.action == 'delete']
 
-    # Try batch write first
-    await _retry_batch(fga, write_items, 'write', FailedTupleDao)
-    await _retry_batch(fga, delete_items, 'delete', FailedTupleDao)
+        await _retry_batch(fga, write_items, 'write', FailedTupleDao)
+        await _retry_batch(fga, delete_items, 'delete', FailedTupleDao)
+    finally:
+        # Release lock
+        if redis:
+            await redis.adelete(LOCK_KEY)
 
 
 async def _retry_batch(fga, items, action: str, dao) -> None:
@@ -71,13 +84,11 @@ async def _retry_batch(fga, items, action: str, dao) -> None:
         else:
             await fga.write_tuples(deletes=tuples)
 
-        # Batch succeeded — mark all as succeeded
         for item in items:
             await dao.aupdate_succeeded(item.id)
         logger.info('Batch retry succeeded for %d %s tuples', len(items), action)
 
     except Exception:
-        # Batch failed — fall back to per-item retry
         logger.debug('Batch %s failed, falling back to per-item retry', action)
         for item in items:
             await _retry_single(fga, item, action, dao)
@@ -112,3 +123,12 @@ async def _retry_single(fga, item, action: str, dao) -> None:
                 'Retry %d/%d failed for FailedTuple %d: %s',
                 item.retry_count + 1, item.max_retries, item.id, error_msg,
             )
+
+
+async def _get_redis():
+    """Get RedisClient. Returns None if unavailable."""
+    try:
+        from bisheng.core.cache.redis_manager import get_redis_client
+        return await get_redis_client()
+    except Exception:
+        return None

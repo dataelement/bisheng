@@ -102,13 +102,13 @@ class DepartmentChangeHandler:
     async def execute_async(operations: List[TupleOperation]) -> None:
         """Execute tuple operations via OpenFGA (F004 ReBAC integration).
 
-        Delegates to PermissionService.batch_write_tuples(). Failures are
-        recorded in FailedTuple compensation queue — does not raise.
+        Uses crash_safe=True so that if the process crashes after DB commit
+        but before FGA write, the pre-recorded FailedTuples ensure recovery.
         """
         if not operations:
             return
         from bisheng.permission.domain.services.permission_service import PermissionService
-        await PermissionService.batch_write_tuples(operations)
+        await PermissionService.batch_write_tuples(operations, crash_safe=True)
 
     @staticmethod
     def execute(operations: List[TupleOperation]) -> None:

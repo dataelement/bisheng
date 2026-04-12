@@ -200,14 +200,31 @@ class PermissionService:
             for uid in affected_user_ids:
                 await PermissionCache.invalidate_user(uid)
 
+    # OpenFGA Write API limit per request
+    _FGA_BATCH_SIZE = 100
+
     @classmethod
-    async def batch_write_tuples(cls, operations: List[TupleOperation]) -> None:
+    async def batch_write_tuples(cls, operations: List[TupleOperation], crash_safe: bool = False) -> None:
         """Batch write/delete tuples to OpenFGA.
 
+        Chunks into batches of _FGA_BATCH_SIZE to respect OpenFGA's per-request limit.
         Used by ChangeHandler.execute_async(). Failures recorded in FailedTuple.
+
+        Args:
+            operations: List of tuple operations to execute.
+            crash_safe: If True, pre-insert FailedTuple records before the FGA call
+                so a process crash between MySQL commit and FGA write leaves
+                recoverable records. On FGA success, the pre-inserted records are
+                deleted. Used by ChangeHandler callsites where the DB transaction
+                has already committed.
         """
         if not operations:
             return
+
+        # Pre-record for crash safety — delete on success
+        pre_recorded_ids: List[int] = []
+        if crash_safe:
+            pre_recorded_ids = await cls._pre_record_failed_tuples(operations)
 
         writes = [
             {'user': op.user, 'relation': op.relation, 'object': op.object}
@@ -221,16 +238,31 @@ class PermissionService:
         try:
             fga = cls._get_fga()
             if fga is None:
-                await cls._save_failed_tuples(operations, 'FGAClient not available')
+                if not crash_safe:
+                    await cls._save_failed_tuples(operations, 'FGAClient not available')
                 return
 
-            await fga.write_tuples(
-                writes=writes or None,
-                deletes=deletes or None,
-            )
+            # Chunk writes and deletes to stay within per-request limit
+            batch = cls._FGA_BATCH_SIZE
+            w_chunks = [writes[i:i + batch] for i in range(0, len(writes), batch)] if writes else []
+            d_chunks = [deletes[i:i + batch] for i in range(0, len(deletes), batch)] if deletes else []
+
+            max_chunks = max(len(w_chunks), len(d_chunks), 1)
+            for idx in range(max_chunks):
+                w = w_chunks[idx] if idx < len(w_chunks) else None
+                d = d_chunks[idx] if idx < len(d_chunks) else None
+                if w or d:
+                    await fga.write_tuples(writes=w, deletes=d)
+
+            # FGA succeeded — clean up pre-recorded FailedTuples
+            if pre_recorded_ids:
+                await cls._delete_pre_recorded(pre_recorded_ids)
+
         except Exception as e:
             logger.error('Failed to batch write tuples: %s', e)
-            await cls._save_failed_tuples(operations, str(e))
+            if not crash_safe:
+                await cls._save_failed_tuples(operations, str(e))
+            # If crash_safe, pre-recorded entries remain as 'pending' for retry
 
     @classmethod
     async def get_resource_permissions(
@@ -409,6 +441,43 @@ class PermissionService:
             logger.critical(
                 'CRITICAL: Failed to record failed tuples (data loss risk): %s', e,
             )
+
+    @classmethod
+    async def _pre_record_failed_tuples(cls, operations: List[TupleOperation]) -> List[int]:
+        """Pre-insert FailedTuple records as 'pending' for crash safety.
+
+        Returns list of record IDs to delete on FGA success.
+        """
+        try:
+            from bisheng.database.models.failed_tuple import FailedTuple, FailedTupleDao
+
+            tuples = [
+                FailedTuple(
+                    action=op.action,
+                    fga_user=op.user,
+                    relation=op.relation,
+                    object=op.object,
+                    error_message='pre-recorded for crash safety',
+                )
+                for op in operations
+            ]
+            await FailedTupleDao.acreate_batch(tuples)
+            return [t.id for t in tuples if t.id]
+        except Exception as e:
+            logger.warning('Failed to pre-record failed tuples: %s', e)
+            return []
+
+    @classmethod
+    async def _delete_pre_recorded(cls, record_ids: List[int]) -> None:
+        """Delete pre-recorded FailedTuples after FGA success."""
+        if not record_ids:
+            return
+        try:
+            from bisheng.database.models.failed_tuple import FailedTupleDao
+            for rid in record_ids:
+                await FailedTupleDao.aupdate_succeeded(rid)
+        except Exception as e:
+            logger.debug('Failed to clean up pre-recorded tuples: %s', e)
 
     @staticmethod
     def _get_fga():
