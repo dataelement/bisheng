@@ -192,6 +192,26 @@ CREATE TABLE IF NOT EXISTS user_department (
 )"""
 
 # ---------------------------------------------------------------------------
+# F004: ReBAC compensation queue
+# ---------------------------------------------------------------------------
+
+TABLE_FAILED_TUPLE = """\
+CREATE TABLE IF NOT EXISTS failed_tuple (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    action VARCHAR(8) NOT NULL DEFAULT 'write',
+    fga_user VARCHAR(256) NOT NULL,
+    relation VARCHAR(64) NOT NULL,
+    object VARCHAR(256) NOT NULL,
+    retry_count INTEGER NOT NULL DEFAULT 0,
+    max_retries INTEGER NOT NULL DEFAULT 3,
+    status VARCHAR(16) NOT NULL DEFAULT 'pending',
+    error_message TEXT,
+    tenant_id INTEGER NOT NULL DEFAULT 1,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+)"""
+
+# ---------------------------------------------------------------------------
 # Registry & helpers
 # ---------------------------------------------------------------------------
 
@@ -207,6 +227,7 @@ TABLE_DEFINITIONS: dict[str, str] = {
     'knowledge': TABLE_KNOWLEDGE,
     'department': TABLE_DEPARTMENT,
     'user_department': TABLE_USER_DEPARTMENT,
+    'failed_tuple': TABLE_FAILED_TUPLE,
 }
 
 

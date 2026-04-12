@@ -256,6 +256,37 @@ class LoginUser(BaseModel):
         role_access = await RoleAccessDao.aget_role_access_batch(self.user_role, access_types)
         return list(set([one.third_id for one in role_access]))
 
+    # ── ReBAC permission methods (F004, INV-3) ─────────────────
+
+    async def rebac_check(self, relation: str, object_type: str, object_id: str) -> bool:
+        """ReBAC permission check — unified entry point for resource-level access.
+
+        Delegates to PermissionService.check() which implements the five-level chain:
+        L1 admin → L2 cache → L3 OpenFGA → L4 owner fallback → L5 fail-closed.
+        """
+        from bisheng.permission.domain.services.permission_service import PermissionService
+        return await PermissionService.check(
+            user_id=self.user_id,
+            relation=relation,
+            object_type=object_type,
+            object_id=object_id,
+            login_user=self,
+        )
+
+    async def rebac_list_accessible(self, relation: str, object_type: str) -> Optional[List[str]]:
+        """List accessible resource IDs via ReBAC.
+
+        Returns None for admin (caller should not filter).
+        Returns list of ID strings for normal users.
+        """
+        from bisheng.permission.domain.services.permission_service import PermissionService
+        return await PermissionService.list_accessible_ids(
+            user_id=self.user_id,
+            relation=relation,
+            object_type=object_type,
+            login_user=self,
+        )
+
     # some methods related to AuthJwt
     @classmethod
     def create_access_token(cls, user: User, auth_jwt: AuthJwt, tenant_id: int = None) -> str:

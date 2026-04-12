@@ -71,10 +71,10 @@ class UserGroupService:
 
         # Emit OpenFGA tuple operations (stub)
         ops = GroupChangeHandler.on_created(group.id, login_user.user_id)
-        GroupChangeHandler.execute(ops)
+        await GroupChangeHandler.execute_async(ops)
         if data.admin_user_ids:
             ops = GroupChangeHandler.on_admin_set(group.id, data.admin_user_ids)
-            GroupChangeHandler.execute(ops)
+            await GroupChangeHandler.execute_async(ops)
 
         return await cls._enrich_group(group)
 
@@ -160,7 +160,7 @@ class UserGroupService:
         await GroupDao.adelete(group_id)
 
         ops = GroupChangeHandler.on_deleted(group_id)
-        GroupChangeHandler.execute(ops)
+        await GroupChangeHandler.execute_async(ops)
 
     @classmethod
     async def aget_members(
@@ -201,7 +201,7 @@ class UserGroupService:
         await UserGroupDao.aadd_members_batch(group_id, user_ids)
 
         ops = GroupChangeHandler.on_members_added(group_id, user_ids)
-        GroupChangeHandler.execute(ops)
+        await GroupChangeHandler.execute_async(ops)
 
     @classmethod
     async def aremove_member(
@@ -216,7 +216,7 @@ class UserGroupService:
         await UserGroupDao.aremove_member(group_id, user_id)
 
         ops = GroupChangeHandler.on_member_removed(group_id, user_id)
-        GroupChangeHandler.execute(ops)
+        await GroupChangeHandler.execute_async(ops)
 
     @classmethod
     async def aset_admins(
@@ -239,10 +239,10 @@ class UserGroupService:
 
         if to_add:
             ops = GroupChangeHandler.on_admin_set(group_id, to_add)
-            GroupChangeHandler.execute(ops)
+            await GroupChangeHandler.execute_async(ops)
         if to_remove:
             ops = GroupChangeHandler.on_admin_removed(group_id, to_remove)
-            GroupChangeHandler.execute(ops)
+            await GroupChangeHandler.execute_async(ops)
 
         return await UserGroupDao.aget_group_admins_detail(group_id)
 

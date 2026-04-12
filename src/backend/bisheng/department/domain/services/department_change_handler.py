@@ -4,33 +4,21 @@ Part of F002-department-tree. Defines the contract between F002 (department tree
 and F004 (ReBAC permissions). Each department mutation (create/move/archive/members)
 produces a list of TupleOperations that describe the intended OpenFGA writes/deletes.
 
-Currently execute() is a log stub — F004 will replace it with actual OpenFGA writes
-via PermissionService.
+execute_async() delegates to PermissionService.batch_write_tuples() for real OpenFGA writes.
+execute() is kept as a synchronous fallback (logs only).
 """
 
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
-from typing import List, Literal
+from typing import List
+
+from bisheng.permission.domain.schemas.tuple_operation import TupleOperation
 
 logger = logging.getLogger(__name__)
 
-
-@dataclass
-class TupleOperation:
-    """A single OpenFGA tuple write or delete operation.
-
-    Attributes:
-        action: 'write' to create a relationship, 'delete' to remove it.
-        user: The subject, e.g. "user:7" or "department:5#member".
-        relation: The relationship type, e.g. "member", "admin", "parent".
-        object: The target, e.g. "department:5".
-    """
-    action: Literal['write', 'delete']
-    user: str
-    relation: str
-    object: str
+# Re-export for backward compatibility
+__all__ = ['TupleOperation', 'DepartmentChangeHandler']
 
 
 class DepartmentChangeHandler:
@@ -111,16 +99,27 @@ class DepartmentChangeHandler:
         ]
 
     @staticmethod
-    def execute(operations: List[TupleOperation]) -> None:
-        """Execute tuple operations. Currently a log stub.
+    async def execute_async(operations: List[TupleOperation]) -> None:
+        """Execute tuple operations via OpenFGA (F004 ReBAC integration).
 
-        F004 (ReBAC) will replace this with actual OpenFGA writes via
-        PermissionService.batch_write_tuples().
+        Delegates to PermissionService.batch_write_tuples(). Failures are
+        recorded in FailedTuple compensation queue — does not raise.
+        """
+        if not operations:
+            return
+        from bisheng.permission.domain.services.permission_service import PermissionService
+        await PermissionService.batch_write_tuples(operations)
+
+    @staticmethod
+    def execute(operations: List[TupleOperation]) -> None:
+        """Synchronous fallback — logs operations only.
+
+        Prefer execute_async() in async contexts.
         """
         if not operations:
             return
         logger.info(
-            'DepartmentChangeHandler: %d tuple operations (stub, F004 not yet)',
+            'DepartmentChangeHandler: %d tuple operations (sync fallback)',
             len(operations),
         )
         for op in operations:
