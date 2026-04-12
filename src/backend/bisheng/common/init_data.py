@@ -35,25 +35,23 @@ async def init_default_data():
                 if not db_role:
                     # Initialize system configuration, Admin has all permissions
                     db_role = Role(id=AdminRole, role_name='System Admin', remark='System highest privileges',
-                                   group_id=DefaultGroup)
+                                   group_id=DefaultGroup, role_type='global')
                     session.add(db_role)
                     db_role_normal = Role(id=DefaultRole, role_name='Regular users', remark='Regular users',
-                                          group_id=DefaultGroup)
+                                          group_id=DefaultGroup, role_type='global')
                     session.add(db_role_normal)
-                    # Grant to Normal User View access to the Build, Knowledge, Model menu bar
+                    # Grant DefaultRole WEB_MENU permissions (F005: updated for v2.5)
                     session.add_all([
+                        RoleAccess(role_id=DefaultRole, type=AccessType.WEB_MENU.value,
+                                   third_id=WebMenuResource.WORKSTATION.value),
                         RoleAccess(role_id=DefaultRole, type=AccessType.WEB_MENU.value,
                                    third_id=WebMenuResource.BUILD.value),
                         RoleAccess(role_id=DefaultRole, type=AccessType.WEB_MENU.value,
                                    third_id=WebMenuResource.KNOWLEDGE.value),
                         RoleAccess(role_id=DefaultRole, type=AccessType.WEB_MENU.value,
-                                   third_id=WebMenuResource.MODEL.value),
-                        RoleAccess(role_id=DefaultRole, type=AccessType.WEB_MENU.value,
-                                   third_id=WebMenuResource.BACKEND.value),
-                        RoleAccess(role_id=DefaultRole, type=AccessType.WEB_MENU.value,
-                                   third_id=WebMenuResource.FRONTEND.value),
-                        RoleAccess(role_id=DefaultRole, type=AccessType.WEB_MENU.value,
                                    third_id=WebMenuResource.KNOWLEDGE_SPACE.value),
+                        RoleAccess(role_id=DefaultRole, type=AccessType.WEB_MENU.value,
+                                   third_id=WebMenuResource.MODEL.value),
                     ])
                     await session.commit()
                 # Initialize default tenant (F001)
