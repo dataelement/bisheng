@@ -1,8 +1,8 @@
 """PermissionCache — L2 Redis cache for permission checks (T08).
 
-Key patterns:
-  perm:chk:{user_id}:{relation}:{object_type}:{object_id} → "1" or "0"
-  perm:lst:{user_id}:{relation}:{object_type} → pickled list[str]
+Key patterns (tenant-isolated):
+  perm:chk:{tenant_id}:{user_id}:{relation}:{object_type}:{object_id} → "1" or "0"
+  perm:lst:{tenant_id}:{user_id}:{relation}:{object_type} → pickled list[str]
 
 TTL: 10 seconds (AC-05).
 UNCACHEABLE_RELATIONS (can_manage, can_delete) bypass cache entirely.
@@ -17,6 +17,12 @@ logger = logging.getLogger(__name__)
 
 KEY_PREFIX = 'perm:'
 TTL = 10  # seconds
+
+
+def _get_tenant_id() -> int:
+    """Get current tenant_id from ContextVar. Falls back to 1 (default tenant)."""
+    from bisheng.core.context.tenant import get_current_tenant_id
+    return get_current_tenant_id() or 1
 
 
 class PermissionCache:
@@ -115,8 +121,9 @@ class PermissionCache:
 
             conn = redis.async_connection
             deleted = 0
+            tid = _get_tenant_id()
             # Scan with exact prefixes to avoid matching user_id=1 against user_id=11
-            for prefix in (f'{KEY_PREFIX}chk:{user_id}:', f'{KEY_PREFIX}lst:{user_id}:'):
+            for prefix in (f'{KEY_PREFIX}chk:{tid}:{user_id}:', f'{KEY_PREFIX}lst:{tid}:{user_id}:'):
                 pattern = f'{prefix}*'
                 cursor = 0
                 while True:
@@ -161,11 +168,13 @@ class PermissionCache:
 
     @staticmethod
     def _check_key(user_id: int, relation: str, object_type: str, object_id: str) -> str:
-        return f'{KEY_PREFIX}chk:{user_id}:{relation}:{object_type}:{object_id}'
+        tid = _get_tenant_id()
+        return f'{KEY_PREFIX}chk:{tid}:{user_id}:{relation}:{object_type}:{object_id}'
 
     @staticmethod
     def _list_key(user_id: int, relation: str, object_type: str) -> str:
-        return f'{KEY_PREFIX}lst:{user_id}:{relation}:{object_type}'
+        tid = _get_tenant_id()
+        return f'{KEY_PREFIX}lst:{tid}:{user_id}:{relation}:{object_type}'
 
     @staticmethod
     async def _get_redis():
