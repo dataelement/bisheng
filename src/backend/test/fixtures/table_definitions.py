@@ -76,10 +76,25 @@ CREATE TABLE IF NOT EXISTS user (
 TABLE_GROUP = """\
 CREATE TABLE IF NOT EXISTS "group" (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    group_name VARCHAR(255) UNIQUE,
+    group_name VARCHAR(255),
     remark VARCHAR(512),
+    tenant_id INTEGER NOT NULL DEFAULT 1,
+    visibility VARCHAR(16) NOT NULL DEFAULT 'public',
     create_user INTEGER,
     update_user INTEGER,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    UNIQUE(tenant_id, group_name)
+)"""
+
+TABLE_USERGROUP = """\
+CREATE TABLE IF NOT EXISTS usergroup (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    group_id INTEGER,
+    is_group_admin INTEGER DEFAULT 0,
+    tenant_id INTEGER NOT NULL DEFAULT 1,
+    remark VARCHAR(512),
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
 )"""
@@ -185,6 +200,7 @@ TABLE_DEFINITIONS: dict[str, str] = {
     'user_tenant': TABLE_USER_TENANT,
     'user': TABLE_USER,
     'group': TABLE_GROUP,
+    'usergroup': TABLE_USERGROUP,
     'role': TABLE_ROLE,
     'role_access': TABLE_ROLE_ACCESS,
     'flow': TABLE_FLOW,

@@ -21,6 +21,7 @@ from bisheng.open_endpoints.api.router import (assistant_router_rpc, chat_router
                                                knowledge_router_rpc, workflow_router_rpc,
                                                filelib_router_rpc)
 from bisheng.department.api.router import router as department_router
+from bisheng.user_group.api.router import router as user_group_router
 from bisheng.share_link.api.router import router as share_link_router
 
 router = APIRouter(prefix='/api/v1', )
@@ -54,6 +55,7 @@ router.include_router(telemetry_search_router)
 router.include_router(channel_router)
 router.include_router(message_router)
 router.include_router(department_router)
+router.include_router(user_group_router)
 
 router_rpc = APIRouter(prefix='/api/v2', )
 router_rpc.include_router(knowledge_router_rpc)

@@ -70,6 +70,9 @@ async def init_default_data():
                     await session.commit()
                     await session.refresh(group)
 
+                # Ensure default user group has visibility='public' (F003)
+                await _init_default_user_group(session)
+
                 user = await session.exec(select(User).limit(1))
                 user = user.all()
                 if not user and settings.admin:
@@ -241,6 +244,28 @@ async def _init_default_root_department(session):
         await session.commit()
 
     logger.info(f'Default root department initialized (id={dept.id})')
+
+
+async def _init_default_user_group(session):
+    """Ensure default user group has visibility='public' (F003).
+
+    Called during init_default_data() after default group creation.
+    Handles upgrades from pre-v2.5 where visibility column didn't exist.
+    """
+    from bisheng.core.context.tenant import bypass_tenant_filter
+
+    with bypass_tenant_filter():
+        group_result = await session.exec(
+            select(Group).where(Group.id == DefaultGroup)
+        )
+        group = group_result.first()
+        if group is None:
+            return  # Default group not yet created
+
+        if not getattr(group, 'visibility', None) or group.visibility != 'public':
+            group.visibility = 'public'
+            await session.commit()
+            logger.info('Default user group visibility set to public')
 
 
 def upload_preset_minio_file():
