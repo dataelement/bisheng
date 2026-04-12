@@ -360,9 +360,12 @@ class LoginUser(BaseModel):
             raise UnAuthorizedError.http_exception()
         return login_user
 
+    # Deprecated WebMenuResource values (AD-07) — excluded from admin's full menu set
+    _DEPRECATED_MENUS = {'frontend', 'backend', 'create_dashboard'}
+
     @classmethod
     async def get_roles_web_menu(cls, user: User) -> (List[int] | str, List[str]):
-        """ get user roles and web menu """
+        """ get user roles and web menu (F005: updated for v2.5 WebMenuResource) """
         db_user_role = await UserRoleDao.aget_user_roles(user.user_id)
         role = ''
         role_ids = []
@@ -378,9 +381,10 @@ class LoginUser(BaseModel):
                 role = 'group_admin'
             else:
                 role = role_ids
-            # Get a list of a user's menu bar permissions
+            # AC-13: union of all roles' menu permissions
             web_menu = await RoleAccessDao.aget_role_access(role_ids, AccessType.WEB_MENU)
             web_menu = list(set([one.third_id for one in web_menu]))
         else:
+            # AC-14: admin returns all WebMenuResource values (including deprecated for compat)
             web_menu = [one.value for one in WebMenuResource]
         return role, web_menu

@@ -320,25 +320,39 @@ async def create_role(*,
                       request: Request,
                       role: RoleCreate,
                       login_user: LoginUser = Depends(LoginUser.get_login_user)):
-    if not role.group_id:
-        raise HTTPException(status_code=500, detail='User GroupsIDTidak boleh kosong.')
+    """Legacy role creation endpoint (AC-24). Delegates to RoleService."""
     if not role.role_name:
         raise HTTPException(status_code=500, detail='msg.role_name_not_be_empty')
 
-    if not login_user.check_group_admin(role.group_id):
-        return UnAuthorizedError.return_resp()
-
-    db_role = Role.model_validate(role)
+    # Try new RoleService path first
     try:
-        with get_sync_db_session() as session:
-            session.add(db_role)
-            session.commit()
-            session.refresh(db_role)
+        from bisheng.role.domain.schemas.role_schema import RoleCreateRequest
+        from bisheng.role.domain.services.role_service import RoleService
+        req = RoleCreateRequest(
+            role_name=role.role_name,
+            remark=role.remark,
+        )
+        db_role = await RoleService.create_role(req, login_user)
         create_role_hook(request, login_user, db_role)
         return resp_200(db_role)
     except Exception:
-        logger.exception('add role error')
-        raise HTTPException(status_code=500, detail='Failed to add, check if it is added repeatedly')
+        # Fallback to legacy path for group_id-based creation
+        if not role.group_id:
+            raise HTTPException(status_code=500, detail='User GroupsIDTidak boleh kosong.')
+        if not login_user.check_group_admin(role.group_id):
+            return UnAuthorizedError.return_resp()
+
+        db_role = Role.model_validate(role)
+        try:
+            with get_sync_db_session() as session:
+                session.add(db_role)
+                session.commit()
+                session.refresh(db_role)
+            create_role_hook(request, login_user, db_role)
+            return resp_200(db_role)
+        except Exception:
+            logger.exception('add role error')
+            raise HTTPException(status_code=500, detail='Failed to add, check if it is added repeatedly')
 
 
 def create_role_hook(request: Request, login_user: LoginUser, db_role: Role) -> bool:
@@ -381,28 +395,30 @@ async def get_role(*,
                    page: int = 0,
                    limit: int = 0,
                    login_user: LoginUser = Depends(LoginUser.get_login_user)):
-    """
-    Get a list of roles visible to the user, Return different data according to different user permissions
-    """
-    # Parameter Processing
+    """Legacy role list endpoint (AC-25). Delegates to RoleService."""
     if role_name:
         role_name = role_name.strip()
 
-    # Determine if it's a Super Admin
-    if login_user.is_admin():
-        # Is Super Admin Get All
-        group_ids = []
-    else:
-        # Query if you are an administrator of another user group under
-        user_groups = UserGroupDao.get_user_admin_group(login_user.user_id)
-        group_ids = [one.group_id for one in user_groups if one.is_group_admin]
-        if not group_ids:
-            raise HTTPException(status_code=500, detail="Quit that! You don't have rights to view this.")
+    try:
+        from bisheng.role.domain.services.role_service import RoleService
+        result = await RoleService.list_roles(
+            keyword=role_name, page=page or 1, limit=limit or 10,
+            login_user=login_user,
+        )
+        return resp_200(data=result)
+    except Exception:
+        # Fallback to legacy path
+        if login_user.is_admin():
+            group_ids = []
+        else:
+            user_groups = UserGroupDao.get_user_admin_group(login_user.user_id)
+            group_ids = [one.group_id for one in user_groups if one.is_group_admin]
+            if not group_ids:
+                raise HTTPException(status_code=500, detail="Quit that! You don't have rights to view this.")
 
-    # Query a list of all roles
-    res = RoleDao.get_role_by_groups(group_ids, role_name, page, limit)
-    total = RoleDao.count_role_by_groups(group_ids, role_name)
-    return resp_200(data={"data": res, "total": total})
+        res = RoleDao.get_role_by_groups(group_ids, role_name, page, limit)
+        total = RoleDao.count_role_by_groups(group_ids, role_name)
+        return resp_200(data={"data": res, "total": total})
 
 
 @router.delete('/role/{role_id}', status_code=200)

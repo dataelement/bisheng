@@ -33,20 +33,30 @@ class RoleAccessCreate(RoleAccessBase):
 
 
 class WebMenuResource(Enum):
-    """Front-end menu bar resources"""
+    """Front-end menu bar resources — updated for v2.5 PRD (F005)."""
 
-    BUILD = 'build'  # Build Menu
-    KNOWLEDGE = 'knowledge'  # Knowledge Menu
-    MODEL = 'model'  # Model Menu
-    EVALUATION = 'evaluation'  # Evaluation Menu
-    BOARD = 'board'  # 看板菜单栏
-    KNOWLEDGE_SPACE = 'knowledge_space'  # Knowledge Space
-    SUBSCRIPTION = 'subscription'  # Subscription Management
-
-    FRONTEND = 'frontend'  # Front-end permissions
-    BACKEND = 'backend'  # Backend Access
-
-    CREATE_DASHBOARD = 'create_dashboard'  # Create board permissions
+    # Level-1 menus
+    WORKSTATION = 'workstation'           # Workspace (user portal)
+    ADMIN = 'admin'                       # Admin console (management portal)
+    # Level-2 menus — build / resources
+    BUILD = 'build'                       # Application build
+    KNOWLEDGE = 'knowledge'               # Knowledge management
+    KNOWLEDGE_SPACE = 'knowledge_space'   # Knowledge space
+    MODEL = 'model'                       # Model management
+    TOOL = 'tool'                         # Tool management
+    MCP = 'mcp'                           # MCP services
+    CHANNEL = 'channel'                   # Channel management
+    # Level-2 menus — evaluation / data
+    EVALUATION = 'evaluation'             # Model evaluation
+    DATASET = 'dataset'                   # Dataset management
+    MARK_TASK = 'mark_task'               # Annotation tasks
+    BOARD = 'board'                       # Dashboard / kanban
+    # System management
+    SUBSCRIPTION = 'subscription'         # Subscription management
+    # Deprecated (AD-07, kept for backward compat)
+    FRONTEND = 'frontend'                 # deprecated
+    BACKEND = 'backend'                   # deprecated
+    CREATE_DASHBOARD = 'create_dashboard' # deprecated
 
 
 class AccessType(Enum):

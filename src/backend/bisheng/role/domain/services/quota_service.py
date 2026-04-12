@@ -1,0 +1,317 @@
+"""QuotaService — three-level quota enforcement engine (F005).
+
+Three-level quota calculation:
+  1. Admin shortcircuit → -1 (unlimited)
+  2. Role-level: multi-role takes max; any -1 → unlimited; missing key → default
+  3. Tenant-level: hard limit caps effective via min(tenant_remaining, role_quota)
+
+Quota values: -1 = unlimited, 0 = prohibited, positive int = upper limit.
+"""
+
+from __future__ import annotations
+
+import functools
+import logging
+from typing import List, Optional
+
+from bisheng.common.errcode.role import QuotaExceededError, QuotaConfigInvalidError
+from bisheng.database.models.role import RoleDao
+from bisheng.database.models.tenant import TenantDao
+from bisheng.user.domain.models.user_role import UserRoleDao
+
+logger = logging.getLogger(__name__)
+
+DEFAULT_ROLE_QUOTA: dict[str, int] = {
+    'knowledge_space': 30,
+    'knowledge_space_file': 500,  # GB
+    'channel': 10,
+    'channel_subscribe': 20,
+    'workflow': -1,
+    'assistant': -1,
+    'tool': -1,
+    'dashboard': -1,
+}
+
+VALID_QUOTA_KEYS = set(DEFAULT_ROLE_QUOTA.keys())
+
+
+class QuotaResourceType:
+    """Supported resource types for quota enforcement."""
+    KNOWLEDGE_SPACE = 'knowledge_space'
+    KNOWLEDGE_SPACE_FILE = 'knowledge_space_file'
+    CHANNEL = 'channel'
+    CHANNEL_SUBSCRIBE = 'channel_subscribe'
+    WORKFLOW = 'workflow'
+    ASSISTANT = 'assistant'
+    TOOL = 'tool'
+    DASHBOARD = 'dashboard'
+
+
+class QuotaService:
+    """Stateless service for quota enforcement. All methods are @classmethod."""
+
+    @classmethod
+    async def get_effective_quota(
+        cls,
+        user_id: int,
+        resource_type: str,
+        tenant_id: int,
+        login_user=None,
+    ) -> int:
+        """Three-level effective quota calculation.
+
+        Returns -1 for unlimited, 0 for prohibited, or positive int limit.
+        """
+        # 1. Admin shortcircuit (AC-19)
+        if login_user and login_user.is_admin():
+            return -1
+
+        # 2. Get user roles and compute role-level quota
+        user_roles = await UserRoleDao.aget_user_roles(user_id)
+        role_ids = [r.role_id for r in user_roles]
+
+        if not role_ids:
+            role_quota = DEFAULT_ROLE_QUOTA.get(resource_type, -1)
+        else:
+            roles = await RoleDao.aget_role_by_ids(role_ids)
+            max_quota = None
+            for role in roles:
+                q = (role.quota_config or {}).get(resource_type)
+                if q is None:
+                    q = DEFAULT_ROLE_QUOTA.get(resource_type, -1)
+                if q == -1:
+                    return -1  # AC-16: any role unlimited → unlimited
+                if max_quota is None or q > max_quota:
+                    max_quota = q
+            role_quota = max_quota if max_quota is not None else DEFAULT_ROLE_QUOTA.get(resource_type, -1)
+
+        # 3. Tenant hard limit
+        tenant = await TenantDao.aget_by_id(tenant_id)
+        tenant_limit = (tenant.quota_config or {}).get(resource_type, -1) if tenant else -1
+
+        if tenant_limit == -1:
+            return role_quota  # Tenant unlimited, only role matters
+
+        # 4. Tenant remaining = tenant_limit - tenant_used
+        tenant_used = await cls.get_tenant_resource_count(tenant_id, resource_type)
+        tenant_remaining = tenant_limit - tenant_used
+
+        # 5. Effective = min(tenant_remaining, role_quota)
+        if role_quota == -1:
+            return max(tenant_remaining, 0)
+        return min(max(tenant_remaining, 0), role_quota)
+
+    @classmethod
+    async def check_quota(
+        cls,
+        user_id: int,
+        resource_type: str,
+        tenant_id: int,
+        login_user=None,
+    ) -> bool:
+        """Check if user can create one more resource.
+
+        Returns True if allowed.
+        Raises QuotaExceededError if quota exhausted (AC-20).
+        """
+        effective = await cls.get_effective_quota(user_id, resource_type, tenant_id, login_user)
+        if effective == -1:
+            return True
+
+        user_used = await cls.get_user_resource_count(user_id, resource_type)
+        if user_used >= effective:
+            raise QuotaExceededError(
+                msg=f'Resource quota exceeded: {resource_type} (used: {user_used}, limit: {effective})',
+            )
+        return True
+
+    @classmethod
+    async def get_all_effective_quotas(
+        cls,
+        user_id: int,
+        tenant_id: int,
+        login_user=None,
+    ) -> list:
+        """Get effective quotas for all resource types (AC-15).
+
+        Returns list of EffectiveQuotaItem-compatible dicts.
+        """
+        from bisheng.role.domain.schemas.role_schema import EffectiveQuotaItem
+
+        # Pre-fetch shared data
+        is_admin = login_user and login_user.is_admin()
+
+        # Get role-level quotas
+        if is_admin:
+            role_quotas = {k: -1 for k in DEFAULT_ROLE_QUOTA}
+        else:
+            user_roles = await UserRoleDao.aget_user_roles(user_id)
+            role_ids = [r.role_id for r in user_roles]
+            if role_ids:
+                roles = await RoleDao.aget_role_by_ids(role_ids)
+                role_quotas = cls._compute_role_quotas(roles)
+            else:
+                role_quotas = dict(DEFAULT_ROLE_QUOTA)
+
+        # Get tenant quotas
+        tenant = await TenantDao.aget_by_id(tenant_id)
+        tenant_config = (tenant.quota_config or {}) if tenant else {}
+
+        items = []
+        for resource_type in DEFAULT_ROLE_QUOTA:
+            role_q = role_quotas.get(resource_type, DEFAULT_ROLE_QUOTA.get(resource_type, -1))
+            tenant_q = tenant_config.get(resource_type, -1)
+            tenant_used = await cls.get_tenant_resource_count(tenant_id, resource_type)
+            user_used = await cls.get_user_resource_count(user_id, resource_type)
+
+            if is_admin:
+                effective = -1
+            elif tenant_q == -1:
+                effective = role_q
+            else:
+                tenant_remaining = tenant_q - tenant_used
+                if role_q == -1:
+                    effective = max(tenant_remaining, 0)
+                else:
+                    effective = min(max(tenant_remaining, 0), role_q)
+
+            items.append(EffectiveQuotaItem(
+                resource_type=resource_type,
+                role_quota=role_q,
+                tenant_quota=tenant_q,
+                tenant_used=tenant_used,
+                user_used=user_used,
+                effective=effective,
+            ))
+        return items
+
+    @classmethod
+    def _compute_role_quotas(cls, roles) -> dict:
+        """Compute multi-role quota: take max per resource type, -1 wins."""
+        result = {}
+        for resource_type in DEFAULT_ROLE_QUOTA:
+            max_q = None
+            for role in roles:
+                q = (role.quota_config or {}).get(resource_type)
+                if q is None:
+                    q = DEFAULT_ROLE_QUOTA.get(resource_type, -1)
+                if q == -1:
+                    max_q = -1
+                    break
+                if max_q is None or q > max_q:
+                    max_q = q
+            result[resource_type] = max_q if max_q is not None else DEFAULT_ROLE_QUOTA.get(resource_type, -1)
+        return result
+
+    @classmethod
+    async def get_tenant_resource_count(cls, tenant_id: int, resource_type: str) -> int:
+        """Count tenant-level resource usage."""
+        from bisheng.core.database import get_async_db_session
+        from sqlalchemy import text
+
+        query_map = {
+            'knowledge_space': "SELECT COUNT(*) FROM knowledge WHERE tenant_id=:tid AND status != -1",
+            'knowledge_space_file': "SELECT COALESCE(SUM(file_size), 0) FROM knowledgefile WHERE tenant_id=:tid AND status IN (1,2)",
+            'channel': "SELECT COUNT(*) FROM channel WHERE tenant_id=:tid AND status='active'",
+            'channel_subscribe': "SELECT COUNT(*) FROM channel WHERE tenant_id=:tid AND status='active'",
+            'workflow': "SELECT COUNT(*) FROM flow WHERE tenant_id=:tid AND flow_type=10 AND status!=0",
+            'assistant': "SELECT COUNT(*) FROM flow WHERE tenant_id=:tid AND flow_type=5 AND status!=0",
+            'tool': "SELECT COUNT(*) FROM gpts_tools WHERE tenant_id=:tid AND is_delete=0",
+            'dashboard': "SELECT COUNT(*) FROM flow WHERE tenant_id=:tid AND flow_type=15 AND status!=0",
+        }
+
+        sql = query_map.get(resource_type)
+        if not sql:
+            return 0
+
+        try:
+            async with get_async_db_session() as session:
+                result = await session.execute(text(sql), {'tid': tenant_id})
+                count = result.scalar() or 0
+                # knowledge_space_file is in bytes, convert to GB
+                if resource_type == 'knowledge_space_file':
+                    count = count // (1024 * 1024 * 1024)
+                return count
+        except Exception as e:
+            logger.warning('Failed to count tenant resource %s: %s', resource_type, e)
+            return 0
+
+    @classmethod
+    async def get_user_resource_count(cls, user_id: int, resource_type: str) -> int:
+        """Count user-level resource usage."""
+        from bisheng.core.database import get_async_db_session
+        from sqlalchemy import text
+
+        query_map = {
+            'knowledge_space': "SELECT COUNT(*) FROM knowledge WHERE user_id=:uid AND status != -1",
+            'knowledge_space_file': "SELECT COALESCE(SUM(file_size), 0) FROM knowledgefile WHERE user_id=:uid AND status IN (1,2)",
+            'channel': "SELECT COUNT(*) FROM channel WHERE user_id=:uid AND status='active'",
+            'channel_subscribe': "SELECT COUNT(*) FROM channel WHERE user_id=:uid AND status='active'",
+            'workflow': "SELECT COUNT(*) FROM flow WHERE user_id=:uid AND flow_type=10 AND status!=0",
+            'assistant': "SELECT COUNT(*) FROM flow WHERE user_id=:uid AND flow_type=5 AND status!=0",
+            'tool': "SELECT COUNT(*) FROM gpts_tools WHERE user_id=:uid AND is_delete=0",
+            'dashboard': "SELECT COUNT(*) FROM flow WHERE user_id=:uid AND flow_type=15 AND status!=0",
+        }
+
+        sql = query_map.get(resource_type)
+        if not sql:
+            return 0
+
+        try:
+            async with get_async_db_session() as session:
+                result = await session.execute(text(sql), {'uid': user_id})
+                count = result.scalar() or 0
+                if resource_type == 'knowledge_space_file':
+                    count = count // (1024 * 1024 * 1024)
+                return count
+        except Exception as e:
+            logger.warning('Failed to count user resource %s: %s', resource_type, e)
+            return 0
+
+    @classmethod
+    def validate_quota_config(cls, quota_config: Optional[dict]) -> None:
+        """Validate quota_config values (AC-10c).
+
+        Valid values: -1 (unlimited), 0 (prohibited), positive integer.
+        Raises QuotaConfigInvalidError on invalid values.
+        """
+        if not quota_config:
+            return
+        for key, value in quota_config.items():
+            if not isinstance(value, int):
+                raise QuotaConfigInvalidError(
+                    msg=f'quota_config[{key}] must be an integer, got {type(value).__name__}',
+                )
+            if value < -1:
+                raise QuotaConfigInvalidError(
+                    msg=f'quota_config[{key}] must be -1, 0, or positive integer, got {value}',
+                )
+
+
+def require_quota(resource_type: str):
+    """Decorator for resource creation endpoints (AD-04).
+
+    Extracts login_user from kwargs, calls QuotaService.check_quota().
+    Raises QuotaExceededError if quota is exhausted.
+
+    Usage:
+        @require_quota(QuotaResourceType.KNOWLEDGE_SPACE)
+        async def create_knowledge_space(*, login_user: LoginUser = Depends(...)):
+            ...
+
+    Note: Defined in F005, applied to resource endpoints in F008.
+    """
+    def decorator(func):
+        @functools.wraps(func)
+        async def wrapper(*args, **kwargs):
+            login_user = kwargs.get('login_user')
+            if login_user:
+                await QuotaService.check_quota(
+                    user_id=login_user.user_id,
+                    resource_type=resource_type,
+                    tenant_id=login_user.tenant_id,
+                    login_user=login_user,
+                )
+            return await func(*args, **kwargs)
+        return wrapper
+    return decorator
