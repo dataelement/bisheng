@@ -33,6 +33,7 @@ class ApplicationContextManager:
         self._initialization_lock = asyncio.Lock()
         self._initialization_order: List[str] = []
         self._dependencies: Dict[str, List[str]] = {}
+        self._optional_contexts: set[str] = set()
 
     async def initialize(self, config: Settings) -> None:
         """Initialize app context
@@ -93,7 +94,7 @@ class ApplicationContextManager:
             if config.openfga.enabled:
                 try:
                     from bisheng.core.openfga.manager import FGAManager
-                    self.register_context(FGAManager(openfga_config=config.openfga))
+                    self.register_context(FGAManager(openfga_config=config.openfga), optional=True)
                 except Exception as e:
                     logger.warning(f"Failed to register FGAManager (OpenFGA may not be available): {e}")
 
@@ -134,8 +135,12 @@ class ApplicationContextManager:
             initialized.add(context_name)
             logger.debug(f"Initialized context: '{context_name}'")
         except Exception as e:
-            logger.error(f"Failed to initialize context '{context_name}': {e}")
-            raise
+            if context_name in self._optional_contexts:
+                logger.warning(f"Optional context '{context_name}' failed to initialize (degraded mode): {e}")
+                initialized.add(context_name)  # Mark as "handled" to avoid retry
+            else:
+                logger.error(f"Failed to initialize context '{context_name}': {e}")
+                raise
 
     async def async_get_instance(self, name: str) -> T:
         """Gets the context instance of the specified name asynchronously"""
@@ -155,7 +160,8 @@ class ApplicationContextManager:
             self,
             context: BaseContextManager,
             dependencies: Optional[List[str]] = None,
-            initialize_order: Optional[int] = None
+            initialize_order: Optional[int] = None,
+            optional: bool = False,
     ) -> None:
         """Register a new context manager
 
@@ -163,11 +169,14 @@ class ApplicationContextManager:
             context: Context manager to register
             dependencies: A list of other context names that the context depends on
             initialize_order: Initialization order (smaller numbers initialize earlier)
+            optional: If True, initialization failure is logged but does not block startup
 
         Raises:
             ValueError: If the context name already exists
         """
         self._registry.register(context)
+        if optional:
+            self._optional_contexts.add(context.name)
 
         # Record dependencies
         if dependencies:
@@ -460,7 +469,8 @@ async def close_app_context() -> None:
 def register_context(
         context: BaseContextManager,
         dependencies: Optional[List[str]] = None,
-        initialize_order: Optional[int] = None
+        initialize_order: Optional[int] = None,
+        optional: bool = False,
 ) -> None:
     """Convenient way to register a context
 
@@ -468,12 +478,13 @@ def register_context(
         context: Context manager to register
         dependencies: A list of other context names that the context depends on
         initialize_order: Initialization order (smaller numbers initialize earlier)
+        optional: If True, initialization failure does not block startup
 
     Example:
         # Register a cache context that depends on the database
         register_context(cache_manager, dependencies=['database'], initialize_order=10)
     """
-    app_context.register_context(context, dependencies, initialize_order)
+    app_context.register_context(context, dependencies, initialize_order, optional=optional)
 
 
 async def health_check(include_details: bool = False) -> Union[Dict[str, bool], Dict[str, Dict[str, Any]]]:

@@ -27,6 +27,7 @@ Data isolation: All test resources use 'e2e-f004-rebac-' prefix.
 """
 
 import os
+import time
 
 import httpx
 import pytest
@@ -34,6 +35,7 @@ import pytest
 API_BASE = os.environ.get('E2E_API_BASE', 'http://localhost:7860/api/v1')
 HEALTH_URL = API_BASE.replace('/api/v1', '') + '/health'
 PREFIX = 'e2e-f004-rebac-'
+RUN_ID = str(int(time.time()))[-6:]  # unique suffix per run
 
 
 # ---------------------------------------------------------------------------
@@ -101,20 +103,40 @@ def _assert_error(resp: httpx.Response, code: int) -> dict:
 
 def _create_workflow(client: httpx.Client, token: str, name: str) -> dict:
     """Create a test workflow (simplest resource with user_id). Returns flow dict."""
-    resp = client.post(f'{API_BASE}/flows/', json={
+    resp = client.post(f'{API_BASE}/workflow/create', json={
         'name': name,
         'flow_type': 10,
         'data': {'nodes': [], 'edges': []},
     }, headers=_auth(token))
-    return _assert_200(resp)
+    # workflow/create returns HTTP 201
+    assert resp.status_code in (200, 201), f'HTTP {resp.status_code}: {resp.text[:300]}'
+    body = resp.json()
+    assert body['status_code'] == 200, f"Business error: {body.get('status_message')}"
+    return body.get('data')
 
 
 def _delete_workflow(client: httpx.Client, token: str, flow_id: str):
     """Delete a workflow (best-effort)."""
     try:
-        client.delete(f'{API_BASE}/flows/{flow_id}', headers=_auth(token))
+        client.delete(f'{API_BASE}/workflow/{flow_id}', headers=_auth(token))
     except Exception:
         pass
+
+
+def _get_default_group_role(client: httpx.Client, admin_token: str) -> dict:
+    """Find the first available group and default role (id=2) for user creation."""
+    resp = client.get(f'{API_BASE}/group/list', params={'page': 1, 'limit': 10},
+                      headers=_auth(admin_token))
+    body = resp.json()
+    if body.get('status_code') == 200:
+        data = body.get('data', {})
+        # API returns {records: [...]} format
+        groups = data.get('records', data.get('data', []))
+        if isinstance(groups, list) and groups:
+            group_id = groups[0].get('id')
+            # Use default role (id=2) which is the standard non-admin role
+            return {'group_id': group_id, 'role_ids': [2]}
+    return None
 
 
 def _create_test_user(client: httpx.Client, admin_token: str, username: str, password: str = 'test_pass_123') -> dict:
@@ -129,10 +151,14 @@ def _create_test_user(client: httpx.Client, admin_token: str, username: str, pas
     encrypted = public_key.encrypt(password.encode(), padding.PKCS1v15())
     encrypted_b64 = base64.b64encode(encrypted).decode()
 
+    # Find a valid group+role for user creation
+    group_role = _get_default_group_role(client, admin_token)
+    group_roles = [group_role] if group_role else [{'group_id': 1, 'role_ids': [2]}]
+
     resp = client.post(f'{API_BASE}/user/create', json={
         'user_name': username,
         'password': encrypted_b64,
-        'role_id': 2,
+        'group_roles': group_roles,
     }, headers=_auth(admin_token))
     return _assert_200(resp)
 
@@ -157,7 +183,7 @@ def admin_token(client):
 @pytest.fixture(scope='module')
 def test_user(client, admin_token):
     """Create a non-admin test user, returns (user_data, token)."""
-    username = f'{PREFIX}user'
+    username = f'{PREFIX}u{RUN_ID}'
     password = 'test_pass_123'
     user_data = _create_test_user(client, admin_token, username, password)
     user_token = _login(client, username, password)
@@ -167,7 +193,7 @@ def test_user(client, admin_token):
 @pytest.fixture(scope='module')
 def test_workflow(client, admin_token):
     """Create a test workflow owned by admin."""
-    flow = _create_workflow(client, admin_token, f'{PREFIX}workflow')
+    flow = _create_workflow(client, admin_token, f'{PREFIX}wf-{RUN_ID}')
     yield flow
     _delete_workflow(client, admin_token, flow['id'])
 
@@ -176,7 +202,7 @@ def test_workflow(client, admin_token):
 def user_workflow(client, test_user):
     """Create a test workflow owned by the test user."""
     _, user_token = test_user
-    flow = _create_workflow(client, user_token, f'{PREFIX}user-workflow')
+    flow = _create_workflow(client, user_token, f'{PREFIX}uwf-{RUN_ID}')
     yield flow
     _delete_workflow(client, user_token, flow['id'])
 
@@ -294,6 +320,10 @@ class TestListObjects:
 class TestAuthorize:
     """Tests for POST /api/v1/resources/{type}/{id}/authorize"""
 
+    @pytest.mark.skipif(
+        not os.environ.get('OPENFGA_AVAILABLE'),
+        reason='Requires OpenFGA service (set OPENFGA_AVAILABLE=1)',
+    )
     def test_ac03_admin_grant_viewer(self, client, admin_token, test_user, test_workflow):
         """AC-03: Admin grants viewer to test user on a workflow."""
         user_data, user_token = test_user
@@ -409,6 +439,10 @@ class TestResourcePermissions:
 class TestPermissionHierarchy:
     """Tests for permission pyramid: owner > manager > editor > viewer."""
 
+    @pytest.mark.skipif(
+        not os.environ.get('OPENFGA_AVAILABLE'),
+        reason='Requires OpenFGA service (set OPENFGA_AVAILABLE=1)',
+    )
     def test_ac02_grant_manager_implies_can_manage(self, client, admin_token, test_user, test_workflow):
         """AC-02+AC-05: Granting manager implies can_manage, can_edit, can_read."""
         user_data, user_token = test_user
