@@ -90,6 +90,13 @@ class ApplicationContextManager:
             from bisheng.core.prompts.manager import PromptManager
             self.register_context(PromptManager())
 
+            if config.openfga.enabled:
+                try:
+                    from bisheng.core.openfga.manager import FGAManager
+                    self.register_context(FGAManager(openfga_config=config.openfga))
+                except Exception as e:
+                    logger.warning(f"Failed to register FGAManager (OpenFGA may not be available): {e}")
+
             logger.debug("Default contexts registered")
         except ImportError as e:
             logger.warning(f"Failed to import default context managers: {e}")

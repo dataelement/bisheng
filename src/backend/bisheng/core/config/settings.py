@@ -10,6 +10,7 @@ from loguru import logger
 from pydantic import ConfigDict, BaseModel, Field, field_validator, model_validator
 
 from bisheng.core.config.multi_tenant import MultiTenantConf
+from bisheng.core.config.openfga import OpenFGAConf
 
 secret_key = 'TI31VYJ-ldAq-FXo5QNPKV_lqGTFfp-MIdbK2Hm5F1E='
 
@@ -314,6 +315,7 @@ class Settings(BaseModel):
     information_conf: IntelligenceCenterConf = IntelligenceCenterConf()
     mcp: McpConf = McpConf()
     multi_tenant: MultiTenantConf = MultiTenantConf()
+    openfga: OpenFGAConf = OpenFGAConf()
 
     @field_validator('database_url')
     @classmethod
