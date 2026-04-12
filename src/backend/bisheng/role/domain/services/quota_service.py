@@ -13,7 +13,7 @@ from __future__ import annotations
 import asyncio
 import functools
 import logging
-from typing import List, Optional
+from typing import Optional
 
 from bisheng.common.errcode.role import QuotaExceededError, QuotaConfigInvalidError
 from bisheng.database.models.role import RoleDao
@@ -129,7 +129,7 @@ class QuotaService:
         user_used = await cls.get_user_resource_count(user_id, resource_type)
         if user_used >= effective:
             raise QuotaExceededError(
-                msg=f'Resource quota exceeded: {resource_type} (used: {user_used}, limit: {effective})',
+                msg=f'Resource quota exceeded for {resource_type}',
             )
         return True
 
@@ -249,13 +249,18 @@ class QuotaService:
     def validate_quota_config(cls, quota_config: Optional[dict]) -> None:
         """Validate quota_config values (AC-10c).
 
+        Valid keys: those in VALID_QUOTA_KEYS.
         Valid values: -1 (unlimited), 0 (prohibited), positive integer.
-        Raises QuotaConfigInvalidError on invalid values.
+        Raises QuotaConfigInvalidError on invalid keys or values.
         """
         if not quota_config:
             return
         for key, value in quota_config.items():
-            if not isinstance(value, int):
+            if key not in VALID_QUOTA_KEYS:
+                raise QuotaConfigInvalidError(
+                    msg=f'quota_config contains unknown key: {key}',
+                )
+            if isinstance(value, bool) or not isinstance(value, int):
                 raise QuotaConfigInvalidError(
                     msg=f'quota_config[{key}] must be an integer, got {type(value).__name__}',
                 )

@@ -182,11 +182,12 @@ class RoleDao(RoleBase):
             department_ids: Optional list of department IDs to filter by
                 (for department admin scope). None = no dept filtering.
         """
+        # bypass_tenant_filter is used by callers, so explicitly scope tenant roles
         stmt = select(Role).where(
             Role.id > AdminRole,
             or_(
                 Role.role_type == 'global',
-                Role.role_type == 'tenant',
+                and_(Role.role_type == 'tenant', Role.tenant_id == tenant_id),
             ),
         )
         if keyword:
@@ -209,23 +210,27 @@ class RoleDao(RoleBase):
         """Get visible roles for role list API (AD-09).
 
         Returns global roles + current tenant's roles, excluding AdminRole(id=1).
-        For department admins, also filters by department subtree.
+        Uses bypass_tenant_filter so global roles from other tenants are visible.
         """
+        from bisheng.core.context.tenant import bypass_tenant_filter
         stmt = cls._build_visible_roles_stmt(tenant_id, keyword, department_ids)
         stmt = stmt.order_by(Role.create_time.desc())
         if page and limit:
             stmt = stmt.offset((page - 1) * limit).limit(limit)
-        async with get_async_db_session() as session:
-            return (await session.exec(stmt)).all()
+        with bypass_tenant_filter():
+            async with get_async_db_session() as session:
+                return (await session.exec(stmt)).all()
 
     @classmethod
     async def acount_visible_roles(cls, tenant_id: int, keyword: str = None,
                                    department_ids: List[int] = None) -> int:
         """Count visible roles (companion for aget_visible_roles)."""
+        from bisheng.core.context.tenant import bypass_tenant_filter
         base_stmt = cls._build_visible_roles_stmt(tenant_id, keyword, department_ids)
         stmt = select(func.count()).select_from(base_stmt.subquery())
-        async with get_async_db_session() as session:
-            return await session.scalar(stmt)
+        with bypass_tenant_filter():
+            async with get_async_db_session() as session:
+                return await session.scalar(stmt)
 
     @classmethod
     async def aget_role_by_name(cls, tenant_id: int, role_type: str,

@@ -77,7 +77,12 @@ class RoleService:
             quota_config=req.quota_config,
             remark=req.remark,
         )
-        return await RoleDao.ainsert_role(role)
+        try:
+            return await RoleDao.ainsert_role(role)
+        except Exception as e:
+            if 'Duplicate entry' in str(e) or 'IntegrityError' in type(e).__name__:
+                raise RoleNameDuplicateError()
+            raise
 
     # ── List ──
 
@@ -149,7 +154,9 @@ class RoleService:
         role_id: int,
         login_user,
     ) -> RoleListResponse:
-        """Get role detail (AC-10)."""
+        """Get role detail (AC-10). Requires at least admin/tenant-admin/dept-admin."""
+        await cls._check_role_permission(login_user)
+
         role = await RoleDao.aget_role_by_id(role_id)
         if not role:
             raise RoleNotFoundError()
@@ -157,7 +164,7 @@ class RoleService:
         user_counts = await RoleDao.aget_user_count_by_role_ids([role_id])
         dept_names = await cls._get_department_names([role])
 
-        permission_level = 'admin' if login_user.is_admin() else 'tenant_admin'
+        permission_level = await cls._get_permission_level(login_user)
         is_readonly = cls._is_readonly(role, login_user, permission_level)
 
         return RoleListResponse(
@@ -281,7 +288,9 @@ class RoleService:
         role_id: int,
         login_user,
     ) -> List[str]:
-        """Get role menu permissions (AC-12)."""
+        """Get role menu permissions (AC-12). Requires admin/tenant-admin/dept-admin."""
+        await cls._check_role_permission(login_user)
+
         role = await RoleDao.aget_role_by_id(role_id)
         if not role:
             raise RoleNotFoundError()
