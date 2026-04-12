@@ -192,6 +192,76 @@ CREATE TABLE IF NOT EXISTS user_department (
 )"""
 
 # ---------------------------------------------------------------------------
+# F006 migration: additional source tables
+# ---------------------------------------------------------------------------
+
+TABLE_USER_ROLE = """\
+CREATE TABLE IF NOT EXISTS userrole (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    role_id INTEGER NOT NULL,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+)"""
+
+TABLE_SPACE_CHANNEL_MEMBER = """\
+CREATE TABLE IF NOT EXISTS space_channel_member (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    business_id VARCHAR(36) NOT NULL,
+    business_type VARCHAR(16) NOT NULL,
+    user_id INTEGER NOT NULL,
+    user_role VARCHAR(16) NOT NULL,
+    status VARCHAR(16) NOT NULL DEFAULT 'ACTIVE',
+    is_pinned INTEGER DEFAULT 0,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+)"""
+
+TABLE_KNOWLEDGE_FILE = """\
+CREATE TABLE IF NOT EXISTS knowledgefile (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    user_name VARCHAR(255),
+    knowledge_id INTEGER NOT NULL,
+    file_name VARCHAR(200) NOT NULL,
+    file_type INTEGER DEFAULT 1,
+    file_source VARCHAR(32),
+    level INTEGER DEFAULT 0,
+    file_level_path VARCHAR(512),
+    status INTEGER DEFAULT 5,
+    object_name VARCHAR(512),
+    remark VARCHAR(512),
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+)"""
+
+TABLE_GPTS_TOOLS = """\
+CREATE TABLE IF NOT EXISTS t_gpts_tools (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    name VARCHAR(255),
+    description TEXT,
+    is_delete INTEGER DEFAULT 0,
+    is_preset INTEGER DEFAULT 0,
+    type INTEGER DEFAULT 0,
+    extra TEXT,
+    logo VARCHAR(512),
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+)"""
+
+TABLE_CHANNEL = """\
+CREATE TABLE IF NOT EXISTS channel (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    logo VARCHAR(512),
+    status INTEGER DEFAULT 1,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+)"""
+
+# ---------------------------------------------------------------------------
 # F004: ReBAC compensation queue
 # ---------------------------------------------------------------------------
 
@@ -228,6 +298,12 @@ TABLE_DEFINITIONS: dict[str, str] = {
     'department': TABLE_DEPARTMENT,
     'user_department': TABLE_USER_DEPARTMENT,
     'failed_tuple': TABLE_FAILED_TUPLE,
+    # F006 migration source tables
+    'userrole': TABLE_USER_ROLE,
+    'space_channel_member': TABLE_SPACE_CHANNEL_MEMBER,
+    'knowledgefile': TABLE_KNOWLEDGE_FILE,
+    't_gpts_tools': TABLE_GPTS_TOOLS,
+    'channel': TABLE_CHANNEL,
 }
 
 
