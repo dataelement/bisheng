@@ -548,20 +548,34 @@ class RBACToReBACMigrator:
                 for rid, tid, atype in ra_result.fetchall():
                     role_access_set.add((rid, tid, atype))
 
+                # space_channel_member: (user_id, business_type, business_id) for ACTIVE
+                scm_set: set[tuple[int, str, str]] = set()
+                try:
+                    scm_result = await session.execute(
+                        sa_text("SELECT user_id, business_type, business_id "
+                                "FROM space_channel_member WHERE status = 'ACTIVE'")
+                    )
+                    for s_uid, s_btype, s_bid in scm_result.fetchall():
+                        scm_set.add((s_uid, s_btype, s_bid))
+                except Exception:
+                    pass  # table may not exist
+
         if not user_ids or not resources:
             logger.warning('Verify: no users or resources to check')
             return report
 
+        # Reverse map: object_type → business_type for SCM lookup
+        scm_type_reverse = {'knowledge_space': 'space', 'channel': 'channel'}
+
         # Check each (user, resource) pair
         for uid in user_ids:
             for obj_type, obj_id in resources:
-                # Old system check: is user owner OR has role_access?
+                # Old system check: owner OR role_access OR space_channel_member?
                 old_result = False
                 if owner_map.get((obj_type, obj_id)) == uid:
                     old_result = True
                 else:
                     user_roles = user_role_map.get(uid, [])
-                    # Map object_type back to AccessType values for read access
                     read_types = {
                         'knowledge_space': 1, 'assistant': 5, 'tool': 7,
                         'workflow': 9, 'dashboard': 11,
@@ -572,6 +586,12 @@ class RBACToReBACMigrator:
                             if (rid, obj_id, read_type) in role_access_set:
                                 old_result = True
                                 break
+
+                # Also check space_channel_member (Step 4 source)
+                if not old_result:
+                    biz_type = scm_type_reverse.get(obj_type)
+                    if biz_type and (uid, biz_type, obj_id) in scm_set:
+                        old_result = True
 
                 # New system check via PermissionService
                 try:
