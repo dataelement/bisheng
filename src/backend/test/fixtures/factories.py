@@ -126,6 +126,57 @@ def create_department(
     return dict(row)
 
 
+def create_group(
+    session: Session,
+    group_name: str = 'Test Group',
+    tenant_id: int = 1,
+    visibility: str = 'public',
+    create_user: int = 1,
+    **kwargs,
+) -> dict:
+    """Insert a group record and return it as a dict."""
+    extra_cols = ''.join(f', {k}' for k in kwargs)
+    extra_vals = ''.join(f', :{k}' for k in kwargs)
+    params = {
+        'group_name': group_name, 'tenant_id': tenant_id,
+        'visibility': visibility, 'create_user': create_user,
+        **kwargs,
+    }
+
+    session.execute(text(
+        f'INSERT INTO "group" (group_name, tenant_id, visibility, create_user{extra_cols}) '
+        f'VALUES (:group_name, :tenant_id, :visibility, :create_user{extra_vals})'
+    ), params)
+    session.flush()
+
+    row = session.execute(
+        text('SELECT * FROM "group" WHERE group_name = :gn AND tenant_id = :tid'),
+        {'gn': group_name, 'tid': tenant_id},
+    ).mappings().one()
+    return dict(row)
+
+
+def create_user_group_member(
+    session: Session,
+    user_id: int,
+    group_id: int,
+    is_group_admin: int = 0,
+    tenant_id: int = 1,
+) -> dict:
+    """Insert a usergroup association and return it as a dict."""
+    session.execute(text(
+        'INSERT INTO usergroup (user_id, group_id, is_group_admin, tenant_id) '
+        'VALUES (:uid, :gid, :admin, :tid)'
+    ), {'uid': user_id, 'gid': group_id, 'admin': is_group_admin, 'tid': tenant_id})
+    session.flush()
+
+    row = session.execute(
+        text('SELECT * FROM usergroup WHERE user_id = :uid AND group_id = :gid AND is_group_admin = :admin'),
+        {'uid': user_id, 'gid': group_id, 'admin': is_group_admin},
+    ).mappings().one()
+    return dict(row)
+
+
 def create_user_department(
     session: Session,
     user_id: int,
