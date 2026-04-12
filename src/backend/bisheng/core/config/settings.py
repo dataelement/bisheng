@@ -10,6 +10,7 @@ from loguru import logger
 from pydantic import ConfigDict, BaseModel, Field, field_validator, model_validator
 
 from bisheng.core.config.multi_tenant import MultiTenantConf
+from bisheng.core.config.openfga import OpenFGAConf
 
 secret_key = 'TI31VYJ-ldAq-FXo5QNPKV_lqGTFfp-MIdbK2Hm5F1E='
 
@@ -171,6 +172,11 @@ class CeleryConf(BaseModel):
                 'task': 'bisheng.worker.information.article.sync_information_article',
                 'schedule': crontab.from_string('30 5 * * *'),  # 05:30 exec every day
             }
+        if 'retry_failed_tuples' not in self.beat_schedule:
+            self.beat_schedule['retry_failed_tuples'] = {
+                'task': 'bisheng.worker.permission.retry_failed_tuples.retry_failed_tuples',
+                'schedule': 30.0,  # Every 30 seconds
+            }
 
         # convert str to crontab
         for key, task_info in self.beat_schedule.items():
@@ -314,6 +320,7 @@ class Settings(BaseModel):
     information_conf: IntelligenceCenterConf = IntelligenceCenterConf()
     mcp: McpConf = McpConf()
     multi_tenant: MultiTenantConf = MultiTenantConf()
+    openfga: OpenFGAConf = OpenFGAConf()
 
     @field_validator('database_url')
     @classmethod

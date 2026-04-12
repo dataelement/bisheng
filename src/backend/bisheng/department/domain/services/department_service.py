@@ -144,7 +144,7 @@ class DepartmentService:
 
         # Fire change handler (outside session)
         ops = DepartmentChangeHandler.on_created(dept.id, parent.id)
-        DepartmentChangeHandler.execute(ops)
+        await DepartmentChangeHandler.execute_async(ops)
 
         return dept
 
@@ -298,7 +298,7 @@ class DepartmentService:
         # Fire change handler
         if parent_id is not None:
             ops = DepartmentChangeHandler.on_archived(dept.id, parent_id)
-            DepartmentChangeHandler.execute(ops)
+            await DepartmentChangeHandler.execute_async(ops)
 
     @classmethod
     async def amove_department(
@@ -344,7 +344,7 @@ class DepartmentService:
 
         # Fire change handler
         ops = DepartmentChangeHandler.on_moved(dept.id, old_parent_id, data.new_parent_id)
-        DepartmentChangeHandler.execute(ops)
+        await DepartmentChangeHandler.execute_async(ops)
 
         return dept
 
@@ -440,7 +440,7 @@ class DepartmentService:
 
         # Fire change handler
         ops = DepartmentChangeHandler.on_members_added(dept.id, data.user_ids)
-        DepartmentChangeHandler.execute(ops)
+        await DepartmentChangeHandler.execute_async(ops)
 
     @classmethod
     async def aremove_member(
@@ -466,7 +466,7 @@ class DepartmentService:
 
         # Fire change handler
         ops = DepartmentChangeHandler.on_member_removed(dept.id, user_id)
-        DepartmentChangeHandler.execute(ops)
+        await DepartmentChangeHandler.execute_async(ops)
 
     @classmethod
     async def aget_members(
