@@ -269,6 +269,26 @@ resp_500(code, msg)  # 业务错误
 
 三步：① `workflow/common/node.py` 添加 NodeType 枚举 → ② `workflow/nodes/<name>/` 创建节点类继承 BaseNode 实现 `_run()` → ③ `workflow/nodes/node_manage.py` 注册到 NODE_CLASS_MAP
 
+### 前端开发规范
+
+两个前端技术栈差异较大，**不可混用**。详细规则在 `.claude/rules/` 中按目录自动加载：
+
+| 维度 | Platform (`src/frontend/platform/`) | Client (`src/frontend/client/`) |
+|------|-------------------------------------|--------------------------------|
+| 状态管理 | Zustand + React Context | Recoil |
+| 路径别名 | `@/` → `src/` | `~/` (或 `@/`) → `src/` |
+| HTTP 层 | `@/controllers/request.ts` | `~/api/request.ts` |
+| UI 组件库 | `@/components/bs-ui/` | `~/components/ui/` |
+| i18n Hook | `useTranslation()` → `t()` | `useLocalize()` → `localize()` |
+| i18n 文件 | `public/locales/{lang}/{ns}.json`（多 namespace） | `src/locales/{lang}/translation.json`（单文件） |
+| Toast | `toast({title, variant, description})` | `showToast({message, severity})` |
+
+**规范文件**：`.claude/rules/platform-frontend.md` / `.claude/rules/client-frontend.md`（按 globs 自动生效）
+
+**前端 Skills**：
+- `/i18n-localizer` — 提取硬编码中文为 i18n key，自动识别 Client/Platform 并使用对应约定
+- `/react-component-refactor` — 大组件拆分（hook 提取、子组件拆分、目录重组），两端通用
+
 ## 核心子系统
 
 > 回答"核心引擎内部怎么运转"。

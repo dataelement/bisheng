@@ -13,6 +13,9 @@ autogen_coding/
 # Mac
 .DS_Store
 
+# Claude Code local settings
+.claude/settings.local.json
+
 # VSCode
 .vscode
 .vscode/settings.json
