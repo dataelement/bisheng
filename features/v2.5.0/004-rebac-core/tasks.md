@@ -11,7 +11,7 @@
 |------|------|------|
 | spec.md | ✅ 已评审 | PRD DSL 同步修正（can_delete + knowledge_file 统一 + folder owner） |
 | tasks.md | ✅ 已拆解 | 18 个任务 |
-| 实现 | 🔲 未开始 | 0 / 18 完成 |
+| 实现 | ✅ 已完成 | 18 / 18 完成 |
 
 ---
 
