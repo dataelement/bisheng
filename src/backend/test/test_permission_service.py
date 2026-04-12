@@ -62,7 +62,7 @@ class TestPermissionServiceCheck:
             writes=[{'user': 'user:2', 'relation': 'viewer', 'object': 'workflow:abc'}],
         )
 
-        with patch.object(PermissionService, '_get_fga_client', return_value=mock_fga):
+        with patch.object(PermissionService, '_get_fga', return_value=mock_fga):
             with patch('bisheng.permission.domain.services.permission_cache.PermissionCache.get_check', new_callable=AsyncMock, return_value=None):
                 with patch('bisheng.permission.domain.services.permission_cache.PermissionCache.set_check', new_callable=AsyncMock):
                     result = await PermissionService.check(
@@ -76,7 +76,7 @@ class TestPermissionServiceCheck:
         """L3+L4: FGA returns False, no owner fallback."""
         from bisheng.permission.domain.services.permission_service import PermissionService
 
-        with patch.object(PermissionService, '_get_fga_client', return_value=mock_fga):
+        with patch.object(PermissionService, '_get_fga', return_value=mock_fga):
             with patch('bisheng.permission.domain.services.permission_cache.PermissionCache.get_check', new_callable=AsyncMock, return_value=None):
                 with patch('bisheng.permission.domain.services.permission_cache.PermissionCache.set_check', new_callable=AsyncMock):
                     with patch.object(PermissionService, '_get_resource_creator', new_callable=AsyncMock, return_value=None):
@@ -91,7 +91,7 @@ class TestPermissionServiceCheck:
         """L4: FGA returns False but user is DB creator → True."""
         from bisheng.permission.domain.services.permission_service import PermissionService
 
-        with patch.object(PermissionService, '_get_fga_client', return_value=mock_fga):
+        with patch.object(PermissionService, '_get_fga', return_value=mock_fga):
             with patch('bisheng.permission.domain.services.permission_cache.PermissionCache.get_check', new_callable=AsyncMock, return_value=None):
                 with patch('bisheng.permission.domain.services.permission_cache.PermissionCache.set_check', new_callable=AsyncMock):
                     with patch.object(PermissionService, '_get_resource_creator', new_callable=AsyncMock, return_value=2):
@@ -106,7 +106,7 @@ class TestPermissionServiceCheck:
         """L5: FGA connection error → deny access."""
         from bisheng.permission.domain.services.permission_service import PermissionService
 
-        with patch.object(PermissionService, '_get_fga_client', return_value=None):
+        with patch.object(PermissionService, '_get_fga', return_value=None):
             result = await PermissionService.check(
                 user_id=2, relation='viewer', object_type='workflow', object_id='abc',
                 login_user=mock_login_user_normal,
@@ -138,7 +138,7 @@ class TestPermissionServiceListAccessible:
             {'user': 'user:2', 'relation': 'viewer', 'object': 'workflow:def'},
         ])
 
-        with patch.object(PermissionService, '_get_fga_client', return_value=mock_fga):
+        with patch.object(PermissionService, '_get_fga', return_value=mock_fga):
             with patch('bisheng.permission.domain.services.permission_cache.PermissionCache.get_list_objects', new_callable=AsyncMock, return_value=None):
                 with patch('bisheng.permission.domain.services.permission_cache.PermissionCache.set_list_objects', new_callable=AsyncMock):
                     result = await PermissionService.list_accessible_ids(
@@ -155,7 +155,7 @@ class TestPermissionServiceAuthorize:
         """Grant viewer to user → write tuple."""
         from bisheng.permission.domain.services.permission_service import PermissionService
 
-        with patch.object(PermissionService, '_get_fga_client', return_value=mock_fga):
+        with patch.object(PermissionService, '_get_fga', return_value=mock_fga):
             with patch('bisheng.permission.domain.services.permission_cache.PermissionCache.invalidate_user', new_callable=AsyncMock):
                 await PermissionService.authorize(
                     object_type='workflow',
@@ -177,7 +177,7 @@ class TestPermissionServiceAuthorize:
             writes=[{'user': 'user:5', 'relation': 'viewer', 'object': 'workflow:abc'}],
         )
 
-        with patch.object(PermissionService, '_get_fga_client', return_value=mock_fga):
+        with patch.object(PermissionService, '_get_fga', return_value=mock_fga):
             with patch('bisheng.permission.domain.services.permission_cache.PermissionCache.invalidate_user', new_callable=AsyncMock):
                 await PermissionService.authorize(
                     object_type='workflow',
@@ -202,7 +202,7 @@ class TestPermissionServiceBatchWrite:
             TupleOperation(action='write', user='user:2', relation='member', object='department:5'),
         ]
 
-        with patch.object(PermissionService, '_get_fga_client', return_value=mock_fga):
+        with patch.object(PermissionService, '_get_fga', return_value=mock_fga):
             await PermissionService.batch_write_tuples(ops)
 
         mock_fga.assert_tuple_count(2)
@@ -216,7 +216,7 @@ class TestPermissionServiceBatchWrite:
             TupleOperation(action='write', user='user:1', relation='member', object='department:5'),
         ]
 
-        with patch.object(PermissionService, '_get_fga_client', return_value=None):
+        with patch.object(PermissionService, '_get_fga', return_value=None):
             with patch.object(PermissionService, '_save_failed_tuples', new_callable=AsyncMock) as mock_save:
                 await PermissionService.batch_write_tuples(ops)
                 mock_save.assert_called_once()

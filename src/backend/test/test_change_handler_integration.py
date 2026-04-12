@@ -25,7 +25,7 @@ class TestDepartmentChangeHandlerIntegration:
         ops = DepartmentChangeHandler.on_created(dept_id=5, parent_id=1)
         assert len(ops) == 1
 
-        with patch.object(PermissionService, '_get_fga_client', return_value=mock_fga):
+        with patch.object(PermissionService, '_get_fga', return_value=mock_fga):
             await DepartmentChangeHandler.execute_async(ops)
 
         mock_fga.assert_tuple_exists('department:1', 'parent', 'department:5')
@@ -38,7 +38,7 @@ class TestDepartmentChangeHandlerIntegration:
         ops = DepartmentChangeHandler.on_members_added(dept_id=5, user_ids=[10, 11, 12])
         assert len(ops) == 3
 
-        with patch.object(PermissionService, '_get_fga_client', return_value=mock_fga):
+        with patch.object(PermissionService, '_get_fga', return_value=mock_fga):
             await DepartmentChangeHandler.execute_async(ops)
 
         mock_fga.assert_tuple_count(3)
@@ -58,7 +58,7 @@ class TestDepartmentChangeHandlerIntegration:
 
         ops = DepartmentChangeHandler.on_moved(dept_id=5, old_parent_id=1, new_parent_id=2)
 
-        with patch.object(PermissionService, '_get_fga_client', return_value=mock_fga):
+        with patch.object(PermissionService, '_get_fga', return_value=mock_fga):
             await DepartmentChangeHandler.execute_async(ops)
 
         mock_fga.assert_tuple_count(1)
@@ -75,7 +75,7 @@ class TestGroupChangeHandlerIntegration:
         ops = GroupChangeHandler.on_created(group_id=3, creator_user_id=1)
         assert len(ops) == 1
 
-        with patch.object(PermissionService, '_get_fga_client', return_value=mock_fga):
+        with patch.object(PermissionService, '_get_fga', return_value=mock_fga):
             await GroupChangeHandler.execute_async(ops)
 
         mock_fga.assert_tuple_exists('user:1', 'admin', 'user_group:3')
@@ -87,7 +87,7 @@ class TestGroupChangeHandlerIntegration:
 
         ops = GroupChangeHandler.on_members_added(group_id=3, user_ids=[10, 11])
 
-        with patch.object(PermissionService, '_get_fga_client', return_value=mock_fga):
+        with patch.object(PermissionService, '_get_fga', return_value=mock_fga):
             await GroupChangeHandler.execute_async(ops)
 
         mock_fga.assert_tuple_count(2)
@@ -106,7 +106,7 @@ class TestGroupChangeHandlerIntegration:
 
         ops = GroupChangeHandler.on_member_removed(group_id=3, user_id=10)
 
-        with patch.object(PermissionService, '_get_fga_client', return_value=mock_fga):
+        with patch.object(PermissionService, '_get_fga', return_value=mock_fga):
             await GroupChangeHandler.execute_async(ops)
 
         mock_fga.assert_tuple_count(0)
@@ -119,7 +119,7 @@ class TestGroupChangeHandlerIntegration:
 
         ops = GroupChangeHandler.on_created(group_id=3, creator_user_id=1)
 
-        with patch.object(PermissionService, '_get_fga_client', return_value=None):
+        with patch.object(PermissionService, '_get_fga', return_value=None):
             with patch.object(PermissionService, '_save_failed_tuples', new_callable=AsyncMock) as mock_save:
                 await GroupChangeHandler.execute_async(ops)
                 mock_save.assert_called_once()

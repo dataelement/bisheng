@@ -110,11 +110,12 @@ class PermissionService:
         if login_user and login_user.is_admin():
             return None
 
-        # Cache lookup
+        # Cache lookup (skip for UNCACHEABLE_RELATIONS)
         from bisheng.permission.domain.services.permission_cache import PermissionCache
-        cached = await PermissionCache.get_list_objects(user_id, relation, object_type)
-        if cached is not None:
-            return cached
+        if relation not in UNCACHEABLE_RELATIONS:
+            cached = await PermissionCache.get_list_objects(user_id, relation, object_type)
+            if cached is not None:
+                return cached
 
         try:
             fga = cls._get_fga()
@@ -136,8 +137,9 @@ class PermissionService:
                 if len(parts) == 2:
                     ids.append(parts[1])
 
-            # Cache result
-            await PermissionCache.set_list_objects(user_id, relation, object_type, ids)
+            # Cache result (skip for UNCACHEABLE_RELATIONS)
+            if relation not in UNCACHEABLE_RELATIONS:
+                await PermissionCache.set_list_objects(user_id, relation, object_type, ids)
 
             return ids
 
@@ -226,7 +228,7 @@ class PermissionService:
                 writes=writes or None,
                 deletes=deletes or None,
             )
-        except (FGAConnectionError, Exception) as e:
+        except Exception as e:
             logger.error('Failed to batch write tuples: %s', e)
             await cls._save_failed_tuples(operations, str(e))
 
