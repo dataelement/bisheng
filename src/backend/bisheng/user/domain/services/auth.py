@@ -360,9 +360,6 @@ class LoginUser(BaseModel):
             raise UnAuthorizedError.http_exception()
         return login_user
 
-    # Deprecated WebMenuResource values (AD-07) — excluded from admin's full menu set
-    _DEPRECATED_MENUS = {'frontend', 'backend', 'create_dashboard'}
-
     @classmethod
     async def get_roles_web_menu(cls, user: User) -> (List[int] | str, List[str]):
         """ get user roles and web menu (F005: updated for v2.5 WebMenuResource) """

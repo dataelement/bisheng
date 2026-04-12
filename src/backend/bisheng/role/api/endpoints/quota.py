@@ -30,11 +30,13 @@ async def get_resource_usage(
     login_user: LoginUser = Depends(LoginUser.get_login_user),
 ):
     """Get current user's resource usage counts (AC-15)."""
+    import asyncio
     from bisheng.role.domain.services.quota_service import DEFAULT_ROLE_QUOTA
 
-    usage = {}
-    for resource_type in DEFAULT_ROLE_QUOTA:
-        usage[resource_type] = await QuotaService.get_user_resource_count(
-            login_user.user_id, resource_type,
-        )
+    resource_types = list(DEFAULT_ROLE_QUOTA.keys())
+    counts = await asyncio.gather(*(
+        QuotaService.get_user_resource_count(login_user.user_id, rt)
+        for rt in resource_types
+    ))
+    usage = dict(zip(resource_types, counts))
     return resp_200(data=usage)

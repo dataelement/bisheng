@@ -180,7 +180,7 @@ class RoleDao(RoleBase):
             Role.id > AdminRole,
             or_(
                 Role.role_type == 'global',
-                and_(Role.role_type == 'tenant'),
+                Role.role_type == 'tenant',
             ),
         )
         if keyword:
@@ -217,24 +217,7 @@ class RoleDao(RoleBase):
                                    department_ids: List[int] = None) -> int:
         """Count visible roles (companion for aget_visible_roles)."""
         base_stmt = cls._build_visible_roles_stmt(tenant_id, keyword, department_ids)
-        # Replace select(Role) with select(count)
-        stmt = select(func.count(Role.id)).where(
-            Role.id > AdminRole,
-            or_(
-                Role.role_type == 'global',
-                and_(Role.role_type == 'tenant'),
-            ),
-        )
-        if keyword:
-            stmt = stmt.where(Role.role_name.like(f'%{keyword}%'))
-        if department_ids is not None:
-            stmt = stmt.where(
-                or_(
-                    Role.role_type == 'global',
-                    Role.department_id.in_(department_ids),
-                    Role.department_id.is_(None),
-                )
-            )
+        stmt = select(func.count()).select_from(base_stmt.subquery())
         async with get_async_db_session() as session:
             return await session.scalar(stmt)
 

@@ -295,47 +295,10 @@ class RoleService:
     # ── Permission helpers ──
 
     @classmethod
-    async def _check_role_permission(cls, login_user) -> None:
-        """Four-level permission check for role management (AC-10b).
+    async def _get_permission_level(cls, login_user) -> str:
+        """Determine user's permission level for role management.
 
-        1. System admin → allowed
-        2. Tenant admin → allowed
-        3. Department admin → allowed (scope enforced in DAO)
-        4. Regular user → denied
-        """
-        if login_user.is_admin():
-            return
-
-        # Check tenant admin via PermissionService
-        try:
-            from bisheng.permission.domain.services.permission_service import PermissionService
-            is_tenant_admin = await PermissionService.check(
-                user_id=login_user.user_id,
-                relation='admin',
-                object_type='tenant',
-                object_id=str(login_user.tenant_id),
-                login_user=login_user,
-            )
-            if is_tenant_admin:
-                return
-        except Exception:
-            pass
-
-        # Check department admin
-        try:
-            dept_ids = await cls._get_user_admin_dept_ids(login_user)
-            if dept_ids:
-                return
-        except Exception:
-            pass
-
-        raise RolePermissionDeniedError()
-
-    @classmethod
-    async def _check_list_permission(cls, login_user) -> str:
-        """Check permission level for list operation.
-
-        Returns: 'admin', 'tenant_admin', 'dept_admin', or raises.
+        Returns: 'admin', 'tenant_admin', 'dept_admin', or 'regular'.
         """
         if login_user.is_admin():
             return 'admin'
@@ -351,23 +314,37 @@ class RoleService:
             )
             if is_tenant_admin:
                 return 'tenant_admin'
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning('PermissionService.check failed for user %d: %s', login_user.user_id, e)
 
         dept_ids = await cls._get_user_admin_dept_ids(login_user)
         if dept_ids:
             return 'dept_admin'
 
-        # Regular users can still view the list (read-only)
         return 'regular'
+
+    @classmethod
+    async def _check_role_permission(cls, login_user) -> None:
+        """Four-level permission check for role management (AC-10b).
+
+        Raises RolePermissionDeniedError for regular users.
+        """
+        level = await cls._get_permission_level(login_user)
+        if level == 'regular':
+            raise RolePermissionDeniedError()
+
+    @classmethod
+    async def _check_list_permission(cls, login_user) -> str:
+        """Check permission level for list operation. Alias for _get_permission_level."""
+        return await cls._get_permission_level(login_user)
 
     @classmethod
     def _is_readonly(cls, role, login_user, permission_level: str) -> bool:
         """Determine if role is read-only for current user."""
         if permission_level == 'admin':
-            return False  # System admin can edit all
+            return False
         if role.role_type == 'global':
-            return True  # Global roles are read-only for non-system-admins
+            return True
         if permission_level == 'regular':
             return True
         return False
@@ -379,7 +356,8 @@ class RoleService:
             from bisheng.database.models.department import DepartmentDao
             depts = await DepartmentDao.aget_user_admin_departments(login_user.user_id)
             return [d.id for d in depts] if depts else []
-        except Exception:
+        except Exception as e:
+            logger.debug('Failed to query admin departments for user %d: %s', login_user.user_id, e)
             return []
 
     @classmethod
@@ -395,7 +373,8 @@ class RoleService:
                 subtree = await DepartmentDao.aget_subtree_ids(dept.path)
                 all_ids.update(subtree)
             return list(all_ids)
-        except Exception:
+        except Exception as e:
+            logger.debug('Failed to query dept subtree for user %d: %s', login_user.user_id, e)
             return None
 
     @classmethod
@@ -408,7 +387,8 @@ class RoleService:
             from bisheng.database.models.department import DepartmentDao
             depts = await DepartmentDao.aget_by_ids(list(set(dept_ids)))
             return {d.id: d.name for d in depts} if depts else {}
-        except Exception:
+        except Exception as e:
+            logger.debug('Failed to query department names: %s', e)
             return {}
 
     @classmethod
