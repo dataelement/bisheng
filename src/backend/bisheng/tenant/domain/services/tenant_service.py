@@ -7,7 +7,6 @@ import logging
 from typing import List, Optional
 
 from bisheng.common.errcode.tenant import (
-    NoTenantsAvailableError,
     TenantAdminRequiredError,
     TenantCodeDuplicateError,
     TenantCreationFailedError,
@@ -34,6 +33,7 @@ from bisheng.tenant.domain.schemas.tenant_schema import (
 logger = logging.getLogger(__name__)
 
 DISABLED_TENANT_KEY = 'disabled_tenant:{}'
+DEFAULT_TENANT_ID = 1
 
 
 def _get_storage_quota(tenant: Tenant) -> Optional[float]:
@@ -41,6 +41,25 @@ def _get_storage_quota(tenant: Tenant) -> Optional[float]:
     if tenant.quota_config and 'storage_gb' in tenant.quota_config:
         return tenant.quota_config['storage_gb']
     return None
+
+
+def _guard_default_tenant(tenant_id: int) -> None:
+    """Prevent modification of the default tenant (id=1)."""
+    if tenant_id == DEFAULT_TENANT_ID:
+        raise TenantNotFoundError()  # Reuse existing error — default tenant is not manageable
+
+
+# Fields safe to include in API responses (excludes create_user, storage_config internals)
+_TENANT_RESPONSE_FIELDS = {
+    'id', 'tenant_code', 'tenant_name', 'logo', 'status',
+    'root_dept_id', 'contact_name', 'contact_phone', 'contact_email',
+    'quota_config', 'create_time', 'update_time',
+}
+
+
+def _safe_tenant_dump(tenant: Tenant) -> dict:
+    """Serialize tenant with only API-safe fields."""
+    return tenant.model_dump(include=_TENANT_RESPONSE_FIELDS)
 
 
 class TenantService:
@@ -91,7 +110,7 @@ class TenantService:
                 action='grant',
             )
 
-            return tenant.model_dump()
+            return _safe_tenant_dump(tenant)
 
         except TenantCodeDuplicateError:
             raise
@@ -171,18 +190,19 @@ class TenantService:
                 tenant = await TenantDao.aget_by_id(tenant_id)
             if not tenant:
                 raise TenantNotFoundError()
-            return tenant.model_dump()
+            return _safe_tenant_dump(tenant)
 
         tenant = await TenantDao.aupdate_tenant(tenant_id, **fields)
         if not tenant:
             raise TenantNotFoundError()
-        return tenant.model_dump()
+        return _safe_tenant_dump(tenant)
 
     @classmethod
     async def aupdate_tenant_status(
         cls, tenant_id: int, data: TenantStatusUpdate, login_user,
     ) -> dict:
         """Update tenant status and manage Redis blacklist."""
+        _guard_default_tenant(tenant_id)
         tenant = await TenantDao.aupdate_tenant(tenant_id, status=data.status)
         if not tenant:
             raise TenantNotFoundError()
@@ -194,11 +214,12 @@ class TenantService:
         else:
             await redis_client.adelete(key)
 
-        return tenant.model_dump()
+        return _safe_tenant_dump(tenant)
 
     @classmethod
     async def adelete_tenant(cls, tenant_id: int, login_user) -> None:
         """Delete a tenant. Requires zero active users."""
+        _guard_default_tenant(tenant_id)
         user_count = await TenantDao.acount_tenant_users(tenant_id)
         if user_count > 0:
             raise TenantHasUsersError()
@@ -260,7 +281,7 @@ class TenantService:
         tenant = await TenantDao.aupdate_tenant(tenant_id, quota_config=data.quota_config)
         if not tenant:
             raise TenantNotFoundError()
-        return tenant.model_dump()
+        return _safe_tenant_dump(tenant)
 
     # ── Tenant Users ───────────────────────────────────────────
 
@@ -478,18 +499,16 @@ class TenantService:
 
     @classmethod
     async def _count_tenant_admins(cls, tenant_id: int) -> int:
-        """Count how many admins a tenant has."""
-        try:
-            from bisheng.permission.domain.services.permission_service import PermissionService
-            fga = PermissionService._get_fga()
-            if fga is None:
-                return 999  # Fail-open when FGA unavailable
-            # Use list_objects to find users with admin relation
-            raw = await fga.list_objects(
-                user=f'tenant:{tenant_id}',
-                relation='admin',
-                type='user',
-            )
-            return len(raw) if raw else 0
-        except Exception:
-            return 999  # Fail-open
+        """Count admins by checking each tenant user's admin relation.
+
+        Falls back to counting all users when FGA is unavailable (fail-open),
+        which blocks removal since count will be >= 1.
+        """
+        users, _ = await UserTenantDao.aget_tenant_users(
+            tenant_id, page=1, page_size=100,
+        )
+        count = 0
+        for user in users:
+            if await cls._is_tenant_admin(user['user_id'], tenant_id):
+                count += 1
+        return count if count > 0 else len(users)  # Fail-closed: if no FGA, assume all are admins

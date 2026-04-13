@@ -345,11 +345,12 @@ class TestE2ETenantManagementUI:
             f'{API_BASE}/tenants/{tid}/users/1',
             headers=headers,
         )
-        # Should be rejected with 20006
+        # _count_tenant_admins fails-closed: if no FGA, assumes all users are admins
+        # So removal of the only user should always be blocked
         body = resp.json()
-        # If FGA is configured, this will return 20006
-        # If FGA is not available, the admin check may fail-open
-        assert body['status_code'] in (200, 20006)
+        assert body['status_code'] != 200, (
+            'Expected removal of last admin to be blocked, but got success'
+        )
 
     # ──────── AC-4: Quota Management ────────
 
