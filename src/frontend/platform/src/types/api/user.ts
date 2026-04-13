@@ -9,6 +9,11 @@ export type User = {
     update_time: string;
     user_id: number;
     role: string;
+    // Multi-tenant fields (F010)
+    tenant_id?: number;
+    tenant_name?: string;
+    tenant_code?: string;
+    tenant_logo?: string;
 };
 
 export type ROLE = {

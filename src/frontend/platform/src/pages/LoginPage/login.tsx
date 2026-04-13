@@ -67,11 +67,20 @@ export const LoginPage = () => {
                 ? ldapLoginApi(mail, encryptPwd)
                 : loginApi(mail, encryptPwd, captchaData.captcha_key, captchaRef.current?.value)
             ).then((res: any) => {
+                // Multi-tenant: check if tenant selection is required
+                if (res.requires_tenant_selection) {
+                    sessionStorage.setItem('pending_tenants', JSON.stringify(res.tenants))
+                    if (window.self !== window.top) localStorage.setItem('ws_token', res.access_token)
+                    localStorage.setItem('isLogin', '1')
+                    location.href = `${__APP_ENV__.BASE_URL}/tenant-select`
+                    return
+                }
+
                 window.self === window.top ? localStorage.removeItem('ws_token') : localStorage.setItem('ws_token', res.access_token)
                 localStorage.setItem('isLogin', '1')
                 const pathname = localStorage.getItem('LOGIN_PATHNAME')
                 if (pathname) {
-                    // After the login session expires, redirect back to the login page. After successful login, redirect back to the page before login. 
+                    // After the login session expires, redirect back to the login page. After successful login, redirect back to the page before login.
                     localStorage.removeItem('LOGIN_PATHNAME')
                     location.href = pathname
                 } else {

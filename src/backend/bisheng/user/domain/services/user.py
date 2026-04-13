@@ -212,8 +212,32 @@ class UserService:
         password = cls.decrypt_md5_password(user.password)
         await cls.judge_user_password(db_user, password)
 
+        # Multi-tenant login flow
+        tenant_id = None
+        requires_tenant_selection = False
+        tenants_list = None
+
+        if settings.multi_tenant.enabled:
+            from bisheng.database.models.tenant import UserTenantDao
+            from bisheng.common.errcode.tenant import NoTenantsAvailableError
+            user_tenants = await UserTenantDao.aget_user_tenants_with_details(db_user.user_id)
+            active_tenants = [t for t in user_tenants if t.get('status') == 'active']
+
+            if len(active_tenants) == 0:
+                raise NoTenantsAvailableError()
+            elif len(active_tenants) == 1:
+                tenant_id = active_tenants[0]['tenant_id']
+                await UserTenantDao.aupdate_last_access_time(db_user.user_id, tenant_id)
+            else:
+                # Multiple tenants: issue temporary JWT with tenant_id=0
+                tenant_id = 0
+                requires_tenant_selection = True
+                tenants_list = active_tenants
+
         # gen jwt token
-        access_token = LoginUser.create_access_token(user=db_user, auth_jwt=auth_jwt)
+        access_token = LoginUser.create_access_token(
+            user=db_user, auth_jwt=auth_jwt, tenant_id=tenant_id,
+        )
 
         # set cookies
         LoginUser.set_access_cookies(access_token, auth_jwt=auth_jwt)
@@ -232,7 +256,23 @@ class UserService:
                                           trace_id=trace_id_var.get(),
                                           event_data=UserLoginEventData(method="password"))
 
-        return resp_200(await cls.build_user_read(db_user, access_token=access_token))
+        # Build response with tenant info
+        extra_fields = {'access_token': access_token}
+        if requires_tenant_selection:
+            extra_fields['requires_tenant_selection'] = True
+            extra_fields['tenants'] = tenants_list
+        if tenant_id and tenant_id > 0:
+            extra_fields['tenant_id'] = tenant_id
+            tenant_info = next((t for t in (tenants_list or []) if t.get('tenant_id') == tenant_id), None)
+            if not tenant_info and settings.multi_tenant.enabled:
+                from bisheng.database.models.tenant import TenantDao
+                from bisheng.core.context.tenant import bypass_tenant_filter
+                with bypass_tenant_filter():
+                    t_obj = await TenantDao.aget_by_id(tenant_id)
+                if t_obj:
+                    extra_fields['tenant_name'] = t_obj.tenant_name
+
+        return resp_200(await cls.build_user_read(db_user, **extra_fields))
 
     @classmethod
     def get_user_all_info(cls, *, start_time: datetime = None, end_time: datetime = None, user_ids: List[int] = None,
