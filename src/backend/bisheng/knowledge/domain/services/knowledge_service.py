@@ -34,13 +34,7 @@ from bisheng.core.ai import FakeEmbeddings
 from bisheng.core.cache.redis_manager import get_redis_client_sync, get_redis_client
 from bisheng.core.cache.utils import file_download, async_file_download
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync, get_minio_storage
-from bisheng.database.models.group_resource import (
-    GroupResource,
-    GroupResourceDao,
-    ResourceTypeEnum,
-)
-from bisheng.database.models.role_access import AccessType, RoleAccessDao
-from bisheng.database.models.user_group import UserGroupDao
+from bisheng.database.models.role_access import AccessType
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import (
     Knowledge,
@@ -65,7 +59,6 @@ from bisheng.knowledge.domain.services.knowledge_permission_service import Knowl
 from bisheng.llm.domain.const import LLMModelType
 from bisheng.llm.domain.models import LLMDao
 from bisheng.user.domain.models.user import UserDao
-from bisheng.user.domain.models.user_role import UserRoleDao
 from bisheng.utils import generate_uuid, generate_knowledge_index_name
 
 
@@ -136,16 +129,11 @@ class KnowledgeService(KnowledgeUtils):
             page: int = 1,
             limit: int = 10,
     ) -> Tuple[List[KnowledgeRead], int]:
-        if not login_user.is_admin():
-            knowledge_id_extra = []
-            user_role = await UserRoleDao.aget_user_roles(login_user.user_id)
-            if user_role:
-                role_ids = [role.role_id for role in user_role]
-                role_access = await RoleAccessDao.aget_role_access(role_ids, AccessType.KNOWLEDGE)
-                if role_access:
-                    knowledge_id_extra = [
-                        int(access.third_id) for access in role_access
-                    ]
+        # F008: Use ReBAC to filter accessible knowledge (AC-04)
+        accessible_ids = await login_user.rebac_list_accessible('can_read', 'knowledge_space')
+        if accessible_ids is not None:
+            # Normal user: filter by accessible IDs
+            knowledge_id_extra = [int(kid) for kid in accessible_ids]
             res = await KnowledgeDao.aget_user_knowledge(
                 login_user.user_id,
                 knowledge_id_extra,
@@ -262,20 +250,9 @@ class KnowledgeService(KnowledgeUtils):
     def create_knowledge_hook(
             cls, request: Request, login_user: UserPayload, knowledge: Knowledge
     ):
-        # Query the user group the user belongs to under
-        user_group = UserGroupDao.get_user_group(login_user.user_id)
-        if user_group:
-            # Batch Insert Knowledge Base Resources into Associated Tables
-            batch_resource = []
-            for one in user_group:
-                batch_resource.append(
-                    GroupResource(
-                        group_id=one.group_id,
-                        third_id=knowledge.id,
-                        type=ResourceTypeEnum.KNOWLEDGE.value,
-                    )
-                )
-            GroupResourceDao.insert_group_batch(batch_resource)
+        # F008: Write owner tuple to OpenFGA (INV-2)
+        from bisheng.permission.domain.services.owner_service import OwnerService
+        OwnerService.write_owner_tuple_sync(login_user.user_id, 'knowledge_space', str(knowledge.id))
 
         cls.audit_telemetry_service.audit_create_knowledge(login_user, request, knowledge)
         cls.audit_telemetry_service.telemetry_new_knowledge(login_user, knowledge)
@@ -374,10 +351,9 @@ class KnowledgeService(KnowledgeUtils):
 
         cls.audit_telemetry_service.audit_delete_knowledge(login_user, request, knowledge)
 
-        # Purge resources under user groups
-        GroupResourceDao.delete_group_resource_by_third_id(
-            str(knowledge.id), ResourceTypeEnum.KNOWLEDGE
-        )
+        # F008: Clean up all FGA tuples for this resource (AC-03)
+        from bisheng.permission.domain.services.owner_service import OwnerService
+        OwnerService.delete_resource_tuples_sync('knowledge_space', str(knowledge.id))
 
     @classmethod
     def delete_knowledge_file_in_minio(cls, knowledge_id: int):
