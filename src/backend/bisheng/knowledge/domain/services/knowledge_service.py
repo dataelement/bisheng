@@ -901,7 +901,7 @@ class KnowledgeService(KnowledgeUtils):
         file_title_map = cls.get_knowledge_files_title(db_knowledge, res)
         timeout_files = []
         for index, one in enumerate(res):
-            finally_res.append(KnowledgeFileResp(**one.model_dump()))
+            finally_res.append(KnowledgeFileResp(**one.model_dump(mode="python")))
             # Parsing more than one day, setting status to failed
             if one.status in [KnowledgeFileStatus.PROCESSING.value, KnowledgeFileStatus.WAITING.value] and (
                     datetime.now() - one.update_time).total_seconds() > 86400:
