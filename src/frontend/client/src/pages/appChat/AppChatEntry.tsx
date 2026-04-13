@@ -26,6 +26,9 @@ export default function AppChatEntry() {
     const fromDelete = (location.state as { fromDelete?: boolean } | null)?.fromDelete === true;
     const resolvedRef = useRef(false);
 
+    // Flow-level info (name / logo / description) is loaded by SideNav's useAppSidebar
+    // hook into currentAppInfoState, so the sidebar card is populated here too.
+
     const buildQs = useCallback(() => {
         const from = new URLSearchParams(location.search).get('from');
         return from ? `?from=${from}` : '';

@@ -74,7 +74,6 @@ export function SideNav() {
 
     // Current conversation's app data
     const chatState = useRecoilValue(currentChatState);
-    const flowData = chatState?.flow;
 
     // Sidebar hook for conversation list and actions
     const {
@@ -84,7 +83,13 @@ export function SideNav() {
         createNewChat,
         shareApp,
         fetchConversations,
+        currentApp,
     } = useAppSidebar();
+
+    // Fall back to `currentApp` (populated by AppChatEntry) when no chat is active —
+    // e.g. right after deleting the last conversation, chatState is cleared but the
+    // sidebar card should still show the app's name / logo / description.
+    const flowData = chatState?.flow ?? currentApp;
 
     return (
         <div className="w-[280px] h-full bg-white border-r border-[#ececec] flex flex-col gap-4 px-3 py-5 overflow-hidden text-[#212121]">
