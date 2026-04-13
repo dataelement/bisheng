@@ -64,6 +64,7 @@ def get_env():
     env['dashboard_pro'] = bisheng_settings.get_system_login_method().dashboard_pro
     env['version'] = __version__
     env['enable_etl4lm'] = bool(etl_for_lm_url)
+    env['multi_tenant_enabled'] = bisheng_settings.multi_tenant.enabled
 
     return resp_200(env)
 

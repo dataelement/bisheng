@@ -3,11 +3,28 @@ import http.cookies
 from time import time
 
 from fastapi import Request
+from fastapi.responses import JSONResponse
 from loguru import logger
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
 from bisheng.core.logger import trace_id_generator, trace_id_var
 from bisheng.utils import get_request_ip
+
+# Paths exempt from tenant context checks (login, env, health, docs, static)
+TENANT_CHECK_EXEMPT_PATHS = (
+    '/api/v1/user/login',
+    '/api/v1/user/register',
+    '/api/v1/user/sso',
+    '/api/v1/user/ldap',
+    '/api/v1/user/public_key',
+    '/api/v1/user/switch-tenant',
+    '/api/v1/user/tenants',
+    '/api/v1/env',
+    '/health',
+    '/docs',
+    '/openapi.json',
+    '/redoc',
+)
 
 
 def _extract_tenant_id_from_token(token: str) -> int:
@@ -22,17 +39,22 @@ def _extract_tenant_id_from_token(token: str) -> int:
         return DEFAULT_TENANT_ID
 
 
-def _set_tenant_context(token: str = None) -> None:
-    """Set tenant context from JWT cookie token. Shared by HTTP and WS middleware."""
+def _set_tenant_context(token: str = None) -> int:
+    """Set tenant context from JWT cookie token. Returns extracted tenant_id.
+
+    Shared by HTTP and WS middleware.
+    """
     from bisheng.core.context.tenant import DEFAULT_TENANT_ID, set_current_tenant_id
     try:
         if token:
             tid = _extract_tenant_id_from_token(token)
             set_current_tenant_id(tid)
+            return tid
         else:
             from bisheng.common.services.config_service import settings
             if not settings.multi_tenant.enabled:
                 set_current_tenant_id(DEFAULT_TENANT_ID)
+            return DEFAULT_TENANT_ID
     except Exception:
         try:
             from bisheng.common.services.config_service import settings
@@ -40,6 +62,7 @@ def _set_tenant_context(token: str = None) -> None:
                 set_current_tenant_id(DEFAULT_TENANT_ID)
         except Exception:
             pass
+        return DEFAULT_TENANT_ID
 
 
 class CustomMiddleware(BaseHTTPMiddleware):
@@ -55,8 +78,33 @@ class CustomMiddleware(BaseHTTPMiddleware):
         path = request.url
         trace_id_var.set(trace_id)
 
-        # Tenant context injection from JWT cookie
-        _set_tenant_context(request.cookies.get('access_token_cookie'))
+        # Tenant context injection from JWT cookie (returns extracted tenant_id)
+        token = request.cookies.get('access_token_cookie')
+        tenant_id = _set_tenant_context(token)
+
+        # Tenant status checks (F010)
+        req_path = request.url.path
+        is_exempt = req_path.startswith(TENANT_CHECK_EXEMPT_PATHS)
+        if not is_exempt and token:
+            # tenant_id=0 means pending tenant selection — block non-exempt paths
+            if tenant_id == 0:
+                return JSONResponse(
+                    status_code=403,
+                    content={'status_code': 20004, 'status_message': 'Missing tenant context', 'data': None},
+                )
+            # Check if tenant is disabled via Redis blacklist
+            if tenant_id and tenant_id > 0:
+                try:
+                    from bisheng.core.cache.redis_manager import get_redis_client
+                    redis_client = await get_redis_client()
+                    from bisheng.tenant.domain.services.tenant_service import DISABLED_TENANT_KEY
+                    if await redis_client.aget(DISABLED_TENANT_KEY.format(tenant_id)):
+                        return JSONResponse(
+                            status_code=403,
+                            content={'status_code': 20001, 'status_message': 'Tenant is disabled', 'data': None},
+                        )
+                except Exception:
+                    pass  # Redis unavailable — fail-open for middleware
 
         logger.info(f"| {ip} | {request.method} {path}")
         start_time = time()

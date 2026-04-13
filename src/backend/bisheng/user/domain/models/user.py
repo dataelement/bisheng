@@ -74,6 +74,11 @@ class UserRead(UserBase):
     access_token: Optional[str] = None
     web_menu: Optional[List[str]] = None
     admin_groups: Optional[List[int]] = None  # Managed User GroupsIDVertical
+    # Multi-tenant fields (F010)
+    requires_tenant_selection: Optional[bool] = None
+    tenants: Optional[List[dict]] = None
+    tenant_id: Optional[int] = None
+    tenant_name: Optional[str] = None
 
 
 class UserQuery(UserBase):

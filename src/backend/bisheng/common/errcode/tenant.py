@@ -25,3 +25,28 @@ class TenantCodeDuplicateError(BaseErrorCode):
 class NoTenantContextError(BaseErrorCode):
     Code: int = 20004
     Msg: str = 'Missing tenant context'
+
+
+class TenantHasUsersError(BaseErrorCode):
+    Code: int = 20005
+    Msg: str = 'Cannot delete tenant with active users'
+
+
+class TenantAdminRequiredError(BaseErrorCode):
+    Code: int = 20006
+    Msg: str = 'Cannot remove the last admin of a tenant'
+
+
+class TenantSwitchForbiddenError(BaseErrorCode):
+    Code: int = 20007
+    Msg: str = 'User does not belong to the target tenant'
+
+
+class TenantCreationFailedError(BaseErrorCode):
+    Code: int = 20008
+    Msg: str = 'Tenant creation failed'
+
+
+class NoTenantsAvailableError(BaseErrorCode):
+    Code: int = 20009
+    Msg: str = 'No available tenants for user'

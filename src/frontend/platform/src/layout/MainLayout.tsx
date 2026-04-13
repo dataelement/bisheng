@@ -27,8 +27,10 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../com
 import { darkContext } from "../contexts/darkContext";
 import { userContext } from "../contexts/userContext";
 import { logoutApi } from "../controllers/API/user";
+import { getUserTenantsApi, switchTenantApi } from "../controllers/API/tenant";
 import { captureAndAlertRequestErrorHoc } from "../controllers/request";
 import { User } from "../types/api/user";
+import { toast } from "@/components/bs-ui/toast/use-toast";
 import HeaderMenu from "./HeaderMenu";
 
 export default function MainLayout() {
@@ -98,6 +100,7 @@ export default function MainLayout() {
                             </Tooltip>
                         </TooltipProvider>
                         <Separator className="mx-[4px] dark:bg-[#111111]" orientation="vertical" />
+                        {appConfig.multiTenantEnabled && <TenantSwitcher user={user} isAdmin={isAdmin} />}
                         <SelectHover
                             className={"-top-4"}
                             triagger={
@@ -194,6 +197,13 @@ export default function MainLayout() {
                                 </NavLink>
                             </>
                         }
+                        {
+                            isAdmin && appConfig.multiTenantEnabled && <>
+                                <NavLink to='/tenant' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
+                                    <SystemIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[56px] text-[14px] leading-[48px]">{t('tenant.management')}</span>
+                                </NavLink>
+                            </>
+                        }
                     </nav>
                     {!appConfig.noFace && <div className="absolute left-0 bottom-0 w-[180px] p-2">
                         <div className="help flex items-between my-3">
@@ -275,4 +285,67 @@ const useLanguage = (user: User) => {
         changLanguage,
         t
     }
+}
+
+// Tenant switcher component for multi-tenant header
+function TenantSwitcher({ user, isAdmin }: { user: User; isAdmin: boolean }) {
+    const { t } = useTranslation("bs");
+    const [tenants, setTenants] = useState<any[]>([]);
+    const [loaded, setLoaded] = useState(false);
+    const currentTenant = user.tenant_name || user.tenant_code || '';
+
+    const loadTenants = () => {
+        if (loaded) return;
+        captureAndAlertRequestErrorHoc(
+            getUserTenantsApi().then((res: any) => {
+                setTenants(res || []);
+                setLoaded(true);
+            })
+        );
+    };
+
+    const handleSwitch = (tenantId: number) => {
+        if (tenantId === user.tenant_id) return;
+        bsConfirm({
+            title: t('tenant.management'),
+            desc: t('tenant.switchConfirm'),
+            onOk: (next: () => void) => {
+                captureAndAlertRequestErrorHoc(
+                    switchTenantApi(tenantId).then(() => {
+                        toast({ title: t('tenant.switchSuccess'), variant: 'success' });
+                        location.reload();
+                    })
+                );
+                next();
+            }
+        });
+    };
+
+    return <>
+        <SelectHover
+            className={"-top-4"}
+            triagger={
+                <div
+                    className="h-8 px-3 bg-header-icon rounded-lg cursor-pointer my-4 flex items-center justify-center"
+                    onMouseEnter={loadTenants}
+                >
+                    <span className="text-sm leading-8 max-w-24 truncate">{currentTenant || t('tenant.management')}</span>
+                    <ChevronDown className="ml-1 w-4 h-4" />
+                </div>
+            }>
+            {tenants.map((tenant) => (
+                <SelectHoverItem key={tenant.tenant_id} onClick={() => handleSwitch(tenant.tenant_id)}>
+                    <span>{tenant.tenant_name}</span>
+                    {tenant.tenant_id === user.tenant_id && <Check className="w-4 h-4 absolute top-1/2 right-0 transform -translate-y-1/2" />}
+                </SelectHoverItem>
+            ))}
+            {isAdmin && <>
+                <div className="border-t my-1" />
+                <SelectHoverItem onClick={() => { location.href = '/tenant'; }}>
+                    <SystemIcon className="w-4 h-4 mr-1" /><span>{t('tenant.management')}</span>
+                </SelectHoverItem>
+            </>}
+        </SelectHover>
+        <Separator className="mx-[4px] dark:bg-[#111111]" orientation="vertical" />
+    </>;
 }

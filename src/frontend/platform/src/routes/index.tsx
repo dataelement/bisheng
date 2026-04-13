@@ -45,6 +45,8 @@ const Report = lazy(() => import("@/pages/Report"));
 const SystemPage = lazy(() => import("@/pages/SystemPage"));
 const ResoucePage = lazy(() => import("@/pages/resoucePage"));
 const Dashboard = lazy(() => import("@/pages/Dashboard"));
+const TenantPage = lazy(() => import("@/pages/TenantPage"));
+const TenantSelect = lazy(() => import("@/pages/LoginPage/TenantSelect"));
 
 const baseConfig = {
   //@ts-ignore
@@ -97,6 +99,7 @@ const privateRouter = [
       { path: "label/:id", element: <TaskApps /> },
       { path: "label/chat/:id/:fid/:cid/:type", element: <TaskAppChats /> },
       { path: "dashboard", element: <Dashboard /> },
+      { path: "tenant", element: <TenantPage />, permission: 'sys' },
     ],
   },
   { path: "dashboard/:id", element: <EditorPage />, errorElement: <RouteErrorBoundary />, permission: 'board', },
@@ -180,6 +183,7 @@ export const publicRouter = createBrowserRouter([
   { path: "/chat/flow/:id/", element: <ChatShare type={AppNumType.FLOW} />, errorElement: <RouteErrorBoundary /> },
   { path: "/chat/assistant/:id/", element: <ChatAssitantShare />, errorElement: <RouteErrorBoundary /> },
   { path: "/resouce/:cid/:mid", element: <ResoucePage />, errorElement: <RouteErrorBoundary /> },
+  { path: "/tenant-select", element: <TenantSelect />, errorElement: <RouteErrorBoundary /> },
   { path: "/403", element: <Page403 /> },
   { path: "*", element: <LoginPage /> }
 ],
