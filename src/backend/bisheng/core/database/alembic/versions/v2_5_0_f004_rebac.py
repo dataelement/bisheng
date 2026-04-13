@@ -16,8 +16,19 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
+def _table_exists(table_name: str) -> bool:
+    conn = op.get_bind()
+    result = conn.execute(sa.text(
+        "SELECT COUNT(*) FROM information_schema.TABLES "
+        "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t"
+    ), {'t': table_name})
+    return result.scalar() > 0
+
+
 def upgrade() -> None:
     """Create failed_tuple table."""
+    if _table_exists('failed_tuple'):
+        return
     op.create_table(
         'failed_tuple',
         sa.Column('id', sa.BigInteger, primary_key=True, autoincrement=True),
