@@ -2,10 +2,11 @@ from datetime import datetime
 from enum import Enum
 from typing import List, Optional, Any
 
-from sqlalchemy import Column, Integer, JSON, DateTime, text, Enum as SQLEnum
+from sqlalchemy import Column, Integer, DateTime, text, Enum as SQLEnum
 from sqlmodel import Field
 
 from bisheng.common.models.base import SQLModelSerializable
+from bisheng.utils.util import DMJSON
 
 
 class MessageTypeEnum(str, Enum):
@@ -36,7 +37,7 @@ class InboxMessage(SQLModelSerializable, table=True):
     content: List[Any] = Field(
         default_factory=list,
         description='Message content in JSON array format',
-        sa_column=Column(JSON, nullable=False)
+        sa_column=Column(DMJSON, nullable=False)
     )
     sender: int = Field(
         ...,
@@ -51,7 +52,7 @@ class InboxMessage(SQLModelSerializable, table=True):
     receiver: List[int] = Field(
         default_factory=list,
         description='Receiver user ID list',
-        sa_column=Column(JSON, nullable=False)
+        sa_column=Column(DMJSON, nullable=False)
     )
     status: MessageStatusEnum = Field(
         default=MessageStatusEnum.WAIT_APPROVE,

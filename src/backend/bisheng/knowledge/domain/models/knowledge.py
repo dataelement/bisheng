@@ -3,7 +3,7 @@ from enum import Enum
 from typing import Any, List, Optional, Tuple, Union, Dict
 
 from pydantic import BaseModel, field_validator
-from sqlalchemy import JSON, Integer, String, collate
+from sqlalchemy import Integer, String, collate
 from sqlmodel import Column, DateTime, Field, case, delete, func, or_, select, text, update
 from sqlmodel.sql.expression import Select, SelectOfScalar, col
 
@@ -13,6 +13,7 @@ from bisheng.database.models.role_access import AccessType, RoleAccessDao
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile, KnowledgeFileDao
 from bisheng.user.domain.models.user import UserDao
 from bisheng.user.domain.models.user_role import UserRoleDao
+from bisheng.utils.util import DMJSON
 
 
 class KnowledgeTypeEnum(Enum):
@@ -67,7 +68,7 @@ class KnowledgeBase(SQLModelSerializable):
     is_released: bool = Field(default=False, description='is released to knowledge space square')
     auth_type: AuthTypeEnum = Field(default=AuthTypeEnum.PUBLIC, description='Authentication Type')
 
-    metadata_fields: Optional[List[Dict]] = Field(default=None, sa_column=Column(JSON, nullable=True),
+    metadata_fields: Optional[List[Dict]] = Field(default=None, sa_column=Column(DMJSON, nullable=True),
                                                   description="Metadata Field Configuration for Knowledge Base")
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))

@@ -4,10 +4,11 @@ from enum import Enum
 from typing import List, Dict, Optional, Literal, Union, Annotated
 
 from pydantic import BaseModel, Field as PydanticField, model_validator
-from sqlalchemy import CHAR, Column, VARCHAR, JSON, Enum as SQLEnum, DateTime, Boolean, text, Text
+from sqlalchemy import CHAR, Column, VARCHAR, Enum as SQLEnum, DateTime, Boolean, text, Text
 from sqlmodel import Field
 
 from bisheng.common.models.base import SQLModelSerializable
+from bisheng.utils.util import DMJSON
 
 
 class ChannelVisibilityEnum(str, Enum):
@@ -42,7 +43,8 @@ class ChannelFilterRules(BaseModel):
     """Channel Filter Rules Model"""
 
     relation: Literal['and', 'or'] = PydanticField(..., description='Relationship between rules: and or or')
-    rules: List[Annotated[Union[SingleRule, MultiRule], PydanticField(discriminator='type')]] = PydanticField(..., description='List of filter rules')
+    rules: List[Annotated[Union[SingleRule, MultiRule], PydanticField(discriminator='type')]] = PydanticField(...,
+                                                                                                              description='List of filter rules')
     channel_type: Literal['main', 'sub'] = PydanticField(..., description='Channel type: main or sub')
     name: Optional[str] = PydanticField(None, description='Filter name, required for sub channel')
 
@@ -66,11 +68,11 @@ class Channel(SQLModelSerializable, table=True):
     description: Optional[str] = Field(None, description='Channel Description/Brief',
                                        sa_column=Column(Text, nullable=True))
     source_list: List[str] = Field(default_factory=list, description='Data Source List',
-                                   sa_column=Column(JSON, nullable=False))
+                                   sa_column=Column(DMJSON, nullable=False))
     visibility: ChannelVisibilityEnum = Field(..., sa_column=Column(SQLEnum(ChannelVisibilityEnum)),
                                               description='Channel Visibility')
     filter_rules: List[Dict] = Field(default_factory=list, description='Filter Conditions',
-                                     sa_column=Column(JSON, nullable=False))
+                                     sa_column=Column(DMJSON, nullable=False))
     user_id: int = Field(..., description='UsersID', foreign_key="user.user_id", nullable=False)
     latest_article_update_time: datetime = Field(None, description='Latest Article Update Time',
                                                  sa_column=Column(DateTime, nullable=True))

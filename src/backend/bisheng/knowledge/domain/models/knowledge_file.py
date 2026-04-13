@@ -5,13 +5,13 @@ from typing import List, Optional, Dict, Any, Literal
 
 # if TYPE_CHECKING:
 from pydantic import field_validator
-from sqlalchemy import JSON, Column, DateTime, Integer, String, or_, text, Text, and_
+from sqlalchemy import Column, DateTime, Integer, String, or_, text, Text, and_
 from sqlmodel import Field, delete, func, select, update, col
 
-from bisheng.utils.util import DMJSON
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.database.base import async_get_count, get_count
+from bisheng.utils.util import DMJSON
 
 
 class KnowledgeFileStatus(int, Enum):
@@ -72,7 +72,7 @@ class KnowledgeFileBase(SQLModelSerializable):
     bbox_object_name: Optional[str] = Field(default='', description='bboxFiles inminioStored object name')
     status: Optional[int] = Field(default=KnowledgeFileStatus.WAITING.value)
     object_name: Optional[str] = Field(default=None, index=False, description='Files in Stored object name')
-    user_metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, sa_column=Column(JSON, nullable=True),
+    user_metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, sa_column=Column(DMJSON, nullable=True),
                                                     description='User-defined metadata')
     remark: Optional[str] = Field(default='', sa_column=Column(String(length=4096)))
     updater_id: Optional[int] = Field(default=None, index=True, description='Last updated by userID')
