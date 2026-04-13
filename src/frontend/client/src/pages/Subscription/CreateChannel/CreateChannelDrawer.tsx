@@ -1,10 +1,11 @@
-import { ChevronDown, ChevronRight, PlusSquare } from "lucide-react";
+import { ChevronDown, ChevronRight, PlusSquare, XIcon } from "lucide-react";
 import * as RadioGroup from "@radix-ui/react-radio-group";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useConfirm, useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
 import {
     Sheet,
+    SheetClose,
     SheetContent,
     SheetHeader,
     SheetTitle,
@@ -199,40 +200,48 @@ export function CreateChannelDrawer({
             <Sheet open={open} onOpenChange={handleClose}>
                 <SheetContent
                     side="right"
-                    className="w-full max-w-[900px] sm:max-w-[1000px] overflow-y-auto scroll-on-scroll bg-white pl-20 pr-20 flex flex-col"
-                    onScroll={handleBodyScroll}
-                    data-scrolling={isBodyScrolling ? "true" : "false"}
+                    hideClose
+                    className="w-full max-w-[900px] sm:max-w-[1000px] overflow-hidden bg-white pl-20 pr-20 flex flex-col"
                 >
-                    <SheetHeader className="sticky top-0 z-10 ml-6 mr-6 pt-6 pb-4 border-b border-[#E5E6EB] bg-white">
-                        <SheetTitle className="text-[16px] -ml-4 font-medium text-[#1D2129]">
-                            {isEditMode ? localize("com_subscription.channel_settings") : localize("com_subscription.create_channel")}
-                        </SheetTitle>
-                    </SheetHeader>
+                    <SheetClose className="ring-offset-background focus:ring-ring data-[state=open]:bg-secondary absolute top-4 right-4 z-20 rounded-xs opacity-70 transition-opacity hover:opacity-100 disabled:pointer-events-none">
+                        <XIcon className="size-4" />
+                        <span className="sr-only">Close</span>
+                    </SheetClose>
+                    <div
+                        className="min-h-0 flex-1 overflow-y-auto scroll-on-scroll"
+                        onScroll={handleBodyScroll}
+                        data-scrolling={isBodyScrolling ? "true" : "false"}
+                    >
+                        <SheetHeader className="sticky top-0 z-10 ml-6 mr-6 pt-6 pb-4 border-b border-[#E5E6EB] bg-white">
+                            <SheetTitle className="text-[16px] -ml-4 font-medium text-[#1D2129]">
+                                {isEditMode ? localize("com_subscription.channel_settings") : localize("com_subscription.create_channel")}
+                            </SheetTitle>
+                        </SheetHeader>
 
-                    {form.showSuccess && !isEditMode ? (
-                        <CreateChannelSuccessContent
-                            onViewChannel={() => {
-                                if (form.createdChannelId) {
-                                    onViewChannel?.(form.createdChannelId);
-                                }
-                                form.resetForm();
-                            }}
-                            onManageMembers={() => {
-                                if (form.createdChannelId) {
-                                    onManageMembers?.(form.createdChannelId);
-                                    onViewChannel?.(form.createdChannelId);
+                        {form.showSuccess && !isEditMode ? (
+                            <CreateChannelSuccessContent
+                                onViewChannel={() => {
+                                    if (form.createdChannelId) {
+                                        onViewChannel?.(form.createdChannelId);
+                                    }
+                                    form.resetForm();
+                                }}
+                                onManageMembers={() => {
+                                    if (form.createdChannelId) {
+                                        onManageMembers?.(form.createdChannelId);
+                                        onViewChannel?.(form.createdChannelId);
 
-                                }
-                                form.resetForm();
-                                onOpenChange(false);
-                            }}
-                        />
-                    ) : (
-                        <div
-                            className={cn(
-                                "overflow-visible px-6 py-5 space-y-5"
-                            )}
-                        >
+                                    }
+                                    form.resetForm();
+                                    onOpenChange(false);
+                                }}
+                            />
+                        ) : (
+                            <div
+                                className={cn(
+                                    "overflow-visible px-6 py-5 space-y-5"
+                                )}
+                            >
                             {/* 添加信息源 */}
                             <div className="space-y-2">
                                 <Label className="text-[14px] text-[#1D2129]">
@@ -596,82 +605,83 @@ export function CreateChannelDrawer({
                                     </div>
                                 )}
                             </div>
-                        </div>
-                    )}
+                            </div>
+                        )}
 
-                    {/* 底部操作按钮 */}
-                    {(!form.showSuccess || isEditMode) && (
-                        <div className="sticky bottom-0 z-10 mt-auto flex justify-end gap-3 px-6 pt-10 pb-5 border-t border-[#E5E6EB] bg-white">
-                            <Button
-                                variant="secondary"
-                                onClick={() => handleClose(false)}
-                                className="h-8 rounded-[6px] px-4 inline-flex items-center justify-center leading-none bg-[#F2F3F5] hover:bg-[#E5E6EB] border-none text-[14px] !font-normal text-[#4E5969]"
-                            >
-                                {localize("cancel")}
-                            </Button>
-                            <Button
-                                disabled={form.submitting}
-                                onClick={async () => {
-                                    const data: CreateChannelFormData = {
-                                        sources: form.sources,
-                                        channelName: form.channelName.trim(),
-                                        channelDesc: form.channelDesc.trim(),
-                                        visibility: form.visibility,
-                                        publishToSquare: form.publishToSquare,
-                                        contentFilter: form.contentFilter,
-                                        filterGroups: form.filterGroups,
-                                        topFilterRelation: form.topFilterRelation,
-                                        createSubChannel: form.createSubChannel,
-                                        subChannels: form.subChannels
-                                    };
+                        {/* 底部操作按钮 */}
+                        {(!form.showSuccess || isEditMode) && (
+                            <div className="sticky bottom-0 z-10 mt-auto flex justify-end gap-3 px-6 pt-10 pb-5 border-t border-[#E5E6EB] bg-white">
+                                <Button
+                                    variant="secondary"
+                                    onClick={() => handleClose(false)}
+                                    className="h-8 rounded-[6px] px-4 inline-flex items-center justify-center leading-none bg-[#F2F3F5] hover:bg-[#E5E6EB] border-none text-[14px] !font-normal text-[#4E5969]"
+                                >
+                                    {localize("cancel")}
+                                </Button>
+                                <Button
+                                    disabled={form.submitting}
+                                    onClick={async () => {
+                                        const data: CreateChannelFormData = {
+                                            sources: form.sources,
+                                            channelName: form.channelName.trim(),
+                                            channelDesc: form.channelDesc.trim(),
+                                            visibility: form.visibility,
+                                            publishToSquare: form.publishToSquare,
+                                            contentFilter: form.contentFilter,
+                                            filterGroups: form.filterGroups,
+                                            topFilterRelation: form.topFilterRelation,
+                                            createSubChannel: form.createSubChannel,
+                                            subChannels: form.subChannels
+                                        };
 
-                                    // 创建和编辑统一走同一套校验逻辑：
-                                    // 1) 至少 1 个信息源
-                                    // 2) 频道名称不能为空
-                                    // 3) 主频道 / 子频道筛选条件中的关键词不能为空
-                                    const validationError = validateCreateChannelForm(data, localize);
-                                    if (validationError) {
-                                        showToast({
-                                            message: validationError,
-                                            severity: NotificationSeverity.WARNING
-                                        });
-                                        return;
-                                    }
-
-                                    if (!onConfirm) return;
-                                    try {
-                                        form.setSubmitting(true);
-                                        const res = await onConfirm(data);
-                                        if (!isEditMode) {
-                                            form.setCreatedChannelId(res.channelId);
-                                            form.setShowSuccess(true);
-                                        } else {
+                                        // 创建和编辑统一走同一套校验逻辑：
+                                        // 1) 至少 1 个信息源
+                                        // 2) 频道名称不能为空
+                                        // 3) 主频道 / 子频道筛选条件中的关键词不能为空
+                                        const validationError = validateCreateChannelForm(data, localize);
+                                        if (validationError) {
                                             showToast({
-                                                message: localize("com_subscription.save_success"),
-                                                severity: NotificationSeverity.SUCCESS
+                                                message: validationError,
+                                                severity: NotificationSeverity.WARNING
                                             });
-                                            form.resetForm();
-                                            onOpenChange(false);
+                                            return;
                                         }
-                                    } catch {
-                                        showToast({
-                                            message: localize("channel_create_failed") || localize("com_subscription.create_channel_failed_retry"),
-                                            severity: NotificationSeverity.ERROR
-                                        });
-                                    } finally {
-                                        form.setSubmitting(false);
-                                    }
-                                }}
-                                className="h-8 rounded-[6px] px-4 inline-flex items-center justify-center leading-none bg-[#165DFF] hover:bg-[#4080FF] text-white border-none text-[14px] !font-normal disabled:opacity-50"
-                            >
-                                {isEditMode
-                                    ? form.submitting ? localize("com_subscription.saving") : localize("com_subscription.save")
-                                    : form.submitting
-                                        ? (localize("creating") || localize("com_subscription.creating"))
-                                        : (localize("com_subscription.confirm_creation") || localize("com_subscription.confirm_create"))}
-                            </Button>
-                        </div>
-                    )}
+
+                                        if (!onConfirm) return;
+                                        try {
+                                            form.setSubmitting(true);
+                                            const res = await onConfirm(data);
+                                            if (!isEditMode) {
+                                                form.setCreatedChannelId(res.channelId);
+                                                form.setShowSuccess(true);
+                                            } else {
+                                                showToast({
+                                                    message: localize("com_subscription.save_success"),
+                                                    severity: NotificationSeverity.SUCCESS
+                                                });
+                                                form.resetForm();
+                                                onOpenChange(false);
+                                            }
+                                        } catch {
+                                            showToast({
+                                                message: localize("channel_create_failed") || localize("com_subscription.create_channel_failed_retry"),
+                                                severity: NotificationSeverity.ERROR
+                                            });
+                                        } finally {
+                                            form.setSubmitting(false);
+                                        }
+                                    }}
+                                    className="h-8 rounded-[6px] px-4 inline-flex items-center justify-center leading-none bg-[#165DFF] hover:bg-[#4080FF] text-white border-none text-[14px] !font-normal disabled:opacity-50"
+                                >
+                                    {isEditMode
+                                        ? form.submitting ? localize("com_subscription.saving") : localize("com_subscription.save")
+                                        : form.submitting
+                                            ? (localize("creating") || localize("com_subscription.creating"))
+                                            : (localize("com_subscription.confirm_creation") || localize("com_subscription.confirm_create"))}
+                                </Button>
+                            </div>
+                        )}
+                    </div>
                 </SheetContent>
             </Sheet>
 
