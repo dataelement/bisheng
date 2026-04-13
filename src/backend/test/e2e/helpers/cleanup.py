@@ -68,12 +68,106 @@ async def ensure_test_tenant(
     client: httpx.AsyncClient,
     admin_token: str,
     tenant_code: str,
-):
+    admin_user_ids: list = None,
+) -> dict:
     """Ensure a test tenant exists. Creates one if not found.
 
-    Note: F001 does not expose tenant CRUD API — this is a stub that will
-    be implemented when F010 (tenant-management-ui) is available.
-    For now, tests use the default tenant (id=1).
+    Returns tenant dict with at least {id, tenant_code}.
+    Uses F010 tenant CRUD API.
     """
-    # F010 will provide tenant CRUD API. Until then, use default tenant.
-    pass
+    headers = auth_headers(admin_token)
+
+    # Check if tenant already exists via list API
+    resp = await client.get(
+        f'{API_BASE}/tenants/',
+        params={'keyword': tenant_code, 'page': 1, 'page_size': 10},
+        headers=headers,
+    )
+    if resp.status_code == 200:
+        body = resp.json()
+        if body.get('status_code') == 200:
+            data = body.get('data', {})
+            items = data.get('data', []) if isinstance(data, dict) else []
+            for item in items:
+                if item.get('tenant_code') == tenant_code:
+                    return item
+
+    # Not found — create it
+    resp = await client.post(
+        f'{API_BASE}/tenants/',
+        json={
+            'tenant_name': f'Test Tenant ({tenant_code})',
+            'tenant_code': tenant_code,
+            'admin_user_ids': admin_user_ids or [1],
+        },
+        headers=headers,
+    )
+    if resp.status_code == 200:
+        body = resp.json()
+        if body.get('status_code') == 200:
+            return body.get('data', {})
+
+    return {'id': None, 'tenant_code': tenant_code}
+
+
+async def cleanup_test_tenants(
+    client: httpx.AsyncClient,
+    prefix: str,
+    token: str,
+):
+    """Delete test tenants by code prefix. Removes users first, then deletes."""
+    if len(prefix) < 5:
+        raise ValueError(f'Cleanup prefix too short: "{prefix}"')
+
+    headers = auth_headers(token)
+    try:
+        resp = await client.get(
+            f'{API_BASE}/tenants/',
+            params={'page': 1, 'page_size': 100},
+            headers=headers,
+        )
+        if resp.status_code != 200:
+            return
+
+        body = resp.json()
+        if body.get('status_code') != 200:
+            return
+
+        data = body.get('data', {})
+        items = data.get('data', []) if isinstance(data, dict) else []
+        for item in items:
+            code = item.get('tenant_code', '')
+            if code.startswith(prefix):
+                tid = item.get('id')
+                if not tid:
+                    continue
+                # Remove all users first (so delete succeeds)
+                users_resp = await client.get(
+                    f'{API_BASE}/tenants/{tid}/users',
+                    params={'page': 1, 'page_size': 100},
+                    headers=headers,
+                )
+                if users_resp.status_code == 200:
+                    users_body = users_resp.json()
+                    if users_body.get('status_code') == 200:
+                        users_data = users_body.get('data', {})
+                        user_list = users_data.get('data', []) if isinstance(users_data, dict) else []
+                        for u in user_list:
+                            uid = u.get('user_id')
+                            if uid:
+                                await client.delete(
+                                    f'{API_BASE}/tenants/{tid}/users/{uid}',
+                                    headers=headers,
+                                )
+                # Disable then delete
+                await client.put(
+                    f'{API_BASE}/tenants/{tid}/status',
+                    json={'status': 'disabled'},
+                    headers=headers,
+                )
+                await client.delete(
+                    f'{API_BASE}/tenants/{tid}',
+                    headers=headers,
+                )
+    except Exception:
+        pass  # Cleanup failure is non-fatal
