@@ -12,6 +12,10 @@ RUN uv pip compile pyproject.toml --upgrade --output-file requirements.txt && \
     pip install --no-cache-dir ./dmAsync/ && \
     uv cache clean && \
     rm -f requirements.txt
+# special logic copy dmssl
+RUN cd /usr/local/lib/python3.10/site-packages/dmssl/ && \
+    mkdir bin && \
+    mv *.so bin
 
 ENV DM_HOME="/usr/local/lib/python3.10/site-packages/dmssl/"
 
