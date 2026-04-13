@@ -1,6 +1,6 @@
 import { ChevronLeft, MoreHorizontal } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useRecoilValue } from 'recoil';
 import { currentChatState } from '~/pages/appChat/store/atoms';
 import { useAppSidebar } from '~/pages/appChat/hooks/useAppSidebar';
@@ -66,11 +66,14 @@ function TruncatedLineTooltip({ text, className }: { text: string; className?: s
 
 export function SideNav() {
     const navigate = useNavigate();
+    const location = useLocation();
     const localize = useLocalize();
+    const { fid: flowId, type: flowType } = useParams();
+    const from = new URLSearchParams(location.search).get('from');
+    const backPath = from === 'explore' ? '/apps/explore' : '/apps';
 
     // Current conversation's app data
     const chatState = useRecoilValue(currentChatState);
-    const flowData = chatState?.flow;
 
     // Sidebar hook for conversation list and actions
     const {
@@ -80,14 +83,20 @@ export function SideNav() {
         createNewChat,
         shareApp,
         fetchConversations,
+        currentApp,
     } = useAppSidebar();
+
+    // Fall back to `currentApp` (populated by AppChatEntry) when no chat is active —
+    // e.g. right after deleting the last conversation, chatState is cleared but the
+    // sidebar card should still show the app's name / logo / description.
+    const flowData = chatState?.flow ?? currentApp;
 
     return (
         <div className="w-[280px] h-full bg-white border-r border-[#ececec] flex flex-col gap-4 px-3 py-5 overflow-hidden text-[#212121]">
             {/* Top back button */}
             <div className="flex items-center gap-[8px] shrink-0">
                 <button
-                    onClick={() => navigate('/apps')}
+                    onClick={() => navigate(backPath)}
                     className="flex shrink-0 items-center justify-center size-[32px] rounded-[8px] bg-[rgba(255,255,255,0.5)] border border-[#ebecf0] backdrop-blur-[4px] hover:bg-gray-50 transition-colors"
                 >
                     <ChevronLeft size={16} className="text-[#212121]" />
@@ -146,13 +155,8 @@ export function SideNav() {
             {/* Conversation list */}
             <div className="flex-1 overflow-y-auto pb-[20px] flex flex-col min-h-0">
                 {groups.length === 0 ? (
-                    <div className="flex flex-1 flex-col items-center justify-center min-h-[120px] px-3 py-6">
-                        <img
-                            src={`${__APP_ENV__.BASE_URL || ''}/assets/channel/ai-home.png`}
-                            alt=""
-                            className="mb-2 h-14 w-14 object-contain shrink-0"
-                        />
-                        <p className="text-center text-[12px] leading-[19.5px] text-[#86909c]">
+                    <div className="flex flex-1 items-center justify-center min-h-[120px] px-3 py-6">
+                        <p className="text-center text-[14px] leading-[19.5px] text-[#86909c]">
                             {localize('com_app_chat_sidebar_empty')}
                         </p>
                     </div>
@@ -174,10 +178,18 @@ export function SideNav() {
                                             isActive={isActive}
                                             onClick={() => switchConversation(conv)}
                                             onRenameSuccess={() => fetchConversations()}
-                                            onDeleteSuccess={() => {
-                                                fetchConversations();
-                                                if (isActive) {
-                                                    createNewChat();
+                                            onDeleteSuccess={async () => {
+                                                const list = await fetchConversations();
+                                                if (!isActive) return;
+                                                if (list.length > 0) {
+                                                    // Jump to the now-most-recent conversation
+                                                    switchConversation(list[0]);
+                                                } else if (flowId && flowType) {
+                                                    // Last conversation deleted — land on empty state, don't auto-create
+                                                    const qs = from ? `?from=${from}` : '';
+                                                    navigate(`/app/${flowId}/${flowType}${qs}`, {
+                                                        state: { fromDelete: true },
+                                                    });
                                                 }
                                             }}
                                         />

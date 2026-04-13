@@ -17,7 +17,7 @@ import {
     getSpaceInfoApi,
     subscribeSpaceApi
 } from "~/api/knowledge";
-import { useLocalize, useScrollbarWhileScrolling } from "~/hooks";
+import { useLocalize } from "~/hooks";
 
 interface KnowledgeSpacePreviewDrawerProps {
     spaceId: string | undefined;
@@ -35,7 +35,6 @@ export function KnowledgeSpacePreviewDrawer({
 }: KnowledgeSpacePreviewDrawerProps) {
     const localize = useLocalize();
     const { showToast } = useToastContext();
-    const { onScroll: onScrollbarWhileScrolling, scrollingProps } = useScrollbarWhileScrolling();
     const MAX_JOINED_SPACES = 50;
 
     const [space, setSpace] = useState<KnowledgeSpace | null>(null);
@@ -331,15 +330,13 @@ export function KnowledgeSpacePreviewDrawer({
                         </SheetHeader>
 
                         <div
-                            className="flex-1 min-h-0 overflow-y-auto scroll-on-scroll px-6 py-4"
+                            className="flex-1 min-h-0 overflow-y-auto scrollbar-on-hover px-6 py-4"
                             onScroll={(e) => {
-                                onScrollbarWhileScrolling();
                                 const el = e.currentTarget;
                                 if (el.scrollTop + el.clientHeight >= el.scrollHeight - 80) {
                                     void loadMoreChildren();
                                 }
                             }}
-                            {...scrollingProps}
                         >
                             {canViewFiles ? (
                                 <div className="space-y-2">
@@ -376,7 +373,7 @@ export function KnowledgeSpacePreviewDrawer({
                                                 <FileCard
                                                     key={f.id}
                                                     file={f}
-                                                    userRole={SpaceRole.MEMBER}
+                                                    userRole={space?.role ?? SpaceRole.MEMBER}
                                                     isSelected={false}
                                                     onSelect={() => { }}
                                                             onDownload={() => { }}

@@ -243,14 +243,17 @@ export default function KnowledgeSquare({
                     </div>
                 )}
 
-                <div className="relative max-w-[1140px] mx-auto w-full flex flex-col items-center justify-center pt-7 pb-5 px-4">
-                    <h1 className="text-[26px] font-semibold text-[#335CFF] mb-1">{tTitle}</h1>
-                    <p className="text-[13px] text-[#86909C] mb-3">{tSubtitle}</p>
+                <div className="relative mx-auto flex w-full max-w-[1140px] flex-col items-center justify-center px-4 pb-6 pt-7">
+                    <h1 className="mb-1 text-[26px] font-semibold text-[#335CFF]">{tTitle}</h1>
+                    <p className="text-[13px] text-[#86909C]">{tSubtitle}</p>
                 </div>
             </div>
 
-            <div ref={scrollRef} className="flex-1 overflow-y-auto bg-white">
-                <div className="relative w-full max-w-[480px] mx-auto mt-2 mb-1">
+            <div
+                ref={scrollRef}
+                className="flex-1 overflow-y-auto scrollbar-on-hover bg-white"
+            >
+                <div className="relative mx-auto mb-1 mt-6 w-full max-w-[480px]">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#8B8FA8] pointer-events-none" />
                     <Input
                         type="text"

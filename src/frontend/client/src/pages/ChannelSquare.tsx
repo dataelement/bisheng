@@ -6,7 +6,7 @@ import { ChannelSquareCard } from "./ChannelSquareCard";
 import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
 import { getChannelSquareApi, subscribeManagerChannelApi } from "~/api/channels";
-import { useLocalize, useScrollbarWhileScrolling } from "~/hooks";
+import { useLocalize } from "~/hooks";
 
 type SquareStatus = "join" | "joined" | "pending" | "private" | "rejected";
 
@@ -59,7 +59,6 @@ export default function ChannelSquare({
   const [hasMorePage, setHasMorePage] = useState(true);
   const [allChannels, setAllChannels] = useState<SquareChannel[]>([]);
   const scrollRef = useRef<HTMLDivElement | null>(null);
-  const { onScroll: onScrollShowScrollbar, scrollingProps } = useScrollbarWhileScrolling();
   const { showToast } = useToastContext();
   const localize = useLocalize();
   const [joiningId, setJoiningId] = useState<string | null>(null);
@@ -218,7 +217,6 @@ export default function ChannelSquare({
 
   const handleListScroll = useCallback(
     (e: UIEvent<HTMLDivElement>) => {
-      onScrollShowScrollbar();
       const node = e.currentTarget;
       if (loadingMore || !hasMorePage) return;
       const threshold = 60;
@@ -229,7 +227,7 @@ export default function ChannelSquare({
         });
       }
     },
-    [hasMorePage, loadingMore, load, onScrollShowScrollbar, page]
+    [hasMorePage, loadingMore, load, page]
   );
 
   // 将频道分成每行3个
@@ -260,9 +258,9 @@ export default function ChannelSquare({
         )}
 
         {/* 主要内容 */}
-        <div className="relative max-w-[1140px] mx-auto w-full flex flex-col items-center justify-center pt-7 pb-6 px-4">
+        <div className="relative mx-auto flex w-full max-w-[1140px] flex-col items-center justify-center px-4 pb-6 pt-7">
 
-          <h1 className="text-[26px] font-semibold text-[#335CFF] mb-1">
+          <h1 className="mb-1 text-[26px] font-semibold text-[#335CFF]">
             {tTitle}
           </h1>
           <p className="text-[13px] text-[#86909C]">
@@ -274,11 +272,10 @@ export default function ChannelSquare({
       {/* 频道列表区域 */}
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto scroll-on-scroll bg-white"
+        className="flex-1 overflow-y-auto scrollbar-on-hover bg-white"
         onScroll={handleListScroll}
-        {...scrollingProps}
       >
-        <div className="relative w-full max-w-[480px] mx-auto mb-6">
+        <div className="relative mx-auto mb-6 mt-6 w-full max-w-[480px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#8B8FA8] pointer-events-none" />
           <Input
             type="text"

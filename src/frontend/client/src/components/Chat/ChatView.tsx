@@ -151,6 +151,8 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                 isLoading={false}
                 isStreaming={isStreaming}
                 shareToken={shareToken}
+                knowledgeChatLayout
+                contentWidthClassName="max-w-[768px] mx-auto"
                 onRegenerate={regenerate}
               />
             ) : (

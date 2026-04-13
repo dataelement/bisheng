@@ -251,9 +251,16 @@ export default function useFolderChat(
                 chatId = session.chat_id;
             }
 
+            // Encode the optional tag chip into the message text using a
+            // `:::tag {...}:::` prefix block. The user bubble parses this back
+            // out for rendering, and `parseStreamHistoryItem` rebuilds the
+            // same prefix when reloading from history so the chip persists.
             const userMessageId = v4();
+            const displayText = tag
+                ? `:::tag ${JSON.stringify({ id: tag.id, name: tag.name })}:::\n${text.trim()}`
+                : text.trim();
             const userMessage: ChatMessage = {
-                text: text.trim(),
+                text: displayText,
                 sender: "User",
                 isCreatedByUser: true,
                 parentMessageId: "",

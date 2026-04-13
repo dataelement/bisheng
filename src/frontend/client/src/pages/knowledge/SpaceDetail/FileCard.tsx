@@ -1,4 +1,4 @@
-import { Circle, Download, MoreVertical, X } from "lucide-react";
+import { Circle, Download, Edit, MoreVertical, RefreshCw, Tag, Trash2, X } from "lucide-react";
 import { useState } from "react";
 import { FileStatus, FileType, KnowledgeFile, SpaceRole } from "~/api/knowledge";
 import { Button, Checkbox } from "~/components";
@@ -83,8 +83,8 @@ export function FileCard({
     // formatTime is now imported from ../knowledgeUtils
 
     const nameToneClass = isKnowledgeItemPreviewable(file)
-        ? "text-[#165dff]"
-        : "text-[#4e5969]";
+        ? "text-[#212121]"
+        : "text-[#999]";
 
     const getStatusText = () => {
         if (isRenaming) {
@@ -249,7 +249,11 @@ export function FileCard({
                                     onClick={(e) => e.stopPropagation()}
                                 >
                                     {showMenuDownloadItem && (
-                                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDownload(); }}>
+                                        <DropdownMenuItem
+                                            onClick={(e) => { e.stopPropagation(); onDownload(); }}
+                                            className="flex items-center"
+                                        >
+                                            <Download className="mr-2 size-4 shrink-0" />
                                             {localize("com_knowledge.download")}
                                         </DropdownMenuItem>
                                     )}
@@ -257,7 +261,11 @@ export function FileCard({
                                     {isAdmin && (
                                         <>
                                             {!isFolder && (
-                                                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEditTags(); }}>
+                                                <DropdownMenuItem
+                                                    onClick={(e) => { e.stopPropagation(); onEditTags(); }}
+                                                    className="flex items-center"
+                                                >
+                                                    <Tag className="mr-2 size-4 shrink-0" />
                                                     {localize("com_knowledge.edit_tags")}
                                                 </DropdownMenuItem>
                                             )}
@@ -266,18 +274,25 @@ export function FileCard({
                                                     e.stopPropagation();
                                                     startRenaming();
                                                 }}
+                                                className="flex items-center"
                                             >
+                                                <Edit className="mr-2 size-4 shrink-0" />
                                                 {localize("com_knowledge.rename")}
                                             </DropdownMenuItem>
                                             {hasRetryOption && (
-                                                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onRetry?.(); }}>
+                                                <DropdownMenuItem
+                                                    onClick={(e) => { e.stopPropagation(); onRetry?.(); }}
+                                                    className="flex items-center"
+                                                >
+                                                    <RefreshCw className="mr-2 size-4 shrink-0" />
                                                     {localize("com_knowledge.retry")}
                                                 </DropdownMenuItem>
                                             )}
                                             <DropdownMenuItem
                                                 onClick={(e) => { e.stopPropagation(); onDelete(); }}
-                                                className="text-[#f53f3f] focus:text-[#f53f3f]"
+                                                className="flex items-center text-[#f53f3f] focus:text-[#f53f3f]"
                                             >
+                                                <Trash2 className="mr-2 size-4 shrink-0" />
                                                 {localize("com_knowledge.delete")}
                                             </DropdownMenuItem>
                                         </>
@@ -299,14 +314,13 @@ export function FileCard({
                     <div className="flex items-center justify-between mt-1 min-w-0 gap-2">
                         <div className="flex items-center flex-1 min-w-0 min-h-[24px]">
                             {isAdmin && isFolder && file.fileNum != null && (
-                                <div className="text-xs font-medium leading-none">
-                                    <span className="text-emerald-500 font-normal">{file.successFileNum ?? 0}</span>
-                                    <span className="text-[#86909c] font-normal">/{file.fileNum}</span>
-                                </div>
+                                <span className="text-xs text-[#86909c] whitespace-nowrap">
+                                    {localize("com_knowledge_items_count", { count: file.fileNum ?? 0 })}
+                                </span>
                             )}
                             {!isAdmin && isFolder && file.fileNum != null && (
                                 <span className="text-xs text-[#86909c] whitespace-nowrap">
-                                    {localize("com_knowledge_items_count", { count: file.successFileNum })}
+                                    {localize("com_knowledge_items_count", { count: file.successFileNum ?? 0 })}
                                 </span>
                             )}
                             {(!isFolder && file.tags && file.tags.length > 0) && (

@@ -28,48 +28,38 @@ import AiModelSelect from "./AiModelSelect";
 import BooksIcon from "../ui/icon/Books";
 import BookOpen from "../ui/icon/BookOpen";
 
+/** 超出该字数则省略；省略后为「前 5 字 + …」共 6 个显示单位（与产品规则一致） */
+const KB_TAG_MAX_CHARS = 5;
+
+function formatKbTagLabel(name: string): string {
+    const chars = Array.from(name);
+    if (chars.length <= KB_TAG_MAX_CHARS) return name;
+    return `${chars.slice(0, KB_TAG_MAX_CHARS).join("")}\u2026`;
+}
+
 const KbTag = ({ kb, onRemove }: { kb: any; onRemove?: () => void }) => {
-    const textRef = useRef<HTMLSpanElement>(null);
-    const [textW, setTextW] = useState<number | undefined>(undefined);
-
-    useLayoutEffect(() => {
-        const el = textRef.current;
-        if (el && textW === undefined) {
-            setTextW(Math.min(el.scrollWidth, 120));
-        }
-    }, [kb.name, textW]);
-
+    const label = formatKbTagLabel(kb.name ?? "");
     return (
-        <div
-            className="group flex items-center shrink-0
-                min-w-[44px] h-6 px-2
-                rounded-[4px] bg-white
-                text-xs text-slate-700
-                hover:bg-slate-50 transition-colors duration-200"
-        >
+        <div className="group flex h-6 min-w-0 max-w-[160px] shrink-0 items-center rounded-[4px] bg-white px-2 text-xs text-slate-700 transition-colors duration-200 hover:bg-slate-50">
             {kb.type === 'space' ? (
-                <BookOpen className="size-4 text-[#999] shrink-0 mr-1" />
+                <BookOpen className="mr-1 size-4 shrink-0 text-[#999]" />
             ) : (
-                <BooksIcon className="size-4 text-[#999] shrink-0 mr-1" />
+                <BooksIcon className="mr-1 size-4 shrink-0 text-[#999]" />
             )}
 
-            <div
-                className="flex items-center overflow-hidden"
-                style={{ width: textW }}
-            >
-                <span ref={textRef} className="truncate min-w-0">{kb.name}</span>
-                {onRemove && (
-                    <button
-                        onClick={onRemove}
-                        className="shrink-0 flex items-center justify-center
-                            h-4 w-0 group-hover:w-4 overflow-hidden
-                            rounded-full hover:bg-slate-200
-                            text-slate-400 transition-all duration-200"
-                    >
-                        ✕
-                    </button>
-                )}
-            </div>
+            <span className="min-w-0 flex-1 truncate text-left" title={kb.name}>
+                {label}
+            </span>
+            {onRemove && (
+                <button
+                    type="button"
+                    onClick={onRemove}
+                    className="ml-0.5 flex size-4 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-200"
+                    aria-label="Remove"
+                >
+                    ✕
+                </button>
+            )}
         </div>
     );
 };

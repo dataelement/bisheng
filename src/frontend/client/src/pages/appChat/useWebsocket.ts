@@ -13,6 +13,34 @@ const wsMap = new Map<string, WebSocket>()
 // 会话运行时信息
 const sessionInfoMap = new Map<string, any>()
 
+/**
+ * Force-close the websocket and forget any session info for the given chatId.
+ * Used when a conversation is deleted while streaming — without this, the
+ * background websocket keeps running and writing messages into Recoil state
+ * for a conversation that no longer exists, which causes the "ghost" output
+ * the user sees after deleting an in-flight chat.
+ */
+export const closeAppChatWebSocket = (chatId: string) => {
+    const ws = wsMap.get(chatId)
+    if (ws) {
+        try {
+            // Best-effort: tell backend to stop processing before yanking the socket.
+            if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ action: 'stop' }))
+            }
+            // Detach handlers so the close event doesn't bubble error toasts.
+            ws.onmessage = null
+            ws.onerror = null
+            ws.onclose = null
+            ws.close()
+        } catch {
+            // ignore — the socket may already be in a teardown state
+        }
+    }
+    wsMap.delete(chatId)
+    sessionInfoMap.delete(chatId)
+}
+
 export const enum ActionType {
     INIT_DATA = 'init_data',
     INPUT = 'input',

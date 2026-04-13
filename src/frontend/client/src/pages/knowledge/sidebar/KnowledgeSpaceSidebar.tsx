@@ -242,7 +242,7 @@ export function KnowledgeSpaceSidebar({
                 onToggle={() => setCollapsed(!collapsed)}
                 isHovering={isToggleHovering}
                 setIsHovering={setIsToggleHovering}
-                className="absolute top-1/2 left-0 z-[10]"
+                className="absolute top-1/2 left-0 z-[40]"
                 translateX={230}
             />
         </div>

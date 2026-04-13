@@ -404,7 +404,7 @@ export function AccountInfoDialog({
                                                 onClick={() => setShowOldPassword(!showOldPassword)}
                                                 className="absolute right-3 top-1/2 -translate-y-1/2 text-[#86909c] hover:text-[#4e5969]"
                                             >
-                                                {showOldPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                                                {showOldPassword ? <Eye className="size-4" /> : <EyeOff className="size-4" />}
                                             </button>
                                         </div>
                                     </div>
@@ -427,7 +427,7 @@ export function AccountInfoDialog({
                                                 onClick={() => setShowNewPassword(!showNewPassword)}
                                                 className="absolute right-3 top-1/2 -translate-y-1/2 text-[#86909c] hover:text-[#4e5969]"
                                             >
-                                                {showNewPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                                                {showNewPassword ? <Eye className="size-4" /> : <EyeOff className="size-4" />}
                                             </button>
                                         </div>
 
@@ -460,7 +460,7 @@ export function AccountInfoDialog({
                                                 onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                                                 className="absolute right-3 top-1/2 -translate-y-1/2 text-[#86909c] hover:text-[#4e5969]"
                                             >
-                                                {showConfirmPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                                                {showConfirmPassword ? <Eye className="size-4" /> : <EyeOff className="size-4" />}
                                             </button>
                                         </div>
                                     </div>

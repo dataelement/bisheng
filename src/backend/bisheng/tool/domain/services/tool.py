@@ -15,7 +15,7 @@ from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import UnAuthorizedError, NotFoundError
 from bisheng.common.errcode.tool import ToolTypeNotExistsError, ToolTypeRepeatError, ToolTypeNameError, \
     ToolTypeIsPresetError, ToolSchemaDownloadError, ToolSchemaEmptyError, ToolSchemaParseError, ToolSchemaServerError, \
-    ToolMcpSchemaError
+    ToolMcpSchemaError, ToolMcpStdioError
 from bisheng.common.services.config_service import settings
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum, GroupResource
 from bisheng.database.models.role_access import AccessType
@@ -252,7 +252,7 @@ class ToolServices(BaseModel):
             if not mcp_conf.enable_stdio:
                 client_type, _ = ClientManager.parse_mcp_client_type(tool_type.openapi_schema)
                 if client_type == McpClientType.STDIO.value:
-                    raise ToolMcpSchemaError(msg="mcp not support stdio mode")
+                    raise ToolMcpStdioError()
             # Instantiatemcpservice object, getting a list of tools
             client = await ClientManager.connect_mcp_from_json(result)
 

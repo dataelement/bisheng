@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { useRecoilState, useRecoilValue } from 'recoil';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { useRecoilState, useRecoilValue, useSetRecoilState } from 'recoil';
 import { NotificationSeverity } from '~/common';
-import type { AppConversation, ConversationGroup } from '~/@types/app';
-import { getAppConversationsApi } from '~/api/apps';
+import type { AppConversation, AppItem, ConversationGroup } from '~/@types/app';
+import { getAppConversationsApi, getAssistantDetailApi, getFlowApi } from '~/api/apps';
 import { groupConversationsByTime, getAppShareUrl } from '~/pages/apps/appUtils';
 import { copyText } from '~/utils';
 import { useToastContext } from '~/Providers';
@@ -15,12 +15,16 @@ import {
 import { generateUUID } from '~/utils';
 import { useLocalize } from '~/hooks';
 
+// flow_type 5 === assistant; anything else (1 = skill, 10 = workflow) goes through getFlowApi.
+const FLOW_TYPE_ASSISTANT = 5;
+
 /**
  * Hook for the app chat sidebar.
  * Handles: loading conversations, time grouping, new/switch conversation, sidebar toggle.
  */
 export function useAppSidebar() {
   const navigate = useNavigate();
+  const location = useLocation();
   const localize = useLocalize();
   const { fid: flowId, type: flowType, conversationId } = useParams();
   const { showToast } = useToastContext();
@@ -28,6 +32,7 @@ export function useAppSidebar() {
   showToastRef.current = showToast;
 
   const currentApp = useRecoilValue(currentAppInfoState);
+  const setCurrentApp = useSetRecoilState(currentAppInfoState);
   const [conversations, setConversations] = useRecoilState(appConversationsState);
   const [sidebarVisible, setSidebarVisible] = useRecoilState(sidebarVisibleState);
 
@@ -87,15 +92,23 @@ export function useAppSidebar() {
       updatedAt: new Date().toISOString(),
       createdAt: new Date().toISOString(),
     }, ...prev]);
-    navigate(`/app/${chatId}/${flowId}/${flowType}`);
-  }, [flowId, flowType, navigate, setConversations]);
+    const from = new URLSearchParams(location.search).get('from');
+    const nextPath = from
+      ? `/app/${chatId}/${flowId}/${flowType}?from=${from}`
+      : `/app/${chatId}/${flowId}/${flowType}`;
+    navigate(nextPath);
+  }, [flowId, flowType, location.search, navigate, setConversations]);
 
   /** Switch to a specific conversation */
   const switchConversation = useCallback(
     (conv: AppConversation) => {
-      navigate(`/app/${conv.id}/${conv.flowId}/${conv.flowType}`);
+      const from = new URLSearchParams(location.search).get('from');
+      const nextPath = from
+        ? `/app/${conv.id}/${conv.flowId}/${conv.flowType}?from=${from}`
+        : `/app/${conv.id}/${conv.flowId}/${conv.flowType}`;
+      navigate(nextPath);
     },
-    [navigate],
+    [location.search, navigate],
   );
 
   /** Toggle sidebar visibility */
@@ -118,6 +131,34 @@ export function useAppSidebar() {
   // Guard: auto-select runs only once per flowId (on initial mount).
   // This prevents re-triggering when the user creates a new chat or switches conversations.
   const hasAutoSelectedRef = useRef<string | null>(null);
+
+  // Fetch flow-level info (name / logo / description) into currentAppInfoState so
+  // the sidebar card stays populated even when no chat is active — e.g. right after
+  // deleting the active conversation, chatsState briefly loses the flow reference.
+  useEffect(() => {
+    if (!flowId || !flowType) return;
+    const numericType = Number(flowType);
+    (async () => {
+      try {
+        const res = numericType === FLOW_TYPE_ASSISTANT
+          ? await getAssistantDetailApi(flowId, undefined, true)
+          : await getFlowApi(flowId, 'v1', undefined, true);
+        if (res?.status_code !== 200) return;
+        const data = res.data;
+        if (!data) return;
+        setCurrentApp({
+          id: data.id ?? flowId,
+          name: data.name ?? '',
+          description: data.description ?? '',
+          logo: data.logo ?? '',
+          flow_type: Number(data.flow_type ?? numericType),
+          user_id: data.user_id ?? '',
+        } as AppItem);
+      } catch {
+        // silent — sidebar falls back to placeholder text
+      }
+    })();
+  }, [flowId, flowType, setCurrentApp]);
 
   // Auto-fetch on mount or flowId change, with one-time auto-select
   useEffect(() => {

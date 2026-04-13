@@ -1,4 +1,4 @@
-import { ListFilter, User, Share2 } from 'lucide-react';
+import { ListFilter, User } from 'lucide-react';
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { useRecoilValue, useSetRecoilState } from 'recoil';
 import { SystemCategories } from '~/types/chat';
@@ -6,6 +6,7 @@ import { usePromptGroupsNav, useLocalize, useCategories } from '~/hooks';
 import { Dropdown, AnimatedSearchInput } from '~/components/ui';
 import type { Option } from '~/common';
 import { cn } from '~/utils';
+import { ShareOutlineIcon } from '~/components/icons';
 import store from '~/store';
 
 export default function FilterPrompts({
@@ -36,7 +37,7 @@ export default function FilterPrompts({
       {
         value: SystemCategories.SHARED_PROMPTS,
         label: localize('com_ui_shared_prompts'),
-        icon: <Share2 className="h-4 w-4 text-text-primary" />,
+        icon: <ShareOutlineIcon className="h-4 w-4 text-text-primary" />,
       },
       { divider: true, value: null },
     ];

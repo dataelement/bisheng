@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo } from 'react';
-import { Share2Icon } from 'lucide-react';
 import { useForm, Controller } from 'react-hook-form';
 import { Permissions } from '~/types/chat';
 import type { TStartupConfig, AgentUpdateParams } from '~/types/chat';
@@ -13,6 +12,7 @@ import {
   OGDialogTrigger,
 } from '~/components/ui';
 import { useUpdateAgentMutation, useGetStartupConfig } from '~/hooks/queries/data-provider';
+import { ShareOutlineIcon } from '~/components/icons';
 import { cn, removeFocusOutlines } from '~/utils';
 import { useToastContext } from '~/Providers';
 import { useLocalize } from '~/hooks';
@@ -142,7 +142,7 @@ export default function ShareAgent({
           type="button"
         >
           <div className="flex items-center justify-center gap-2 text-blue-500">
-            <Share2Icon className="icon-md h-4 w-4" />
+            <ShareOutlineIcon className="icon-md h-4 w-4" />
           </div>
         </button>
       </OGDialogTrigger>

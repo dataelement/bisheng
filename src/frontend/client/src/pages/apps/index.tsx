@@ -5,6 +5,7 @@ import { AgentCard } from './components/AgentCard';
 import { AppEmptyState } from './components/AppEmptyState';
 import { AppSearchBar } from './components/AppSearchBar';
 import { useAppCenter } from './hooks/useAppCenter';
+import { ChannelBlocksArrowsIcon } from '~/components/icons/channels';
 
 export default function AppCenter() {
     const {
@@ -43,7 +44,7 @@ export default function AppCenter() {
                     to="/apps/explore"
                     className="backdrop-blur-[4px] flex items-center justify-center gap-[4px] px-[6px] py-[2px] rounded-[6px] hover:bg-gray-50 transition-colors"
                 >
-                    <LayoutGrid size={16} className="text-[#335cff]" />
+                    <ChannelBlocksArrowsIcon className="size-4 text-[#335cff]" />
                     <span className="font-['PingFang_SC'] text-[#212121] text-[12px] leading-[20px]">
                         探索更多应用
                     </span>

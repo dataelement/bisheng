@@ -439,7 +439,7 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
                       />
                     )}
 
-                    <span className="truncate flex-1 min-w-0 transition-all duration-200 group-hover:text-[11px]">
+                    <span className="min-w-0 flex-1 truncate">
                       {kb.name}
                     </span>
 

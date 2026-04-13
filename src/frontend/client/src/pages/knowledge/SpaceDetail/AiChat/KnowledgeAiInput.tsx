@@ -7,11 +7,11 @@
  * - '#' key opens TagPicker; selecting a tag sets the badge (max 1)
  * - With tag selected and empty input: first Backspace/Delete highlights tag; second removes it (no extra chrome)
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { SendIcon } from "~/components/svg";
 import { TagPicker } from "./TagPicker";
 import type { FolderChatTag } from "~/hooks/useFolderChat";
-import { useLocalize, useScrollbarWhileScrolling } from "~/hooks";
+import { useLocalize } from "~/hooks";
 import SpeechToTextComponent from "~/components/Voice/SpeechToText";
 import { useGetWorkbenchModelsQuery } from "~/hooks/queries/data-provider";
 
@@ -37,7 +37,6 @@ export function KnowledgeAiInput({
     onStop,
 }: KnowledgeAiInputProps) {
     const localize = useLocalize();
-    const inputBlockScroll = useScrollbarWhileScrolling();
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const badgeRef = useRef<HTMLSpanElement>(null);
     const [badgeIndentPx, setBadgeIndentPx] = useState<number | undefined>(undefined);
@@ -85,6 +84,17 @@ export function KnowledgeAiInput({
     useEffect(() => {
         if (inputText.trim()) setTagDeleteHighlight(false);
     }, [inputText]);
+
+    // 已选 tag 时仅用短文案；部分浏览器不会随 React placeholder 属性刷新，需同步到 DOM
+    const resolvedPlaceholder = selectedTag
+        ? localize("com_knowledge.ai_input_placeholder_short")
+        : localize("com_knowledge.ai_input_placeholder");
+    useLayoutEffect(() => {
+        const el = textareaRef.current;
+        if (el) {
+            el.placeholder = resolvedPlaceholder;
+        }
+    }, [resolvedPlaceholder]);
 
     // Detect '#' trigger for tag picker
     const handleInput = useCallback(
@@ -217,11 +227,7 @@ export function KnowledgeAiInput({
 
                 {/* Outer scroll: badge + textarea are one block so they scroll together; badge overlays first line only */}
                 <div className="p-3 pb-0">
-                    <div
-                        className="max-h-48 overflow-y-auto overflow-x-hidden scroll-on-scroll pr-6"
-                        onScroll={inputBlockScroll.onScroll}
-                        {...inputBlockScroll.scrollingProps}
-                    >
+                    <div className="max-h-48 overflow-y-auto overflow-x-hidden scrollbar-on-hover pr-6">
                         <div className="relative">
                             {selectedTag && (
                                 <span
@@ -257,7 +263,7 @@ export function KnowledgeAiInput({
                                     isComposingRef.current = false;
                                 }}
                                 disabled={disabled || isStreaming}
-                                placeholder={localize("com_knowledge.ai_input_placeholder")}
+                                placeholder={resolvedPlaceholder}
                                 rows={1}
                                 className="w-full min-h-5 bg-transparent text-sm leading-5 text-text-primary outline-none resize-none overflow-hidden"
                                 style={{

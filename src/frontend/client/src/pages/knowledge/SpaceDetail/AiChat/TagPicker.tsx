@@ -65,7 +65,7 @@ export function TagPicker({ tags, searchText, onSelect, onClose }: TagPickerProp
     return (
         <div
             ref={containerRef}
-            className="absolute bottom-full left-0 right-0 mb-1 bg-white border border-[#e5e6eb] rounded-lg shadow-lg z-50 max-h-[200px] overflow-y-auto"
+            className="absolute bottom-full left-0 right-0 mb-1 bg-white border border-[#e5e6eb] rounded-lg shadow-lg z-50 max-h-[200px] overflow-y-auto scrollbar-on-hover"
         >
             <div className="p-1.5">
                 {filtered.map((tag, i) => (

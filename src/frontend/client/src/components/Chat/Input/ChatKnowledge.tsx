@@ -7,7 +7,8 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
-  getManagedSpacesApi,
+  getMineSpacesApi,
+  getJoinedSpacesApi,
 } from "~/api/knowledge";
 import {
   DropdownMenu,
@@ -184,7 +185,6 @@ export const ChatKnowledge = ({
   value: KnowledgeItem[];
   onChange: (val: KnowledgeItem[]) => void;
 }) => {
-  console.log('value :>> ', value);
   const localize = useLocalize();
   const PAGE_SIZE = 20;
   const MAX_KB_PER_TYPE = 50;
@@ -217,8 +217,33 @@ export const ChatKnowledge = ({
   const loadSpaces = useCallback(async () => {
     setSpaceFetching(true);
     try {
-      const spaces = await getManagedSpacesApi();
-      setAllSpaces(spaces);
+      // Fetch "mine" + "joined" in parallel and merge into a single list
+      const [mine, joined] = await Promise.all([
+        getMineSpacesApi(),
+        getJoinedSpacesApi(),
+      ]);
+      // Dedupe by id (a space could in principle appear in both lists)
+      const seen = new Set<string | number>();
+      const merged: any[] = [];
+      for (const s of [...mine, ...joined]) {
+        if (seen.has(s.id)) continue;
+        seen.add(s.id);
+        merged.push(s);
+      }
+      // Sort A–Z, English (ASCII-leading) names first, then Chinese names.
+      // Within each bucket, compare with the appropriate locale so that
+      // pinyin order is used for CJK and natural order for ASCII.
+      merged.sort((a, b) => {
+        const an = (a.name || "").trim();
+        const bn = (b.name || "").trim();
+        const aIsEn = an.length > 0 && an.charCodeAt(0) < 128;
+        const bIsEn = bn.length > 0 && bn.charCodeAt(0) < 128;
+        if (aIsEn !== bIsEn) return aIsEn ? -1 : 1;
+        return an.localeCompare(bn, aIsEn ? "en" : "zh-Hans-u-co-pinyin", {
+          sensitivity: "base",
+        });
+      });
+      setAllSpaces(merged);
     } catch (err) {
       console.error("[ChatKnowledge] Failed to load spaces:", err);
     } finally {
@@ -309,14 +334,19 @@ export const ChatKnowledge = ({
       <DropdownMenuContent ref={menuContentRef} align="start" className="w-[200px] p-1.5 rounded-2xl shadow-xl border-slate-100">
 
         {/* 知识空间 */}
-        <DropdownMenuSub open={openSub === 'space'} onOpenChange={() => {}}>
+        <DropdownMenuSub
+          open={openSub === 'space'}
+          onOpenChange={(o) => {
+            if (o) setOpenSub('space');
+            else setOpenSub((cur) => (cur === 'space' ? null : cur));
+          }}
+        >
           <DropdownMenuSubTrigger
             data-sub-key="space"
             className={cn(
               "flex items-center justify-between rounded-xl outline-none cursor-pointer",
               "!bg-transparent hover:!bg-transparent focus:!bg-transparent"
             )}
-            onPointerEnter={() => setOpenSub('space')}
           >
             <div className="flex items-center gap-3">
               <div className="relative">
@@ -356,14 +386,19 @@ export const ChatKnowledge = ({
         </DropdownMenuSub>
 
         {/* 组织知识库 */}
-        <DropdownMenuSub open={openSub === 'org'} onOpenChange={() => {}}>
+        <DropdownMenuSub
+          open={openSub === 'org'}
+          onOpenChange={(o) => {
+            if (o) setOpenSub('org');
+            else setOpenSub((cur) => (cur === 'org' ? null : cur));
+          }}
+        >
           <DropdownMenuSubTrigger
             data-sub-key="org"
             className={cn(
               "flex items-center justify-between rounded-xl outline-none cursor-pointer mt-0.5",
               "!bg-transparent hover:!bg-transparent focus:!bg-transparent"
             )}
-            onPointerEnter={() => setOpenSub('org')}
           >
             <div className="flex items-center gap-3">
               <div className="relative">

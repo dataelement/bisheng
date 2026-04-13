@@ -1,5 +1,4 @@
 import { useLocalize } from "~/hooks";
-import { SquareArrowOutUpLeftIcon } from "lucide-react";
 import BookPlusIcon from "~/components/ui/icon/BookPlus";
 import { useState } from "react";
 import { Article } from "~/api/channels";
@@ -83,12 +82,10 @@ export function ArticleCard({
                     />
                 </div>
             ) : (
-                <div className="transition-transform duration-300 ease-in-out group-hover:scale-105">
-                    <ArticleFaviconCoverPlaceholder
-                        iconUrl={article.sourceAvatar}
-                        alt={article.sourceName}
-                    />
-                </div>
+                <ArticleFaviconCoverPlaceholder
+                    iconUrl={article.sourceAvatar}
+                    alt={article.sourceName}
+                />
             )}
 
             {/* 2. 右侧内容区 */}

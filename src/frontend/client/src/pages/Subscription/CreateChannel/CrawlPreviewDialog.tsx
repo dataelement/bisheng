@@ -196,9 +196,10 @@ export function CrawlPreviewDialog({
     };
 
     return (
-        <Dialog modal={false} open={open} onOpenChange={onOpenChange}>
+        <Dialog modal open={open} onOpenChange={onOpenChange}>
             <DialogContent
-                className="w-[600px] h-[600px] max-w-[600px] flex flex-col bg-white text-[14px] [&>button]:hidden"
+                className="w-[600px] h-[600px] max-w-[600px] flex flex-col bg-white text-[14px] [&>button]:hidden z-[100]"
+                overlayClassName="z-[100]"
                 onPointerDownOutside={(e) => e.preventDefault()}
                 onInteractOutside={(e) => e.preventDefault()}
             >

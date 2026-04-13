@@ -1,7 +1,6 @@
-import { ChevronDown, ChevronRight, PlusSquare } from "lucide-react";
+import { ChevronDown, ChevronRight, PlusSquare, XIcon } from "lucide-react";
 import * as RadioGroup from "@radix-ui/react-radio-group";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { flushSync } from "react-dom";
 import { useConfirm, useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
 import {
@@ -46,6 +45,8 @@ const MAX_SUB_CHANNELS = 6;
 /** 可见方式 / 权限：主标题（私有、需审核、公开）— 与创建知识空间一致 */
 const PERMISSION_OPTION_TEXT_CLASS =
     "text-[14px] font-normal leading-[22px] tracking-normal text-[#212121]";
+/** 表单说明/辅助文案：14px / 400 / #999999 */
+const FORM_HINT_TEXT_CLASS = "text-[14px] font-normal text-[#999999]";
 const PERMISSION_OPTION_FONT: CSSProperties = {
     fontFamily: '"PingFang SC", "PingFang TC", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif',
 };
@@ -63,30 +64,6 @@ export interface CreateChannelFormData {
     topFilterRelation: "and" | "or";
     createSubChannel: boolean;
     subChannels: SubChannelData[];
-}
-
-function serializeChannelDrawerForm(form: CreateChannelFormData): string {
-    const sources = [...form.sources]
-        .map((s) => ({
-            id: s.id,
-            name: s.name,
-            type: s.type,
-            url: s.url ?? "",
-            avatar: s.avatar ?? "",
-        }))
-        .sort((a, b) => a.id.localeCompare(b.id));
-    return JSON.stringify({
-        sources,
-        channelName: form.channelName.trim(),
-        channelDesc: form.channelDesc.trim(),
-        visibility: form.visibility,
-        publishToSquare: form.publishToSquare,
-        contentFilter: form.contentFilter,
-        filterGroups: form.filterGroups,
-        topFilterRelation: form.topFilterRelation,
-        createSubChannel: form.createSubChannel,
-        subChannels: form.subChannels,
-    });
 }
 
 interface CreateChannelDrawerProps {
@@ -116,9 +93,23 @@ export function CreateChannelDrawer({
     const [isComposingName, setIsComposingName] = useState(false);
     const [isComposingDesc, setIsComposingDesc] = useState(false);
     const initedChannelIdRef = useRef<string | null>(null);
-    /** 爬取弹窗关闭时 Radix 可能同步触发 Sheet 的 onOpenChange(false)；此处挡住误关，避免误判「空白表单」并 reset */
-    const suppressSheetCloseRef = useRef(false);
-    const formCloseBaselineRef = useRef<string | null>(null);
+
+    const isCreateFormPristine = () => {
+        // 仅用于“创建频道”场景：未做任何修改时，关闭不需要二次确认
+        return (
+            !isEditMode &&
+            form.sources.length === 0 &&
+            !form.channelName.trim() &&
+            !form.channelDesc.trim() &&
+            form.visibility === "review" &&
+            form.publishToSquare === "yes" &&
+            !form.contentFilter &&
+            form.filterGroups.length === 0 &&
+            form.topFilterRelation === "and" &&
+            !form.createSubChannel &&
+            form.subChannels.length === 0
+        );
+    };
     const [isBodyScrolling, setIsBodyScrolling] = useState(false);
     const bodyScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -170,76 +161,14 @@ export function CreateChannelDrawer({
         form.setSources
     ]);
 
-    useEffect(() => {
-        if (!open) {
-            formCloseBaselineRef.current = null;
-            return;
-        }
-        if (formCloseBaselineRef.current !== null) return;
-
-        if (isEditMode && editingChannel) {
-            if (initedChannelIdRef.current !== editingChannel.id) return;
-            const srcInfos = (editingChannel as { source_infos?: unknown[] }).source_infos;
-            const nSync = Array.isArray(srcInfos) ? srcInfos.length : 0;
-            const srcList = (editingChannel as { source_list?: string[] }).source_list;
-            const nAsync = srcList?.length ?? 0;
-            const expectedSources = nSync > 0 ? nSync : nAsync;
-            if (expectedSources > 0 && form.sources.length === 0) return;
-        }
-
-        formCloseBaselineRef.current = serializeChannelDrawerForm({
-            sources: form.sources,
-            channelName: form.channelName,
-            channelDesc: form.channelDesc,
-            visibility: form.visibility,
-            publishToSquare: form.publishToSquare,
-            contentFilter: form.contentFilter,
-            filterGroups: form.filterGroups,
-            topFilterRelation: form.topFilterRelation,
-            createSubChannel: form.createSubChannel,
-            subChannels: form.subChannels,
-        });
-    }, [
-        open,
-        isEditMode,
-        editingChannel,
-        form.sources,
-        form.channelName,
-        form.channelDesc,
-        form.visibility,
-        form.publishToSquare,
-        form.contentFilter,
-        form.filterGroups,
-        form.topFilterRelation,
-        form.createSubChannel,
-        form.subChannels,
-    ]);
-
     const handleClose = async (nextOpen: boolean) => {
-        if (!nextOpen && suppressSheetCloseRef.current) {
-            return;
-        }
         if (!nextOpen) {
             if (form.showSuccess) {
                 form.resetForm();
                 onOpenChange(false);
                 return;
             }
-            const currentSnap = serializeChannelDrawerForm({
-                sources: form.sources,
-                channelName: form.channelName,
-                channelDesc: form.channelDesc,
-                visibility: form.visibility,
-                publishToSquare: form.publishToSquare,
-                contentFilter: form.contentFilter,
-                filterGroups: form.filterGroups,
-                topFilterRelation: form.topFilterRelation,
-                createSubChannel: form.createSubChannel,
-                subChannels: form.subChannels,
-            });
-            const unchangedFromOpen =
-                formCloseBaselineRef.current !== null && currentSnap === formCloseBaselineRef.current;
-            if (unchangedFromOpen) {
+            if (isCreateFormPristine()) {
                 form.resetForm();
                 onOpenChange(false);
                 return;
@@ -270,9 +199,20 @@ export function CreateChannelDrawer({
             <Sheet open={open} onOpenChange={handleClose}>
                 <SheetContent
                     side="right"
-                    className="w-full max-w-[900px] sm:max-w-[1000px] bg-white pl-20 pr-20 flex flex-col"
+                    hideClose
+                    className="w-full max-w-[900px] sm:max-w-[1000px] overflow-y-auto scroll-on-scroll bg-white pl-20 pr-20 flex flex-col"
+                    onScroll={handleBodyScroll}
+                    data-scrolling={isBodyScrolling ? "true" : "false"}
                 >
-                    <SheetHeader className="ml-6 mr-6 pt-6 pb-4 border-b border-[#E5E6EB]">
+                    <button
+                        type="button"
+                        onClick={() => handleClose(false)}
+                        className="ring-offset-background focus:ring-ring data-[state=open]:bg-secondary fixed top-4 right-4 z-[60] rounded-xs opacity-70 transition-opacity hover:opacity-100 disabled:pointer-events-none"
+                    >
+                        <XIcon className="size-4" />
+                        <span className="sr-only">Close</span>
+                    </button>
+                    <SheetHeader className="sticky top-0 z-10 ml-6 mr-6 pt-6 pb-4 border-b border-[#E5E6EB] bg-white">
                         <SheetTitle className="text-[16px] -ml-4 font-medium text-[#1D2129]">
                             {isEditMode ? localize("com_subscription.channel_settings") : localize("com_subscription.create_channel")}
                         </SheetTitle>
@@ -298,9 +238,9 @@ export function CreateChannelDrawer({
                         />
                     ) : (
                         <div
-                            className="flex-1 min-h-0 overflow-y-auto scroll-on-scroll px-6 py-5 space-y-5"
-                            onScroll={handleBodyScroll}
-                            data-scrolling={isBodyScrolling ? "true" : "false"}
+                            className={cn(
+                                "overflow-visible px-6 py-5 space-y-5"
+                            )}
                         >
                             {/* 添加信息源 */}
                             <div className="space-y-2">
@@ -470,7 +410,7 @@ export function CreateChannelDrawer({
                                                 >
                                                     {opt.label}
                                                 </span>
-                                                <span className="text-[14px] font-normal text-[#999]">
+                                                <span className={FORM_HINT_TEXT_CLASS}>
                                                     {opt.desc}
                                                 </span>
                                             </div>
@@ -485,7 +425,7 @@ export function CreateChannelDrawer({
                                     <Label className="text-[14px] text-[#1D2129]">
                                         <span className="text-[#F53F3F] mr-1">*</span>
                                         {localize("com_subscription.is_publish_plaza")}
-                                        <span className="ml-2 text-[12px] text-[#86909C]">{localize("com_subscription.publish_to_square_description")}</span>
+                                        <span className={cn("ml-2", FORM_HINT_TEXT_CLASS)}>{localize("com_subscription.publish_to_square_description")}</span>
                                     </Label>
                                     <RadioGroup.Root
                                         value={form.publishToSquare}
@@ -520,7 +460,7 @@ export function CreateChannelDrawer({
                                     <div>
                                         <Label className="text-[14px] flex text-[#1D2129]">
                                             {localize("com_subscription.channel_content_filter")}
-                                            <p className="text-[12px] text-[#86909C] ml-2 mt-0.5">
+                                            <p className={cn("ml-2 mt-0.5", FORM_HINT_TEXT_CLASS)}>
                                                 {localize("com_subscription.only_filter_criteria")}
                                             </p>
                                         </Label>
@@ -579,7 +519,7 @@ export function CreateChannelDrawer({
                                     <div>
                                         <Label className="text-[14px] flex text-[#1D2129]">
                                             {localize("com_subscription.create_sub_channel")}
-                                            <p className="text-[12px] text-[#86909C] ml-2 mt-0.5">
+                                            <p className={cn("ml-2 mt-0.5", FORM_HINT_TEXT_CLASS)}>
                                                 {localize("com_subscription.subscribe_same_filters")}
                                             </p>
                                         </Label>
@@ -670,7 +610,7 @@ export function CreateChannelDrawer({
 
                     {/* 底部操作按钮 */}
                     {(!form.showSuccess || isEditMode) && (
-                        <div className="flex justify-end gap-3 px-6 py-4 border-t border-[#E5E6EB] bg-white">
+                        <div className="sticky bottom-0 z-10 mt-auto flex justify-end gap-3 px-6 pt-10 pb-5 border-t border-[#E5E6EB] bg-white">
                             <Button
                                 variant="secondary"
                                 onClick={() => handleClose(false)}
@@ -754,15 +694,10 @@ export function CreateChannelDrawer({
                     form.setSourceSearchResetToken((t) => t + 1);
                 }}
                 onAddSource={(source) => {
-                    suppressSheetCloseRef.current = true;
-                    flushSync(() => {
-                        form.setSources((prev) => [...prev, source]);
-                    });
+                    form.setSources((prev) => [...prev, source]);
                     form.setCrawlDialogOpen(false);
+                    // 添加成功后回到「添加信息源」面板，并展示选中状态
                     form.setShowAddSourcePanel(true);
-                    queueMicrotask(() => {
-                        suppressSheetCloseRef.current = false;
-                    });
                 }}
             />
         </>

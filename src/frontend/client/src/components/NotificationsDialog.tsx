@@ -148,7 +148,7 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
     const formatBadge = (n: number) => (n > 99 ? "99+" : String(n));
 
     const loadNotifications = async (nextPage: number, append: boolean) => {
-        setLoading(true);
+        if (!append) setLoading(true);
         try {
             const tab: MessageTab = activeTab === "request" ? "request" : "all";
             const { data, total } = await getMessageListApi({
@@ -165,7 +165,7 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
         } catch (error) {
             console.error("Failed to load notifications:", error);
         } finally {
-            setLoading(false);
+            if (!append) setLoading(false);
         }
     };
 
