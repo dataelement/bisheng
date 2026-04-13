@@ -29,6 +29,9 @@ async def init_default_data():
         try:
             db_manager = await get_database_connection()
             await db_manager.create_db_and_tables()
+            # Bypass tenant filter during init — no tenant context available at startup
+            from bisheng.core.context.tenant import _bypass_tenant_filter
+            _bypass_token = _bypass_tenant_filter.set(True)
             async with get_async_db_session() as session:
                 db_role = await session.exec(select(Role).limit(1))
                 db_role = db_role.all()
@@ -129,6 +132,8 @@ async def init_default_data():
                     await session.exec(
                         update(GptsTools).where(GptsTools.id.in_(jr_types)).values(type=8))
                     await session.commit()
+
+            _bypass_tenant_filter.reset(_bypass_token)
 
             # Initialize Databaseconfig
             await settings.init_config()
