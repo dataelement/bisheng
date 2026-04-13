@@ -112,7 +112,7 @@ export function ChannelSquareCard({
                 {creatorAvatars.slice(0, 3).map((src, idx) => (
                   <Avatar
                     key={idx}
-                    className="h-6 w-6 border border-white"
+                    className="h-5 w-5 border border-white"
                   >
                     <AvatarImage src={src} alt={creator} className="object-cover" />
                   </Avatar>

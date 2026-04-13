@@ -99,7 +99,7 @@ export default function KnowledgeSquareCard({
 
                 <div className="flex items-center gap-2.5 text-[14px] leading-[20px] text-[#86909C]">
                     <div className="flex items-center gap-1.5">
-                        <Avatar className="border border-white h-6 w-6">
+                        <Avatar className="border border-white h-5 w-5">
                             {creatorAvatar ? (
                                 <AvatarImage src={creatorAvatar} alt={space.creator} />
                             ) : null}
