@@ -9,6 +9,7 @@ from langchain_openai import ChatOpenAI, AzureChatOpenAI, OpenAIEmbeddings, Azur
 from .asr import OpenAIASRClient, AliyunASRClient, AzureOpenAIASRClient
 from .base import BaseASRClient, BaseTTSClient
 from .embeddings.fake_embedding import FakeEmbeddings
+from .embeddings.volcengine_embedding import VolcengineEmbeddings
 from .llm.chat_openai_compatible import ChatOpenAICompatible
 from .rerank.common_rerank import CommonRerank
 from .rerank.xinference_rerank import XinferenceRerank
@@ -41,6 +42,7 @@ __all__ = [
     'AzureOpenAIEmbeddings',
     'DashScopeEmbeddings',
     'FakeEmbeddings',
+    'VolcengineEmbeddings',
 
     'DashScopeRerank',
     'CommonRerank',
