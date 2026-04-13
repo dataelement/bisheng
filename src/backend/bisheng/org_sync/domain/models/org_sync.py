@@ -283,14 +283,15 @@ class OrgSyncConfigDao:
 
     @classmethod
     async def aget_list(
-        cls, tenant_id: int, status: str = 'active',
+        cls, tenant_id: int, status: Optional[str] = None,
     ) -> List[OrgSyncConfig]:
+        """List configs for a tenant. Pass status to filter, or None for all non-deleted."""
         async with get_async_db_session() as session:
             statement = select(OrgSyncConfig).where(
                 OrgSyncConfig.tenant_id == tenant_id,
                 OrgSyncConfig.status != 'deleted',
             )
-            if status:
+            if status is not None:
                 statement = statement.where(OrgSyncConfig.status == status)
             statement = statement.order_by(OrgSyncConfig.id.desc())
             result = await session.exec(statement)

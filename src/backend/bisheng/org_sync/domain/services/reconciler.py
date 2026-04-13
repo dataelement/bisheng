@@ -383,7 +383,6 @@ def _check_dept_changes(
     # Desired state from remote
     new_primary_dept_id = ext_to_local_dept.get(remote.primary_dept_external_id)
     new_secondary_dept_ids: set[int] = set()
-    add_secondary_ext: list[str] = []
     for ext_id in remote.secondary_dept_external_ids:
         local_id = ext_to_local_dept.get(ext_id)
         if local_id is not None:

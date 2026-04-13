@@ -195,12 +195,24 @@ class GenericAPIProvider(OrgSyncProvider):
         return results
 
     async def test_connection(self) -> dict:
+        """Test connectivity by authenticating and probing configured URLs."""
+        await self.authenticate()
+        total_depts = -1
+        total_members = -1
         async with httpx.AsyncClient(timeout=30) as client:
-            depts = await self.fetch_departments()
-            members = await self.fetch_members()
-            return {
-                'connected': True,
-                'org_name': 'Generic API',
-                'total_depts': len(depts),
-                'total_members': len(members),
-            }
+            dept_url = self.auth_config.get('departments_url')
+            if dept_url:
+                data = await self._fetch_json(client, dept_url)
+                items = data if isinstance(data, list) else data.get('departments', [])
+                total_depts = len(items) if isinstance(items, list) else -1
+            member_url = self.auth_config.get('members_url')
+            if member_url:
+                data = await self._fetch_json(client, member_url)
+                items = data if isinstance(data, list) else data.get('members', [])
+                total_members = len(items) if isinstance(items, list) else -1
+        return {
+            'connected': True,
+            'org_name': 'Generic API',
+            'total_depts': total_depts,
+            'total_members': total_members,
+        }

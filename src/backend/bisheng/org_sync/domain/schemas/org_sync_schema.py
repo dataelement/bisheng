@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Any, Optional
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator
 
 
 # ---------------------------------------------------------------------------
@@ -59,6 +59,8 @@ class OrgSyncConfigUpdate(BaseModel):
 # ---------------------------------------------------------------------------
 
 class OrgSyncConfigRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     provider: str
     config_name: str
@@ -77,6 +79,8 @@ class OrgSyncConfigRead(BaseModel):
 
 
 class OrgSyncLogRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     config_id: int
     trigger_type: str

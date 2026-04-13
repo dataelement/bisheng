@@ -209,6 +209,14 @@ class UserTenantDao:
             return result.all()
 
     @classmethod
+    async def acreate(cls, user_tenant: UserTenant) -> UserTenant:
+        async with get_async_db_session() as session:
+            session.add(user_tenant)
+            await session.commit()
+            await session.refresh(user_tenant)
+            return user_tenant
+
+    @classmethod
     def get_user_default_tenant(cls, user_id: int) -> Optional[UserTenant]:
         with get_sync_db_session() as session:
             return session.exec(

@@ -14,9 +14,6 @@ from datetime import datetime
 from typing import Optional
 
 from loguru import logger
-from sqlmodel import select
-
-from bisheng.core.database import get_async_db_session
 
 from bisheng.common.errcode.org_sync import (
     OrgSyncAlreadyRunningError,
@@ -85,18 +82,7 @@ class OrgSyncService:
 
         redis_lock = await cls._acquire_redis_lock(config_id)
 
-        # Step 3: Create log entry
-        log = OrgSyncLog(
-            tenant_id=config.tenant_id,
-            config_id=config_id,
-            trigger_type=trigger_type,
-            trigger_user=trigger_user,
-            status='running',
-            start_time=datetime.now(),
-        )
-        log = await OrgSyncLogDao.acreate(log)
-        log_id = log.id
-
+        log: Optional[OrgSyncLog] = None
         errors: list[dict] = []
         stats = {
             'dept_created': 0, 'dept_updated': 0, 'dept_archived': 0,
@@ -105,6 +91,17 @@ class OrgSyncService:
         }
 
         try:
+            # Step 3: Create log entry
+            log = OrgSyncLog(
+                tenant_id=config.tenant_id,
+                config_id=config_id,
+                trigger_type=trigger_type,
+                trigger_user=trigger_user,
+                status='running',
+                start_time=datetime.now(),
+            )
+            log = await OrgSyncLogDao.acreate(log)
+
             # Step 4: Decrypt auth_config and instantiate provider
             auth_config = decrypt_auth_config(config.auth_config)
             provider = get_provider(config.provider, auth_config)
@@ -118,10 +115,7 @@ class OrgSyncService:
             remote_depts = await provider.fetch_departments(root_dept_ids)
 
             # Step 7: Load local departments
-            local_depts = await DepartmentDao.aget_all_active()
-            local_depts = [
-                d for d in local_depts if d.tenant_id == config.tenant_id
-            ]
+            local_depts = await DepartmentDao.aget_active_by_tenant(config.tenant_id)
 
             # Step 8: Reconcile departments
             dept_ops = reconcile_departments(
@@ -130,23 +124,22 @@ class OrgSyncService:
 
             # Step 9: Apply department operations
             ext_to_local = await cls._apply_dept_ops(
-                dept_ops, config, stats, errors,
+                dept_ops, config, stats, errors, local_depts,
             )
 
             # Step 10: Fetch remote members
             dept_ext_ids = [d.external_id for d in remote_depts]
             remote_members = await provider.fetch_members(dept_ext_ids)
 
-            # Step 11: Load local users
+            # Step 11: Load local users + batch load user departments
             local_users = await UserDao.aget_by_source(
                 config.provider, config.tenant_id,
             )
-            # Build user department map
+            user_ids = [u.user_id for u in local_users]
+            all_user_depts = await UserDepartmentDao.aget_by_user_ids(user_ids)
             local_user_depts: dict[int, list[UserDepartment]] = {}
-            for user in local_users:
-                from bisheng.database.models.department import UserDepartmentDao
-                depts = await UserDepartmentDao.aget_user_departments(user.user_id)
-                local_user_depts[user.user_id] = depts
+            for ud in all_user_depts:
+                local_user_depts.setdefault(ud.user_id, []).append(ud)
 
             # Step 12: Reconcile members
             member_ops = reconcile_members(
@@ -167,35 +160,43 @@ class OrgSyncService:
                 'error_msg': str(e),
             })
 
-        # Step 14: Update log
-        final_status = 'success'
-        if errors:
-            final_status = 'partial' if any(
-                stats[k] > 0 for k in stats
-            ) else 'failed'
+        finally:
+            # Step 14: Update log (if created)
+            if log:
+                final_status = 'success'
+                if errors:
+                    final_status = 'partial' if any(
+                        stats[k] > 0 for k in stats
+                    ) else 'failed'
 
-        log.status = final_status
-        log.dept_created = stats['dept_created']
-        log.dept_updated = stats['dept_updated']
-        log.dept_archived = stats['dept_archived']
-        log.member_created = stats['member_created']
-        log.member_updated = stats['member_updated']
-        log.member_disabled = stats['member_disabled']
-        log.member_reactivated = stats['member_reactivated']
-        log.error_details = errors or None
-        log.end_time = datetime.now()
-        await OrgSyncLogDao.aupdate(log)
+                log.status = final_status
+                log.dept_created = stats['dept_created']
+                log.dept_updated = stats['dept_updated']
+                log.dept_archived = stats['dept_archived']
+                log.member_created = stats['member_created']
+                log.member_updated = stats['member_updated']
+                log.member_disabled = stats['member_disabled']
+                log.member_reactivated = stats['member_reactivated']
+                log.error_details = errors or None
+                log.end_time = datetime.now()
+                try:
+                    await OrgSyncLogDao.aupdate(log)
+                except Exception:
+                    logger.exception('Failed to update sync log')
 
-        # Step 15: Update config
-        config.last_sync_at = datetime.now()
-        config.last_sync_result = final_status
-        await OrgSyncConfigDao.aupdate(config)
+            # Step 15: Update config
+            try:
+                config.last_sync_at = datetime.now()
+                config.last_sync_result = log.status if log else 'failed'
+                await OrgSyncConfigDao.aupdate(config)
+            except Exception:
+                logger.exception('Failed to update sync config')
 
-        # Step 16: Release lock
-        await OrgSyncConfigDao.aset_sync_status(config_id, 'running', 'idle')
-        await cls._release_redis_lock(config_id, redis_lock)
+            # Step 16: Release lock (always, even on failure)
+            await OrgSyncConfigDao.aset_sync_status(config_id, 'running', 'idle')
+            await cls._release_redis_lock(config_id, redis_lock)
 
-        return log_id
+        return log.id if log else 0
 
     # ------------------------------------------------------------------
     # Department operations
@@ -208,11 +209,9 @@ class OrgSyncService:
         config: OrgSyncConfig,
         stats: dict,
         errors: list[dict],
+        local_depts: list,
     ) -> dict[str, int]:
         """Execute department operations. Returns ext_id → local dept.id map."""
-        # Build initial mapping from existing local departments
-        local_depts = await DepartmentDao.aget_all_active()
-        local_depts = [d for d in local_depts if d.tenant_id == config.tenant_id]
         ext_to_local: dict[str, int] = {}
         for d in local_depts:
             if d.external_id:
@@ -257,17 +256,11 @@ class OrgSyncService:
         if op.remote.parent_external_id:
             parent_id = ext_to_local.get(op.remote.parent_external_id)
             if parent_id is None:
-                # Try to find by external_id in DB
-                async with get_async_db_session() as session:
-                    result = await session.exec(
-                        select(Department).where(
-                            Department.external_id == op.remote.parent_external_id,
-                            Department.tenant_id == config.tenant_id,
-                        )
-                    )
-                    parent = result.first()
-                    if parent:
-                        parent_id = parent.id
+                parent = await DepartmentDao.aget_by_external_id(
+                    op.remote.parent_external_id, config.tenant_id,
+                )
+                if parent:
+                    parent_id = parent.id
         else:
             # Root department — find tenant root
             root = await DepartmentDao.aget_root_by_tenant(config.tenant_id)
@@ -419,10 +412,8 @@ class OrgSyncService:
         user = await UserDao.add_user_and_default_role(user)
 
         # Create UserTenant
-        async with get_async_db_session() as session:
-            ut = UserTenant(user_id=user.user_id, tenant_id=config.tenant_id)
-            session.add(ut)
-            await session.commit()
+        ut = UserTenant(user_id=user.user_id, tenant_id=config.tenant_id)
+        await UserTenantDao.acreate(ut)
 
         # Create UserDepartment entries
         all_dept_ids: list[int] = []

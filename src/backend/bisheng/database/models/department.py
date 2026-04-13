@@ -328,6 +328,32 @@ class DepartmentDao:
             return result.all()
 
     @classmethod
+    async def aget_active_by_tenant(cls, tenant_id: int) -> List[Department]:
+        """Get all active departments for a specific tenant."""
+        async with get_async_db_session() as session:
+            result = await session.exec(
+                select(Department).where(
+                    Department.tenant_id == tenant_id,
+                    Department.status == 'active',
+                )
+            )
+            return result.all()
+
+    @classmethod
+    async def aget_by_external_id(
+        cls, external_id: str, tenant_id: int,
+    ) -> Optional[Department]:
+        """Get department by external_id within a tenant (for org sync)."""
+        async with get_async_db_session() as session:
+            result = await session.exec(
+                select(Department).where(
+                    Department.external_id == external_id,
+                    Department.tenant_id == tenant_id,
+                )
+            )
+            return result.first()
+
+    @classmethod
     def update_paths_batch(cls, old_prefix: str, new_prefix: str) -> None:
         with get_sync_db_session() as session:
             session.execute(
@@ -622,6 +648,19 @@ class UserDepartmentDao:
                 )
             )
             return result.first()
+
+    @classmethod
+    async def aget_by_user_ids(cls, user_ids: List[int]) -> List[UserDepartment]:
+        """Batch load UserDepartment records for multiple users."""
+        if not user_ids:
+            return []
+        async with get_async_db_session() as session:
+            result = await session.exec(
+                select(UserDepartment).where(
+                    UserDepartment.user_id.in_(user_ids),
+                )
+            )
+            return result.all()
 
     @classmethod
     def check_member_exists(cls, user_id: int, department_id: int) -> bool:

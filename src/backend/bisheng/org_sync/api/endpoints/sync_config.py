@@ -3,6 +3,8 @@
 Part of F009-org-sync. Spec §6.1–6.5.
 """
 
+from typing import Optional
+
 from fastapi import APIRouter, Depends
 
 from bisheng.common.dependencies.user_deps import UserPayload
@@ -10,7 +12,6 @@ from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.errcode.org_sync import (
     OrgSyncConfigNotFoundError,
     OrgSyncInvalidConfigError,
-    OrgSyncPermissionDeniedError,
 )
 from bisheng.common.schemas.api import resp_200
 from bisheng.org_sync.domain.models.org_sync import (
@@ -35,34 +36,29 @@ def _config_to_read(config: OrgSyncConfig) -> dict:
         auth_dict = decrypt_auth_config(config.auth_config)
     except Exception:
         auth_dict = {}
-    return OrgSyncConfigRead(
-        id=config.id,
-        provider=config.provider,
-        config_name=config.config_name,
-        auth_type=config.auth_type,
-        auth_config=mask_sensitive_fields(auth_dict),
-        sync_scope=config.sync_scope,
-        schedule_type=config.schedule_type,
-        cron_expression=config.cron_expression,
-        sync_status=config.sync_status,
-        last_sync_at=config.last_sync_at,
-        last_sync_result=config.last_sync_result,
-        status=config.status,
-        create_user=config.create_user,
-        create_time=config.create_time,
-        update_time=config.update_time,
-    ).model_dump(mode='json')
+    data = config.model_dump()
+    data['auth_config'] = mask_sensitive_fields(auth_dict)
+    return OrgSyncConfigRead.model_validate(data).model_dump(mode='json')
+
+
+async def _get_config_or_404(
+    config_id: int, login_user: UserPayload,
+) -> Optional[OrgSyncConfig]:
+    """Load config with tenant + deleted check. Returns None if not found."""
+    config = await OrgSyncConfigDao.aget_by_id(config_id)
+    if not config or config.tenant_id != login_user.tenant_id:
+        return None
+    if config.status == 'deleted':
+        return None
+    return config
 
 
 @router.post('/configs')
 async def create_config(
     data: OrgSyncConfigCreate,
-    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    login_user: UserPayload = Depends(UserPayload.get_admin_user),
 ):
     """Create a new org sync configuration (spec §6.1, AC-01, AC-02)."""
-    if not login_user.is_admin():
-        return OrgSyncPermissionDeniedError.return_resp()
-
     try:
         config = OrgSyncConfig(
             tenant_id=login_user.tenant_id,
@@ -88,12 +84,9 @@ async def create_config(
 
 @router.get('/configs')
 async def list_configs(
-    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    login_user: UserPayload = Depends(UserPayload.get_admin_user),
 ):
     """List org sync configs for current tenant (spec §6.2, AC-03)."""
-    if not login_user.is_admin():
-        return OrgSyncPermissionDeniedError.return_resp()
-
     try:
         configs = await OrgSyncConfigDao.aget_list(login_user.tenant_id)
         return resp_200([_config_to_read(c) for c in configs])
@@ -104,17 +97,12 @@ async def list_configs(
 @router.get('/configs/{config_id}')
 async def get_config(
     config_id: int,
-    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    login_user: UserPayload = Depends(UserPayload.get_admin_user),
 ):
     """Get org sync config details (spec §6.3, AC-04, AC-08)."""
-    if not login_user.is_admin():
-        return OrgSyncPermissionDeniedError.return_resp()
-
     try:
-        config = await OrgSyncConfigDao.aget_by_id(config_id)
-        if not config or config.tenant_id != login_user.tenant_id:
-            return OrgSyncConfigNotFoundError.return_resp()
-        if config.status == 'deleted':
+        config = await _get_config_or_404(config_id, login_user)
+        if not config:
             return OrgSyncConfigNotFoundError.return_resp()
         return resp_200(_config_to_read(config))
     except BaseErrorCode as e:
@@ -125,17 +113,12 @@ async def get_config(
 async def update_config(
     config_id: int,
     data: OrgSyncConfigUpdate,
-    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    login_user: UserPayload = Depends(UserPayload.get_admin_user),
 ):
     """Update org sync config (spec §6.4, AC-05, AC-06)."""
-    if not login_user.is_admin():
-        return OrgSyncPermissionDeniedError.return_resp()
-
     try:
-        config = await OrgSyncConfigDao.aget_by_id(config_id)
-        if not config or config.tenant_id != login_user.tenant_id:
-            return OrgSyncConfigNotFoundError.return_resp()
-        if config.status == 'deleted':
+        config = await _get_config_or_404(config_id, login_user)
+        if not config:
             return OrgSyncConfigNotFoundError.return_resp()
 
         # Merge auth_config (AC-06)
@@ -166,15 +149,12 @@ async def update_config(
 @router.delete('/configs/{config_id}')
 async def delete_config(
     config_id: int,
-    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    login_user: UserPayload = Depends(UserPayload.get_admin_user),
 ):
     """Soft-delete org sync config (spec §6.5, AC-07)."""
-    if not login_user.is_admin():
-        return OrgSyncPermissionDeniedError.return_resp()
-
     try:
-        config = await OrgSyncConfigDao.aget_by_id(config_id)
-        if not config or config.tenant_id != login_user.tenant_id:
+        config = await _get_config_or_404(config_id, login_user)
+        if not config:
             return OrgSyncConfigNotFoundError.return_resp()
 
         if config.sync_status == 'running':
