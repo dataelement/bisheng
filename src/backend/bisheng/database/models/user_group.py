@@ -288,11 +288,17 @@ class UserGroupDao(UserGroupBase):
 
     @classmethod
     async def aget_group_member_count(cls, group_id: int) -> int:
-        """Count non-admin members of a group."""
+        """Count non-admin members of a group (excluding deleted users)."""
+        from bisheng.user.domain.models.user import User
         async with get_async_db_session() as session:
-            stmt = select(func.count(UserGroup.id)).where(
-                UserGroup.group_id == group_id,
-                UserGroup.is_group_admin == 0,
+            stmt = (
+                select(func.count(UserGroup.id))
+                .join(User, UserGroup.user_id == User.user_id)
+                .where(
+                    UserGroup.group_id == group_id,
+                    UserGroup.is_group_admin == 0,
+                    User.delete == 0,
+                )
             )
             result = await session.exec(stmt)
             return result.one()
@@ -340,7 +346,8 @@ class UserGroupDao(UserGroupBase):
                 select(UserGroup.user_id, User.user_name)
                 .join(User, UserGroup.user_id == User.user_id)
                 .where(UserGroup.group_id == group_id,
-                       UserGroup.is_group_admin == 1)
+                       UserGroup.is_group_admin == 1,
+                       User.delete == 0)
             )
             rows = (await session.exec(stmt)).all()
             return [{'user_id': r[0], 'user_name': r[1]} for r in rows]

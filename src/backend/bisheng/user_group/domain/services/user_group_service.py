@@ -63,17 +63,21 @@ class UserGroupService:
         )
         group = await GroupDao.acreate(group)
 
-        # Set initial admins if provided
-        if data.admin_user_ids:
-            await UserGroupDao.aset_admins_batch(
-                group.id, add_ids=data.admin_user_ids, remove_ids=[],
-            )
+        # Ensure creator is always an admin (for visibility in user_group table)
+        admin_ids = list(data.admin_user_ids) if data.admin_user_ids else []
+        if login_user.user_id not in admin_ids:
+            admin_ids.append(login_user.user_id)
 
-        # Emit OpenFGA tuple operations (stub)
+        await UserGroupDao.aset_admins_batch(
+            group.id, add_ids=admin_ids, remove_ids=[],
+        )
+
+        # Emit OpenFGA tuple operations
         ops = GroupChangeHandler.on_created(group.id, login_user.user_id)
         await GroupChangeHandler.execute_async(ops)
-        if data.admin_user_ids:
-            ops = GroupChangeHandler.on_admin_set(group.id, data.admin_user_ids)
+        extra_admin_ids = [uid for uid in admin_ids if uid != login_user.user_id]
+        if extra_admin_ids:
+            ops = GroupChangeHandler.on_admin_set(group.id, extra_admin_ids)
             await GroupChangeHandler.execute_async(ops)
 
         return await cls._enrich_group(group)
@@ -122,6 +126,10 @@ class UserGroupService:
         group = await GroupDao.aget_by_id(group_id)
         if not group:
             raise UserGroupNotFoundError()
+
+        # Default group cannot be renamed
+        if group_id == DefaultGroup and data.group_name is not None and data.group_name != group.group_name:
+            raise UserGroupDefaultProtectedError()
 
         # Check name uniqueness if name is being changed
         if data.group_name is not None and data.group_name != group.group_name:
@@ -250,12 +258,26 @@ class UserGroupService:
     async def acreate_default_group(
         cls, tenant_id: int, creator_user_id: int,
     ) -> Group:
-        """Create default user group for a tenant. Used by init_data / F010."""
+        """Create default user group for a tenant. Used by init_data / F010.
+
+        Idempotent: returns existing default group if one already exists for the tenant.
+        """
+        from sqlmodel import select
         from bisheng.core.context.tenant import bypass_tenant_filter
         from bisheng.core.database import get_async_db_session
 
         with bypass_tenant_filter():
             async with get_async_db_session() as session:
+                # Check if default group already exists for this tenant
+                existing = (await session.exec(
+                    select(Group).where(
+                        Group.tenant_id == tenant_id,
+                        Group.group_name == 'Default user group',
+                    )
+                )).first()
+                if existing:
+                    return existing
+
                 group = Group(
                     group_name='Default user group',
                     visibility='public',

@@ -81,7 +81,7 @@ class RoleGroupService():
         if not exist_group:
             raise ValueError('User group does not exist')
         exist_group.group_name = group.group_name
-        exist_group.remark = group.group_name
+        exist_group.remark = group.remark
         exist_group.update_user = login_user.user_id
         exist_group.update_time = datetime.now()
 
