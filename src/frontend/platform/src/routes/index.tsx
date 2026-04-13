@@ -100,6 +100,7 @@ const privateRouter = [
       { path: "label/chat/:id/:fid/:cid/:type", element: <TaskAppChats /> },
       { path: "dashboard", element: <Dashboard /> },
       { path: "tenant", element: <TenantPage />, permission: 'sys' },
+      { path: "department", element: <Navigate to="/sys" replace /> },
     ],
   },
   { path: "dashboard/:id", element: <EditorPage />, errorElement: <RouteErrorBoundary />, permission: 'board', },

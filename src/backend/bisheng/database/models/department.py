@@ -3,6 +3,7 @@
 Part of F002-department-tree.
 """
 
+import logging
 from datetime import datetime
 from typing import List, Optional, Tuple
 
@@ -23,6 +24,8 @@ from sqlmodel import Field, select
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_async_db_session, get_sync_db_session
+
+logger = logging.getLogger(__name__)
 
 
 class Department(SQLModelSerializable, table=True):
@@ -429,6 +432,32 @@ class DepartmentDao:
                 stmt = stmt.where(Department.id != exclude_id)
             result = await session.exec(stmt)
             return result.first() is not None
+
+    @classmethod
+    async def aget_user_admin_departments(cls, user_id: int) -> List[Department]:
+        """Get departments where user is admin via OpenFGA.
+
+        Uses FGAClient.list_objects() which respects admin inheritance from parent.
+        Returns empty list if FGA is unavailable.
+        """
+        from bisheng.core.openfga.manager import aget_fga_client
+
+        fga = await aget_fga_client()
+        if fga is None:
+            return []
+        try:
+            raw = await fga.list_objects(
+                user=f'user:{user_id}', relation='admin', type='department',
+            )
+        except Exception:
+            logger.warning(
+                'FGA list_objects failed for user %d department admin', user_id,
+            )
+            return []
+        dept_ids = [int(obj.split(':', 1)[1]) for obj in raw if ':' in obj]
+        if not dept_ids:
+            return []
+        return await cls.aget_by_ids(dept_ids)
 
 
 # ---------------------------------------------------------------------------

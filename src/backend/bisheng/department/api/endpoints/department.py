@@ -9,6 +9,7 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.schemas.api import resp_200
 from bisheng.department.domain.schemas.department_schema import (
+    DepartmentAdminSet,
     DepartmentCreate,
     DepartmentMoveRequest,
     DepartmentUpdate,
@@ -87,5 +88,32 @@ async def move_department(
     try:
         dept = await DepartmentService.amove_department(dept_id, data, login_user)
         return resp_200(dept.model_dump())
+    except BaseErrorCode as e:
+        return e.return_resp_instance()
+
+
+@router.get('/{dept_id}/admins')
+async def get_department_admins(
+    dept_id: str,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    try:
+        admins = await DepartmentService.aget_admins(dept_id, login_user)
+        return resp_200(admins)
+    except BaseErrorCode as e:
+        return e.return_resp_instance()
+
+
+@router.put('/{dept_id}/admins')
+async def set_department_admins(
+    dept_id: str,
+    data: DepartmentAdminSet,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    try:
+        result = await DepartmentService.aset_admins(
+            dept_id, data.user_ids, login_user,
+        )
+        return resp_200(result)
     except BaseErrorCode as e:
         return e.return_resp_instance()

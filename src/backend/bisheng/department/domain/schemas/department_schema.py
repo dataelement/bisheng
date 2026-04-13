@@ -15,6 +15,7 @@ class DepartmentCreate(BaseModel):
     parent_id: int
     sort_order: int = 0
     default_role_ids: Optional[List[int]] = None
+    admin_user_ids: Optional[List[int]] = None
 
 
 class DepartmentUpdate(BaseModel):
@@ -25,6 +26,10 @@ class DepartmentUpdate(BaseModel):
 
 class DepartmentMoveRequest(BaseModel):
     new_parent_id: int
+
+
+class DepartmentAdminSet(BaseModel):
+    user_ids: List[int] = Field(..., min_length=1)
 
 
 class DepartmentMemberAdd(BaseModel):

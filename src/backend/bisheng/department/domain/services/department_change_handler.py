@@ -99,6 +99,36 @@ class DepartmentChangeHandler:
         ]
 
     @staticmethod
+    def on_admin_set(
+        dept_id: int, user_ids: List[int],
+    ) -> List[TupleOperation]:
+        """Users set as admins of a department."""
+        return [
+            TupleOperation(
+                action='write',
+                user=f'user:{uid}',
+                relation='admin',
+                object=f'department:{dept_id}',
+            )
+            for uid in user_ids
+        ]
+
+    @staticmethod
+    def on_admin_removed(
+        dept_id: int, user_ids: List[int],
+    ) -> List[TupleOperation]:
+        """Users removed as admins of a department."""
+        return [
+            TupleOperation(
+                action='delete',
+                user=f'user:{uid}',
+                relation='admin',
+                object=f'department:{dept_id}',
+            )
+            for uid in user_ids
+        ]
+
+    @staticmethod
     async def execute_async(operations: List[TupleOperation]) -> None:
         """Execute tuple operations via OpenFGA (F004 ReBAC integration).
 

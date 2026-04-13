@@ -3,7 +3,9 @@
 Part of F002-department-tree.
 """
 
-from fastapi import APIRouter, Depends
+from typing import Optional
+
+from fastapi import APIRouter, Depends, Query
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.base import BaseErrorCode
@@ -20,11 +22,13 @@ async def get_members(
     page: int = 1,
     limit: int = 20,
     keyword: str = '',
+    is_primary: Optional[int] = Query(None, description='Filter: 1=primary, 0=secondary'),
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     try:
         data = await DepartmentService.aget_members(
             dept_id, page, limit, keyword, login_user,
+            is_primary=is_primary,
         )
         return resp_200(data)
     except BaseErrorCode as e:
