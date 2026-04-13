@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import tempfile
 from datetime import datetime
 from pathlib import Path
@@ -24,7 +25,9 @@ from bisheng.common.models.space_channel_member import (
     UserRoleEnum,
     MembershipStatusEnum,
 )
-from bisheng.database.models.group_resource import ResourceTypeEnum
+from bisheng.permission.domain.services.owner_service import OwnerService, _get_scm_role_to_fga
+from bisheng.permission.domain.services.permission_service import PermissionService
+from bisheng.permission.domain.schemas.permission_schema import AuthorizeGrantItem, AuthorizeRevokeItem
 from bisheng.database.models.role import RoleDao
 from bisheng.database.models.tag import TagDao, TagBusinessTypeEnum, Tag
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
@@ -55,6 +58,8 @@ _MAX_SPACE_PER_USER = 30
 # Maximum number of spaces a user can subscribe to (not as creator)
 _MAX_SUBSCRIBE_PER_USER = 50
 SPACE_ADMIN_ASSIGNMENT_MESSAGE = "assigned_knowledge_space_admin"
+
+_logger = logging.getLogger(__name__)
 
 
 class KnowledgeSpaceService(KnowledgeUtils):
@@ -114,17 +119,35 @@ class KnowledgeSpaceService(KnowledgeUtils):
         result.is_followed = subscription_status == SpaceSubscriptionStatusEnum.SUBSCRIBED
         result.is_pending = subscription_status == SpaceSubscriptionStatusEnum.PENDING
 
-    async def _require_write_permission(self, space_id: int) -> UserRoleEnum:
+    async def _require_write_permission(self, space_id: int) -> None:
         """
-        Verify that the current user (self.login_user) is an active CREATOR or ADMIN
-        of the given space. Raises SpacePermissionDeniedError otherwise.
+        Verify that the current user has can_edit permission on the space
+        via ReBAC (PermissionService). Raises SpacePermissionDeniedError otherwise.
         """
-        role = await SpaceChannelMemberDao.async_get_active_member_role(
-            space_id, self.login_user.user_id
+        allowed = await PermissionService.check(
+            user_id=self.login_user.user_id,
+            relation='can_edit',
+            object_type='knowledge_space',
+            object_id=str(space_id),
+            login_user=self.login_user,
         )
-        if role not in self._WRITE_ROLES:
+        if not allowed:
             raise SpacePermissionDeniedError()
-        return role
+
+    async def _require_manage_permission(self, space_id: int) -> None:
+        """
+        Verify that the current user has can_manage permission on the space
+        (required for member management operations).
+        """
+        allowed = await PermissionService.check(
+            user_id=self.login_user.user_id,
+            relation='can_manage',
+            object_type='knowledge_space',
+            object_id=str(space_id),
+            login_user=self.login_user,
+        )
+        if not allowed:
+            raise SpacePermissionDeniedError()
 
     async def _require_read_permission(self, space_id: int) -> Knowledge:
         space = await KnowledgeDao.aquery_by_id(space_id)
@@ -132,10 +155,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
             raise SpaceNotFoundError()
         if space.auth_type == AuthTypeEnum.PUBLIC:
             return space
-        role = await SpaceChannelMemberDao.async_get_active_member_role(
-            space_id, self.login_user.user_id
+        allowed = await PermissionService.check(
+            user_id=self.login_user.user_id,
+            relation='can_read',
+            object_type='knowledge_space',
+            object_id=str(space_id),
+            login_user=self.login_user,
         )
-        if not role:
+        if not allowed:
             raise SpacePermissionDeniedError()
         return space
 
@@ -180,6 +207,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
             status=MembershipStatusEnum.ACTIVE,
         )
         await SpaceChannelMemberDao.async_insert_member(member)
+
+        # F008: Write owner tuple to OpenFGA (INV-2)
+        try:
+            await OwnerService.write_owner_tuple(
+                self.login_user.user_id, 'knowledge_space', str(knowledge_space.id),
+            )
+        except Exception as e:
+            _logger.warning('Failed to write owner tuple for knowledge_space %s: %s', knowledge_space.id, e)
 
         # Audit log for knowledge space creation
         await KnowledgeAuditTelemetryService.audit_create_knowledge_space(self.login_user, self.request,
@@ -232,6 +267,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         await KnowledgeDao.async_delete_knowledge(knowledge_id=space_id)
 
+        # F008: Delete all FGA tuples for this space
+        try:
+            await OwnerService.delete_resource_tuples('knowledge_space', str(space_id))
+        except Exception as e:
+            _logger.warning('Failed to delete FGA tuples for knowledge_space %s: %s', space_id, e)
+
         # Audit log and telemetry
         await KnowledgeAuditTelemetryService.audit_delete_knowledge_space(self.login_user, self.request, space)
         KnowledgeAuditTelemetryService.telemetry_delete_knowledge(self.login_user)
@@ -270,6 +311,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
         # When switching to PRIVATE, remove all non-creator members
         if old_auth_type != AuthTypeEnum.PRIVATE and auth_type == AuthTypeEnum.PRIVATE:
             await SpaceChannelMemberDao.async_delete_non_creator_members(space_id)
+            # F008: Clear all FGA tuples and re-write owner only
+            try:
+                await OwnerService.delete_resource_tuples('knowledge_space', str(space_id))
+                await OwnerService.write_owner_tuple(
+                    self.login_user.user_id, 'knowledge_space', str(space_id),
+                )
+            except Exception as e:
+                _logger.warning('Failed to sync FGA tuples after PRIVATE switch for space %s: %s', space_id, e)
         elif old_auth_type == AuthTypeEnum.APPROVAL and auth_type == AuthTypeEnum.PUBLIC:
             await SpaceChannelMemberDao.async_delete_rejected_members(space_id)
 
@@ -496,7 +545,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
         - Admins cannot promote others to admin, nor can they modify the roles of other admins or creators
         - Modifying the creator's role is not allowed
         """
-        current_role = await self._require_write_permission(req.space_id)
+        # 1. Verify can_manage permission via ReBAC
+        await self._require_manage_permission(req.space_id)
+
+        # Get current user's SCM role for business logic decisions
+        current_role = await SpaceChannelMemberDao.async_get_active_member_role(
+            req.space_id, self.login_user.user_id
+        )
 
         # 2. Query target member
         target_membership = await SpaceChannelMemberDao.async_find_member(
@@ -531,9 +586,30 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 and req.role == UserRoleEnum.ADMIN.value
         )
 
-        # 6. Update role
+        # 6. Update role in SpaceChannelMember
+        old_role = target_membership.user_role
         target_membership.user_role = UserRoleEnum(req.role)
         await SpaceChannelMemberDao.update(target_membership)
+
+        # F008: Sync FGA tuples (revoke old relation + grant new)
+        new_role = UserRoleEnum(req.role)
+        old_fga = _get_scm_role_to_fga().get(old_role)
+        new_fga = _get_scm_role_to_fga().get(new_role)
+        if old_fga and new_fga and old_fga != new_fga:
+            try:
+                await PermissionService.authorize(
+                    object_type='knowledge_space', object_id=str(req.space_id),
+                    revokes=[AuthorizeRevokeItem(
+                        subject_type='user', subject_id=req.user_id,
+                        relation=old_fga, include_children=False,
+                    )],
+                    grants=[AuthorizeGrantItem(
+                        subject_type='user', subject_id=req.user_id,
+                        relation=new_fga, include_children=False,
+                    )],
+                )
+            except Exception as e:
+                _logger.warning('Failed to sync FGA tuples for space %s member %s: %s', req.space_id, req.user_id, e)
 
         if should_notify_admin_assignment:
             await self._send_admin_assignment_notification(
@@ -551,8 +627,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
         - Admins can remove regular members
         - Admins cannot remove other admins or creators
         """
-        # 1. Verify current user permissions
-        current_role = await self._require_write_permission(req.space_id)
+        # 1. Verify can_manage permission via ReBAC
+        await self._require_manage_permission(req.space_id)
+
+        # Get current user's SCM role for business logic decisions
+        current_role = await SpaceChannelMemberDao.async_get_active_member_role(
+            req.space_id, self.login_user.user_id
+        )
 
         # 2. Cannot remove yourself
         if req.user_id == self.login_user.user_id:
@@ -576,6 +657,20 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         # 6. Hard delete: remove from database
         await SpaceChannelMemberDao.delete_space_member(space_id=req.space_id, user_id=req.user_id)
+
+        # F008: Delete FGA tuple for the removed member
+        removed_fga = _get_scm_role_to_fga().get(target_membership.user_role)
+        if removed_fga:
+            try:
+                await PermissionService.authorize(
+                    object_type='knowledge_space', object_id=str(req.space_id),
+                    revokes=[AuthorizeRevokeItem(
+                        subject_type='user', subject_id=req.user_id,
+                        relation=removed_fga, include_children=False,
+                    )],
+                )
+            except Exception as e:
+                _logger.warning('Failed to delete FGA tuple for space %s member %s: %s', req.space_id, req.user_id, e)
 
         return True
 

@@ -17,9 +17,8 @@ from bisheng.common.errcode.tool import ToolTypeNotExistsError, ToolTypeRepeatEr
     ToolTypeIsPresetError, ToolSchemaDownloadError, ToolSchemaEmptyError, ToolSchemaParseError, ToolSchemaServerError, \
     ToolMcpSchemaError
 from bisheng.common.services.config_service import settings
-from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum, GroupResource
+from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.role_access import AccessType
-from bisheng.database.models.user_group import UserGroupDao
 from bisheng.mcp_manage.constant import McpClientType
 from bisheng.mcp_manage.manager import ClientManager
 from bisheng.tool.domain.const import ToolPresetType
@@ -121,20 +120,11 @@ class ToolServices(BaseModel):
     @classmethod
     def add_gpts_tools_hook(cls, request: Request, user: UserPayload, gpts_tool_type: GptsToolsTypeRead) -> bool:
         """ After adding custom toolshookFunction """
-        # Query the user group the user belongs to under
-        user_group = UserGroupDao.get_user_group(user.user_id)
-        group_ids = []
-        if user_group:
-            # Batch Insert Custom Tools into Correlation Table
-            batch_resource = []
-            for one in user_group:
-                group_ids.append(one.group_id)
-                batch_resource.append(GroupResource(
-                    group_id=one.group_id,
-                    third_id=gpts_tool_type.id,
-                    type=ResourceTypeEnum.GPTS_TOOL.value))
-            GroupResourceDao.insert_group_batch(batch_resource)
-        AuditLogService.create_tool(user, get_request_ip(request), group_ids, gpts_tool_type)
+        # F008: Write owner tuple to OpenFGA (INV-2)
+        from bisheng.permission.domain.services.owner_service import OwnerService
+        OwnerService.write_owner_tuple_sync(user.user_id, 'tool', str(gpts_tool_type.id))
+
+        AuditLogService.create_tool(user, get_request_ip(request), [], gpts_tool_type)
         return True
 
     async def update_tool_config(self, tool_type_id: int, extra: dict) -> bool:
@@ -354,9 +344,8 @@ class ToolServices(BaseModel):
 
     @classmethod
     async def update_tool_hook(cls, request: Request, user: UserPayload, exist_tool_type):
-        groups = await GroupResourceDao.aget_resource_group(ResourceTypeEnum.GPTS_TOOL, exist_tool_type.id)
-        group_ids = [int(one.group_id) for one in groups]
-        await asyncio.to_thread(AuditLogService.update_tool, user, get_request_ip(request), group_ids, exist_tool_type)
+        # F008: removed GroupResourceDao for audit (AC-08)
+        await asyncio.to_thread(AuditLogService.update_tool, user, get_request_ip(request), [], exist_tool_type)
 
     async def delete_tools(self, tool_type_id: int) -> bool:
         """ Delete Tool Category """
@@ -378,10 +367,12 @@ class ToolServices(BaseModel):
     def delete_tool_hook(cls, request, user: UserPayload, gpts_tool_type) -> bool:
         """ After deleting the customizerhookFunction """
         logger.info(f"delete_gpts_tool_hook id: {gpts_tool_type.id}, user: {user.user_id}")
-        GroupResourceDao.delete_group_resource_by_third_id(gpts_tool_type.id, ResourceTypeEnum.GPTS_TOOL)
-        groups = GroupResourceDao.get_resource_group(ResourceTypeEnum.GPTS_TOOL, gpts_tool_type.id)
-        group_ids = [int(one.group_id) for one in groups]
-        AuditLogService.delete_tool(user, get_request_ip(request), group_ids, gpts_tool_type)
+
+        # F008: Clean up all FGA tuples (AC-03)
+        from bisheng.permission.domain.services.owner_service import OwnerService
+        OwnerService.delete_resource_tuples_sync('tool', str(gpts_tool_type.id))
+
+        AuditLogService.delete_tool(user, get_request_ip(request), [], gpts_tool_type)
         return True
 
     async def refresh_all_mcp(self) -> list[str]:

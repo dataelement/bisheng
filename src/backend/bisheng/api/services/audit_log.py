@@ -15,7 +15,7 @@ from bisheng.database.models.assistant import AssistantDao, Assistant
 from bisheng.database.models.audit_log import AuditLog, SystemId, EventType, ObjectType, AuditLogDao
 from bisheng.database.models.flow import FlowDao, Flow, FlowType
 from bisheng.database.models.group import Group
-from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
+from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.database.models.role import Role
 from bisheng.database.models.session import MessageSessionDao, MessageSession
@@ -69,9 +69,9 @@ class AuditLogService:
     @classmethod
     def _chat_log(cls, user: UserPayload, ip_address: str, event_type: EventType, object_type: ObjectType,
                   object_id: str, object_name: str, resource_type: ResourceTypeEnum):
-        # Get the group to which the resource belongs
-        groups = GroupResourceDao.get_resource_group(resource_type, object_id)
-        group_ids = [one.group_id for one in groups]
+        # F008: Use operator's user groups instead of resource group (ReBAC migration)
+        user_groups = UserGroupDao.get_user_group(user.user_id)
+        group_ids = [one.group_id for one in user_groups]
         audit_log = AuditLog(
             operator_id=user.user_id,
             operator_name=user.user_name,
@@ -90,10 +90,10 @@ class AuditLogService:
                               object_type: ObjectType,
                               object_id: str, object_name: str, resource_type: ResourceTypeEnum,
                               group_ids: List[int] = None):
-        # Get the group to which the resource belongs
+        # F008: Use operator's user groups instead of resource group (ReBAC migration)
         if group_ids is None:
-            groups = await GroupResourceDao.aget_resource_group(resource_type, object_id)
-            group_ids = [one.group_id for one in groups]
+            user_groups = await UserGroupDao.aget_user_group(user.user_id)
+            group_ids = [one.group_id for one in user_groups]
         audit_log = AuditLog(
             operator_id=user.user_id,
             operator_name=user.user_name,
@@ -154,9 +154,9 @@ class AuditLogService:
         """
         Build Module Audit Log
         """
-        # Get which user groups the resource belongs to
-        groups = GroupResourceDao.get_resource_group(resource_type, object_id)
-        group_ids = [one.group_id for one in groups]
+        # F008: Use operator's user groups instead of resource group (ReBAC migration)
+        user_groups = UserGroupDao.get_user_group(user.user_id)
+        group_ids = [one.group_id for one in user_groups]
 
         # Insert Audit Log
         audit_log = AuditLog(
@@ -179,9 +179,9 @@ class AuditLogService:
         """
         Build Module Audit Log
         """
-        # Get which user groups the resource belongs to
-        groups = await GroupResourceDao.aget_resource_group(resource_type, object_id)
-        group_ids = [one.group_id for one in groups]
+        # F008: Use operator's user groups instead of resource group (ReBAC migration)
+        user_groups = await UserGroupDao.aget_user_group(user.user_id)
+        group_ids = [one.group_id for one in user_groups]
 
         # Insert Audit Log
         audit_log = AuditLog(
@@ -298,9 +298,9 @@ class AuditLogService:
         """
         Logs of Knowledge Base Modules
         """
-        # Get which user groups the resource belongs to
-        groups = GroupResourceDao.get_resource_group(resource_type, resource_id)
-        group_ids = [one.group_id for one in groups]
+        # F008: Use operator's user groups instead of resource group (ReBAC migration)
+        user_groups = UserGroupDao.get_user_group(user.user_id)
+        group_ids = [one.group_id for one in user_groups]
 
         # Insert Audit Log
         audit_log = AuditLog(

@@ -10,7 +10,7 @@ from bisheng.common.errcode.tag import TagExistError, TagNotExistError
 from bisheng.common.models.config import ConfigDao, ConfigKeyEnum, Config
 from bisheng.database.models.assistant import AssistantDao
 from bisheng.database.models.flow import FlowDao
-from bisheng.database.models.group_resource import ResourceTypeEnum, GroupResourceDao
+from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.role_access import AccessType
 from bisheng.database.models.tag import TagDao, Tag, TagLink, TagBusinessTypeEnum
 
@@ -90,14 +90,8 @@ class TagService:
         if not resource_info:
             raise NotFoundError()
 
-        if login_user.access_check(resource_info.user_id, resource_id, access_type):
-            return True
-
-        # Get user groups to which the resource belongs
-        resource_groups = GroupResourceDao.get_resource_group(resource_type, resource_id)
-        resource_groups = [int(one.group_id) for one in resource_groups]
-        # Determine if the operator under is an administrator of a user group
-        if not login_user.check_groups_admin(resource_groups):
+        # F008: access_check now delegates to ReBAC via T01 adapter
+        if not login_user.access_check(resource_info.user_id, resource_id, access_type):
             raise UnAuthorizedError()
 
         return True
