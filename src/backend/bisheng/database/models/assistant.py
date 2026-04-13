@@ -2,17 +2,14 @@ from datetime import datetime
 from enum import Enum
 from typing import List, Optional, Tuple
 
-from sqlalchemy import JSON, Column, DateTime, Text, and_, func, or_, text
+from sqlalchemy import Column, DateTime, Text, and_, func, or_, text
 from sqlmodel import Field, select, col
 
-from bisheng.utils.util import DMJSON
-from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.models.base import SQLModelSerializable
-from bisheng.common.services import telemetry_service
 from bisheng.core.database import get_sync_db_session, get_async_db_session
-from bisheng.core.logger import trace_id_var
 from bisheng.database.models.role_access import AccessType, RoleAccess
 from bisheng.utils import generate_uuid
+from bisheng.utils.util import DMJSON
 
 
 class AssistantStatus(Enum):
@@ -44,7 +41,8 @@ class AssistantBase(SQLModelSerializable):
 
 
 class AssistantLinkBase(SQLModelSerializable):
-    id: Optional[int] = Field(default=None, nullable=False, primary_key=True, description='Uniqueness quantificationID')
+    id: Optional[int] = Field(default=None, sa_column=Column(primary_key=True, autoincrement=True, nullable=False),
+                              description='Uniqueness quantificationID')
     assistant_id: Optional[str] = Field(default=0, index=True, description='assistantID')
     tool_id: Optional[int] = Field(default=0, index=True, description='ToolsID')
     flow_id: Optional[str] = Field(default='', index=True, description='SkillID')

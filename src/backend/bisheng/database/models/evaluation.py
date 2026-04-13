@@ -2,12 +2,12 @@ from datetime import datetime
 from enum import Enum
 from typing import List, Optional, Dict
 
-from sqlalchemy import Column, DateTime, Text, text, func, and_, JSON
+from sqlalchemy import Column, DateTime, Text, text, func, and_
 from sqlmodel import Field, select
 
-from bisheng.utils.util import DMJSON
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session
+from bisheng.utils.util import DMJSON
 
 
 class ExecType(Enum):
@@ -46,7 +46,7 @@ class EvaluationBase(SQLModelSerializable):
 
 
 class Evaluation(EvaluationBase, table=True):
-    id: int = Field(default=None, primary_key=True, unique=True)
+    id: int = Field(default=None, sa_column=Column(primary_key=True, autoincrement=True, nullable=False))
 
 
 class EvaluationRead(EvaluationBase):

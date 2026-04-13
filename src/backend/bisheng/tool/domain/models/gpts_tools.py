@@ -3,15 +3,14 @@ from datetime import datetime
 from typing import Dict, List, Optional
 
 from pydantic import model_validator
-from sqlalchemy import JSON, Column, DateTime, String, text, func
-from sqlalchemy.dialects.mysql import LONGTEXT
+from sqlalchemy import Column, DateTime, String, text, func
 from sqlmodel import Field, or_, select, Text, update, col
 
-from bisheng.utils.util import DMJSON
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.utils import md5_hash, generate_uuid
 from bisheng.utils.mask_data import JsonFieldMasker
+from bisheng.utils.util import DMJSON
 from ..const import AuthType, ToolPresetType
 
 
@@ -34,7 +33,8 @@ class GptsToolsBase(SQLModelSerializable):
 
 
 class GptsToolsTypeBase(SQLModelSerializable):
-    id: Optional[int] = Field(default=None, index=True, primary_key=True)
+    id: Optional[int] = Field(default=None,
+                              sa_column=Column(index=True, primary_key=True, autoincrement=True, nullable=False))
     name: str = Field(default='', sa_column=Column(String(length=1024)), description="Tool Category Name")
     logo: Optional[str] = Field(default='', description="of the tool categorylogoFile URL")
     extra: Optional[str] = Field(default='{}', sa_column=Column(Text),
@@ -63,7 +63,7 @@ class GptsTools(GptsToolsBase, table=True):
     extra: Optional[str | dict] = Field(default=None, sa_column=Column(Text, index=False),
                                         description='Used to store additional information, such as parameter requirements, including &initdb_conf_key Data field'
                                                     'Indicates that the configuration information is obtained from the system configuration,For multi-level use.with ')
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: Optional[int] = Field(default=None, sa_column=Column(primary_key=True, autoincrement=True, nullable=False))
 
 
 class GptsToolsType(GptsToolsTypeBase, table=True):

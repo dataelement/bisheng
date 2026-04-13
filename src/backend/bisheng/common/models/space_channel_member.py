@@ -32,7 +32,7 @@ REJECTED_STATUS_DISPLAY_WINDOW = timedelta(hours=24)
 
 class SpaceChannelMember(SQLModelSerializable, table=True):
     __tablename__ = 'space_channel_member'
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: Optional[int] = Field(default=None, sa_column=Column(primary_key=True, autoincrement=True, nullable=False))
 
     business_id: str = Field(..., description='Business ID', sa_column=Column(CHAR(36), nullable=False, index=True))
     business_type: BusinessTypeEnum = Field(...,
