@@ -146,6 +146,7 @@ class CeleryConf(BaseModel):
             self.task_routers = {
                 "bisheng.worker.knowledge.*": {"queue": "knowledge_celery"},  # Knowledge Base Related Tasks
                 "bisheng.worker.workflow.*": {"queue": "workflow_celery"},  # Workflow Execution Related Tasks
+                "bisheng.worker.org_sync.*": {"queue": "knowledge_celery"},  # Org Sync Tasks (low frequency, reuse knowledge queue)
             }
         if 'telemetry_mid_user_increment' not in self.beat_schedule:
             self.beat_schedule['telemetry_mid_user_increment'] = {
@@ -176,6 +177,11 @@ class CeleryConf(BaseModel):
             self.beat_schedule['retry_failed_tuples'] = {
                 'task': 'bisheng.worker.permission.retry_failed_tuples.retry_failed_tuples',
                 'schedule': 30.0,  # Every 30 seconds
+            }
+        if 'check_org_sync_schedules' not in self.beat_schedule:
+            self.beat_schedule['check_org_sync_schedules'] = {
+                'task': 'bisheng.worker.org_sync.tasks.check_org_sync_schedules',
+                'schedule': 60.0,  # Every 60 seconds
             }
 
         # convert str to crontab

@@ -25,6 +25,7 @@ from bisheng.user_group.api.router import router as user_group_router
 from bisheng.permission.api.router import router as permission_router
 from bisheng.role.api.router import router as role_router
 from bisheng.share_link.api.router import router as share_link_router
+from bisheng.org_sync.api.router import router as org_sync_router
 
 router = APIRouter(prefix='/api/v1', )
 router.include_router(chat_router)
@@ -60,6 +61,7 @@ router.include_router(department_router)
 router.include_router(user_group_router)
 router.include_router(permission_router)
 router.include_router(role_router)
+router.include_router(org_sync_router)
 
 router_rpc = APIRouter(prefix='/api/v2', )
 router_rpc.include_router(knowledge_router_rpc)
