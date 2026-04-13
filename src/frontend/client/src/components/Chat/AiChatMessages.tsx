@@ -10,7 +10,7 @@ import { cn } from "~/utils";
 import AiMessageBubble from "./AiMessageBubble";
 import type { ChatMessage } from "~/api/chatApi";
 import { buildMessageTree } from "~/api/chatApi";
-import { useLocalize, useScrollbarWhileScrolling } from "~/hooks";
+import { useLocalize } from "~/hooks";
 import HeaderTitle from "./HeaderTitle";
 
 interface AiChatMessagesProps {
@@ -31,6 +31,8 @@ interface AiChatMessagesProps {
     knowledgeChatLayout?: boolean;
     /** Overrides empty-state line under the illustration (e.g. knowledge folder QA hint from parent) */
     emptyStateHint?: string;
+    /** Optional width utility classes for the inner message column */
+    contentWidthClassName?: string;
     onPresetClick?: (question: string) => void;
     onRegenerate?: (parentMessageId: string) => void;
 }
@@ -124,14 +126,13 @@ export default function AiChatMessages({
     flatMode = false,
     knowledgeChatLayout = false,
     emptyStateHint,
+    contentWidthClassName,
     onPresetClick,
     onRegenerate,
 }: AiChatMessagesProps) {
     const localize = useLocalize();
     const scrollRef = useRef<HTMLDivElement>(null);
     const endRef = useRef<HTMLDivElement>(null);
-    const msgListScroll = useScrollbarWhileScrolling();
-    const emptyPanelScroll = useScrollbarWhileScrolling();
     const [showScrollBtn, setShowScrollBtn] = useState(false);
     // Track whether user has manually scrolled up
     const isUserScrolledUp = useRef(false);
@@ -172,7 +173,6 @@ export default function AiChatMessages({
     // Show/hide scroll-to-bottom button and track user scroll position
     const handleScroll = () => {
         checkNearBottom();
-        msgListScroll.onScroll();
     };
 
     const scrollToBottom = () => {
@@ -186,9 +186,7 @@ export default function AiChatMessages({
     if (!hasMessages && !isLoading) {
         return (
             <div
-                className="flex-1 overflow-y-auto scroll-on-scroll px-5 py-4 flex flex-col items-center justify-center"
-                onScroll={emptyPanelScroll.onScroll}
-                {...emptyPanelScroll.scrollingProps}
+                className="flex-1 overflow-y-auto scrollbar-on-hover px-5 py-4 flex flex-col items-center justify-center"
                 style={{
                     transitionProperty: 'background-color',
                     transitionDuration: '350ms',
@@ -248,14 +246,13 @@ export default function AiChatMessages({
             )}
             <div
                 ref={scrollRef}
-                className={`h-full overflow-y-auto scroll-on-scroll ${hideHeaderTitle ? "pt-2" : "pt-14"}`}
+                className={`h-full overflow-y-auto scrollbar-on-hover ${hideHeaderTitle ? "pt-2" : "pt-14"}`}
                 onScroll={handleScroll}
-                {...msgListScroll.scrollingProps}
             >
                 <div
                     className={cn(
                         "flex w-full flex-col py-2",
-                        knowledgeChatLayout ? "max-w-none" : "max-w-[768px] mx-auto"
+                        contentWidthClassName ?? (knowledgeChatLayout ? "max-w-none" : "max-w-[768px] mx-auto")
                     )}
                 >
                     {flatMode ? (

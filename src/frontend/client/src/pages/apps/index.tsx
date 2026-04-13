@@ -5,6 +5,7 @@ import { AgentCard } from './components/AgentCard';
 import { AppEmptyState } from './components/AppEmptyState';
 import { AppSearchBar } from './components/AppSearchBar';
 import { useAppCenter } from './hooks/useAppCenter';
+import { ChannelBlocksArrowsIcon } from '~/components/icons/channels';
 
 export default function AppCenter() {
     const {

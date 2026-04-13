@@ -239,7 +239,7 @@ export function AddSourceDropdown({
             {expanded && (
                 <div
                     ref={expandedPanelRef}
-                    className="absolute left-0 right-0 top-0 z-[100] flex h-[440px] min-w-[400px] flex-col overflow-hidden rounded-lg border border-[#E5E6EB] bg-white shadow-[0_4px_16px_rgba(0,0,0,0.12)]"
+                    className="absolute left-0 right-0 top-0 z-[220] flex h-[440px] min-w-[400px] flex-col overflow-hidden rounded-lg border border-[#E5E6EB] bg-white shadow-[0_4px_16px_rgba(0,0,0,0.12)]"
                 >
                     <div className="flex shrink-0 items-center gap-2 border-b border-[#E5E6EB] pb-0 mb-2">
                         <div className="relative flex-1 rounded-lg m-1">
@@ -457,7 +457,7 @@ export function AddSourceDropdown({
                         )}
                     </div>
                     {mgr.viewMode === "list" && (
-                        <div className="flex shrink-0 justify-between items-center border-t border-[#E5E6EB] px-4 py-3">
+                        <div className="relative z-[221] flex shrink-0 items-center justify-between border-t border-[#E5E6EB] bg-white px-4 py-3">
                             <span className="text-[12px] text-[#86909C]">{localize("com_subscription.total_channel_sources")}{mgr.pendingSources.length}/{MAX_SOURCES}
                             </span>
                             <div className="flex gap-2">

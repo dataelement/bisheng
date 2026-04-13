@@ -269,7 +269,7 @@ function UserBubble({
                         <div className="hidden rc-name select-none font-semibold text-base">{user?.username}</div>
                         <div
                             className={cn(
-                                "px-3 py-2 whitespace-pre-wrap break-words rounded-[2px]",
+                                "px-3 py-2 whitespace-pre-wrap break-words rounded-[8px]",
                                 knowledgeChatLayout
                                     ? "bg-[#F2F3F5] text-[#4E5969] text-[14px] leading-[22px]"
                                     : "rounded-[10px] bg-[#E6EDFC] text-[#1d2129] text-sm"
@@ -277,7 +277,12 @@ function UserBubble({
                         >
                             {tag && (
                                 <span
-                                    className="mr-1 inline-flex h-5 max-w-[min(240px,90%)] items-center rounded-[2px] px-1 align-[-2px] text-xs font-medium text-[#212121] select-none"
+                                    className={cn(
+                                        "mr-1 inline-flex max-w-[min(240px,90%)] shrink-0 items-center rounded-[2px] px-1 align-middle text-[#212121] select-none",
+                                        knowledgeChatLayout
+                                            ? "text-[14px] font-normal leading-[22px]"
+                                            : "h-5 text-xs font-medium leading-none align-middle"
+                                    )}
                                     style={{ backgroundColor: "#335CFF59" }}
                                     title={`#${tag.name}`}
                                 >

@@ -23,7 +23,6 @@ import SpeechToTextComponent from "~/components/Voice/SpeechToText";
 import { useGetWorkbenchModelsQuery } from "~/hooks/queries/data-provider";
 import InputFiles from "~/pages/appChat/components/InputFiles";
 import { useFileDropAndPaste } from "~/pages/appChat/useFileDropAndPaste";
-import { useScrollbarWhileScrolling } from "~/hooks";
 import { checkIfScrollable, cn, removeFocusRings } from "~/utils";
 import AiModelSelect from "./AiModelSelect";
 import BooksIcon from "../ui/icon/Books";
@@ -151,7 +150,6 @@ const AiChatInput = memo(
         /** True only while user is actively scrolling — drives .scroll-on-scroll (see style.css). */
         const [isTextareaScrolling, setIsTextareaScrolling] = useState(false);
         const textareaScrollHideTimerRef = useRef<number | null>(null);
-        const kbTagsScroll = useScrollbarWhileScrolling();
 
         const updateTextareaScrollable = useCallback(() => {
             const el = textAreaRef.current;
@@ -303,11 +301,7 @@ const AiChatInput = memo(
 
                     {/* Selected knowledge base / space tags */}
                     {selectedOrgKbs && selectedOrgKbs.length > 0 && !isLingsi && (
-                        <div
-                            className="m-3 max-h-[72px] overflow-y-auto scroll-on-scroll"
-                            onScroll={kbTagsScroll.onScroll}
-                            {...kbTagsScroll.scrollingProps}
-                        >
+                        <div className="m-3 max-h-[72px] overflow-y-auto scrollbar-on-hover">
                             <div className="flex flex-wrap gap-1">
                                 {selectedOrgKbs.map((kb) => (
                                     <KbTag

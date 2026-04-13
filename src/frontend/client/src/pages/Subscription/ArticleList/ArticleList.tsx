@@ -230,9 +230,9 @@ export function ArticleList({ channel, selectedArticleId, onArticleSelect }: Art
 
 
     return (
-        <div className="flex-1 px-4 h-full flex flex-col max-w-[1000px] mx-auto">
+        <div className="flex h-full w-full flex-1 flex-col">
             {/* header */}
-            <div className="pt-5 pb-4 space-y-4">
+            <div className="mx-auto w-full max-w-[1000px] px-4 pt-5 pb-4 space-y-4">
                 {/* 第一行：频道名称、信息、分享（固定 32px 高，避免分享按钮显隐或详情切换时闪动） */}
                 <div className="flex h-8 min-h-8 shrink-0 items-center justify-between gap-2">
                     <div className="flex min-w-0 flex-1 items-center gap-1">
@@ -348,48 +348,50 @@ export function ArticleList({ channel, selectedArticleId, onArticleSelect }: Art
                 onScroll={handleListScroll}
                 data-scrolling={isListScrolling ? "true" : "false"}
             >
-                {/* Show loading spinner while channel detail or initial article list is loading */}
-                {(isChannelDetailLoading || (loading && articles.length === 0)) ? (
-                    <div className="flex flex-col items-center justify-center h-64 gap-3 text-[#86909c]">
-                        <LoadingIcon className="size-16 text-primary" />
-                    </div>
-                ) : articles.length === 0 ? (
-                    <div className="flex flex-1 flex-col items-center justify-center py-60 text-center">
-                        {(searchQuery || selectedSources.length > 0 || onlyUnread) ? (
-                            <p className="text-[14px] leading-6 text-[#86909c]">{localize("com_subscription.no_results")}</p>
-                        ) : (
-                            <>
-                                <img
-                                    className="size-[120px] mb-4 object-contain opacity-90"
-                                    src={`${__APP_ENV__.BASE_URL}/assets/channel/empty.png`}
-                                    alt="empty"
+                <div className="mx-auto w-full max-w-[1000px] px-4">
+                    {/* Show loading spinner while channel detail or initial article list is loading */}
+                    {(isChannelDetailLoading || (loading && articles.length === 0)) ? (
+                        <div className="flex flex-col items-center justify-center h-64 gap-3 text-[#86909c]">
+                            <LoadingIcon className="size-16 text-primary" />
+                        </div>
+                    ) : articles.length === 0 ? (
+                        <div className="flex flex-1 flex-col items-center justify-center py-60 text-center">
+                            {(searchQuery || selectedSources.length > 0 || onlyUnread) ? (
+                                <p className="text-[14px] leading-6 text-[#86909c]">{localize("com_subscription.no_results")}</p>
+                            ) : (
+                                <>
+                                    <img
+                                        className="size-[120px] mb-4 object-contain opacity-90"
+                                        src={`${__APP_ENV__.BASE_URL}/assets/channel/empty.png`}
+                                        alt="empty"
+                                    />
+                                    <p className="text-[14px] leading-6 text-[#4E5969]">
+                                        {localize("com_subscription.no_related_content")}
+                                    </p>
+                                </>
+                            )}
+                        </div>
+                    ) : (
+                        <InfiniteScroll
+                            loadMore={() => loadArticles(currentPage + 1)}
+                            hasMore={hasMore}
+                            isLoading={loading}
+                            emptyText={localize("com_subscription.all_messages_are_here")}
+                            className=""
+                        >
+                            {articles.map(article => (
+                                <ArticleCard
+                                    key={article.id}
+                                    article={article}
+                                    onSelect={handleArticleClick}
+                                    isSelected={selectedArticleId === article.id}
+                                    searchQuery={searchQuery}
                                 />
-                                <p className="text-[14px] leading-6 text-[#4E5969]">
-                                    {localize("com_subscription.no_related_content")}
-                                </p>
-                            </>
-                        )}
-                    </div>
-                ) : (
-                    <InfiniteScroll
-                        loadMore={() => loadArticles(currentPage + 1)}
-                        hasMore={hasMore}
-                        isLoading={loading}
-                        emptyText={localize("com_subscription.all_messages_are_here")}
-                        className=""
-                    >
-                        {articles.map(article => (
-                            <ArticleCard
-                                key={article.id}
-                                article={article}
-                                onSelect={handleArticleClick}
-                                isSelected={selectedArticleId === article.id}
-                                searchQuery={searchQuery}
-                            />
-                        ))}
-                    </InfiniteScroll>
-                )}
+                            ))}
+                        </InfiniteScroll>
+                    )}
+                </div>
             </div>
-        </div >
+        </div>
     );
 }

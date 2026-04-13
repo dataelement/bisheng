@@ -1,4 +1,3 @@
-import { useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Loader2 } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
@@ -8,9 +7,7 @@ import { NotificationSeverity } from "~/common"
 import AppAvator from '~/components/Avator'
 import { Button } from "~/components/ui/Button"
 import { useLocalize } from "~/hooks"
-import store from "~/store"
-import { ConversationData, QueryKeys } from "~/types/chat"
-import { addConversation, cn, copyText, generateUUID } from "~/utils"
+import { cn, copyText } from "~/utils"
 import { getAppShareUrl } from './appUtils'
 import { AgentNavigation } from './components/AgentNavigation'
 import { AppSearchBar } from './components/AppSearchBar'
@@ -25,8 +22,9 @@ const ExploreCard = ({ agent, onClick, onShare }: { agent: any, onClick: (agent:
             onClick={() => onClick(agent)}
             className={cn(
                 "group relative content-stretch flex h-[80px] items-center gap-[12px] overflow-clip rounded-[8px] p-[12px] transition-all cursor-pointer",
-                "border border-solid border-[#E5E6EB] bg-white",
-                "hover:border-[#335CFF] hover:shadow-[0_8px_20px_0_rgba(117,145,212,0.12)]",
+                "border-[0.5px] border-solid border-[#EBECF0] bg-[linear-gradient(110deg,#F9FBFE_0%,#FFF_50%,#F9FBFE_100%)]",
+                "hover:shadow-[0_8px_20px_0_rgba(117,145,212,0.12)]",
+                "after:pointer-events-none after:absolute after:inset-0 after:rounded-[8px] after:border after:border-[#335CFF] after:opacity-0 after:transition-opacity group-hover:after:opacity-100",
                 "hover:bg-[linear-gradient(0deg,#FFF_0%,#FFF_100%),linear-gradient(110deg,#F9FBFE_0%,#FFF_50%,#F9FBFE_100%)]"
             )}
         >
@@ -45,7 +43,7 @@ const ExploreCard = ({ agent, onClick, onShare }: { agent: any, onClick: (agent:
                 </p>
 
                 {/* 描述区域：平时显示，hover时隐藏 */}
-                <p className="flex-[1_0_0] font-['PingFang_SC'] leading-[20px] text-[14px] text-[#A9AEB8] w-full line-clamp-2 break-words group-hover:hidden whitespace-normal mt-[2px]">
+                <p className="mt-[2px] flex-[1_0_0] w-full overflow-hidden text-ellipsis whitespace-normal font-['PingFang_SC'] text-[12px] leading-[18px] text-[#A9AEB8] line-clamp-2 group-hover:hidden">
                     {agent.description || agent.desc || localize('com_app_no_description_placeholder')}
                 </p>
 
@@ -74,24 +72,25 @@ export default function ExplorePlaza() {
     const [searchQuery, setSearchQuery] = useState("")
     const [agents, setAgents] = useState<any[]>([])
     const [loading, setLoading] = useState(false)
+    const [loadingMore, setLoadingMore] = useState(false)
     const [refreshTrigger, setRefreshTrigger] = useState(0)
 
     // --- 新增滚动加载相关状态 ---
     const [page, setPage] = useState(1);
     const [hasMore, setHasMore] = useState(true);
     const loaderRef = useRef<HTMLDivElement>(null);
+    const loadMoreLockRef = useRef(false);
     const pageSize = 20;
 
     const navigate = useNavigate()
-    const queryClient = useQueryClient()
-    const { setConversation } = store.useCreateConversationAtom(0);
     const { showToast } = useToastContext()
     const localize = useLocalize()
 
     // Modify Fetch Function
     const fetchAgents = useCallback(async (query: string, categoryId: number | string, currentPage: number, isAppend: boolean) => {
-        if (loading) return;
-        setLoading(true);
+        if (loading || loadingMore) return;
+        if (isAppend) setLoadingMore(true);
+        else setLoading(true);
         try {
             const result = categoryId === 'uncategorized'
                 ? await getUncategorized(currentPage, pageSize, query)
@@ -110,13 +109,15 @@ export default function ExplorePlaza() {
             console.error("Failed to fetch agents:", error);
             if (!isAppend) setAgents([]);
         } finally {
-            setLoading(false);
+            if (isAppend) setLoadingMore(false);
+            else setLoading(false);
         }
-    }, [loading]);
+    }, [loading, loadingMore]);
 
     useEffect(() => {
         setPage(1);
         setHasMore(true);
+        loadMoreLockRef.current = false;
         fetchAgents(searchQuery, activeTabId, 1, false);
     }, [searchQuery, activeTabId, refreshTrigger]);
 
@@ -127,49 +128,39 @@ export default function ExplorePlaza() {
     }, [page]);
 
     useEffect(() => {
+        if (!loadingMore) {
+            loadMoreLockRef.current = false;
+        }
+    }, [loadingMore]);
+
+    useEffect(() => {
         const observer = new IntersectionObserver((entries) => {
             const target = entries[0];
-            if (target.isIntersecting && !loading && hasMore) {
+            if (
+                target.isIntersecting &&
+                !loading &&
+                !loadingMore &&
+                hasMore &&
+                !loadMoreLockRef.current
+            ) {
+                loadMoreLockRef.current = true;
                 setPage(prev => prev + 1);
             }
-        }, { threshold: 0.1 });
+        }, { threshold: 0, rootMargin: '400px 0px' });
 
         if (loaderRef.current) {
             observer.observe(loaderRef.current);
         }
 
         return () => observer.disconnect();
-    }, [loading, hasMore]);
+    }, [loading, loadingMore, hasMore]);
 
     const handleCardClick = (agent: any) => {
-        const _chatId = generateUUID(32)
         const flowId = agent.id
         const flowType = agent.flow_type || agent.type
-
-        queryClient.setQueryData<ConversationData>([QueryKeys.allConversations], (convoData) => {
-            if (!convoData) {
-                return convoData;
-            }
-            setConversation((prevState: any) => {
-                return {
-                    ...prevState,
-                    conversationId: _chatId
-                }
-            })
-            return addConversation(convoData, {
-                conversationId: _chatId,
-                createdAt: "",
-                endpoint: null,
-                endpointType: null,
-                model: "",
-                flowId,
-                flowType: flowType,
-                title: agent.name,
-                tools: [],
-                updatedAt: ""
-            } as any);
-        });
-        navigate(`/chat/${_chatId}/${flowId}/${flowType}`);
+        // Enter without chatId — AppChatEntry will resolve to most recent conversation,
+        // or create a new one if the user has no conversations for this app yet.
+        navigate(`/app/${flowId}/${flowType}?from=explore`);
     }
 
     const handleShare = async (agent: any) => {
@@ -233,6 +224,12 @@ export default function ExplorePlaza() {
                     {loading && (
                         <div className="flex items-center gap-2 text-[#335cff]">
                             <Loader2 className="animate-spin" size={24} />
+                            <span className="text-sm font-['PingFang_SC']">{localize('com_app_explore_loading_more')}</span>
+                        </div>
+                    )}
+                    {!loading && loadingMore && (
+                        <div className="flex items-center gap-2 text-[#335cff]">
+                            <Loader2 className="animate-spin" size={20} />
                             <span className="text-sm font-['PingFang_SC']">{localize('com_app_explore_loading_more')}</span>
                         </div>
                     )}

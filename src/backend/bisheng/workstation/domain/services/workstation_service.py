@@ -34,10 +34,10 @@ class WorkStationService(BaseService):
 
     @classmethod
     def update_config(
-        cls,
-        request: Request,
-        login_user: UserPayload,
-        data: WorkstationConfig,
+            cls,
+            request: Request,
+            login_user: UserPayload,
+            data: WorkstationConfig,
     ) -> WorkstationConfig:
         """Update workstation default configuration."""
         config = ConfigDao.get_config(ConfigKeyEnum.WORKSTATION)
@@ -171,11 +171,11 @@ class WorkStationService(BaseService):
 
     @classmethod
     def uploadPersonalKnowledge(
-        cls,
-        request: Request,
-        login_user: UserPayload,
-        file_path,
-        background_tasks: BackgroundTasks,
+            cls,
+            request: Request,
+            login_user: UserPayload,
+            file_path,
+            background_tasks: BackgroundTasks,
     ):
         knowledge = KnowledgeDao.get_user_knowledge(
             login_user.user_id,
@@ -205,11 +205,11 @@ class WorkStationService(BaseService):
 
     @classmethod
     def queryKnowledgeList(
-        cls,
-        request: Request,
-        login_user: UserPayload,
-        page: int,
-        size: int,
+            cls,
+            request: Request,
+            login_user: UserPayload,
+            page: int,
+            size: int,
     ):
         knowledge = KnowledgeDao.get_user_knowledge(
             login_user.user_id,
@@ -308,8 +308,7 @@ class WorkStationService(BaseService):
         chat_history = []
         messages = await ChatMessageDao.aget_messages_by_chat_id(chat_id, ['question', 'answer'], size)
         for one in messages:
-            extra = json.loads(one.extra) or {}
-            content = extra['prompt'] if 'prompt' in extra else one.message
+            content = one.message
             if one.category == MessageCategory.QUESTION.value:
                 chat_history.append(HumanMessage(content=content))
             elif one.category == MessageCategory.ANSWER.value:

@@ -6,7 +6,7 @@ import { Copy, DownloadIcon, ZoomIn, ZoomOut } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { Button, Separator } from "~/components/ui"
 import { copyText, formatDate } from "~/utils"
-import { useLocalize, useScrollbarWhileScrolling } from "~/hooks"
+import { useLocalize } from "~/hooks"
 
 // 动态加载 mermaid
 export const loadScript = async (fileName) => {
@@ -46,7 +46,6 @@ export default function MermaidBlock({ children }: { children: string }) {
     const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
     const [copySuccess, setCopySuccess] = useState(false)
     const codeRef = useRef<HTMLElement>(null)
-    const mermaidCodeScroll = useScrollbarWhileScrolling()
 
     useEffect(() => {
         loadScript('mermaid').then((mermaid) => {
@@ -256,11 +255,7 @@ export default function MermaidBlock({ children }: { children: string }) {
                         onMouseLeave={handleMouseLeave}
                     />
                     <div className={mode === "code" ? "block relative" : "hidden"}>
-                        <pre
-                            className="p-4 overflow-x-auto text-sm leading-relaxed max-h-[500px] overflow-y-auto scroll-on-scroll"
-                            onScroll={mermaidCodeScroll.onScroll}
-                            {...mermaidCodeScroll.scrollingProps}
-                        >
+                        <pre className="p-4 overflow-x-auto text-sm leading-relaxed max-h-[500px] overflow-y-auto scrollbar-on-hover">
                             <code ref={codeRef} className="text-slate-500 text-foreground font-mono whitespace-pre-wrap break-words">{children}</code>
                         </pre>
                     </div>

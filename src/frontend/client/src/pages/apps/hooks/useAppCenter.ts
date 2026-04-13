@@ -58,7 +58,7 @@ export function useAppCenter() {
   const continueChat = useCallback(
     (app: AppItem) => {
       const chatId = generateUUID(32);
-      navigate(`/app/${chatId}/${app.id}/${app.flow_type}`);
+      navigate(`/app/${chatId}/${app.id}/${app.flow_type}?from=center`);
     },
     [navigate],
   );
@@ -67,7 +67,7 @@ export function useAppCenter() {
   const startChat = useCallback(
     (app: AppItem) => {
       const chatId = generateUUID(32);
-      navigate(`/app/${chatId}/${app.id}/${app.flow_type}`);
+      navigate(`/app/${chatId}/${app.id}/${app.flow_type}?from=center`);
     },
     [navigate],
   );

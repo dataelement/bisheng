@@ -119,9 +119,9 @@ export const ExpandableSearchField = forwardRef<HTMLInputElement, ExpandableSear
                     "transition-[width,border-color,background-color] duration-300 ease-out motion-reduce:transition-none",
                     expanded
                         ? cn(
-                              expandedWidthClassName,
-                              showActiveChrome ? "border-[#024DE3]" : "border-[#E5E6EB]"
-                          )
+                            expandedWidthClassName,
+                            showActiveChrome ? "border-[#024DE3]" : "border-[#E5E6EB]"
+                        )
                         : "w-8 border-[#E5E6EB] cursor-pointer hover:bg-[#F7F8FA]",
                     disabled && "pointer-events-none opacity-50",
                     containerClassName

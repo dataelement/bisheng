@@ -13,7 +13,7 @@ import { useRecoilState } from 'recoil';
 import { useMediaQuery } from '~/hooks';
 import { bishengConfState } from '~/pages/appChat/store/atoms';
 import { useGetBsConfig } from '~/hooks/queries/data-provider';
-import { useAuthContext, useLocalize, useScrollbarWhileScrolling } from '~/hooks';
+import { useAuthContext, useLocalize } from '~/hooks';
 import { Tooltip, TooltipContent, TooltipTrigger } from '~/components/ui/Tooltip2';
 import store from '~/store';
 import { cn } from '~/utils';
@@ -197,7 +197,6 @@ export default function MainLayout() {
       // ignore
     }
   }, [isMobile, isAppSection, mobileSidebarOpen]);
-  const { onScroll: onOutletScroll, scrollingProps: outletScrollingProps } = useScrollbarWhileScrolling();
 
   // Auth guard: redirect to login when user query finishes without a valid user.
   // The 401 interceptor in request.ts already handles production redirect,
@@ -251,11 +250,7 @@ export default function MainLayout() {
           id={cacheKey}
           saveScroll={true}
         >
-          <div
-            className="h-[calc(100vh-16px)] overflow-y-auto overscroll-y-contain scroll-on-scroll rounded-xl bg-white shadow-xl"
-            onScroll={onOutletScroll}
-            {...outletScrollingProps}
-          >
+          <div className="h-[calc(100vh-16px)] overflow-y-auto overscroll-y-none scrollbar-on-hover rounded-xl bg-white shadow-xl">
             {outlet}
           </div>
         </KeepAlive>

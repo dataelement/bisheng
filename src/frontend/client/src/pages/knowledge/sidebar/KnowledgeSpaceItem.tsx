@@ -1,12 +1,4 @@
-import {
-    MinimizeIcon,
-    MoreHorizontal,
-    Pin,
-    PinOff,
-    Settings,
-    Users,
-    LogOut,
-} from "lucide-react";
+import { MoreHorizontal, Pin, PinOff, Settings, Users, LogOut } from "lucide-react";
 import { useState } from "react";
 import { KnowledgeSpace, SpaceRole } from "~/api/knowledge";
 import { NotificationSeverity } from "~/common";
@@ -29,6 +21,7 @@ import { useConfirm, useToastContext } from "~/Providers";
 import { useLocalize } from "~/hooks";
 import { getFullWidthLength } from "~/utils";
 import { ChannelPinIcon } from "~/components/icons/channels";
+import ClosedIcon from "~/components/ui/icon/ClosedIcon";
 import { SpaceNotebookIcon } from "~/components/icons/SpaceNotebookIcon";
 
 interface KnowledgeSpaceItemProps {
@@ -194,7 +187,7 @@ export default function KnowledgeSpaceItem({
                             className={sidebarListMoreMenuDangerItemClassName}
                         >
                             {type === "created" ? (
-                                <MinimizeIcon className={sidebarListMoreMenuDangerIconClassName} />
+                                <ClosedIcon className={sidebarListMoreMenuDangerIconClassName} />
                             ) : (
                                 <LogOut className={sidebarListMoreMenuDangerIconClassName} />
                             )}

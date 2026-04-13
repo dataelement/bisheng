@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useRecoilState, useRecoilValue } from "recoil";
 import AppAvator from "~/components/Avator";
 import HeaderTitle from "~/components/Chat/HeaderTitle";
@@ -20,9 +20,11 @@ export default function ChatView({ data, cid, v, readOnly }) {
 
     const localize = useLocalize();
     const navigate = useNavigate();
+    const location = useLocation();
     const { fid: flowId, type: flowType } = useParams();
     const chatState = useRecoilValue(currentChatState);
     const running = useRecoilValue(currentRunningState);
+    const conversations = useRecoilValue(appConversationsState);
     const [, setConversations] = useRecoilState(appConversationsState);
 
     // Lightweight createNewChat — avoids importing useAppSidebar which would
@@ -38,13 +40,18 @@ export default function ChatView({ data, cid, v, readOnly }) {
             updatedAt: new Date().toISOString(),
             createdAt: new Date().toISOString(),
         }, ...prev]);
-        navigate(`/app/${chatId}/${flowId}/${flowType}`);
-    }, [flowId, flowType, navigate, setConversations]);
+        const from = new URLSearchParams(location.search).get('from');
+        const nextPath = from
+            ? `/app/${chatId}/${flowId}/${flowType}?from=${from}`
+            : `/app/${chatId}/${flowId}/${flowType}`;
+        navigate(nextPath);
+    }, [flowId, flowType, location.search, navigate, setConversations]);
 
     const messages = chatState?.messages || [];
 
     /** 无消息且无需展示开场白 / 引导问题 / 工作流表单时显示主区域空状态 */
     const showChatEmptyState =
+        conversations.length === 0 &&
         messages.length === 0 &&
         !data?.guide_word &&
         !running?.inputForm &&

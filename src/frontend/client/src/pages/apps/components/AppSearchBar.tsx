@@ -54,7 +54,6 @@ export function AppSearchBar({ query, onSearch, debounceMs = 300 }: AppSearchBar
       onChange={handleChange}
       placeholder={localize('com_app_search_placeholder')}
       titleWhenCollapsed={localize('com_app_search_by_name')}
-      showClearButton
       expandedWidthClassName="w-[220px]"
     />
   );

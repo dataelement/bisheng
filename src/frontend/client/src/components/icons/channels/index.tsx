@@ -6,10 +6,10 @@ export const ChannelBlocksArrowsIcon: React.FC<ChannelIconProps> = (props) => (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
     <g clipPath="url(#clip0_blocks)">
       <path d="M15 0H1C0.447715 0 0 0.447715 0 1V15C0 15.5523 0.447715 16 1 16H15C15.5523 16 16 15.5523 16 15V1C16 0.447715 15.5523 0 15 0Z" fill="white" fillOpacity="0.01" />
-      <path d="M5.66667 2H3C2.44772 2 2 2.44771 2 3V5.66667C2 6.21895 2.44771 6.66667 3 6.66667H5.66667C6.21895 6.66667 6.66667 6.21895 6.66667 5.66667V3C6.66667 2.44772 6.21895 2 5.66667 2Z" stroke="#333333" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M5.66667 9.3335H3C2.44772 9.3335 2 9.78121 2 10.3335V13.0002C2 13.5524 2.44771 14.0002 3 14.0002H5.66667C6.21895 14.0002 6.66667 13.5524 6.66667 13.0002V10.3335C6.66667 9.78121 6.21895 9.3335 5.66667 9.3335Z" stroke="#333333" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M13 2H10.3333C9.78103 2 9.33331 2.44771 9.33331 3V5.66667C9.33331 6.21895 9.78103 6.66667 10.3333 6.66667H13C13.5523 6.66667 14 6.21895 14 5.66667V3C14 2.44772 13.5523 2 13 2Z" stroke="#333333" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M14 9.3335L9.33333 14.0002M14 9.3335H9.33333H14ZM14 9.3335V14.0002V9.3335Z" stroke="#333333" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M5.66667 2H3C2.44772 2 2 2.44771 2 3V5.66667C2 6.21895 2.44771 6.66667 3 6.66667H5.66667C6.21895 6.66667 6.66667 6.21895 6.66667 5.66667V3C6.66667 2.44772 6.21895 2 5.66667 2Z" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M5.66667 9.3335H3C2.44772 9.3335 2 9.78121 2 10.3335V13.0002C2 13.5524 2.44771 14.0002 3 14.0002H5.66667C6.21895 14.0002 6.66667 13.5524 6.66667 13.0002V10.3335C6.66667 9.78121 6.21895 9.3335 5.66667 9.3335Z" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M13 2H10.3333C9.78103 2 9.33331 2.44771 9.33331 3V5.66667C9.33331 6.21895 9.78103 6.66667 10.3333 6.66667H13C13.5523 6.66667 14 6.21895 14 5.66667V3C14 2.44772 13.5523 2 13 2Z" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M14 9.3335L9.33333 14.0002M14 9.3335H9.33333H14ZM14 9.3335V14.0002V9.3335Z" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" />
     </g>
     <defs>
       <clipPath id="clip0_blocks">
@@ -29,6 +29,39 @@ export const ChannelPinIcon: React.FC<ChannelIconProps> = (props) => (
     </g>
     <defs>
       <clipPath id="clip0_pin">
+        <rect width="14" height="14" fill="white" />
+      </clipPath>
+    </defs>
+  </svg>
+);
+
+/** Gray pin icon used in app plaza card actions */
+export const ChannelPinGrayIcon: React.FC<ChannelIconProps> = (props) => (
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
+    <g clipPath="url(#clip0_pin_gray)">
+      <path d="M8.74998 2.625L6.41665 4.95833L4.08331 5.83333L3.20831 6.70833L7.29165 10.7917L8.16665 9.91667L9.04165 7.58333L11.375 5.25" stroke="#4E5969" strokeWidth="1.16667" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M5.25 8.75L2.625 11.375" stroke="#4E5969" strokeWidth="1.16667" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M8.45831 2.3335L11.6666 5.54183" stroke="#4E5969" strokeWidth="1.16667" strokeLinecap="round" strokeLinejoin="round" />
+    </g>
+    <defs>
+      <clipPath id="clip0_pin_gray">
+        <rect width="14" height="14" fill="white" />
+      </clipPath>
+    </defs>
+  </svg>
+);
+
+/** Gray "unpin" icon = gray pin + slash */
+export const ChannelUnpinGrayIcon: React.FC<ChannelIconProps> = (props) => (
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
+    <g clipPath="url(#clip0_unpin_gray)">
+      <path d="M8.74998 2.625L6.41665 4.95833L4.08331 5.83333L3.20831 6.70833L7.29165 10.7917L8.16665 9.91667L9.04165 7.58333L11.375 5.25" stroke="#4E5969" strokeWidth="1.16667" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M5.25 8.75L2.625 11.375" stroke="#4E5969" strokeWidth="1.16667" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M8.45831 2.3335L11.6666 5.54183" stroke="#4E5969" strokeWidth="1.16667" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M2.33331 2.33325L11.6666 11.6666" stroke="#4E5969" strokeWidth="1.16667" strokeLinecap="round" />
+    </g>
+    <defs>
+      <clipPath id="clip0_unpin_gray">
         <rect width="14" height="14" fill="white" />
       </clipPath>
     </defs>

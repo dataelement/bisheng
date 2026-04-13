@@ -4,6 +4,7 @@ import * as Menu from '@ariakit/react/menu';
 import type { MouseEvent, FocusEvent, KeyboardEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'react-router-dom';
+import { useSetRecoilState } from 'recoil';
 
 import { useLocalize } from '~/hooks';
 import { useToastContext } from '~/Providers';
@@ -12,6 +13,8 @@ import { useUpdateConversationMutation, useDeleteConversationMutation } from '~/
 import type { AppConversation } from '~/@types/app';
 import type { TMessage } from '~/types/chat';
 import { QueryKeys } from '~/types/chat';
+import { chatsState, runningState } from '~/pages/appChat/store/atoms';
+import { closeAppChatWebSocket } from '~/pages/appChat/useWebsocket';
 
 import { DropdownPopup, OGDialog, Label } from '~/components';
 import OGDialogTemplate from '~/components/ui/OGDialogTemplate';
@@ -42,6 +45,8 @@ export function AppSidebarConvoItem({ conv, isActive, onClick, onDeleteSuccess, 
     const deleteButtonRef = useRef<HTMLButtonElement>(null);
 
     const updateConvoMutation = useUpdateConversationMutation(currentConvoId ?? '');
+    const setChats = useSetRecoilState(chatsState);
+    const setRunning = useSetRecoilState(runningState);
     
     // ----- Rename Logic -----
     const handleRenameStart = useCallback((e?: MouseEvent) => {
@@ -112,6 +117,23 @@ export function AppSidebarConvoItem({ conv, isActive, onClick, onDeleteSuccess, 
     // ----- Delete Logic -----
     const deleteConvoMutation = useDeleteConversationMutation({
         onSuccess: () => {
+            // Tear down any in-flight streaming for this chat: close its WS,
+            // drop its session info, and purge Recoil chats / running state.
+            // Without this, a delete during streaming leaves the websocket alive
+            // and the right pane keeps rendering messages for a deleted convo.
+            closeAppChatWebSocket(conv.id);
+            setChats((prev) => {
+                if (!(conv.id in prev)) return prev;
+                const next = { ...prev };
+                delete next[conv.id];
+                return next;
+            });
+            setRunning((prev) => {
+                if (!(conv.id in prev)) return prev;
+                const next = { ...prev };
+                delete next[conv.id];
+                return next;
+            });
             onDeleteSuccess();
             setShowDeleteDialog(false);
         },

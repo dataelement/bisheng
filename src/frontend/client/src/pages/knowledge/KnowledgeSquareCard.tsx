@@ -52,11 +52,11 @@ export default function KnowledgeSquareCard({
     return (
         <Card
             className={cn(
-                "flex-1 min-w-0 gap-0 p-0 transition-all cursor-pointer rounded-[8px] border border-solid border-[#E5E6EB] bg-white shadow-none",
-                "hover:border-[#335CFF] hover:shadow-[0_8px_20px_0_rgba(117,145,212,0.12)]",
-                "hover:bg-[linear-gradient(0deg,#FFF_0%,#FFF_100%),linear-gradient(110deg,#F9FBFE_0%,#FFF_50%,#F9FBFE_100%)]",
+                "group relative flex-1 min-w-0 gap-0 p-0 cursor-pointer rounded-[8px] border-[0.5px] border-solid border-[#EBECF0] bg-[linear-gradient(110deg,#F9FBFE_0%,#FFF_50%,#F9FBFE_100%)] shadow-none transition-all",
+                "hover:bg-[linear-gradient(0deg,#FFF_0%,#FFF_100%),linear-gradient(110deg,#F9FBFE_0%,#FFF_50%,#F9FBFE_100%)] hover:shadow-[0_8px_20px_0_rgba(117,145,212,0.12)]",
+                "after:pointer-events-none after:absolute after:inset-0 after:rounded-[8px] after:border after:border-[#335CFF] after:opacity-0 after:transition-opacity group-hover:after:opacity-100",
                 isHighlighted &&
-                    "border-[#335CFF] bg-[linear-gradient(0deg,#FFF_0%,#FFF_100%),linear-gradient(110deg,#F9FBFE_0%,#FFF_50%,#F9FBFE_100%)] shadow-[0_8px_20px_0_rgba(117,145,212,0.12)]"
+                "border-[1px] border-solid border-[#335CFF] bg-[linear-gradient(0deg,#FFF_0%,#FFF_100%),linear-gradient(110deg,#F9FBFE_0%,#FFF_50%,#F9FBFE_100%)] shadow-[0_8px_20px_0_rgba(117,145,212,0.12)]"
             )}
             onClick={onPreview}
         >
@@ -99,7 +99,7 @@ export default function KnowledgeSquareCard({
 
                 <div className="flex items-center gap-2.5 text-[14px] leading-[20px] text-[#86909C]">
                     <div className="flex items-center gap-1.5">
-                        <Avatar className="border border-white h-6 w-6">
+                        <Avatar className="border border-white h-5 w-5">
                             {creatorAvatar ? (
                                 <AvatarImage src={creatorAvatar} alt={space.creator} />
                             ) : null}

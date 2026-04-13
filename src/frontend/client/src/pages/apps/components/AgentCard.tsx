@@ -1,7 +1,6 @@
 import type { AppItem } from '~/@types/app';
 import { Button } from '~/components';
 import AppAvator from '~/components/Avator';
-import { ChannelPinGrayIcon, ChannelPinIcon, ChannelUnpinGrayIcon } from '~/components/icons/channels';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '~/components/ui/Tooltip2';
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
@@ -25,8 +24,9 @@ export function AgentCard({
   return (
     <div
       className={cn(
-        'group/card relative flex flex-col justify-between overflow-hidden rounded-[6px] border border-solid p-2 h-[132px] transition-all cursor-pointer',
-        'border-[#ebecf0] border-[0.5px] hover:border-[#335cff] hover:border-[1.047px] hover:shadow-[0px_2.094px_8.796px_1.047px_rgba(117,145,212,0.12)] bg-white',
+        'group/card relative flex h-[132px] cursor-pointer flex-col justify-between overflow-hidden rounded-[6px] border border-solid p-2 transition-all',
+        'border-[#ebecf0] border-[0.5px] bg-white hover:shadow-[0px_2.094px_8.796px_1.047px_rgba(117,145,212,0.12)]',
+        'after:pointer-events-none after:absolute after:inset-0 after:rounded-[6px] after:border after:border-[#335CFF] after:opacity-0 after:transition-opacity group-hover/card:after:opacity-100',
         'bg-[linear-gradient(123.519deg,_rgb(249,251,254)_0%,_rgb(255,255,255)_50%,_rgb(249,251,254)_100%)]',
       )}
       onClick={() => onStartChat(agent)}
@@ -60,14 +60,14 @@ export function AgentCard({
                   isPinned ? localize('com_app_unpin_tooltip') : localize('com_app_pin_tooltip')
                 }
               >
-                {isPinned ? (
+                {/* {isPinned ? (
                   <span className="relative inline-flex size-[18px] items-center justify-center">
                     <ChannelPinIcon className="absolute size-[18px] shrink-0 transition-opacity group-hover/pin:opacity-0" />
                     <ChannelUnpinGrayIcon className="pointer-events-none absolute size-[18px] opacity-0 transition-opacity group-hover/pin:opacity-100" />
                   </span>
                 ) : (
                   <ChannelPinGrayIcon className="size-[18px] shrink-0" />
-                )}
+                )} */}
               </button>
             </TooltipTrigger>
             <TooltipContent>
