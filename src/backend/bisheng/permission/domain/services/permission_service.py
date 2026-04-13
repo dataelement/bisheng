@@ -12,7 +12,9 @@ All methods are @classmethod — no instance state.
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import re
 from typing import List, Optional
 
 from bisheng.core.openfga.exceptions import FGAConnectionError
@@ -23,6 +25,7 @@ from bisheng.permission.domain.schemas.permission_schema import (
     AuthorizeGrantItem,
     AuthorizeRevokeItem,
     PermissionLevel,
+    ResourcePermissionItem,
 )
 from bisheng.permission.domain.schemas.tuple_operation import TupleOperation
 
@@ -264,15 +267,19 @@ class PermissionService:
                 await cls._save_failed_tuples(operations, str(e))
             # If crash_safe, pre-recorded entries remain as 'pending' for retry
 
+    # Regex to parse FGA subject: "user:7", "department:5#member", "user_group:3#member"
+    _SUBJECT_RE = re.compile(r'^(user|department|user_group):(\d+)(#member)?$')
+
     @classmethod
     async def get_resource_permissions(
         cls,
         object_type: str,
         object_id: str,
-    ) -> List[dict]:
-        """List all permission entries for a resource.
+    ) -> List[ResourcePermissionItem]:
+        """List enriched permission entries for a resource.
 
-        Returns list of {"user": ..., "relation": ..., "object": ...}.
+        Reads raw FGA tuples, parses subjects, resolves names via DB,
+        and returns structured ResourcePermissionItem list.
         """
         try:
             fga = cls._get_fga()
@@ -282,7 +289,10 @@ class PermissionService:
             tuples = await fga.read_tuples(
                 object=f'{object_type}:{object_id}',
             )
-            return tuples
+            if not tuples:
+                return []
+
+            return await cls._enrich_permission_tuples(tuples)
 
         except FGAConnectionError as e:
             logger.error('OpenFGA unreachable during read_tuples: %s', e)
@@ -290,6 +300,122 @@ class PermissionService:
         except Exception as e:
             logger.error('Error reading resource permissions: %s', e)
             return []
+
+    @classmethod
+    async def _enrich_permission_tuples(
+        cls,
+        tuples: List[dict],
+    ) -> List[ResourcePermissionItem]:
+        """Parse FGA tuples, resolve subject names, merge department entries."""
+        # Step 1: Parse and filter tuples
+        parsed = []
+        for t in tuples:
+            m = cls._SUBJECT_RE.match(t.get('user', ''))
+            if not m:
+                continue
+            subject_type, subject_id_str, member_suffix = m.groups()
+            # Skip #member suffix tuples (membership relations, not direct grants)
+            if member_suffix:
+                continue
+            parsed.append({
+                'subject_type': subject_type,
+                'subject_id': int(subject_id_str),
+                'relation': t.get('relation', ''),
+            })
+
+        if not parsed:
+            return []
+
+        # Step 2: Collect IDs by subject_type
+        user_ids = [p['subject_id'] for p in parsed if p['subject_type'] == 'user']
+        dept_ids = [p['subject_id'] for p in parsed if p['subject_type'] == 'department']
+        group_ids = [p['subject_id'] for p in parsed if p['subject_type'] == 'user_group']
+
+        # Step 3: Batch resolve names
+        name_map = await cls._resolve_subject_names(user_ids, dept_ids, group_ids)
+
+        # Step 4: Build items and merge department entries
+        dept_tracker: dict[tuple, ResourcePermissionItem] = {}
+        items: List[ResourcePermissionItem] = []
+
+        for p in parsed:
+            key = (p['subject_type'], p['subject_id'])
+            name = name_map.get(key)
+
+            if p['subject_type'] == 'department':
+                dept_key = (p['subject_id'], p['relation'])
+                if dept_key in dept_tracker:
+                    # Multiple tuples for same dept+relation → include_children=True
+                    dept_tracker[dept_key].include_children = True
+                else:
+                    item = ResourcePermissionItem(
+                        subject_type=p['subject_type'],
+                        subject_id=p['subject_id'],
+                        subject_name=name,
+                        relation=p['relation'],
+                        include_children=None,
+                    )
+                    dept_tracker[dept_key] = item
+                    items.append(item)
+            else:
+                items.append(ResourcePermissionItem(
+                    subject_type=p['subject_type'],
+                    subject_id=p['subject_id'],
+                    subject_name=name,
+                    relation=p['relation'],
+                ))
+
+        return items
+
+    @classmethod
+    async def _resolve_subject_names(
+        cls,
+        user_ids: List[int],
+        dept_ids: List[int],
+        group_ids: List[int],
+    ) -> dict[tuple, Optional[str]]:
+        """Batch-resolve subject names from DB. Returns {(type, id): name}.
+
+        Runs all DAO queries concurrently via asyncio.gather.
+        """
+        async def _fetch_users():
+            if not user_ids:
+                return []
+            from bisheng.user.domain.models.user import UserDao
+            return await UserDao.aget_user_by_ids(user_ids) or []
+
+        async def _fetch_depts():
+            if not dept_ids:
+                return []
+            from bisheng.database.models.department import DepartmentDao
+            return await DepartmentDao.aget_by_ids(dept_ids) or []
+
+        async def _fetch_groups():
+            if not group_ids:
+                return []
+            from bisheng.database.models.group import GroupDao
+            return await GroupDao.aget_group_by_ids(group_ids) or []
+
+        results = await asyncio.gather(
+            _fetch_users(), _fetch_depts(), _fetch_groups(),
+            return_exceptions=True,
+        )
+
+        name_map: dict[tuple, Optional[str]] = {}
+        extractors = [
+            (results[0], 'user', lambda u: (u.user_id, u.user_name)),
+            (results[1], 'department', lambda d: (d.id, d.name)),
+            (results[2], 'user_group', lambda g: (g.id, g.group_name)),
+        ]
+        for result, subject_type, extractor in extractors:
+            if isinstance(result, Exception):
+                logger.warning('Failed to resolve %s names: %s', subject_type, result)
+                continue
+            for item in result:
+                id_val, name_val = extractor(item)
+                name_map[(subject_type, id_val)] = name_val
+
+        return name_map
 
     @classmethod
     async def get_permission_level(

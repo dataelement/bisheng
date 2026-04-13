@@ -1,0 +1,50 @@
+{
+  "dialog": {
+    "title": "权限管理",
+    "tabList": "当前权限",
+    "tabGrant": "添加权限",
+    "tabShare": "链接分享"
+  },
+  "level": {
+    "owner": "拥有者",
+    "manager": "管理者",
+    "editor": "编辑者",
+    "viewer": "查看者"
+  },
+  "subject": {
+    "user": "用户",
+    "department": "部门",
+    "userGroup": "用户组"
+  },
+  "action": {
+    "grant": "授权",
+    "revoke": "撤回",
+    "confirmRevoke": "确定要撤回该权限吗？",
+    "submit": "提交",
+    "modify": "修改权限"
+  },
+  "search": {
+    "user": "搜索用户...",
+    "department": "搜索部门...",
+    "userGroup": "搜索用户组..."
+  },
+  "includeChildren": "包含子部门",
+  "empty": {
+    "permissions": "暂无权限记录",
+    "departments": "暂无部门数据",
+    "userGroups": "暂无用户组",
+    "searchResults": "无匹配结果"
+  },
+  "comingSoon": "即将推出",
+  "managePermission": "权限管理",
+  "error": {
+    "permissionDenied": "权限不足，无法执行此操作",
+    "grantFailed": "授权失败",
+    "revokeFailed": "撤回失败"
+  },
+  "success": {
+    "grant": "授权成功",
+    "revoke": "已撤回权限",
+    "modify": "权限级别已修改"
+  }
+}

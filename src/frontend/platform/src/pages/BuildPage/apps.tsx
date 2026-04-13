@@ -1,6 +1,9 @@
 import CardComponent from "@/components/bs-comp/cardComponent";
 import AppAvator from "@/components/bs-comp/cardComponent/avatar";
 import LabelShow from "@/components/bs-comp/cardComponent/LabelShow";
+import { PermissionBadge } from "@/components/bs-comp/permission/PermissionBadge";
+import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
+import { canManageResource, usePermissionLevels } from "@/components/bs-comp/permission/usePermissionLevels";
 import AppTempSheet from "@/components/bs-comp/sheets/AppTempSheet";
 import { LoadingIcon } from "@/components/bs-icons/loading";
 import { MoveOneIcon } from "@/components/bs-icons/moveOne";
@@ -78,6 +81,18 @@ export default function apps() {
     const { page, pageSize, data: dataSource, total, loading, setPage, search, reload, refreshData, filterData } = useTable<FlowType>({ pageSize: 14, managed: true }, (param) =>
         getAppsApi(param)
     )
+
+    // Permission management state
+    const [permDialogOpen, setPermDialogOpen] = useState(false);
+    const [permTarget, setPermTarget] = useState<{ id: string; name: string; type: string } | null>(null);
+    const resourceIds = dataSource.map((item: any) => String(item.id));
+    const { levels: permLevels } = usePermissionLevels('workflow', resourceIds);
+
+    const handleOpenPermission = (item: any) => {
+        const typeMap = { 5: 'assistant', 1: 'workflow', 10: 'workflow' };
+        setPermTarget({ id: String(item.id), name: item.name, type: typeMap[item.flow_type] || 'workflow' });
+        setPermDialogOpen(true);
+    };
 
     const { open: tempOpen, tempType, flowRef, toggleTempModal } = useCreateTemp()
 
@@ -248,6 +263,8 @@ export default function apps() {
                                     onCheckedChange={handleCheckedChange}
                                     onDelete={handleDelete}
                                     onSetting={(item) => handleSetting(item)}
+                                    onPermission={canManageResource(permLevels, item.id) ? handleOpenPermission : undefined}
+                                    permissionBadge={<PermissionBadge level={permLevels[String(item.id)]} />}
                                     headSelecter={(
                                         // skills
                                         item.flow_type !== AppNumType.ASSISTANT ? <CardSelectVersion
@@ -283,5 +300,15 @@ export default function apps() {
         </div>
         {/* create flow&assistant */}
         <CreateApp ref={createAppModalRef} />
+        {/* Permission management dialog */}
+        {permTarget && (
+            <PermissionDialog
+                open={permDialogOpen}
+                onOpenChange={setPermDialogOpen}
+                resourceType={permTarget.type as any}
+                resourceId={permTarget.id}
+                resourceName={permTarget.name}
+            />
+        )}
     </div>
 };
