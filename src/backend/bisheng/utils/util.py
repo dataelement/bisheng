@@ -2,6 +2,7 @@ import asyncio
 import functools
 import hashlib
 import io
+import json
 import logging
 import time
 import zipfile
@@ -9,11 +10,29 @@ from functools import wraps
 from typing import Union, List, Tuple
 from urllib.parse import urlparse
 
-from docstring_parser import parse  # type: ignore
+from docstring_parser import parse
+from sqlalchemy import JSON, TypeDecorator  # type: ignore
 
 logger = logging.getLogger(__name__)
 
-
+class DMJSON(TypeDecorator):
+    impl = JSON  # 底层依赖达梦的 JSON 类型
+    def process_bind_param(self, value, dialect):
+        # 写入数据库：字典转 JSON 字符串
+        if value is None:
+            return None
+        return json.dumps(value)
+    def process_result_value(self, value, dialect):
+        # 读取数据库：JSON 字符串转字典
+        if value is None:
+            return None
+        if isinstance(value, str):
+            try:
+                return json.loads(value)
+            except json.JSONDecodeError:
+                return {}
+        return value
+    
 def sync_to_async(func):
     """
     Decorator to convert a sync function to an async function.

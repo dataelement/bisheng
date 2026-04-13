@@ -8,6 +8,7 @@ from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlmodel import (JSON, Column, DateTime, Field, String, Text, case, delete, func, not_, or_,
                       select, text, update, col)
 
+from bisheng.utils.util import DMJSON
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session, get_async_db_session
 
@@ -54,7 +55,7 @@ class MessageBase(SQLModelSerializable):
 class ChatMessage(MessageBase, table=True):
     # id: Optional[int] = Field(default=None, primary_key=True)
     id: Optional[int] = Field(default=None, sa_column=Column(Integer, primary_key=True, autoincrement=True))
-    receiver: Optional[Dict] = Field(default=None, sa_column=Column(JSON))
+    receiver: Optional[Dict] = Field(default=None, sa_column=Column(DMJSON))
 
     # Key: Set table level character set to utf8mb4
     __table_args__ = {

@@ -5,6 +5,7 @@ from typing import List, Optional, Tuple
 from sqlalchemy import JSON, Column, DateTime, Text, and_, func, or_, text
 from sqlmodel import Field, select, col
 
+from bisheng.utils.util import DMJSON
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.common.services import telemetry_service
@@ -28,7 +29,7 @@ class AssistantBase(SQLModelSerializable):
     system_prompt: str = Field(default='', sa_column=Column(Text), description='System Prompt')
     prompt: str = Field(default='', sa_column=Column(Text), description='User Visible Descriptor')
     guide_word: Optional[str] = Field(default='', sa_column=Column(Text), description='Ice Breaker ')
-    guide_question: Optional[List] = Field(default_factory=list, sa_column=Column(JSON),
+    guide_question: Optional[List] = Field(default_factory=list, sa_column=Column(DMJSON),
                                            description='Facilitation Questions')
     model_name: str = Field(default='', description='Corresponds to the only model in the model managementID')
     temperature: float = Field(default=0.5, description='Model Temperature')

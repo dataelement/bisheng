@@ -7,6 +7,7 @@ from sqlalchemy import Select, Text
 from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlmodel import JSON, Column, DateTime, Field, func, select, text, update, col
 
+from bisheng.utils.util import DMJSON
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_async_db_session
 from bisheng.utils import generate_uuid
@@ -43,13 +44,13 @@ class FinetuneBase(SQLModelSerializable):
     model_id: int = Field(default=0, index=True, description='Published Training ModelsID')
     model_name: str = Field(index=True, max_length=50, description='Name of the training model')
     method: str = Field(default=TrainMethod.FULL.value, nullable=False, max_length=20, description='Training Methods')
-    extra_params: Dict = Field(sa_column=Column(JSON), description='Additional parameters required for training tasks')
-    train_data: Optional[List[Dict]] = Field(default=None, sa_column=Column(JSON), description='Personal Training Dataset Information')
-    preset_data: Optional[List[Dict]] = Field(default=None, sa_column=Column(JSON), description='Preset training dataset information')
+    extra_params: Dict = Field(sa_column=Column(DMJSON), description='Additional parameters required for training tasks')
+    train_data: Optional[List[Dict]] = Field(default=None, sa_column=Column(DMJSON), description='Personal Training Dataset Information')
+    preset_data: Optional[List[Dict]] = Field(default=None, sa_column=Column(DMJSON), description='Preset training dataset information')
     status: int = Field(default=FinetuneStatus.TRAINING.value, index=True, description='Status of the training task')
     reason: Optional[str] = Field(default='', sa_column=Column(Text), description='Task Failure Reason')
     log_path: Optional[str] = Field(default='', max_length=512, description='Training log inminioPath on')
-    report: Optional[Dict] = Field(default=None, sa_column=Column(JSON), description='Assessment report data for training tasks')
+    report: Optional[Dict] = Field(default=None, sa_column=Column(DMJSON), description='Assessment report data for training tasks')
     user_id: int = Field(default=None, index=True, description='creatorID')
     user_name: str = Field(default=None, description='creatorName')
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(

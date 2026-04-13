@@ -5,6 +5,7 @@ from pydantic import model_validator
 from sqlalchemy import JSON, Column, DateTime, Integer, text, String
 from sqlmodel import Field
 
+from bisheng.utils.util import DMJSON
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.database.models.flow import FlowType
 
@@ -12,7 +13,7 @@ from bisheng.database.models.flow import FlowType
 class TemplateBase(SQLModelSerializable):
     name: str = Field(index=True)
     description: Optional[str] = Field(default=None, sa_column=Column(String(length=1000)))
-    data: Optional[Dict] = Field(default=None, sa_column=Column(JSON))
+    data: Optional[Dict] = Field(default=None, sa_column=Column(DMJSON))
     order_num: Optional[int] = Field(default=True, index=True)
     # 5 assistant 10 workflow
     flow_type: Optional[int] = Field(default=FlowType.WORKFLOW.value)

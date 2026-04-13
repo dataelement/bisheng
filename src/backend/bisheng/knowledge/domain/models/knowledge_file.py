@@ -8,6 +8,7 @@ from pydantic import field_validator
 from sqlalchemy import JSON, Column, DateTime, Integer, String, or_, text, Text, and_
 from sqlmodel import Field, delete, func, select, update, col
 
+from bisheng.utils.util import DMJSON
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.database.base import async_get_count, get_count
@@ -129,7 +130,7 @@ class KnowledgeFile(KnowledgeFileBase, table=True):
 class QAKnowledge(QAKnowledgeBase, table=True):
     # id: Optional[int] = Field(default=None, primary_key=True)
     id: Optional[int] = Field(default=None, sa_column=Column(Integer, primary_key=True, autoincrement=True))
-    questions: Optional[List[str]] = Field(default=None, sa_column=Column(JSON))
+    questions: Optional[List[str]] = Field(default=None, sa_column=Column(DMJSON))
     answers: Optional[str] = Field(default=None, sa_column=Column(Text))
 
 

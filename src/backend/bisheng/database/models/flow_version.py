@@ -5,16 +5,18 @@ from typing import Dict, List, Optional
 
 # if TYPE_CHECKING:
 from pydantic import field_validator
-from sqlalchemy import func, String
+from sqlalchemy import Integer, func, String
 from sqlmodel import JSON, Field, select, update, text, Column, DateTime
 
+from bisheng.utils.util import DMJSON
 from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.database.models.flow import Flow, FlowType
 
 
 class FlowVersionBase(SQLModelSerializable):
-    id: Optional[int] = Field(default=None, primary_key=True, unique=True)
+    # id: Optional[int] = Field(default=None, primary_key=True, unique=True)
+    id: Optional[int] = Field(default=None, sa_column=Column(Integer, primary_key=True, autoincrement=True))
     flow_id: str = Field(index=True, max_length=32, description="Belonging SkillsID")
     name: str = Field(index=True, description="Version Name")
     data: Optional[Dict] = Field(default=None, description="Version Data")
@@ -47,7 +49,7 @@ class FlowVersionBase(SQLModelSerializable):
 
 
 class FlowVersion(FlowVersionBase, table=True):
-    data: Optional[Dict] = Field(default=None, sa_column=Column(JSON), description="Version Data")
+    data: Optional[Dict] = Field(default=None, sa_column=Column(DMJSON), description="Version Data")
 
 
 class FlowVersionRead(FlowVersionBase):

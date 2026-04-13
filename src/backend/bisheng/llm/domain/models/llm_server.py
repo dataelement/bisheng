@@ -1,9 +1,10 @@
 from datetime import datetime
 from typing import Dict, List, Optional
 
-from sqlalchemy import CHAR, JSON, Column, DateTime, Integer, Text, UniqueConstraint, delete, text, update
+from sqlalchemy import CHAR, JSON, VARCHAR, Column, DateTime, Integer, Text, UniqueConstraint, delete, text, update
 from sqlmodel import Field, select, col
 
+from bisheng.utils.util import DMJSON
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.llm.domain.const import LLMModelType
@@ -13,10 +14,10 @@ from bisheng.llm.domain.utils import wrapper_bisheng_llm_info, wrapper_bisheng_l
 class LLMServerBase(SQLModelSerializable):
     name: str = Field(default='', index=True, unique=True, description='Service name')
     description: Optional[str] = Field(default='', sa_column=Column(Text), description='Service Description')
-    type: str = Field(sa_column=Column(CHAR(20)), description='Service Provider Type')
+    type: str = Field(sa_column=Column(VARCHAR(20)), description='Service Provider Type')
     limit_flag: bool = Field(default=False, description='Whether to turn on the daily call limit')
     limit: int = Field(default=0, description='Daily call limit')
-    config: Optional[Dict] = Field(default=None, sa_column=Column(JSON),
+    config: Optional[Dict] = Field(default=None, sa_column=Column(DMJSON),
                                    description='Service Provider Public Configuration')
     user_id: int = Field(default=0, description='creatorID')
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
@@ -30,8 +31,8 @@ class LLMModelBase(SQLModelSerializable):
     name: str = Field(default='', description='Model Display Name')
     description: Optional[str] = Field(default='', sa_column=Column(Text), description='Model Description')
     model_name: str = Field(default='', description='Model name, parameters used when instantiating components')
-    model_type: str = Field(sa_column=Column(CHAR(20)), description='model type')
-    config: Optional[Dict] = Field(default=None, sa_column=Column(JSON),
+    model_type: str = Field(sa_column=Column(VARCHAR(20)), description='model type')
+    config: Optional[Dict] = Field(default=None, sa_column=Column(DMJSON),
                                    description='Service Provider Public Configuration')
     status: int = Field(default=2, description='Model status.0Normal1abnormal:, 2: Unknown')
     remark: Optional[str] = Field(default='', sa_column=Column(Text), description='Abnormal reason')

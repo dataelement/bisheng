@@ -4,6 +4,7 @@ from typing import List, Optional
 
 from sqlmodel import Field, select, Column, DateTime, text, Text, func, or_, JSON
 
+from bisheng.utils.util import DMJSON
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.utils import generate_uuid
@@ -84,7 +85,7 @@ class AuditLogBase(SQLModelSerializable):
     """
     operator_id: int = Field(index=True, description="Operating User'sID")
     operator_name: Optional[str] = Field(description="Username")
-    group_ids: Optional[List[int | str]] = Field(sa_column=Column(JSON),
+    group_ids: Optional[List[int | str]] = Field(sa_column=Column(DMJSON),
                                                  description="Belongs to a user groupIDVertical")
     system_id: Optional[str] = Field(index=True, description="Module Item")
     event_type: Optional[str] = Field(index=True, description="Operation behaviors")

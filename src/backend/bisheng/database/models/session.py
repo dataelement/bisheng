@@ -5,6 +5,7 @@ from typing import Optional, List
 from sqlalchemy import JSON
 from sqlmodel import Field, Column, DateTime, text, select, func, update, col
 
+from bisheng.utils.util import DMJSON
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.database.models.user_group import UserGroupDao
@@ -25,7 +26,7 @@ class MessageSessionBase(SQLModelSerializable):
     flow_description: Optional[str] = Field(default=None, description='App Description')
     flow_logo: Optional[str] = Field(default=None, description='Applicationslogo')
     user_id: int = Field(index=True, description='User who created the sessionID')
-    group_ids: Optional[List[int]] = Field(default=None, sa_column=Column(JSON),
+    group_ids: Optional[List[int]] = Field(default=None, sa_column=Column(DMJSON),
                                            description="Belongs to a user groupIDVertical")
     is_delete: Optional[bool] = Field(default=False,
                                       description='Whether the corresponding skill or the session itself was deleted')

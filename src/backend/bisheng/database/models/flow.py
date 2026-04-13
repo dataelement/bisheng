@@ -8,6 +8,7 @@ from pydantic import field_validator
 from sqlalchemy import Column, DateTime, String, and_, func, or_, text
 from sqlmodel import JSON, Field, select, update, col
 
+from bisheng.utils.util import DMJSON
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.common.schemas.telemetry.event_data_schema import NewApplicationEventData
@@ -80,7 +81,7 @@ class FlowBase(SQLModelSerializable):
 
 class Flow(FlowBase, table=True):
     id: str = Field(default_factory=generate_uuid, primary_key=True, unique=True)
-    data: Optional[Dict] = Field(default=None, sa_column=Column(JSON))
+    data: Optional[Dict] = Field(default=None, sa_column=Column(DMJSON))
 
 
 class FlowCreate(FlowBase):

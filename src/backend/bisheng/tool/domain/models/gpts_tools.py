@@ -7,6 +7,7 @@ from sqlalchemy import JSON, Column, DateTime, String, text, func
 from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlmodel import Field, or_, select, Text, update, col
 
+from bisheng.utils.util import DMJSON
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.utils import md5_hash, generate_uuid
@@ -23,7 +24,7 @@ class GptsToolsBase(SQLModelSerializable):
     is_preset: int = Field(default=ToolPresetType.API.value,
                            description="The category of the tool, the historical reason field is not renamed")
     is_delete: int = Field(default=0, description='1 Indicates logical deletion')
-    api_params: Optional[List[Dict]] = Field(default=None, sa_column=Column(JSON),
+    api_params: Optional[List[Dict]] = Field(default=None, sa_column=Column(DMJSON),
                                              description='Used to storeapiParameter and other information')
     user_id: Optional[int] = Field(default=None, index=True, description='Create UserID， nullIndicates system creation')
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(

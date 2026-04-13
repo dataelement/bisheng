@@ -5,6 +5,7 @@ from typing import List, Optional, Dict
 from sqlalchemy import Column, DateTime, Text, text, func, and_, JSON
 from sqlmodel import Field, select
 
+from bisheng.utils.util import DMJSON
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session
 
@@ -33,7 +34,7 @@ class EvaluationBase(SQLModelSerializable):
                         description='Task Execution Status: 1:Executing "{0}" 2: execute fail 3:execute success')
     prompt: str = Field(default='', sa_column=Column(Text), description='Evaluation Instruction Text')
     result_file_path: str = Field(default='', description='of the assessment results minio <g id="Bold">Address:</g>')
-    result_score: Optional[Dict | str] = Field(default=None, sa_column=Column(JSON),
+    result_score: Optional[Dict | str] = Field(default=None, sa_column=Column(DMJSON),
                                                description='Final Assessment Score')
     description: str = Field(default='', sa_column=Column(Text), description='Error description information')
     is_delete: int = Field(default=0, description='whether delete')
