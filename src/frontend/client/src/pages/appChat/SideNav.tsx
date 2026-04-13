@@ -1,6 +1,6 @@
 import { ChevronLeft, MoreHorizontal } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useRecoilValue } from 'recoil';
 import { currentChatState } from '~/pages/appChat/store/atoms';
 import { useAppSidebar } from '~/pages/appChat/hooks/useAppSidebar';
@@ -68,6 +68,7 @@ export function SideNav() {
     const navigate = useNavigate();
     const location = useLocation();
     const localize = useLocalize();
+    const { fid: flowId, type: flowType } = useParams();
     const from = new URLSearchParams(location.search).get('from');
     const backPath = from === 'explore' ? '/apps/explore' : '/apps';
 
@@ -172,10 +173,18 @@ export function SideNav() {
                                             isActive={isActive}
                                             onClick={() => switchConversation(conv)}
                                             onRenameSuccess={() => fetchConversations()}
-                                            onDeleteSuccess={() => {
-                                                fetchConversations();
-                                                if (isActive) {
-                                                    createNewChat();
+                                            onDeleteSuccess={async () => {
+                                                const list = await fetchConversations();
+                                                if (!isActive) return;
+                                                if (list.length > 0) {
+                                                    // Jump to the now-most-recent conversation
+                                                    switchConversation(list[0]);
+                                                } else if (flowId && flowType) {
+                                                    // Last conversation deleted — land on empty state, don't auto-create
+                                                    const qs = from ? `?from=${from}` : '';
+                                                    navigate(`/app/${flowId}/${flowType}${qs}`, {
+                                                        state: { fromDelete: true },
+                                                    });
                                                 }
                                             }}
                                         />

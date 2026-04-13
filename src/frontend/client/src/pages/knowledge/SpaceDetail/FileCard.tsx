@@ -83,8 +83,8 @@ export function FileCard({
     // formatTime is now imported from ../knowledgeUtils
 
     const nameToneClass = isKnowledgeItemPreviewable(file)
-        ? "text-[#165dff]"
-        : "text-[#4e5969]";
+        ? "text-[#212121]"
+        : "text-[#999]";
 
     const getStatusText = () => {
         if (isRenaming) {

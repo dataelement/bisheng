@@ -6,6 +6,7 @@ import {
 import WebView from '@/components/WebView';
 import { AuthContextProvider } from '@/hooks/AuthContext';
 import AppChat from '@/pages/appChat';
+import AppChatEntry from '@/pages/appChat/AppChatEntry';
 import AgentCenter from '@/pages/apps';
 import ExplorePlaza from '@/pages/apps/explore';
 import Share from '@/pages/share';
@@ -73,6 +74,7 @@ export const router = createBrowserRouter([
           },
           {
             path: 'app', element: <AppRoot />, children: [
+              { path: ':fid/:type', element: <AppChatEntry /> },
               { path: ':conversationId/:fid/:type', element: <AppChat /> }
             ]
           },

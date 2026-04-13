@@ -1,11 +1,8 @@
-import { useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Loader2 } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { getChatOnlineApi, getUncategorized } from "~/api/apps"
-import { ConversationData, QueryKeys } from "~/types/chat"
-import store from "~/store"
-import { addConversation, cn, copyText, generateUUID } from "~/utils"
+import { cn, copyText } from "~/utils"
 import { getAppShareUrl } from './appUtils'
 import AppAvator from '~/components/Avator'
 import { AgentNavigation } from './components/AgentNavigation'
@@ -86,8 +83,6 @@ export default function ExplorePlaza() {
     const pageSize = 20;
 
     const navigate = useNavigate()
-    const queryClient = useQueryClient()
-    const { setConversation } = store.useCreateConversationAtom(0);
     const { showToast } = useToastContext()
     const localize = useLocalize()
 
@@ -151,7 +146,7 @@ export default function ExplorePlaza() {
                 loadMoreLockRef.current = true;
                 setPage(prev => prev + 1);
             }
-        }, { threshold: 0.1 });
+        }, { threshold: 0, rootMargin: '400px 0px' });
 
         if (loaderRef.current) {
             observer.observe(loaderRef.current);
@@ -161,34 +156,11 @@ export default function ExplorePlaza() {
     }, [loading, loadingMore, hasMore]);
 
     const handleCardClick = (agent: any) => {
-        const _chatId = generateUUID(32)
         const flowId = agent.id
         const flowType = agent.flow_type || agent.type
-
-        queryClient.setQueryData<ConversationData>([QueryKeys.allConversations], (convoData) => {
-            if (!convoData) {
-                return convoData;
-            }
-            setConversation((prevState: any) => {
-                return {
-                    ...prevState,
-                    conversationId: _chatId
-                }
-            })
-            return addConversation(convoData, {
-                conversationId: _chatId,
-                createdAt: "",
-                endpoint: null,
-                endpointType: null,
-                model: "",
-                flowId,
-                flowType: flowType,
-                title: agent.name,
-                tools: [],
-                updatedAt: ""
-            });
-        });
-        navigate(`/app/${_chatId}/${flowId}/${flowType}?from=explore`);
+        // Enter without chatId — AppChatEntry will resolve to most recent conversation,
+        // or create a new one if the user has no conversations for this app yet.
+        navigate(`/app/${flowId}/${flowType}?from=explore`);
     }
 
     const handleShare = async (agent: any) => {

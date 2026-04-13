@@ -211,7 +211,7 @@ export default function MainLayout() {
           id={cacheKey}
           saveScroll={true}
         >
-          <div className="h-[calc(100vh-16px)] overflow-y-auto overscroll-y-contain scrollbar-on-hover rounded-xl bg-white shadow-xl">
+          <div className="h-[calc(100vh-16px)] overflow-y-auto overscroll-y-none scrollbar-on-hover rounded-xl bg-white shadow-xl">
             {outlet}
           </div>
         </KeepAlive>
