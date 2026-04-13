@@ -1,0 +1,50 @@
+{
+  "dialog": {
+    "title": "Permissions",
+    "tabList": "Current Permissions",
+    "tabGrant": "Grant Access",
+    "tabShare": "Share Link"
+  },
+  "level": {
+    "owner": "Owner",
+    "manager": "Manager",
+    "editor": "Editor",
+    "viewer": "Viewer"
+  },
+  "subject": {
+    "user": "User",
+    "department": "Department",
+    "userGroup": "User Group"
+  },
+  "action": {
+    "grant": "Grant",
+    "revoke": "Revoke",
+    "confirmRevoke": "Are you sure you want to revoke this permission?",
+    "submit": "Submit",
+    "modify": "Change Permission"
+  },
+  "search": {
+    "user": "Search users...",
+    "department": "Search departments...",
+    "userGroup": "Search user groups..."
+  },
+  "includeChildren": "Include sub-departments",
+  "empty": {
+    "permissions": "No permissions yet",
+    "departments": "No departments available",
+    "userGroups": "No user groups available",
+    "searchResults": "No results found"
+  },
+  "comingSoon": "Coming Soon",
+  "managePermission": "Permissions",
+  "error": {
+    "permissionDenied": "Permission denied",
+    "grantFailed": "Failed to grant permission",
+    "revokeFailed": "Failed to revoke permission"
+  },
+  "success": {
+    "grant": "Permission granted",
+    "revoke": "Permission revoked",
+    "modify": "Permission level updated"
+  }
+}

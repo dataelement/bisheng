@@ -13,13 +13,16 @@ import {
 import { BookIcon } from "@/components/bs-icons/knowledge";
 import { LoadIcon, LoadingIcon } from "@/components/bs-icons/loading";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
+import { PermissionBadge } from "@/components/bs-comp/permission/PermissionBadge";
+import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
+import { canManageResource, usePermissionLevels } from "@/components/bs-comp/permission/usePermissionLevels";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/bs-ui/select";
 import { toast, useToast } from "@/components/bs-ui/toast/use-toast";
 import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 import Tip from "@/components/bs-ui/tooltip/tip";
 import { getKnowledgeModelConfig } from "@/controllers/API/finetune";
-import { CircleAlert, Copy, Ellipsis, LoaderCircle, Settings, Trash2 } from "lucide-react";
+import { CircleAlert, Copy, Ellipsis, LoaderCircle, Settings, Shield, Trash2 } from "lucide-react";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Textarea } from "../../components/bs-ui/input";
@@ -322,10 +325,17 @@ export default function KnowledgeFile() {
     // New: Control Select dropdown state to avoid occasional popup issues
     const [selectOpenId, setSelectOpenId] = useState<string | null>(null);
     const [modalKey, setModalKey] = useState(0); // New: Used to force re-render of modal
+    // Permission management state
+    const [permDialogOpen, setPermDialogOpen] = useState(false);
+    const [permTarget, setPermTarget] = useState<{ id: string; name: string } | null>(null);
 
     const { page, pageSize, data: datalist, total, loading, setPage, search, reload } = useTable({ cancelLoadingWhenReload: true }, (param) =>
         readFileLibDatabase({ ...param, name: param.keyword })
     )
+
+    // Permission levels for badge display
+    const resourceIds = datalist.map((el: any) => String(el.id));
+    const { levels: permLevels } = usePermissionLevels('knowledge_space', resourceIds);
 
     // Enable polling during copying
     useEffect(() => {
@@ -503,6 +513,7 @@ export default function KnowledgeFile() {
                                         <div>
                                             <div className="truncate max-w-[500px] w-[264px] text-[14px] font-medium pt-2 flex items-center gap-2">
                                                 {el.name}
+                                                <PermissionBadge level={permLevels[String(el.id)]} />
                                             </div>
                                             <Tip
                                                 side="top"
@@ -547,6 +558,10 @@ export default function KnowledgeFile() {
                                                 console.log("Selected value:", selectedValue, "for lib:", el.id);
 
                                                 switch (selectedValue) {
+                                                    case 'permission':
+                                                        setPermTarget({ id: String(el.id), name: el.name });
+                                                        setPermDialogOpen(true);
+                                                        break;
                                                     case 'copy':
                                                         el.state === KnowledgeBaseStatus.Published && handleCopy(el);
                                                         break;
@@ -584,6 +599,14 @@ export default function KnowledgeFile() {
                                                 }}
                                                 className="z-50 overflow-visible"
                                             >
+                                                {canManageResource(permLevels, el.id) && (
+                                                    <SelectItem showIcon={false} value="permission">
+                                                        <div className="flex gap-2 items-center">
+                                                            <Shield className="w-4 h-4" />
+                                                            {t('managePermission', { ns: 'permission' })}
+                                                        </div>
+                                                    </SelectItem>
+                                                )}
                                                 <Tip content={!el.copiable && t('noOperationPermission')} side='top'>
                                                     <SelectItem
                                                         showIcon={false}
@@ -663,6 +686,17 @@ export default function KnowledgeFile() {
                     onLoadEnd={reload}
                     mode="edit"
                     currentLib={currentSettingLib}
+                />
+            )}
+
+            {/* Permission management dialog */}
+            {permTarget && (
+                <PermissionDialog
+                    open={permDialogOpen}
+                    onOpenChange={setPermDialogOpen}
+                    resourceType="knowledge_space"
+                    resourceId={permTarget.id}
+                    resourceName={permTarget.name}
                 />
             )}
         </div>

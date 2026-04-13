@@ -1,5 +1,6 @@
 import { cname } from "@/components/bs-ui/utils";
 import { AppNumType, AppType } from "@/types/app";
+import { Shield } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { SkillIcon } from "../../bs-icons";
@@ -35,6 +36,8 @@ interface IProps<T> {
   onCheckedChange?: (b: boolean, data: T) => Promise<any>
   onDelete?: (data: T) => void,
   onSetting?: (data: T) => void,
+  onPermission?: (data: T) => void,
+  permissionBadge?: React.ReactNode,
 }
 
 export const gradients = [
@@ -86,7 +89,9 @@ export default function CardComponent<T>({
   onDelete,
   onAddTemp,
   onCheckedChange,
-  onSetting
+  onSetting,
+  onPermission,
+  permissionBadge = null
 }: IProps<T>) {
 
   const [_checked, setChecked] = useState(checked)
@@ -169,7 +174,7 @@ export default function CardComponent<T>({
           ></Switch>
         </div>
       </div>
-      <CardTitle className="truncate-doubleline leading-5 break-all">{title}</CardTitle>
+      <CardTitle className="truncate-doubleline leading-5 break-all flex items-center gap-1">{title}{permissionBadge}</CardTitle>
     </CardHeader>
     <CardContent className="h-[140px] overflow-auto scrollbar-hide">
       <CardDescription className="break-all">{description}</CardDescription>
@@ -185,6 +190,7 @@ export default function CardComponent<T>({
         {edit
           && <div className="hidden group-hover:flex">
             {/* {!checked && <div className="hover:bg-[#EAEDF3] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onSetting(data) }}><SettingIcon /></div>} */}
+            {onPermission && <div className="hover:bg-[#EAEDF3] dark:hover:bg-[#34353A] rounded cursor-pointer p-1" onClick={(e) => { e.stopPropagation(); onPermission(data) }}><Shield className="w-4 h-4" /></div>}
             {isAdmin && type !== 'assistant' && <div className="hover:bg-[#EAEDF3] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onAddTemp(data) }}><AddToIcon /></div>}
             {!checked && <div className="hover:bg-[#24272d] rounded cursor-pointer" onClick={(e) => { e.stopPropagation(); onDelete(data) }}><DelIcon /></div>}
           </div>

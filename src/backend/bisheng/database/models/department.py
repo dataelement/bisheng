@@ -200,6 +200,16 @@ class DepartmentDao:
             ).first()
 
     @classmethod
+    async def aget_by_ids(cls, dept_ids: List[int]) -> List[Department]:
+        if not dept_ids:
+            return []
+        async with get_async_db_session() as session:
+            result = await session.exec(
+                select(Department).where(Department.id.in_(dept_ids))
+            )
+            return result.all()
+
+    @classmethod
     async def aget_by_dept_id(cls, dept_id: str) -> Optional[Department]:
         async with get_async_db_session() as session:
             result = await session.exec(
