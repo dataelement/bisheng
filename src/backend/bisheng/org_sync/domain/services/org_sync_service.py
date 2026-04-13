@@ -9,10 +9,14 @@ operating DAO + DepartmentChangeHandler for system-level sync.
 """
 
 import secrets
+import uuid
 from datetime import datetime
 from typing import Optional
 
 from loguru import logger
+from sqlmodel import select
+
+from bisheng.core.database import get_async_db_session
 
 from bisheng.common.errcode.org_sync import (
     OrgSyncAlreadyRunningError,
@@ -254,8 +258,6 @@ class OrgSyncService:
             parent_id = ext_to_local.get(op.remote.parent_external_id)
             if parent_id is None:
                 # Try to find by external_id in DB
-                from bisheng.core.database import get_async_db_session
-                from sqlmodel import select
                 async with get_async_db_session() as session:
                     result = await session.exec(
                         select(Department).where(
@@ -280,7 +282,6 @@ class OrgSyncService:
                 path = parent_dept.path
 
         # Generate business key
-        import uuid
         dept_id = f'BS@{uuid.uuid4().hex[:5]}'
 
         dept = Department(
@@ -418,7 +419,6 @@ class OrgSyncService:
         user = await UserDao.add_user_and_default_role(user)
 
         # Create UserTenant
-        from bisheng.core.database import get_async_db_session
         async with get_async_db_session() as session:
             ut = UserTenant(user_id=user.user_id, tenant_id=config.tenant_id)
             session.add(ut)

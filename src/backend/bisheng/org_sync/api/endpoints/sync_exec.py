@@ -3,8 +3,6 @@
 Part of F009-org-sync. Spec §6.6–6.9.
 """
 
-import asyncio
-
 from fastapi import APIRouter, Depends, Query
 
 from bisheng.common.dependencies.user_deps import UserPayload
@@ -18,7 +16,6 @@ from bisheng.common.errcode.org_sync import (
 from bisheng.common.schemas.api import PageData, resp_200
 from bisheng.org_sync.domain.models.org_sync import (
     OrgSyncConfigDao,
-    OrgSyncLog,
     OrgSyncLogDao,
     decrypt_auth_config,
 )
@@ -70,18 +67,7 @@ async def execute_sync(
         if config.sync_status == 'running':
             return OrgSyncAlreadyRunningError.return_resp()
 
-        # Create log entry first, then dispatch Celery task
-        from datetime import datetime
-        log = OrgSyncLog(
-            tenant_id=config.tenant_id,
-            config_id=config_id,
-            trigger_type='manual',
-            trigger_user=login_user.user_id,
-            status='running',
-            start_time=datetime.now(),
-        )
-        log = await OrgSyncLogDao.acreate(log)
-
+        # Dispatch Celery task — log entry created inside OrgSyncService.execute_sync
         from bisheng.worker.org_sync.tasks import execute_org_sync
         execute_org_sync.apply_async(
             args=[config_id, 'manual', login_user.user_id],
@@ -89,7 +75,7 @@ async def execute_sync(
         )
 
         return resp_200({
-            'log_id': log.id,
+            'config_id': config_id,
             'message': 'Sync task dispatched',
         })
     except BaseErrorCode as e:

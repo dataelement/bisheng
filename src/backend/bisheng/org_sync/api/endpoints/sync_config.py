@@ -83,7 +83,7 @@ async def create_config(
         if 'Duplicate entry' in str(e) or 'uk_tenant_provider_name' in str(e):
             from bisheng.common.errcode.org_sync import OrgSyncConfigDuplicateError
             return OrgSyncConfigDuplicateError.return_resp()
-        return OrgSyncInvalidConfigError.return_resp(msg=str(e))
+        return OrgSyncInvalidConfigError.return_resp()
 
 
 @router.get('/configs')
