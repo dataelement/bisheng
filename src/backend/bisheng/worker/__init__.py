@@ -8,3 +8,4 @@ from bisheng.worker.telemetry.mid_table import sync_mid_user_increment, sync_mid
 from bisheng.worker.test.test import add
 from bisheng.worker.workflow.tasks import execute_workflow, continue_workflow, stop_workflow
 from bisheng.worker.permission.retry_failed_tuples import retry_failed_tuples
+from bisheng.worker.org_sync.tasks import execute_org_sync, check_org_sync_schedules

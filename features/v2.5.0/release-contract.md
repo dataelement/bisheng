@@ -150,8 +150,6 @@ F009-org-sync ← 仅依赖 F002（P2，延后）
 | **200** | **tenant (v2.5 新增)** | _待创建_ |
 | **210** | **department (v2.5 新增)** | _待创建_ |
 | **220** | **org_sync (v2.5 P2 新增)** | _待创建_ |
-| **230** | **user_group (v2.5 新增)** | `common/errcode/user_group.py` |
-| **240** | **role (v2.5 新增)** | `common/errcode/role.py` |
 
 ---
 

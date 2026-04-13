@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import List, Optional
 
 from pydantic import field_validator
-from sqlalchemy import Column, DateTime, func, text
+from sqlalchemy import Column, DateTime, String, UniqueConstraint, func, text
 from sqlalchemy.orm import selectinload
 from sqlmodel import Field, select, Relationship, col
 
@@ -22,6 +22,21 @@ class UserBase(SQLModelSerializable):
     dept_id: Optional[str] = Field(default=None, index=True)
     remark: Optional[str] = Field(default=None, index=False)
     avatar: Optional[str] = Field(default=None, index=False)
+    source: str = Field(
+        default='local',
+        sa_column=Column(
+            String(32), nullable=False,
+            server_default=text("'local'"),
+            comment='Source: local/feishu/wecom/dingtalk/generic_api',
+        ),
+    )
+    external_id: Optional[str] = Field(
+        default=None,
+        sa_column=Column(
+            String(128), nullable=True,
+            comment='External employee ID for sync',
+        ),
+    )
     delete: int = Field(default=0, index=False)
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
@@ -48,6 +63,9 @@ class User(UserBase, table=True):
     roles: List["Role"] = Relationship(link_model=UserRole)
 
     __tablename__ = "user"
+    __table_args__ = (
+        UniqueConstraint('source', 'external_id', name='uk_user_source_external_id'),
+    )
 
 
 class UserRead(UserBase):
@@ -280,3 +298,28 @@ class UserDao(UserBase):
         statement = select(User).order_by(col(User.user_id).asc()).limit(1)
         with get_sync_db_session() as session:
             return session.exec(statement).first()
+
+    @classmethod
+    async def aget_by_source_external_id(cls, source: str, external_id: str) -> Optional['User']:
+        """Get user by source + external_id combination (for org sync matching)."""
+        async with get_async_db_session() as session:
+            statement = select(User).where(
+                User.source == source,
+                User.external_id == external_id,
+            )
+            result = await session.exec(statement)
+            return result.first()
+
+    @classmethod
+    async def aget_by_source(cls, source: str, tenant_id: int) -> List['User']:
+        """Get all users from a given source within a tenant (for reconcile)."""
+        from bisheng.database.models.user_tenant import UserTenant
+        async with get_async_db_session() as session:
+            statement = select(User).join(
+                UserTenant, User.user_id == UserTenant.user_id,
+            ).where(
+                User.source == source,
+                UserTenant.tenant_id == tenant_id,
+            )
+            result = await session.exec(statement)
+            return result.all()
