@@ -13,6 +13,9 @@ const app_env = {
   BASE_URL: '/workspace',
   BISHENG_HOST: '/admin'
 }
+
+const proxyTarget = process.env.VITE_PROXY_TARGET || 'http://127.0.0.1:7860';
+const fileServiceTarget = process.env.VITE_FILE_SERVICE_TARGET || proxyTarget;
 // https://vitejs.dev/config/
 export default defineConfig(({ command }) => ({
   base: app_env.BASE_URL || '/',
@@ -30,7 +33,7 @@ export default defineConfig(({ command }) => ({
       //   changeOrigin: true,
       // },
       '^(/workspace)?/bisheng': {
-        target: "http://192.168.106.120:3002",
+        target: fileServiceTarget,
         changeOrigin: true,
         secure: false,
         rewrite: (path) => {
@@ -38,7 +41,7 @@ export default defineConfig(({ command }) => ({
         },
       },
       '/workspace/api': {
-        target: 'http://192.168.106.120:3002',
+        target: proxyTarget,
         changeOrigin: true,
         secure: false,
         ws: true,
@@ -52,7 +55,7 @@ export default defineConfig(({ command }) => ({
         },
       },
       '/workspace/tmp-dir': {
-        target: 'http://192.168.106.120:3002',
+        target: fileServiceTarget,
         changeOrigin: true,
         secure: false,
         rewrite: (path) => {

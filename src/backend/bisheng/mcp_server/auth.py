@@ -127,6 +127,10 @@ def _hash_session_token(token: str) -> str:
     return hashlib.sha256(token.encode('utf-8')).hexdigest()
 
 
+def hash_bisheng_session_token(token: str) -> str:
+    return _hash_session_token(token)
+
+
 def _normalize_scopes(scopes: Optional[list[str] | tuple[str, ...]]) -> tuple[str, ...]:
     if not scopes:
         return _MCP_DEFAULT_SCOPES
@@ -135,6 +139,12 @@ def _normalize_scopes(scopes: Optional[list[str] | tuple[str, ...]]) -> tuple[st
         if scope in _MCP_DEFAULT_SCOPES and scope not in normalized:
             normalized.append(scope)
     return tuple(normalized or _MCP_DEFAULT_SCOPES)
+
+
+def normalize_mcp_scopes(scopes: Optional[list[str] | tuple[str, ...] | str]) -> tuple[str, ...]:
+    if isinstance(scopes, str):
+        scopes = [scope.strip() for scope in scopes.replace(',', ' ').split() if scope.strip()]
+    return _normalize_scopes(scopes)
 
 
 async def _assert_parent_session_valid(user_id: int, parent_session_hash: str):
@@ -155,11 +165,11 @@ async def resolve_login_user_from_bisheng_access_token(token: str) -> UserPayloa
     )
 
 
-def create_mcp_access_token(login_user: LoginUser,
-                            parent_access_token: str,
-                            *,
-                            scopes: Optional[list[str] | tuple[str, ...]] = None,
-                            expires_in: int = _MCP_DEFAULT_EXPIRES_IN) -> tuple[str, dict]:
+def _create_mcp_access_token_from_session_hash(login_user: LoginUser,
+                                               parent_session_hash: str,
+                                               *,
+                                               scopes: Optional[list[str] | tuple[str, ...]] = None,
+                                               expires_in: int = _MCP_DEFAULT_EXPIRES_IN) -> tuple[str, dict]:
     now = int(datetime.now(timezone.utc).timestamp())
     expires_in = max(60, min(int(expires_in), _MCP_MAX_EXPIRES_IN))
     normalized_scopes = list(_normalize_scopes(scopes))
@@ -174,7 +184,7 @@ def create_mcp_access_token(login_user: LoginUser,
         'jti': generate_uuid(),
         'token_type': _MCP_TOKEN_TYPE,
         'scope': normalized_scopes,
-        'parent_session_hash': _hash_session_token(parent_access_token),
+        'parent_session_hash': parent_session_hash,
     }
     token = jwt.encode(claims, AuthJwt().jwt_secret, algorithm='HS256')
     return token, {
@@ -184,6 +194,32 @@ def create_mcp_access_token(login_user: LoginUser,
         'scopes': normalized_scopes,
         'audience': _MCP_AUDIENCE,
     }
+
+
+def create_mcp_access_token(login_user: LoginUser,
+                            parent_access_token: str,
+                            *,
+                            scopes: Optional[list[str] | tuple[str, ...]] = None,
+                            expires_in: int = _MCP_DEFAULT_EXPIRES_IN) -> tuple[str, dict]:
+    return _create_mcp_access_token_from_session_hash(
+        login_user,
+        _hash_session_token(parent_access_token),
+        scopes=scopes,
+        expires_in=expires_in,
+    )
+
+
+def create_mcp_access_token_from_session_hash(login_user: LoginUser,
+                                              parent_session_hash: str,
+                                              *,
+                                              scopes: Optional[list[str] | tuple[str, ...]] = None,
+                                              expires_in: int = _MCP_DEFAULT_EXPIRES_IN) -> tuple[str, dict]:
+    return _create_mcp_access_token_from_session_hash(
+        login_user,
+        parent_session_hash,
+        scopes=scopes,
+        expires_in=expires_in,
+    )
 
 
 async def _validate_mcp_access_token(token: str) -> tuple[UserPayload, tuple[str, ...]]:

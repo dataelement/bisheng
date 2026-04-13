@@ -762,6 +762,141 @@ class ExternalWorkflowService:
         return updated_graph
 
     @classmethod
+    def _extract_descriptor_param_updates(cls, node_descriptor: dict) -> dict:
+        params = node_descriptor.get('params')
+        if not isinstance(params, dict):
+            return {}
+        updates = {}
+        for key, value in params.items():
+            if isinstance(value, dict) and 'value' in value:
+                updates[key] = copy.deepcopy(value.get('value'))
+            else:
+                updates[key] = copy.deepcopy(value)
+        return updates
+
+    @classmethod
+    def _resolve_descriptor_position(cls,
+                                     node_descriptor: dict,
+                                     existing_node: Optional[dict],
+                                     *,
+                                     axis: str,
+                                     fallback: float) -> float:
+        position = node_descriptor.get('position')
+        if isinstance(position, dict) and axis in position:
+            try:
+                return float(position.get(axis))
+            except Exception:
+                cls._raise_workflow_error(
+                    f'Workflow node {node_descriptor.get("id") or "unknown"} has an invalid {axis} position'
+                )
+        if existing_node is not None:
+            return cls._node_position_value(existing_node, axis)
+        return fallback
+
+    @classmethod
+    def _build_graph_node_from_descriptor(cls,
+                                          node_descriptor: dict,
+                                          *,
+                                          existing_node: Optional[dict] = None,
+                                          node_index: int = 0) -> dict:
+        node_id = node_descriptor.get('id') or (existing_node or {}).get('id')
+        if not node_id:
+            cls._raise_workflow_error('Workflow node descriptor must contain an id')
+
+        node_type = node_descriptor.get('type') or (cls._get_node_type(existing_node) if existing_node else '')
+        if not node_type:
+            cls._raise_workflow_error(f'Workflow node descriptor {node_id} must contain a type')
+
+        name = node_descriptor.get('name')
+        description = node_descriptor.get('description')
+        tab = node_descriptor.get('tab')
+        position_x = cls._resolve_descriptor_position(
+            node_descriptor,
+            existing_node,
+            axis='x',
+            fallback=float(node_index * cls._DEFAULT_HORIZONTAL_NODE_GAP),
+        )
+        position_y = cls._resolve_descriptor_position(
+            node_descriptor,
+            existing_node,
+            axis='y',
+            fallback=0.0,
+        )
+
+        if existing_node is not None and cls._get_node_type(existing_node) == node_type:
+            node_payload = copy.deepcopy(existing_node)
+        else:
+            node_payload = create_graph_node_payload(
+                node_type,
+                node_id=node_id,
+                name=name or '',
+                position_x=position_x,
+                position_y=position_y,
+            )
+            if node_payload is None:
+                raise NotFoundError(msg=f'Workflow node template not found: {node_type}')
+
+        node_payload['id'] = node_id
+        node_payload['position'] = {'x': position_x, 'y': position_y}
+        node_data = node_payload.setdefault('data', {})
+        node_data['id'] = node_id
+        node_data['type'] = node_type
+        if name is not None:
+            node_data['name'] = name
+        else:
+            node_data.setdefault('name', '')
+        if description is not None:
+            node_data['description'] = description
+        if tab is not None:
+            node_data['tab'] = copy.deepcopy(tab)
+
+        param_updates = cls._extract_descriptor_param_updates(node_descriptor)
+        if param_updates:
+            cls._patch_node_fields(node_payload, param_updates)
+
+        return node_payload
+
+    @classmethod
+    def _coerce_editor_graph_input(cls,
+                                   graph_data: dict,
+                                   *,
+                                   base_graph: Optional[dict] = None) -> dict:
+        if not isinstance(graph_data, dict):
+            return graph_data
+
+        nodes = graph_data.get('nodes')
+        if not isinstance(nodes, list):
+            return graph_data
+
+        if all(not isinstance(node, dict) or isinstance(node.get('data'), dict) for node in nodes):
+            return cls._normalize_editor_node_types(copy.deepcopy(graph_data))
+
+        base_nodes_by_id = {}
+        if isinstance(base_graph, dict):
+            for existing_node in base_graph.get('nodes', []):
+                if isinstance(existing_node, dict) and existing_node.get('id'):
+                    base_nodes_by_id[existing_node['id']] = existing_node
+
+        updated_graph = copy.deepcopy(graph_data)
+        rebuilt_nodes = []
+        for index, raw_node in enumerate(nodes):
+            if not isinstance(raw_node, dict):
+                rebuilt_nodes.append(raw_node)
+                continue
+            if isinstance(raw_node.get('data'), dict):
+                rebuilt_nodes.append(copy.deepcopy(raw_node))
+                continue
+            rebuilt_nodes.append(
+                cls._build_graph_node_from_descriptor(
+                    raw_node,
+                    existing_node=base_nodes_by_id.get(raw_node.get('id')),
+                    node_index=index,
+                )
+            )
+        updated_graph['nodes'] = rebuilt_nodes
+        return cls._normalize_editor_node_types(updated_graph)
+
+    @classmethod
     def _apply_node_initial_params(cls, node_payload: dict, initial_params: Optional[dict]) -> dict:
         if not initial_params:
             return node_payload
@@ -996,6 +1131,7 @@ class ExternalWorkflowService:
                                     description: Optional[str] = None,
                                     guide_word: Optional[str] = None) -> tuple[Flow, FlowVersion]:
         cls._assert_workflow_name_available(login_user, name)
+        graph_data = cls._coerce_editor_graph_input(graph_data)
         graph_data = cls._ensure_create_graph_scaffold(graph_data)
         cls._validate_draft_graph(login_user, graph_data, flow_name=name)
 
@@ -1054,7 +1190,7 @@ class ExternalWorkflowService:
         if name is not None and name != flow.name:
             cls._assert_workflow_name_available(login_user, name, exclude_flow_id=flow.id)
 
-        graph_data = cls._normalize_editor_node_types(copy.deepcopy(graph_data))
+        graph_data = cls._coerce_editor_graph_input(graph_data, base_graph=editable_version.data)
         if has_flow_updates:
             if name is not None:
                 flow.name = name

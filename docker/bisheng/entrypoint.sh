@@ -29,9 +29,14 @@ start_default(){
     celery -A bisheng.worker.main worker -l info -c 100 -P threads -Q celery -n celery@%h
 }
 
+start_min_worker(){
+    # 最小化worker进程数，减少资源占用
+    celery -A bisheng.worker.main worker -l info -c 100 -P threads -Q knowledge_celery,workflow_celery,celery -n min_worker@%h
+}
+
 if [ "$start_mode" = "api" ]; then
     echo "Starting API server..."
-    uvicorn bisheng.main:app --host 0.0.0.0 --port 7860 --no-access-log --workers 8
+    uvicorn bisheng.main:app --host 0.0.0.0 --port 7860 --no-access-log --workers 1
 elif [ "$start_mode" = "knowledge" ]; then
     echo "Starting Knowledge Celery worker..."
     start_knowledge
@@ -49,14 +54,8 @@ elif [ "$start_mode" = "linsight" ]; then
     start_linsight
 elif [ "$start_mode" = "worker" ]; then
     echo "Starting All worker..."
-    # 处理知识库相关任务的worker
-    start_knowledge &
-    # 处理工作流相关任务的worker
-    start_workflow &
-    # 处理linsight相关任务的worker
-    start_linsight &
-    # 默认其他任务的执行worker，目前是定时统计埋点数据
-    start_default &
+    # 最小化worker进程数，减少资源占用
+    start_min_worker &
     start_beat
 
     echo "All workers started successfully."

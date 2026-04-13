@@ -275,6 +275,100 @@ class TestExternalWorkflowService(IsolatedAsyncioTestCase):
             )
         )
 
+    def test_create_workflow_draft_sync_accepts_normalized_graph_descriptor(self):
+        captured = {}
+
+        def fake_validate(login_user, graph_data, flow_name, flow_id=None):
+            captured['graph_data'] = deepcopy(graph_data)
+
+        def fake_create_flow(flow_info, flow_type):
+            flow_info.id = 'flow-1'
+            return flow_info
+
+        def fake_get_current_version(flow_id):
+            return SimpleNamespace(id=11, data=deepcopy(captured['graph_data']))
+
+        with patch.object(ExternalWorkflowService, '_assert_workflow_name_available'), \
+                patch.object(ExternalWorkflowService, '_validate_draft_graph', side_effect=fake_validate), \
+                patch.object(FlowDao, 'create_flow', side_effect=fake_create_flow), \
+                patch.object(FlowVersionDao, 'get_version_by_flow', side_effect=fake_get_current_version), \
+                patch.object(FlowVersionDao, 'update_version', side_effect=lambda version: version), \
+                patch.object(FlowService, 'create_flow_hook'):
+            flow, version = ExternalWorkflowService._create_workflow_draft_sync(
+                login_user=SimpleNamespace(user_id=1),
+                name='demo',
+                graph_data={
+                    'nodes': [{
+                        'id': 'input-1',
+                        'type': 'input',
+                        'name': 'Ticket Input',
+                        'params': {},
+                    }],
+                    'edges': [],
+                },
+            )
+
+        self.assertEqual(flow.id, 'flow-1')
+        self.assertEqual(version.id, 11)
+        node_ids = {node['id'] for node in captured['graph_data']['nodes']}
+        self.assertIn('input-1', node_ids)
+        input_node = next(node for node in captured['graph_data']['nodes'] if node['id'] == 'input-1')
+        self.assertEqual(input_node['type'], 'flowNode')
+        self.assertEqual(input_node['data']['type'], 'input')
+        self.assertEqual(input_node['data']['name'], 'Ticket Input')
+        self.assertEqual(input_node['position'], {'x': 0.0, 'y': 0.0})
+
+    async def test_update_workflow_draft_accepts_normalized_graph_descriptor(self):
+        flow = SimpleNamespace(id='flow-1', name='demo', status=FlowStatus.OFFLINE.value, description='', guide_word='')
+        version_graph = make_graph()
+        version_graph['nodes'][0]['type'] = 'flowNode'
+        version_graph['nodes'][0]['position'] = {'x': 128, 'y': 64}
+        version = SimpleNamespace(id=11, data=version_graph, is_current=1)
+        validate_calls = []
+        persisted = []
+
+        async def fake_get_editable_version(login_user, flow_id, version_id=None):
+            return flow, version
+
+        def fake_validate(login_user, graph_data, flow_name, flow_id=None):
+            validate_calls.append(deepcopy(graph_data))
+
+        def fake_update_version(version_info):
+            persisted.append(deepcopy(version_info.data))
+            return version_info
+
+        with patch.object(ExternalWorkflowService, '_get_editable_version', side_effect=fake_get_editable_version), \
+                patch.object(ExternalWorkflowService, '_validate_draft_graph', side_effect=fake_validate), \
+                patch.object(FlowVersionDao, 'update_version', side_effect=fake_update_version):
+            _, updated_version = await ExternalWorkflowService.update_workflow_draft(
+                login_user=SimpleNamespace(user_id=1),
+                flow_id='flow-1',
+                graph_data={
+                    'nodes': [{
+                        'id': 'node-1',
+                        'type': 'llm',
+                        'name': 'Router',
+                        'params': {
+                            'temperature': {'value': 0.3},
+                            'system_prompt': {'value': 'route tickets'},
+                        },
+                    }],
+                    'edges': [],
+                },
+            )
+
+        self.assertEqual(updated_version.id, 11)
+        self.assertEqual(len(validate_calls), 1)
+        rebuilt_node = validate_calls[0]['nodes'][0]
+        self.assertEqual(rebuilt_node['type'], 'flowNode')
+        self.assertEqual(rebuilt_node['position'], {'x': 128.0, 'y': 64.0})
+        self.assertEqual(rebuilt_node['data']['name'], 'Router')
+        params = rebuilt_node['data']['group_params'][0]['params']
+        self.assertEqual(params[0]['value'], 0.3)
+        self.assertEqual(params[1]['value'], 'route tickets')
+        self.assertEqual(params[2]['value'], 'secret')
+        self.assertEqual(len(persisted), 1)
+
     async def test_create_workflow_draft_uses_async_thread_wrapper(self):
         expected_flow = SimpleNamespace(id='flow-1')
         expected_version = SimpleNamespace(id=11, data=make_graph())
@@ -406,6 +500,63 @@ class TestExternalWorkflowService(IsolatedAsyncioTestCase):
 
         condition_item = normalized[0]['conditions'][0]
         self.assertEqual(condition_item['left_label'], 'Score/priority_score')
+        self.assertEqual(condition_item['right_label'], '')
+        self.assertEqual(condition_item['right_value_type'], 'input')
+
+    def test_normalize_workflow_editor_graph_hydrates_condition_labels(self):
+        graph = {
+            'nodes': [{
+                'id': 'code-1',
+                'type': 'flowNode',
+                'position': {'x': 0, 'y': 0},
+                'data': {
+                    'id': 'code-1',
+                    'type': 'code',
+                    'name': 'Score Priority',
+                    'group_params': [{
+                        'name': '出参',
+                        'params': [{
+                            'key': 'code_output',
+                            'type': 'code_output',
+                            'global': 'code:value.map(el => ({ label: el.key, value: el.key }))',
+                            'value': [{'key': 'priority_score', 'type': 'str'}],
+                        }],
+                    }],
+                },
+            }, {
+                'id': 'condition-1',
+                'type': 'flowNode',
+                'position': {'x': 320, 'y': 0},
+                'data': {
+                    'id': 'condition-1',
+                    'type': 'condition',
+                    'name': 'Condition',
+                    'group_params': [{
+                        'params': [{
+                            'key': 'condition',
+                            'type': 'condition',
+                            'value': [{
+                                'id': 'case_a',
+                                'operator': 'and',
+                                'conditions': [{
+                                    'id': 'rule_1',
+                                    'left_var': 'code-1.priority_score',
+                                    'comparison_operation': 'greater_than_or_equal',
+                                    'right_value_type': 'const',
+                                    'right_value': '90',
+                                }],
+                            }],
+                        }],
+                    }],
+                },
+            }],
+            'edges': [],
+        }
+
+        normalized = FlowService._normalize_workflow_editor_graph(graph)
+        condition_item = normalized['nodes'][1]['data']['group_params'][0]['params'][0]['value'][0]['conditions'][0]
+
+        self.assertEqual(condition_item['left_label'], 'Score Priority/priority_score')
         self.assertEqual(condition_item['right_label'], '')
         self.assertEqual(condition_item['right_value_type'], 'input')
 

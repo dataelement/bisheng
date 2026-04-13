@@ -1,0 +1,8 @@
+services:
+  backend:
+    volumes:
+      - ../src/backend/bisheng:/app/bisheng
+
+  backend_worker:
+    volumes:
+      - ../src/backend/bisheng:/app/bisheng

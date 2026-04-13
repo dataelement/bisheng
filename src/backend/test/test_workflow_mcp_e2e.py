@@ -194,6 +194,50 @@ class TestWorkflowMcpE2E(IsolatedAsyncioTestCase):
         self.assertEqual(scaffold_types, ['start', 'end'])
         self.assertEqual(len(captured['graph_data']['edges']), 1)
 
+    async def test_streamable_http_create_workflow_draft_accepts_normalized_graph_descriptor(self):
+        session = await self._open_session(scopes=('workflow.write',))
+        captured = {}
+
+        def fake_validate_runtime(login_user, graph_data, flow_name, flow_id=None):
+            captured['graph_data'] = json.loads(json.dumps(graph_data))
+
+        def fake_create_flow(flow_info, flow_type):
+            flow_info.id = 'flow-1'
+            captured['created_graph'] = json.loads(json.dumps(flow_info.data))
+            return flow_info
+
+        def fake_get_current_version(flow_id):
+            return SimpleNamespace(id=11, data=json.loads(json.dumps(captured['created_graph'])))
+
+        with patch.object(ExternalWorkflowService, '_assert_workflow_name_available'), \
+                patch.object(ExternalWorkflowService, '_validate_workflow_runtime', side_effect=fake_validate_runtime), \
+                patch.object(FlowDao, 'create_flow', side_effect=fake_create_flow), \
+                patch.object(FlowVersionDao, 'get_version_by_flow', side_effect=fake_get_current_version), \
+                patch.object(FlowVersionDao, 'update_version', side_effect=lambda version: version), \
+                patch.object(FlowService, 'create_flow_hook'):
+            result = await session.call_tool(
+                'create_workflow_draft',
+                {
+                    'name': 'demo',
+                    'graph_data': {
+                        'nodes': [{
+                            'id': 'input-1',
+                            'type': 'input',
+                            'name': 'Ticket Input',
+                            'params': {},
+                        }],
+                        'edges': [],
+                    },
+                },
+            )
+
+        payload = self._decode_tool_result(result)
+        self.assertTrue(payload['ok'])
+        input_node = next(node for node in captured['graph_data']['nodes'] if node['id'] == 'input-1')
+        self.assertEqual(input_node['type'], 'flowNode')
+        self.assertEqual(input_node['data']['type'], 'input')
+        self.assertEqual(input_node['data']['name'], 'Ticket Input')
+
     async def test_streamable_http_returns_structured_validation_error_payload(self):
         session = await self._open_session()
 

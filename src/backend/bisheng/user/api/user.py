@@ -1,8 +1,11 @@
 import hashlib
+import html
 import random
+import time
 from base64 import b64encode
 from datetime import datetime
 from io import BytesIO
+from types import SimpleNamespace
 from typing import Annotated, Dict, List, Optional
 
 import rsa
@@ -12,6 +15,7 @@ from fastapi.security import OAuth2PasswordBearer
 from loguru import logger
 from pydantic import BaseModel, Field
 from sqlmodel import select
+from starlette.responses import HTMLResponse, JSONResponse
 
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.v1.schemas import resp_200, CreateUserReq
@@ -26,7 +30,25 @@ from bisheng.database.models.mark_task import MarkTaskDao
 from bisheng.database.models.role import Role, RoleCreate, RoleDao, RoleUpdate
 from bisheng.database.models.role_access import RoleRefresh, RoleAccessDao, AccessType
 from bisheng.database.models.user_group import UserGroupDao
-from bisheng.mcp_server.auth import create_mcp_access_token, get_request_bisheng_access_token, resolve_login_user_from_bisheng_access_token
+from bisheng.mcp_server.auth import (
+    create_mcp_access_token,
+    create_mcp_access_token_from_session_hash,
+    get_request_bisheng_access_token,
+    hash_bisheng_session_token,
+    normalize_mcp_scopes,
+    resolve_login_user_from_bisheng_access_token,
+)
+from bisheng.mcp_server.device_flow import (
+    McpDeviceSession,
+    delete_device_session,
+    generate_device_code,
+    generate_user_code,
+    load_device_session_by_device_code,
+    load_device_session_by_user_code,
+    normalize_device_flow_interval,
+    normalize_device_flow_ttl,
+    save_device_session,
+)
 from bisheng.utils import generate_uuid
 from bisheng.utils import get_request_ip
 from bisheng.utils.constants import CAPTCHA_PREFIX, RSA_KEY, USER_PASSWORD_ERROR, USER_CURRENT_SESSION
@@ -47,6 +69,90 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl='token')
 
 class McpTokenCreateRequest(BaseModel):
     expires_in: int = Field(default=1800, ge=60, le=3600, description='MCP token ttl in seconds')
+
+
+class McpDeviceAuthorizeRequest(BaseModel):
+    client_id: str = Field(min_length=1, max_length=200, description='Public MCP client id')
+    client_name: str = Field(default='', max_length=200, description='Display name shown on the approval page')
+    scope: str = Field(default='', description='Space separated MCP scopes')
+    expires_in: int = Field(default=600, ge=60, le=900, description='Device code ttl in seconds')
+    interval: int = Field(default=5, ge=1, le=30, description='Polling interval in seconds')
+
+
+class McpDeviceTokenRequest(BaseModel):
+    grant_type: str = Field(default='urn:ietf:params:oauth:grant-type:device_code')
+    device_code: str = Field(min_length=1)
+    client_id: str = Field(default='', max_length=200)
+
+
+def _mcp_device_token_error(error: str, description: str, status_code: int = 400):
+    return JSONResponse(
+        status_code=status_code,
+        content={
+            'error': error,
+            'error_description': description,
+        },
+    )
+
+
+def _mcp_device_verify_html(*,
+                            user_code: str,
+                            title: str,
+                            message: str,
+                            status: str,
+                            client_name: str = '',
+                            scopes: Optional[list[str]] = None,
+                            can_approve: bool = False):
+    escaped_title = html.escape(title)
+    escaped_message = html.escape(message)
+    escaped_user_code = html.escape(user_code)
+    escaped_client_name = html.escape(client_name or 'MCP Client')
+    scopes_html = ''.join(
+        f'<li><code>{html.escape(scope)}</code></li>' for scope in (scopes or [])
+    ) or '<li><code>workflow.read workflow.write workflow.publish</code></li>'
+    form_html = ''
+    if can_approve:
+        form_html = f"""
+        <form method="post">
+          <input type="hidden" name="user_code" value="{escaped_user_code}" />
+          <button type="submit" name="action" value="approve">Approve</button>
+          <button type="submit" name="action" value="deny">Deny</button>
+        </form>
+        """
+    body = f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{escaped_title}</title>
+  <style>
+    body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; background: #f6f7fb; color: #1f2937; }}
+    main {{ max-width: 640px; margin: 48px auto; background: white; border-radius: 16px; padding: 32px; box-shadow: 0 12px 40px rgba(15, 23, 42, 0.08); }}
+    h1 {{ margin: 0 0 12px; font-size: 28px; }}
+    p {{ line-height: 1.6; }}
+    code {{ background: #eef2ff; padding: 2px 6px; border-radius: 6px; }}
+    .status {{ display: inline-block; margin-bottom: 16px; padding: 6px 10px; border-radius: 999px; background: #eef2ff; color: #3730a3; font-size: 14px; }}
+    ul {{ padding-left: 20px; }}
+    form {{ display: flex; gap: 12px; margin-top: 24px; }}
+    button {{ border: 0; border-radius: 10px; padding: 12px 18px; cursor: pointer; font-size: 15px; }}
+    button[value="approve"] {{ background: #111827; color: white; }}
+    button[value="deny"] {{ background: #e5e7eb; color: #111827; }}
+  </style>
+</head>
+<body>
+  <main>
+    <div class="status">{html.escape(status)}</div>
+    <h1>{escaped_title}</h1>
+    <p>{escaped_message}</p>
+    <p><strong>User code:</strong> <code>{escaped_user_code}</code></p>
+    <p><strong>Client:</strong> {escaped_client_name}</p>
+    <p><strong>Requested scopes:</strong></p>
+    <ul>{scopes_html}</ul>
+    {form_html}
+  </main>
+</body>
+</html>"""
+    return HTMLResponse(body)
 
 
 @router.post('/user/regist')
@@ -129,6 +235,244 @@ async def create_workflow_mcp_token(request: Request,
         expires_in=body.expires_in,
     )
     return resp_200(token_payload)
+
+
+@router.post('/user/mcp/device/authorize')
+async def create_mcp_device_authorization(request: Request,
+                                          body: McpDeviceAuthorizeRequest):
+    redis_client = await get_redis_client()
+    scopes = list(normalize_mcp_scopes(body.scope))
+    session = McpDeviceSession(
+        device_code=generate_device_code(),
+        user_code=generate_user_code(),
+        client_id=body.client_id,
+        client_name=body.client_name.strip(),
+        scopes=scopes,
+        expires_at=int(time.time()) + normalize_device_flow_ttl(body.expires_in),
+        interval=normalize_device_flow_interval(body.interval),
+    )
+    await save_device_session(redis_client, session)
+    verification_uri = str(request.url_for('mcp_device_verify_page'))
+    return resp_200(data={
+        'device_code': session.device_code,
+        'user_code': session.user_code,
+        'verification_uri': verification_uri,
+        'verification_uri_complete': f'{verification_uri}?user_code={session.user_code}',
+        'expires_in': session.expires_in,
+        'interval': session.interval,
+        'scope': ' '.join(session.scopes),
+        'scopes': session.scopes,
+    })
+
+
+@router.get('/user/mcp/device/verify', name='mcp_device_verify_page')
+async def mcp_device_verify_page(request: Request, user_code: str = Query(default='')):
+    normalized_user_code = user_code.strip().upper()
+    if not normalized_user_code:
+        return _mcp_device_verify_html(
+            user_code='',
+            title='Missing user code',
+            message='Open this page with the device flow user code from your MCP client.',
+            status='invalid_request',
+        )
+
+    redis_client = await get_redis_client()
+    session = await load_device_session_by_user_code(redis_client, normalized_user_code)
+    if session is None:
+        return _mcp_device_verify_html(
+            user_code=normalized_user_code,
+            title='Device code not found',
+            message='This device authorization request does not exist or has already been completed.',
+            status='invalid_grant',
+        )
+    if session.expired:
+        await delete_device_session(redis_client, session)
+        return _mcp_device_verify_html(
+            user_code=session.user_code,
+            title='Device code expired',
+            message='Start a new device authorization request from your MCP client.',
+            status='expired_token',
+            client_name=session.client_name,
+            scopes=session.scopes,
+        )
+
+    access_token = get_request_bisheng_access_token(request)
+    if not access_token:
+        return _mcp_device_verify_html(
+            user_code=session.user_code,
+            title='Login required',
+            message='Log in to Bisheng in this browser first, then refresh this page to approve the MCP client.',
+            status='login_required',
+            client_name=session.client_name,
+            scopes=session.scopes,
+        )
+
+    try:
+        login_user = await resolve_login_user_from_bisheng_access_token(access_token)
+    except Exception:
+        return _mcp_device_verify_html(
+            user_code=session.user_code,
+            title='Login required',
+            message='Your Bisheng session is invalid or expired. Log in again, then refresh this page.',
+            status='login_required',
+            client_name=session.client_name,
+            scopes=session.scopes,
+        )
+
+    if session.status == 'approved':
+        message = f'This request has already been approved for {login_user.user_name}. Return to the MCP client.'
+        return _mcp_device_verify_html(
+            user_code=session.user_code,
+            title='Already approved',
+            message=message,
+            status='approved',
+            client_name=session.client_name,
+            scopes=session.scopes,
+        )
+
+    if session.status == 'denied':
+        return _mcp_device_verify_html(
+            user_code=session.user_code,
+            title='Request denied',
+            message='This device authorization request has already been denied.',
+            status='access_denied',
+            client_name=session.client_name,
+            scopes=session.scopes,
+        )
+
+    return _mcp_device_verify_html(
+        user_code=session.user_code,
+        title='Approve MCP client',
+        message=f'You are signed in as {login_user.user_name}. Approve this MCP client to access Bisheng workflows.',
+        status='pending',
+        client_name=session.client_name,
+        scopes=session.scopes,
+        can_approve=True,
+    )
+
+
+@router.post('/user/mcp/device/verify')
+async def approve_mcp_device_authorization(request: Request):
+    form = await request.form()
+    user_code = str(form.get('user_code', '')).strip().upper()
+    action = str(form.get('action', 'approve')).strip().lower()
+    redis_client = await get_redis_client()
+    session = await load_device_session_by_user_code(redis_client, user_code)
+    if session is None:
+        return _mcp_device_verify_html(
+            user_code=user_code,
+            title='Device code not found',
+            message='This device authorization request does not exist or has already been completed.',
+            status='invalid_grant',
+        )
+    if session.expired:
+        await delete_device_session(redis_client, session)
+        return _mcp_device_verify_html(
+            user_code=session.user_code,
+            title='Device code expired',
+            message='Start a new device authorization request from your MCP client.',
+            status='expired_token',
+            client_name=session.client_name,
+            scopes=session.scopes,
+        )
+
+    access_token = get_request_bisheng_access_token(request)
+    if not access_token:
+        return _mcp_device_verify_html(
+            user_code=session.user_code,
+            title='Login required',
+            message='Log in to Bisheng in this browser first, then retry approval.',
+            status='login_required',
+            client_name=session.client_name,
+            scopes=session.scopes,
+        )
+    try:
+        login_user = await resolve_login_user_from_bisheng_access_token(access_token)
+    except Exception:
+        return _mcp_device_verify_html(
+            user_code=session.user_code,
+            title='Login required',
+            message='Your Bisheng session is invalid or expired. Log in again, then retry approval.',
+            status='login_required',
+            client_name=session.client_name,
+            scopes=session.scopes,
+        )
+
+    session.updated_at = int(time.time())
+    if action == 'deny':
+        session.status = 'denied'
+        session.denied_reason = f'denied by {login_user.user_name}'
+        await save_device_session(redis_client, session)
+        return _mcp_device_verify_html(
+            user_code=session.user_code,
+            title='Request denied',
+            message='The MCP client authorization request has been denied.',
+            status='access_denied',
+            client_name=session.client_name,
+            scopes=session.scopes,
+        )
+
+    session.status = 'approved'
+    session.user_id = login_user.user_id
+    session.user_name = login_user.user_name
+    session.parent_session_hash = hash_bisheng_session_token(access_token)
+    await save_device_session(redis_client, session)
+    return _mcp_device_verify_html(
+        user_code=session.user_code,
+        title='Request approved',
+        message='Return to the MCP client. It can now exchange the device code for an MCP access token.',
+        status='approved',
+        client_name=session.client_name,
+        scopes=session.scopes,
+    )
+
+
+@router.post('/user/mcp/device/token')
+async def issue_mcp_device_token(body: McpDeviceTokenRequest):
+    if body.grant_type != 'urn:ietf:params:oauth:grant-type:device_code':
+        return _mcp_device_token_error('unsupported_grant_type', 'Only device_code grant_type is supported.')
+
+    redis_client = await get_redis_client()
+    session = await load_device_session_by_device_code(redis_client, body.device_code)
+    if session is None:
+        return _mcp_device_token_error('invalid_grant', 'The device_code is invalid or has already been consumed.')
+    if body.client_id and body.client_id != session.client_id:
+        return _mcp_device_token_error('invalid_client', 'The client_id does not match this device authorization request.')
+    if session.expired:
+        await delete_device_session(redis_client, session)
+        return _mcp_device_token_error('expired_token', 'The device authorization request has expired.')
+
+    now = int(time.time())
+    if session.last_poll_at and now - session.last_poll_at < session.interval:
+        session.last_poll_at = now
+        session.updated_at = now
+        await save_device_session(redis_client, session)
+        return _mcp_device_token_error('slow_down', f'Poll no faster than every {session.interval} seconds.')
+
+    session.last_poll_at = now
+    session.updated_at = now
+    await save_device_session(redis_client, session)
+
+    if session.status == 'pending':
+        return _mcp_device_token_error('authorization_pending', 'The end user has not approved this device yet.')
+    if session.status == 'denied':
+        await delete_device_session(redis_client, session)
+        description = session.denied_reason or 'The end user denied the device authorization request.'
+        return _mcp_device_token_error('access_denied', description)
+    if session.status != 'approved' or not session.user_id or not session.parent_session_hash:
+        await delete_device_session(redis_client, session)
+        return _mcp_device_token_error('invalid_grant', 'The device authorization request is in an invalid state.')
+
+    login_user = SimpleNamespace(user_id=session.user_id, user_name=session.user_name)
+    _, token_payload = create_mcp_access_token_from_session_hash(
+        login_user,
+        session.parent_session_hash,
+        scopes=session.scopes,
+    )
+    await delete_device_session(redis_client, session)
+    token_payload['scope'] = ' '.join(session.scopes)
+    token_payload['mcp_url'] = '/mcp'
+    return JSONResponse(content=token_payload)
 
 
 @router.get('/user/admin')
