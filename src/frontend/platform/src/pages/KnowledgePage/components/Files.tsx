@@ -341,8 +341,8 @@ export default function Files({ onPreview }) {
             )}
 
             {/* Top action bar combined */}
-            <div className="absolute right-0 top-[-62px] flex flex-wrap md:flex-nowrap justify-end gap-2 md:gap-4 items-center z-[999] max-w-[calc(100vw-40px)] bg-background md:bg-transparent p-1 md:p-0 rounded-lg">
-                
+            <div className="absolute right-0 top-[-62px] flex flex-wrap md:flex-nowrap justify-end gap-2 md:gap-4 items-center z-10 max-w-[calc(100vw-40px)] bg-background md:bg-transparent p-1 md:p-0 rounded-lg">
+
                 {/* Batch Actions */}
                 {selectedFileObjs.length > 0 && (
                     <div className="flex items-center gap-2 mr-1 md:mr-0 pr-2 md:pr-4 border-r border-gray-200 dark:border-gray-700">

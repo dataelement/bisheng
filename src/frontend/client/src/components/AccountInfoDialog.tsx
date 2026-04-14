@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSetRecoilState } from "recoil";
 import { X, Eye, EyeOff, Camera } from "lucide-react";
-import { Avatar, AvatarImage } from "~/components/ui/Avatar";
+import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
 import { Button } from "~/components/ui/Button";
 import { Input } from "~/components/ui/Input";
 import { Dialog, DialogContent } from "~/components/ui/Dialog";
@@ -350,7 +350,7 @@ export function AccountInfoDialog({
                                     className="group relative shrink-0 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-[#165dff] focus-visible:ring-offset-2"
                                 >
                                     <Avatar className="size-14 ring-1 ring-[#f2f3f5]">
-                                        <AvatarImage src={currentAvatarUrl} alt={username} />
+                                        {currentAvatarUrl ? <AvatarImage src={currentAvatarUrl} alt="User" /> : <AvatarName name={username} />}
                                     </Avatar>
                                     <div className="absolute inset-0 flex items-center justify-center rounded-full bg-[rgba(0,0,0,0.55)] opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
                                         <Camera className="size-6 text-white" aria-hidden />
