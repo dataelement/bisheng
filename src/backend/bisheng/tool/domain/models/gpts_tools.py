@@ -35,7 +35,8 @@ class GptsToolsBase(SQLModelSerializable):
 
 class GptsToolsTypeBase(SQLModelSerializable):
     id: Optional[int] = Field(default=None,
-                              sa_column=Column(index=True, primary_key=True, autoincrement=True, nullable=False))
+                              sa_column=Column(Integer, index=True, primary_key=True, autoincrement=True,
+                                               nullable=False))
     name: str = Field(default='', sa_column=Column(String(length=1024)), description="Tool Category Name")
     logo: Optional[str] = Field(default='', description="of the tool categorylogoFile URL")
     extra: Optional[str] = Field(default='{}', sa_column=Column(Text),
