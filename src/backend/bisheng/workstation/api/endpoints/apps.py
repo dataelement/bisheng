@@ -49,8 +49,13 @@ def delete_frequently_used_chat(
 
 
 @router.get('/app/uncategorized')
-def get_uncategorized_chat(login_user=LoginUserDep, page: Optional[int] = 1, limit: Optional[int] = 8):
-    data, _ = WorkFlowService.get_uncategorized_flows(login_user, page, limit)
+def get_uncategorized_chat(
+    login_user=LoginUserDep,
+    page: Optional[int] = 1,
+    limit: Optional[int] = 8,
+    keyword: Optional[str] = None,
+):
+    data, _ = WorkFlowService.get_uncategorized_flows(login_user, page, limit, keyword)
     return resp_200(data=data)
 
 
