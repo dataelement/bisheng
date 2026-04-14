@@ -255,6 +255,13 @@ export const ChatKnowledge = ({
     loadSpaces();
   }, [loadSpaces]);
 
+  // Track root dropdown open so we can refresh spaces when it's reopened
+  // (new spaces created outside this component won't appear otherwise).
+  const [rootOpen, setRootOpen] = useState(false);
+  useEffect(() => {
+    if (rootOpen) loadSpaces();
+  }, [rootOpen, loadSpaces]);
+
   // Client-side filter by keyword
   const filteredSpaces = useMemo(
     () =>
@@ -318,7 +325,7 @@ export const ChatKnowledge = ({
   const orgLayout = useSubMenuLayout(menuContentRef, 'org', openSub === 'org');
 
   return (
-    <DropdownMenu>
+    <DropdownMenu open={rootOpen} onOpenChange={setRootOpen}>
       <DropdownMenuTrigger disabled={disabled}>
         <div className={cn(
           "flex bg-white items-center gap-2 h-7 px-3 rounded-full border border-slate-200 text-gray-500 cursor-pointer hover:border-blue-400 transition-all outline-none disabled:opacity-0",

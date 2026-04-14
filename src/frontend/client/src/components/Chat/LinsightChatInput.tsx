@@ -25,7 +25,7 @@ import { useLinsightSessionManager } from "~/hooks/useLinsightManager";
 import InputFiles from "~/pages/appChat/components/InputFiles";
 import { useFileDropAndPaste } from "~/pages/appChat/useFileDropAndPaste";
 import { cn, removeFocusRings } from "~/utils";
-import { sameSopLabelState } from "./Input/SameSopSpan";
+import SameSopSpan, { sameSopLabelState } from "./Input/SameSopSpan";
 
 export interface LinsightChatInputFeatures {
     modelSelect?: boolean;
@@ -126,7 +126,7 @@ const LinsightChatInput = memo(
                 isNew: true,
                 files: Array.from(chatFiles || []).map(item => ({
                     file_id: item.file_id,
-                    file_name: item.name,
+                    file_name: item.filename || item.name,
                     parsing_status: 'completed'
                 })),
                 question: trimmed,
@@ -135,7 +135,6 @@ const LinsightChatInput = memo(
                 model: 'gpt-4',
                 enableWebSearch: false,
                 useKnowledgeBase: true,
-                orgKnowledgeBaseIds: [],
             });
 
             // submitMessage({
@@ -163,7 +162,7 @@ const LinsightChatInput = memo(
             if (textAreaRef.current) {
                 textAreaRef.current.style.height = "auto";
             }
-        }, [text, disabled, isStreaming, fileUploading, onSend, chatFiles]);
+        }, [text, disabled, isStreaming, fileUploading, onSend, chatFiles, sameSopLabel, linsightTools, bsConfig, count]);
 
         const handleKeyDown = useCallback(
             (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -182,6 +181,8 @@ const LinsightChatInput = memo(
                 {isDragging && <DragDropOverlay />}
 
                 <div className={`relative pb-3 z-10 flex w-full flex-col bg-surface-tertiary overflow-hidden border border-blue-400 bg-gradient-to-b from-[#F2F5FF] to-white ${size === 'mini' ? 'rounded-xl' : 'rounded-3xl'}`}>
+                    {/* 做同款 label */}
+                    {isLingsi && <SameSopSpan />}
                     {/* File upload area: file list + attachment button */}
                     {(() => {
                         const InputFilesAny = InputFiles as any;

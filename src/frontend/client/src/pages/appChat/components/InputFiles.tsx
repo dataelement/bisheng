@@ -104,7 +104,9 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
                     return updatedFiles;
                 });
             }, uploadMode).then(response => {
-                const filePath = response.data.file_path; // Assuming the response contains the file ID
+                // Upload API returns `filepath` (no underscore). Keep `file_path` fallback
+                // for any caller/endpoint that still uses the snake-case form.
+                const filePath = response.data.filepath ?? response.data.file_path;
                 const fileId = response.data.file_id; // Server-returned file_id
                 filesRef.current = filesRef.current.map(f => {
                     if (f.id === id) {

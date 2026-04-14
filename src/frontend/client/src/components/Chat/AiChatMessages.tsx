@@ -89,7 +89,7 @@ function MessageTreeNode({
                 isLatest={isLastMessage}
                 isStreaming={isStreaming && isLastMessage}
                 onRegenerate={
-                    !message.isCreatedByUser && isLastMessage && !isStreaming
+                    !message.isCreatedByUser && !isStreaming
                         ? () => onRegenerate?.(message.parentMessageId)
                         : undefined
                 }

@@ -20,7 +20,7 @@ import useAiChatSSE, { type SSESubmission } from "~/hooks/useAiChatSSE";
 
 const NO_PARENT = "00000000-0000-0000-0000-000000000000";
 
-export default function useAiChat(initialConversationId: string = "new", isLingsi: boolean = false) {
+export default function useAiChat(initialConversationId: string = "new", isLingsi: boolean = false, shareToken: string = "") {
     const localize = useLocalize();
     // --- Local state ---
     const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -90,7 +90,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
             return;
         }
         setIsLoading(true);
-        fetchMessages(conversationId)
+        fetchMessages(conversationId, shareToken)
             .then((msgs) => {
                 setMessages(msgs);
                 setIsLoading(false);

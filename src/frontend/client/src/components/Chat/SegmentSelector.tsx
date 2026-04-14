@@ -14,7 +14,7 @@ const SegmentSelector = ({ lingsi, onChange, bsConfig }) => {
                         }`}
                     onClick={() => onChange(false)}
                 >
-                    {bsConfig.tabDisplayName ? bsConfig.tabDisplayName : localize('com_segment_daily_mode')}
+                    {bsConfig?.tabDisplayName ? bsConfig.tabDisplayName : localize('com_segment_daily_mode')}
                 </button>
                 <button
                     className={`flex-1 py-1.5 px-8 rounded-full text-sm break-keep transition-all ${lingsi
@@ -26,7 +26,7 @@ const SegmentSelector = ({ lingsi, onChange, bsConfig }) => {
                     <div className='flex items-center justify-center relative'>
                         {lingsi && <img src={__APP_ENV__.BASE_URL + "/assets/lingsi.svg"} className='size-4 block' alt="" />}
                         <span className={lingsi ? 'lingsi-text ml-2' : ''}>
-                            {bsConfig.linsightConfig.tab_display_name ? bsConfig.linsightConfig.tab_display_name : localize('com_segment_linsight')}
+                            {bsConfig?.linsightConfig?.tab_display_name ? bsConfig.linsightConfig.tab_display_name : localize('com_segment_linsight')}
                         </span>
                     </div>
                 </button>

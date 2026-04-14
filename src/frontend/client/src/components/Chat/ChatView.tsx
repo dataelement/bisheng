@@ -45,7 +45,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     stopGenerating,
     clearConversation,
     regenerate,
-  } = useAiChat(conversationId);
+  } = useAiChat(conversationId, false, shareToken);
 
   const navigate = useNavigate();
 
@@ -111,7 +111,6 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
 
   const isNew = conversationId === 'new';
   const hasMessages = messages.length > 0;
-
   return (
     <Presentation isLingsi={isLingsi}>
       <div className={cn('h-full')}>
@@ -159,7 +158,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
               /* Landing page — preserved for welcome + Lingsi mode switch */
               <Landing
                 lingsi={isLingsi}
-                lingsiEntry={(bsConfig as any)?.linsightConfig?.linsight_entry}
+                lingsiEntry={(bsConfig as any)?.linsightConfig?.linsight_entry || true}
                 setLingsi={setIsLingsi}
                 isNew={isNew}
               />
