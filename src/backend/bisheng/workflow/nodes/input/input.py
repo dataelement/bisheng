@@ -315,7 +315,7 @@ class InputNode(BaseNode):
             })
 
             file_ext = file_name.split('.')[-1].lower()
-            logger.debug(f"{self.id}.{key} file_parse_mode is keep_raw")
+            logger.debug(f"{self.id}.{key} file_parse_mode is {file_parse_mode}")
             original_file_path.append(one_file_url)
             if file_ext in self._image_ext:
                 image_files_path.append(one_file_url)
@@ -340,6 +340,9 @@ class InputNode(BaseNode):
             # A file corresponding to the same variable, placed in a file_id mile
             for one in metadatas:
                 one.update(all_metadata[-1])
+                input_file_metadata_keys = {one.field_name for one in InputFileMetadata}
+                for k in one.keys() - input_file_metadata_keys:
+                    del one[k]
                 new_metadata.append(one)
 
             # Uploaded to milvus And es
