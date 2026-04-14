@@ -8,8 +8,10 @@ from bisheng.api.v1.schemas import FileProcessBase
 from bisheng.knowledge.domain.schemas.knowledge_rag_schema import Metadata
 from bisheng.knowledge.rag.base_file_pipeline import BaseFilePipeline
 from bisheng.knowledge.rag.pipeline.transformer.abstract import AbstractTransformer
+from bisheng.knowledge.rag.pipeline.transformer.extra_file import ExtraFileTransformer
 from bisheng.knowledge.rag.pipeline.transformer.splitter import SplitterTransformer
 from bisheng.user.domain.models.user import UserDao
+from bisheng.utils import generate_uuid
 
 
 class PreviewFilePipeline(BaseFilePipeline):
@@ -31,6 +33,7 @@ class PreviewFilePipeline(BaseFilePipeline):
             invoke_user_id: int,
             local_file_path: str,
             file_name: str,
+            knowledge_id: int,
             file_rule: FileProcessBase = None,
             **kwargs,
     ):
@@ -41,6 +44,7 @@ class PreviewFilePipeline(BaseFilePipeline):
             **kwargs,
         )
         self.local_file_path = local_file_path
+        self.knowledge_id = knowledge_id
 
     @cached_property
     def file_metadata(self) -> Dict:
@@ -64,6 +68,13 @@ class PreviewFilePipeline(BaseFilePipeline):
 
     def _init_common_transformers(self) -> List[BaseDocumentTransformer]:
         transformers = self._init_abstract_transformers()
+        transformers.append(ExtraFileTransformer(
+            loader=self.loader,
+            document_id=generate_uuid(),
+            knowledge_id=self.knowledge_id,
+            knowledge_file=None,
+            retain_images=self.file_split_rule.retain_images == 1
+        ))
         transformers.append(
             SplitterTransformer(
                 separator=self.file_split_rule.separator,

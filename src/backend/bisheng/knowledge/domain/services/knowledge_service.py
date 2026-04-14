@@ -512,6 +512,7 @@ class KnowledgeService(KnowledgeUtils):
         pipeline = PreviewFilePipeline(
             invoke_user_id=login_user.user_id,
             local_file_path=filepath,
+            knowledge_id=req_data.knowledge_id,
             file_name=file_name,
             file_rule=file_rule,
         )
