@@ -115,6 +115,8 @@ export default function PreviewResult({
             break;
           case 'completed':
             setEtl(data.parse_type)
+            // 记录该文件已在当前 previewCount 下解析过,下次切回时走缓存
+            prevPreviewCountMapRef.current[currentFile.id] = previewCount;
             // 解析完成：处理结果（对应原 .then(res) 逻辑）
             handlePreviewResult(true);
             setChunks(data.chunks.map(chunk => ({

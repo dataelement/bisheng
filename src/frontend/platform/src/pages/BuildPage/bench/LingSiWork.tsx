@@ -754,8 +754,9 @@ export default function index() {
             formData.append('file', importFiles[0]);
 
             setImportFilesData([importFiles[0]]); // Only save one file
-            const result = await sopApi.UploadSopRecord(formData);
-            console.log('API Response:', result); // For debugging
+            const result = await captureAndAlertRequestErrorHoc(sopApi.UploadSopRecord(formData));
+            console.log('API Response:', result);
+            if (!result) return; // 失败已弹 toast
             const { error_rows, success_rows, repeat_rows } = result
             if (error_rows.length) {
                 setValidationDialog({
@@ -772,9 +773,9 @@ export default function index() {
                     formData.append('ignore_error', 'false');
                     formData.append('override', 'false');
                     formData.append('save_new', 'false');
-                    const res = await sopApi.UploadSopRecord(formData);
+                    const res = await captureAndAlertRequestErrorHoc(sopApi.UploadSopRecord(formData));
+                    if (!res) return;
 
-                    console.log(res, repeat_rows);
                     setImportDialogOpen(true)
                     setDuplicateNames(repeat_rows);
                     setDuplicateDialogOpen(true);
