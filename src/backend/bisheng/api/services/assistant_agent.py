@@ -2,18 +2,27 @@ import json
 import os
 import time
 import uuid
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
+from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.callbacks import Callbacks
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.messages import AIMessage, HumanMessage, BaseMessage
+from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate
 from langchain_core.runnables import RunnableConfig
-from langchain_core.tools import BaseTool
+from langchain_core.tools import BaseTool, ArgsSchema
 from langchain_core.utils.function_calling import format_tool_to_openai_tool
 from langgraph.prebuilt import create_react_agent
 from loguru import logger
+from pydantic import Field, SkipValidation
+from typing_extensions import Annotated
 
 from bisheng.api.services.assistant_base import AssistantUtils
+from bisheng.citation.domain.services.citation_prompt_helper import (
+    CITATION_PROMPT_RULES,
+    annotate_rag_documents_with_citations,
+    annotate_web_results_with_citations,
+)
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.errcode.assistant import AssistantModelEmptyError, AssistantModelNotConfigError, \
     AssistantAutoLLMError
@@ -26,6 +35,86 @@ from bisheng_langchain.gpts.auto_optimization import (generate_breif_description
                                                       optimize_assistant_prompt)
 from bisheng_langchain.gpts.auto_tool_selected import ToolInfo, ToolSelector
 from bisheng_langchain.gpts.prompts import ASSISTANT_PROMPT_OPT
+
+ASSISTANT_CITATION_PROMPT_RULES = f"""{CITATION_PROMPT_RULES}
+
+When the tool's results already contain the aforementioned private section reference markers, the final answer must retain these markers as is; they must not be deleted, rewritten, or interpreted.
+
+Do not output this rule."""
+
+
+class AssistantCitationToolWrapper(BaseTool):
+    """Add citation prompt context for assistant tool invocations."""
+
+    name: str
+    description: str
+    args_schema: Annotated[Optional[ArgsSchema], SkipValidation()] = Field(default=None)
+    tool: BaseTool
+
+    @classmethod
+    def wrap(cls, tool: BaseTool) -> BaseTool:
+        return cls(
+            name=tool.name,
+            description=tool.description,
+            args_schema=tool.args_schema,
+            tool=tool,
+        )
+
+    def _is_web_search_tool(self) -> bool:
+        return self.tool.name == 'web_search' or getattr(self.tool, 'tool_name', None) == 'web_search'
+
+    def _has_knowledge_rag_tool(self) -> bool:
+        return hasattr(self.tool, 'knowledge_retriever_tool')
+
+    @staticmethod
+    def _append_web_citation(output: Any) -> Any:
+        if not isinstance(output, str):
+            return output
+        try:
+            results = json.loads(output)
+        except json.JSONDecodeError:
+            return output
+        if not isinstance(results, list):
+            return output
+        results = annotate_web_results_with_citations(results)
+        return json.dumps(results, ensure_ascii=False)
+
+    def _build_knowledge_prompt(self) -> ChatPromptTemplate:
+        messages = list(self.tool.chat_prompt.messages)
+        citation_rules_message = SystemMessagePromptTemplate.from_template(CITATION_PROMPT_RULES)
+        insert_index = 1 if messages and isinstance(messages[0], SystemMessagePromptTemplate) else 0
+        messages.insert(insert_index, citation_rules_message)
+        return ChatPromptTemplate.from_messages(messages)
+
+    def _build_knowledge_inputs(self, query: str, retrieval_result: Any) -> dict:
+        source_documents = list(retrieval_result or [])
+        source_documents = annotate_rag_documents_with_citations(source_documents)
+        inputs = {'context': source_documents}
+        if 'question' in self.tool.chat_prompt.input_variables:
+            inputs['question'] = query
+        return inputs
+
+    def _run(self, query: str, **kwargs: Any) -> Any:
+        if self._is_web_search_tool():
+            return self._append_web_citation(self.tool.invoke({'query': query}, config=kwargs.get('config')))
+        if not self._has_knowledge_rag_tool():
+            return self.tool.invoke({'query': query}, config=kwargs.get('config'))
+
+        retrieval_result = self.tool.knowledge_retriever_tool.invoke({'query': query})
+        llm_inputs = self._build_knowledge_inputs(query, retrieval_result)
+        qa_chain = create_stuff_documents_chain(llm=self.tool.llm, prompt=self._build_knowledge_prompt())
+        return qa_chain.invoke(llm_inputs)
+
+    async def _arun(self, query: str, **kwargs: Any) -> Any:
+        if self._is_web_search_tool():
+            return self._append_web_citation(await self.tool.ainvoke({'query': query}, config=kwargs.get('config')))
+        if not self._has_knowledge_rag_tool():
+            return await self.tool.ainvoke({'query': query}, config=kwargs.get('config'))
+
+        retrieval_result = await self.tool.knowledge_retriever_tool.ainvoke({'query': query})
+        llm_inputs = self._build_knowledge_inputs(query, retrieval_result)
+        qa_chain = create_stuff_documents_chain(llm=self.tool.llm, prompt=self._build_knowledge_prompt())
+        return await qa_chain.ainvoke(llm_inputs)
 
 
 class AssistantAgent(AssistantUtils):
@@ -147,7 +236,16 @@ class AssistantAgent(AssistantUtils):
                                                                         callbacks=callbacks,
                                                                         **self.knowledge_retriever)
                 tools.append(knowledge_tool)
-        self.tools = tools
+        self.tools = [self.wrap_citation_tool(tool) for tool in tools]
+
+    @classmethod
+    def wrap_citation_tool(cls, tool: BaseTool) -> BaseTool:
+        if tool.name == 'web_search' or hasattr(tool, 'knowledge_retriever_tool'):
+            return AssistantCitationToolWrapper.wrap(tool)
+        return tool
+
+    def has_citation_tools(self) -> bool:
+        return any(isinstance(tool, AssistantCitationToolWrapper) for tool in self.tools)
 
     async def init_agent(self):
         """
@@ -163,6 +261,8 @@ class AssistantAgent(AssistantUtils):
         prompt = self.assistant.prompt
         if getattr(self.llm, 'model_name', '').startswith('command-r'):
             prompt = self.ASSISTANT_PROMPT_COHERE.format(preamble=prompt)
+        if self.has_citation_tools():
+            prompt = f'{prompt}\n\n{ASSISTANT_CITATION_PROMPT_RULES}'
         if self.current_agent_executor == 'ReAct':
             # Inisialisasiagent
             self.agent = ConfigurableAssistant(agent_executor_type=agent_executor_type,

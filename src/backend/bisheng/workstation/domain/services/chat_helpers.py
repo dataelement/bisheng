@@ -96,8 +96,7 @@ async def final_message(
             'requestMessage': (await WorkstationMessage.from_chat_message(request_message)).model_dump(),
             'responseMessage': (
                 await WorkstationMessage.from_chat_message(
-                    response_message,
-                    citations=None,
+                    response_message
                 )
             ).model_dump(),
         },

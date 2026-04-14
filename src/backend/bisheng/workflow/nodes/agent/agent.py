@@ -1,13 +1,23 @@
+import json
 import typing
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
+from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.messages import HumanMessage
+from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate
 from langchain_core.retrievers import BaseRetriever
 from langchain_core.runnables import RunnableConfig
+from langchain_core.tools import BaseTool, ArgsSchema
 from langgraph.prebuilt import create_react_agent
 from loguru import logger
-from pydantic import BaseModel, field_validator, Field
+from pydantic import BaseModel, field_validator, Field, SkipValidation
+from typing_extensions import Annotated
 
+from bisheng.citation.domain.services.citation_prompt_helper import (
+    CITATION_PROMPT_RULES,
+    annotate_rag_documents_with_citations,
+    annotate_web_results_with_citations,
+)
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.llm.domain.services import LLMService
@@ -23,6 +33,85 @@ agent_executor_dict = {
     'ReAct': 'get_react_agent_executor',
     'function call': 'get_openai_functions_agent_executor',
 }
+
+WORKFLOW_AGENT_CITATION_PROMPT_RULES = f"""{CITATION_PROMPT_RULES}
+
+当工具结果中已经包含上述私有区段引用标记时，最终回答必须原样保留这些标记，不得删除、改写或解释这些标记。
+不要输出本规则内容。"""
+
+
+class WorkflowCitationToolWrapper(BaseTool):
+    """Add citation prompt context for workflow agent tool invocations."""
+
+    name: str
+    description: str
+    args_schema: Annotated[Optional[ArgsSchema], SkipValidation()] = Field(default=None)
+    tool: BaseTool
+
+    @classmethod
+    def wrap(cls, tool: BaseTool) -> BaseTool:
+        return cls(
+            name=tool.name,
+            description=tool.description,
+            args_schema=tool.args_schema,
+            tool=tool,
+        )
+
+    def _is_web_search_tool(self) -> bool:
+        return self.tool.name == 'web_search' or getattr(self.tool, 'tool_name', None) == 'web_search'
+
+    def _has_knowledge_rag_tool(self) -> bool:
+        return hasattr(self.tool, 'knowledge_retriever_tool')
+
+    @staticmethod
+    def _append_web_citation(output: Any) -> Any:
+        if not isinstance(output, str):
+            return output
+        try:
+            results = json.loads(output)
+        except json.JSONDecodeError:
+            return output
+        if not isinstance(results, list):
+            return output
+        results = annotate_web_results_with_citations(results)
+        return json.dumps(results, ensure_ascii=False)
+
+    def _build_knowledge_prompt(self) -> ChatPromptTemplate:
+        messages = list(self.tool.chat_prompt.messages)
+        citation_rules_message = SystemMessagePromptTemplate.from_template(CITATION_PROMPT_RULES)
+        insert_index = 1 if messages and isinstance(messages[0], SystemMessagePromptTemplate) else 0
+        messages.insert(insert_index, citation_rules_message)
+        return ChatPromptTemplate.from_messages(messages)
+
+    def _build_knowledge_inputs(self, query: str, retrieval_result: Any) -> dict:
+        source_documents = list(retrieval_result or [])
+        source_documents = annotate_rag_documents_with_citations(source_documents)
+        inputs = {'context': source_documents}
+        if 'question' in self.tool.chat_prompt.input_variables:
+            inputs['question'] = query
+        return inputs
+
+    def _run(self, query: str, config: RunnableConfig = None, **kwargs: Any) -> Any:
+        if self._is_web_search_tool():
+            return self._append_web_citation(self.tool.invoke({'query': query}, config=config))
+        if not self._has_knowledge_rag_tool():
+            return self.tool.invoke({'query': query}, config=config)
+
+        retrieval_result = self.tool.knowledge_retriever_tool.invoke({'query': query}, config=config)
+        llm_inputs = self._build_knowledge_inputs(query, retrieval_result)
+        qa_chain = create_stuff_documents_chain(llm=self.tool.llm, prompt=self._build_knowledge_prompt())
+        return qa_chain.invoke(llm_inputs, config=config)
+
+    async def _arun(self, query: str, config: RunnableConfig = None, **kwargs: Any) -> Any:
+        if self._is_web_search_tool():
+            return self._append_web_citation(await self.tool.ainvoke({'query': query}, config=config))
+        if not self._has_knowledge_rag_tool():
+            return await self.tool.ainvoke({'query': query}, config=config)
+
+        retrieval_result = await self.tool.knowledge_retriever_tool.ainvoke({'query': query}, config=config)
+        llm_inputs = self._build_knowledge_inputs(query, retrieval_result)
+        qa_chain = create_stuff_documents_chain(llm=self.tool.llm, prompt=self._build_knowledge_prompt())
+        return await qa_chain.ainvoke(llm_inputs, config=config)
 
 
 class SqlAgentParams(BaseModel):
@@ -127,6 +216,9 @@ class AgentNode(BaseNode):
         sql_agent_tools = self.init_sql_agent_tool()
         func_tools.extend(knowledge_tools)
         func_tools.extend(sql_agent_tools)
+        func_tools = self._wrap_citation_tools(func_tools)
+        if self._has_citation_tools(func_tools):
+            system_prompt = f'{system_prompt}\n\n{WORKFLOW_AGENT_CITATION_PROMPT_RULES}'
         if self._agent_executor_type == 'ReAct':
             self._agent = ConfigurableAssistant(
                 agent_executor_type=agent_executor_dict.get(self._agent_executor_type),
@@ -136,6 +228,20 @@ class AgentNode(BaseNode):
             )
         else:
             self._agent = create_react_agent(self._llm, func_tools, prompt=system_prompt, checkpointer=False)
+
+    @classmethod
+    def _wrap_citation_tools(cls, tools: list[BaseTool]) -> list[BaseTool]:
+        return [cls._wrap_citation_tool(tool) for tool in tools]
+
+    @staticmethod
+    def _wrap_citation_tool(tool: BaseTool) -> BaseTool:
+        if tool.name == 'web_search' or hasattr(tool, 'knowledge_retriever_tool'):
+            return WorkflowCitationToolWrapper.wrap(tool)
+        return tool
+
+    @staticmethod
+    def _has_citation_tools(tools: list[BaseTool]) -> bool:
+        return any(isinstance(tool, WorkflowCitationToolWrapper) for tool in tools)
 
     def _init_tools(self):
         if self._tools:

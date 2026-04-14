@@ -267,11 +267,11 @@ async def stream_chat_completion(request: Request, data: APIChatCompletion, logi
                         question=data.text,
                     )
             elif data.use_knowledge_base and (
-                len(data.use_knowledge_base.knowledge_space_ids) > 0
-                or len(data.use_knowledge_base.organization_knowledge_ids) > 0
+                    len(data.use_knowledge_base.knowledge_space_ids) > 0
+                    or len(data.use_knowledge_base.organization_knowledge_ids) > 0
             ):
                 logger.info(f'Using knowledge base for prompt: {data.text}')
-                chunks, source_document, _ = await WorkStationService.queryChunksFromDB(
+                chunks, source_document = await WorkStationService.queryChunksFromDB(
                     data.text,
                     use_knowledge_param=data.use_knowledge_base,
                     max_token=max_token,

@@ -4,7 +4,6 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, field_validator
 
-from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
 from bisheng.database.models.message import ChatMessage
 from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.user.domain.models.user import UserDao
@@ -26,7 +25,6 @@ class WorkstationMessage(BaseModel):
     unfinished: Optional[bool] = False
     flow_name: Optional[str] = None
     source: Optional[int] = None
-    citations: Optional[list[CitationRegistryItemSchema]] = None
 
     @field_validator('messageId', mode='before')
     @classmethod
@@ -45,8 +43,7 @@ class WorkstationMessage(BaseModel):
     @classmethod
     async def from_chat_message(
         cls,
-        message: ChatMessage,
-        citations: Optional[list[CitationRegistryItemSchema]] = None,
+        message: ChatMessage
     ):
         files = json.loads(message.files) if message.files else []
         extra = json.loads(message.extra) if message.extra else {}
@@ -67,8 +64,7 @@ class WorkstationMessage(BaseModel):
             text=message.message,
             files=files,
             flow_name=message_session_model.name if message_session_model else None,
-            source=message.source,
-            citations=citations,
+            source=message.source
         )
 
 

@@ -36,13 +36,9 @@ async def get_chat_history(
     if login_user.user_id != messages[0].user_id:
         if not share_link or share_link.resource_id != conversationId:
             return UnAuthorizedError.return_resp()
-    citation_map = await ChatSessionService.get_message_citations_by_message_ids(
-        [message.id for message in messages if message.id is not None],
-    )
     return resp_200([
         await WorkstationMessage.from_chat_message(
-            message,
-            citations=citation_map.get(message.id) if message.id is not None else None,
+            message
         )
         for message in messages
     ])

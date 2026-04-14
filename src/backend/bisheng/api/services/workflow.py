@@ -264,8 +264,7 @@ class WorkFlowService(BaseService):
                 workflow_event.output_schema = WorkflowOutputSchema(
                     message=chat_response.message.get('msg'),
                     reasoning_content=chat_response.message.get('reasoning_content'),
-                    output_key=chat_response.message.get('output_key'),
-                    citations=chat_response.citations,
+                    output_key=chat_response.message.get('output_key')
                 )
                 cls.handle_source(chat_response, workflow_event)
             case WorkflowEventType.Error.value:
@@ -323,8 +322,7 @@ class WorkFlowService(BaseService):
         workflow_event.output_schema = WorkflowOutputSchema(
             message=chat_response.message.get('msg'),
             files=chat_response.files,
-            output_key=chat_response.message.get('output_key'),
-            citations=chat_response.citations,
+            output_key=chat_response.message.get('output_key')
         )
         cls.handle_source(chat_response, workflow_event)
         return workflow_event

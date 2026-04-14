@@ -19,7 +19,6 @@ from bisheng.common.errcode.server import EmbeddingModelStatusError
 from bisheng.common.models.config import Config, ConfigDao, ConfigKeyEnum
 from bisheng.common.services.base import BaseService
 from bisheng.core.vectorstore.multi_retriever import MultiRetriever
-from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
 from bisheng.database.constants import MessageCategory
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
@@ -234,7 +233,7 @@ class WorkStationService(BaseService):
         use_knowledge_param: UseKnowledgeBaseParam,
         max_token: int,
         login_user: UserPayload,
-    ) -> tuple[list[Any], None, list[CitationRegistryItemSchema]] | tuple[list[Any], Any, list[CitationRegistryItemSchema]]:
+    ) -> tuple[list[str], Optional[list[dict]]]:
         """Query relevant knowledge blocks from the database."""
         try:
             knowledge_ids = []
@@ -285,7 +284,7 @@ class WorkStationService(BaseService):
 
             finally_docs = await knowledge_retriever_tool.ainvoke({'query': question})
             if not finally_docs:
-                return [], [], []
+                return [], []
 
             prompt_context = ''
             if not prompt_context:
@@ -296,12 +295,12 @@ class WorkStationService(BaseService):
                     formatted_results.append(
                         f'[file name]:{file_name}\n[file content begin]\n{content}\n[file content end]\n'
                     )
-                return formatted_results, finally_docs, []
+                return formatted_results, finally_docs
 
-            return [prompt_context], finally_docs, []
+            return [prompt_context], finally_docs
         except Exception as exc:
             logger.exception(f'queryChunksFromDB error: {exc}')
-            return [], None, []
+            return [], None
 
     @classmethod
     async def get_chat_history(cls, chat_id: str, size: int = 4):
