@@ -245,34 +245,37 @@ class KnowledgeService(KnowledgeUtils):
         db_knowledge.user_id = login_user.user_id
         db_knowledge = KnowledgeDao.insert_one(db_knowledge)
 
-        try:
-            vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(login_user.user_id,
-                                                                                knowledge=db_knowledge,
-                                                                                metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
-            # Init Milvus schema avoiding SchemaNotReady concurrently
-            # Need to provide non-nullable fields to satisfy Milvus schema constraints
-            init_ids = vector_client.add_texts(
-                texts=["init_schema"],
-                metadatas=[Metadata(document_id=0,
-                                    knowledge_id=db_knowledge.id,
-                                    abstract="",
-                                    chunk_index=1,
-                                    bbox="{}",
-                                    page=1,
-                                    upload_time=int(time.time()),
-                                    update_time=int(time.time()),
-                                    uploader="",
-                                    updater="",
-                                    user_metadata={}).model_dump()]
-            )
-            if init_ids:
-                vector_client.delete(ids=init_ids)
+        # qa knowledge will be init index when add question
+        # todo change qa and other knowledge one metadata_schema
+        if db_knowledge.type != KnowledgeTypeEnum.QA.value:
+            try:
+                vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(login_user.user_id,
+                                                                                    knowledge=db_knowledge,
+                                                                                    metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
+                # Init Milvus schema avoiding SchemaNotReady concurrently
+                # Need to provide non-nullable fields to satisfy Milvus schema constraints
+                init_ids = vector_client.add_texts(
+                    texts=["init_schema"],
+                    metadatas=[Metadata(document_id=0,
+                                        knowledge_id=db_knowledge.id,
+                                        abstract="",
+                                        chunk_index=1,
+                                        bbox="{}",
+                                        page=1,
+                                        upload_time=int(time.time()),
+                                        update_time=int(time.time()),
+                                        uploader="",
+                                        updater="",
+                                        user_metadata={}).model_dump()]
+                )
+                if init_ids:
+                    vector_client.delete(ids=init_ids)
 
-            es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=db_knowledge,
-                                                                        metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
-            es_client._store._create_index_if_not_exists()
-        except Exception as e:
-            logger.exception("create knowledge index name error")
+                es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=db_knowledge,
+                                                                            metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
+                es_client._store._create_index_if_not_exists()
+            except Exception as e:
+                logger.exception("create knowledge index name error")
 
         # Handling the next steps in creating a Knowledge Base
         if not skip_hook:
