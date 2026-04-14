@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import List, Optional
 
 from pydantic import field_validator
-from sqlalchemy import Column, DateTime, func, text
+from sqlalchemy import Column, DateTime, func, text, Integer
 from sqlalchemy.orm import selectinload
 from sqlmodel import Field, select, Relationship, col
 
@@ -38,7 +38,8 @@ class UserBase(SQLModelSerializable):
 
 
 class User(UserBase, table=True):
-    user_id: Optional[int] = Field(default=None, sa_column=Column(primary_key=True, autoincrement=True, nullable=False))
+    user_id: Optional[int] = Field(default=None,
+                                   sa_column=Column(Integer, primary_key=True, autoincrement=True, nullable=False))
     password: str = Field(index=False)
     password_update_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')), description='Password Last Modified')

@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from enum import Enum
 from typing import Optional, List
 
-from sqlalchemy import Column, CHAR, Enum as SQLEnum, DateTime, text, Boolean, delete, func, case
+from sqlalchemy import Column, CHAR, Enum as SQLEnum, DateTime, text, Boolean, delete, func, case, INTEGER
 from sqlmodel import Field, select, update, col
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -32,7 +32,8 @@ REJECTED_STATUS_DISPLAY_WINDOW = timedelta(hours=24)
 
 class SpaceChannelMember(SQLModelSerializable, table=True):
     __tablename__ = 'space_channel_member'
-    id: Optional[int] = Field(default=None, sa_column=Column(primary_key=True, autoincrement=True, nullable=False))
+    id: Optional[int] = Field(default=None,
+                              sa_column=Column(INTEGER, primary_key=True, autoincrement=True, nullable=False))
 
     business_id: str = Field(..., description='Business ID', sa_column=Column(CHAR(36), nullable=False, index=True))
     business_type: BusinessTypeEnum = Field(...,

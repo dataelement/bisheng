@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import List, Optional, Tuple
 
-from sqlalchemy import Column, DateTime, Text, and_, func, or_, text
+from sqlalchemy import Column, DateTime, Text, and_, func, or_, text, Integer
 from sqlmodel import Field, select, col
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -41,7 +41,8 @@ class AssistantBase(SQLModelSerializable):
 
 
 class AssistantLinkBase(SQLModelSerializable):
-    id: Optional[int] = Field(default=None, sa_column=Column(primary_key=True, autoincrement=True, nullable=False),
+    id: Optional[int] = Field(default=None,
+                              sa_column=Column(Integer, primary_key=True, autoincrement=True, nullable=False),
                               description='Uniqueness quantificationID')
     assistant_id: Optional[str] = Field(default=0, index=True, description='assistantID')
     tool_id: Optional[int] = Field(default=0, index=True, description='ToolsID')

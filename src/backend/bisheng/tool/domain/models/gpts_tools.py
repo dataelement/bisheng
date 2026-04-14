@@ -4,6 +4,7 @@ from typing import Dict, List, Optional
 
 from pydantic import model_validator
 from sqlalchemy import Column, DateTime, String, text, func
+from sqlalchemy.sql.sqltypes import Integer
 from sqlmodel import Field, or_, select, Text, update, col
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -63,7 +64,8 @@ class GptsTools(GptsToolsBase, table=True):
     extra: Optional[str | dict] = Field(default=None, sa_column=Column(Text, index=False),
                                         description='Used to store additional information, such as parameter requirements, including &initdb_conf_key Data field'
                                                     'Indicates that the configuration information is obtained from the system configuration,For multi-level use.with ')
-    id: Optional[int] = Field(default=None, sa_column=Column(primary_key=True, autoincrement=True, nullable=False))
+    id: Optional[int] = Field(default=None,
+                              sa_column=Column(Integer, primary_key=True, autoincrement=True, nullable=False))
 
 
 class GptsToolsType(GptsToolsTypeBase, table=True):

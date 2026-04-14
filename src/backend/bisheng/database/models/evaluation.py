@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import List, Optional, Dict
 
-from sqlalchemy import Column, DateTime, Text, text, func, and_
+from sqlalchemy import Column, DateTime, Text, text, func, and_, Integer
 from sqlmodel import Field, select
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -46,7 +46,7 @@ class EvaluationBase(SQLModelSerializable):
 
 
 class Evaluation(EvaluationBase, table=True):
-    id: int = Field(default=None, sa_column=Column(primary_key=True, autoincrement=True, nullable=False))
+    id: int = Field(default=None, sa_column=Column(Integer, primary_key=True, autoincrement=True, nullable=False))
 
 
 class EvaluationRead(EvaluationBase):
