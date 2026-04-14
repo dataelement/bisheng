@@ -40,8 +40,9 @@ class ArticleEsService:
 
     async def ensure_index(self) -> None:
         """Ensure article index exists"""
-        client = await self._get_client()
-        await ensure_article_index_exists(client)
+        if self._es_client is None:
+            self._es_client = await get_es_connection()
+        await ensure_article_index_exists(self._es_client)
 
     @staticmethod
     def ensure_index_sync() -> None:
