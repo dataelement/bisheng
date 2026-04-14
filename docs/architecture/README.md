@@ -28,6 +28,7 @@ bisheng/
 | [部署架构与配置](./08-deployment.md) | Docker Compose 编排、配置系统、开发环境 |
 | [用户与权限体系](./10-permission-rbac.md) | 三层权限模型、RBAC、协作空间成员制、扩展分析 |
 | [开发指南](./09-development-guide.md) | 环境搭建、模块约定、扩展点、测试 |
+| [商业版 API 网关](./11-gateway.md) | Gateway 架构、SSO/OAuth 流程、内容安全、流控、开发环境 |
 
 ## 快速导航
 
@@ -38,3 +39,4 @@ bisheng/
 - 想了解如何部署项目或搭建本地开发环境，请看 [部署架构与配置](./08-deployment.md)
 - 想了解用户认证、角色权限、资源授权的完整机制，请看 [用户与权限体系](./10-permission-rbac.md)
 - 想了解开发规范、如何新增模块或编写测试，请看 [开发指南](./09-development-guide.md)
+- 想了解商业版网关（SSO/OAuth、内容安全、流控）的架构和开发方式，请看 [商业版 API 网关](./11-gateway.md)
