@@ -204,7 +204,7 @@ class SOPManageService:
                 new_name = one.name
                 if new_name in repeat_names:
                     # Add suffix if there are duplicate records, Limit Length500characters
-                    new_name = f"{one.name}Dungeon"
+                    new_name = f"{one.name} 副本"
                 await SOPManageService.add_sop(SOPManagementSchema(
                     name=new_name,
                     description=one.description,
