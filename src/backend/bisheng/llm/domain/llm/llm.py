@@ -17,7 +17,6 @@ from bisheng.common.errcode.server import NoLlmModelConfigError, LlmModelConfigD
 from bisheng.core.ai import ChatOllama, ChatOpenAI, ChatOpenAICompatible, \
     AzureChatOpenAI, ChatZhipuAI, ChatAnthropic, MoonshotChat
 from bisheng.core.ai.llm.custom_chat_deepseek import CustomChatDeepSeek
-from bisheng.core.ai.llm.custom_chat_tongyi import CustomChatTongYi
 from bisheng.llm.domain.const import LLMModelType, LLMServerType
 from bisheng.llm.domain.models import LLMServer, LLMModel
 from .base import BishengBase
@@ -62,7 +61,7 @@ def _get_openai_params(params: dict, server_config: dict, model_config: dict) ->
             'api_key': server_config.get('openai_api_key') or server_config.get('api_key') or "empty",
             'base_url': server_config.get('openai_api_base') or server_config.get('base_url'),
         })
-        params['base_url'] = params['base_url'].rstrip('/')
+        params['base_url'] = params['base_url'].rstrip('/') if params['base_url'] else ""
     if server_config.get('openai_proxy'):
         params['openai_proxy'] = server_config.get('openai_proxy')
     params['stream_usage'] = True
@@ -103,27 +102,18 @@ def _get_azure_openai_params(params: dict, server_config: dict, model_config: di
 
 
 def _get_qwen_params(params: dict, server_config: dict, model_config: dict) -> dict:
-    params['dashscope_api_key'] = server_config.get('openai_api_key', '')
-    params['model_kwargs'] = {
-        'enable_search': model_config.get('enable_web_search', False),
-    }
+    params = _get_openai_params(params, server_config, model_config)
+    params["base_url"] = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    extra_body = params.pop('extra_body', {}) or params.pop('model_kwargs', {})
+
+    extra_body['enable_search'] = model_config.get('enable_web_search', False)
+
     if params.get("streaming"):
-        params['model_kwargs']['incremental_output'] = True
+        extra_body['incremental_output'] = True
 
-    if params.get('temperature'):
-        params['model_kwargs']['temperature'] = params.pop('temperature')
+    params['extra_body'] = extra_body
 
-    if params.get('max_tokens'):
-        params['model_kwargs']['max_tokens'] = params.pop('max_tokens')
-
-    user_kwargs = _get_user_kwargs(model_config)
-    if user_model_kwargs := user_kwargs.get('model_kwargs'):
-        user_model_kwargs.update(params['model_kwargs'])
-        params['model_kwargs'] = user_model_kwargs
-        user_kwargs.pop('model_kwargs', None)
-    user_kwargs.update(params)
-
-    return user_kwargs
+    return params
 
 
 def _get_anthropic_params(params: dict, server_config: dict, model_config: dict) -> dict:
@@ -166,7 +156,7 @@ _llm_node_type: Dict = {
     # OfficalapiSERVICES
     LLMServerType.OPENAI.value: {'client': ChatOpenAICompatible, 'params_handler': _get_openai_params},
     LLMServerType.AZURE_OPENAI.value: {'client': AzureChatOpenAI, 'params_handler': _get_azure_openai_params},
-    LLMServerType.QWEN.value: {'client': CustomChatTongYi, 'params_handler': _get_qwen_params},
+    LLMServerType.QWEN.value: {'client': ChatOpenAICompatible, 'params_handler': _get_qwen_params},
     LLMServerType.QIAN_FAN.value: {'client': ChatOpenAICompatible, 'params_handler': _get_openai_params},
     LLMServerType.ZHIPU.value: {'client': ChatZhipuAI, 'params_handler': _get_zhipu_params},
     LLMServerType.MINIMAX.value: {'client': ChatOpenAICompatible, 'params_handler': _get_openai_params},

@@ -204,7 +204,7 @@ class SOPManageService:
                 new_name = one.name
                 if new_name in repeat_names:
                     # Add suffix if there are duplicate records, Limit Length500characters
-                    new_name = f"{one.name}Dungeon"
+                    new_name = f"{one.name} 副本"
                 await SOPManageService.add_sop(SOPManagementSchema(
                     name=new_name,
                     description=one.description,
@@ -404,8 +404,8 @@ class SOPManageService:
                 vector_client = KnowledgeRag.init_milvus_vectorstore(SOPManageService.collection_name,
                                                                      embeddings=embeddings)
                 es_client = KnowledgeRag.init_es_vectorstore(index_name=SOPManageService.collection_name)
-                vector_client.delete(expr=f"vector_store_id == '{vector_store_id}'")
-                es_client.delete([vector_store_id])
+                await vector_client.adelete(expr=f"vector_store_id == '{vector_store_id}'")
+                await es_client.adelete([vector_store_id])
                 metadatas = [{"vector_store_id": vector_store_id}]
                 await vector_client.aadd_texts([sop_obj.content[0:10000]], metadatas=metadatas)
                 await es_client.aadd_texts([sop_obj.content], ids=[vector_store_id], metadatas=metadatas)

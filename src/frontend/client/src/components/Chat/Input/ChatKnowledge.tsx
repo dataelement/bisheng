@@ -50,10 +50,19 @@ function useDebounce<T>(value: T, delay: number): T {
 const MAX_SUB_HEIGHT = 320;
 const BOTTOM_GAP = 8;
 
+/**
+ * Compute an alignOffset so the sub-content top aligns with the parent menu top,
+ * and clamp maxH so the sub-content never overflows the viewport on either side.
+ *
+ * After the sub-content is rendered by Radix, we also observe its real position
+ * and re-clamp maxH based on the actual top (handles Radix collision shifting).
+ */
 function useSubMenuLayout(menuRef: React.RefObject<HTMLDivElement | null>, triggerKey: string, open: boolean) {
   const [alignOffset, setAlignOffset] = useState(0);
   const [maxH, setMaxH] = useState<number>(MAX_SUB_HEIGHT);
+  const subContentRef = useRef<HTMLDivElement | null>(null);
 
+  // Phase 1 — compute alignOffset & an initial maxH from parent menu rect
   useLayoutEffect(() => {
     if (!open) return;
 
@@ -71,13 +80,71 @@ function useSubMenuLayout(menuRef: React.RefObject<HTMLDivElement | null>, trigg
         setAlignOffset(0);
       }
 
-      const available = window.innerHeight - menuRect.top - BOTTOM_GAP;
-      setMaxH(Math.min(Math.max(available, 0), MAX_SUB_HEIGHT));
+      // Initial estimate — will be refined in Phase 2
+      const spaceBelow = window.innerHeight - menuRect.top - BOTTOM_GAP;
+      const spaceAbove = menuRect.bottom - BOTTOM_GAP;
+      const available = Math.max(spaceBelow, spaceAbove);
+      setMaxH(Math.min(Math.max(available, 120), MAX_SUB_HEIGHT));
     };
 
     requestAnimationFrame(update);
     window.addEventListener('resize', update);
     return () => window.removeEventListener('resize', update);
+  }, [open, menuRef, triggerKey]);
+
+  // Phase 2 — once Radix renders the actual sub-content, observe its real
+  // position and clamp maxH so it stays within the viewport.
+  useEffect(() => {
+    if (!open) {
+      subContentRef.current = null;
+      return;
+    }
+
+    // Radix renders sub-content in a portal; locate it by role + data attribute
+    const findSubContent = (): HTMLElement | null => {
+      // Look for the sub-content element associated with this trigger
+      const menuEl = menuRef.current;
+      if (!menuEl) return null;
+
+      const trigger = menuEl.querySelector<HTMLElement>(`[data-sub-key="${triggerKey}"]`);
+      if (!trigger) return null;
+
+      // The sub-content is rendered in a portal; we find it via the Radix
+      // data-state="open" attribute on [role="menu"] elements in the document
+      const allMenus = document.querySelectorAll<HTMLElement>('[role="menu"][data-state="open"]');
+      // Pick the deepest nested one that is NOT the parent menu
+      for (const m of Array.from(allMenus)) {
+        if (m !== menuEl && !menuEl.contains(m)) {
+          return m;
+        }
+      }
+      return null;
+    };
+
+    const clampToViewport = () => {
+      const el = subContentRef.current || findSubContent();
+      if (!el) return;
+      subContentRef.current = el;
+
+      const rect = el.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.top - BOTTOM_GAP;
+      const finalH = Math.min(Math.max(spaceBelow, 120), MAX_SUB_HEIGHT);
+      setMaxH(finalH);
+    };
+
+    // Wait a tick for Radix portal to mount
+    const rafId = requestAnimationFrame(() => {
+      requestAnimationFrame(clampToViewport);
+    });
+
+    window.addEventListener('resize', clampToViewport);
+    window.addEventListener('scroll', clampToViewport, true);
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      window.removeEventListener('resize', clampToViewport);
+      window.removeEventListener('scroll', clampToViewport, true);
+    };
   }, [open, menuRef, triggerKey]);
 
   return { alignOffset, maxH };
@@ -255,6 +322,13 @@ export const ChatKnowledge = ({
     loadSpaces();
   }, [loadSpaces]);
 
+  // Track root dropdown open so we can refresh spaces when it's reopened
+  // (new spaces created outside this component won't appear otherwise).
+  const [rootOpen, setRootOpen] = useState(false);
+  useEffect(() => {
+    if (rootOpen) loadSpaces();
+  }, [rootOpen, loadSpaces]);
+
   // Client-side filter by keyword
   const filteredSpaces = useMemo(
     () =>
@@ -318,7 +392,7 @@ export const ChatKnowledge = ({
   const orgLayout = useSubMenuLayout(menuContentRef, 'org', openSub === 'org');
 
   return (
-    <DropdownMenu>
+    <DropdownMenu open={rootOpen} onOpenChange={setRootOpen}>
       <DropdownMenuTrigger disabled={disabled}>
         <div className={cn(
           "flex bg-white items-center gap-2 h-7 px-3 rounded-full border border-slate-200 text-gray-500 cursor-pointer hover:border-blue-400 transition-all outline-none disabled:opacity-0",
@@ -331,7 +405,7 @@ export const ChatKnowledge = ({
         </div>
       </DropdownMenuTrigger>
 
-      <DropdownMenuContent ref={menuContentRef} align="start" className="w-[200px] p-1.5 rounded-2xl shadow-xl border-slate-100">
+      <DropdownMenuContent ref={menuContentRef} align="start" collisionPadding={BOTTOM_GAP} className="w-[200px] p-1.5 rounded-2xl shadow-xl border-slate-100">
 
         {/* 知识空间 */}
         <DropdownMenuSub
@@ -361,12 +435,12 @@ export const ChatKnowledge = ({
 
           <DropdownMenuSubContent
             alignOffset={spaceLayout.alignOffset}
+            collisionPadding={BOTTOM_GAP}
             className="w-[280px] p-3 rounded-2xl shadow-2xl ml-2 border-slate-100 bg-white flex flex-col overflow-hidden"
             style={{
               '--tw-enter-duration': '0.35s',
               '--tw-enter-easing': 'ease-in-out',
-              height: spaceLayout.maxH,
-              maxHeight: MAX_SUB_HEIGHT,
+              maxHeight: spaceLayout.maxH,
             } as React.CSSProperties}
           >
             <p className="text-sm leading-5 py-1.5 mb-1 font-medium shrink-0">{localize('com_ui_knowledge_space')}</p>
@@ -413,12 +487,12 @@ export const ChatKnowledge = ({
 
           <DropdownMenuSubContent
             alignOffset={orgLayout.alignOffset}
+            collisionPadding={BOTTOM_GAP}
             className="w-[280px] p-3 rounded-2xl shadow-2xl ml-2 border-slate-100 bg-white flex flex-col overflow-hidden"
             style={{
               '--tw-enter-duration': '0.35s',
               '--tw-enter-easing': 'ease-in-out',
-              height: orgLayout.maxH,
-              maxHeight: MAX_SUB_HEIGHT,
+              maxHeight: orgLayout.maxH,
             } as React.CSSProperties}
           >
             <p className="text-sm leading-5 py-1.5 mb-1 font-medium shrink-0">{localize('com_tools_org_knowledge')}</p>

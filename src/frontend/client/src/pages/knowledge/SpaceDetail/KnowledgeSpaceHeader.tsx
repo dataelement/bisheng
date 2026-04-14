@@ -419,12 +419,13 @@ export function KnowledgeSpaceHeader({
                 <div className="flex items-center gap-3 self-end sm:self-auto shrink-0 mt-2 sm:mt-0">
                     <Button
                         variant="ghost"
-                        className={`h-8 px-1.5 gap-1 font-normal hover:bg-accent ${isAiAssistantOpen ? 'bg-[#f0f5ff] rounded-md' : ''}`}
+                        className="ai-btn-border-draw h-8 px-1.5 gap-1 font-normal rounded-[6px] hover:bg-transparent"
                         disabled={isSearching}
                         onClick={onToggleAiAssistant}
                     >
-                        <AiChatIcon className="size-3.5" stroke={isSearching ? "#c9cdd4" : "#335CFF"} />
-                        <span className={isSearching ? '' : 'ai-gradient-text'}>{localize("com_knowledge.ai_assistant")}</span>
+                        <span className="ai-btn-shimmer-overlay" />
+                        <AiChatIcon className="size-4" stroke={isSearching ? "#c9cdd4" : "#335cff"} />
+                        <span className={isSearching ? '' : 'text-[#000D4D]'}>{localize("com_knowledge.ai_assistant")}</span>
                     </Button>
 
                     {showShare && (

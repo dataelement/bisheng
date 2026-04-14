@@ -108,10 +108,11 @@ export default function FilePreviewPage() {
         <Button
             variant="ghost"
             onClick={handleToggleAiAssistant}
-            className="h-8 px-1.5 text-sm gap-1 hover:bg-accent"
+            className="ai-btn-border-draw h-8 px-1.5 text-sm gap-1 rounded-[6px] hover:bg-transparent"
         >
-            <AiChatIcon className="size-3.5" />
-            <span className="ai-gradient-text">{localize("com_knowledge.ai_assistant")}</span>
+            <span className="ai-btn-shimmer-overlay" />
+            <AiChatIcon className="size-4 text-[#94BFFF]" />
+            <span className="text-[#000D4D] font-normal">{localize("com_knowledge.ai_assistant")}</span>
         </Button>
     );
 

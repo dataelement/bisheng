@@ -2783,6 +2783,62 @@ button.scroll-convo {
   display: inline-block;
 }
 
+.ai-btn-border-draw {
+  position: relative;
+  overflow: hidden;
+}
+
+.ai-btn-shimmer-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
+  pointer-events: none;
+  background-image: linear-gradient(
+    135deg,
+    transparent 40%,
+    rgba(255, 255, 255, .5) 50%,
+    transparent 60%
+  );
+  background-size: 250% 250%;
+  background-position: 100% 100%;
+}
+
+.ai-btn-border-draw:hover .ai-btn-shimmer-overlay {
+  animation: ai-btn-shimmer .8s ease forwards;
+}
+
+@keyframes ai-btn-shimmer {
+  0% { background-position: 100% 100%; }
+  100% { background-position: 0% 0%; }
+}
+
+.ai-btn-border-draw::before,
+.ai-btn-border-draw::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 1px solid transparent;
+  pointer-events: none;
+  transition: clip-path .5s ease;
+}
+
+.ai-btn-border-draw::before {
+  border-color: #335CFF;
+  clip-path: inset(0 100% 100% 0);
+}
+
+.ai-btn-border-draw::after {
+  border-color: #335CFF;
+  clip-path: inset(100% 0 0 100%);
+}
+
+.ai-btn-border-draw:hover::before,
+.ai-btn-border-draw:hover::after {
+  clip-path: inset(0 0 0 0);
+}
+
 .lingsi-border-box {
   position: relative;
   width: 200px;

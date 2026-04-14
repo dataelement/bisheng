@@ -410,7 +410,13 @@ class WorkFlowService(BaseService):
         return is_new
 
     @classmethod
-    def get_uncategorized_flows(cls, user: UserPayload, page: int = 1, page_size: int = 8) -> tuple[list, int]:
+    def get_uncategorized_flows(
+        cls,
+        user: UserPayload,
+        page: int = 1,
+        page_size: int = 8,
+        keyword: Optional[str] = None,
+    ) -> tuple[list, int]:
         """
         Get a list of unsorted skills
         """
@@ -427,7 +433,17 @@ class WorkFlowService(BaseService):
 
         # Get a list of skills visible to the user
         if user.is_admin():
-            data, _ = FlowDao.get_all_apps(None, FlowStatus.ONLINE.value, None, None, None, None, flow_ids_not_in, 0, 0)
+            data, _ = FlowDao.get_all_apps(
+                keyword,
+                FlowStatus.ONLINE.value,
+                None,
+                None,
+                None,
+                None,
+                flow_ids_not_in,
+                0,
+                0,
+            )
         else:
             user_role = UserRoleDao.get_user_roles(user.user_id)
             role_ids = [role.role_id for role in user_role]
@@ -436,7 +452,7 @@ class WorkFlowService(BaseService):
             flow_id_extra = []
             if role_access:
                 flow_id_extra = [access.third_id for access in role_access]
-            data, _ = FlowDao.get_all_apps(None, FlowStatus.ONLINE.value, None, None, user.user_id, flow_id_extra,
+            data, _ = FlowDao.get_all_apps(keyword, FlowStatus.ONLINE.value, None, None, user.user_id, flow_id_extra,
                                            flow_ids_not_in, 0, 0)
         data = cls.filter_supported_apps(data)
         total = len(data)

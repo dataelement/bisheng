@@ -14,7 +14,7 @@ const SegmentSelector = ({ lingsi, onChange, bsConfig }) => {
                         }`}
                     onClick={() => onChange(false)}
                 >
-                    {bsConfig.tabDisplayName ? bsConfig.tabDisplayName : localize('com_segment_daily_mode')}
+                    {bsConfig?.tabDisplayName ? bsConfig.tabDisplayName : localize('com_segment_daily_mode')}
                 </button>
                 <button
                     type="button"
@@ -24,10 +24,10 @@ const SegmentSelector = ({ lingsi, onChange, bsConfig }) => {
                         }`}
                     onClick={() => onChange(true)}
                 >
-                    <div className="flex items-center justify-center gap-1 relative">
-                        {lingsi && <img src={__APP_ENV__.BASE_URL + "/assets/lingsi.svg"} className="size-4 block shrink-0" alt="" />}
-                        <span className={lingsi ? 'lingsi-text' : ''}>
-                            {bsConfig.linsightConfig.tab_display_name ? bsConfig.linsightConfig.tab_display_name : localize('com_segment_linsight')}
+                    <div className='flex items-center justify-center relative'>
+                        {lingsi && <img src={__APP_ENV__.BASE_URL + "/assets/lingsi.svg"} className='size-4 block' alt="" />}
+                        <span className={lingsi ? 'lingsi-text ml-2' : ''}>
+                            {bsConfig?.linsightConfig?.tab_display_name ? bsConfig.linsightConfig.tab_display_name : localize('com_segment_linsight')}
                         </span>
                     </div>
                 </button>

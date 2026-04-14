@@ -56,7 +56,7 @@ class KnowledgeBase(SQLModelSerializable):
     user_id: Optional[int] = Field(default=None, index=True)
     name: str = Field(index=True, min_length=1, max_length=200,
                       description='Knowledge Base Name')
-    type: int = Field(index=False, default=0,
+    type: int = Field(index=False, default=KnowledgeTypeEnum.NORMAL.value,
                       description='Knowledge Base Type, value from KnowledgeTypeEnum')
     description: Optional[str] = Field(default=None, index=True)
     model: Optional[str] = Field(default=None, index=False)

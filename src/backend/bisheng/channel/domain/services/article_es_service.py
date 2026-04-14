@@ -35,12 +35,14 @@ class ArticleEsService:
         """Get ES client, lazy loading"""
         if self._es_client is None:
             self._es_client = await get_es_connection()
+        await self.ensure_index()
         return self._es_client
 
     async def ensure_index(self) -> None:
         """Ensure article index exists"""
-        client = await self._get_client()
-        await ensure_article_index_exists(client)
+        if self._es_client is None:
+            self._es_client = await get_es_connection()
+        await ensure_article_index_exists(self._es_client)
 
     @staticmethod
     def ensure_index_sync() -> None:
@@ -448,7 +450,7 @@ class ArticleEsService:
                 body.append({"query": query, "size": 0})
 
         response = await client.msearch(body=body)
-        
+
         counts = []
         for i, r in enumerate(response["responses"]):
             if i in zero_indices:
@@ -565,7 +567,8 @@ class ArticleEsService:
                 "post_tags": ["</em>"],
                 "fields": {
                     "title": {"number_of_fragments": 0, "highlight_query": highlight_query},
-                    "content": {"fragment_size": 200, "number_of_fragments": 3, "highlight_query": highlight_query, "max_analyzed_offset": 999999},
+                    "content": {"fragment_size": 200, "number_of_fragments": 3, "highlight_query": highlight_query,
+                                "max_analyzed_offset": 999999},
                 },
             }
 

@@ -97,5 +97,13 @@ linsight:
   # 模型json格式失败重试时的温度
   retry_temperature: 1
 
+information_conf:
+  # 情报订阅服务的接口地址
+  base_url: ""
+  # 情报订阅服务的api_key
+  api_key: ""
+  kwargs: # 发送给情报订阅服务额外参数
+    timeout: 3600  # 请求情报订阅服务的超时时间，单位秒
+
 mcp:
   enable_stdio: true

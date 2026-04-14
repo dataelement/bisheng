@@ -340,59 +340,60 @@ export default function Files({ onPreview }) {
                 </div>
             )}
 
-            {/* Top action bar */}
-            {selectedFileObjs.length > 0 && (
-                <div className="absolute top-[-62px] left-0 right-0 flex justify-center items-center p-2 border-b z-10">
-                    <div className="flex items-center">
-                        <div className="flex gap-2">
+            {/* Top action bar combined */}
+            <div className="absolute right-0 top-[-62px] flex flex-wrap md:flex-nowrap justify-end gap-2 md:gap-4 items-center z-10 max-w-[calc(100vw-40px)] bg-background md:bg-transparent p-1 md:p-0 rounded-lg">
+
+                {/* Batch Actions */}
+                {selectedFileObjs.length > 0 && (
+                    <div className="flex items-center gap-2 mr-1 md:mr-0 pr-2 md:pr-4 border-r border-gray-200 dark:border-gray-700">
+                        <Tip content={!isEditable && t('noOperationPermission')} side='bottom'>
+                            <Button
+                                variant="outline"
+                                onClick={handleBatchDelete}
+                                disabled={!isEditable}
+                                className="flex items-center gap-1 disabled:pointer-events-auto h-9 px-2 sm:px-4"
+                            >
+                                <Trash2 size={16} />
+                                <span className="hidden sm:inline">{t('delete')}</span>
+                            </Button>
+                        </Tip>
+                        {hasSelectedFailedFiles && (
                             <Tip content={!isEditable && t('noOperationPermission')} side='bottom'>
                                 <Button
                                     variant="outline"
-                                    onClick={handleBatchDelete}
+                                    onClick={handleBatchRetry}
                                     disabled={!isEditable}
-                                    className="flex items-center gap-1 disabled:pointer-events-auto"
+                                    className="flex items-center gap-1 disabled:pointer-events-auto h-9 px-2 sm:px-4"
                                 >
-                                    <Trash2 size={16} />
-                                    {t('delete')}
+                                    <RotateCw size={16} />
+                                    <span className="hidden sm:inline">{t('retry')}</span>
                                 </Button>
                             </Tip>
-                            {hasSelectedFailedFiles && (
-                                <Tip content={!isEditable && t('noOperationPermission')} side='bottom'>
-                                    <Button
-                                        variant="outline"
-                                        onClick={handleBatchRetry}
-                                        disabled={!isEditable}
-                                        className="flex items-center gap-1 disabled:pointer-events-auto"
-                                    >
-                                        <RotateCw size={16} />
-                                        {t('retry')}
-                                    </Button>
-                                </Tip>
-                            )}
-                        </div>
+                        )}
                     </div>
-                </div>
-            )}
-
-            <div className="absolute right-0 top-[-62px] flex gap-4 items-center z-999">
-                <SearchInput placeholder={t('searchFileName')} onChange={(e) => {
-                    search(e.target.value);
-                    setSelectedFileObjs([]);
-                    setIsAllSelected(false);
-                }} />
-                <Button
-                    variant="outline"
-                    onClick={() => setMetadataOpen(true)}
-                    className="px-4 whitespace-nowrap"
-                >
-                    <ClipboardPenLine size={16} strokeWidth={1.5} className="mr-1" />
-                    {t('metaData')}
-                </Button>
-                {isEditable && (
-                    <Link to={`/filelib/upload/${id}`}>
-                        <Button className="px-8">{t('uploadFile')}</Button>
-                    </Link>
                 )}
+
+                {/* Regular actions */}
+                <div className="flex items-center gap-2 md:gap-4">
+                    <SearchInput placeholder={t('searchFileName')} onChange={(e) => {
+                        search(e.target.value);
+                        setSelectedFileObjs([]);
+                        setIsAllSelected(false);
+                    }} />
+                    <Button
+                        variant="outline"
+                        onClick={() => setMetadataOpen(true)}
+                        className="px-2 md:px-4 whitespace-nowrap h-9"
+                    >
+                        <ClipboardPenLine size={16} strokeWidth={1.5} className="mr-0 md:mr-1" />
+                        <span className="hidden md:inline">{t('metaData')}</span>
+                    </Button>
+                    {isEditable && (
+                        <Link to={`/filelib/upload/${id}`}>
+                            <Button className="px-4 md:px-8 h-9">{t('uploadFile')}</Button>
+                        </Link>
+                    )}
+                </div>
             </div>
 
             <div className="h-[calc(100vh-180px)] overflow-y-auto pb-20">

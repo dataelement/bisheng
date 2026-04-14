@@ -103,14 +103,18 @@ export interface BsConfig {
 
 // --- API Functions ---
 
-/** Fetch messages for a conversation */
+/** Fetch messages for a conversation. When rendered from /share/:token the
+ *  caller must pass shareToken so the backend auth middleware lets the
+ *  anonymous request through. */
 export async function getMessages(
-    conversationId: string
+    conversationId: string,
+    shareToken?: string
 ): Promise<ChatMessage[]> {
     if (!conversationId || conversationId === "new") {
         return [];
     }
-    const res = await http.get(API.messages(conversationId));
+    const headers = shareToken ? { 'share-token': shareToken } : undefined;
+    const res = await http.get(API.messages(conversationId), headers ? { headers } : undefined);
     return res?.data ?? res ?? [];
 }
 
