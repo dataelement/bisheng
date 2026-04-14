@@ -58,9 +58,10 @@ def get_original_file(message_id: Annotated[int, Body(embed=True)],
     result = []
     for index, chunk in enumerate(chunks):
         file = id2file.get(chunk.file_id)
+        chunk_metadata = json.loads(chunk.meta_data) if chunk.meta_data else {}
 
-        chunk_res = json.loads(json.loads(chunk.meta_data).get('bbox'))
-        file_access = json.loads(chunk.meta_data).get('right', True)
+        chunk_res = json.loads(chunk_metadata.get('bbox')) if chunk_metadata and chunk_metadata.get("bbox") else {}
+        file_access = chunk_metadata.get('right', True)
         chunk_res['right'] = file_access
         if file_access and file:
             # Preview filesurl

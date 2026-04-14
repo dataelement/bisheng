@@ -96,8 +96,8 @@ def sync_judge_source(result, source_document, chat_id, extra: Dict):
         if any(not doc.metadata.get("right", True) for doc in source_document):
             source = SourceType.NO_PERMISSION.value
         elif all(
-            doc.metadata.get("user_metadata") and doc.metadata.get("user_metadata", {}).get("url")
-            for doc in source_document
+                doc.metadata.get("user_metadata") and doc.metadata.get("user_metadata", {}).get("url")
+                for doc in source_document
         ):
             source = SourceType.LINK.value
             repeat_doc = {}
@@ -162,9 +162,10 @@ def sync_process_source_document(source_document: List[Document], chat_id, messa
 
 
 async def process_source_document(source_document: List[Document], chat_id, message_id, answer):
+    logger.debug(f"process_source_document: {len(source_document)} message_id: {message_id}")
+
     if not source_document or not message_id:
         return
-
     message_info = await ChatMessageDao.aget_message_by_id(message_id)
     if not message_info:
         return
@@ -186,9 +187,11 @@ async def process_source_document(source_document: List[Document], chat_id, mess
             )
             batch_insert.append(recall_chunk)
     if batch_insert:
+        logger.debug(f"batch_insert: {len(batch_insert)} message_id: {message_id}")
         async with get_async_db_session() as db_session:
             db_session.add_all(batch_insert)
             await db_session.commit()
+    logger.debug(f"process_source_document_over: {len(source_document)} message_id: {message_id}")
 
 
 def process_node_data(node_data: List[Dict]) -> Dict:
