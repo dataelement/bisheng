@@ -278,8 +278,10 @@ export default function apps() {
         <CreateTemp flow={flowRef.current} type={tempType} open={tempOpen} setOpen={() => toggleTempModal()} onCreated={() => { }} ></CreateTemp>
         {/* footer */}
         <div className="flex justify-between absolute bottom-0 left-0 w-full bg-background-main h-16 items-center px-10">
-            <p className="text-sm text-muted-foreground break-keep">{t('build.manageYourApplications')}</p>
-            <AutoPagination className="m-0 w-auto justify-end" page={page} pageSize={pageSize} total={total} onChange={setPage}></AutoPagination>
+            <div className="flex items-center gap-2">
+                <p className="text-sm text-muted-foreground break-keep">{t('build.manageYourApplications')}</p>
+            </div>
+            <AutoPagination className="m-0 w-auto justify-end" page={page} pageSize={pageSize} total={total} showTotal={true} onChange={setPage}></AutoPagination>
         </div>
         {/* create flow&assistant */}
         <CreateApp ref={createAppModalRef} />

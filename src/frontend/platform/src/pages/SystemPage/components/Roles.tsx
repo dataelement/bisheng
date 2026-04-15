@@ -193,8 +193,11 @@ export default function Roles() {
                     </TableFooter>
                 </Table>
             </div>
-            <div className="bisheng-table-footer bg-background-login">
-                <p className="desc">{t('system.roleList')}.</p>
+            <div className="bisheng-table-footer px-6 bg-background-login">
+                <div className="flex items-center gap-2">
+                    <p className="desc">{t('system.roleList')}.</p>
+                    <span className="text-sm text-[#86909c]">{t('pagination.totalRecords', { ns: 'bs', total: state.roles.length })}</span>
+                </div>
             </div>
         </div>
     );

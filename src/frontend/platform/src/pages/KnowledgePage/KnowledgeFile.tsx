@@ -633,12 +633,15 @@ export default function KnowledgeFile() {
                 </Table>
             </div>
             <div className="bisheng-table-footer px-6 bg-background-login">
-                <p className="desc">{t('lib.libraryCollection', { ns: 'bs' })}</p>
+                <div className="flex items-center gap-2">
+                    <p className="desc">{t('lib.libraryCollection', { ns: 'bs' })}</p>
+                </div>
                 <div>
                     <AutoPagination
                         page={page}
                         pageSize={pageSize}
                         total={total}
+                        showTotal={true}
                         onChange={(newPage) => setPage(newPage)}
                     />
                 </div>

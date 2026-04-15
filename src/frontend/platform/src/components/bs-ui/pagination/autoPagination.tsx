@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from './index';
 import { Input } from '../input';
+import { useTranslation } from 'react-i18next';
 
 interface IProps {
     /** Current page number */
@@ -20,7 +21,9 @@ interface IProps {
     /** Text for "Jump to" label */
     jumpToText?: string,
     /** Text for "page" label */
-    pageText?: string
+    pageText?: string,
+    /** Whether to show total count */
+    showTotal?: boolean
 }
 
 const AutoPagination = ({
@@ -32,8 +35,10 @@ const AutoPagination = ({
     onChange,
     showJumpInput = false,
     jumpToText = 'Go to',
-    pageText = 'page'
+    pageText = 'page',
+    showTotal = false
 }: IProps) => {
+    const { t } = useTranslation();
     const totalPages = Math.ceil(total / pageSize);
     const [jumpPage, setJumpPage] = useState<string>("");
 
@@ -135,6 +140,12 @@ const AutoPagination = ({
                             />
                             <span>{pageText}</span>
                         </div>
+                    </PaginationItem>
+                )}
+                {/* Conditionally render total count */}
+                {showTotal && (
+                    <PaginationItem key="total">
+                        <span className="text-sm text-[#86909c] ml-2">{t('pagination.totalRecords', { ns: 'bs', total })}</span>
                     </PaginationItem>
                 )}
             </PaginationContent>

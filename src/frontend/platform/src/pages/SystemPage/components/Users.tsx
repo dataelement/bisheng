@@ -243,13 +243,16 @@ export default function Users(params) {
         </div>
         {/* 分页 */}
         {/* <Pagination count={10}></Pagination> */}
-        <div className="bisheng-table-footer bg-background-login">
-            <p className="desc">{t('system.userList')}</p>
+        <div className="bisheng-table-footer px-6 bg-background-login">
+            <div className="flex items-center gap-2">
+                <p className="desc">{t('system.userList')}</p>
+            </div>
             <AutoPagination
                 className="float-right justify-end w-full mr-6"
                 page={page}
                 pageSize={pageSize}
                 total={total}
+                showTotal={true}
                 onChange={(newPage) => setPage(newPage)}
             />
         </div>

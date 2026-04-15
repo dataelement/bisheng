@@ -902,6 +902,7 @@ export default function Paragraphs({ fileId, onBack }) {
                     page={page}
                     pageSize={pageSize}
                     total={total}
+                    showTotal={true}
                     onChange={setPage}
                     disabled={!selectedFileId}
                 />

@@ -1,5 +1,8 @@
 {
   "title": "BISHENG",
+  "pagination": {
+    "totalRecords": "Total {{total}} records"
+  },
   "bisheng": "{{bisheng}}",
   "linsight": "{{linsight}}",
   "linsightFullName": "{{linsightFull}}",

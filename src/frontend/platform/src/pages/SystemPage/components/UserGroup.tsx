@@ -118,8 +118,11 @@ export default function UserGroups() {
                 </TableFooter>
             </Table>
         </div>
-        <div className="bisheng-table-footer bg-background-login">
-            <p className="desc">{t('system.userGroupList')}.</p>
+        <div className="bisheng-table-footer px-6 bg-background-login">
+            <div className="flex items-center gap-2">
+                <p className="desc">{t('system.userGroupList')}.</p>
+                <span className="text-sm text-[#86909c]">{t('pagination.totalRecords', { ns: 'bs', total: userGroups.length })}</span>
+            </div>
         </div>
     </div>
 }

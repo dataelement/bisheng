@@ -1,5 +1,8 @@
 {
   "title": "BISHENG",
+  "pagination": {
+    "totalRecords": "共 {{total}} 条记录"
+  },
   "bisheng": "{{bishengZh}}",
   "linsight": "{{linsightZh}}",
   "linsightFullName": "{{linsightFullZh}}",

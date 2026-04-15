@@ -118,10 +118,13 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
                             <span>{t("tools.mcpTools")}</span>
                         </div>
                     </div>
-                    <div className="absolute bottom-0 left-0 flex h-16 w-full items-center justify-betwee px-2">
-                        <p className="text-sm text-muted-foreground break-all">
-                            {t("tools.manageCustomTools")}
-                        </p>
+                    <div className="absolute bottom-0 left-0 flex h-16 w-full items-center justify-between px-6">
+                        <div className="flex items-center gap-2">
+                            <p className="text-sm text-muted-foreground break-keep">
+                                {t("tools.manageCustomTools")}
+                            </p>
+                            <span className="text-sm text-[#86909c] whitespace-nowrap">{t('pagination.totalRecords', { ns: 'bs', total: options.length })}</span>
+                        </div>
                     </div>
                 </div>
                 <div className="h-full w-full flex-1 overflow-auto bg-background-login p-5 pb-20 pt-2 scrollbar-hide">

@@ -397,6 +397,7 @@ export default function AppUseLog() {
                     pageText={t('log.pagination.page')}
                     pageSize={pageSize}
                     total={total}
+                    showTotal={true}
                     onChange={(newPage) => setPage(newPage)}
                 />
             </div>

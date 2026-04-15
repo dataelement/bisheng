@@ -35,7 +35,7 @@ async def get_all_group(login_user: UserPayload = Depends(UserPayload.get_login_
             raise UnAuthorizedError()
 
     groups_res = RoleGroupService().get_group_list(groups)
-    return resp_200({'records': groups_res})
+    return resp_200({'records': groups_res, 'total': len(groups_res)})
 
 
 @router.post('/create')
