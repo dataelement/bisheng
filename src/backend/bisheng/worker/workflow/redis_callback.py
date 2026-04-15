@@ -9,6 +9,12 @@ from langchain_core.documents import Document
 from loguru import logger
 from bisheng.api.v1.schema.workflow import WorkflowEventType
 from bisheng.api.v1.schemas import ChatResponse
+from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
+from bisheng.citation.domain.services.citation_prompt_helper import (
+    collect_rag_citation_registry_items,
+    select_registry_items_for_persistence,
+    save_message_citations_sync,
+)
 from bisheng.common.chat.utils import sync_judge_source, sync_process_source_document
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
 from bisheng.common.errcode.flow import WorkFlowNodeRunMaxTimesError, WorkFlowWaitUserTimeoutError, \
@@ -412,7 +418,12 @@ class RedisCallback(BaseCallback):
         if self.workflow and self.get_workflow_stop():
             self.workflow.stop()
 
-    def save_chat_message(self, chat_response: ChatResponse, source_documents=None) -> int | str | None:
+    def save_chat_message(
+            self,
+            chat_response: ChatResponse,
+            source_documents=None,
+            citation_registry_items: List[CitationRegistryItemSchema] | None = None,
+    ) -> int | str | None:
         """  save chat message to database
         return message id
         """
@@ -444,6 +455,19 @@ class RedisCallback(BaseCallback):
             category=chat_response.category,
             files=json.dumps(chat_response.files, ensure_ascii=False)
         ))
+
+        answer_text = self._extract_message_text(chat_response.message)
+        items = list(citation_registry_items or [])
+        if not items and source_documents:
+            documents = source_documents if isinstance(source_documents, list) else [source_documents]
+            items = collect_rag_citation_registry_items(documents)
+        items = select_registry_items_for_persistence(items, answer_text)
+        save_message_citations_sync(
+            message_id=message.id,
+            items=items,
+            chat_id=self.chat_id,
+            flow_id=self.workflow_id,
+        )
 
         # If the document is traceable, handle the recallchunk
         if chat_response.source not in [0, 4]:
@@ -482,6 +506,19 @@ class RedisCallback(BaseCallback):
             self.create_session = True
 
         return message.id
+
+    @staticmethod
+    def _extract_message_text(message: str | dict | list | None) -> str:
+        if isinstance(message, str):
+            return message
+        if isinstance(message, dict):
+            msg = message.get('msg')
+            if isinstance(msg, str):
+                return msg
+            return json.dumps(message, ensure_ascii=False)
+        if message is None:
+            return ''
+        return json.dumps(message, ensure_ascii=False)
 
     def generate_session_title(self, answer: str):
         if not self.new_session:
@@ -591,13 +628,17 @@ class RedisCallback(BaseCallback):
         # Replaceminioright of privacysharePrefix bynginxShare  ugly solve
         minio_share = settings.get_minio_conf().sharepoint
         data.msg = data.msg.replace(f"http://{minio_share}", "")
-        chat_response = ChatResponse(message=data.dict(exclude={'source_documents'}),
+        chat_response = ChatResponse(message=data.dict(exclude={'source_documents', 'citation_registry_items'}),
                                      category=WorkflowEventType.StreamMsg.value,
                                      extra='',
                                      type='end',
                                      flow_id=self.workflow_id,
                                      chat_id=self.chat_id)
-        msg_id = self.save_chat_message(chat_response, source_documents=data.source_documents)
+        msg_id = self.save_chat_message(
+            chat_response,
+            source_documents=data.source_documents,
+            citation_registry_items=data.citation_registry_items,
+        )
         if msg_id:
             chat_response.message_id = msg_id
         self.send_chat_response(chat_response)

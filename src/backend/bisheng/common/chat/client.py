@@ -12,6 +12,10 @@ from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.v1.callback import AsyncGptsDebugCallbackHandler
 from bisheng.api.v1.schemas import ChatMessage, ChatResponse
+from bisheng.citation.domain.services.citation_prompt_helper import (
+    save_message_citations,
+    select_registry_items_for_persistence,
+)
 from bisheng.common.chat.types import WorkType
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
@@ -328,6 +332,7 @@ class ChatClient:
 
             # Get callback history
             chat_history = await self.get_latest_history()
+            self.gpts_agent.reset_citation_registry_items()
             # RecallagentGet Results
             result = await self.gpts_agent.run(input_msg, chat_history, self.gpts_async_callback)
             logger.debug(f'gpts agent {self.client_key} result: {result}')
@@ -357,6 +362,17 @@ class ChatClient:
 
             res = await self.add_message('bot', reasoning_content, 'reasoning_answer')
             res = await self.add_message('bot', answer, 'answer')
+            if res:
+                citation_items = select_registry_items_for_persistence(
+                    self.gpts_agent.collect_citation_registry_items(),
+                    answer,
+                )
+                await save_message_citations(
+                    message_id=res.id,
+                    items=citation_items,
+                    chat_id=self.chat_id,
+                    flow_id=self.client_id,
+                )
             await self.send_response('answer', 'start', '')
             await self.send_response('answer', answer_end_type, answer, message_id=res.id if res else None)
             logger.info(f'gptsAgentOver assistant_id:{self.client_id} chat_id:{self.chat_id} question:{input_msg}')

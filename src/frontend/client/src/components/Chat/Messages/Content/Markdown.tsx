@@ -1,4 +1,6 @@
-import React, { lazy, memo, Suspense, useEffect, useMemo, useRef } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import * as Popover from '@radix-ui/react-popover';
+import { ExternalLink, FileText, Globe2, Loader2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { useRecoilValue } from 'recoil';
 import rehypeHighlight from 'rehype-highlight';
@@ -17,15 +19,24 @@ import {
 import { Artifact, artifactPlugin } from '~/components/Artifacts/Artifact';
 import { remarkCitationPlugin } from '~/components/Artifacts/remarkCitationPlugin';
 import CodeBlock from '~/components/Messages/Content/CodeBlock';
-import { TooltipAnchor } from '~/components/ui';
 import { useFileDownload } from '~/hooks/queries/data-provider';
 import { PermissionTypes, Permissions } from '~/types/chat';
 import useHasAccess from '~/hooks/Roles/useHasAccess';
 import useLocalize from '~/hooks/useLocalize';
 import store from '~/store';
 import { handleDoubleClick, langSubset, preprocessLaTeX } from '~/utils';
-import type { ChatCitation } from '~/api/chatApi';
-import { WebItem } from './SearchWebUrls';
+import { getCitationDetail, type ChatCitation } from '~/api/chatApi';
+import {
+  buildCitationPreview,
+  createCitationDetailMap,
+  getCitationClassName,
+  getCitationSourceLabel,
+  getLegacyCitationPreview,
+  transformPrivateCitations,
+  type CitationDetailLoader,
+  type CitationDisplayData,
+  type CitationPreview,
+} from './citationUtils';
 import MermaidBlock from './Mermaid'
 import Echarts from './Echarts'
 
@@ -71,7 +82,7 @@ export const code: React.ElementType = memo(({ className, children }: TCodeProps
       </code>
     );
   } else {
-    if (lang === 'echarts') return <Echarts option={children} />
+    if (lang === 'echarts') return <Echarts option={String(children)} />
     if (lang === 'mermaid') return <MermaidBlock>{String(children).trim()}</MermaidBlock>
     return <CodeBlock
       lang={lang ?? 'text'}
@@ -191,171 +202,194 @@ type TContentProps = {
   citations?: ChatCitation[] | null;
 };
 
-type CitationDisplayData = {
-  label: number;
-  type: string;
-  groupKey: string;
-  chunkId: string;
-  url?: string;
-  title: string;
-  snippet: string;
-};
-
-const CITATION_START = '\ue200';
-const CITATION_SEPARATOR = '\ue201';
-const CITATION_END = '\ue202';
-
-type ParsedCitationRef = {
-  type: string;
-  groupKey: string;
-  chunkId: string;
-  citationId: string;
-  itemId: string;
-};
-
-function parseCitationRef(ref: string): ParsedCitationRef | null {
-  const lastColonIndex = ref.lastIndexOf(':');
-  if (lastColonIndex < 0) {
-    return null;
+function CitationPreviewCard({
+  preview,
+  label,
+  isLoading,
+  error,
+}: {
+  preview: CitationPreview | null;
+  label?: number;
+  isLoading: boolean;
+  error: boolean;
+}) {
+  if (isLoading) {
+    return (
+      <div className="flex min-h-[120px] w-[420px] max-w-[calc(100vw-32px)] items-center justify-center rounded-lg bg-white text-sm text-[#86909C] shadow-[0_10px_30px_rgba(0,0,0,0.12)]">
+        <Loader2 className="mr-2 size-4 animate-spin" />
+        加载溯源详情...
+      </div>
+    );
   }
 
-  const citationId = ref.slice(0, lastColonIndex).trim();
-  const itemId = ref.slice(lastColonIndex + 1).trim();
-
-  if (!citationId || !itemId) {
-    return null;
+  if (error || !preview) {
+    return (
+      <div className="w-[420px] max-w-[calc(100vw-32px)] rounded-lg bg-white p-4 text-sm text-[#86909C] shadow-[0_10px_30px_rgba(0,0,0,0.12)]">
+        暂无溯源详情
+      </div>
+    );
   }
 
-  const firstUnderscoreIndex = citationId.indexOf('_');
-  if (firstUnderscoreIndex < 0) {
-    return null;
-  }
+  const isWeb = preview.type === 'web';
+  const Icon = isWeb ? Globe2 : FileText;
 
-  const type = citationId.slice(0, firstUnderscoreIndex).trim();
-  const groupKey = citationId.slice(firstUnderscoreIndex + 1).trim();
-
-  if (!type || !groupKey) {
-    return null;
-  }
-
-  return {
-    type,
-    groupKey,
-    chunkId: itemId,
-    citationId,
-    itemId,
-  };
+  return (
+    <div className="w-[420px] max-w-[calc(100vw-32px)] overflow-hidden rounded-lg bg-white text-[#1D2129] shadow-[0_10px_30px_rgba(0,0,0,0.12)]">
+      <div className="flex items-center gap-2 border-b border-[#F2F3F5] px-4 py-3">
+        <Icon className={`size-4 shrink-0 ${isWeb ? 'text-[#7C3AED]' : 'text-[#F53F3F]'}`} />
+        {preview.link ? (
+          <a
+            href={preview.link}
+            target="_blank"
+            rel="noreferrer"
+            className="min-w-0 flex-1 truncate text-[15px] font-medium leading-6 text-[#165DFF] hover:underline"
+          >
+            {preview.title}
+          </a>
+        ) : (
+          <div className="min-w-0 flex-1 truncate text-[15px] font-medium leading-6 text-[#165DFF]">
+            {preview.title}
+          </div>
+        )}
+        {isWeb && <ExternalLink className="size-4 shrink-0 text-[#165DFF]" />}
+      </div>
+      <div className="px-4 py-3">
+        <div className="border-l-2 border-[#E5E6EB] pl-3 text-[14px] leading-7 text-[#1D2129]">
+          <div className="line-clamp-4 whitespace-pre-wrap break-words">
+            {preview.snippet || '暂无内容摘要'}
+          </div>
+        </div>
+        <div className="mt-3 flex items-center justify-between gap-3 text-[13px] leading-5 text-[#86909C]">
+          <div className="flex min-w-0 items-center gap-2">
+            <Icon className="size-4 shrink-0" />
+            <span className="truncate">{preview.sourceName}</span>
+            {preview.sourceMeta && <span className="shrink-0">{preview.sourceMeta}</span>}
+          </div>
+          <div className={`shrink-0 rounded px-2 py-1 ${isWeb ? 'bg-[#F3EEFF] text-[#7C3AED]' : 'bg-[#EEF3FF] text-[#165DFF]'}`}>
+            [{label}] - {isWeb ? '网页' : '文档'}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
-function buildCitationDisplayData(ref: string, citations: ChatCitation[] | null | undefined): CitationDisplayData | null {
-  if (!citations?.length) {
-    return null;
-  }
-
-  const parsedRef = parseCitationRef(ref);
-  if (!parsedRef) {
-    return null;
-  }
-
-  const { citationId, itemId, type, groupKey, chunkId } = parsedRef;
-  const citation = citations.find((item) => item.citationId === citationId);
-
-  if (!citation?.sourcePayload) {
-    return null;
-  }
-
-  const matchedItem = citation.sourcePayload.items?.find((item) => String(item.itemId) === itemId);
-  const title =
-    citation.sourcePayload.title ||
-    citation.sourcePayload.documentName ||
-    citation.sourcePayload.knowledgeName ||
-    matchedItem?.title ||
-    citationId;
-  const snippet =
-    matchedItem?.content ||
-    matchedItem?.snippet ||
-    citation.sourcePayload.snippet ||
-    '';
-  const url =
-    citation.sourcePayload.url ||
-    citation.sourcePayload.sourceUrl ||
-    citation.sourcePayload.previewUrl ||
-    citation.sourcePayload.downloadUrl;
-
-  return {
-    label: 0,
-    type,
-    groupKey,
-    chunkId,
-    url,
-    title,
-    snippet,
-  };
-}
-
-function transformPrivateCitations(content: string, citations: ChatCitation[] | null | undefined) {
-  if (!content.includes(CITATION_START)) {
-    return { transformedContent: content, citationMap: {} as Record<string, CitationDisplayData> };
-  }
-
-  const citationMap: Record<string, CitationDisplayData> = {};
-  const groupIndexMap: Record<string, number> = {};
-  let nextGroupLabel = 1;
-  const transformedContent = content.replace(new RegExp(`${CITATION_START}([\\s\\S]*?)${CITATION_END}`, 'g'), (_, rawRefs: string) => {
-    const refs = rawRefs
-      .split(CITATION_SEPARATOR)
-      .map((item) => item.trim())
-      .filter(Boolean);
-
-    return refs
-      .map((ref) => {
-        if (!citationMap[ref]) {
-          const displayData = buildCitationDisplayData(ref, citations);
-          if (displayData) {
-            const groupId = `${displayData.type}_${displayData.groupKey}`;
-            if (!groupIndexMap[groupId]) {
-              groupIndexMap[groupId] = nextGroupLabel;
-              nextGroupLabel += 1;
-            }
-            displayData.label = groupIndexMap[groupId];
-            citationMap[ref] = displayData;
-          }
-        }
-        return citationMap[ref] ? `[citationref:${ref}]` : '';
-      })
-      .join('');
-  });
-
-  return { transformedContent, citationMap };
-}
-
-const Citation = ({ data, children }) => {
-
+const Citation = ({
+  data,
+  children,
+  initialDetail,
+  webContent,
+  loadCitationDetail,
+}: {
+  data: Partial<CitationDisplayData>;
+  children: React.ReactNode;
+  initialDetail?: ChatCitation | null;
+  webContent?: any;
+  loadCitationDetail: CitationDetailLoader;
+}) => {
   if (!data) return null;
 
-  const citationLabel = String(children ?? '');
-  const normalizedType = data.type.toLowerCase();
-  const isWebCitation = normalizedType === 'web' || normalizedType === 'websearch';
-  const citationClassName = isWebCitation
-    ? 'bg-[#F3EEFF] text-[#7C3AED] hover:bg-[#E9DFFF]'
-    : 'bg-[#EEF3FF] text-[#1D4ED8] hover:bg-[#E3ECFF]';
+  const [open, setOpen] = useState(false);
+  const [detail, setDetail] = useState<ChatCitation | null>(initialDetail ?? null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(false);
+  const closeTimerRef = useRef<number | null>(null);
+  const citationClassName = getCitationClassName(data.type);
+  const legacyPreview = data.ref?.startsWith('citation:')
+    ? getLegacyCitationPreview(webContent, data.label)
+    : null;
+  const preview = legacyPreview ?? buildCitationPreview(detail, data);
 
-  return <TooltipAnchor
-    role="button"
-    description={
-      <div className="p-2">
-        <WebItem url={data.url || '#'} title={data.title} snippet={data.snippet} />
-      </div>
+  const fetchDetail = async () => {
+    if (detail || legacyPreview || isLoading || !data.citationId || data.citationId.startsWith('citation:')) {
+      return;
     }
-    className={`ml-1 inline-flex min-h-6 min-w-6 items-center justify-center rounded-xl px-2 py-0.5 text-[0.9em] font-medium leading-none transition-colors duration-200 ${citationClassName}`}
-    onClick={() => {
-      if (data.url) {
-        window.open(data.url, '_blank')
+
+    setIsLoading(true);
+    setError(false);
+    try {
+      const nextDetail = await loadCitationDetail(data.citationId);
+      setDetail(nextDetail);
+    } catch (err) {
+      console.error('Failed to load citation detail:', err);
+      setError(true);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (initialDetail) {
+      setDetail(initialDetail);
+    }
+  }, [initialDetail]);
+
+  useEffect(() => {
+    return () => {
+      if (closeTimerRef.current) {
+        window.clearTimeout(closeTimerRef.current);
       }
-    }}
-  >
-    <span>{children}</span>
-  </TooltipAnchor>
+    };
+  }, []);
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (closeTimerRef.current) {
+      window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+    setOpen(nextOpen);
+    if (nextOpen) {
+      void fetchDetail();
+    }
+  };
+
+  const scheduleClose = () => {
+    if (closeTimerRef.current) {
+      window.clearTimeout(closeTimerRef.current);
+    }
+    closeTimerRef.current = window.setTimeout(() => {
+      setOpen(false);
+    }, 120);
+  };
+
+  return (
+    <Popover.Root open={open} onOpenChange={handleOpenChange}>
+      <Popover.Trigger asChild>
+        <button
+          type="button"
+          data-citation-ref={data.ref}
+          data-citation-id={data.citationId}
+          data-citation-item-id={data.itemId}
+          data-citation-type={data.type}
+          data-citation-group-key={data.groupKey}
+          data-citation-chunk-id={data.chunkId}
+          aria-label={`${getCitationSourceLabel(data.type)}引用 ${data.label ?? ''}`}
+          onMouseEnter={() => handleOpenChange(true)}
+          onMouseLeave={scheduleClose}
+          className={`ml-1 inline-flex min-h-6 min-w-6 cursor-pointer items-center justify-center rounded-xl px-2 py-0.5 text-[0.9em] font-medium leading-none transition-colors duration-200 ${citationClassName}`}
+        >
+          <span>{children}</span>
+        </button>
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Content
+          side="top"
+          align="start"
+          sideOffset={8}
+          onMouseEnter={() => handleOpenChange(true)}
+          onMouseLeave={scheduleClose}
+          className="z-50 outline-none"
+        >
+          <CitationPreviewCard
+            preview={preview}
+            label={data.label}
+            isLoading={isLoading}
+            error={error}
+          />
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
+  );
 };
 
 const Markdown = memo(({ content = '', showCursor, isLatestMessage, webContent, citations }: TContentProps & { webContent: any }) => {
@@ -392,7 +426,7 @@ const Markdown = memo(({ content = '', showCursor, isLatestMessage, webContent, 
     const normalizedContent = filterMermaidBlocks(message)
       // .replaceAll(/(\n\s{4,})/g, '\n   ') // 禁止4空格转代码
       .replace(/(?<![\n\|])\n(?!\n)/g, '\n\n') // 单个换行符 处理不换行情况，例如：`Hello | There\nFriend
-    const { transformedContent, citationMap } = transformPrivateCitations(normalizedContent, citations);
+    const { transformedContent, citationMap } = transformPrivateCitations(normalizedContent);
 
     return {
       currentContent: transformedContent,
@@ -400,7 +434,7 @@ const Markdown = memo(({ content = '', showCursor, isLatestMessage, webContent, 
     };
     // .replaceAll('(bisheng/', '(/bisheng/') // TODO 临时处理方案,以后需要改为markdown插件方式处理
     // .replace(/\\[\[\]]/g, '$$') // 处理`\[...\]`包裹的公式
-  }, [content, LaTeXParsing, isInitializing, citations]);
+  }, [content, LaTeXParsing, isInitializing]);
 
   const rehypePlugins = useMemo(
     () => [
@@ -428,6 +462,43 @@ const Markdown = memo(({ content = '', showCursor, isLatestMessage, webContent, 
     ],
     [],
   );
+
+  const citationDetailMap = useMemo(() => createCitationDetailMap(citations), [citations]);
+  const citationDetailCacheRef = useRef<Record<string, ChatCitation>>({});
+  const citationRequestCacheRef = useRef<Record<string, Promise<ChatCitation | null>>>({});
+
+  useEffect(() => {
+    Object.entries(citationDetailMap).forEach(([citationId, detail]) => {
+      citationDetailCacheRef.current[citationId] = detail;
+    });
+  }, [citationDetailMap]);
+
+  const loadCitationDetail = useCallback<CitationDetailLoader>(async (citationId) => {
+    const cachedDetail = citationDetailCacheRef.current[citationId];
+    if (cachedDetail) {
+      return cachedDetail;
+    }
+
+    const pendingRequest = citationRequestCacheRef.current[citationId];
+    if (pendingRequest) {
+      return pendingRequest;
+    }
+
+    const request = getCitationDetail(citationId)
+      .then((detail) => {
+        if (detail?.citationId) {
+          citationDetailCacheRef.current[detail.citationId] = detail;
+        }
+        citationDetailCacheRef.current[citationId] = detail;
+        return detail;
+      })
+      .finally(() => {
+        delete citationRequestCacheRef.current[citationId];
+      });
+
+    citationRequestCacheRef.current[citationId] = request;
+    return request;
+  }, []);
 
   // Cursor
   if (isInitializing) {
@@ -475,7 +546,20 @@ const Markdown = memo(({ content = '', showCursor, isLatestMessage, webContent, 
                       const legacyIndex = Number(legacyIndexValue);
                       if (webContent?.[legacyIndex - 1]) {
                         nodes.push(
-                          <Citation key={`legacy-${matchIndex}`} data={webContent[legacyIndex - 1]}>
+                          <Citation
+                            key={`legacy-${matchIndex}`}
+                            webContent={webContent}
+                            loadCitationDetail={loadCitationDetail}
+                            data={{
+                              label: legacyIndex,
+                              ref: `citation:${legacyIndexValue}`,
+                              type: 'web',
+                              groupKey: legacyIndexValue,
+                              chunkId: legacyIndexValue,
+                              citationId: `citation:${legacyIndexValue}`,
+                              itemId: legacyIndexValue,
+                            }}
+                          >
                             {legacyIndexValue}
                           </Citation>
                         );
@@ -484,7 +568,12 @@ const Markdown = memo(({ content = '', showCursor, isLatestMessage, webContent, 
                       const citationData = citationMap[privateRef];
                       if (citationData) {
                         nodes.push(
-                          <Citation key={`private-${matchIndex}`} data={citationData}>
+                          <Citation
+                            key={`private-${matchIndex}`}
+                            data={citationData}
+                            initialDetail={citationDetailMap[citationData.citationId]}
+                            loadCitationDetail={loadCitationDetail}
+                          >
                             {citationData.label}
                           </Citation>
                         );

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import * as RadioGroup from "@radix-ui/react-radio-group";
+import { XIcon } from "lucide-react";
 import { NotificationSeverity } from "~/common";
 import { useConfirm, useToastContext } from "~/Providers";
 import { Button } from "~/components/ui/Button";
@@ -12,7 +13,7 @@ import {
     SheetTitle
 } from "~/components/ui/Sheet";
 import { Textarea } from "~/components/ui/Textarea";
-import { useLocalize } from "~/hooks";
+import { useLocalize, useMediaQuery } from "~/hooks";
 import { KnowledgeSpace, VisibilityType } from "~/api/knowledge";
 import { cn, getFullWidthLength, truncateByFullWidth } from "~/utils";
 import { ChannelSuccessIcon } from "~/components/icons/channels";
@@ -61,6 +62,7 @@ export function CreateKnowledgeSpaceDrawer({
     const { showToast } = useToastContext();
     const confirm = useConfirm();
     const localize = useLocalize();
+    const isH5 = useMediaQuery("(max-width: 768px)");
     const [name, setName] = useState("");
     const [description, setDescription] = useState("");
     const [joinPolicy, setJoinPolicy] = useState<JoinPolicy>("review");
@@ -127,11 +129,35 @@ export function CreateKnowledgeSpaceDrawer({
             onOpenChange(false);
         }
     };
+
+    const handleClose = () => {
+        onOpenChange(false);
+    };
+
     return (
         <Sheet open={open} onOpenChange={onOpenChange}>
-            <SheetContent side="right" className="min-w-[1000px] p-0 bg-white">
-                <SheetHeader className="px-8 pt-7 pb-4 border-b border-[#E5E6EB]">
-                    <SheetTitle className="text-[20px] font-medium text-[#1D2129] leading-none">
+            <SheetContent
+                side="right"
+                hideClose={isH5}
+                className={cn(
+                    "min-w-[1000px] bg-white p-0",
+                    isH5 &&
+                        "inset-0 left-0 top-0 flex h-dvh w-screen min-w-0 max-w-none translate-x-0 translate-y-0 flex-col overflow-y-auto scroll-on-scroll px-4"
+                )}
+            >
+                {isH5 ? (
+                    <button
+                        type="button"
+                        onClick={handleClose}
+                        className="ring-offset-background focus:ring-ring data-[state=open]:bg-secondary fixed top-4 right-4 z-[60] rounded-xs opacity-70 transition-opacity hover:opacity-100 disabled:pointer-events-none"
+                    >
+                        <XIcon className="size-4" />
+                        <span className="sr-only">Close</span>
+                    </button>
+                ) : null}
+
+                <SheetHeader className="border-b border-[#E5E6EB] px-8 pb-4 pt-7 max-md:sticky max-md:top-0 max-md:z-10 max-md:mx-0 max-md:bg-white max-md:px-0 max-md:pt-6">
+                    <SheetTitle className="text-[20px] font-medium text-[#1D2129] leading-none max-md:-ml-4">
                         {mode === "edit" ? localize("com_subscription.edit_knowledge_space") || localize("com_knowledge.edit_space") : localize("com_subscription.create_konwledge_space")}
                     </SheetTitle>
                 </SheetHeader>
@@ -167,7 +193,7 @@ export function CreateKnowledgeSpaceDrawer({
                         </div>
                     </div>
                 ) : (
-                    <div className="flex-1 overflow-y-auto px-8 py-7">
+                    <div className="flex-1 overflow-y-auto px-8 py-7 max-md:px-0 max-md:py-5">
                         <div className="space-y-7">
                             {/* 知识空间名称 */}
                             <div className="space-y-2">
@@ -364,15 +390,15 @@ export function CreateKnowledgeSpaceDrawer({
                 )}
 
                 {!showSuccess && (
-                    <div className="px-6 py-3 border-t border-[#E5E6EB] flex items-center justify-end gap-2 bg-white">
+                    <div className="flex items-center justify-end gap-2 border-t border-[#E5E6EB] bg-white px-6 py-3 max-md:sticky max-md:bottom-0 max-md:z-10 max-md:mt-auto max-md:gap-2 max-md:px-0">
                         <Button
                             variant="secondary"
-                            className="h-8 rounded-[6px] border border-[#E5E6EB] bg-white text-[14px] font-normal text-[#4E5969]"
+                            className="h-8 rounded-[6px] border border-[#E5E6EB] bg-white text-[14px] font-normal text-[#4E5969] max-md:flex-1"
                             onClick={() => onOpenChange(false)}
                         >
                             {localize("com_knowledge.cancel")}</Button>
                         <Button
-                            className="h-8 rounded-[6px] bg-[#165DFF] hover:bg-[#4080FF] text-[14px] font-normal text-white"
+                            className="h-8 rounded-[6px] bg-[#165DFF] text-[14px] font-normal text-white hover:bg-[#4080FF] max-md:flex-1"
                             onClick={handleConfirm}
                         >
                             {mode === "edit" ? localize("com_knowledge.save") : localize("com_knowledge.confirm_create")}

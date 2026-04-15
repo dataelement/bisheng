@@ -16,7 +16,13 @@ import store from "~/store";
 import { BsConfig } from "~/types/chat";
 import { cn } from "~/utils";
 
-// 工具
+/**
+ * @deprecated v2.5 — use `AgentToolSelector` instead.
+ * ChatToolDown only knows how to flip web-search on/off via the legacy
+ * `searchType` atom. It is still rendered by `AiChatInput` when `bsConfig.tools`
+ * is empty (pre-v2.5 admin configs); once the workstation config migration is
+ * complete everywhere this component + the `searchType` atom can be deleted.
+ */
 export const ChatToolDown = ({
   config,
   searchType,

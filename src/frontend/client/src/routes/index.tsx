@@ -24,6 +24,7 @@ import AppRoot from './AppRoot';
 import Root from './Root';
 import Knowledge from '~/pages/knowledge';
 import FilePreviewPage from '~/pages/knowledge/FilePreview/FilePreviewPage';
+import DevLogin from '~/pages/DevLogin';
 
 const AuthLayout = () => (
   <AuthContextProvider>
@@ -99,6 +100,7 @@ export const router = createBrowserRouter([
     ],
   },
   { path: '/html', element: <WebView /> },
+  { path: '/__dev/login', element: <DevLogin /> },
   { path: '/404', element: <Page404 /> },
   { path: "*", element: <Navigate to="/404" replace /> }
 ], baseConfig);

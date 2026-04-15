@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { useRecoilState } from "recoil";
 import {
   CheckMark,
@@ -7,6 +7,7 @@ import {
   RegenerateIcon,
 } from "~/components/svg";
 import { TextToSpeechButton } from "~/components/Voice/TextToSpeechButton";
+import CitationReferencesDrawer from "~/components/Chat/Messages/Content/CitationReferencesDrawer";
 import type {
   TConversation,
   TMessage,
@@ -75,6 +76,22 @@ export default function HoverButtons({
 
   const { isCreatedByUser, error } = message;
   const sourceRef = useRef(null);
+  const { referenceContent, referenceWebContent } = useMemo(() => {
+    const rawText = message.text || "";
+    let regularContent = rawText.replace(/:::thinking[\s\S]*?:::/, "").trim();
+    let webContent: any[] = [];
+    const webMatch = regularContent.match(/:::web([\s\S]*?):::/);
+    if (webMatch) {
+      regularContent = regularContent.replace(/:::web[\s\S]*?:::/, "").trim();
+      try {
+        const str = webMatch[1].trim();
+        webContent = str ? JSON.parse(str) : [];
+      } catch {
+        webContent = [];
+      }
+    }
+    return { referenceContent: regularContent, referenceWebContent: webContent };
+  }, [message.text]);
 
   const renderRegenerate = () => {
     if (!regenerateEnabled) {
@@ -114,6 +131,13 @@ export default function HoverButtons({
   };
   return (
     <div className="visible mt-0 flex justify-center gap-1 self-end text-gray-500 lg:justify-start">
+      {!isCreatedByUser && (
+        <CitationReferencesDrawer
+          content={referenceContent}
+          webContent={referenceWebContent}
+          citations={(message as any).citations}
+        />
+      )}
       <div className="mr-2 pt-0.5">
         <MessageSource
           extra={null}

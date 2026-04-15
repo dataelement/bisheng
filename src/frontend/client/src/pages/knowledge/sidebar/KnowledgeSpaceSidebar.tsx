@@ -1,7 +1,8 @@
 import {
     ArrowLeftRightIcon,
     ChevronDown,
-    Plus
+    Plus,
+    X
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -13,6 +14,16 @@ import { SectionHeader } from "./SectionHeader";
 import { useSpaceActions } from "../hooks/useSpaceActions";
 import { useLocalize } from "~/hooks";
 import { ChannelBlocksArrowsIcon } from "~/components/icons/channels";
+import { NavLink, useLocation } from "react-router-dom";
+import { cn } from "~/utils";
+import { useAuthContext } from "~/hooks/AuthContext";
+import { useGetBsConfig } from "~/hooks/queries/data-provider";
+import { appsSectionLinkTarget, lastSectionPaths } from "~/layouts/appModuleNavPaths";
+import { UserPopMenu } from "~/layouts/UserPopMenu";
+import BookOpenIcon from "~/components/ui/icon/BookOpen";
+import GlobeIcon from "~/components/ui/icon/Globe";
+import HomeIcon from "~/components/ui/icon/Home";
+import LinkIcon from "~/components/ui/icon/Link";
 
 interface KnowledgeSpaceSidebarProps {
     activeSpaceId?: string;
@@ -25,10 +36,87 @@ interface KnowledgeSpaceSidebarProps {
     onCollapsedChange?: (collapsed: boolean) => void;
     /** When true, hide ONLY the expand toggle in collapsed mode (expand is provided elsewhere). */
     hideExpandToggleWhenCollapsed?: boolean;
+    /** H5：置于移动端抽屉内，隐藏 PC 折叠把手，宽度随父容器 */
+    mobileDrawerMode?: boolean;
+    /** H5 抽屉：右上角关闭 */
+    onDrawerClose?: () => void;
 }
 
 // Sort cycle: update_time → name → update_time
 const SORT_CYCLE = [SpaceSortType.UPDATE_TIME, SpaceSortType.NAME];
+
+function KnowledgeMobileDrawerNavTabs({ onAfterPick }: { onAfterPick?: () => void }) {
+    const { pathname } = useLocation();
+    const localize = useLocalize();
+    const { user } = useAuthContext();
+    const plugins: string[] | null = Array.isArray((user as { plugins?: unknown })?.plugins)
+        ? ((user as { plugins: string[] }).plugins)
+        : null;
+    const showSubscriptionTab = plugins ? plugins.includes("subscription") : true;
+    const showKnowledgeSpaceTab = plugins ? plugins.includes("knowledge_space") : true;
+    const links = [
+        {
+            section: "home",
+            to: lastSectionPaths.home || "/c/new",
+            icon: HomeIcon,
+            label: localize("com_nav_home"),
+            isActive: /^\/(c|linsight)(\/|$)/.test(pathname),
+            closeOnPick: true,
+        },
+        {
+            section: "apps",
+            to: appsSectionLinkTarget(),
+            icon: GlobeIcon,
+            label: localize("com_nav_app_center"),
+            isActive: /^\/apps(\/|$)/.test(pathname) || /^\/app\//.test(pathname),
+            closeOnPick: true,
+        },
+        {
+            section: "channel",
+            to: lastSectionPaths.channel || "/channel",
+            icon: LinkIcon,
+            label: localize("com_ui_channel"),
+            isActive: pathname.startsWith("/channel"),
+            closeOnPick: false,
+        },
+        {
+            section: "knowledge",
+            to: lastSectionPaths.knowledge || "/knowledge",
+            icon: BookOpenIcon,
+            label: localize("com_knowledge.knowledge_space"),
+            isActive: pathname.startsWith("/knowledge"),
+            closeOnPick: false,
+        },
+    ].filter((link) => {
+        if (link.section === "channel") return showSubscriptionTab;
+        if (link.section === "knowledge") return showKnowledgeSpaceTab;
+        return true;
+    });
+
+    return (
+        <div className="flex shrink-0 items-center justify-center gap-2 border-b border-[#e5e6eb] px-2 py-2">
+            {links.map((link) => {
+                const Icon = link.icon;
+                return (
+                    <NavLink
+                        key={link.section}
+                        to={link.to}
+                        title={link.label}
+                        onClick={() => {
+                            if (link.closeOnPick) onAfterPick?.();
+                        }}
+                        className={cn(
+                            "flex size-11 shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-[#f2f3f5]",
+                            link.isActive && "bg-[#e6edfc]",
+                        )}
+                    >
+                        <Icon className={cn("size-5 shrink-0", link.isActive ? "text-[#335CFF]" : "text-[#818181]")} />
+                    </NavLink>
+                );
+            })}
+        </div>
+    );
+}
 
 function getSortLabel(sort: SpaceSortType, localize: any) {
     return sort === SpaceSortType.NAME ? localize("com_knowledge.name") : localize("com_knowledge.recently_updated");
@@ -44,8 +132,11 @@ export function KnowledgeSpaceSidebar({
     collapsed: collapsedProp,
     onCollapsedChange,
     hideExpandToggleWhenCollapsed,
+    mobileDrawerMode = false,
+    onDrawerClose,
 }: KnowledgeSpaceSidebarProps) {
     const localize = useLocalize();
+    const { data: bsConfig } = useGetBsConfig();
     const [collapsedState, setCollapsedState] = useState(false);
     const collapsed = collapsedProp ?? collapsedState;
     const setCollapsed = (next: boolean) => {
@@ -123,28 +214,82 @@ export function KnowledgeSpaceSidebar({
         listScrollTimerRef.current = setTimeout(() => setIsListScrolling(false), 500);
     };
 
+    useEffect(() => {
+        if (mobileDrawerMode) setCollapsed(false);
+    }, [mobileDrawerMode]);
+
     return (
-        <div className="relative flex-shrink-0">
+        <div className={`relative flex-shrink-0 ${mobileDrawerMode ? "h-full min-h-0 w-full" : ""}`}>
             <div
                 className={[
                     `h-full bg-white flex flex-col overflow-hidden ${collapsed ? "" : "border-r border-[#e5e6eb]"}`,
-                    collapsed ? "w-0" : "w-60",
+                    mobileDrawerMode ? "w-full" : collapsed ? "w-0" : "w-60",
                 ].join(" ")}
-                style={{
+                style={mobileDrawerMode ? undefined : {
                     transitionProperty: 'width',
                     transitionDuration: '300ms',
                     transitionTimingFunction: 'ease-in-out'
                 }}
             >
+                {mobileDrawerMode ? (
+                    <div className="shrink-0 border-b border-[#e5e6eb] px-3 py-2.5">
+                        <div className="flex items-center justify-between">
+                            {bsConfig?.sidebarIcon?.image ? (
+                                <img
+                                    className="h-8 w-8 rounded-md object-contain"
+                                    src={bsConfig.sidebarIcon.image}
+                                    alt={localize("com_nav_home")}
+                                />
+                            ) : (
+                                <div className="h-8 w-8 rounded-md bg-[#F2F3F5]" />
+                            )}
+                            {onDrawerClose ? (
+                                <button
+                                    type="button"
+                                    onClick={onDrawerClose}
+                                    aria-label={localize("com_nav_close_sidebar")}
+                                    className="inline-flex size-8 items-center justify-center rounded-md text-[#4E5969] hover:bg-[#F7F8FA]"
+                                >
+                                    <X className="size-4" />
+                                </button>
+                            ) : null}
+                        </div>
+                    </div>
+                ) : null}
+                {mobileDrawerMode ? <KnowledgeMobileDrawerNavTabs onAfterPick={onDrawerClose} /> : null}
                 {/* Top actions */}
-                <div className={collapsed ? "px-0 py-5" : "px-3 py-5"}>
-                    <div className={collapsed ? "flex items-center justify-center h-7" : "border-b border-[#e5e6eb] space-y-4 pb-4"}>
-                        {!collapsed && <div className="px-2 flex justify-between items-center text-[16px] font-medium">
+                <div className={collapsed ? "px-0 py-5" : mobileDrawerMode ? "px-3 py-3" : "px-3 py-5"}>
+                    {mobileDrawerMode ? (
+                        <div className="border-b border-[#e5e6eb] pb-3">
+                            <Button
+                                variant="secondary"
+                                onClick={onCreateSpace}
+                                className="h-9 w-full gap-1 border border-[#EBECF0] bg-white text-[13px] text-[#212121] hover:bg-[#F7F8FA]"
+                            >
+                                <Plus className="size-4" />
+                                {localize("com_knowledge.create")}
+                            </Button>
+                        </div>
+                    ) : null}
+                    <div className={cn(
+                        collapsed ? "flex items-center justify-center h-7" : "border-b border-[#e5e6eb] space-y-4 pb-4",
+                        mobileDrawerMode && "hidden"
+                    )}>
+                        {!collapsed && !mobileDrawerMode && <div className="px-2 flex justify-between items-center text-[16px] font-medium">
                             <span className="text-[#1d2129]">{localize("com_knowledge.knowledge_space")}</span>
                         </div>}
                         {!collapsed && (
                             <div className="flex items-center gap-3">
-                                <Button variant="secondary" onClick={onCreateSpace} className="flex-1 h-8 text-[13px] text-[#212121] bg-[#F7F7F7] hover:bg-[#E5E6EB] border-none gap-1">
+                                <Button
+                                    variant="secondary"
+                                    onClick={onCreateSpace}
+                                    className={cn(
+                                        "flex-1 h-8 gap-1 text-[13px] text-[#212121]",
+                                        mobileDrawerMode
+                                            ? "border border-[#EBECF0] bg-white hover:bg-[#F7F8FA]"
+                                            : "border-none bg-[#F7F7F7] hover:bg-[#E5E6EB]"
+                                    )}
+                                >
                                     <Plus className="size-4" />
                                     {localize("com_knowledge.create")}
                                 </Button>
@@ -236,13 +381,18 @@ export function KnowledgeSpaceSidebar({
                         </div>
                     </div>
                 </div>
+                {mobileDrawerMode ? (
+                    <div className="shrink-0 border-t border-[#ececec] px-2 pb-2 pt-1">
+                        <UserPopMenu variant="drawer" />
+                    </div>
+                ) : null}
             </div>
             <NavToggle
                 navVisible={!collapsed}
                 onToggle={() => setCollapsed(!collapsed)}
                 isHovering={isToggleHovering}
                 setIsHovering={setIsToggleHovering}
-                className="absolute top-1/2 left-0 z-[40]"
+                className={`absolute top-1/2 left-0 z-[40] ${mobileDrawerMode ? "hidden" : ""}`}
                 translateX={230}
             />
         </div>

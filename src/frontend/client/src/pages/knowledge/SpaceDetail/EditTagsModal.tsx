@@ -175,17 +175,25 @@ export function EditTagsModal({
 
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
-            <DialogContent className="gap-0 sm:max-w-[600px] w-[600px] p-0 bg-white border-none shadow-[0px_5px_22px_0px_rgba(61,68,110,0.2)] rounded-xl outline-none flex flex-col items-stretch [&>button]:hidden">
-                <DialogHeader className="px-6 py-3 h-12 border-none space-y-0 text-left shrink-0">
-                    <DialogTitle className="text-[16px] font-medium text-[#212121] leading-[24px]">
+            <DialogContent className="flex w-[600px] flex-col items-stretch gap-0 rounded-xl border-none bg-white p-0 shadow-[0px_5px_22px_0px_rgba(61,68,110,0.2)] outline-none max-md:inset-0 max-md:left-0 max-md:top-0 max-md:h-dvh max-md:w-screen max-md:max-w-none max-md:translate-x-0 max-md:translate-y-0 max-md:rounded-none [&>button]:hidden">
+                <DialogHeader className="h-auto shrink-0 space-y-0 border-b border-[#ECECEC] px-6 py-4 text-left max-md:px-4 max-md:pt-6 max-md:pb-4">
+                    <DialogTitle className="text-[20px] leading-7 font-medium text-[#212121]">
                         {isBatchMode ? localize("com_knowledge.batch_add_tags") : localize("com_knowledge.edit_tags")}
                     </DialogTitle>
+                    <button
+                        type="button"
+                        onClick={handleClose}
+                        className="absolute right-4 top-4 inline-flex size-8 items-center justify-center rounded-md text-[#4E5969] transition-colors hover:bg-[#F2F3F5]"
+                        aria-label={localize("com_knowledge.close") || "Close"}
+                    >
+                        <X className="size-4" />
+                    </button>
                 </DialogHeader>
 
-                <div className="flex flex-col flex-1 gap-3 px-6 py-6 pb-2">
+                <div className="flex flex-1 flex-col gap-4 px-6 py-6 pb-2 max-md:px-4 max-md:py-4">
                     {/* Tags Input Box */}
                     <div
-                        className="relative flex items-center flex-wrap gap-1 border border-[#ebecf0] rounded-lg px-3 py-1.5 min-h-[22px] focus-within:border-primary transition-colors bg-white pr-[40px] cursor-text"
+                        className="relative flex min-h-8 cursor-text flex-wrap items-center gap-1 rounded-[8px] border border-[#EBECF0] bg-white px-3 py-[5px] pr-[40px] transition-colors focus-within:border-primary"
                         onClick={() => document.getElementById("tag-input")?.focus()}
                     >
                         {selectedTags.map((tag) => (
@@ -219,7 +227,7 @@ export function EditTagsModal({
                             className="flex-1 min-w-[120px] bg-transparent outline-none text-sm leading-[22px] text-[#212121] placeholder-[#86909c] min-h-[22px]"
                         // maxLength={8}
                         />
-                        <span className="text-[14px] leading-[22px] text-[#999] absolute right-3 h-full flex items-center top-0">
+                        <span className="absolute right-3 top-0 flex h-full items-center text-[14px] leading-[22px] text-[#999]">
                             {selectedTagIds.size}/10
                         </span>
                     </div>
@@ -228,7 +236,7 @@ export function EditTagsModal({
 
                     {/* Existing Space Tags */}
                     <div className="flex flex-col gap-2 pt-1">
-                        <div className="text-[14px] leading-[20px] font-[500] text-[#212121]">{localize("com_knowledge.existing_tags")}</div>
+                        <div className="text-[12px] leading-5 font-normal text-[#212121]">{localize("com_knowledge.existing_tags")}</div>
                         <div className="flex flex-wrap gap-1">
                             {spaceTags.length === 0 && (
                                 <span className="text-[12px] text-[#86909c]">{localize("com_knowledge.no_tags")}</span>
@@ -252,12 +260,12 @@ export function EditTagsModal({
                     </div>
                 </div>
 
-                <DialogFooter className="flex justify-end gap-3 px-6 py-3 border-none mt-2 sm:space-x-0 h-16 items-center shrink-0">
-                    <Button variant="outline" className="h-8 px-4" onClick={handleClose}>
+                <DialogFooter className="mt-2 flex h-16 shrink-0 items-center justify-end gap-3 border-none px-6 py-3 max-md:mt-auto max-md:h-auto max-md:border-t max-md:border-[#ECECEC] max-md:px-4 max-md:py-3 sm:space-x-0">
+                    <Button variant="outline" className="h-8 px-4 max-md:flex-1" onClick={handleClose}>
                         {localize("com_knowledge.cancel")}</Button>
                     <Button
                         variant="default"
-                        className="h-8 px-4"
+                        className="h-8 px-4 max-md:flex-1"
                         onClick={handleSave}
                         disabled={loading}
                     >

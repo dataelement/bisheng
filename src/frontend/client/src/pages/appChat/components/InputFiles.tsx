@@ -23,7 +23,9 @@ const checkFileType = (file, accepts) => {
 };
 
 // @accepts '.png,.jpg'
-const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, onChange, uploadMode }, ref) => {
+// `hideTrigger` hides the built-in attachment icon; caller invokes
+// `openPicker()` via the imperative ref (e.g. from the "+" menu).
+const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, onChange, uploadMode, hideTrigger = false }, ref) => {
     const t = useLocalize()
     const [files, setFiles] = useState([]);
     const filesRef = useRef([]);
@@ -148,6 +150,10 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
             if (disabled) return;
             handleFileChange(Array.from(fileList));
         },
+        openPicker: () => {
+            if (disabled) return;
+            fileInputRef.current?.click();
+        },
         clear: () => {
             setFiles([]);
             filesRef.current = [];
@@ -214,17 +220,19 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
                 ))}
             </div>}
 
-            {/* File Upload Button disabled */}
-            <div
-                className={cn(
-                    'absolute z-10 bottom-3 cursor-pointer p-1 hover:bg-gray-200 rounded-full',
-                    showVoice ? 'right-[92px]' : 'right-14',
-                    disabled ? 'pointer-events-none opacity-40' : ''
-                )}
-                onClick={() => !disabled && fileInputRef.current.click()}
-            >
-                <AttachmentIcon />
-            </div>
+            {/* File Upload Button — hidden when invoked from the "+" menu. */}
+            {!hideTrigger && (
+                <div
+                    className={cn(
+                        'absolute z-10 bottom-3 cursor-pointer p-1 hover:bg-gray-200 rounded-full',
+                        showVoice ? 'right-[92px]' : 'right-14',
+                        disabled ? 'pointer-events-none opacity-40' : ''
+                    )}
+                    onClick={() => !disabled && fileInputRef.current.click()}
+                >
+                    <AttachmentIcon />
+                </div>
+            )}
 
             {/* File Input */}
             <input

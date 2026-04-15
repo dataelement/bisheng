@@ -709,6 +709,8 @@
   "com_tools_personal_knowledge": "個人ナレッジ",
   "com_tools_title": "ツール",
   "com_tools_web_search": "オンライン検索",
+  "com_tools_knowledge_search": "ナレッジベース検索",
+  "com_tools_generic_fallback": "ツール",
   "com_ui_accept": "同意する",
   "com_ui_add": "追加",
   "com_ui_add_model_preset": "モデルまたはプリセットを追加して追加の返信を取得",
@@ -1627,6 +1629,7 @@
     "followed_by_me": "私がフォローしている",
     "fullscreen": "全画面表示",
     "go_to_square": "広場に行く",
+    "go_to_channel_plaza": "チャンネル広場へ",
     "includes": "含む",
     "input_keywords_semicolon_separated": "キーワードをセミコロン ';' で区切って入力してください",
     "input_question_placeholder": "質問を入力してください...",
@@ -1796,5 +1799,6 @@
     "total_members": "メンバー総数",
     "website_not_indexed": "サイトがまだ登録されていません。クロールしますか？",
     "create": "作成"
-  }
+  },
+  "com_label_operation_tip_mobile": "操作ヒント：上で表示するラベルを選び、下でドラッグして並べ替えます"
 }

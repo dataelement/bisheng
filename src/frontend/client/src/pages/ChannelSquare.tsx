@@ -230,12 +230,6 @@ export default function ChannelSquare({
     [hasMorePage, loadingMore, load, page]
   );
 
-  // 将频道分成每行3个
-  const channelRows: typeof visibleChannels[] = [];
-  for (let i = 0; i < visibleChannels.length; i += 3) {
-    channelRows.push(visibleChannels.slice(i, i + 3));
-  }
-
   return (
     <div className="h-full w-full flex flex-col bg-white overflow-hidden">
       {/* 头部区域 */}
@@ -292,7 +286,7 @@ export default function ChannelSquare({
         </div>
         <div className="max-w-[1032px] mx-auto px-4 pb-4 pt-0">
 
-          {channelRows.length === 0 ? (
+          {visibleChannels.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 text-[#86909c]">
               <img
                 className="size-[120px] mb-3 object-contain opacity-90"
@@ -303,9 +297,8 @@ export default function ChannelSquare({
             </div>
           ) : (
             <div className="space-y-3">
-              {channelRows.map((row, rowIndex) => (
-                <div key={rowIndex} className="flex gap-3">
-                  {row.map((channel) => (
+              <div className="grid grid-cols-2 gap-3 min-[768px]:grid-cols-3">
+                {visibleChannels.map((channel) => (
                     <ChannelSquareCard
                       key={channel.id}
                       title={channel.title}
@@ -320,17 +313,8 @@ export default function ChannelSquare({
                       onPreview={() => onPreviewChannel?.(channel.id)}
                       onAction={() => handleJoinChannel(channel.id, channel.title)}
                     />
-                  ))}
-                  {/* 补充空白卡片以保持布局 */}
-                  {row.length < 3 && (
-                    <>
-                      {Array.from({ length: 3 - row.length }).map((_, i) => (
-                        <div key={`empty-${i}`} className="flex-1 min-w-0" />
-                      ))}
-                    </>
-                  )}
-                </div>
-              ))}
+                ))}
+              </div>
               <div className="h-10 flex items-center justify-center text-[12px] text-[#C9CDD4]">
                 {loadingMore
                   ? "加载中..."

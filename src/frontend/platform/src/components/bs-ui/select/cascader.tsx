@@ -30,7 +30,8 @@ interface IProps {
     loadData?,
     onChange,
     selectClass?,
-    selectPlaceholder?
+    selectPlaceholder?,
+    footer?: React.ReactNode
 }
 
 const Item = (props: {
@@ -71,9 +72,10 @@ const Col = (props: {
     selectedValue: string | null, // 改为传递选中值
     options: Option[],
     onHover: (o: Option, isLeaf: boolean) => void,
-    onClick: (o: Option, isLeaf: boolean) => void
+    onClick: (o: Option, isLeaf: boolean) => void,
+    footer?: React.ReactNode
 }) => {
-    const { options, selectedValue, ...opros } = props
+    const { options, selectedValue, footer, ...opros } = props
     const [hoveredOption, setHoveredOption] = useState<Option | null>(null)
 
     const handleHover = (option: Option, isLeaf: boolean) => {
@@ -81,19 +83,22 @@ const Col = (props: {
         props.onHover(option, isLeaf)
     }
 
-    return <div className="w-36 border-l first:border-none max-h-80 overflow-y-auto">
-        {
-            options.map(option => (
-                <Item
-                    {...opros}
-                    option={option}
-                    key={option.value}
-                    isSelected={selectedValue === option.value} // 传递选中状态
-                    isHovered={hoveredOption?.value === option.value}
-                    onHover={handleHover}
-                />
-            ))
-        }
+    return <div className="w-36 border-l first:border-none max-h-80 overflow-y-auto flex flex-col">
+        <div className="flex-1 overflow-y-auto">
+            {
+                options.map(option => (
+                    <Item
+                        {...opros}
+                        option={option}
+                        key={option.value}
+                        isSelected={selectedValue === option.value} // 传递选中状态
+                        isHovered={hoveredOption?.value === option.value}
+                        onHover={handleHover}
+                    />
+                ))
+            }
+        </div>
+        {footer && <div className="">{footer}</div>}
     </div>
 }
 
@@ -111,7 +116,7 @@ const resetCols = (values, options) => {
     return vals
 }
 
-export default function Cascader({ error = false, selectClass = '', close = false, placeholder = '', defaultValue = [], options, loadData, onChange }: IProps) {
+export default function Cascader({ error = false, selectClass = '', close = false, placeholder = '', defaultValue = [], options, loadData, onChange, footer }: IProps) {
 
     const [open, setOpen] = useState(false)
     const [values, setValues] = useState<any>(defaultValue)
@@ -197,11 +202,19 @@ export default function Cascader({ error = false, selectClass = '', close = fals
                                 onHover={(op, isLeaf) => handleHover(op, isLeaf, index)}
                                 onClick={handleClick}
                                 key={index}
+                                footer={index === 0 && footer
+                                    ? <div onClick={() => setOpen(false)}>{footer}</div>
+                                    : undefined}
                             />
                         })
                     }
                 </div>
-                : <div className="w-full flex justify-center items-center bisheng-label">空</div>
+                : footer
+                    ? <div className="w-36 flex flex-col">
+                        <div className="flex-1 flex justify-center items-center bisheng-label py-4">空</div>
+                        <div className="border-t" onClick={() => setOpen(false)}>{footer}</div>
+                    </div>
+                    : <div className="w-full flex justify-center items-center bisheng-label">空</div>
             }
         </SelectContent>
     </Select>

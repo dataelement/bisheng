@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
-import { useLocalize } from "~/hooks";
+import { useLocalize, useMediaQuery } from "~/hooks";
 
 const AI_MIN_LEFT = 480;
 const AI_MIN_RIGHT = 360;
@@ -12,6 +12,7 @@ const AI_MIN_RIGHT = 360;
  */
 export function useAiSplitPane() {
     const localize = useLocalize();
+    const isH5 = useMediaQuery("(max-width: 768px)");
     const [showAiAssistant, setShowAiAssistant] = useState(false);
     const [aiSplitWidth, setAiSplitWidth] = useState<number>(() => {
         const saved = localStorage.getItem("knowledge-ai-split-ratio");
@@ -24,6 +25,9 @@ export function useAiSplitPane() {
     // ─── Toggle AI assistant panel ───────────────────────────────────────
     const handleToggleAiAssistant = useCallback(() => {
         setShowAiAssistant(prev => {
+            if (!prev && isH5) {
+                return true;
+            }
             if (!prev && splitContainerRef.current) {
                 const containerWidth = splitContainerRef.current.getBoundingClientRect().width;
                 if (containerWidth < AI_MIN_LEFT + AI_MIN_RIGHT) {
@@ -36,11 +40,11 @@ export function useAiSplitPane() {
             }
             return !prev;
         });
-    }, [aiSplitWidth, showToast]);
+    }, [aiSplitWidth, showToast, isH5]);
 
     // ─── ResizeObserver: auto-close if container too narrow ──────────────
     useEffect(() => {
-        if (!showAiAssistant || !splitContainerRef.current) return;
+        if (isH5 || !showAiAssistant || !splitContainerRef.current) return;
         const el = splitContainerRef.current;
         const ro = new ResizeObserver((entries) => {
             for (const entry of entries) {
@@ -51,7 +55,7 @@ export function useAiSplitPane() {
         });
         ro.observe(el);
         return () => ro.disconnect();
-    }, [showAiAssistant, aiSplitWidth]);
+    }, [showAiAssistant, aiSplitWidth, isH5]);
 
     // ─── Splitter drag handlers ─────────────────────────────────────────
     const startSplitResize = useCallback((e: React.MouseEvent) => {

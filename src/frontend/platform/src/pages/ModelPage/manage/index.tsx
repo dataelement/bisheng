@@ -13,6 +13,7 @@ import { changeLLmServerStatus, getAssistantModelList, getModelListApi } from "@
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { CircleMinus, CirclePlus } from "lucide-react"
 import { useQuery } from "react-query"
+import { useSearchParams } from "react-router-dom"
 import ModelConfig from "./ModelConfig"
 import SystemModelConfig from "./SystemModelConfig"
 
@@ -87,8 +88,23 @@ export default function Management() {
     const { user } = useContext(userContext)
     const [modelId, setModelId] = useState(null)
     const [systemModel, setSystemModel] = useState(false)
+    const [systemModelTab, setSystemModelTab] = useState<string | undefined>(undefined)
     const [loading, setLoading] = useState(false)
     const { refetch } = useModel()
+
+    const [searchParams, setSearchParams] = useSearchParams()
+    useEffect(() => {
+        const tab = searchParams.get('systemModel')
+        // Wait for model list to load before opening SystemModelConfig — otherwise
+        // AssisModel's ModelSelect sees empty options and nulls out existing model_ids.
+        if (tab && data.length > 0) {
+            setSystemModelTab(tab)
+            setSystemModel(true)
+            const next = new URLSearchParams(searchParams)
+            next.delete('systemModel')
+            setSearchParams(next, { replace: true })
+        }
+    }, [searchParams, setSearchParams, data])
 
     const reload = async () => {
         setLoading(true)
@@ -134,7 +150,7 @@ export default function Management() {
         }}
     />
 
-    if (systemModel) return <SystemModelConfig data={data} onBack={() => setSystemModel(false)} />
+    if (systemModel) return <SystemModelConfig data={data} defaultTab={systemModelTab} onBack={() => { setSystemModel(false); setSystemModelTab(undefined); }} />
 
     return <div className="relative bg-background-login h-full px-2 py-4">
         {loading && (

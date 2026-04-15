@@ -201,6 +201,28 @@ class LinsightConf(BaseModel):
                                       description='Number of files to read when subtasking, in reverse order by modification time')
 
 
+class DailyChatConf(BaseModel):
+    """ Daily-chat (日常模式) Agent runtime configuration.
+
+    Stored in DB config (written by POST /api/v1/config/save) under key `daily_chat`.
+    Read at request time via ConfigService.aget_daily_chat_conf().
+    """
+    agent_max_iterations: int = Field(
+        default=50,
+        description='Max LangGraph recursion_limit for the daily-chat ReAct agent loop. '
+                    'Falls back to 50 on missing / non-int / <= 0 value.',
+    )
+
+    @field_validator('agent_max_iterations', mode='before')
+    @classmethod
+    def _coerce_agent_max_iterations(cls, v):
+        try:
+            n = int(v)
+        except (TypeError, ValueError):
+            return 50
+        return n if n > 0 else 50
+
+
 class CookieConf(BaseModel):
     """ Cookie Configure """
     max_age: Optional[int] = Field(default=None, description="Cookie Maximum survival time in seconds")

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, X } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "~/components/ui/Sheet";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
 import { Button } from "~/components/ui/Button";
@@ -17,7 +17,8 @@ import {
     getSpaceInfoApi,
     subscribeSpaceApi
 } from "~/api/knowledge";
-import { useLocalize } from "~/hooks";
+import { cn } from "~/utils";
+import { useLocalize, useMediaQuery } from "~/hooks";
 
 interface KnowledgeSpacePreviewDrawerProps {
     spaceId: string | undefined;
@@ -34,6 +35,7 @@ export function KnowledgeSpacePreviewDrawer({
     onSquareStatusChange,
 }: KnowledgeSpacePreviewDrawerProps) {
     const localize = useLocalize();
+    const isH5 = useMediaQuery("(max-width: 768px)");
     const { showToast } = useToastContext();
     const MAX_JOINED_SPACES = 50;
 
@@ -271,21 +273,35 @@ export function KnowledgeSpacePreviewDrawer({
         <Sheet open={open} onOpenChange={onOpenChange}>
             <SheetContent
                 side="right"
-                className="w-[1000px] sm:max-w-[1000px] p-0 px-12 flex flex-col h-full min-h-0 overflow-hidden"
+                className={cn(
+                    "flex h-full min-h-0 flex-col overflow-hidden p-0 px-12 w-[1000px] sm:max-w-[1000px]",
+                    "max-md:inset-0 max-md:left-0 max-md:top-0 max-md:h-dvh max-md:w-screen max-md:max-w-none max-md:translate-x-0 max-md:translate-y-0 max-md:px-4"
+                )}
                 hideClose
             >
-                <button
-                    type="button"
-                    aria-label={localize("com_knowledge.collapse_drawer")}
-                    onClick={() => onOpenChange(false)}
-                    className="absolute left-1 top-1/2 -translate-y-1/2 h-16 w-6 bg-white text-[#C9CDD4] hover:text-[#B6BBC5] flex items-center justify-center z-20"
-                >
-                    <ChevronRight className="size-6 stroke-[2.75]" />
-                </button>
+                {!isH5 ? (
+                    <button
+                        type="button"
+                        aria-label={localize("com_knowledge.collapse_drawer")}
+                        onClick={() => onOpenChange(false)}
+                        className="absolute left-1 top-1/2 z-20 flex h-16 w-6 -translate-y-1/2 items-center justify-center bg-white text-[#C9CDD4] hover:text-[#B6BBC5]"
+                    >
+                        <ChevronRight className="size-6 stroke-[2.75]" />
+                    </button>
+                ) : (
+                    <button
+                        type="button"
+                        aria-label={localize("com_knowledge.close")}
+                        onClick={() => onOpenChange(false)}
+                        className="absolute right-4 top-4 z-20 inline-flex size-8 items-center justify-center rounded-md text-[#4E5969] hover:bg-[#F7F8FA]"
+                    >
+                        <X className="size-4" />
+                    </button>
+                )}
                 {space && (
                     <>
-                        <SheetHeader className="px-6 pt-6 pb-4 gap-0 border-b border-gray-100 text-left">
-                            <SheetTitle className="font-semibold text-[#1d2129] leading-tight mb-1">
+                        <SheetHeader className="gap-0 border-b border-gray-100 px-6 pb-4 pt-6 text-left max-md:px-0 max-md:pt-6">
+                            <SheetTitle className="mb-1 text-[#1d2129] leading-tight font-semibold max-md:pr-10">
                                 {space.name}
                             </SheetTitle>
                             {space.description && (
@@ -330,7 +346,7 @@ export function KnowledgeSpacePreviewDrawer({
                         </SheetHeader>
 
                         <div
-                            className="flex-1 min-h-0 overflow-y-auto scrollbar-on-hover px-6 py-4"
+                            className="scrollbar-on-hover flex-1 min-h-0 overflow-y-auto px-6 py-4 max-md:px-0"
                             onScroll={(e) => {
                                 const el = e.currentTarget;
                                 if (el.scrollTop + el.clientHeight >= el.scrollHeight - 80) {
@@ -368,7 +384,7 @@ export function KnowledgeSpacePreviewDrawer({
                                         <div className="flex items-center justify-center h-64 text-[#86909c] text-sm">
                                             {localize("com_knowledge.no_files")}</div>
                                     ) : (
-                                        <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 xl:grid-cols-3">
+                                        <div className="grid grid-cols-2 gap-3 min-[768px]:grid-cols-3">
                                             {filesPreview.map((f) => (
                                                 <FileCard
                                                     key={f.id}

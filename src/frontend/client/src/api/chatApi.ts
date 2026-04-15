@@ -7,10 +7,16 @@ import http from "~/api/request";
 const API = {
     messages: (conversationId: string) =>
         `/api/v1/workstation/messages/${conversationId}`,
+    // v2.5: native Agent-mode history (ChatResponse shape, legacy sibling
+    // branches pre-collapsed server-side).
+    agentMessages: (conversationId: string) =>
+        `/api/v1/workstation/messages/${conversationId}/agent`,
     sseChat: () => `/api/v1/workstation/chat/completions`,
     abortChat: () => `/api/v1/workstation/chat/completions/abort`,
     deleteConversation: (id: string) => `/api/v1/chat/${id}`,
     bsConfig: () => `/api/v1/workstation/config`,
+    citationDetail: (citationId: string) =>
+        `/api/v1/citations/${encodeURIComponent(citationId)}`,
 };
 
 // --- Types ---
@@ -45,6 +51,36 @@ export interface ChatCitation {
     [key: string]: any;
 }
 
+// v2.5 Agent-mode tool call shape (server emits these in agent_tool_call SSE events
+// and persists an array of them inside agent_answer messages).
+export type AgentToolType = "tool" | "knowledge" | "web" | string;
+
+export interface AgentToolCall {
+    tool_call_id: string;
+    tool_name: string;
+    display_name?: string;
+    tool_type?: AgentToolType;
+    args?: Record<string, any>;
+    results?: any;
+    error?: string | null;
+    /** True while the backend is still running this tool (no `end` event seen yet). */
+    inflight?: boolean;
+    /** Epoch ms when the start event arrived; lets the UI compute a live duration. */
+    started_at?: number;
+}
+
+// Unified ordered event — one per thinking segment or tool call in arrival order.
+// Replaces the old parallel arrays (thinking_segments + tool_calls +
+// after_segment/segment_idx cross-references).
+export type AgentEvent =
+    | {
+          type: "thinking";
+          content: string;
+          /** Final duration; absent while the segment is still streaming. */
+          duration_ms?: number;
+      }
+    | ({ type: "tool_call" } & AgentToolCall);
+
 export interface ChatMessage {
     messageId: string;
     parentMessageId: string;
@@ -63,10 +99,20 @@ export interface ChatMessage {
     flow_name?: string;
     // Web search results
     searchResult?: SearchWebItem[];
-    // Reference sources 
+    // Reference sources
     references?: ReferenceSource[];
     citations?: ChatCitation[] | null;
     files?: any[];
+    // --- v2.5 Agent-mode native fields ---
+    /** One of question / agent_answer / agent_thinking / agent_tool_call / legacy answer. */
+    category?: string;
+    /**
+     * Ordered log of thinking segments + tool calls, in arrival order.
+     * This is the primary source for agent-native rendering. Historical
+     * rows written before this field existed are reconstructed from their
+     * legacy fields in `mapAgentResponseItem`.
+     */
+    events?: AgentEvent[];
 }
 
 export interface ContentPart {
@@ -118,6 +164,64 @@ export async function getMessages(
     return res?.data ?? res ?? [];
 }
 
+/**
+ * v2.5: Fetch messages in native Agent-mode shape (ChatResponse).
+ * - Legacy regenerate sibling branches are pre-collapsed server-side.
+ * - Each row already has `category`, and agent_answer rows come with the
+ *   structured JSON payload split into `message` { msg, reasoning_content,
+ *   tool_calls[], steps[] } on the response.
+ *
+ * Response items look like:
+ *   { message_id, category, type, message: {...}, is_bot, chat_id, ... }
+ *
+ * Mapped to ChatMessage here so the renderer doesn't have to branch on the
+ * server shape.
+ */
+export async function getAgentMessages(
+    conversationId: string
+): Promise<ChatMessage[]> {
+    if (!conversationId || conversationId === "new") {
+        return [];
+    }
+    const res = await http.get(API.agentMessages(conversationId));
+    const rows: any[] = res?.data ?? res ?? [];
+    return rows.map(mapAgentResponseItem);
+}
+
+function mapAgentResponseItem(row: any): ChatMessage {
+    const category: string = row.category;
+    const raw = row.message;
+    const base: ChatMessage = {
+        messageId: String(row.message_id ?? ""),
+        parentMessageId: "",
+        conversationId: row.chat_id ?? "",
+        sender: row.is_bot ? "assistant" : "user",
+        text: "",
+        isCreatedByUser: !row.is_bot,
+        createdAt: row.create_time,
+        category,
+        files: Array.isArray(row.files) ? row.files : [],
+        citations: Array.isArray(row.citations) ? row.citations : null,
+    };
+
+    if (category === "question" && raw && typeof raw === "object") {
+        base.text = raw.query ?? "";
+        return base;
+    }
+
+    if (category === "agent_answer" && raw && typeof raw === "object") {
+        base.text = raw.msg ?? "";
+        // Backend always normalises agent_answer rows to {msg, events}, even
+        // for older DB shapes (`chat_helpers._normalise_agent_message_content`).
+        base.events = Array.isArray(raw.events) ? (raw.events as AgentEvent[]) : [];
+        return base;
+    }
+
+    // Fallback — unknown categories land as plain text.
+    base.text = typeof raw === "string" ? raw : JSON.stringify(raw ?? "");
+    return base;
+}
+
 /** Abort an active SSE stream */
 export async function abortChat(abortKey: string): Promise<void> {
     await http.post(API.abortChat(), {
@@ -131,6 +235,11 @@ export async function deleteConversation(
     conversationId: string
 ): Promise<void> {
     await http.delete(API.deleteConversation(conversationId));
+}
+
+export async function getCitationDetail(citationId: string): Promise<ChatCitation> {
+    const res = await http.get<any>(API.citationDetail(citationId));
+    return res?.data ?? res;
 }
 
 /** Get the full SSE URL (absolute) for creating SSE connection */

@@ -1,6 +1,7 @@
 import { ArrowLeftIcon } from "lucide-react";
 import React, { useEffect, useRef } from "react";
 import { Button } from "~/components";
+import { useMediaQuery } from "~/hooks";
 import { ArticleDetail } from "./ArticleDetail";
 import { AiAssistantPanel } from "../AiChat/AiAssistantPanel";
 import { useResizablePanel } from "../hooks/useResizablePanel";
@@ -10,6 +11,7 @@ const MIN_RIGHT_WIDTH = 360;
 
 export default function FullScreenArticle({ article, onExit, showFullScreenBtn = true, onSwitchToFullScreen, showAiAssistant, setShowAiAssistant, onCloseAiAssistant }) {
     const containerRef = useRef<HTMLDivElement>(null);
+    const isH5 = useMediaQuery("(max-width: 768px)");
 
     const { leftWidth, isResizing, startResizing } = useResizablePanel({
         storageKey: "ai-assistant-split-ratio",
@@ -21,13 +23,16 @@ export default function FullScreenArticle({ article, onExit, showFullScreenBtn =
 
     // Auto-close AI panel when container is too narrow
     useEffect(() => {
+        if (isH5) return;
         if (showAiAssistant && containerRef.current) {
             const containerRect = containerRef.current.getBoundingClientRect();
             if (containerRect.width < MIN_LEFT_WIDTH + MIN_RIGHT_WIDTH) {
                 setShowAiAssistant(false);
             }
         }
-    }, [showAiAssistant, setShowAiAssistant]);
+    }, [showAiAssistant, setShowAiAssistant, isH5]);
+
+    const showMobileAiOnly = isH5 && showAiAssistant;
 
     return (
         <div ref={containerRef} className="relative flex h-full w-full overflow-hidden bg-white">
@@ -36,30 +41,37 @@ export default function FullScreenArticle({ article, onExit, showFullScreenBtn =
                 <div className="fixed inset-0 z-50 cursor-col-resize" />
             )}
 
-            <Button variant="outline" size="icon" className="absolute top-4 left-4 h-8 w-8 z-10" onClick={onExit}>
+            <Button
+                variant="outline"
+                size="icon"
+                className={`absolute left-4 h-8 w-8 z-10 ${isH5 ? "top-[11px]" : "top-4"}`}
+                onClick={onExit}
+            >
                 <ArrowLeftIcon className="size-4" />
             </Button>
 
             {/* Left article area */}
-            <div
-                style={{ width: showAiAssistant ? `${leftWidth}px` : '100%' }}
-                className="h-full flex-shrink-0 relative"
-            >
-                <div className={showAiAssistant ? 'h-full' : 'max-w-[1000px] mx-auto h-full'}>
-                    <ArticleDetail
-                        screenFull
-                        aiAssistantOpen={showAiAssistant}
-                        onAiAssistant={() => setShowAiAssistant(true)}
-                        showFullScreenBtn={showFullScreenBtn}
-                        onFullScreen={onExit}
-                        onExitAiAssistant={showFullScreenBtn ? onSwitchToFullScreen : onCloseAiAssistant}
-                        article={article}
-                    />
+            {!showMobileAiOnly && (
+                <div
+                    style={{ width: showAiAssistant ? `${leftWidth}px` : '100%' }}
+                    className="h-full flex-shrink-0 relative"
+                >
+                    <div className={showAiAssistant ? 'h-full' : 'max-w-[1000px] mx-auto h-full'}>
+                        <ArticleDetail
+                            screenFull
+                            aiAssistantOpen={showAiAssistant}
+                            onAiAssistant={() => setShowAiAssistant(true)}
+                            showFullScreenBtn={showFullScreenBtn}
+                            onFullScreen={onExit}
+                            onExitAiAssistant={showFullScreenBtn ? onSwitchToFullScreen : onCloseAiAssistant}
+                            article={article}
+                        />
+                    </div>
                 </div>
-            </div>
+            )}
 
             {/* Splitter — only when AI panel is open */}
-            {showAiAssistant && (
+            {showAiAssistant && !isH5 && (
                 <div className="relative z-20 w-[1px] min-w-[1px] max-w-[1px] flex-none shrink-0">
                     <div
                         onMouseDown={startResizing}
@@ -71,12 +83,22 @@ export default function FullScreenArticle({ article, onExit, showFullScreenBtn =
             )}
 
             {/* Right AI Assistant area */}
-            {showAiAssistant && (
+            {showAiAssistant && !isH5 && (
                 <div className="flex-1 h-full min-w-[360px] bg-white">
                     <AiAssistantPanel
                         features={{ tools: false, modelSelect: false, knowledgeBase: false, fileUpload: false }}
                         articleDocId={article?.id}
                         onClose={onCloseAiAssistant} />
+                </div>
+            )}
+
+            {showMobileAiOnly && (
+                <div className="h-full w-full bg-white">
+                    <AiAssistantPanel
+                        features={{ tools: false, modelSelect: false, knowledgeBase: false, fileUpload: false }}
+                        articleDocId={article?.id}
+                        onClose={onCloseAiAssistant}
+                    />
                 </div>
             )}
         </div>

@@ -1,13 +1,15 @@
-import { ChevronLeft } from 'lucide-react';
+import { X } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { useRecoilValue } from 'recoil';
+import { useNavigate, useParams } from 'react-router-dom';
+import { useSetRecoilState, useRecoilValue } from 'recoil';
 import AppAvator from '~/components/Avator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '~/components/ui/Tooltip2';
 import { useLocalize } from '~/hooks';
 import { AppSidebarConvoItem } from '~/pages/appChat/components/AppSidebarConvoItem';
+import { SideNavModuleTabs } from '~/pages/appChat/components/SideNavModuleTabs';
 import { AppSwitcherDropdown } from '~/pages/appChat/components/AppSwitcherDropdown';
 import { useAppSidebar } from '~/pages/appChat/hooks/useAppSidebar';
+import { sidebarVisibleState } from '~/pages/appChat/store/appSidebarAtoms';
 import { currentChatState } from '~/pages/appChat/store/atoms';
 import { cn } from '~/utils';
 
@@ -66,11 +68,9 @@ function TruncatedLineTooltip({ text, className }: { text: string; className?: s
 
 export function SideNav() {
     const navigate = useNavigate();
-    const location = useLocation();
     const localize = useLocalize();
     const { fid: flowId, type: flowType } = useParams();
-    const from = new URLSearchParams(location.search).get('from');
-    const backPath = from === 'explore' ? '/apps/explore' : '/apps';
+    const setSidebarVisible = useSetRecoilState(sidebarVisibleState);
 
     // Current conversation's app data
     const chatState = useRecoilValue(currentChatState);
@@ -92,16 +92,18 @@ export function SideNav() {
     const flowData = chatState?.flow ?? currentApp;
 
     return (
-        <div className="w-[280px] h-full bg-white border-r border-[#ececec] flex flex-col gap-4 px-3 py-5 overflow-hidden text-[#212121]">
-            {/* Top back button */}
-            <div className="flex items-center gap-[8px] shrink-0">
-                <button
-                    onClick={() => navigate(backPath)}
-                    className="flex shrink-0 items-center justify-center size-[32px] rounded-[8px] bg-[rgba(255,255,255,0.5)] border border-[#ebecf0] backdrop-blur-[4px] hover:bg-gray-50 transition-colors"
-                >
-                    <ChevronLeft size={16} className="text-[#212121]" />
-                </button>
-                <span className="text-[14px] font-medium leading-[22px]">{localize('com_app_chat_sidebar_title')}</span>
+        <div className="relative w-[240px] h-full bg-white border-r border-[#ececec] flex flex-col gap-4 px-2 py-2 overflow-hidden text-[#212121]">
+            <button
+                onClick={() => setSidebarVisible(false)}
+                className="absolute right-2 top-2 z-20 flex shrink-0 items-center justify-center size-[28px] rounded-[6px] hover:bg-[#f7f8fa] transition-colors"
+                aria-label={localize('com_nav_close_sidebar')}
+            >
+                <X size={16} className="text-[#4E5969]" />
+            </button>
+
+            {/* Top module tabs */}
+            <div className="pt-8">
+                <SideNavModuleTabs />
             </div>
 
             {/* App card */}
@@ -188,8 +190,7 @@ export function SideNav() {
                                                     switchConversation(list[0]);
                                                 } else if (flowId && flowType) {
                                                     // Last conversation deleted — land on empty state, don't auto-create
-                                                    const qs = from ? `?from=${from}` : '';
-                                                    navigate(`/app/${flowId}/${flowType}${qs}`, {
+                                                    navigate(`/app/${flowId}/${flowType}`, {
                                                         state: { fromDelete: true },
                                                     });
                                                 }

@@ -6,11 +6,13 @@ import { Input } from "@/components/bs-ui/input";
 import { Label } from "@/components/bs-ui/label";
 import { Switch } from "@/components/bs-ui/switch";
 import { QuestionTooltip } from "@/components/bs-ui/tooltip";
+import { getAssistantModelConfig } from "@/controllers/API/finetune";
 import { useModel } from "@/pages/ModelPage/manage";
 import { ModelSelect } from "@/pages/ModelPage/manage/tabs/KnowledgeModel";
 import { Check, Plus } from "lucide-react";
-import { forwardRef } from "react";
+import { forwardRef, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
 
 export interface Model {
     key: string;
@@ -33,6 +35,35 @@ export const ModelManagement = forwardRef<HTMLDivElement[], ModelManagementProps
     ({ models, errors, error, onAdd, onRemove, onModelChange, onNameChange, onVisualToggle }, ref) => {
         const { llmOptions } = useModel();
         const { t } = useTranslation();
+        const navigate = useNavigate();
+
+        // Assistant-scoped model id allowlist (from 系统模型设置-助手模型)
+        const [assistantModelIds, setAssistantModelIds] = useState<Set<string> | null>(null);
+        useEffect(() => {
+            getAssistantModelConfig().then((cfg) => {
+                const list = (cfg && cfg.llm_list) || [];
+                setAssistantModelIds(new Set(list.map((it: any) => String(it.model_id))));
+            }).catch(() => setAssistantModelIds(new Set()));
+        }, []);
+
+        const assistantLlmOptions = useMemo(() => {
+            if (!assistantModelIds) return [];
+            return llmOptions
+                .map((server) => ({
+                    ...server,
+                    children: (server.children || []).filter((m: any) => assistantModelIds.has(String(m.value))),
+                }))
+                .filter((server) => server.children.length > 0);
+        }, [llmOptions, assistantModelIds]);
+
+        const selectFooter = (
+            <div
+                className="px-3 py-2 text-sm text-primary cursor-pointer hover:bg-[#EBF0FF] dark:hover:bg-gray-700"
+                onClick={() => navigate('/model/management?systemModel=assis')}
+            >
+                + {t('bench.addMoreModels')}
+            </div>
+        );
 
         // Bind ref to each model item
         const setItemRef = (el: HTMLDivElement | null, index: number) => {
@@ -69,13 +100,14 @@ export const ModelManagement = forwardRef<HTMLDivElement[], ModelManagementProps
                 {models.map((model, index) => (
                     <div key={model.key} className="grid items-center mb-4" style={{ gridTemplateColumns: "1fr 1fr 120px 60px" }}>
                         <div className="pr-2" id={model.id}>
-                            {llmOptions.length > 0 ? (
+                            {assistantLlmOptions.length > 0 ? (
                                 <ModelSelect
                                     key={model.id}
                                     label={''}
                                     value={model.id}
-                                    options={llmOptions}
+                                    options={assistantLlmOptions}
                                     onChange={(val) => onModelChange(index, val)}
+                                    footer={selectFooter}
                                 />
                             ) : (
                                 <ModelSelect
@@ -84,6 +116,7 @@ export const ModelManagement = forwardRef<HTMLDivElement[], ModelManagementProps
                                     value={''}
                                     options={[]}
                                     onChange={(val) => { }}
+                                    footer={selectFooter}
                                 />
                             )}
                             {errors[model.key] && <p className="text-red-500 text-xs mt-1">{errors[model.key]?.[0]}</p>}

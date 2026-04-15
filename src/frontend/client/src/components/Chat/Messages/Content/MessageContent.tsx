@@ -87,7 +87,7 @@ const DisplayMessage = ({ text, isCreatedByUser, message, showCursor, webContent
   let content: React.ReactElement;
   if (!isCreatedByUser) {
     content = (
-      <Markdown content={safeText} webContent={webContent} showCursor={showCursorState} isLatestMessage={isLatestMessage} />
+      <Markdown content={safeText} webContent={webContent} citations={(message as any).citations} showCursor={showCursorState} isLatestMessage={isLatestMessage} />
     );
   } else if (enableUserMsgMarkdown) {
     content = <MarkdownLite content={safeText} />;

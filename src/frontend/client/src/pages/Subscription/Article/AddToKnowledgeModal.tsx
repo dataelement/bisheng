@@ -205,7 +205,7 @@ function TreeNode({
                     <InlineEdit
                         defaultValue={node.name}
                         onValidate={(name) => {
-                            if (nodes.some(node => node.name === name)) {
+                            if (nodes.some(n => n.id !== node.id && n.name === name)) {
                                 showToast({ message: localize("com_subscription.folder_name_duplicate"), severity: NotificationSeverity.WARNING });
                                 return false;
                             }
@@ -534,38 +534,42 @@ export function AddToKnowledgeModal({ open, onOpenChange, articleId }: AddToKnow
     return (
         <>
             <Dialog open={open} onOpenChange={handleOpenChange}>
-                <DialogContent className="w-[600px] max-w-[90vw] p-0 gap-0 overflow-hidden rounded-xl">
+                <DialogContent
+                    close={false}
+                    className="w-[576px] max-w-[92vw] p-0 gap-0 overflow-hidden rounded-xl max-md:inset-0 max-md:left-0 max-md:top-0 max-md:h-dvh max-md:w-screen max-md:max-w-none max-md:translate-x-0 max-md:translate-y-0 max-md:rounded-none"
+                >
                     {/* Header */}
-                    <DialogHeader className="px-6 pt-3 pb-3">
-                        <DialogTitle className="font-semibold text-gray-800 leading-6">{localize("com_subscription.add_to_knowledge_space")}</DialogTitle>
+                    <DialogHeader className="px-6 pt-4 pb-4 border-b border-[#ECECEC] max-md:px-4">
+                        <DialogTitle className="text-[20px] font-medium leading-7 text-[#212121]">
+                            {localize("com_subscription.add_to_knowledge_space")}
+                        </DialogTitle>
                     </DialogHeader>
 
                     {/* Search */}
-                    <div className="px-6 pt-3">
+                    <div className="px-6 pt-4 max-md:px-4">
                         <div className="relative">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-gray-400 pointer-events-none" />
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#818181] pointer-events-none" />
                             <Input
                                 value={search}
                                 onChange={e => setSearch(e.target.value)}
                                 placeholder={localize("com_subscription.search_knowledge_space_placeholder")}
-                                className="w-full h-8 pl-8 pr-8 text-sm rounded-md border border-gray-100 focus:outline-none"
+                                className="w-full h-8 pl-8 pr-8 text-[14px] rounded-[6px] border border-[#ECECEC] focus:outline-none"
                             />
                             {search && (
                                 <button
                                     className="absolute right-2.5 top-1/2 -translate-y-1/2"
                                     onClick={() => setSearch("")}
                                 >
-                                    <X className="size-3.5 text-gray-400" />
+                                    <X className="size-3.5 text-[#818181]" />
                                 </button>
                             )}
                         </div>
                     </div>
 
                     {/* Tree / Empty state */}
-                    <div className="px-6 pt-4">
+                    <div className="px-6 pt-4 max-md:px-4">
                         <div
-                            className="p-3 w-[552px] max-w-full overflow-y-auto overflow-x-hidden border rounded-md scrollbar-on-hover"
-                            style={{ height: 340 }}
+                            className="h-[340px] max-h-full w-full overflow-y-auto overflow-x-hidden rounded-[6px] border border-[#ECECEC] p-3 scrollbar-on-hover max-md:h-[calc(100dvh-260px)]"
                         >
                             {spacesLoading ? (
                                 <div className="flex items-center justify-center h-full text-[#86909c]">
@@ -613,18 +617,18 @@ export function AddToKnowledgeModal({ open, onOpenChange, articleId }: AddToKnow
                     </div>
 
                     {/* Footer */}
-                    <DialogFooter className="px-5 py-3.5 mt-3 flex flex-row justify-end gap-1">
+                    <DialogFooter className="mt-3 flex flex-row justify-end gap-2 px-5 py-3.5 max-md:mt-auto max-md:border-t max-md:border-[#ECECEC] max-md:px-4 max-md:py-3">
                         <Button
                             variant="outline"
                             size="sm"
                             onClick={() => handleOpenChange(false)}
-                            className="h-8 px-4 text-sm rounded-md font-normal"
+                            className="h-8 px-4 text-sm rounded-md font-normal max-md:flex-1"
                         >{localize("com_subscription.cancel")}</Button>
                         <Button
                             size="sm"
                             onClick={() => void handleConfirm()}
                             disabled={!selectedId || isConfirming}
-                            className="h-8 px-4 text-sm rounded-md font-normal"
+                            className="h-8 px-4 text-sm rounded-md font-normal max-md:flex-1"
                         >
                             {isConfirming && <Loader2 className="size-3.5 mr-1.5 animate-spin" />}{localize("com_subscription.add")}
                         </Button>
