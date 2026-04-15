@@ -17,12 +17,18 @@ export type User = {
 };
 
 export type ROLE = {
-    create_time: string
     id: number
-    role_id: number
-    remark: string
+    role_id?: number
     role_name: string
-    update_time: string
+    role_type?: string
+    department_id?: number | null
+    department_name?: string | null
+    quota_config?: Record<string, any> | null
+    user_count?: number
+    is_readonly?: boolean
+    remark?: string
+    create_time?: string
+    update_time?: string
 }
 
 export type UserGroup = {
@@ -33,4 +39,5 @@ export type UserGroup = {
     createTime: string
     updateTime: string
     groupLimit?: number
+    visibility?: string
 }

@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import List, Optional
 
 from pydantic import field_validator
-from sqlalchemy import Column, DateTime, String, UniqueConstraint, func, text
+from sqlalchemy import Column, DateTime, String, UniqueConstraint, func, or_, text
 from sqlalchemy.orm import selectinload
 from sqlmodel import Field, select, Relationship, col
 
@@ -142,6 +142,16 @@ class UserDao(UserBase):
     async def aget_user_by_username(cls, username: str) -> User | None:
         async with get_async_db_session() as session:
             statement = select(User).where(User.user_name == username)
+            result = await session.exec(statement)
+            return result.first()
+
+    @classmethod
+    async def aget_user_for_login(cls, account: str) -> User | None:
+        """按用户名或 external_id（本地人员 ID）查找可登录用户。"""
+        async with get_async_db_session() as session:
+            statement = select(User).where(
+                or_(User.user_name == account, User.external_id == account),
+            )
             result = await session.exec(statement)
             return result.first()
 

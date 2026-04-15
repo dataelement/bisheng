@@ -78,6 +78,19 @@ export async function removeDepartmentMemberApi(
   return await axios.delete(`/api/v1/departments/${deptId}/members/${userId}`)
 }
 
+export async function getDepartmentAssignableRolesApi(
+  deptId: string
+): Promise<{ id: number; role_name: string; role_type: string; department_id?: number | null }[]> {
+  return await axios.get(`/api/v1/departments/${deptId}/assignable-roles`)
+}
+
+export async function createDepartmentLocalMemberApi(
+  deptId: string,
+  data: { user_name: string; password: string; role_ids: number[] }
+): Promise<{ user_id: number; user_name: string; person_id: string; dept_id: string }> {
+  return await axios.post(`/api/v1/departments/${deptId}/local-members`, data)
+}
+
 // ── Admins ─────────────────────────────────────────────
 
 export async function getDepartmentAdminsApi(

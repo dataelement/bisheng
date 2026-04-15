@@ -79,8 +79,12 @@ export async function disableUserApi(userid, status) {
 }
 // 角色列表
 export async function getRolesApi(searchkey = ""): Promise<{ data: ROLE[] }> {
-  return await axios.get(`/api/v1/role/list?role_name=${searchkey}`)
-    .then(res => res.data);
+  const res = await axios.get(`/api/v1/role/list?role_name=${searchkey}&page=1&limit=200`)
+  const payload = res?.data
+  if (Array.isArray(payload)) return payload as any
+  if (Array.isArray(payload?.data)) return payload.data as any
+  if (Array.isArray(payload?.data?.data)) return payload.data.data as any
+  return []
 }
 // 用户组下角色列表
 export async function getRolesByGroupApi(searchkey = "", groupIds: any[]): Promise<{ data: ROLE[] }> {
@@ -147,6 +151,49 @@ export async function createRole(groupId, name) {
     role_name: name,
     remark: "手动创建用户",
   });
+}
+
+// v2.5 角色管理（去用户组绑定）
+export async function getRolesPageApi(params: {
+  keyword?: string
+  page?: number
+  limit?: number
+}): Promise<{ data: ROLE[]; total: number }> {
+  const res = await axios.get(`/api/v1/roles`, { params })
+  return res
+}
+
+export async function createRoleV2Api(data: {
+  role_name: string
+  department_id?: number | null
+  quota_config?: Record<string, number>
+  remark?: string
+}) {
+  return await axios.post(`/api/v1/roles`, data)
+}
+
+export async function updateRoleV2Api(
+  roleId: number,
+  data: {
+    role_name?: string
+    department_id?: number | null
+    quota_config?: Record<string, number>
+    remark?: string
+  }
+) {
+  return await axios.put(`/api/v1/roles/${roleId}`, data)
+}
+
+export async function deleteRoleV2Api(roleId: number) {
+  return await axios.delete(`/api/v1/roles/${roleId}`)
+}
+
+export async function getRoleMenuV2Api(roleId: number): Promise<string[]> {
+  return await axios.get(`/api/v1/roles/${roleId}/menu`)
+}
+
+export async function updateRoleMenuV2Api(roleId: number, menu_ids: string[]) {
+  return await axios.post(`/api/v1/roles/${roleId}/menu`, { menu_ids })
 }
 /**
  * 更新角色权限
@@ -215,22 +262,23 @@ export function delUserGroupApi(group_id) {
 }
 
 // 保存用户组
-export function saveUserGroup(form, selected) {
-  console.log('form :>> ', form);
+export function saveUserGroup(form, selected, visibility: string = 'public') {
   const { groupName: group_name } = form
   return axios.post(`/api/v1/group/create`, {
     group_name,
     group_admins: selected.map(item => item.value),
+    visibility: visibility === 'private' ? 'private' : 'public',
   });
 }
 
 // 修改用户组
-export function updateUserGroup(id, form, selected) {
+export function updateUserGroup(id, form, selected, visibility?: string) {
   const { groupName: group_name } = form
-  const a = axios.put(`/api/v1/group/create`, {
-    id,
-    group_name
-  });
+  const putBody: Record<string, unknown> = { id, group_name }
+  if (visibility === 'private' || visibility === 'public') {
+    putBody.visibility = visibility
+  }
+  const a = axios.put(`/api/v1/group/create`, putBody);
   const b = axios.post(`/api/v1/group/set_group_admin`, {
     group_id: id,
     user_ids: selected.map(item => item.value)

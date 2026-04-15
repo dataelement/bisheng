@@ -179,6 +179,7 @@ export default function EditUserGroup({ data, onBeforeChange, onChange }) {
         groupName: '',
         adminUser: '',
         groupLimit: 0,
+        visibility: 'public' as 'public' | 'private',
         assistant: [],
         skill: [],
         workFlows: []
@@ -209,8 +210,8 @@ export default function EditUserGroup({ data, onBeforeChange, onChange }) {
         // 过滤系统管理员
         const users = selected.filter(item => !lockOptions.some(id => id === item.value))
 
-        const res: any = await (data.id ? updateUserGroup(data.id, form, users) : // 修改
-            saveUserGroup(form, users)) // 保存
+        const res: any = await (data.id ? updateUserGroup(data.id, form, users, form.visibility) : // 修改
+            saveUserGroup(form, users, form.visibility)) // 保存
 
         if (appConfig.isPro) {
             await captureAndAlertRequestErrorHoc(saveGroupApi({
@@ -225,7 +226,12 @@ export default function EditUserGroup({ data, onBeforeChange, onChange }) {
     }
 
     useEffect(() => { // 初始化数据
-        setForm({ ...form, groupName: data.group_name, groupLimit: data.group_limit || 0 })
+        setForm({
+            ...form,
+            groupName: data.group_name,
+            groupLimit: data.group_limit || 0,
+            visibility: data.visibility === 'private' ? 'private' : 'public',
+        })
         async function init() {
             const res = await getAdminsApi()
             const users = data.group_admins?.map(d => ({ label: d.user_name, value: d.user_id })) || []
@@ -240,6 +246,18 @@ export default function EditUserGroup({ data, onBeforeChange, onChange }) {
         <div className="font-bold mt-4">
             <p className="text-xl mb-4">{t('system.groupName')}</p>
             <Input placeholder={t('system.userGroupName')} required value={form.groupName} onChange={(e) => setForm({ ...form, groupName: e.target.value })}></Input>
+        </div>
+        <div className="font-bold mt-12">
+            <p className="text-xl mb-4">{t('system.groupVisibility')}</p>
+            <RadioGroup className="flex flex-wrap gap-6" value={form.visibility}
+                onValueChange={(v: 'public' | 'private') => setForm({ ...form, visibility: v })}>
+                <Label className="flex items-center gap-2 font-normal">
+                    <RadioGroupItem value="public" />{t('system.visibilityPublic')}
+                </Label>
+                <Label className="flex items-center gap-2 font-normal">
+                    <RadioGroupItem value="private" />{t('system.visibilityPrivate')}
+                </Label>
+            </RadioGroup>
         </div>
         <div className="font-bold mt-12">
             <p className="text-xl mb-4">{t('system.admins')}</p>

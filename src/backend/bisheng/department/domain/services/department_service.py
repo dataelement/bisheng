@@ -6,16 +6,19 @@ Part of F002-department-tree.
 from __future__ import annotations
 
 import logging
+import re
 import secrets
 from typing import List, Optional
 
-from sqlalchemy import func, update
+from sqlalchemy import and_, func, or_, update
 from sqlmodel import select
 
 from bisheng.common.errcode.department import (
     DepartmentCircularMoveError,
     DepartmentHasChildrenError,
     DepartmentHasMembersError,
+    DepartmentInvalidPasswordError,
+    DepartmentInvalidRolesError,
     DepartmentMemberExistsError,
     DepartmentMemberNotFoundError,
     DepartmentNameDuplicateError,
@@ -33,6 +36,7 @@ from bisheng.database.models.department import (
 )
 from bisheng.department.domain.schemas.department_schema import (
     DepartmentCreate,
+    DepartmentLocalMemberCreate,
     DepartmentMemberAdd,
     DepartmentMoveRequest,
     DepartmentTreeNode,
@@ -98,6 +102,18 @@ async def _check_permission(
 def generate_dept_id(prefix: str = 'BS') -> str:
     """Generate a business key like 'BS@a3f7e9'."""
     return f'{prefix}@{secrets.token_hex(3)}'
+
+
+def _password_meets_prd_policy(plain: str) -> bool:
+    """PRD：至少 8 位，含大写、小写、数字、符号。"""
+    if len(plain) < 8:
+        return False
+    return bool(
+        re.search(r'[A-Z]', plain)
+        and re.search(r'[a-z]', plain)
+        and re.search(r'\d', plain)
+        and re.search(r'[^A-Za-z0-9\s]', plain),
+    )
 
 
 async def _get_dept_or_raise(session, dept_id: str) -> Department:
@@ -609,6 +625,7 @@ class DepartmentService:
                     UserDepartment.is_primary,
                     UserDepartment.source,
                     UserDepartment.create_time,
+                    UserDepartment.update_time,
                     User.delete.label('user_deleted'),
                 )
                 .join(User, User.user_id == UserDepartment.user_id)
@@ -648,7 +665,10 @@ class DepartmentService:
                         Group.group_name,
                     )
                     .join(Group, UserGroup.group_id == Group.id)
-                    .where(UserGroup.user_id.in_(user_ids))
+                    .where(
+                        UserGroup.user_id.in_(user_ids),
+                        Group.visibility == 'public',
+                    )
                 )
                 for uid, gid, gname in ug_result.all():
                     user_groups_map.setdefault(uid, []).append(
@@ -680,6 +700,7 @@ class DepartmentService:
                 'is_primary': r.is_primary,
                 'source': r.source,
                 'create_time': r.create_time,
+                'update_time': r.update_time,
                 'enabled': r.user_deleted == 0,
                 'user_groups': user_groups_map.get(r.user_id, []),
                 'roles': roles_map.get(r.user_id, []),
@@ -687,3 +708,130 @@ class DepartmentService:
             for r in rows
         ]
         return {'data': data, 'total': total}
+
+    @classmethod
+    async def aget_assignable_roles(
+        cls, dept_id: str, login_user,
+    ) -> List[dict]:
+        """当前部门可授予的角色：全局 + 本部门子树内定义的角色（不含内置超管）。"""
+        from bisheng.database.constants import AdminRole
+        from bisheng.database.models.role import Role
+
+        async with get_async_db_session() as session:
+            dept = await _get_dept_or_raise(session, dept_id)
+            await _check_permission(login_user, dept_internal_id=dept.id)
+
+            subtree = await session.exec(
+                select(Department.id).where(
+                    Department.path.like(f'{dept.path}%'),
+                    Department.status == 'active',
+                )
+            )
+            raw_ids = subtree.all()
+            subtree_ids = []
+            for row in raw_ids:
+                subtree_ids.append(int(row[0]) if isinstance(row, tuple) else int(row))
+
+            stmt = select(Role).where(
+                Role.id > AdminRole,
+                or_(
+                    Role.role_type == 'global',
+                    and_(
+                        Role.role_type == 'tenant',
+                        Role.tenant_id == login_user.tenant_id,
+                        or_(
+                            Role.department_id.is_(None),
+                            Role.department_id.in_(subtree_ids),
+                        ),
+                    ),
+                    # 兼容旧数据：历史角色可能未写 role_type，默认按 tenant 角色处理
+                    and_(
+                        or_(Role.role_type.is_(None), Role.role_type == ''),
+                        Role.tenant_id == login_user.tenant_id,
+                        or_(
+                            Role.department_id.is_(None),
+                            Role.department_id.in_(subtree_ids),
+                        ),
+                    ),
+                ),
+            ).order_by(Role.role_name.asc())
+            roles = (await session.exec(stmt)).all()
+
+        return [
+            {
+                'id': r.id,
+                'role_name': r.role_name,
+                'role_type': r.role_type,
+                'department_id': r.department_id,
+            }
+            for r in roles
+        ]
+
+    @classmethod
+    async def acreate_local_member(
+        cls, dept_id: str, data: DepartmentLocalMemberCreate, login_user,
+    ) -> dict:
+        """在部门内创建本地账号：主属当前部门、默认用户组、指定角色、生成人员 ID（external_id）。"""
+        from bisheng.common.errcode.user import UserNameAlreadyExistError
+        from bisheng.database.constants import AdminRole, DefaultGroup
+        from bisheng.user.domain.models.user import User, UserDao
+        from bisheng.user.domain.services.user import UserService
+        from bisheng.utils import md5_hash
+
+        async with get_async_db_session() as session:
+            dept = await _get_dept_or_raise(session, dept_id)
+            await _check_permission(login_user, dept_internal_id=dept.id)
+
+        plain = UserService.decrypt_password_plain(data.password)
+        if not _password_meets_prd_policy(plain):
+            raise DepartmentInvalidPasswordError()
+
+        if await UserDao.aget_user_by_username(data.user_name):
+            raise UserNameAlreadyExistError()
+
+        assignable = await cls.aget_assignable_roles(dept_id, login_user)
+        allowed_ids = {r['id'] for r in assignable}
+        if AdminRole in data.role_ids or not set(data.role_ids).issubset(allowed_ids):
+            raise DepartmentInvalidRolesError()
+
+        person_id = None
+        for _ in range(5):
+            candidate = generate_dept_id()
+            existing = await UserDao.aget_by_source_external_id('local', candidate)
+            if not existing:
+                person_id = candidate
+                break
+        if not person_id:
+            person_id = f'BS@{secrets.token_hex(6)}'
+
+        pwd_hash = md5_hash(plain)
+        user = User(
+            user_name=data.user_name,
+            password=pwd_hash,
+            source='local',
+            external_id=person_id,
+        )
+        user = UserDao.add_user_with_groups_and_roles(
+            user, [DefaultGroup], list(data.role_ids),
+        )
+
+        async with get_async_db_session() as session:
+            dept = await _get_dept_or_raise(session, dept_id)
+            ud = UserDepartment(
+                user_id=user.user_id,
+                department_id=dept.id,
+                is_primary=1,
+                source='local',
+            )
+            session.add(ud)
+            await session.commit()
+
+        ops = DepartmentChangeHandler.on_members_added(dept.id, [user.user_id])
+        await DepartmentChangeHandler.execute_async(ops)
+
+        return {
+            'user_id': user.user_id,
+            'user_name': user.user_name,
+            'person_id': person_id,
+            'dept_id': dept.dept_id,
+        }

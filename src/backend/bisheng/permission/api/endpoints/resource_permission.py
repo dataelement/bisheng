@@ -109,3 +109,24 @@ async def get_resource_permissions(
         object_id=resource_id,
     )
     return resp_200(permissions)
+
+
+@router.get('/rebac-schema')
+async def rebac_schema_summary(
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    """PRD §3.2.3 资源权限模板：返回当前内置 OpenFGA 模型类型与关系名（仅超管）。"""
+    if not login_user.is_admin():
+        return PermissionDeniedError.return_resp()
+
+    from bisheng.core.openfga.authorization_model import MODEL_VERSION, get_authorization_model
+
+    model = get_authorization_model()
+    types_out = []
+    for td in model.get('type_definitions', []):
+        tname = td.get('type')
+        rels = sorted(list((td.get('relations') or {}).keys()))
+        types_out.append({'type': tname, 'relations': rels})
+    return resp_200(
+        {'schema_version': model.get('schema_version'), 'model_version': MODEL_VERSION, 'types': types_out},
+    )

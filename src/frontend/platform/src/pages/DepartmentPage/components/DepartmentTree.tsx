@@ -1,8 +1,12 @@
 import { SearchInput } from "@/components/bs-ui/input"
+import { cn } from "@/utils"
 import { DepartmentTreeNode } from "@/types/api/department"
 import { Building2, ChevronDown, ChevronRight, Plus } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
+
+/** 每层缩进宽度（px），侧栏内要一眼能看出父子关系 */
+const TREE_INDENT_PER_LEVEL = 22
 
 interface DepartmentTreeProps {
   data: DepartmentTreeNode[]
@@ -70,16 +74,30 @@ export function DepartmentTree({ data, selectedDeptId, onSelect, onCreateChild }
       const hasChildren = node.children && node.children.length > 0
       const isExpanded = expanded.has(node.id)
       const isSelected = node.dept_id === selectedDeptId
+      const gutterWidth = depth * TREE_INDENT_PER_LEVEL
 
       return (
         <div key={node.id}>
           <div
-            className={`group flex cursor-pointer items-center rounded-md px-2 py-1.5 text-sm hover:bg-accent ${
-              isSelected ? "bg-accent font-medium" : ""
-            }`}
-            style={{ paddingLeft: `${depth * 16 + 8}px` }}
+            className={cn(
+              "group flex cursor-pointer items-center rounded-md py-1.5 pl-1.5 pr-2 text-sm hover:bg-accent",
+              isSelected && "bg-accent font-medium",
+            )}
             onClick={() => onSelect(node)}
           >
+            {/* 层级缩进：占位宽度 + 竖线提示从属关系（不依赖仅靠 padding 的微弱差异） */}
+            <div
+              className="relative shrink-0 self-stretch"
+              style={{ width: gutterWidth }}
+              aria-hidden
+            >
+              {depth > 0 && (
+                <span
+                  className="pointer-events-none absolute right-0 top-1 bottom-1 w-px bg-border"
+                  aria-hidden
+                />
+              )}
+            </div>
             {/* Expand/collapse */}
             <span
               className="mr-1 flex h-4 w-4 shrink-0 items-center justify-center"
@@ -87,15 +105,17 @@ export function DepartmentTree({ data, selectedDeptId, onSelect, onCreateChild }
             >
               {hasChildren ? (
                 isExpanded ? (
-                  <ChevronDown className="h-3.5 w-3.5" />
+                  <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
                 ) : (
-                  <ChevronRight className="h-3.5 w-3.5" />
+                  <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
                 )
-              ) : null}
+              ) : (
+                <span className="block h-3.5 w-3.5" aria-hidden />
+              )}
             </span>
             <Building2 className="mr-1.5 h-4 w-4 shrink-0 text-muted-foreground" />
             <span className="flex-1 truncate">{node.name}</span>
-            <span className="mr-1 text-xs text-muted-foreground">{node.member_count}</span>
+            <span className="mr-1 text-xs text-muted-foreground tabular-nums">{node.member_count}</span>
             {/* Quick create child button */}
             <button
               className="hidden h-5 w-5 shrink-0 items-center justify-center rounded hover:bg-gray-200 group-hover:flex"

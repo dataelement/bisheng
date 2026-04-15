@@ -106,7 +106,11 @@ export default function Departments() {
               </TabsList>
             </div>
             <TabsContent value="members">
-              <MemberTable deptId={selectedDept.dept_id} onChanged={handleTreeChange} />
+              <MemberTable
+                deptId={selectedDept.dept_id}
+                deptName={selectedDept.name}
+                onChanged={handleTreeChange}
+              />
             </TabsContent>
             <TabsContent value="settings">
               <DepartmentSettings dept={selectedDept} tree={tree} onChanged={handleTreeChange} />

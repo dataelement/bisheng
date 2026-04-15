@@ -113,7 +113,11 @@ export default function DepartmentPage() {
               </TabsList>
             </div>
             <TabsContent value="members">
-              <MemberTable deptId={selectedDept.dept_id} onChanged={handleTreeChange} />
+              <MemberTable
+                deptId={selectedDept.dept_id}
+                deptName={selectedDept.name}
+                onChanged={handleTreeChange}
+              />
             </TabsContent>
             <TabsContent value="settings">
               <DepartmentSettings

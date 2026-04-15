@@ -50,3 +50,13 @@ class DepartmentMemberNotFoundError(BaseErrorCode):
 class DepartmentPermissionDeniedError(BaseErrorCode):
     Code: int = 21009
     Msg: str = 'No permission for this department operation'
+
+
+class DepartmentInvalidPasswordError(BaseErrorCode):
+    Code: int = 21010
+    Msg: str = 'Password must be at least 8 characters and include upper, lower, digit and symbol'
+
+
+class DepartmentInvalidRolesError(BaseErrorCode):
+    Code: int = 21011
+    Msg: str = 'One or more roles are not assignable in this department'

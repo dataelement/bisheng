@@ -32,15 +32,10 @@ from bisheng.utils import get_request_ip
 
 class RoleGroupService():
 
-    def get_group_list(self, group_ids: List[int]) -> List[GroupRead]:
-        """Get the full amountgroupVertical"""
-
-        # Inquirygroup
-        if group_ids:
-            groups = GroupDao.get_group_by_ids(group_ids)
-        else:
-            groups = GroupDao.get_all_group()
-        # Inquiryuser
+    def enrich_group_reads(self, groups: List[Group]) -> List[GroupRead]:
+        """Attach admins to Group ORM rows and return GroupRead list."""
+        if not groups:
+            return []
         user_admin = UserGroupDao.get_groups_admins([group.id for group in groups])
         users_dict = {}
         if user_admin:
@@ -55,6 +50,16 @@ class RoleGroupService():
                 if user.group_id == group.id
             ]
         return groupReads
+
+    def get_group_list(self, group_ids: List[int]) -> List[GroupRead]:
+        """Get the full amountgroupVertical"""
+
+        # Inquirygroup
+        if group_ids:
+            groups = GroupDao.get_group_by_ids(group_ids)
+        else:
+            groups = GroupDao.get_all_group()
+        return self.enrich_group_reads(groups)
 
     def create_group(self, request: Request, login_user: UserPayload, group: GroupCreate) -> Group:
         """Add Usergroup"""
@@ -82,6 +87,8 @@ class RoleGroupService():
             raise ValueError('User group does not exist')
         exist_group.group_name = group.group_name
         exist_group.remark = group.remark
+        if getattr(group, 'visibility', None) in ('public', 'private'):
+            exist_group.visibility = group.visibility
         exist_group.update_user = login_user.user_id
         exist_group.update_time = datetime.now()
 

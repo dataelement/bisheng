@@ -36,6 +36,7 @@ export interface DepartmentMember {
   is_primary: number
   source: string
   create_time: string
+  update_time?: string
   enabled: boolean
   user_groups: { id: number; group_name: string }[]
   roles: { id: number; role_name: string }[]

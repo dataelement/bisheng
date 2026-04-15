@@ -10,6 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/bs-ui/select"
+import { Switch } from "@/components/bs-ui/switch"
 import {
   Table,
   TableBody,
@@ -23,18 +24,21 @@ import {
   getDepartmentMembersApi,
   removeDepartmentMemberApi,
 } from "@/controllers/API/department"
+import { disableUserApi } from "@/controllers/API/user"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
+import { isSyncedSource } from "@/pages/DepartmentPage/constants/syncReadonly"
 import { DepartmentMember } from "@/types/api/department"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { AddMemberDialog } from "./AddMemberDialog"
+import { CreateLocalMemberDialog } from "./CreateLocalMemberDialog"
 
 interface MemberTableProps {
   deptId: string
+  deptName: string
   onChanged: () => void
 }
 
-export function MemberTable({ deptId, onChanged }: MemberTableProps) {
+export function MemberTable({ deptId, deptName, onChanged }: MemberTableProps) {
   const { t } = useTranslation()
   const [members, setMembers] = useState<DepartmentMember[]>([])
   const [total, setTotal] = useState(0)
@@ -46,9 +50,13 @@ export function MemberTable({ deptId, onChanged }: MemberTableProps) {
   pageRef.current = page
 
   const loadMembers = useCallback(() => {
-    const params: any = { page: pageRef.current, limit: 20, keyword }
+    const params: Record<string, string | number> = {
+      page: pageRef.current,
+      limit: 20,
+      keyword,
+    }
     if (isPrimaryFilter !== "all") {
-      params.is_primary = parseInt(isPrimaryFilter)
+      params.is_primary = parseInt(isPrimaryFilter, 10)
     }
     captureAndAlertRequestErrorHoc(
       getDepartmentMembersApi(deptId, params)
@@ -76,7 +84,7 @@ export function MemberTable({ deptId, onChanged }: MemberTableProps) {
   )
 
   const handleRemove = useCallback(
-    (userId: number, userName: string) => {
+    (userId: number) => {
       bsConfirm({
         title: t("bs:department.removeMember"),
         desc: t("bs:department.confirmRemoveMember"),
@@ -97,15 +105,38 @@ export function MemberTable({ deptId, onChanged }: MemberTableProps) {
     [deptId, loadMembers, onChanged, t]
   )
 
+  const handleToggleEnabled = useCallback(
+    (m: DepartmentMember, enabled: boolean) => {
+      setMembers((list) =>
+        list.map((x) =>
+          x.user_id === m.user_id ? { ...x, enabled } : x
+        )
+      )
+      captureAndAlertRequestErrorHoc(
+        disableUserApi(m.user_id, enabled ? 0 : 1)
+      ).then((res) => {
+        if (res === null) {
+          loadMembers()
+        } else {
+          toast({ title: t("prompt"), variant: "success" })
+          onChanged()
+        }
+      })
+    },
+    [loadMembers, onChanged, t]
+  )
+
   const handleAdded = useCallback(() => {
     setAddOpen(false)
     loadMembers()
     onChanged()
   }, [loadMembers, onChanged])
 
+  const fmtTime = (v?: string) =>
+    v ? String(v).replace("T", " ").slice(0, 19) : "-"
+
   return (
     <div>
-      {/* Toolbar */}
       <div className="mb-4 flex items-center gap-2">
         <SearchInput
           placeholder={t("bs:department.searchMember")}
@@ -124,11 +155,10 @@ export function MemberTable({ deptId, onChanged }: MemberTableProps) {
         </Select>
         <div className="flex-1" />
         <Button size="sm" onClick={() => setAddOpen(true)}>
-          {t("bs:department.addMember")}
+          {t("bs:department.createLocalUser")}
         </Button>
       </div>
 
-      {/* Table */}
       <Table>
         <TableHeader>
           <TableRow>
@@ -136,6 +166,7 @@ export function MemberTable({ deptId, onChanged }: MemberTableProps) {
             <TableHead>{t("bs:department.memberType")}</TableHead>
             <TableHead>{t("bs:department.userGroups")}</TableHead>
             <TableHead>{t("bs:department.roles")}</TableHead>
+            <TableHead>{t("bs:department.updateTime")}</TableHead>
             <TableHead>{t("bs:department.enabled")}</TableHead>
             <TableHead className="w-[80px]">{t("operations")}</TableHead>
           </TableRow>
@@ -143,7 +174,7 @@ export function MemberTable({ deptId, onChanged }: MemberTableProps) {
         <TableBody>
           {members.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={6} className="text-center text-muted-foreground">
+              <TableCell colSpan={7} className="text-center text-muted-foreground">
                 {t("bs:department.noMembers")}
               </TableCell>
             </TableRow>
@@ -164,17 +195,24 @@ export function MemberTable({ deptId, onChanged }: MemberTableProps) {
                 <TableCell className="max-w-[150px] truncate">
                   {m.roles.map((r) => r.role_name).join(", ") || "-"}
                 </TableCell>
+                <TableCell className="whitespace-nowrap text-muted-foreground">
+                  {fmtTime(m.update_time)}
+                </TableCell>
                 <TableCell>
-                  <Badge variant={m.enabled ? "default" : "destructive"}>
-                    {m.enabled ? t("bs:department.enabled") : t("bs:department.disabled")}
-                  </Badge>
+                  <Switch
+                    checked={m.enabled}
+                    disabled={isSyncedSource(m.source)}
+                    onCheckedChange={(checked) =>
+                      handleToggleEnabled(m, Boolean(checked))
+                    }
+                  />
                 </TableCell>
                 <TableCell>
                   <Button
                     variant="link"
                     size="sm"
                     className="text-destructive"
-                    onClick={() => handleRemove(m.user_id, m.user_name)}
+                    onClick={() => handleRemove(m.user_id)}
                   >
                     {t("bs:department.removeMember")}
                   </Button>
@@ -185,7 +223,6 @@ export function MemberTable({ deptId, onChanged }: MemberTableProps) {
         </TableBody>
       </Table>
 
-      {/* Pagination */}
       <div className="mt-4 flex justify-end">
         <AutoPagination
           page={page}
@@ -195,11 +232,11 @@ export function MemberTable({ deptId, onChanged }: MemberTableProps) {
         />
       </div>
 
-      {/* Add member dialog */}
       {addOpen && (
-        <AddMemberDialog
+        <CreateLocalMemberDialog
           deptId={deptId}
-          onAdded={handleAdded}
+          deptName={deptName}
+          onCreated={handleAdded}
           onClose={() => setAddOpen(false)}
         />
       )}

@@ -10,7 +10,10 @@ from fastapi import APIRouter, Depends, Query
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.schemas.api import resp_200
-from bisheng.department.domain.schemas.department_schema import DepartmentMemberAdd
+from bisheng.department.domain.schemas.department_schema import (
+    DepartmentLocalMemberCreate,
+    DepartmentMemberAdd,
+)
 from bisheng.department.domain.services.department_service import DepartmentService
 
 router = APIRouter()
@@ -44,6 +47,31 @@ async def add_members(
     try:
         await DepartmentService.aadd_members(dept_id, data, login_user)
         return resp_200()
+    except BaseErrorCode as e:
+        return e.return_resp_instance()
+
+
+@router.get('/{dept_id}/assignable-roles')
+async def list_assignable_roles(
+    dept_id: str,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    try:
+        data = await DepartmentService.aget_assignable_roles(dept_id, login_user)
+        return resp_200(data)
+    except BaseErrorCode as e:
+        return e.return_resp_instance()
+
+
+@router.post('/{dept_id}/local-members')
+async def create_local_member(
+    dept_id: str,
+    data: DepartmentLocalMemberCreate,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    try:
+        out = await DepartmentService.acreate_local_member(dept_id, data, login_user)
+        return resp_200(out)
     except BaseErrorCode as e:
         return e.return_resp_instance()
 

@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next"
+import { Badge } from "@/components/bs-ui/badge";
 import { Button } from "../../../components/bs-ui/button";
 import { SearchInput } from "../../../components/bs-ui/input";
 import { PlusIcon } from "@/components/bs-icons/plus";
@@ -86,6 +87,7 @@ export default function UserGroups() {
                         <TableHead className="w-[200px]">{t('system.groupName')}</TableHead>
                         <TableHead>{t('system.admins')}</TableHead>
                         {appConfig.isPro && <TableHead className="w-[150px]">{t('system.flowControl')}</TableHead>}
+                        <TableHead className="w-[100px]">{t('system.groupVisibility')}</TableHead>
                         <TableHead className="w-[160px]">{t('system.changeTime')}</TableHead>
                         <TableHead className="text-right w-[130px]" >{t('operations')}</TableHead>
                     </TableRow>
@@ -96,6 +98,11 @@ export default function UserGroups() {
                             <TableCell className="font-medium">{ug.group_name}</TableCell>
                             <TableCell className="break-all">{(ug.admin_user || ug.group_admins).map(el => el.user_name).join(',')}</TableCell>
                             {appConfig.isPro && <TableCell>{ug.group_limit ? t('system.limit') : t('system.unlimited')}</TableCell>}
+                            <TableCell>
+                                <Badge variant={ug.visibility === 'private' ? 'secondary' : 'outline'}>
+                                    {ug.visibility === 'private' ? t('system.visibilityPrivate') : t('system.visibilityPublic')}
+                                </Badge>
+                            </TableCell>
                             <TableCell>{ug.update_time.replace('T', ' ')}</TableCell>
                             <TableCell className="text-right"   style={{ 
                                     whiteSpace: 'nowrap',
@@ -113,7 +120,7 @@ export default function UserGroups() {
                 </TableBody>
                 <TableFooter>
                     {!userGroups.length && <TableRow>
-                        <TableCell colSpan={5} className="text-center text-gray-400">{t('build.empty')}</TableCell>
+                        <TableCell colSpan={appConfig.isPro ? 6 : 5} className="text-center text-gray-400">{t('build.empty')}</TableCell>
                     </TableRow>}
                 </TableFooter>
             </Table>

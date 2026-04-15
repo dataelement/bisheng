@@ -37,6 +37,14 @@ class DepartmentMemberAdd(BaseModel):
     is_primary: int = 0
 
 
+class DepartmentLocalMemberCreate(BaseModel):
+    """PRD §3.2.1：在部门内创建本地人员（主部门固定为当前部门）。"""
+
+    user_name: str = Field(..., min_length=1, max_length=128)
+    password: str = Field(..., description='RSA 加密后的密码（与 /user/create 一致）')
+    role_ids: List[int] = Field(..., min_length=1, description='全局角色 + 本部门角色的 id 列表')
+
+
 class DepartmentTreeNode(BaseModel):
     id: int
     dept_id: str

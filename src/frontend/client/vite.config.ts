@@ -2,7 +2,7 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 import { visualizer } from "rollup-plugin-visualizer";
 import type { Plugin } from 'vite';
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import { compression } from 'vite-plugin-compression2';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import { VitePWA } from 'vite-plugin-pwa';
@@ -13,8 +13,16 @@ const app_env = {
   BASE_URL: '/workspace',
   BISHENG_HOST: '/admin'
 }
+
 // https://vitejs.dev/config/
-export default defineConfig(({ command }) => ({
+export default defineConfig(({ command, mode }) => {
+  const env = loadEnv(mode, process.cwd(), 'VITE_');
+  const apiProxyTarget =
+    env.VITE_PROXY_TARGET || process.env.VITE_PROXY_TARGET || 'http://127.0.0.1:7860';
+  const minioProxyTarget =
+    env.VITE_MINIO_PROXY_TARGET || process.env.VITE_MINIO_PROXY_TARGET || 'http://localhost:9000';
+
+  return {
   base: app_env.BASE_URL || '/',
   define: {
     __APP_ENV__: JSON.stringify(app_env)
@@ -30,7 +38,7 @@ export default defineConfig(({ command }) => ({
       //   changeOrigin: true,
       // },
       '^(/workspace)?/bisheng': {
-        target: 'http://localhost:9000',
+        target: minioProxyTarget,
         changeOrigin: true,
         secure: false,
         rewrite: (path) => {
@@ -38,7 +46,7 @@ export default defineConfig(({ command }) => ({
         },
       },
       '/workspace/api': {
-        target: 'http://127.0.0.1:7860',
+        target: apiProxyTarget,
         changeOrigin: true,
         secure: false,
         ws: true,
@@ -52,7 +60,7 @@ export default defineConfig(({ command }) => ({
         },
       },
       '/workspace/tmp-dir': {
-        target: 'http://localhost:9000',
+        target: minioProxyTarget,
         changeOrigin: true,
         secure: false,
         rewrite: (path) => {
@@ -61,8 +69,7 @@ export default defineConfig(({ command }) => ({
       },
     },
   },
-  // Set the directory where environment variables are loaded from and restrict prefixes
-  envDir: '../',
+  // 默认从本目录（与 client/.env.local 一致）加载环境变量；勿用 ../ 否则读不到 client/.env.local
   envPrefix: ['VITE_', 'SCRIPT_', 'DOMAIN_', 'ALLOW_'],
   plugins: [
     react(),
@@ -322,7 +329,8 @@ export default defineConfig(({ command }) => ({
       $fonts: path.resolve(__dirname, 'public/fonts'),
     },
   },
-}));
+};
+});
 
 interface SourcemapExclude {
   excludeNodeModules?: boolean;

@@ -93,13 +93,17 @@ class UserService:
         return UserRead(**user_data)
 
     @classmethod
-    def decrypt_md5_password(cls, password: str):
+    def decrypt_password_plain(cls, password: str) -> str:
+        """RSA 解密得到明文密码（未做 MD5）；无 RSA 配置时视为明文开发模式。"""
         if value := get_redis_client_sync().get(RSA_KEY):
             private_key = value[1]
-            password = md5_hash(rsa.decrypt(b64decode(password), private_key).decode('utf-8'))
-        else:
-            password = md5_hash(password)
+            return rsa.decrypt(b64decode(password), private_key).decode('utf-8')
         return password
+
+    @classmethod
+    def decrypt_md5_password(cls, password: str):
+        plain = cls.decrypt_password_plain(password)
+        return md5_hash(plain)
 
     @classmethod
     def create_user(cls, request: Request, login_user: LoginUser, req_data: 'CreateUserReq'):
@@ -200,8 +204,8 @@ class UserService:
             if not user.captcha_key or not await verify_captcha(user.captcha, user.captcha_key):
                 raise CaptchaError()
 
-        # get user info
-        db_user = await UserDao.aget_user_by_username(user.user_name)
+        # get user info（支持用户名或本地人员 external_id 登录）
+        db_user = await UserDao.aget_user_for_login(user.user_name)
         # verify user exists
         if not db_user:
             return UserValidateError.return_resp()

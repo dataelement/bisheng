@@ -9,6 +9,7 @@ import {
   setDepartmentAdminsApi,
   updateDepartmentApi,
 } from "@/controllers/API/department"
+import { isSyncedSource } from "@/pages/DepartmentPage/constants/syncReadonly"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { DepartmentAdmin, DepartmentTreeNode } from "@/types/api/department"
 import { useCallback, useEffect, useState } from "react"
@@ -25,7 +26,7 @@ export function DepartmentSettings({ dept, tree, onChanged }: DepartmentSettings
   const [name, setName] = useState(dept.name)
   const [admins, setAdmins] = useState<DepartmentAdmin[]>([])
   const [adminInput, setAdminInput] = useState("")
-  const isSynced = dept.source !== "local"
+  const isSynced = isSyncedSource(dept.source)
 
   useEffect(() => {
     setName(dept.name)

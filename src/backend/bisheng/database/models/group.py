@@ -15,6 +15,11 @@ DefaultGroup = 2
 class GroupBase(SQLModelSerializable):
     group_name: str = Field(index=False, description='用户组名称')
     remark: Optional[str] = Field(default=None, index=False)
+    visibility: str = Field(
+        default='public',
+        sa_column=Column(String(16), nullable=False, server_default=text("'public'"),
+                         comment='Visibility: public/private'),
+    )
     create_user: Optional[int] = Field(default=None, index=True, description="Creating a user'sID")
     update_user: Optional[int] = Field(default=None, description="Update user'sID")
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
@@ -31,11 +36,6 @@ class Group(GroupBase, table=True):
         default=1,
         sa_column=Column(Integer, nullable=False, server_default=text('1'),
                          index=True, comment='Tenant ID'),
-    )
-    visibility: str = Field(
-        default='public',
-        sa_column=Column(String(16), nullable=False, server_default=text("'public'"),
-                         comment='Visibility: public/private'),
     )
 
     __table_args__ = (
@@ -193,12 +193,19 @@ class GroupDao(GroupBase):
             # Get group IDs where user is member or admin
             member_stmt = select(UserGroup.group_id).where(UserGroup.user_id == user_id)
             member_result = await session.exec(member_stmt)
-            user_group_ids = member_result.all()
+            raw_gids = member_result.all()
+            user_group_ids = [
+                int(x[0]) if isinstance(x, tuple) else int(x) for x in raw_gids
+            ]
 
-            # Build query: public OR user's private groups
-            stmt = select(Group).where(
-                (Group.visibility == 'public') | (Group.id.in_(user_group_ids))
-            )
+            visibility_cond = Group.visibility == 'public'
+            creator_cond = Group.create_user == user_id
+            if user_group_ids:
+                stmt = select(Group).where(
+                    visibility_cond | creator_cond | Group.id.in_(user_group_ids),
+                )
+            else:
+                stmt = select(Group).where(visibility_cond | creator_cond)
             if keyword:
                 stmt = stmt.where(Group.group_name.like(f'%{keyword}%'))
 
