@@ -20,9 +20,13 @@ from typing_extensions import Annotated
 from bisheng.api.services.assistant_base import AssistantUtils
 from bisheng.citation.domain.services.citation_prompt_helper import (
     CITATION_PROMPT_RULES,
+    CitationRegistryCollector,
     annotate_rag_documents_with_citations,
     annotate_web_results_with_citations,
+    collect_rag_citation_registry_items,
+    collect_web_citation_registry_items,
 )
+from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.errcode.assistant import AssistantModelEmptyError, AssistantModelNotConfigError, \
     AssistantAutoLLMError
@@ -50,14 +54,17 @@ class AssistantCitationToolWrapper(BaseTool):
     description: str
     args_schema: Annotated[Optional[ArgsSchema], SkipValidation()] = Field(default=None)
     tool: BaseTool
+    citation_registry_items: List[CitationRegistryItemSchema] = Field(default_factory=list, exclude=True)
+    citation_collector: Optional[CitationRegistryCollector] = Field(default=None, exclude=True)
 
     @classmethod
-    def wrap(cls, tool: BaseTool) -> BaseTool:
+    def wrap(cls, tool: BaseTool, citation_collector: CitationRegistryCollector) -> BaseTool:
         return cls(
             name=tool.name,
             description=tool.description,
             args_schema=tool.args_schema,
             tool=tool,
+            citation_collector=citation_collector,
         )
 
     def _is_web_search_tool(self) -> bool:
@@ -66,8 +73,7 @@ class AssistantCitationToolWrapper(BaseTool):
     def _has_knowledge_rag_tool(self) -> bool:
         return hasattr(self.tool, 'knowledge_retriever_tool')
 
-    @staticmethod
-    def _append_web_citation(output: Any) -> Any:
+    def _append_web_citation(self, output: Any) -> Any:
         if not isinstance(output, str):
             return output
         try:
@@ -77,6 +83,7 @@ class AssistantCitationToolWrapper(BaseTool):
         if not isinstance(results, list):
             return output
         results = annotate_web_results_with_citations(results)
+        self._extend_citation_registry_items(collect_web_citation_registry_items(results))
         return json.dumps(results, ensure_ascii=False)
 
     def _build_knowledge_prompt(self) -> ChatPromptTemplate:
@@ -89,10 +96,16 @@ class AssistantCitationToolWrapper(BaseTool):
     def _build_knowledge_inputs(self, query: str, retrieval_result: Any) -> dict:
         source_documents = list(retrieval_result or [])
         source_documents = annotate_rag_documents_with_citations(source_documents)
+        self._extend_citation_registry_items(collect_rag_citation_registry_items(source_documents))
         inputs = {'context': source_documents}
         if 'question' in self.tool.chat_prompt.input_variables:
             inputs['question'] = query
         return inputs
+
+    def _extend_citation_registry_items(self, items: List[CitationRegistryItemSchema]) -> None:
+        self.citation_registry_items.extend(items)
+        if self.citation_collector:
+            self.citation_collector.extend(items)
 
     def _run(self, query: str, **kwargs: Any) -> Any:
         if self._is_web_search_tool():
@@ -155,6 +168,7 @@ class AssistantAgent(AssistantUtils):
         self.llm_agent_executor = None
         # Knowledge Base Retrieval Related Parameters
         self.knowledge_retriever = {'max_content': 15000, 'sort_by_source_and_index': False}
+        self.citation_registry_collector = CitationRegistryCollector()
 
     async def init_assistant(self, callbacks: Callbacks = None):
         await self.init_llm()
@@ -238,14 +252,36 @@ class AssistantAgent(AssistantUtils):
                 tools.append(knowledge_tool)
         self.tools = [self.wrap_citation_tool(tool) for tool in tools]
 
-    @classmethod
-    def wrap_citation_tool(cls, tool: BaseTool) -> BaseTool:
+    def wrap_citation_tool(self, tool: BaseTool) -> BaseTool:
         if tool.name == 'web_search' or hasattr(tool, 'knowledge_retriever_tool'):
-            return AssistantCitationToolWrapper.wrap(tool)
+            return AssistantCitationToolWrapper.wrap(tool, self.citation_registry_collector)
         return tool
 
     def has_citation_tools(self) -> bool:
         return any(isinstance(tool, AssistantCitationToolWrapper) for tool in self.tools)
+
+    def reset_citation_registry_items(self) -> None:
+        """Clear citation items before one assistant run."""
+        self.citation_registry_collector.clear()
+        for tool in self.tools:
+            if isinstance(tool, AssistantCitationToolWrapper):
+                tool.citation_registry_items = []
+
+    def collect_citation_registry_items(self) -> List[CitationRegistryItemSchema]:
+        """Collect citation items emitted by wrapped tools."""
+        items: List[CitationRegistryItemSchema] = []
+        seen_keys: set[tuple[str, str | None]] = set()
+        candidate_items = self.citation_registry_collector.list_items()
+        for tool in self.tools:
+            if isinstance(tool, AssistantCitationToolWrapper):
+                candidate_items.extend(tool.citation_registry_items)
+        for item in candidate_items:
+            item_key = (item.citationId, item.itemId)
+            if item_key in seen_keys:
+                continue
+            seen_keys.add(item_key)
+            items.append(item)
+        return items
 
     async def init_agent(self):
         """

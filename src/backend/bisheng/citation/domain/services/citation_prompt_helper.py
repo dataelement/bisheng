@@ -1,11 +1,41 @@
-from collections import defaultdict, deque
-from typing import Any, Deque, Dict, List
+from collections import OrderedDict, defaultdict, deque
+import re
+from typing import Any, Deque, Dict, List, Optional, Set
 
 from langchain_core.documents import Document
 
+from bisheng.citation.domain.repositories.implementations.message_citation_repository_impl import (
+    MessageCitationRepositoryImpl,
+)
 from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
 from bisheng.citation.domain.services.citation_registry_service import CitationRegistryService
+from bisheng.core.database import get_sync_db_session
 from bisheng.core.prompts.prompt_loader import PromptLoader
+
+
+CITATION_START_MARKER = '\ue200'
+CITATION_SEPARATOR_MARKER = '\ue201'
+CITATION_END_MARKER = '\ue202'
+CITATION_KEY_PATTERN = re.compile(
+    rf'{CITATION_START_MARKER}(.*?){CITATION_END_MARKER}',
+    re.DOTALL,
+)
+
+
+class CitationRegistryCollector:
+    """Collect citation registry items across copied tool instances."""
+
+    def __init__(self) -> None:
+        self.items: List[CitationRegistryItemSchema] = []
+
+    def clear(self) -> None:
+        self.items.clear()
+
+    def extend(self, items: List[CitationRegistryItemSchema]) -> None:
+        self.items.extend(items)
+
+    def list_items(self) -> List[CitationRegistryItemSchema]:
+        return list(self.items)
 
 
 def _load_citation_prompt_rules() -> str:
@@ -130,3 +160,134 @@ def annotate_web_results_with_citations(results: List[dict]) -> List[dict]:
             annotated_result['citation_key'] = citation_key
         annotated_results.append(annotated_result)
     return annotated_results
+
+
+def _split_citation_key(citation_key: Any) -> tuple[Optional[str], Optional[str]]:
+    if not isinstance(citation_key, str):
+        return None, None
+    if ':' not in citation_key:
+        return None, None
+    citation_id, item_id = citation_key.split(':', 1)
+    if not citation_id or not item_id:
+        return None, None
+    return citation_id, item_id
+
+
+def _clean_document_for_citation(document: Document) -> Document:
+    metadata = dict(document.metadata or {})
+    citation_key = metadata.pop('citation_key', None)
+    page_content = document.page_content or ''
+    if citation_key:
+        page_content = page_content.replace(f'\n\ncitation_key: {citation_key}', '')
+    return Document(page_content=page_content, metadata=metadata)
+
+
+def collect_rag_citation_registry_items(documents: List[Document]) -> List[CitationRegistryItemSchema]:
+    """Collect persistence-ready citation items from annotated RAG documents."""
+    if not documents:
+        return []
+
+    grouped_documents: "OrderedDict[str, List[Document]]" = OrderedDict()
+    for document in documents:
+        citation_id, _ = _split_citation_key((document.metadata or {}).get('citation_key'))
+        if not citation_id:
+            continue
+        grouped_documents.setdefault(citation_id, []).append(_clean_document_for_citation(document))
+
+    registry_items: List[CitationRegistryItemSchema] = []
+    knowledge_names = CitationRegistryService._load_knowledge_names([
+        document
+        for grouped_docs in grouped_documents.values()
+        for document in grouped_docs
+    ])
+    for citation_id, grouped_docs in grouped_documents.items():
+        payload = CitationRegistryService._build_rag_payload_with_knowledge_names(grouped_docs, knowledge_names)
+        registry_items.extend(CitationRegistryService._flatten_rag_payload(citation_id, payload))
+    return registry_items
+
+
+def collect_web_citation_registry_items(results: List[dict]) -> List[CitationRegistryItemSchema]:
+    """Collect persistence-ready citation items from annotated web search results."""
+    if not results or not isinstance(results, list):
+        return []
+
+    grouped_results: "OrderedDict[str, List[dict]]" = OrderedDict()
+    for result in results:
+        if not isinstance(result, dict):
+            continue
+        citation_id, _ = _split_citation_key(result.get('citation_key'))
+        if not citation_id:
+            continue
+        result_without_citation = dict(result)
+        result_without_citation.pop('citation_key', None)
+        grouped_results.setdefault(citation_id, []).append(result_without_citation)
+
+    registry_items: List[CitationRegistryItemSchema] = []
+    for citation_id, grouped_page_results in grouped_results.items():
+        first_result = grouped_page_results[0]
+        raw_url = CitationRegistryService._parse_optional_text(first_result.get('url') or first_result.get('link')) or ''
+        normalized_url = CitationRegistryService.normalize_url(raw_url)
+        payload = CitationRegistryService._build_web_payload(normalized_url, grouped_page_results)
+        registry_items.extend(CitationRegistryService._flatten_web_payload(citation_id, payload))
+    return registry_items
+
+
+def extract_citation_ids_from_text(text: str) -> Set[str]:
+    """Extract citation IDs that are actually referenced in generated text."""
+    if not text:
+        return set()
+
+    citation_ids: Set[str] = set()
+    for marker_content in CITATION_KEY_PATTERN.findall(text):
+        for citation_key in marker_content.split(CITATION_SEPARATOR_MARKER):
+            citation_id, _ = _split_citation_key(citation_key.strip())
+            if citation_id:
+                citation_ids.add(citation_id)
+    return citation_ids
+
+
+def filter_registry_items_by_text(
+        items: List[CitationRegistryItemSchema],
+        text: str,
+) -> List[CitationRegistryItemSchema]:
+    """Keep only registry items referenced by the generated answer."""
+    citation_ids = extract_citation_ids_from_text(text)
+    if not citation_ids:
+        return []
+    return [item for item in items if item.citationId in citation_ids]
+
+
+def select_registry_items_for_persistence(
+        items: List[CitationRegistryItemSchema],
+        text: str,
+) -> List[CitationRegistryItemSchema]:
+    """Prefer answer-referenced citations, and keep generated citations when no marker exists."""
+    if not items:
+        return []
+
+    citation_ids = extract_citation_ids_from_text(text)
+    if not citation_ids:
+        return items
+
+    return [item for item in items if item.citationId in citation_ids]
+
+
+def save_message_citations_sync(
+        message_id: int,
+        items: List[CitationRegistryItemSchema],
+        chat_id: Optional[str] = None,
+        flow_id: Optional[str] = None,
+) -> None:
+    """Persist citation registry items for a saved chat message."""
+    if not message_id or not items:
+        return
+
+    with get_sync_db_session() as session:
+        repository = MessageCitationRepositoryImpl(session)
+        service = CitationRegistryService(repository)
+        service.save_citations_sync(
+            message_id=message_id,
+            items=items,
+            chat_id=chat_id,
+            flow_id=flow_id,
+        )

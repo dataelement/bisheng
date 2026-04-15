@@ -11,6 +11,8 @@ const API = {
     abortChat: () => `/api/v1/workstation/chat/completions/abort`,
     deleteConversation: (id: string) => `/api/v1/chat/${id}`,
     bsConfig: () => `/api/v1/workstation/config`,
+    citationDetail: (citationId: string) =>
+        `/api/v1/citations/${encodeURIComponent(citationId)}`,
 };
 
 // --- Types ---
@@ -131,6 +133,11 @@ export async function deleteConversation(
     conversationId: string
 ): Promise<void> {
     await http.delete(API.deleteConversation(conversationId));
+}
+
+export async function getCitationDetail(citationId: string): Promise<ChatCitation> {
+    const res = await http.get<any>(API.citationDetail(citationId));
+    return res?.data ?? res;
 }
 
 /** Get the full SSE URL (absolute) for creating SSE connection */

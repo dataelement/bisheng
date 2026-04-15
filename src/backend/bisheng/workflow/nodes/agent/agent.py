@@ -17,7 +17,10 @@ from bisheng.citation.domain.services.citation_prompt_helper import (
     CITATION_PROMPT_RULES,
     annotate_rag_documents_with_citations,
     annotate_web_results_with_citations,
+    collect_rag_citation_registry_items,
+    collect_web_citation_registry_items,
 )
+from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.llm.domain.services import LLMService
@@ -47,6 +50,7 @@ class WorkflowCitationToolWrapper(BaseTool):
     description: str
     args_schema: Annotated[Optional[ArgsSchema], SkipValidation()] = Field(default=None)
     tool: BaseTool
+    citation_registry_items: list[CitationRegistryItemSchema] = Field(default_factory=list, exclude=True)
 
     @classmethod
     def wrap(cls, tool: BaseTool) -> BaseTool:
@@ -63,8 +67,7 @@ class WorkflowCitationToolWrapper(BaseTool):
     def _has_knowledge_rag_tool(self) -> bool:
         return hasattr(self.tool, 'knowledge_retriever_tool')
 
-    @staticmethod
-    def _append_web_citation(output: Any) -> Any:
+    def _append_web_citation(self, output: Any) -> Any:
         if not isinstance(output, str):
             return output
         try:
@@ -74,6 +77,7 @@ class WorkflowCitationToolWrapper(BaseTool):
         if not isinstance(results, list):
             return output
         results = annotate_web_results_with_citations(results)
+        self.citation_registry_items.extend(collect_web_citation_registry_items(results))
         return json.dumps(results, ensure_ascii=False)
 
     def _build_knowledge_prompt(self) -> ChatPromptTemplate:
@@ -86,6 +90,7 @@ class WorkflowCitationToolWrapper(BaseTool):
     def _build_knowledge_inputs(self, query: str, retrieval_result: Any) -> dict:
         source_documents = list(retrieval_result or [])
         source_documents = annotate_rag_documents_with_citations(source_documents)
+        self.citation_registry_items.extend(collect_rag_citation_registry_items(source_documents))
         inputs = {'context': source_documents}
         if 'question' in self.tool.chat_prompt.input_variables:
             inputs['question'] = query
@@ -193,6 +198,7 @@ class AgentNode(BaseNode):
         # agent
         self._agent_executor_type = 'React'
         self._agent = None
+        self._citation_tools: list[WorkflowCitationToolWrapper] = []
 
     def _init_agent(self, system_prompt: str):
         # Get a list of configured helper models
@@ -217,6 +223,7 @@ class AgentNode(BaseNode):
         func_tools.extend(knowledge_tools)
         func_tools.extend(sql_agent_tools)
         func_tools = self._wrap_citation_tools(func_tools)
+        self._citation_tools = [tool for tool in func_tools if isinstance(tool, WorkflowCitationToolWrapper)]
         if self._has_citation_tools(func_tools):
             system_prompt = f'{system_prompt}\n\n{WORKFLOW_AGENT_CITATION_PROMPT_RULES}'
         if self._agent_executor_type == 'ReAct':
@@ -364,7 +371,12 @@ class AgentNode(BaseNode):
 
         if self._tab == 'single':
             self._tool_invoke_list.append([])
-            ret['output'], reasoning_content = self._run_once(None, unique_id, 'output', self._tool_invoke_list[0])
+            ret['output'], reasoning_content, citation_items = self._run_once(
+                None,
+                unique_id,
+                'output',
+                self._tool_invoke_list[0],
+            )
             self._log_reasoning_content.append(reasoning_content)
             if self._output_user:
                 self.callback_manager.on_stream_over(StreamMsgOverData(node_id=self.id,
@@ -372,14 +384,19 @@ class AgentNode(BaseNode):
                                                                        msg=ret['output'],
                                                                        reasoning_content=reasoning_content,
                                                                        unique_id=unique_id,
-                                                                       output_key='output'))
+                                                                       output_key='output',
+                                                                       citation_registry_items=citation_items))
         else:
             for index, one in enumerate(self.node_params['batch_variable']):
                 self._batch_variable_list.append(self.get_other_node_variable(one))
                 output_key = self.node_params['output'][index]['key']
                 self._tool_invoke_list.append([])
-                ret[output_key], reasoning_content = self._run_once(one, unique_id, output_key,
-                                                                    self._tool_invoke_list[index])
+                ret[output_key], reasoning_content, citation_items = self._run_once(
+                    one,
+                    unique_id,
+                    output_key,
+                    self._tool_invoke_list[index],
+                )
                 self._log_reasoning_content.append(reasoning_content)
                 if self._output_user:
                     self.callback_manager.on_stream_over(StreamMsgOverData(node_id=self.id,
@@ -387,7 +404,8 @@ class AgentNode(BaseNode):
                                                                            msg=ret[output_key],
                                                                            reasoning_content=reasoning_content,
                                                                            unique_id=unique_id,
-                                                                           output_key=output_key))
+                                                                           output_key=output_key,
+                                                                           citation_registry_items=citation_items))
 
         logger.debug('agent_over result={}', ret)
         if self._output_user:
@@ -452,7 +470,7 @@ class AgentNode(BaseNode):
         return ret
 
     def _run_once(self, input_variable: str = None, unique_id: str = None, output_key: str = None,
-                  tool_invoke_list: list = None) -> (str, str):
+                  tool_invoke_list: list = None) -> (str, str, list[CitationRegistryItemSchema]):
         """
         params:
             input_variable: Input variables, if yesbatchthen you need to pass in a variablekey, otherwiseNone
@@ -494,6 +512,7 @@ class AgentNode(BaseNode):
         human_message = self.contact_file_into_prompt(human_message, self._image_prompt)
         chat_history.append(human_message)
         logger.debug(f'agent invoke chat_history: {chat_history}')
+        self._reset_citation_registry_items()
 
         if self._agent_executor_type == 'ReAct':
             result = self._agent.invoke({
@@ -503,8 +522,18 @@ class AgentNode(BaseNode):
             output = result['agent_outcome'].return_values['output']
             if isinstance(output, dict):
                 output = list(output.values())[0]
-            return output, llm_callback.reasoning_content
+            return output, llm_callback.reasoning_content, self._collect_citation_registry_items()
         else:
             result = self._agent.invoke({'messages': chat_history}, config=config)
             result = result['messages']
-            return result[-1].content, llm_callback.reasoning_content
+            return result[-1].content, llm_callback.reasoning_content, self._collect_citation_registry_items()
+
+    def _reset_citation_registry_items(self) -> None:
+        for tool in self._citation_tools:
+            tool.citation_registry_items = []
+
+    def _collect_citation_registry_items(self) -> list[CitationRegistryItemSchema]:
+        items: list[CitationRegistryItemSchema] = []
+        for tool in self._citation_tools:
+            items.extend(tool.citation_registry_items)
+        return items

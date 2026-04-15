@@ -2,6 +2,8 @@ from typing import Any, List, Optional
 
 from pydantic import BaseModel, Field
 
+from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
+
 
 # Node start event data
 class NodeStartData(BaseModel):
@@ -69,3 +71,7 @@ class StreamMsgData(BaseModel):
 
 class StreamMsgOverData(StreamMsgData):
     source_documents: Optional[List[Any]] = Field(default=[], description='Source documents')
+    citation_registry_items: List[CitationRegistryItemSchema] = Field(
+        default_factory=list,
+        description='Citation registry items for persistence',
+    )
