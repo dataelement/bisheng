@@ -15,6 +15,7 @@ import Thinking from "~/components/Artifacts/Thinking";
 import AgentThinkingHeader from "~/components/Chat/Messages/AgentThinkingHeader";
 import ToolCallDisplay from "~/components/Chat/Messages/ToolCallDisplay";
 import Markdown from "~/components/Chat/Messages/Content/Markdown";
+import CitationReferencesDrawer from "~/components/Chat/Messages/Content/CitationReferencesDrawer";
 import SearchWebUrls from "~/components/Chat/Messages/Content/SearchWebUrls";
 import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
 import { TextToSpeechButton } from "~/components/Voice/TextToSpeechButton";
@@ -488,6 +489,11 @@ function AssistantBubble({
                 {/* Action buttons (only show when not streaming) */}
                 {!isStreaming && regularContent && (
                     <div className="flex items-center gap-1 mt-1.5 text-gray-400">
+                        <CitationReferencesDrawer
+                            content={regularContent}
+                            webContent={webContent}
+                            citations={message.citations}
+                        />
                         {/* Reference Sources */}
                         {message.source !== 0 && (
                             <div className="mr-2 pt-0.5">

@@ -2,6 +2,7 @@ import { CheckIcon, ChevronDown, Loader2 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { ChatMessageType } from "~/@types/chat";
 import Markdown from "~/components/Chat/Messages/Content/Markdown";
+import CitationReferencesDrawer from "~/components/Chat/Messages/Content/CitationReferencesDrawer";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
 import { cn, copyText, formatStrTime } from "~/utils";
 import ChatFile from "./ChatFile";
@@ -60,6 +61,19 @@ export default function MessageBs({ logo, title, data, onUnlike = () => { },read
         }
         return [msg, '']
     }, [data.message])
+    const referenceWebContent = useMemo(() => {
+        const webMatch = message.match(/:::web([\s\S]*?):::/);
+        if (!webMatch) return [];
+        try {
+            const str = webMatch[1].trim();
+            return str ? JSON.parse(str) : [];
+        } catch {
+            return [];
+        }
+    }, [message]);
+    const referenceContent = useMemo(() => {
+        return message.replace(/:::web[\s\S]*?:::/, '').trim();
+    }, [message]);
 
     const messageRef = useRef<HTMLDivElement>(null)
     const handleCopyMessage = () => {
@@ -83,7 +97,7 @@ export default function MessageBs({ logo, title, data, onUnlike = () => { },read
                             <p className="select-none font-semibold text-base mb-1">{title}</p>
                             {message || data.files.length ?
                                 <div ref={messageRef} className="">
-                                    {message && <div className="bs-mkdown text-base"><Markdown content={message} isLatestMessage={false} webContent={undefined} /></div>}
+                                    {message && <div className="bs-mkdown text-base"><Markdown content={message} isLatestMessage={false} webContent={undefined} citations={(data as any).citations} /></div>}
                                     {data.files.length > 0 && data.files.map(file => <ChatFile key={file.path} fileName={file.name} filePath={file.path} />)}
                                     {/* @user */}
                                     {data.receiver && <p className="text-blue-500 text-sm">@ {data.receiver.user_name}</p>}
@@ -99,6 +113,12 @@ export default function MessageBs({ logo, title, data, onUnlike = () => { },read
             {/* 附加信息 */}
             {
                 data.end && <div className="flex justify-between">
+                    <CitationReferencesDrawer
+                        content={referenceContent}
+                        webContent={referenceWebContent}
+                        citations={(data as any).citations}
+                        buttonClassName="ml-4"
+                    />
                     <MessageSource
                         extra={data.extra || {}}
                         end={data.end}

@@ -201,6 +201,7 @@ function mapAgentResponseItem(row: any): ChatMessage {
         createdAt: row.create_time,
         category,
         files: Array.isArray(row.files) ? row.files : [],
+        citations: Array.isArray(row.citations) ? row.citations : null,
     };
 
     if (category === "question" && raw && typeof raw === "object") {

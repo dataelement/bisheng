@@ -183,6 +183,7 @@ export default function useChatHelpers() {
                         receiver,
                         type,
                         source,
+                        citations,
                         user_id,
                         reasoning_log,
                         thought
@@ -209,6 +210,7 @@ export default function useChatHelpers() {
                             message: msg,
                             receiver,
                             source,
+                            citations,
                             user_id,
                             liked: !!liked,
                             end: type === "over",
@@ -233,6 +235,7 @@ export default function useChatHelpers() {
                     if (currentMessageIndex === -1) {
                         // Create new message
                         const { category, flow_id, chat_id, files, is_bot, extra, liked, receiver, type, source, user_id } = data
+                        const { citations } = data
                         const message = data.message.msg
                         const reasoning_log = reasoning_content || ""
 
@@ -249,6 +252,7 @@ export default function useChatHelpers() {
                                 message,
                                 receiver,
                                 source,
+                                citations,
                                 user_id,
                                 liked: !!liked,
                                 end: type === "over",
@@ -272,6 +276,7 @@ export default function useChatHelpers() {
                                 : currentMsg.reasoning_log,
                             create_time: formatDate(new Date(), "yyyy-MM-ddTHH:mm:ss"),
                             source: data.source,
+                            citations: data.citations ?? currentMsg.citations,
                             end: data.type === "end",
                             extra: data.extra,
                         }
