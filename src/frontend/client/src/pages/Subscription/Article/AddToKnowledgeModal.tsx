@@ -205,7 +205,7 @@ function TreeNode({
                     <InlineEdit
                         defaultValue={node.name}
                         onValidate={(name) => {
-                            if (nodes.some(node => node.name === name)) {
+                            if (nodes.some(n => n.id !== node.id && n.name === name)) {
                                 showToast({ message: localize("com_subscription.folder_name_duplicate"), severity: NotificationSeverity.WARNING });
                                 return false;
                             }
