@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Menu, Plus } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useActivate, useUnactivate } from "react-activation";
@@ -33,11 +34,12 @@ import KnowledgeSquare from "./KnowledgeSquare";
 import { useFileManager } from "./hooks/useFileManager";
 import { useFileUpload } from "./hooks/useFileUpload";
 import { useAiSplitPane } from "./hooks/useAiSplitPane";
-import { useLocalize } from "~/hooks";
+import { useLocalize, useMediaQuery } from "~/hooks";
 import { useAuthContext } from "~/hooks/AuthContext";
 
 export default function Knowledge() {
     const localize = useLocalize();
+    const isH5 = useMediaQuery("(max-width: 768px)");
     const MAX_USER_SPACES = 30;
     const previewNavTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [activeSpace, setActiveSpace] = useState<KnowledgeSpace | null>(null);
@@ -49,6 +51,7 @@ export default function Knowledge() {
     const [isDragging, setIsDragging] = useState(false);
     const [dragError, setDragError] = useState<string | null>(null);
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+    const [spaceListDrawerOpen, setSpaceListDrawerOpen] = useState(false);
 
     const { showToast } = useToastContext();
     const { user, isUserLoading } = useAuthContext();
@@ -90,6 +93,19 @@ export default function Knowledge() {
 
     // Feature gate: system may disable Knowledge Space via user plugins.
     // Share links should redirect to workbench home with a clear permission toast.
+    useEffect(() => {
+        if (!isH5) setSpaceListDrawerOpen(false);
+    }, [isH5]);
+
+    useEffect(() => {
+        if (showKnowledgeSquare) setSpaceListDrawerOpen(false);
+    }, [showKnowledgeSquare]);
+
+    useEffect(() => {
+        if (!activeSpace) return;
+        setSpaceListDrawerOpen(false);
+    }, [activeSpace?.id]);
+
     useEffect(() => {
         if (knowledgePluginGate !== "disabled") return;
         showToastRef.current({
@@ -529,89 +545,192 @@ export default function Knowledge() {
                 </div>
             )}
 
-            <KnowledgeSpaceSidebar
-                activeSpaceId={activeSpace?.id}
-                onSpaceSelect={handleSpaceSelect}
-                onCreateSpace={handleCreateSpace}
-                onSpaceSettings={handleSpaceSettings}
-                onManageMembers={(space) => {
-                    setMemberDialogSpace(space);
-                    setMemberDialogOpen(true);
-                }}
-                onKnowledgeSquare={() => setShowKnowledgeSquare(true)}
-                collapsed={sidebarCollapsed}
-                onCollapsedChange={setSidebarCollapsed}
-                hideExpandToggleWhenCollapsed={!!activeSpace}
-            />
+            <div className="hidden h-full shrink-0 md:block">
+                <KnowledgeSpaceSidebar
+                    activeSpaceId={activeSpace?.id}
+                    onSpaceSelect={handleSpaceSelect}
+                    onCreateSpace={handleCreateSpace}
+                    onSpaceSettings={handleSpaceSettings}
+                    onManageMembers={(space) => {
+                        setMemberDialogSpace(space);
+                        setMemberDialogOpen(true);
+                    }}
+                    onKnowledgeSquare={() => setShowKnowledgeSquare(true)}
+                    collapsed={sidebarCollapsed}
+                    onCollapsedChange={setSidebarCollapsed}
+                    hideExpandToggleWhenCollapsed={!!activeSpace}
+                />
+            </div>
+
+            {isH5 && spaceListDrawerOpen ? (
+                <div
+                    className="fixed inset-0 z-[70] flex"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label={localize("com_knowledge.knowledge_space")}
+                >
+                    <div className="flex h-full w-[min(240px,78vw)] max-w-[260px] shrink-0 flex-col overflow-hidden border-r border-[#e5e6eb] bg-white shadow-[4px_0_24px_rgba(0,0,0,0.06)]">
+                        <KnowledgeSpaceSidebar
+                            mobileDrawerMode
+                            onDrawerClose={() => setSpaceListDrawerOpen(false)}
+                            activeSpaceId={activeSpace?.id}
+                            onSpaceSelect={handleSpaceSelect}
+                            onCreateSpace={() => {
+                                handleCreateSpace();
+                                setSpaceListDrawerOpen(false);
+                            }}
+                            onSpaceSettings={(space) => {
+                                handleSpaceSettings(space);
+                                setSpaceListDrawerOpen(false);
+                            }}
+                            onManageMembers={(space) => {
+                                setMemberDialogSpace(space);
+                                setMemberDialogOpen(true);
+                                setSpaceListDrawerOpen(false);
+                            }}
+                            onKnowledgeSquare={() => {
+                                setShowKnowledgeSquare(true);
+                                setSpaceListDrawerOpen(false);
+                            }}
+                        />
+                    </div>
+                    <button
+                        type="button"
+                        className="min-w-0 flex-1 bg-transparent"
+                        aria-label={localize("com_nav_close_sidebar")}
+                        onClick={() => setSpaceListDrawerOpen(false)}
+                    />
+                </div>
+            ) : null}
 
             {activeSpace ? (
                 <div ref={aiPane.splitContainerRef} className="flex h-full min-w-0 flex-1 overflow-hidden">
-                    {/* Left: file list */}
-                    <div
-                        style={{ width: aiPane.showAiAssistant ? `${aiPane.aiSplitWidth}px` : '100%' }}
-                        className="h-full min-w-0 flex-shrink-0 overflow-hidden"
-                    >
-                        <KnowledgeSpaceContent
-                            space={activeSpace}
-                            files={fileManager.files}
-                            currentPage={fileManager.currentPage}
-                            pageSize={fileManager.pageSize}
-                            total={fileManager.total}
-                            onPageChange={fileManager.handlePageChange}
-                            loading={fileManager.loading}
-                            onSearch={fileManager.handleSearch}
-                            onFilterStatus={fileManager.setStatusFilter}
-                            onSort={(sortBy, direction) => {
-                                if (!sortBy || !direction) return;
-                                fileManager.handleSort(sortBy, direction);
-                            }}
-                            onNavigateFolder={fileManager.handleNavigateFolder}
-                            onUploadFile={fileUpload.handleUploadFile}
-                            onCreateFolder={fileUpload.handleCreateFolder}
-                            onDownloadFile={() => showToast({ message: localize("com_knowledge.start_download"), severity: NotificationSeverity.SUCCESS })}
-                            onRenameFile={fileUpload.handleRenameFile}
-                            onDeleteFile={fileUpload.handleDeleteFile}
-                            onEditTags={fileUpload.handleEditTags}
-                            onRetryFile={() => showToast({ message: localize("com_knowledge.retry_feature_dev"), severity: NotificationSeverity.INFO })}
-                            currentPath={fileManager.currentPath}
-                            onDragStateChange={handleDragStateChange}
-                            uploadingFiles={fileUpload.uploadingFiles}
-                            creatingFolder={fileUpload.creatingFolder}
-                            onCancelCreateFolder={fileUpload.handleCancelCreateFolder}
-                            onToggleAiAssistant={aiPane.handleToggleAiAssistant}
-                            isAiAssistantOpen={aiPane.showAiAssistant}
-                            onCreateSpace={handleCreateSpace}
-                        />
-                    </div>
+                    {(() => {
+                        const showMobileAiOnly = isH5 && aiPane.showAiAssistant;
+                        if (showMobileAiOnly) {
+                            return (
+                                <div className="h-full min-w-0 flex-1 bg-white">
+                                    <KnowledgeAiPanel
+                                        spaceId={String(activeSpace.id)}
+                                        folderId={fileManager.currentFolderId}
+                                        contextLabel={contextLabel}
+                                        onClose={() => aiPane.setShowAiAssistant(false)}
+                                    />
+                                </div>
+                            );
+                        }
+                        return (
+                            <>
+                                {/* Left: file list */}
+                                <div
+                                    style={{ width: aiPane.showAiAssistant ? `${aiPane.aiSplitWidth}px` : '100%' }}
+                                    className="h-full min-w-0 flex-shrink-0 overflow-hidden"
+                                >
+                                    {isH5 ? (
+                                        <div className="flex h-10 items-center justify-between px-2">
+                                            <button
+                                                type="button"
+                                                aria-label={localize("com_nav_open_sidebar")}
+                                                onClick={() => setSpaceListDrawerOpen(true)}
+                                                className="inline-flex size-8 items-center justify-center rounded-md text-[#4E5969] hover:bg-[#F7F8FA]"
+                                            >
+                                                <Menu className="size-4" />
+                                            </button>
+                                            <button
+                                                type="button"
+                                                aria-label={localize("com_knowledge.create_knowledge_space")}
+                                                onClick={handleCreateSpace}
+                                                className="inline-flex size-8 items-center justify-center rounded-md text-[#212121] hover:bg-[#F7F8FA]"
+                                            >
+                                                <Plus className="size-4" />
+                                            </button>
+                                        </div>
+                                    ) : null}
+                                    <KnowledgeSpaceContent
+                                        space={activeSpace}
+                                        files={fileManager.files}
+                                        currentPage={fileManager.currentPage}
+                                        pageSize={fileManager.pageSize}
+                                        total={fileManager.total}
+                                        onPageChange={fileManager.handlePageChange}
+                                        loading={fileManager.loading}
+                                        onSearch={fileManager.handleSearch}
+                                        onFilterStatus={fileManager.setStatusFilter}
+                                        onSort={(sortBy, direction) => {
+                                            if (!sortBy || !direction) return;
+                                            fileManager.handleSort(sortBy, direction);
+                                        }}
+                                        onNavigateFolder={fileManager.handleNavigateFolder}
+                                        onUploadFile={fileUpload.handleUploadFile}
+                                        onCreateFolder={fileUpload.handleCreateFolder}
+                                        onDownloadFile={() => showToast({ message: localize("com_knowledge.start_download"), severity: NotificationSeverity.SUCCESS })}
+                                        onRenameFile={fileUpload.handleRenameFile}
+                                        onDeleteFile={fileUpload.handleDeleteFile}
+                                        onEditTags={fileUpload.handleEditTags}
+                                        onRetryFile={() => showToast({ message: localize("com_knowledge.retry_feature_dev"), severity: NotificationSeverity.INFO })}
+                                        currentPath={fileManager.currentPath}
+                                        onDragStateChange={handleDragStateChange}
+                                        uploadingFiles={fileUpload.uploadingFiles}
+                                        creatingFolder={fileUpload.creatingFolder}
+                                        onCancelCreateFolder={fileUpload.handleCancelCreateFolder}
+                                        onToggleAiAssistant={aiPane.handleToggleAiAssistant}
+                                        isAiAssistantOpen={aiPane.showAiAssistant}
+                                        onCreateSpace={handleCreateSpace}
+                                        onGoKnowledgeSquare={() => setShowKnowledgeSquare(true)}
+                                    />
+                                </div>
 
-                    {/* Splitter */}
-                    {aiPane.showAiAssistant && (
-                        <div className="relative z-20 w-[1px] min-w-[1px] max-w-[1px] flex-none shrink-0">
-                            {/* Flex 始终 1px；线条 1px → hover/active 时 w-1（与原实现一致），视觉上加宽不占额外 flex 宽度 */}
-                            <div
-                                onMouseDown={aiPane.startSplitResize}
-                                className="group absolute inset-y-0 left-1/2 z-10 flex w-4 -translate-x-1/2 cursor-col-resize justify-center"
-                            >
-                                <div className="pointer-events-none w-px self-stretch bg-[#e5e6eb] transition-[width,background-color] duration-150 group-hover:w-1 group-hover:bg-primary group-active:w-1 group-active:bg-primary" />
-                            </div>
-                        </div>
-                    )}
+                                {/* Splitter */}
+                                {!isH5 && aiPane.showAiAssistant && (
+                                    <div className="relative z-20 w-[1px] min-w-[1px] max-w-[1px] flex-none shrink-0">
+                                        {/* Flex 始终 1px；线条 1px → hover/active 时 w-1（与原实现一致），视觉上加宽不占额外 flex 宽度 */}
+                                        <div
+                                            onMouseDown={aiPane.startSplitResize}
+                                            className="group absolute inset-y-0 left-1/2 z-10 flex w-4 -translate-x-1/2 cursor-col-resize justify-center"
+                                        >
+                                            <div className="pointer-events-none w-px self-stretch bg-[#e5e6eb] transition-[width,background-color] duration-150 group-hover:w-1 group-hover:bg-primary group-active:w-1 group-active:bg-primary" />
+                                        </div>
+                                    </div>
+                                )}
 
-                    {/* Right: AI assistant */}
-                    {aiPane.showAiAssistant && (
-                        <div className="flex-1 h-full min-w-[360px] bg-white border-l border-[#e5e6eb]">
-                            <KnowledgeAiPanel
-                                spaceId={String(activeSpace.id)}
-                                folderId={fileManager.currentFolderId}
-                                contextLabel={contextLabel}
-                                onClose={() => aiPane.setShowAiAssistant(false)}
-                            />
-                        </div>
-                    )}
+                                {/* Right: AI assistant */}
+                                {!isH5 && aiPane.showAiAssistant && (
+                                    <div className="flex-1 h-full min-w-[360px] bg-white border-l border-[#e5e6eb]">
+                                        <KnowledgeAiPanel
+                                            spaceId={String(activeSpace.id)}
+                                            folderId={fileManager.currentFolderId}
+                                            contextLabel={contextLabel}
+                                            onClose={() => aiPane.setShowAiAssistant(false)}
+                                        />
+                                    </div>
+                                )}
+                            </>
+                        );
+                    })()}
                 </div>
             ) : (
                 /* Empty state when no space is selected */
                 <div className="flex flex-1 flex-col items-center justify-center py-10 text-center">
+                    {isH5 ? (
+                        <div className="absolute left-0 right-0 top-0 z-10 flex h-10 items-center justify-between px-2">
+                            <button
+                                type="button"
+                                aria-label={localize("com_nav_open_sidebar")}
+                                onClick={() => setSpaceListDrawerOpen(true)}
+                                className="inline-flex size-8 items-center justify-center rounded-md text-[#4E5969] hover:bg-[#F7F8FA]"
+                            >
+                                <Menu className="size-4" />
+                            </button>
+                            <button
+                                type="button"
+                                aria-label={localize("com_knowledge.create_knowledge_space")}
+                                onClick={handleCreateSpace}
+                                className="inline-flex size-8 items-center justify-center rounded-md text-[#212121] hover:bg-[#F7F8FA]"
+                            >
+                                <Plus className="size-4" />
+                            </button>
+                        </div>
+                    ) : null}
                     <img
                         className="size-[120px] mb-4 object-contain opacity-90"
                         src={`${__APP_ENV__.BASE_URL}/assets/channel/empty.png`}

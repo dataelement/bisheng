@@ -38,16 +38,16 @@ export default function AppCenter() {
             </header>
 
             {/* 副标题与探索更多 */}
-            <div className="flex items-center gap-[24px] max-w-[1000px] w-full shrink-0 relative mt-4 mb-4 max-[576px]:flex-col max-[576px]:items-start max-[576px]:gap-2">
-                <p className="font-['PingFang_SC'] text-[#666] text-[14px] leading-[22px] max-[576px]:line-clamp-1 max-[576px]:overflow-hidden max-[576px]:text-[13px]">
+            <div className="flex items-center gap-[24px] max-w-[1000px] w-full shrink-0 relative mt-4 mb-4">
+                <p className="font-['PingFang_SC'] text-[#666] text-[14px] leading-[22px] max-[600px]:hidden">
                     最近使用过的应用都在这里～
                 </p>
                 <Link
                     to="/apps/explore"
-                    className="backdrop-blur-[4px] flex items-center justify-center gap-[6px] px-[10px] py-[6px] rounded-[8px] hover:bg-gray-50 transition-colors max-[576px]:w-full"
+                    className="backdrop-blur-[4px] flex items-center justify-center gap-[6px] px-[10px] py-[6px] rounded-[8px] hover:bg-gray-50 transition-colors"
                 >
                     <LayoutGrid size={16} className="text-[#335cff]" />
-                    <span className="font-['PingFang_SC'] text-[#212121] text-[12px] leading-[20px] max-[576px]:text-[13px]">
+                    <span className="font-['PingFang_SC'] text-[#212121] text-[12px] leading-[20px]">
                         探索更多应用
                     </span>
                 </Link>
@@ -64,7 +64,7 @@ export default function AppCenter() {
                         <AppEmptyState query={searchQuery} />
                     </div>
                 ) : (
-                    <div className="grid grid-cols-1 max-[576px]:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-3 gap-y-3.5 w-full relative">
+                    <div className="grid w-full relative gap-x-3 gap-y-3.5 grid-cols-2 [@media(min-width:768px)]:grid-cols-4">
                         {apps.map((agent) => (
                             <AgentCard
                                 key={agent.id}

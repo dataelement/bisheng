@@ -1713,6 +1713,7 @@
     "followed_by_me": "Followed by Me",
     "fullscreen": "Fullscreen",
     "go_to_square": "Go to Square",
+    "go_to_channel_plaza": "Go to channel plaza",
     "includes": "Includes",
     "input_keywords_semicolon_separated": "Please enter keywords, separated by semicolons ';'",
     "input_question_placeholder": "Please enter your question...",
@@ -1882,5 +1883,6 @@
     "total_members": "Total members",
     "website_not_indexed": "Website not in database. Do you want to crawl?",
     "create": "Create"
-  }
+  },
+  "com_label_operation_tip_mobile": "Operation tip: Select labels to display in the upper list, drag and drop to sort in the lower list"
 }

@@ -219,11 +219,6 @@ export default function KnowledgeSquare({
         }
     };
 
-    const spaceRows: KnowledgeSpace[][] = [];
-    for (let i = 0; i < visibleSpaces.length; i += 3) {
-        spaceRows.push(visibleSpaces.slice(i, i + 3));
-    }
-
     return (
         <div className="h-full w-full flex flex-col bg-white overflow-hidden">
             <div
@@ -269,7 +264,7 @@ export default function KnowledgeSquare({
                 <div className="max-w-[1032px] mx-auto px-4 py-4">
                     {loading && spaces.length === 0 ? (
                         <div className="flex items-center justify-center h-64 text-[#86909C]">{localize("com_knowledge.loading")}</div>
-                    ) : spaceRows.length === 0 ? (
+                    ) : visibleSpaces.length === 0 ? (
                         <div className="flex flex-col items-center justify-center h-64 text-[#86909c]">
                             <img
                                 className="size-[120px] mb-3 object-contain opacity-90"
@@ -280,30 +275,20 @@ export default function KnowledgeSquare({
                         </div>
                     ) : (
                         <div className="space-y-3">
-                            {spaceRows.map((row, rowIndex) => (
-                                <div key={rowIndex} className="flex gap-3">
-                                    {row.map((space) => (
-                                        <KnowledgeSquareCard
-                                            key={space.id}
-                                            space={space}
-                                            status={
-                                                statusOverride?.[String(space.id)] ??
-                                                ((space.squareStatus as SquareSpaceStatus) || "join")
-                                            }
-                                            onPreview={() => onPreviewSpace?.(space.id)}
-                                            onAction={() => handleJoin(space)}
-                                        />
-                                    ))}
-
-                                    {row.length < 3 && (
-                                        <>
-                                            {Array.from({ length: 3 - row.length }).map((_, i) => (
-                                                <div key={`empty-${i}`} className="flex-1 min-w-0" />
-                                            ))}
-                                        </>
-                                    )}
-                                </div>
-                            ))}
+                            <div className="grid grid-cols-2 gap-3 min-[768px]:grid-cols-3">
+                                {visibleSpaces.map((space) => (
+                                    <KnowledgeSquareCard
+                                        key={space.id}
+                                        space={space}
+                                        status={
+                                            statusOverride?.[String(space.id)] ??
+                                            ((space.squareStatus as SquareSpaceStatus) || "join")
+                                        }
+                                        onPreview={() => onPreviewSpace?.(space.id)}
+                                        onAction={() => handleJoin(space)}
+                                    />
+                                ))}
+                            </div>
 
                             <div className="h-10 flex items-center justify-center text-[12px] text-[#C9CDD4]">
                                 {loadingMore ? localize("com_knowledge.loading") : !hasMorePage ? localize("com_knowledge.no_more_content") : ""}

@@ -154,7 +154,7 @@ function UserPopMenuDrawer() {
                     >
                         <div className="flex items-center gap-3">
                             <Bell className="size-[18px] text-gray-600" />
-                            <span className="text-[14px] text-gray-700">{localize("com_notifications_title")}</span>
+                            <span className="whitespace-nowrap text-[14px] text-gray-700">{localize("com_notifications_title")}</span>
                         </div>
                         {unreadCount > 0 && (
                             <span className="shrink-0 bg-[#f53f3f] px-2.5 py-0.5 text-center text-[14px] font-medium text-white rounded-full min-w-[24px]">
@@ -171,7 +171,7 @@ function UserPopMenuDrawer() {
                         >
                             <div className="flex items-center gap-3">
                                 <Globe className="size-[18px] text-gray-600" />
-                                <span className="text-[14px] text-gray-700">{localize("com_nav_language")}</span>
+                                <span className="whitespace-nowrap text-[14px] text-gray-700">{localize("com_nav_language")}</span>
                             </div>
                             <ChevronRight
                                 className={cn("size-4 shrink-0 text-gray-500 transition-transform", langOpen && "rotate-90")}
@@ -217,7 +217,7 @@ function UserPopMenuDrawer() {
                         }}
                     >
                         <LogOut className="size-[18px]" />
-                        <span className="text-[14px] font-medium">{localize("com_nav_log_out")}</span>
+                        <span className="whitespace-nowrap text-[14px] font-medium">{localize("com_nav_log_out")}</span>
                     </button>
                 </div>
             ) : null}

@@ -13,6 +13,8 @@ export const knowledgeSpaceDropdownSurfaceClassName =
 /** 知识空间 / 订阅频道侧栏列表项「⋯」菜单：在内边距与宽度上与 {@link knowledgeSpaceDropdownSurfaceClassName} 叠加 */
 export const sidebarListMoreMenuContentClassName = cn(
     "w-40 gap-0 px-4 py-3",
+    /** 须高于移动端频道抽屉 z-[70]，否则浮层在蒙层下无法点击「成员管理」等项 */
+    "z-[100]",
     knowledgeSpaceDropdownSurfaceClassName
 );
 

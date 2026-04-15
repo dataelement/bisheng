@@ -1629,6 +1629,7 @@
     "followed_by_me": "私がフォローしている",
     "fullscreen": "全画面表示",
     "go_to_square": "広場に行く",
+    "go_to_channel_plaza": "チャンネル広場へ",
     "includes": "含む",
     "input_keywords_semicolon_separated": "キーワードをセミコロン ';' で区切って入力してください",
     "input_question_placeholder": "質問を入力してください...",
@@ -1798,5 +1799,6 @@
     "total_members": "メンバー総数",
     "website_not_indexed": "サイトがまだ登録されていません。クロールしますか？",
     "create": "作成"
-  }
+  },
+  "com_label_operation_tip_mobile": "操作ヒント：上で表示するラベルを選び、下でドラッグして並べ替えます"
 }

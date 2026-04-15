@@ -12,8 +12,8 @@ import { FileTable } from "./FileTable";
 import { KnowledgeSpaceHeader } from "./KnowledgeSpaceHeader";
 import { PaginationBar } from "./PaginationBar";
 import { SelectionPathBreadcrumb } from "./SelectionPathBreadcrumb";
-import { useLocalize } from "~/hooks";
-import { getFullWidthLength } from "~/utils";
+import { useLocalize, useMediaQuery } from "~/hooks";
+import { cn, getFullWidthLength } from "~/utils";
 
 interface KnowledgeSpaceContentProps {
     space: KnowledgeSpace;
@@ -42,6 +42,7 @@ interface KnowledgeSpaceContentProps {
     onToggleAiAssistant?: () => void;
     isAiAssistantOpen?: boolean;
     onCreateSpace?: () => void;
+    onGoKnowledgeSquare?: () => void;
 }
 
 export function KnowledgeSpaceContent({
@@ -71,8 +72,10 @@ export function KnowledgeSpaceContent({
     onToggleAiAssistant,
     isAiAssistantOpen,
     onCreateSpace,
+    onGoKnowledgeSquare,
 }: KnowledgeSpaceContentProps) {
     const localize = useLocalize();
+    const isH5 = useMediaQuery("(max-width: 768px)");
     const displayFiles = [
         ...(creatingFolder ? [creatingFolder] : []),
         ...uploadingFiles,
@@ -487,6 +490,7 @@ export function KnowledgeSpaceContent({
                 onBatchTag={handleBatchTag}
                 onBatchRetry={handleBatchRetry}
                 onBatchDelete={handleBatchDelete}
+                onGoKnowledgeSquare={onGoKnowledgeSquare}
                 onToggleAiAssistant={onToggleAiAssistant}
                 isAiAssistantOpen={isAiAssistantOpen}
             />
@@ -513,12 +517,23 @@ export function KnowledgeSpaceContent({
                                 )}
                             </p>
                         </div>
-                    ) : viewMode === "card" ? (
+                    ) : (isH5 || viewMode === "card") ? (
                         <div className="flex-1 overflow-y-auto scrollbar-on-hover">
                             <div
                                 ref={cardGridRef}
-                                className="grid w-full min-w-0 gap-4 py-4"
-                                style={{ gridTemplateColumns: `repeat(${cardCols}, minmax(0, 1fr))` }}
+                                className={cn(
+                                    "w-full min-w-0 py-4",
+                                    isH5
+                                        ? viewMode === "list"
+                                            ? "grid grid-cols-1 gap-2"
+                                            : "grid grid-cols-2 gap-3"
+                                        : "grid gap-4"
+                                )}
+                                style={
+                                    isH5
+                                        ? undefined
+                                        : { gridTemplateColumns: `repeat(${cardCols}, minmax(0, 1fr))` }
+                                }
                             >
                                 {displayFiles.map((file) => (
                                     <FileCard
@@ -536,6 +551,7 @@ export function KnowledgeSpaceContent({
                                         onPreview={handlePreviewFile}
                                         onValidateName={(newName) => validateFileName(newName, file.type === FileType.FOLDER, file.id, !!file.isCreating)}
                                         onCancelCreate={onCancelCreateFolder}
+                                        mobileListMode={isH5 && viewMode === "list"}
                                     />
                                 ))}
                             </div>

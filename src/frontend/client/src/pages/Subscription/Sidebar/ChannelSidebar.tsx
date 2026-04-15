@@ -1,18 +1,105 @@
-import { useLocalize } from "~/hooks";
+import { useLocalize, useAuthContext } from "~/hooks";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Plus, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { matchPath, NavLink, useLocation } from "react-router-dom";
 import {
     Channel,
     SortType,
     getChannelsApi,
 } from "~/api/channels";
+import BookOpenIcon from "~/components/ui/icon/BookOpen";
+import GlobeIcon from "~/components/ui/icon/Globe";
+import HomeIcon from "~/components/ui/icon/Home";
+import LinkIcon from "~/components/ui/icon/Link";
 import { Button } from "~/components/ui/Button";
 import NavToggle from "~/components/Nav/NavToggle";
 import { ChannelBlocksArrowsIcon } from "~/components/icons/channels";
 import ChannelItem from "./ChannelItem";
 import { SectionHeader } from "./SectionHeader";
 import { useChannelActions } from "../hooks/useChannelActions";
+import { UserPopMenu } from "~/layouts/UserPopMenu";
+import { appsSectionLinkTarget, lastSectionPaths } from "~/layouts/appModuleNavPaths";
+import { useGetBsConfig } from "~/hooks/queries/data-provider";
+import { cn } from "~/utils";
+
+/** H5 频道抽屉顶：四模块入口 */
+function SubscriptionMobileDrawerNavTabs({
+    onAfterPick,
+}: {
+    onAfterPick?: () => void;
+}) {
+    const { pathname } = useLocation();
+    const localize = useLocalize();
+    const { user } = useAuthContext();
+    const plugins: string[] | null = Array.isArray((user as { plugins?: unknown })?.plugins)
+        ? ((user as { plugins: string[] }).plugins)
+        : null;
+    const showSubscriptionTab = plugins ? plugins.includes("subscription") : true;
+    const showKnowledgeSpaceTab = plugins ? plugins.includes("knowledge_space") : true;
+
+    const links = useMemo(
+        () =>
+            [
+                {
+                    section: "home",
+                    to: lastSectionPaths.home || "/c/new",
+                    icon: HomeIcon,
+                    label: localize("com_nav_home"),
+                    isActive: /^\/(c|linsight)(\/|$)/.test(pathname),
+                },
+                {
+                    section: "apps",
+                    to: appsSectionLinkTarget(),
+                    icon: GlobeIcon,
+                    label: localize("com_nav_app_center"),
+                    isActive:
+                        matchPath("/app/:id/:fid/:type", pathname) !== null || pathname.startsWith("/apps"),
+                },
+                {
+                    section: "channel",
+                    to: lastSectionPaths.channel || "/channel",
+                    icon: LinkIcon,
+                    label: localize("com_ui_channel"),
+                    isActive: pathname.startsWith("/channel"),
+                },
+                {
+                    section: "knowledge",
+                    to: lastSectionPaths.knowledge || "/knowledge",
+                    icon: BookOpenIcon,
+                    label: localize("com_knowledge.knowledge_space"),
+                    isActive: pathname.startsWith("/knowledge"),
+                },
+            ].filter((l) => {
+                if (l.section === "channel") return showSubscriptionTab;
+                if (l.section === "knowledge") return showKnowledgeSpaceTab;
+                return true;
+            }),
+        [pathname, localize, showSubscriptionTab, showKnowledgeSpaceTab],
+    );
+
+    return (
+        <div className="flex shrink-0 items-stretch gap-1 border-b border-[#e5e6eb] px-2 py-2">
+            {links.map((link) => {
+                const Icon = link.icon;
+                return (
+                    <NavLink
+                        key={link.section}
+                        to={link.to}
+                        title={link.label}
+                        onClick={() => onAfterPick?.()}
+                        className={cn(
+                            "flex min-w-0 flex-1 flex-col items-center justify-center rounded-lg py-1.5 transition-colors hover:bg-[#f2f3f5]",
+                            link.isActive && "bg-[#e6edfc]",
+                        )}
+                    >
+                        <Icon className={cn("size-5 shrink-0", link.isActive ? "text-[#335CFF]" : "text-[#818181]")} />
+                    </NavLink>
+                );
+            })}
+        </div>
+    );
+}
 
 interface ChannelSidebarProps {
     activeChannelId?: string;
@@ -25,6 +112,10 @@ interface ChannelSidebarProps {
     onCreatedCountChange?: (count: number) => void;
     /** When true, skip auto-selecting the first channel (e.g. share route is resolving) */
     suppressAutoSelect?: boolean;
+    /** H5：置于订阅页固定抽屉内，隐藏 PC 折叠把手，宽度随父容器 */
+    mobileDrawerMode?: boolean;
+    /** H5 抽屉：右上角关闭 */
+    onDrawerClose?: () => void;
 }
 
 export function ChannelSidebar({
@@ -36,8 +127,11 @@ export function ChannelSidebar({
     onChannelSettings,
     onCreatedCountChange,
     suppressAutoSelect,
+    mobileDrawerMode = false,
+    onDrawerClose,
 }: ChannelSidebarProps) {
     const localize = useLocalize();
+    const { data: bsConfig } = useGetBsConfig();
     const [collapsed, setCollapsed] = useState(false);
     const [createdCollapsed, setCreatedCollapsed] = useState(false);
     const [subscribedCollapsed, setSubscribedCollapsed] = useState(false);
@@ -93,6 +187,10 @@ export function ChannelSidebar({
         onCreatedCountChange?.(createdChannels.length);
     }, [createdChannels.length, onCreatedCountChange]);
 
+    useEffect(() => {
+        if (mobileDrawerMode) setCollapsed(false);
+    }, [mobileDrawerMode]);
+
     const getSortText = (sortType: SortType) => {
         switch (sortType) {
             case SortType.RECENT_UPDATE: return localize("com_subscription.recently_updated");
@@ -122,19 +220,68 @@ export function ChannelSidebar({
     };
 
     return (
-        <div className="relative flex-shrink-0">
+        <div className={cn("relative shrink-0", mobileDrawerMode && "h-full min-h-0 w-full")}>
             <div
                 className={[
                     "h-full bg-white border-r border-[#e5e6eb] flex flex-col overflow-hidden",
-                    collapsed ? "w-0" : "w-60",
+                    mobileDrawerMode ? "w-full" : collapsed ? "w-0" : "w-60",
                 ].join(" ")}
-                style={{
-                    transitionProperty: 'width',
-                    transitionDuration: '300ms',
-                    transitionTimingFunction: 'ease-in-out'
-                }}
+                style={
+                    mobileDrawerMode
+                        ? undefined
+                        : {
+                            transitionProperty: "width",
+                            transitionDuration: "300ms",
+                            transitionTimingFunction: "ease-in-out",
+                        }
+                }
             >
-                {/* 顶部操作区 */}
+                {mobileDrawerMode ? (
+                    <>
+                        <div className="shrink-0 border-b border-[#e5e6eb] px-3 py-2.5">
+                            <div className="flex items-center justify-between">
+                                {bsConfig?.sidebarIcon?.image ? (
+                                    <img
+                                        className="h-8 w-8 rounded-md object-contain"
+                                        src={bsConfig.sidebarIcon.image}
+                                        alt={localize("com_nav_home")}
+                                    />
+                                ) : (
+                                    <div className="h-8 w-8 rounded-md bg-[#F2F3F5]" />
+                                )}
+                                {onDrawerClose ? (
+                                    <button
+                                        type="button"
+                                        onClick={onDrawerClose}
+                                        aria-label={localize("com_nav_close_sidebar")}
+                                        className="inline-flex size-8 items-center justify-center rounded-md text-[#4E5969] hover:bg-[#F7F8FA]"
+                                    >
+                                        <X className="size-4" />
+                                    </button>
+                                ) : null}
+                            </div>
+                        </div>
+                        <SubscriptionMobileDrawerNavTabs
+                            onAfterPick={onDrawerClose}
+                        />
+                        <div className="shrink-0 border-b border-[#e5e6eb] px-3 py-3">
+                            <Button
+                                variant="secondary"
+                                type="button"
+                                onClick={() => {
+                                    onCreateChannel();
+                                    onDrawerClose?.();
+                                }}
+                                className="flex h-9 w-full items-center justify-center gap-1 border-none bg-[#F7F7F7] text-[13px] hover:bg-[#E5E6EB]"
+                            >
+                                <Plus className="size-4" />
+                                {localize("com_subscription.create")}
+                            </Button>
+                        </div>
+                    </>
+                ) : null}
+                {/* 顶部操作区 — PC */}
+                {!mobileDrawerMode ? (
                 <div className={collapsed ? "px-0 py-5" : "px-3 py-5"}>
                     <div className={collapsed ? "flex items-center justify-center h-7" : "border-b border-[#e5e6eb] space-y-4 pb-4"}>
                         {!collapsed && <div className="px-2 flex justify-between items-center text-[16px] font-medium">
@@ -153,6 +300,7 @@ export function ChannelSidebar({
                         )}
                     </div>
                 </div>
+                ) : null}
 
                 {/* 列表区（折叠时隐藏内容，但保持容器以产生宽度过渡） */}
                 <div
@@ -234,15 +382,22 @@ export function ChannelSidebar({
                         </div>
                     </div>
                 </div>
+                {mobileDrawerMode ? (
+                    <div className="shrink-0 border-t border-[#ececec] px-2 pb-2 pt-1">
+                        <UserPopMenu variant="drawer" />
+                    </div>
+                ) : null}
             </div>
-            <NavToggle
-                navVisible={!collapsed}
-                onToggle={() => setCollapsed((v) => !v)}
-                isHovering={isToggleHovering}
-                setIsHovering={setIsToggleHovering}
-                className="absolute top-1/2 left-0 z-[10]"
-                translateX={230}
-            />
+            {!mobileDrawerMode ? (
+                <NavToggle
+                    navVisible={!collapsed}
+                    onToggle={() => setCollapsed((v) => !v)}
+                    isHovering={isToggleHovering}
+                    setIsHovering={setIsToggleHovering}
+                    className="absolute top-1/2 left-0 z-[10]"
+                    translateX={230}
+                />
+            ) : null}
         </div>
     );
 };

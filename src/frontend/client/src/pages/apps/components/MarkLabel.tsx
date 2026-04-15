@@ -3,7 +3,7 @@
 
 
 
-import { CircleX, LightbulbIcon } from 'lucide-react';
+import { CircleX, LightbulbIcon, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { DragDropContext, Draggable, Droppable } from 'react-beautiful-dnd';
 import { getAllLabelsApi, updateHomeLabelApi } from '~/api/apps';
@@ -85,16 +85,27 @@ export default function MarkLabel({ open, home, onClose }) {
     const [flag, setFlag] = useState(false) // 解决拖拽映射位置错位
 
     return <Dialog open={open} onOpenChange={onClose}>
-        <DialogContent className='max-w-[85%] md:max-w-[70%] max-h-[90vh] flex flex-col overflow-hidden'>
-            <DialogHeader className='shrink-0'>
-                <DialogTitle className='flex items-center space-x-2'>
+        <DialogContent close={false} className='max-w-[70%] overflow-hidden max-[768px]:h-screen max-[768px]:w-screen max-[768px]:max-w-none max-[768px]:rounded-none max-[768px]:p-0'>
+            <button
+                type="button"
+                onClick={handleCancel}
+                aria-label={localize('com_label_cancel')}
+                className='absolute right-3 top-3 z-20 hidden items-center justify-center rounded-md p-1 text-[#4E5969] hover:bg-[#F2F3F5] max-[768px]:inline-flex'
+            >
+                <X className='size-5' />
+            </button>
+            <DialogHeader className='h-20 max-[768px]:h-auto max-[768px]:border-b max-[768px]:px-4 max-[768px]:pb-3 max-[768px]:pt-4'>
+                <DialogTitle className='flex items-start space-x-2 max-[768px]:flex-col max-[768px]:space-x-0 max-[768px]:space-y-1'>
                     <LightbulbIcon />
-                    <span className='text-sm text-gray-500'>{localize('com_label_operation_tip')}</span>
+                    <span className='text-sm text-gray-500 max-[768px]:hidden'>{localize('com_label_operation_tip')}</span>
+                    <span className='hidden text-sm text-gray-500 max-[768px]:inline'>
+                        {localize('com_label_operation_tip_mobile')}
+                    </span>
                 </DialogTitle>
             </DialogHeader>
-            <div className='flex-1 h-[60vh] max-h-[600px] min-h-[300px] w-full grid grid-cols-[70%_30%] overflow-hidden'>
-                <div className='ml-2 sm:ml-10 overflow-y-auto pr-2'>
-                    <div className='w-full relative pb-4'>
+            <div className='h-[600px] w-full grid grid-cols-[70%_30%] max-[768px]:h-[calc(100vh-154px)] max-[768px]:grid-cols-1 max-[768px]:overflow-y-auto max-[768px]:px-4 max-[768px]:pb-24 max-[768px]:pt-3'>
+                <div className='ml-10 max-[768px]:ml-0'>
+                    <div className='w-full relative'>
                         {
                             labels.map(l =>
                                 <Button onClick={() => handleSelect(l.value)}
@@ -105,8 +116,8 @@ export default function MarkLabel({ open, home, onClose }) {
                         }
                     </div>
                 </div>
-                <div className='border-l text-gray-500 overflow-y-auto'>
-                    <div className='ml-4 pb-4'>
+                <div className='border-l text-gray-500 max-[768px]:mt-4 max-[768px]:border-l-0 max-[768px]:border-t max-[768px]:pt-4'>
+                    <div className='ml-4 max-[768px]:ml-0'>
                         <span className='text-md font-bold'>{localize('com_label_selected', { 0: selected.length })}</span>
                         <DragDropContext onDragEnd={handleDragEnd} onDragStart={() => setFlag(true)} onDragUpdate={() => setFlag(true)}>
                             <Droppable droppableId={'list'}>
@@ -132,9 +143,9 @@ export default function MarkLabel({ open, home, onClose }) {
                     </div>
                 </div>
             </div>
-            <DialogFooter className='shrink-0 pt-2'>
-                <Button variant="outline" className="h-10 w-[120px]" onClick={handleCancel}>{localize('com_label_cancel')}</Button>
-                <Button className="h-10 w-[120px]" onClick={handleConfirm}>{localize('com_label_save')}</Button>
+            <DialogFooter className='absolute bottom-6 right-6 max-[768px]:fixed max-[768px]:bottom-0 max-[768px]:left-0 max-[768px]:right-0 max-[768px]:z-20 max-[768px]:w-full max-[768px]:!flex max-[768px]:!flex-row max-[768px]:items-center max-[768px]:justify-between max-[768px]:gap-3 max-[768px]:border-t max-[768px]:bg-white max-[768px]:px-4 max-[768px]:py-3'>
+                <Button variant="outline" className="h-10 w-[120px] px-16 max-[768px]:!w-1/2 max-[768px]:px-0" onClick={handleCancel}>{localize('com_label_cancel')}</Button>
+                <Button className="px-16 h-10 w-[120px] max-[768px]:!w-1/2 max-[768px]:px-0" onClick={handleConfirm}>{localize('com_label_save')}</Button>
             </DialogFooter>
         </DialogContent>
     </Dialog>

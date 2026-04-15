@@ -62,9 +62,11 @@ export default function MobileNav({
         )}
       </button>
       {variant === 'app' ? (
-        <h1 className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-center text-sm font-normal max-[575px]:sr-only">
-          {title ?? localize('com_ui_new_chat')}
-        </h1>
+        <>
+          {/* 应用会话标题由 ChatView/HeaderTitle 展示；此处勿用主站会话列表首条标题，否则会误显「首页」等 */}
+          <div className="min-w-0 flex-1" aria-hidden />
+          <span className="sr-only">{localize('com_ui_new_chat')}</span>
+        </>
       ) : (
         <>
           <div className="min-w-0 flex-1" aria-hidden />

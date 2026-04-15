@@ -1,4 +1,4 @@
-import { useLocalize } from "~/hooks";
+import { useLocalize, useMediaQuery } from "~/hooks";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
@@ -26,6 +26,7 @@ import { ChannelSidebar } from "./Sidebar/ChannelSidebar";
 import { CreateChannelDrawer } from "./CreateChannel/CreateChannelDrawer";
 import type { CreateChannelFormData } from "./CreateChannel/CreateChannelDrawer";
 import { buildCreateChannelPayload } from "./channelUtils";
+import { Menu } from "lucide-react";
 
 const MAX_USER_CHANNELS = 10;
 
@@ -67,6 +68,8 @@ export default function Subscription() {
     const [memberDialogSpace, setMemberDialogSpace] = useState<KnowledgeSpace | null>(null);
     const [channelMemberOpen, setChannelMemberOpen] = useState(false);
     const [channelMemberChannel, setChannelMemberChannel] = useState<Channel | null>(null);
+    const isH5 = useMediaQuery("(max-width: 768px)");
+    const [channelListDrawerOpen, setChannelListDrawerOpen] = useState(false);
     const [editingChannel, setEditingChannel] = useState<Channel | null>(null);
     const { showToast } = useToastContext();
     const queryClient = useQueryClient();
@@ -315,9 +318,14 @@ export default function Subscription() {
     // Channel count is reported by ChannelSidebar via callback; ref avoids unnecessary re-renders
     const createdChannelCountRef = useRef(0);
 
+    useEffect(() => {
+        if (!isH5) setChannelListDrawerOpen(false);
+    }, [isH5]);
+
     // Handle channel selection
     const handleChannelSelect = (channel: Channel | null) => {
         setActiveChannel(channel);
+        if (isH5) setChannelListDrawerOpen(false);
     };
 
     // Create channel - opens drawer (with limit check)
@@ -383,8 +391,9 @@ export default function Subscription() {
     }
 
     return (
-        <div className="relative h-full flex">
+        <div className="relative flex h-full flex-col md:flex-row">
             {showChannelSquare ? (
+                <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                 <ChannelSquare
                     refreshKey={channelSquareRefreshKey}
                     onBack={() => {
@@ -398,63 +407,123 @@ export default function Subscription() {
                         navigate(`/channel/share/${id}?square=1`);
                     }}
                 />
+                </div>
             ) : (
                 <>
-                    {/* left sidebar */}
-                    <ChannelSidebar
-                        activeChannelId={activeChannel?.id}
-                        suppressAutoSelect={!!previewChannelId}
-                        onChannelSelect={handleChannelSelect}
-                        onCreateChannel={handleCreateChannel}
-                        onChannelSquare={handleChannelSquare}
-                        onCreatedCountChange={(count) => { createdChannelCountRef.current = count; }}
-                        onManageMembers={(channel) => {
-                            setChannelMemberChannel(channel);
-                            setChannelMemberOpen(true);
-                        }}
-                        onChannelSettings={(channel) => {
-                            // 用详情接口回显后再打开抽屉，避免抽屉先打开、详情后到导致表单被二次 init 覆盖用户刚输入的内容
-                            setEditingChannel(null);
-                            (async () => {
-                                try {
-                                    const detail = await getChannelDetailApi(channel.id);
-                                    // 以 /my_channels 的列表项为基础，叠加详情字段（description / visibility / is_released / source_list 等）
-                                    setEditingChannel({ ...channel, ...detail });
-                                } catch {
-                                    // 如果详情接口失败，至少保证能用列表里的基础字段编辑名称
-                                    setEditingChannel(channel);
-                                } finally {
-                                    setShowCreateChannelDrawer(true);
-                                }
-                            })();
-                        }}
-                    />
-
-                    {activeChannel ? (
-                        <ChannelLayout
-                            key={`${activeChannel.id}-${channelRefreshToken}`}
-                            channel={activeChannel}
-                            onFullScreen={(article, ai) => {
-                                enteredFullscreenViaAiRef.current = !!ai;
-                                setFullScreenArticle(article);
-                                setShowAiAssistant(ai || false);
-                                setShowFullScreenBtn(!!ai);
+                    {/* PC：左侧频道列表；H5：改抽屉叠在主内容之上（见下方 fixed） */}
+                    <div className="hidden h-full shrink-0 md:block">
+                        <ChannelSidebar
+                            activeChannelId={activeChannel?.id}
+                            suppressAutoSelect={!!previewChannelId}
+                            onChannelSelect={handleChannelSelect}
+                            onCreateChannel={handleCreateChannel}
+                            onChannelSquare={handleChannelSquare}
+                            onCreatedCountChange={(count) => { createdChannelCountRef.current = count; }}
+                            onManageMembers={(channel) => {
+                                setChannelMemberChannel(channel);
+                                setChannelMemberOpen(true);
+                            }}
+                            onChannelSettings={(channel) => {
+                                setEditingChannel(null);
+                                (async () => {
+                                    try {
+                                        const detail = await getChannelDetailApi(channel.id);
+                                        setEditingChannel({ ...channel, ...detail });
+                                    } catch {
+                                        setEditingChannel(channel);
+                                    } finally {
+                                        setShowCreateChannelDrawer(true);
+                                    }
+                                })();
                             }}
                         />
-                    ) : (
-                        <div className="flex flex-1 flex-col items-center justify-center py-10 text-center">
-                            <img
-                                className="size-[120px] mb-4 object-contain opacity-90"
-                                src={`${__APP_ENV__.BASE_URL}/assets/channel/empty.png`}
-                                alt="empty"
+                    </div>
+
+                    {isH5 && channelListDrawerOpen ? (
+                        <div
+                            className="fixed inset-0 z-[70] flex md:hidden"
+                            role="dialog"
+                            aria-modal="true"
+                            aria-label={localize("com_subscription.subscribe")}
+                        >
+                            <div className="flex h-full w-[min(240px,78vw)] max-w-[260px] shrink-0 flex-col overflow-hidden border-r border-[#e5e6eb] bg-white shadow-[4px_0_24px_rgba(0,0,0,0.06)]">
+                                <ChannelSidebar
+                                    mobileDrawerMode
+                                    onDrawerClose={() => setChannelListDrawerOpen(false)}
+                                    activeChannelId={activeChannel?.id}
+                                    suppressAutoSelect={!!previewChannelId}
+                                    onChannelSelect={handleChannelSelect}
+                                    onCreateChannel={handleCreateChannel}
+                                    onChannelSquare={handleChannelSquare}
+                                    onCreatedCountChange={(count) => { createdChannelCountRef.current = count; }}
+                                    onManageMembers={(channel) => {
+                                        setChannelMemberChannel(channel);
+                                        setChannelMemberOpen(true);
+                                    }}
+                                    onChannelSettings={(channel) => {
+                                        setEditingChannel(null);
+                                        (async () => {
+                                            try {
+                                                const detail = await getChannelDetailApi(channel.id);
+                                                setEditingChannel({ ...channel, ...detail });
+                                            } catch {
+                                                setEditingChannel(channel);
+                                            } finally {
+                                                setShowCreateChannelDrawer(true);
+                                            }
+                                        })();
+                                    }}
+                                />
+                            </div>
+                            <button
+                                type="button"
+                                className="min-w-0 flex-1 bg-transparent"
+                                aria-label={localize("com_nav_close_sidebar")}
+                                onClick={() => setChannelListDrawerOpen(false)}
                             />
-                            <p className="text-[14px] leading-6 text-[#4E5969]">{localize("com_subscription.no_related_content_please")}<span
-                                className="ml-1.5 cursor-pointer text-[#165DFF] underline decoration-dashed underline-offset-4 transition-colors hover:text-[#4080FF] active:text-[#0E42D2]"
-                                onClick={handleCreateChannel}
-                            >{localize("com_subscription.create_channel")}</span>
-                            </p>
                         </div>
-                    )}
+                    ) : null}
+
+                    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                        {activeChannel ? (
+                            <ChannelLayout
+                                key={`${activeChannel.id}-${channelRefreshToken}`}
+                                channel={activeChannel}
+                                onOpenChannelNav={isH5 ? () => setChannelListDrawerOpen(true) : undefined}
+                                onGoChannelSquare={isH5 ? handleChannelSquare : undefined}
+                                onCreateChannel={isH5 ? handleCreateChannel : undefined}
+                                onFullScreen={(article, ai) => {
+                                    enteredFullscreenViaAiRef.current = !!ai;
+                                    setFullScreenArticle(article);
+                                    setShowAiAssistant(ai || false);
+                                    setShowFullScreenBtn(!!ai);
+                                }}
+                            />
+                        ) : (
+                            <div className="relative flex flex-1 flex-col items-center justify-center py-10 text-center">
+                                {isH5 ? (
+                                    <button
+                                        type="button"
+                                        aria-label={localize("com_nav_open_sidebar")}
+                                        onClick={() => setChannelListDrawerOpen(true)}
+                                        className="absolute left-4 top-4 z-10 inline-flex size-9 items-center justify-center rounded-md text-[#4E5969] hover:bg-[#F7F8FA] md:hidden"
+                                    >
+                                        <Menu className="size-4" />
+                                    </button>
+                                ) : null}
+                                <img
+                                    className="size-[120px] mb-4 object-contain opacity-90"
+                                    src={`${__APP_ENV__.BASE_URL}/assets/channel/empty.png`}
+                                    alt="empty"
+                                />
+                                <p className="text-[14px] leading-6 text-[#4E5969]">{localize("com_subscription.no_related_content_please")}<span
+                                    className="ml-1.5 cursor-pointer text-[#165DFF] underline decoration-dashed underline-offset-4 transition-colors hover:text-[#4080FF] active:text-[#0E42D2]"
+                                    onClick={handleCreateChannel}
+                                >{localize("com_subscription.create_channel")}</span>
+                                </p>
+                            </div>
+                        )}
+                    </div>
                 </>
             )}
 

@@ -1633,6 +1633,7 @@
     "followed_by_me": "我关注的",
     "fullscreen": "全屏",
     "go_to_square": "前往广场",
+    "go_to_channel_plaza": "前往频道广场",
     "includes": "包含",
     "input_keywords_semicolon_separated": "请输入关键词, 以分号\";\"分隔",
     "input_question_placeholder": "请输入你的问题...",
@@ -1803,5 +1804,6 @@
     "image_copied": "图片已复制到剪切板",
     "image_copy_failed_url_copied": "图片复制失败，已复制链接",
     "knowledge_space_name_empty": "知识空间名称不能为空"
-  }
+  },
+  "com_label_operation_tip_mobile": "操作提示：在上方选择要展示的标签，在下方拖拽进行排序"
 }
