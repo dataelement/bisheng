@@ -22,7 +22,7 @@ from bisheng.worker.main import bisheng_celery
 @bisheng_celery.task
 def sync_information_article(information_id: str = None):
     trace_id_var.set(f"sync_all_information_articles_{generate_uuid()}")
-    logger.debug("Starting to sync information articles for all sources.")
+    logger.debug(f"Starting to sync information articles for {information_id}.")
     article_service = ArticleEsService()
     article_service.ensure_index_sync()
     with get_sync_db_session() as session:
@@ -39,12 +39,12 @@ def sync_information_article(information_id: str = None):
                 except Exception as e:
                     logger.exception(f"Failed to sync information article for source {one.id}: {e}")
             page += 1
-    logger.debug("Finished syncing information articles for all sources.")
+    logger.debug("Finished syncing information articles")
 
     # Update latest_article_update_time for channels
     if information_id is None:
         # Update all channels
-        logger.debug("Updating latest_article_update_time for all channels.")
+        logger.debug("Updating latest_article_update_time")
         _update_channel_latest_article_update_time()
     else:
         # Update only channels that use this information source
