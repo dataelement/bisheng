@@ -50,6 +50,18 @@ class ArticleEsService:
         client = get_es_connection_sync()
         ensure_article_index_exists_sync(client)
 
+    @staticmethod
+    def refresh_index_sync() -> None:
+        """Force an ES refresh on the article index so freshly-indexed docs are
+        immediately visible to GET / search. Used by the Celery worker right
+        after bulk_index to avoid the 'Article not found' race when the
+        knowledge-space sync hook reads the same docs back."""
+        try:
+            client = get_es_connection_sync()
+            client.indices.refresh(index=ARTICLE_INDEX_NAME)
+        except Exception as e:  # pragma: no cover — best-effort
+            logger.warning(f"ES refresh failed for {ARTICLE_INDEX_NAME}: {e}")
+
     @classmethod
     def _build_content_preview(cls, content: Optional[str]) -> str:
         """Build a truncated content preview for search list responses."""
@@ -624,6 +636,34 @@ class ArticleEsService:
             page=page,
             page_size=page_size,
         )
+
+    def match_article_ids_sync(
+            self,
+            article_ids: List[str],
+            source_ids: Optional[List[str]] = None,
+            filter_rules: Optional[List[Dict[str, Any]]] = None,
+    ) -> List[str]:
+        """Return the subset of `article_ids` that match the given source/filter
+        predicate. Used by the knowledge-sync worker to evaluate sub-channel
+        rules against freshly-indexed articles.
+        """
+        if not article_ids:
+            return []
+        query = self._build_count_query(
+            source_ids=source_ids,
+            filter_rules=filter_rules,
+            include_article_ids=article_ids,
+        )
+        if query is None:
+            return []
+        client = get_es_connection_sync()
+        body = {
+            "query": query,
+            "_source": False,
+            "size": len(article_ids),
+        }
+        response = client.search(index=ARTICLE_INDEX_NAME, body=body)
+        return [hit["_id"] for hit in response.get("hits", {}).get("hits", [])]
 
     @staticmethod
     def get_source_latest_article_time_sync(source_id: str) -> Optional[str]:

@@ -2,27 +2,19 @@
 import { Button } from "@/components/bs-ui/button";
 import { CardContent } from "@/components/bs-ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
+import { Input, NonNegativeInput, Textarea } from "@/components/bs-ui/input";
 import { Label } from "@/components/bs-ui/label";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { generateUUID } from "@/components/bs-ui/utils";
+import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 import { locationContext } from "@/contexts/locationContext";
 import { userContext } from "@/contexts/userContext";
 import { getSubConfigApi, setSubConfigApi } from "@/controllers/API";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
-import { t } from "i18next";
-import { Settings } from "lucide-react";
-import { useCallback, useContext, useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import WebSearchForm from "../tools/builtInTool/WebSearchFrom";
-import { FormInput } from "./FormInput";
-import { IconUploadSection } from "./IconUploadSection";
-import { Model, ModelManagement } from "./ModelManagement";
 import Preview from "./Preview";
-import { ToggleSection } from "./ToggleSection";
-import { WebSearchConfig } from "./WebSearchConfig";
-import { Input, NonNegativeInput, Textarea } from "@/components/bs-ui/input";
-import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 
 
 export interface FormErrors {

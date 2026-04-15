@@ -20,6 +20,31 @@ class SubscribeChannelRequest(BaseModel):
     channel_id: str = Field(..., description='Channel ID')
 
 
+class KnowledgeSyncSpaceItem(BaseModel):
+    """One knowledge-space / folder binding inside the sync config."""
+    knowledge_space_id: str = Field(..., description='Knowledge Space ID')
+    knowledge_space_name: Optional[str] = Field(None, description='Knowledge Space display name')
+    folder_id: Optional[str] = Field(None, description='Target folder ID; NULL = space root')
+    folder_path: Optional[str] = Field(None, description='Full folder display path, parent/child/target')
+
+
+class KnowledgeSyncMainConfig(BaseModel):
+    enabled: bool = Field(default=False, description='Whether main-channel sync is enabled')
+    spaces: List[KnowledgeSyncSpaceItem] = Field(default_factory=list, description='Bound knowledge spaces')
+
+
+class KnowledgeSyncSubConfig(BaseModel):
+    sub_channel_name: str = Field(..., description='Sub-channel name (matches ChannelFilterRules.name)')
+    enabled: bool = Field(default=False, description='Whether sync is enabled for this sub-channel')
+    spaces: List[KnowledgeSyncSpaceItem] = Field(default_factory=list, description='Bound knowledge spaces')
+
+
+class KnowledgeSyncConfig(BaseModel):
+    """Bundled channel ➜ knowledge-space sync config, saved atomically with the channel."""
+    main: KnowledgeSyncMainConfig = Field(default_factory=KnowledgeSyncMainConfig)
+    subs: List[KnowledgeSyncSubConfig] = Field(default_factory=list)
+
+
 class CreateChannelRequest(BaseModel):
     name: str = Field(..., description='Channel Name')
     source_list: List[str] = Field(default_factory=list, description='Data Source List')
@@ -27,6 +52,7 @@ class CreateChannelRequest(BaseModel):
     description: Optional[str] = Field(None, description='Channel Description/Brief')
     filter_rules: Optional[List[ChannelFilterRules]] = Field(default_factory=list, description='Filter Conditions')
     is_released: bool = Field(default=False, description='Whether the channel is released')
+    knowledge_sync: Optional[KnowledgeSyncConfig] = Field(None, description='Knowledge space sync configuration')
 
 
 class UpdateChannelRequest(BaseModel):
@@ -36,6 +62,7 @@ class UpdateChannelRequest(BaseModel):
     visibility: Optional[ChannelVisibilityEnum] = Field(None, description='Channel Visibility')
     filter_rules: Optional[List[ChannelFilterRules]] = Field(default=None, description='Filter Conditions')
     is_released: Optional[bool] = Field(None, description='Whether the channel is released')
+    knowledge_sync: Optional[KnowledgeSyncConfig] = Field(None, description='Knowledge space sync configuration; None = leave untouched')
 
 
 class AddInformationSourceRequest(BaseModel):
@@ -112,6 +139,10 @@ class ChannelDetailResponse(BaseModel):
     subscriber_count: int = Field(default=0, description='Number of subscribers')
     article_count: int = Field(default=0, description='Total number of articles in the main channel')
     subscription_status: SubscriptionStatusEnum = Field(..., description='Current user subscription status')
+    knowledge_sync: Optional[KnowledgeSyncConfig] = Field(
+        None,
+        description='Knowledge space sync configuration; only populated for creators',
+    )
 
 
 class ChannelMemberResponse(BaseModel):
@@ -166,6 +197,14 @@ class AddArticlesToKnowledgeSpaceRequest(BaseModel):
     knowledge_id: int = Field(..., description='Knowledge Space ID')
     article_ids: List[str] = Field(..., min_length=1, description='Article ID list to add')
     parent_id: Optional[int] = Field(None, description='Parent folder ID in the knowledge space')
+    # Internal flag used by the Celery sync worker: when True, articles missing
+    # from ES are skipped instead of aborting, and duplicate file names in the
+    # target space are treated as success (the article is already there).
+    # User-facing endpoints leave this False so the UI can surface real errors.
+    skip_missing_and_duplicates: bool = Field(
+        default=False,
+        description='Internal: skip missing articles and duplicate files instead of raising',
+    )
 
 
 class ChannelSquarePageResponse(BaseModel):

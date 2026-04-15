@@ -33,11 +33,26 @@ export interface KnowledgeNode {
     childrenLoading?: boolean;
 }
 
+export interface AddToKnowledgeSelection {
+    knowledgeSpaceId: string;
+    knowledgeSpaceName: string;
+    folderId: string | null;
+    folderPath: string | null;
+}
+
 interface AddToKnowledgeModalProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    /** Article ID to add to the selected knowledge space/folder */
+    /** Article ID to add to the selected knowledge space/folder (article mode). */
     articleId?: string | number;
+    /**
+     * v2.5 Module D: when set to "channel_sync", the modal becomes a generic
+     * space/folder picker — confirm returns selection info via onSyncSelect
+     * instead of calling addArticleToKnowledgeApi.
+     */
+    mode?: "article" | "channel_sync";
+    /** Receives the chosen knowledge space / folder; only fires in channel_sync mode. */
+    onSyncSelect?: (selection: AddToKnowledgeSelection) => void;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
@@ -258,7 +273,13 @@ function TreeNode({
 
 // ─── Main Modal ──────────────────────────────────────────────────────────
 
-export function AddToKnowledgeModal({ open, onOpenChange, articleId }: AddToKnowledgeModalProps) {
+export function AddToKnowledgeModal({
+    open,
+    onOpenChange,
+    articleId,
+    mode = "article",
+    onSyncSelect,
+}: AddToKnowledgeModalProps) {
     const localize = useLocalize();
     const { showToast } = useToastContext();
     const [tree, setTree] = useState<KnowledgeNode[]>([]);
@@ -463,6 +484,34 @@ export function AddToKnowledgeModal({ open, onOpenChange, articleId }: AddToKnow
 
     /** Confirm — add article to selected space/folder */
     const handleConfirm = async (forceReplace = false) => {
+        // v2.5 Module D — channel-sync mode: report selection back to caller,
+        // no article upload.
+        if (mode === "channel_sync") {
+            if (!selectedId) return;
+            const node = findNode(tree, selectedId);
+            if (!node) return;
+            const spaceNode = findNode(tree, node.spaceId) || node;
+            // Compose folder path from ancestors (excluding the space root).
+            const buildPath = (): string | null => {
+                if (node.type === "space") return null;
+                const chain: string[] = [];
+                let cur: KnowledgeNode | null = node;
+                while (cur && cur.id !== node.spaceId) {
+                    chain.unshift(cur.name);
+                    cur = cur.parentId ? (findNode(tree, cur.parentId) ?? null) : null;
+                }
+                return chain.length ? chain.join("/") : null;
+            };
+            onSyncSelect?.({
+                knowledgeSpaceId: node.spaceId,
+                knowledgeSpaceName: spaceNode.name || "",
+                folderId: node.type === "space" ? null : selectedId,
+                folderPath: buildPath(),
+            });
+            onOpenChange(false);
+            return;
+        }
+
         if (!articleId) return;
 
         // If forcing replace from the duplicate dialog, use pending params

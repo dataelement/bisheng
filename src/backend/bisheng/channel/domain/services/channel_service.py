@@ -28,6 +28,14 @@ from bisheng.channel.domain.schemas.channel_manager_schema import (
     ChannelSquareItemResponse,
     ChannelSquarePageResponse,
     SubscribeChannelRequest,
+    KnowledgeSyncConfig,
+    KnowledgeSyncMainConfig,
+    KnowledgeSyncSubConfig,
+    KnowledgeSyncSpaceItem,
+)
+from bisheng.channel.domain.models.channel_knowledge_sync import (
+    ChannelKnowledgeSync,
+    ChannelKnowledgeSyncDao,
 )
 from bisheng.channel.domain.services.article_es_service import ArticleEsService
 from bisheng.common.dependencies.user_deps import UserPayload
@@ -173,6 +181,14 @@ class ChannelService:
         # Update latest_article_update_time for the new channel
         if channel_model.source_list:
             await self.update_channels_latest_article_time([channel_model])
+
+        # Persist knowledge-sync config, if provided, using the freshly-assigned id.
+        if channel_data.knowledge_sync is not None:
+            await self._save_knowledge_sync(
+                channel_id=channel_model.id,
+                cfg=channel_data.knowledge_sync,
+                user_id=login_user.user_id,
+            )
 
         # Audit log
         from bisheng.api.services.audit_log import AuditLogService
@@ -908,6 +924,14 @@ class ChannelService:
                         exec_time = datetime.now() + timedelta(hours=1)
                         sync_information_article.apply_async(args=(one.id,), eta=exec_time)
 
+        # Replace knowledge-sync config atomically if caller provided one.
+        if req.knowledge_sync is not None:
+            await self._save_knowledge_sync(
+                channel_id=channel.id,
+                cfg=req.knowledge_sync,
+                user_id=login_user.user_id,
+            )
+
         return channel
 
     async def get_channel_detail(self, channel_id: str, login_user: UserPayload) -> ChannelDetailResponse:
@@ -981,6 +1005,16 @@ class ChannelService:
         # Determine subscription status
         subscription_status = self._resolve_membership_subscription_status(current_membership)
 
+        # Knowledge-sync config — only returned for the channel creator since
+        # the feature is creator-only (Module D). Members don't need to see it.
+        knowledge_sync_cfg: Optional[KnowledgeSyncConfig] = None
+        is_creator = (
+            current_membership is not None
+            and current_membership.user_role == UserRoleEnum.CREATOR
+        )
+        if is_creator:
+            knowledge_sync_cfg = await self._load_knowledge_sync(channel.id)
+
         return ChannelDetailResponse(
             id=channel.id,
             name=channel.name,
@@ -994,8 +1028,110 @@ class ChannelService:
             creator_name=creator_name,
             subscriber_count=subscriber_count,
             article_count=article_count,
-            subscription_status=subscription_status
+            subscription_status=subscription_status,
+            knowledge_sync=knowledge_sync_cfg,
         )
+
+    # ------------------------------------------------------------------ #
+    # Knowledge-space sync helpers (v2.5 Module D).
+    # The channel create/update endpoints accept an optional `knowledge_sync`
+    # field which we persist atomically alongside the channel itself. On read,
+    # `get_channel_detail` re-hydrates the same shape for the creator's UI.
+    # ------------------------------------------------------------------ #
+
+    async def _save_knowledge_sync(
+        self, channel_id: str, cfg: KnowledgeSyncConfig, user_id: int,
+    ) -> None:
+        """Replace every sync row for `channel_id` with the rows derived from `cfg`.
+
+        One row per (channel, sub_channel_name?, space_id + folder_id).
+        When a scope's `enabled` flag is False we still persist the rows but
+        mark them `is_enabled=False` so the worker skips them; dropping them
+        entirely would lose the user's selected spaces once they flip the
+        switch back on.
+        """
+        rows: List[ChannelKnowledgeSync] = []
+
+        # main-channel scope
+        for space in cfg.main.spaces:
+            rows.append(ChannelKnowledgeSync(
+                channel_id=channel_id,
+                sub_channel_name=None,
+                knowledge_space_id=space.knowledge_space_id,
+                folder_id=space.folder_id,
+                folder_path=space.folder_path,
+                is_enabled=cfg.main.enabled,
+                user_id=int(user_id),
+            ))
+
+        # sub-channel scopes
+        for sub in cfg.subs:
+            if not sub.sub_channel_name:
+                continue
+            for space in sub.spaces:
+                rows.append(ChannelKnowledgeSync(
+                    channel_id=channel_id,
+                    sub_channel_name=sub.sub_channel_name,
+                    knowledge_space_id=space.knowledge_space_id,
+                    folder_id=space.folder_id,
+                    folder_path=space.folder_path,
+                    is_enabled=sub.enabled,
+                    user_id=int(user_id),
+                ))
+
+        await ChannelKnowledgeSyncDao.areplace_for_channel(channel_id, rows)
+
+    async def _load_knowledge_sync(
+        self, channel_id: str,
+    ) -> KnowledgeSyncConfig:
+        """Build a KnowledgeSyncConfig from the stored rows, plus display
+        names for the bound knowledge spaces."""
+        rows = await ChannelKnowledgeSyncDao.alist_by_channel_id(channel_id)
+        # Sort by create_time for stable, creation-order display (requirement 3.1.1).
+        rows.sort(key=lambda r: r.create_time)
+
+        # Resolve knowledge-space display names for the UI.
+        space_name_by_id: Dict[str, str] = {}
+        numeric_ids = [
+            int(r.knowledge_space_id)
+            for r in rows
+            if r.knowledge_space_id and str(r.knowledge_space_id).isdigit()
+        ]
+        if numeric_ids:
+            from bisheng.knowledge.domain.models.knowledge import Knowledge
+            from bisheng.core.database import get_async_db_session
+            from sqlmodel import select as _select
+            async with get_async_db_session() as session:
+                q = _select(Knowledge).where(Knowledge.id.in_(numeric_ids))
+                for kb in (await session.exec(q)).all():
+                    space_name_by_id[str(kb.id)] = kb.name
+
+        def _to_item(r: ChannelKnowledgeSync) -> KnowledgeSyncSpaceItem:
+            return KnowledgeSyncSpaceItem(
+                knowledge_space_id=str(r.knowledge_space_id),
+                knowledge_space_name=space_name_by_id.get(str(r.knowledge_space_id), ''),
+                folder_id=r.folder_id,
+                folder_path=r.folder_path,
+            )
+
+        main_rows = [r for r in rows if not r.sub_channel_name]
+        sub_rows_by_name: Dict[str, List[ChannelKnowledgeSync]] = {}
+        for r in rows:
+            if r.sub_channel_name:
+                sub_rows_by_name.setdefault(r.sub_channel_name, []).append(r)
+
+        main_cfg = KnowledgeSyncMainConfig(
+            enabled=bool(main_rows) and all(r.is_enabled for r in main_rows),
+            spaces=[_to_item(r) for r in main_rows],
+        )
+        subs: List[KnowledgeSyncSubConfig] = []
+        for name, rlist in sub_rows_by_name.items():
+            subs.append(KnowledgeSyncSubConfig(
+                sub_channel_name=name,
+                enabled=bool(rlist) and all(r.is_enabled for r in rlist),
+                spaces=[_to_item(r) for r in rlist],
+            ))
+        return KnowledgeSyncConfig(main=main_cfg, subs=subs)
 
     async def dismiss_channel(self, channel_id: str, login_user: UserPayload, request=None):
         """
@@ -1443,8 +1579,16 @@ class ChannelService:
         for article_id in req.article_ids:
             article = await self.article_es_service.get_article(article_id)
             if not article:
+                if req.skip_missing_and_duplicates:
+                    logger.warning(
+                        f"add_articles_to_knowledge_space: skipping missing article {article_id}"
+                    )
+                    continue
                 raise ValueError(f"Article not found: {article_id}")
             articles.append(article)
+        if not articles:
+            # Nothing to do (all were missing and we're in skip-mode).
+            return []
 
         # 2. Check write permission before uploading to minio
         role = await SpaceChannelMemberDao.async_get_active_member_role(
@@ -1504,7 +1648,7 @@ class ChannelService:
             else:
                 failed = True
         await KnowledgeFileDao.async_update_batch(result)
-        if failed:
+        if failed and not req.skip_missing_and_duplicates:
             raise SpaceFileNameDuplicateError()
 
         return result

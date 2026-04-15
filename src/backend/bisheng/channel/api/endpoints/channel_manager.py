@@ -367,3 +367,10 @@ async def add_articles_to_knowledge_space(
     """Add channel articles to a knowledge space."""
     result = await channel_service.add_articles_to_knowledge_space(req, login_user, request)
     return resp_200(data=result)
+
+
+# NOTE: Channel ➜ knowledge-space sync config (v2.5 Module D) is saved and
+# returned as part of the Channel CRUD endpoints via the `knowledge_sync`
+# field on CreateChannelRequest / UpdateChannelRequest / ChannelDetailResponse.
+# Standalone /knowledge_sync endpoints were removed in favour of atomic
+# create/update with the channel itself.

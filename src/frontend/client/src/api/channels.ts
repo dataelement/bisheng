@@ -119,7 +119,7 @@ export interface ChannelDetailResponse {
     create_time?: string;
     creator_name: string;
     subscriber_count: number;
-    subscription_status:string;
+    subscription_status: string;
     article_count: number;
     filter_rules?: ManagerChannelFilterRule[];
     source_infos?: Array<{
@@ -130,6 +130,8 @@ export interface ChannelDetailResponse {
         icon?: string;
         source_type?: string;
     }>;
+    /** v2.5 Module D — only populated for the channel creator. */
+    knowledge_sync?: KnowledgeSyncConfig | null;
 }
 
 /**
@@ -378,6 +380,8 @@ export interface CreateManagerChannelPayload {
     filter_rules: ManagerChannelFilterRule[]; // 筛选规则（必填）
     channel_type?: string;                // 频道类型（可选）
     is_released?: boolean;                // 是否发布（可选）
+    /** v2.5 Module D — saved atomically with the channel. */
+    knowledge_sync?: KnowledgeSyncConfig;
 }
 
 /**
@@ -550,6 +554,35 @@ export async function removeChannelMemberApi(body: {
     user_id: number;
 }): Promise<any> {
     return await request.post(`/api/v1/channel/manager/remove_member`, body);
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// v2.5 Module D — Channel ➜ Knowledge Space sync configuration types.
+// Persisted atomically with the channel itself: the shapes below are sent as
+// the `knowledge_sync` field on create/update and returned on detail.
+// ─────────────────────────────────────────────────────────────────────────
+
+export interface KnowledgeSyncSpaceItem {
+    knowledge_space_id: string;
+    knowledge_space_name?: string | null;
+    folder_id?: string | null;
+    folder_path?: string | null;
+}
+
+export interface KnowledgeSyncMainConfig {
+    enabled: boolean;
+    spaces: KnowledgeSyncSpaceItem[];
+}
+
+export interface KnowledgeSyncSubConfig {
+    sub_channel_name: string;
+    enabled: boolean;
+    spaces: KnowledgeSyncSpaceItem[];
+}
+
+export interface KnowledgeSyncConfig {
+    main: KnowledgeSyncMainConfig;
+    subs: KnowledgeSyncSubConfig[];
 }
 
 // ── Information Source types (migrated from ~/mock/sources) ──

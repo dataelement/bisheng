@@ -27,6 +27,9 @@ import {
 import { AddSourceDropdown } from "./AddSourceDropdown";
 import { CrawlPreviewDialog } from "./CrawlPreviewDialog";
 import { CreateChannelSuccessContent } from "./CreateChannelSuccess";
+import KnowledgeSyncSection, {
+    type KnowledgeSyncDraft,
+} from "./KnowledgeSyncSection";
 import { SubChannelBlock, type SubChannelData } from "./SubChannelBlock";
 import {
     FilterConditionEditor,
@@ -64,6 +67,9 @@ export interface CreateChannelFormData {
     topFilterRelation: "and" | "or";
     createSubChannel: boolean;
     subChannels: SubChannelData[];
+    /** v2.5 Module D — flows through to the `knowledge_sync` field on the
+     * Channel create/update payload. */
+    knowledgeSync: KnowledgeSyncDraft;
 }
 
 interface CreateChannelDrawerProps {
@@ -93,6 +99,12 @@ export function CreateChannelDrawer({
     const [isComposingName, setIsComposingName] = useState(false);
     const [isComposingDesc, setIsComposingDesc] = useState(false);
     const initedChannelIdRef = useRef<string | null>(null);
+    // v2.5 Module D — owned here so the draft survives across renders of the
+    // section and travels with the channel create/update payload on submit.
+    const [syncDraft, setSyncDraft] = useState<KnowledgeSyncDraft>({
+        main: { enabled: false, spaces: [] },
+        subs: [],
+    });
 
     const isCreateFormPristine = () => {
         // 仅用于“创建频道”场景：未做任何修改时，关闭不需要二次确认
@@ -113,6 +125,16 @@ export function CreateChannelDrawer({
     const [isBodyScrolling, setIsBodyScrolling] = useState(false);
     const bodyScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+    // Reset the sync draft only on close. Kept in a standalone effect keyed
+    // on `open` alone so it does not re-fire when unstable form hook refs
+    // change — the main init effect below has a heavier dep list that can
+    // flip every render under some localize/query-client setups.
+    useEffect(() => {
+        if (!open) {
+            setSyncDraft({ main: { enabled: false, spaces: [] }, subs: [] });
+        }
+    }, [open]);
+
     useEffect(() => {
         if (!open) {
             initedChannelIdRef.current = null;
@@ -125,6 +147,22 @@ export function CreateChannelDrawer({
 
             // 使用统一表单初始化逻辑（名称 / 简介 / 权限 / 是否发布 / filter_rules）
             form.initFromChannel(editingChannel);
+
+            // v2.5 Module D — hydrate sync draft from channel detail if present.
+            const existingSync = (editingChannel as any).knowledge_sync;
+            if (existingSync && (existingSync.main || existingSync.subs)) {
+                setSyncDraft({
+                    main: {
+                        enabled: !!existingSync.main?.enabled,
+                        spaces: Array.isArray(existingSync.main?.spaces)
+                            ? existingSync.main.spaces
+                            : [],
+                    },
+                    subs: Array.isArray(existingSync.subs) ? existingSync.subs : [],
+                });
+            } else {
+                setSyncDraft({ main: { enabled: false, spaces: [] }, subs: [] });
+            }
 
             // 信息源回显：
             const sourceInfos = (editingChannel as any).source_infos as
@@ -608,6 +646,25 @@ export function CreateChannelDrawer({
                         </div>
                     )}
 
+                    {/* v2.5 Module D — 频道同步至知识空间配置 */}
+                    <KnowledgeSyncSection
+                        value={syncDraft}
+                        onChange={setSyncDraft}
+                        subChannelNames={
+                            form.createSubChannel
+                                ? form.subChannels
+                                    .map((s) => s.name?.trim())
+                                    .filter((n): n is string => !!n)
+                                : []
+                        }
+                        // In create mode the current user is always the creator.
+                        // In edit mode, honour the backend's role assignment.
+                        isCreator={
+                            !isEditMode ||
+                            String(editingChannel?.role) === "creator"
+                        }
+                    />
+
                     {/* 底部操作按钮 */}
                     {(!form.showSuccess || isEditMode) && (
                         <div className="sticky bottom-0 z-10 mt-auto flex justify-end gap-3 border-t border-[#E5E6EB] bg-white px-6 pb-5 pt-10 max-md:gap-2 max-md:px-0 max-md:pt-4">
@@ -631,7 +688,8 @@ export function CreateChannelDrawer({
                                         filterGroups: form.filterGroups,
                                         topFilterRelation: form.topFilterRelation,
                                         createSubChannel: form.createSubChannel,
-                                        subChannels: form.subChannels
+                                        subChannels: form.subChannels,
+                                        knowledgeSync: syncDraft,
                                     };
 
                                     // 创建和编辑统一走同一套校验逻辑：
