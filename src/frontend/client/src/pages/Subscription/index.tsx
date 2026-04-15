@@ -26,7 +26,8 @@ import { ChannelSidebar } from "./Sidebar/ChannelSidebar";
 import { CreateChannelDrawer } from "./CreateChannel/CreateChannelDrawer";
 import type { CreateChannelFormData } from "./CreateChannel/CreateChannelDrawer";
 import { buildCreateChannelPayload } from "./channelUtils";
-import { Menu } from "lucide-react";
+import { Menu, Plus } from "lucide-react";
+import { cn } from "~/utils";
 
 const MAX_USER_CHANNELS = 10;
 
@@ -73,6 +74,7 @@ export default function Subscription() {
     const [editingChannel, setEditingChannel] = useState<Channel | null>(null);
     const { showToast } = useToastContext();
     const queryClient = useQueryClient();
+    const mobileHeadIconBtnClassName = "inline-flex size-8 items-center justify-center rounded-md text-[#212121] hover:bg-[#F7F8FA]";
 
     const channelPluginGate = useMemo((): "loading" | "enabled" | "disabled" => {
         if (isUserLoading) return "loading";
@@ -446,7 +448,7 @@ export default function Subscription() {
                             aria-modal="true"
                             aria-label={localize("com_subscription.subscribe")}
                         >
-                            <div className="flex h-full w-[min(240px,78vw)] max-w-[260px] shrink-0 flex-col overflow-hidden border-r border-[#e5e6eb] bg-white shadow-[4px_0_24px_rgba(0,0,0,0.06)]">
+                            <div className="flex h-full w-[240px] max-w-[240px] shrink-0 flex-col overflow-hidden border-r border-[#e5e6eb] bg-white shadow-[4px_0_24px_rgba(0,0,0,0.06)]">
                                 <ChannelSidebar
                                     mobileDrawerMode
                                     onDrawerClose={() => setChannelListDrawerOpen(false)}
@@ -502,14 +504,24 @@ export default function Subscription() {
                         ) : (
                             <div className="relative flex flex-1 flex-col items-center justify-center py-10 text-center">
                                 {isH5 ? (
-                                    <button
-                                        type="button"
-                                        aria-label={localize("com_nav_open_sidebar")}
-                                        onClick={() => setChannelListDrawerOpen(true)}
-                                        className="absolute left-4 top-4 z-10 inline-flex size-9 items-center justify-center rounded-md text-[#4E5969] hover:bg-[#F7F8FA] md:hidden"
-                                    >
-                                        <Menu className="size-4" />
-                                    </button>
+                                    <>
+                                        <button
+                                            type="button"
+                                            aria-label={localize("com_nav_open_sidebar")}
+                                            onClick={() => setChannelListDrawerOpen(true)}
+                                            className={cn("absolute left-2 top-2 z-10 md:hidden", mobileHeadIconBtnClassName)}
+                                        >
+                                            <Menu className="size-4" />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            aria-label={localize("com_subscription.create")}
+                                            onClick={handleCreateChannel}
+                                            className={cn("absolute right-2 top-2 z-10 md:hidden", mobileHeadIconBtnClassName)}
+                                        >
+                                            <Plus className="size-4" />
+                                        </button>
+                                    </>
                                 ) : null}
                                 <img
                                     className="size-[120px] mb-4 object-contain opacity-90"

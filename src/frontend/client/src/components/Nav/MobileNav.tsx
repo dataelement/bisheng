@@ -28,6 +28,8 @@ export default function MobileNav({
   persistNavVisibleInLocalStorage = true,
   navigateToNewChatPath = '/c/new',
 }: MobileNavProps) {
+  const mobileHeadIconBtnClassName =
+    'inline-flex size-8 shrink-0 items-center justify-center rounded-md text-[#212121] hover:bg-[#F7F8FA]';
   const localize = useLocalize();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -46,19 +48,19 @@ export default function MobileNav({
   };
 
   return (
-    <div className="bg-token-main-surface-primary sticky top-0 z-10 flex min-h-[48px] w-full flex-row items-center justify-between bg-white max-[575px]:bg-[#f9f9fb] px-1 pl-2 pr-3 dark:bg-gray-800 dark:text-white md:hidden max-[575px]:border-b max-[575px]:border-[#f0f1f3]">
+    <div className="bg-token-main-surface-primary sticky top-0 z-10 flex h-10 w-full flex-row items-center justify-between bg-white px-2 dark:bg-gray-800 dark:text-white md:hidden max-[575px]:border-b max-[575px]:border-[#f0f1f3]">
       <button
         type="button"
         data-testid="mobile-header-toggle-sidebar"
         aria-label={navVisible ? localize('com_nav_close_sidebar') : localize('com_nav_open_sidebar')}
         aria-expanded={navVisible}
-        className="inline-flex size-10 shrink-0 items-center justify-center rounded-full text-[#1d2129] hover:bg-surface-hover"
+        className={mobileHeadIconBtnClassName}
         onClick={toggleSidebar}
       >
         {navVisible ? (
-          <X className="size-6" strokeWidth={2} />
+          <X className="size-4" strokeWidth={2} />
         ) : (
-          <Menu className="size-6" strokeWidth={2} />
+          <Menu className="size-4" strokeWidth={2} />
         )}
       </button>
       {variant === 'app' ? (
@@ -77,7 +79,7 @@ export default function MobileNav({
         type="button"
         data-testid="mobile-header-new-chat-button"
         aria-label={localize('com_ui_new_chat')}
-        className="inline-flex size-10 shrink-0 items-center justify-center rounded-full text-[#1d2129] hover:bg-surface-hover"
+        className={mobileHeadIconBtnClassName}
         onClick={() => {
           queryClient.setQueryData<TMessage[]>(
             [QueryKeys.messages, conversation?.conversationId ?? Constants.NEW_CONVO],
@@ -89,7 +91,7 @@ export default function MobileNav({
           }
         }}
       >
-        <Plus className="size-6" strokeWidth={2} />
+        <Plus className="size-4" strokeWidth={2} />
       </button>
     </div>
   );

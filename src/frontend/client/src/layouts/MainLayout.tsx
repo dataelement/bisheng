@@ -279,7 +279,7 @@ export default function MainLayout() {
           aria-modal="true"
           aria-label={localize('com_nav_app_center')}
         >
-          <div className="flex h-full w-[min(200px,62vw)] max-w-[220px] shrink-0 flex-col overflow-hidden border-r border-[#ececec] bg-white shadow-[4px_0_24px_rgba(0,0,0,0.06)]">
+          <div className="flex h-full w-[240px] max-w-[240px] shrink-0 flex-col overflow-hidden border-r border-[#ececec] bg-white shadow-[4px_0_24px_rgba(0,0,0,0.06)]">
             <Sidebar
               mobileSidebarOpen={mobileSidebarOpen}
               onCloseMobileApps={() => setMobileSidebarOpen(false)}
@@ -301,9 +301,9 @@ export default function MainLayout() {
             type="button"
             aria-label={localize('com_nav_open_sidebar')}
             onClick={() => setMobileSidebarOpen(true)}
-            className="absolute left-3 top-2 z-[50] inline-flex size-7 items-center justify-center rounded-md text-[#86909C] hover:bg-[#F7F8FA]"
+            className="absolute left-2 top-2 z-[50] inline-flex size-8 items-center justify-center rounded-md text-[#212121] hover:bg-[#F7F8FA]"
           >
-            <Menu className="size-3.5" />
+            <Menu className="size-4" />
           </button>
         ) : null}
         <KeepAlive

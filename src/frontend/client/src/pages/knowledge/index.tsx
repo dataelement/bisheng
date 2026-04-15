@@ -52,6 +52,7 @@ export default function Knowledge() {
     const [dragError, setDragError] = useState<string | null>(null);
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
     const [spaceListDrawerOpen, setSpaceListDrawerOpen] = useState(false);
+    const mobileHeadIconBtnClassName = "inline-flex size-8 items-center justify-center rounded-md text-[#212121] hover:bg-[#F7F8FA]";
 
     const { showToast } = useToastContext();
     const { user, isUserLoading } = useAuthContext();
@@ -569,7 +570,7 @@ export default function Knowledge() {
                     aria-modal="true"
                     aria-label={localize("com_knowledge.knowledge_space")}
                 >
-                    <div className="flex h-full w-[min(240px,78vw)] max-w-[260px] shrink-0 flex-col overflow-hidden border-r border-[#e5e6eb] bg-white shadow-[4px_0_24px_rgba(0,0,0,0.06)]">
+                    <div className="flex h-full w-[240px] max-w-[240px] shrink-0 flex-col overflow-hidden border-r border-[#e5e6eb] bg-white shadow-[4px_0_24px_rgba(0,0,0,0.06)]">
                         <KnowledgeSpaceSidebar
                             mobileDrawerMode
                             onDrawerClose={() => setSpaceListDrawerOpen(false)}
@@ -627,12 +628,12 @@ export default function Knowledge() {
                                     className="h-full min-w-0 flex-shrink-0 overflow-hidden"
                                 >
                                     {isH5 ? (
-                                        <div className="flex h-10 items-center justify-between px-2">
+                                        <div className="flex h-8 items-center justify-between px-2">
                                             <button
                                                 type="button"
                                                 aria-label={localize("com_nav_open_sidebar")}
                                                 onClick={() => setSpaceListDrawerOpen(true)}
-                                                className="inline-flex size-8 items-center justify-center rounded-md text-[#4E5969] hover:bg-[#F7F8FA]"
+                                                className={mobileHeadIconBtnClassName}
                                             >
                                                 <Menu className="size-4" />
                                             </button>
@@ -640,7 +641,7 @@ export default function Knowledge() {
                                                 type="button"
                                                 aria-label={localize("com_knowledge.create_knowledge_space")}
                                                 onClick={handleCreateSpace}
-                                                className="inline-flex size-8 items-center justify-center rounded-md text-[#212121] hover:bg-[#F7F8FA]"
+                                                className={mobileHeadIconBtnClassName}
                                             >
                                                 <Plus className="size-4" />
                                             </button>
@@ -717,7 +718,7 @@ export default function Knowledge() {
                                 type="button"
                                 aria-label={localize("com_nav_open_sidebar")}
                                 onClick={() => setSpaceListDrawerOpen(true)}
-                                className="inline-flex size-8 items-center justify-center rounded-md text-[#4E5969] hover:bg-[#F7F8FA]"
+                                className={mobileHeadIconBtnClassName}
                             >
                                 <Menu className="size-4" />
                             </button>
@@ -725,7 +726,7 @@ export default function Knowledge() {
                                 type="button"
                                 aria-label={localize("com_knowledge.create_knowledge_space")}
                                 onClick={handleCreateSpace}
-                                className="inline-flex size-8 items-center justify-center rounded-md text-[#212121] hover:bg-[#F7F8FA]"
+                                className={mobileHeadIconBtnClassName}
                             >
                                 <Plus className="size-4" />
                             </button>

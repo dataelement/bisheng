@@ -117,7 +117,7 @@ export default function NewChat({
         <div className="mb-4 flex items-center justify-between">
           <p className="font-medium text-[#212121] text-[16px] ml-2">{localize('com_nav_home')}</p>
         </div>
-        <div className="mb-2 flex w-full flex-nowrap items-stretch gap-1 overflow-x-auto pb-1 md:hidden scrollbar-hide">
+        <div className="mb-2 flex w-full flex-nowrap items-stretch justify-center gap-2 overflow-x-auto pb-1 md:hidden scrollbar-hide">
           {[
             {
               section: 'home',
@@ -160,10 +160,10 @@ export default function NewChat({
                 aria-label={link.label}
                 className={({ isActive: navActive }) =>
                   cn(
-                    'flex min-w-[36px] shrink-0 items-center justify-center rounded-md px-2 py-1.5 transition-colors',
+                    'flex size-11 shrink-0 items-center justify-center rounded-lg transition-colors',
                     navActive || link.isActive
-                      ? 'bg-[#e6edfc] font-medium text-[#335CFF]'
-                      : 'text-[#4e5969] hover:bg-[#f7f8fa]',
+                      ? 'bg-[#E6EDFC] text-[#335CFF]'
+                      : 'text-[#818181] hover:bg-[#f2f3f5]',
                   )
                 }
               >
@@ -172,7 +172,7 @@ export default function NewChat({
                   const Icon = link.icon;
                   return (
                     <Icon
-                      className={cn('size-[14px] shrink-0', on ? 'text-[#335CFF]' : 'text-[#818181]')}
+                      className={cn('size-5 shrink-0', on ? 'text-[#335CFF]' : 'text-[#818181]')}
                     />
                   );
                 }}

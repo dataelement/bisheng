@@ -53,8 +53,8 @@ const Nav = ({
       if (savedNavVisible === null) {
         toggleNavVisible();
       }
-      // 移动端：历史抽屉约 44% 视口宽
-      setNavWidth('min(44vw, 640px)');
+      // 移动端：与其它页面抽屉统一固定宽度
+      setNavWidth('240px');
     } else {
       setNavWidth('240px');
     }

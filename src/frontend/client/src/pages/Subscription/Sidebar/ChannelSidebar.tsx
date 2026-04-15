@@ -79,7 +79,7 @@ function SubscriptionMobileDrawerNavTabs({
     );
 
     return (
-        <div className="flex shrink-0 items-stretch gap-1 border-b border-[#e5e6eb] px-2 py-2">
+        <div className="flex shrink-0 items-center justify-center gap-2 border-b border-[#e5e6eb] px-2 py-2">
             {links.map((link) => {
                 const Icon = link.icon;
                 return (
@@ -89,7 +89,7 @@ function SubscriptionMobileDrawerNavTabs({
                         title={link.label}
                         onClick={() => onAfterPick?.()}
                         className={cn(
-                            "flex min-w-0 flex-1 flex-col items-center justify-center rounded-lg py-1.5 transition-colors hover:bg-[#f2f3f5]",
+                            "flex size-11 shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-[#f2f3f5]",
                             link.isActive && "bg-[#e6edfc]",
                         )}
                     >

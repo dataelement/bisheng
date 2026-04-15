@@ -340,7 +340,7 @@ export function KnowledgeSpaceHeader({
     return (
         <div className="space-y-4 pt-5 pb-4 max-md:space-y-3 max-md:pt-4 max-md:pb-3">
             {currentPath.length === 0 ? (
-                <div className="flex items-end gap-2 md:hidden">
+                <div className="flex items-end gap-3 md:hidden">
                     <h1 className="text-[24px] font-semibold leading-8 text-[#335CFF]">
                         {localize("com_knowledge.knowledge_space")}
                     </h1>
@@ -360,8 +360,8 @@ export function KnowledgeSpaceHeader({
             ) : null}
 
             {/* 面包屑 / 当前空间标题 */}
-            <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center max-md:gap-3">
-                <div className="flex items-center gap-1 text-sm flex-wrap w-full sm:w-auto">
+            <div className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 flex-1 items-center gap-1 text-sm">
                     {currentPath.length === 0 ? (
                         <div className="flex items-center gap-1">
                             <h1 className="text-base text-[#1d2129] max-md:text-[16px] max-md:leading-6">{space.name}</h1>
@@ -440,10 +440,10 @@ export function KnowledgeSpaceHeader({
                 </div>
 
                 {/* 右侧：AI助手和分享 */}
-                <div className="mt-2 flex shrink-0 items-center gap-2 self-end sm:self-auto sm:gap-3 sm:mt-0">
+                <div className="flex shrink-0 items-center gap-3">
                     <Button
                         variant="ghost"
-                        className="ai-btn-border-draw h-8 px-1.5 gap-1 font-normal rounded-[6px] hover:bg-transparent"
+                        className="ai-btn-border-draw h-8 gap-1 rounded-[6px] px-3 font-normal hover:bg-transparent"
                         disabled={isSearching}
                         onClick={onToggleAiAssistant}
                     >
@@ -455,7 +455,7 @@ export function KnowledgeSpaceHeader({
                     {showShare && (
                         <Button
                             variant="ghost"
-                            className="h-8 gap-1 px-1.5 font-normal transition-colors hover:bg-[#F7F8FA] max-md:rounded-[6px] max-md:px-2 max-md:text-[#212121] max-md:border max-md:border-[#EBECF0] max-md:bg-white"
+                            className="h-8 gap-2 rounded-[6px] border border-[#EBECF0] bg-white px-4 font-normal text-[#212121] transition-colors hover:bg-[#F7F8FA]"
                             onClick={handleShare}
                         >
                             <ShareOutlineIcon className="size-4 text-gray-800" />

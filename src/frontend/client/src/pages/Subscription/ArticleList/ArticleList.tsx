@@ -77,6 +77,7 @@ export function ArticleList({
     onGoChannelSquare,
     onCreateChannel,
 }: ArticleListProps) {
+    const mobileHeadIconBtnClassName = "inline-flex size-8 items-center justify-center rounded-md text-[#212121] hover:bg-[#F7F8FA]";
     const localize = useLocalize();
     const [articles, setArticles] = useState<Article[]>([]);
     const [currentPage, setCurrentPage] = useState(1);
@@ -244,14 +245,14 @@ export function ArticleList({
 
     return (
         <div className="flex h-full w-full flex-1 flex-col">
-            {/* header — H5 对齐 Figma 4063/4131：顶栏、订阅标题行、频道行、Tab+筛选 */}
-            <div className="mx-auto w-full max-w-[1000px] px-4 pt-4 pb-4 md:pt-5 md:space-y-4 max-md:space-y-4">
+            {/* header — 结构与知识空间页保持一致 */}
+            <div className="mx-auto w-full max-w-[1000px] px-4 pt-5 pb-4 space-y-4 max-md:space-y-3 max-md:pt-0 max-md:pb-3">
                 {(onOpenChannelNav || onGoChannelSquare || onCreateChannel) ? (
                     <div className="hidden max-md:flex max-md:flex-col max-md:gap-3">
                         {/* H5 第一行：仅展开 / 创建，与标题区分开 */}
                         <div
                             className={cn(
-                                "flex items-center gap-2",
+                                "-mx-4 flex h-8 items-center gap-2 px-2",
                                 onOpenChannelNav && onCreateChannel && "justify-between",
                                 !onOpenChannelNav && onCreateChannel && "justify-end",
                             )}
@@ -261,9 +262,9 @@ export function ArticleList({
                                     type="button"
                                     onClick={onOpenChannelNav}
                                     aria-label={localize("com_nav_open_sidebar")}
-                                    className="inline-flex size-9 shrink-0 items-center justify-center rounded-md text-[#212121] hover:bg-[#F2F3F5]"
+                                    className={mobileHeadIconBtnClassName}
                                 >
-                                    <Menu className="size-5" />
+                                    <Menu className="size-4" />
                                 </button>
                             ) : null}
                             {onCreateChannel ? (
@@ -271,14 +272,14 @@ export function ArticleList({
                                     type="button"
                                     onClick={onCreateChannel}
                                     aria-label={localize("com_subscription.create")}
-                                    className="inline-flex size-9 shrink-0 items-center justify-center rounded-md text-[#212121] hover:bg-[#F2F3F5]"
+                                    className={mobileHeadIconBtnClassName}
                                 >
-                                    <Plus className="size-5" strokeWidth={2} />
+                                    <Plus className="size-4" strokeWidth={2} />
                                 </button>
                             ) : null}
                         </div>
                         {/* H5 第二行：订阅 + 前往频道广场（在展开按钮下方） */}
-                        <div className="flex min-w-0 items-start justify-between gap-3">
+                        <div className="flex min-w-0 items-end gap-2">
                             <h2 className="shrink-0 text-[24px] font-semibold leading-8 text-[#335CFF]">
                                 {localize("com_subscription.subscribe")}
                             </h2>
@@ -286,25 +287,27 @@ export function ArticleList({
                                 <button
                                     type="button"
                                     onClick={onGoChannelSquare}
-                                    className="inline-flex min-w-0 max-w-[55%] items-center gap-1 rounded-md border border-transparent bg-white/80 px-1.5 py-0.5 text-left text-[12px] font-normal leading-5 text-[#212121] backdrop-blur-sm hover:bg-white"
+                                    className="inline-flex min-w-0 items-center gap-1 rounded-[6px] px-1.5 py-0.5 text-[#212121] hover:bg-[#F7F8FA]"
                                 >
-                                    <ChannelBlocksArrowsIcon className="size-3.5 shrink-0 text-[#212121]" />
-                                    <span className="truncate">{localize("com_subscription.go_to_channel_plaza")}</span>
+                                    <ChannelBlocksArrowsIcon className="size-4 shrink-0 text-[#86909C]" />
+                                    <span className="truncate text-[12px] leading-5 font-normal text-[#212121]">
+                                        {localize("com_subscription.go_to_channel_plaza")}
+                                    </span>
                                 </button>
                             ) : null}
                         </div>
                     </div>
                 ) : null}
 
-                {/* 频道名 + 信息 + 分享 — PC 与 H5 共用一行；H5 字号/色按稿 */}
-                <div className="flex min-h-8 shrink-0 items-center justify-between gap-2 md:h-8">
-                    <div className="flex min-w-0 flex-1 items-center gap-1 md:gap-1">
-                        <h1 className="truncate text-[16px] font-medium leading-8 text-[#212121] md:font-semibold md:text-[#1D2129]">
+                {/* 频道名 + 信息 + 分享 */}
+                <div className="flex items-center justify-between gap-3">
+                    <div className="flex min-w-0 flex-1 items-center gap-1 text-sm">
+                        <h1 className="truncate text-base text-[#1d2129] max-md:text-[16px] max-md:leading-6">
                             {channelDetail?.name || channel.name}
                         </h1>
                         <Tooltip>
-                            <TooltipTrigger>
-                                <Info className="size-4 text-[#999999] md:text-[#86909c]" />
+                            <TooltipTrigger className="cursor-pointer">
+                                <Info className="size-4 text-[#86909c] outline-none hover:text-[#165dff]" />
                             </TooltipTrigger>
                             <TooltipContent noArrow className="bg-white shadow-md px-3 py-2 max-w-md w-[240px]">
                                 <div className="space-y-1.5 text-gray-800 text-sm">
@@ -325,7 +328,7 @@ export function ArticleList({
                         </Tooltip>
                     </div>
 
-                    <div className="flex shrink-0 items-center justify-end md:h-8">
+                    <div className="flex shrink-0 items-center gap-3">
                         {channelDetail?.visibility !== "private" ? (
                             <Button
                                 onClick={() => {
@@ -341,13 +344,10 @@ export function ArticleList({
                                         });
                                     });
                                 }}
-                                variant="outline"
-                                className={cn(
-                                    "rounded-md border text-[14px] font-normal leading-normal",
-                                    "h-8 px-4 max-md:h-auto max-md:min-h-8 max-md:border-[#EBECF0] max-md:bg-white/50 max-md:px-4 max-md:py-[5px] max-md:text-[#212121] max-md:backdrop-blur-sm",
-                                )}
+                                variant="ghost"
+                                className="h-8 gap-1 px-1.5 font-normal transition-colors hover:bg-[#F7F8FA] max-md:rounded-[6px] max-md:px-2 max-md:text-[#212121] max-md:border max-md:border-[#EBECF0] max-md:bg-white"
                             >
-                                <ShareOutlineIcon className="size-3.5 shrink-0 max-md:size-4" />
+                                <ShareOutlineIcon className="size-4 shrink-0 text-gray-800" />
                                 {localize("com_subscription.share")}
                             </Button>
                         ) : null}
