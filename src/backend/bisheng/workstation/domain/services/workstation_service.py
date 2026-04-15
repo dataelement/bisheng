@@ -12,6 +12,7 @@ from bisheng.api.v1.schemas import (
     KnowledgeSpaceConfig,
     LinsightConfig,
     SubscriptionConfig,
+    ToolConfig,
     WorkstationConfig,
 )
 from bisheng.common.dependencies.user_deps import UserPayload
@@ -81,7 +82,80 @@ class WorkStationService(BaseService):
     def parse_config(cls, config: Any) -> Optional[WorkstationConfig]:
         if not config:
             return None
-        ret = WorkstationConfig(**json.loads(config.value))
+        raw = json.loads(config.value)
+
+        # Rollout from beta1 flat-leaf shape -> hierarchical LinSight shape:
+        # flat entries carry `tool_key`; group them under their parent type_id
+        # so Pydantic can load them into the new schema without data loss.
+        raw_tools = raw.get('tools')
+        if isinstance(raw_tools, list) and any(isinstance(t, dict) and 'tool_key' in t for t in raw_tools):
+            try:
+                type_ids = list({t.get('type_id') for t in raw_tools if isinstance(t, dict) and t.get('type_id')})
+                parents = {p.id: p for p in GptsToolsDao.get_all_tool_type(type_ids)} if type_ids else {}
+                grouped: dict = {}
+                order: list = []
+                for t in raw_tools:
+                    if not isinstance(t, dict):
+                        continue
+                    parent_id = t.get('type_id') or t.get('id')
+                    if parent_id not in grouped:
+                        parent = parents.get(parent_id)
+                        grouped[parent_id] = {
+                            'id': parent_id,
+                            'name': parent.name if parent else t.get('name', ''),
+                            'is_preset': parent.is_preset if parent else None,
+                            'description': parent.description if parent else t.get('description'),
+                            'default_checked': bool(t.get('default_checked')),
+                            'children': [],
+                        }
+                        order.append(parent_id)
+                    # Prefer default_checked=True if any legacy leaf had it on.
+                    if t.get('default_checked'):
+                        grouped[parent_id]['default_checked'] = True
+                    grouped[parent_id]['children'].append({
+                        'id': t.get('id'),
+                        'name': t.get('name'),
+                        'tool_key': t.get('tool_key'),
+                        'desc': t.get('description') or t.get('desc'),
+                    })
+                raw['tools'] = [grouped[pid] for pid in order]
+            except Exception:
+                # Best-effort; fall through and let Pydantic drop unknown keys.
+                pass
+
+        ret = WorkstationConfig(**raw)
+
+        # Platform default: the built-in web_search tool must always appear in
+        # `tools`. Fresh configs (tools is None) get it auto-seeded with
+        # default_checked=True. Legacy rollout migrates from webSearch.enabled:
+        # if admin had explicitly turned it off, preserve that by seeding with
+        # default_checked=False instead of silently flipping it back on.
+        if ret.tools is None:
+            try:
+                web_search_db = GptsToolsDao.get_tool_by_tool_key('web_search')
+                if web_search_db:
+                    parent_types = GptsToolsDao.get_all_tool_type([web_search_db.type])
+                    parent = parent_types[0] if parent_types else None
+                    legacy_disabled = ret.webSearch is not None and not ret.webSearch.enabled
+                    ret.tools = [ToolConfig(
+                        id=web_search_db.type,
+                        name=parent.name if parent else '联网搜索',
+                        is_preset=parent.is_preset if parent else 1,
+                        description=parent.description if parent else 'Search the internet for real-time information',
+                        default_checked=not legacy_disabled,
+                        children=[{
+                            'id': web_search_db.id,
+                            'name': web_search_db.name,
+                            'tool_key': web_search_db.tool_key,
+                            'desc': web_search_db.desc,
+                        }],
+                    )]
+            except Exception:
+                # Best-effort migration; absence of the tool shouldn't break config load.
+                pass
+        if ret.orgKbs is None:
+            ret.orgKbs = []
+
         if ret.assistantIcon and ret.assistantIcon.relative_path:
             ret.assistantIcon.image = cls.get_logo_share_link(ret.assistantIcon.relative_path)
         if ret.sidebarIcon and ret.sidebarIcon.relative_path:
@@ -304,13 +378,51 @@ class WorkStationService(BaseService):
 
     @classmethod
     async def get_chat_history(cls, chat_id: str, size: int = 4):
+        """Build LLM-consumable chat history, backward compatible with both
+        legacy plain-text messages and v2.5 JSON-formatted messages."""
+        import re as _re
+
         chat_history = []
-        messages = await ChatMessageDao.aget_messages_by_chat_id(chat_id, ['question', 'answer'], size)
+        categories = [
+            MessageCategory.QUESTION.value,
+            MessageCategory.ANSWER.value,
+            MessageCategory.AGENT_ANSWER.value,
+        ]
+        messages = await ChatMessageDao.aget_messages_by_chat_id(chat_id, categories, size)
+
         for one in messages:
-            content = one.message
+            raw = one.message or ''
             if one.category == MessageCategory.QUESTION.value:
+                # Try new JSON format: {"query": "..."}
+                try:
+                    parsed = json.loads(raw)
+                    content = parsed.get('query', raw) if isinstance(parsed, dict) else raw
+                except (json.JSONDecodeError, TypeError):
+                    content = raw
+                # Legacy rows may carry a rewritten prompt in `extra.prompt`.
+                try:
+                    extra = json.loads(one.extra) if one.extra else {}
+                    if isinstance(extra, dict) and extra.get('prompt'):
+                        content = extra['prompt']
+                except (json.JSONDecodeError, TypeError):
+                    pass
                 chat_history.append(HumanMessage(content=content))
-            elif one.category == MessageCategory.ANSWER.value:
+
+            elif one.category == MessageCategory.AGENT_ANSWER.value:
+                # New JSON format: {"msg":"...", ...}
+                try:
+                    parsed = json.loads(raw)
+                    content = parsed.get('msg', '') if isinstance(parsed, dict) else raw
+                except (json.JSONDecodeError, TypeError):
+                    content = raw
                 chat_history.append(AIMessage(content=content))
+
+            elif one.category == MessageCategory.ANSWER.value:
+                # Legacy plain-text: strip :::thinking / :::web markup so the
+                # model sees only the visible answer.
+                content = _re.sub(r':::thinking\n[\s\S]*?\n:::', '', raw)
+                content = _re.sub(r':::web\n[\s\S]*?\n:::', '', content).strip()
+                chat_history.append(AIMessage(content=content))
+
         logger.info(f'loaded {len(chat_history)} chat history for chat_id {chat_id}')
         return chat_history

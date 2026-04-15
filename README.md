@@ -107,3 +107,54 @@ Welcome to join our discussion group
 
 [![Star History Chart](https://api.star-history.com/svg?repos=dataelement/bisheng&type=Date)](https://star-history.com/#dataelement/bisheng&Date)
 -->
+
+
+ 驗證結果
+
+  管理員流程:
+  1. Platform → 日常模式 → 看到「可用工具 (1/20)」含 web_search,switch 可改 default
+  2. 保存 → POST /api/v1/workstation/config 寫入 tools[]
+  3. GET /api/v1/workstation/config 讀回 tools[] 正確
+
+  用戶流程(Client):
+  1. 打開對話 → bsConfig.tools 加載 → AgentToolSelector 自動按 default_checked 勾選
+  2. 發送消息 → payload 含 tools: [...] → 後端分派到 Agent 流
+  3. SSE 返回 agent_thinking/agent_answer → useAiChatSSE 新 compat 代碼轉成 :::thinking...:::answer 給現有 renderer 消費
+  4. UI 呈現:思考塊 + 最終回覆 (跟舊格式視覺等價)
+
+  遺留 / 已跳過
+
+  - PlusMenu (+ 按鈕分組 files/knowledge-space/org-kb): UX 細化,不阻塞功能
+  - Agent 消息的原生渲染: 當前用兼容 mapper 把 agent_* 折回 :::thinking:::answer 格式複用舊 renderer。後續專屬的 AgentMessageBubble /
+  ToolCallDisplay 屬於獨立的「渲染改造」任務
+  - web_search 在 3003 環境的 API key: 環境問題,非代碼問題
+
+
+  ----
+  幾個小提醒:                                                                                                                                
+                                                                                                                                             
+  🚀 啟動命令(備忘)                                                                                                                          
+  # 後端                                                                                                                                     
+  cd /Users/shanghang/dataelem/bisheng/src/backend                                     
+  config=$(pwd)/config_3003.yaml PYTHONPATH=./ \                                                                              
+  uv run uvicorn bisheng.main:app --host 0.0.0.0 --port 7860 --reload                                                                        
+                                                                                                                                             
+  # Client (端口 4001,訪問 http://localhost:4001/workspace/__dev/login 登錄)                                                                 
+  cd /Users/shanghang/dataelem/bisheng/src/frontend/client && pnpm start                                                                     
+                                                                                                                                             
+  # Platform (端口 3001)                                                                                                                     
+  cd /Users/shanghang/dataelem/bisheng/src/frontend/platform && pnpm start                                                               
+                                                                                                                                             
+  🐛 萬一遇到問題                                                                                                                            
+  - 後端日誌:/tmp/bisheng-backend.log                                                                                                      
+  - 改 yaml 配置(如 daily_chat.agent_max_iterations):去 Platform 系統設置或直接調 POST /api/v1/config/save,redis 緩存會自動失效              
+  - web_search 工具空配置會被優雅降級,Agent 流仍能跑(只是不調用該工具)                                                                     
+  - 若 SSE 流卡住,先看 /tmp/bisheng-backend.log 看是 LLM 還是 LangGraph 問題                                                                 
+                                                                                                                                           
+  📝 主要新功能驗收清單                                                                                                                      
+  1. Platform → 日常模式 → 「可用工具」+「組織知識庫」配置                                                                                   
+  2. Client → 對話界面 → 工具下拉 + 結構化思考/工具調用渲染                                                                                  
+  3. Client → 訂閱頻道 → 設置 → 「同步至知識空間」                                                                                           
+  4. 後端 yaml 改 daily_chat.agent_max_iterations → 立即生效                
+
+

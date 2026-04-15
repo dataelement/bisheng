@@ -9,7 +9,7 @@ import KnowledgeModle from "./tabs/KnowledgeModel";
 import WorkflowModel from "./tabs/WorkflowModel";
 import WorkbenchModel from "./tabs/WorkbenchModel";
 
-export default function SystemModelConfig({ data, onBack }) {
+export default function SystemModelConfig({ data, defaultTab, onBack }: { data: any; defaultTab?: string; onBack: () => void }) {
     const { t } = useTranslation('model')
     const { llmOptions, embeddings, asrModel, ttsModel} = useMemo(() => {
         let llmOptions = []
@@ -66,7 +66,7 @@ export default function SystemModelConfig({ data, onBack }) {
                 <span>{t('model.systemModelSettings')}</span>
             </div>
             <div className="px-4">
-                <Tabs defaultValue="workbench" className="flex flex-col">
+                <Tabs defaultValue={defaultTab || "workbench"} className="flex flex-col">
                     <TabsList className="w-[550px] m-auto">
                         <TabsTrigger value="workbench" className="w-[150px]">{t('model.workModel')}</TabsTrigger>
                         <TabsTrigger value="knowledge" className="w-[150px]">{t('model.knowledgeBaseModel')}</TabsTrigger>

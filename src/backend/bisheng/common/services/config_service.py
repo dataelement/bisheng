@@ -8,7 +8,8 @@ from bisheng.common.models.config import ConfigKeyEnum, Config
 from bisheng.common.repositories.implementations.config_repository_impl import ConfigRepositoryImpl
 from bisheng.core.cache.redis_manager import get_redis_client_sync
 from bisheng.core.config.settings import Settings, PasswordConf, SystemLoginMethod, \
-    WorkflowConf, LinsightConf, KnowledgeConf, IntelligenceCenterConf, McpConf
+    WorkflowConf, LinsightConf, KnowledgeConf, IntelligenceCenterConf, McpConf, \
+    DailyChatConf
 from bisheng.core.database import get_sync_db_session, get_async_db_session
 
 config_file = os.getenv('config', 'config.yaml')
@@ -217,6 +218,14 @@ class ConfigService(Settings):
         # Get password-related configuration items
         all_config = self.get_all_config()
         return WorkflowConf(**all_config.get('workflow', {}))
+
+    async def aget_daily_chat_conf(self) -> DailyChatConf:
+        try:
+            all_config = await self.aget_all_config()
+            return DailyChatConf(**(all_config.get('daily_chat', {}) or {}))
+        except Exception as e:
+            logger.warning(f'Failed to load daily_chat conf, using defaults: {e}')
+            return DailyChatConf()
 
     def get_linsight_conf(self) -> LinsightConf:
         # Get Ideas-related configuration items

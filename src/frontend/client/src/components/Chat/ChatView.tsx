@@ -6,6 +6,7 @@ import { getFeaturedCases } from '~/api/linsight';
 import AiChatInput from '~/components/Chat/AiChatInput';
 import AiChatMessages from '~/components/Chat/AiChatMessages';
 import { Spinner } from '~/components/svg';
+import { useAuthContext } from '~/hooks/AuthContext';
 import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import useAiChat from '~/hooks/useAiChat';
 import useLocalize from '~/hooks/useLocalize';
@@ -30,9 +31,80 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   const [inputText, setInputText] = useState('');
 
   const { data: bsConfig } = useGetBsConfig();
+  const { user } = useAuthContext();
   const [chatModel, setChatModel] = useRecoilState(store.chatModel);
   const [selectedOrgKbs, setSelectedOrgKbs] = useRecoilState(store.selectedOrgKbs);
+  const [selectedAgentTools, setSelectedAgentTools] = useRecoilState(store.selectedAgentTools);
+  const [agentToolsInitialized, setAgentToolsInitialized] = useRecoilState(store.agentToolsInitialized);
   const [searchType, setSearchType] = useRecoilState(store.searchType);
+
+  // v2.5 interaction memory — per-user localStorage snapshots for the input
+  // bar (model, kb selection, tools). Rules:
+  //  - model: default = latest backend model; if user-saved model was deleted,
+  //    fall back to latest again
+  //  - KB space: default empty; remember user toggles
+  //  - org KB: default per bsConfig.orgKbs[].default_checked; remember toggles
+  //  - tools: default per bsConfig.tools[].default_checked; remember toggles
+  const memoReadyRef = useRef(false);
+  useEffect(() => {
+    if (!bsConfig || !user?.id) return;
+    if (memoReadyRef.current) return;
+    const prefix = `bs:${user.id}:`;
+
+    // Model: stored id wins if still present; otherwise latest configured model.
+    try {
+      const savedModelId = localStorage.getItem(`${prefix}chatModel`);
+      const models = (bsConfig as any)?.models || [];
+      let target = savedModelId
+        ? models.find((m: any) => String(m.id) === savedModelId)
+        : null;
+      if (!target && models.length) target = models[models.length - 1];
+      if (target) {
+        setChatModel({ id: Number(target.id), name: target.displayName || target.name });
+      }
+    } catch { /* ignore */ }
+
+    // Org KBs + knowledge spaces (unified selectedOrgKbs atom).
+    try {
+      const raw = localStorage.getItem(`${prefix}selectedOrgKbs`);
+      if (raw) {
+        setSelectedOrgKbs(JSON.parse(raw));
+      } else {
+        const defaults = ((bsConfig as any)?.orgKbs || [])
+          .filter((k: any) => k.default_checked)
+          .map((k: any) => ({ id: String(k.id), name: k.name, type: 'org' }));
+        setSelectedOrgKbs(defaults);
+      }
+    } catch { /* ignore */ }
+
+    // Agent tool groups (parent-level). AgentToolSelector still seeds from
+    // default_checked on first run; localStorage overrides that when present.
+    try {
+      const raw = localStorage.getItem(`${prefix}selectedAgentTools`);
+      if (raw) {
+        setSelectedAgentTools(JSON.parse(raw));
+        setAgentToolsInitialized(true);
+      }
+    } catch { /* ignore */ }
+
+    memoReadyRef.current = true;
+  }, [bsConfig, user?.id, setChatModel, setSelectedOrgKbs, setSelectedAgentTools, setAgentToolsInitialized]);
+
+  // Persist on change (after initial hydrate completes).
+  useEffect(() => {
+    if (!memoReadyRef.current || !user?.id || !chatModel.id) return;
+    localStorage.setItem(`bs:${user.id}:chatModel`, String(chatModel.id));
+  }, [chatModel.id, user?.id]);
+
+  useEffect(() => {
+    if (!memoReadyRef.current || !user?.id) return;
+    localStorage.setItem(`bs:${user.id}:selectedOrgKbs`, JSON.stringify(selectedOrgKbs));
+  }, [selectedOrgKbs, user?.id]);
+
+  useEffect(() => {
+    if (!memoReadyRef.current || !user?.id || !agentToolsInitialized) return;
+    localStorage.setItem(`bs:${user.id}:selectedAgentTools`, JSON.stringify(selectedAgentTools));
+  }, [selectedAgentTools, user?.id, agentToolsInitialized]);
 
   // Core chat state — replaces old ChatContext + useSSE + useChatHelpers
   const {
@@ -142,7 +214,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                 <Spinner className="opacity-0" />
               </div>
             ) : hasMessages ? (
-              /* Messages — using new AiChatMessages */
+              /* Messages — using new AiChatMessages (v2.5: flat, no sibling tree) */
               <AiChatMessages
                 messages={messages}
                 conversationId={activeConvoId}
@@ -153,6 +225,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                 knowledgeChatLayout
                 contentWidthClassName="max-w-[768px] mx-auto"
                 onRegenerate={regenerate}
+                flatMode
               />
             ) : (
               /* Landing page — preserved for welcome + Lingsi mode switch */

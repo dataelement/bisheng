@@ -7,10 +7,13 @@ import {
     ChevronLeftIcon,
     ChevronRightIcon,
     CopyIcon,
+    Loader2,
     RefreshCwIcon
 } from "lucide-react";
 import { memo, useCallback, useMemo, useState, useRef } from "react";
 import Thinking from "~/components/Artifacts/Thinking";
+import AgentThinkingHeader from "~/components/Chat/Messages/AgentThinkingHeader";
+import ToolCallDisplay from "~/components/Chat/Messages/ToolCallDisplay";
 import Markdown from "~/components/Chat/Messages/Content/Markdown";
 import SearchWebUrls from "~/components/Chat/Messages/Content/SearchWebUrls";
 import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
@@ -20,7 +23,7 @@ import { useAuthContext } from "~/hooks";
 import MessageSource from "~/pages/appChat/components/MessageSource";
 import ResouceModal from "~/pages/appChat/components/ResouceModal";
 import { copyText, cn } from "~/utils";
-import type { ChatMessage } from "~/api/chatApi";
+import type { AgentEvent, ChatMessage } from "~/api/chatApi";
 import Image from "~/components/Chat/Messages/Content/Image";
 import { FileIcon, getFileTypebyFileName } from "~/components/ui/icon/File/FileIcon";
 
@@ -150,6 +153,52 @@ function parseMessageText(text: string) {
         webContent,
         regularContent,
     };
+}
+
+/**
+ * Render the agent-native timeline: walk `events` in arrival order, emitting
+ * a thinking header or tool-call card for each entry. The last streaming
+ * thinking entry (no `duration_ms` yet) shows the "思考中…" pulse.
+ */
+function AgentTimeline({
+    events,
+    isStreaming,
+}: {
+    events: AgentEvent[];
+    isStreaming: boolean;
+}) {
+    // Index of the last thinking event that still has no duration — that's
+    // the one currently being streamed (drives the pulse animation).
+    const openThinkingIdx = (() => {
+        for (let i = events.length - 1; i >= 0; i--) {
+            const ev = events[i];
+            if (ev.type === "thinking" && ev.duration_ms == null) return i;
+        }
+        return -1;
+    })();
+
+    return (
+        <>
+            {events.map((ev, i) => {
+                if (ev.type === "thinking") {
+                    return (
+                        <AgentThinkingHeader
+                            key={`t-${i}`}
+                            reasoning={ev.content}
+                            durationMs={ev.duration_ms}
+                            isStreaming={isStreaming && i === openThinkingIdx}
+                        />
+                    );
+                }
+                return (
+                    <ToolCallDisplay
+                        key={ev.tool_call_id || `tc-${i}`}
+                        toolCall={ev}
+                    />
+                );
+            })}
+        </>
+    );
 }
 
 const AiMessageBubble = memo(
@@ -327,16 +376,46 @@ function AssistantBubble({
     setSiblingIdx?: (idx: number) => void;
     knowledgeChatLayout?: boolean;
 }) {
-    // Parse :::thinking::: and :::web::: from the raw text
-    const { thinkingContent, webContent, regularContent } = useMemo(
-        () => parseMessageText(message.text || ""),
-        [message.text]
-    );
+    // v2.5 Agent-native detection — when a message has structured fields set
+    // (populated by useAiChatSSE.onAgentUpdate or by getAgentMessages history
+    // loader), skip the legacy :::thinking:::/:::web::: regex parsing and let
+    // the dedicated components own those sections.
+    const isAgentNative = useMemo(() => {
+        if (message.category === "agent_answer") return true;
+        return Array.isArray(message.events) && message.events.length > 0;
+    }, [message.category, message.events]);
+
+    // Parse :::thinking::: and :::web::: from the raw text (legacy path only).
+    // Agent-native path still needs to strip the legacy envelope because the
+    // SSE hook keeps writing `:::thinking…:::\n> ⏳/✅` status lines into
+    // `text` for backward compat — rendering them here would duplicate the
+    // thinking header + tool call cards in the message body.
+    const { thinkingContent, webContent, regularContent } = useMemo(() => {
+        if (isAgentNative) {
+            const raw = message.text || "";
+            const stripped = raw
+                .replace(/:::thinking[\s\S]*?:::/g, "")
+                .replace(/^>\s*[⏳✅⚠️][^\n]*\n?/gm, "")
+                .trimStart();
+            return { thinkingContent: "", webContent: [], regularContent: stripped };
+        }
+        return parseMessageText(message.text || "");
+    }, [message.text, isAgentNative]);
     const { data: bsConfig } = useGetBsConfig()
     const sourceRef = useRef<any>(null);
 
     const modelName = message.sender || "AI";
     const showCursor = isLatest && isStreaming;
+
+    // Show a "等待模型响应…" pill while the request is in flight but no
+    // tokens / events have landed yet. Disappears as soon as anything
+    // streams in (events.length > 0 || regularContent).
+    const showWaiting =
+        !!isStreaming &&
+        !!isLatest &&
+        !message.error &&
+        !regularContent &&
+        !(Array.isArray(message.events) && message.events.length > 0);
 
     return (
         <div className={cn("flex justify-start py-3", knowledgeChatLayout ? "w-full px-4" : "px-4")}>
@@ -350,18 +429,32 @@ function AssistantBubble({
                     <div className="model-name select-none font-semibold text-base">{modelName}</div>
                 </div>
 
-                {/* Thinking block - reuse existing Thinking component */}
-                {thinkingContent && (
-                    <Thinking>{thinkingContent}</Thinking>
+                {/* Pre-stream "等待模型响应…" pill — same shape as the thinking
+                    header so it doesn't visually jump when it's replaced. */}
+                {showWaiting && (
+                    <div className="mt-3 inline-flex w-fit items-center justify-center gap-1.5 rounded-xl bg-surface-tertiary px-3 py-2 text-xs leading-[18px] text-text-secondary">
+                        <Loader2 className="size-3.5 animate-spin" />
+                        <span>等待模型响应…</span>
+                    </div>
                 )}
 
-                {/* Web search sources - reuse existing SearchWebUrls component */}
-                {webContent.length > 0 && (
-                    <SearchWebUrls webs={webContent} />
+                {/* v2.5 Agent-native rendering: ordered events (thinking + tool calls) */}
+                {isAgentNative ? (
+                    <AgentTimeline
+                        events={message.events || []}
+                        isStreaming={!!isStreaming && isLatest}
+                    />
+                ) : (
+                    <>
+                        {/* Legacy :::thinking::: reuse Thinking component */}
+                        {thinkingContent && <Thinking>{thinkingContent}</Thinking>}
+                        {/* Legacy :::web::: → SearchWebUrls */}
+                        {webContent.length > 0 && <SearchWebUrls webs={webContent} />}
+                    </>
                 )}
 
                 {/* Error state */}
-                {message.error ? (
+                {showWaiting ? null : message.error ? (
                     <div
                         className={cn(
                             "text-red-500 bg-red-50 px-3 py-2",

@@ -1,8 +1,8 @@
 import {
-  BookOpenText,
   Check,
-  ChevronRight,
   Loader2,
+  PaperclipIcon,
+  Plus,
   SearchIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -246,11 +246,18 @@ export const ChatKnowledge = ({
   disabled,
   value = [],
   onChange,
+  showFileUpload = false,
+  fileUploadDisabled = false,
+  onFileUploadClick,
 }: {
   config?: BsConfig;
   disabled: boolean;
   value: KnowledgeItem[];
   onChange: (val: KnowledgeItem[]) => void;
+  /** Render a "上传文件" entry at the top of the menu (v2.5 plus menu). */
+  showFileUpload?: boolean;
+  fileUploadDisabled?: boolean;
+  onFileUploadClick?: () => void;
 }) => {
   const localize = useLocalize();
   const PAGE_SIZE = 20;
@@ -357,6 +364,22 @@ export const ChatKnowledge = ({
     }
   }, [orgData, orgPage]);
 
+  // Sort: admin-configured org KBs (in sort_order) first, then any other KBs
+  // the user can access. Filtering by use-permission is enforced server-side
+  // in useGetOrgToolList — we only reshuffle display order here.
+  const sortedOrgKbs = useMemo(() => {
+    const configured = (config as any)?.orgKbs || [];
+    if (!configured.length) return allOrgKbs;
+    const ordered = [...configured].sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+    const configuredIds = new Set(ordered.map((k: any) => String(k.id)));
+    const byId = new Map(allOrgKbs.map((k: any) => [String(k.id), k]));
+    const head = ordered
+      .map((k: any) => byId.get(String(k.id)))
+      .filter(Boolean);
+    const tail = allOrgKbs.filter((k: any) => !configuredIds.has(String(k.id)));
+    return [...head, ...tail];
+  }, [allOrgKbs, config]);
+
   // checked data
   const handleToggle = (item: any, type: KnowledgeType) => {
     const exists = value.some((i) => i.id === item.id && i.type === type);
@@ -395,17 +418,30 @@ export const ChatKnowledge = ({
     <DropdownMenu open={rootOpen} onOpenChange={setRootOpen}>
       <DropdownMenuTrigger disabled={disabled}>
         <div className={cn(
-          "flex bg-white items-center gap-2 h-7 px-3 rounded-full border border-slate-200 text-gray-500 cursor-pointer hover:border-blue-400 transition-all outline-none disabled:opacity-0",
-          hasAnySelection && "!bg-[rgba(20,59,255,0.10)] !border-[#0253E8] text-[#0253E8] shadow-[0_1px_2px_0_rgba(0,0,0,0.05)]",
+          "flex size-7 items-center justify-center rounded-full  text-gray-500 cursor-pointer hover:border-blue-400 transition-all outline-none",
           disabled && "opacity-50 hover:border-slate-200 cursor-not-allowed"
         )}>
-          <BookOpenText size={16} />
-          <span className="text-xs break-keep">{localize('com_tools_knowledge_base')}</span>
-          <ChevronRight size={14} className={cn("rotate-90", hasAnySelection ? "opacity-100" : "opacity-40")} />
+          <Plus size={16} />
         </div>
       </DropdownMenuTrigger>
 
       <DropdownMenuContent ref={menuContentRef} align="start" collisionPadding={BOTTOM_GAP} className="w-[200px] p-1.5 rounded-2xl shadow-xl border-slate-100">
+
+        {/* 上传文件 */}
+        {showFileUpload && (
+          <DropdownMenuItem
+            disabled={fileUploadDisabled}
+            onSelect={(e) => {
+              e.preventDefault();
+              if (fileUploadDisabled) return;
+              onFileUploadClick?.();
+            }}
+            className="flex items-center gap-3 rounded-xl outline-none cursor-pointer px-2 py-1.5 data-[disabled]:opacity-40 data-[disabled]:cursor-not-allowed"
+          >
+            <PaperclipIcon className="size-[18px] text-slate-600" />
+            <span className="text-[14px] text-slate-700 font-normal">{localize('com_ui_upload_files')}</span>
+          </DropdownMenuItem>
+        )}
 
         {/* 知识空间 */}
         <DropdownMenuSub
@@ -500,7 +536,7 @@ export const ChatKnowledge = ({
               placeholder={localize('com_tools_knowledge_base_search')}
               keyword={orgKeyword}
               setKeyword={setOrgKeyword}
-              items={allOrgKbs}
+              items={sortedOrgKbs}
               selectedItems={selectedOrgKbs}
               onToggle={(item) => handleToggle(item, 'org')}
               isFetching={orgFetching}

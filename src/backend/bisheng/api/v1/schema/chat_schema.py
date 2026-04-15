@@ -41,6 +41,21 @@ class APIAddQAParam(BaseModel):
     relative_questions: Optional[List[str]] = []
 
 
+class ToolPayload(BaseModel):
+    """v2.5: frontend tool selection passed on each chat_completions request.
+
+    Selection order:
+      - id, tool_key come from the workstation config's tools[] list (the
+        admin-configured available tools); the client sends whichever ones
+        the user toggled on.
+      - type is always 'tool' for now — knowledge bases are passed separately
+        through `use_knowledge_base` to preserve existing semantics.
+    """
+    id: int = 0
+    tool_key: Optional[str] = None
+    type: str = 'tool'
+
+
 class UseKnowledgeBaseParam(BaseModel):
     personal_knowledge_enabled: Optional[bool] = False
     organization_knowledge_ids: Optional[List[int]] = []
@@ -72,12 +87,31 @@ class APIChatCompletion(BaseModel):
     isContinued: Optional[bool] = False
     model: str
     text: Optional[str] = ''
-    search_enabled: Optional[bool] = False
+
+    # --- v2.5: new Agent-mode fields ---
+    # User's currently-toggled tools in the chat input (workstation.tools subset).
+    # When non-empty, the backend routes through the LangGraph ReAct agent loop.
+    # When empty/absent, behaviour falls back to a plain bisheng_llm.astream call.
+    tools: Optional[List[ToolPayload]] = None
+
+    # --- Preserved (new code-path also honours use_knowledge_base / files) ---
     use_knowledge_base: Optional[UseKnowledgeBaseParam] = None
     files: Optional[List[Dict]] = None
-    parentMessageId: Optional[str] = None
-    overrideParentMessageId: Optional[str] = None
+
+    # --- DEPRECATED (kept for backward compatibility; ignored by new Agent flow) ---
+    search_enabled: Optional[bool] = False      # legacy web-search mutex flag
+    parentMessageId: Optional[str] = None       # legacy tree branching
+    overrideParentMessageId: Optional[str] = None  # legacy regenerate pointer
     responseMessageId: Optional[str] = None
+
+    @field_validator('parentMessageId', 'overrideParentMessageId', 'responseMessageId', mode='before')
+    @classmethod
+    def _coerce_optional_str_id(cls, v: Any):
+        # Frontend occasionally sends numeric DB ids here — coerce to str so
+        # Pydantic's strict mode doesn't 422 the whole SSE request.
+        if v is None or isinstance(v, str):
+            return v
+        return str(v)
 
 
 class delta(BaseModel):

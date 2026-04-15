@@ -385,6 +385,29 @@ class WSPrompt(BaseModel):
     prompt: Optional[str] = None
 
 
+# v2.5 Agent Mode: Available Tool Group (shape mirrors LinSight linsight_config.tools).
+# The daily-chat input bar resolves individual tools from `children[]`; the parent
+# row only stores display metadata and per-group `default_checked`.
+class ToolConfig(BaseModel):
+    """Available tool group item for the daily-chat Agent input bar."""
+    id: int = Field(description='GptsToolsType.id (parent type id)')
+    name: str = Field(description='Display name shown in the UI')
+    is_preset: Optional[int] = Field(default=None, description='0=custom, 1=builtin, 2=mcp')
+    description: Optional[str] = Field(default=None)
+    default_checked: bool = Field(default=False, description='Initial checked state for new sessions')
+    children: List[Dict] = Field(default_factory=list, description='Selected leaf tools: [{id, name, tool_key, desc}]')
+
+
+# v2.5 Agent Mode: Configured Organizational Knowledge Base Items
+class OrgKbConfig(BaseModel):
+    """Organization knowledge-base item surfaced in the PlusMenu."""
+    id: int = Field(description='Knowledge.id')
+    name: str = Field(description='Knowledge-base display name')
+    type: Optional[int] = Field(default=None, description='Knowledge type: 0=doc, 1=qa')
+    default_checked: bool = Field(default=False, description='Initial checked state for new sessions')
+    sort_order: int = Field(default=0, description='Display order (ascending)')
+
+
 # linsight Configuration
 class LinsightConfig(BaseModel):
     """
@@ -411,10 +434,20 @@ class WorkstationConfig(BaseModel):
     functionDescription: Optional[str] = Field(default='')
     inputPlaceholder: Optional[str] = ''
     models: Optional[Union[List[WSModel], str]] = None
-    webSearch: Optional[WSPrompt] = None
+    # --- Legacy: kept for backward compatibility during rollout ---
+    webSearch: Optional[WSPrompt] = None  # DEPRECATED, superseded by `tools`
     knowledgeBase: Optional[WSPrompt] = None
     fileUpload: Optional[WSPrompt] = None
     systemPrompt: Optional[str] = None
+    # --- v2.5 Agent-mode additions ---
+    tools: Optional[List[ToolConfig]] = Field(
+        default=None,
+        description='Available tools for the chat input bar (max 20 enforced by UI)',
+    )
+    orgKbs: Optional[List[OrgKbConfig]] = Field(
+        default=None,
+        description='Configured organization knowledge bases surfaced in the PlusMenu',
+    )
     applicationCenterWelcomeMessage: Optional[str] = Field(default='', max_length=1000,
                                                            pattern=r'^[\u4e00-\u9fff\w\s\.,;:!@#$%^&*()\-_=+\[\]{}|\\\'"<>/?`~·！￥（）【】、《》，。；：“”‘’？]+$',
                                                            description='App Center Welcome Message')

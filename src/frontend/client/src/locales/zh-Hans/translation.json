@@ -712,6 +712,8 @@
   "com_tools_personal_knowledge": "个人知识库",
   "com_tools_title": "工具",
   "com_tools_web_search": "联网搜索",
+  "com_tools_knowledge_search": "知识库检索",
+  "com_tools_generic_fallback": "工具",
   "com_ui_accept": "我接受",
   "com_ui_add": "添加",
   "com_ui_add_model_preset": "添加一个模型或预设以获得额外的回复",
