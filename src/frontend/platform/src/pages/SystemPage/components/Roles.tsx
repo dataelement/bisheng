@@ -43,6 +43,7 @@ import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 export default function Roles() {
+  // NOTE: keep this page lightweight; tiny no-op change for CI retrigger.
   const { t } = useTranslation()
   const [roles, setRoles] = useState<ROLE[]>([])
   const [total, setTotal] = useState(0)
