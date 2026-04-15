@@ -9,7 +9,7 @@ from bisheng.citation.domain.repositories.implementations.message_citation_repos
 )
 from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
 from bisheng.citation.domain.services.citation_registry_service import CitationRegistryService
-from bisheng.core.database import get_sync_db_session
+from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.core.prompts.prompt_loader import PromptLoader
 
 
@@ -286,6 +286,27 @@ def save_message_citations_sync(
         repository = MessageCitationRepositoryImpl(session)
         service = CitationRegistryService(repository)
         service.save_citations_sync(
+            message_id=message_id,
+            items=items,
+            chat_id=chat_id,
+            flow_id=flow_id,
+        )
+
+
+async def save_message_citations(
+        message_id: int,
+        items: List[CitationRegistryItemSchema],
+        chat_id: Optional[str] = None,
+        flow_id: Optional[str] = None,
+) -> None:
+    """Persist citation registry items for a saved chat message asynchronously."""
+    if not message_id or not items:
+        return
+
+    async with get_async_db_session() as session:
+        repository = MessageCitationRepositoryImpl(session)
+        service = CitationRegistryService(repository)
+        await service.save_citations(
             message_id=message_id,
             items=items,
             chat_id=chat_id,

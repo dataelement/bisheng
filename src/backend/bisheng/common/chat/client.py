@@ -13,8 +13,8 @@ from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.v1.callback import AsyncGptsDebugCallbackHandler
 from bisheng.api.v1.schemas import ChatMessage, ChatResponse
 from bisheng.citation.domain.services.citation_prompt_helper import (
+    save_message_citations,
     select_registry_items_for_persistence,
-    save_message_citations_sync,
 )
 from bisheng.common.chat.types import WorkType
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
@@ -367,7 +367,7 @@ class ChatClient:
                     self.gpts_agent.collect_citation_registry_items(),
                     answer,
                 )
-                save_message_citations_sync(
+                await save_message_citations(
                     message_id=res.id,
                     items=citation_items,
                     chat_id=self.chat_id,

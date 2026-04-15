@@ -2,12 +2,14 @@ import asyncio
 import json
 import time
 from datetime import datetime
-from typing import Dict, List
+from typing import Any, Optional
 from uuid import uuid4
 
 from fastapi import Request
 from fastapi.responses import StreamingResponse
+from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate
 from loguru import logger
 
 from bisheng.api.services import knowledge_imp
@@ -153,14 +155,116 @@ async def initialize_chat(data: APIChatCompletion, login_user: UserPayload):
 #   - _prepare_tools: Entry point function; integrates tool_payloads + knowledge_bases_info -> List[BaseTool].
 # --------------------------------------------------------------------------- #
 
-from pydantic import BaseModel as PydanticBaseModel, Field as PydanticField
+from pydantic import BaseModel as PydanticBaseModel, Field as PydanticField, SkipValidation
 
-from langchain_core.tools import BaseTool, StructuredTool
+from langchain_core.tools import ArgsSchema, BaseTool, StructuredTool
+from typing_extensions import Annotated
 
+from bisheng.citation.domain.services.citation_prompt_helper import (
+    CITATION_PROMPT_RULES,
+    CitationRegistryCollector,
+    annotate_rag_documents_with_citations,
+    annotate_web_results_with_citations,
+    collect_rag_citation_registry_items,
+    collect_web_citation_registry_items,
+    save_message_citations,
+    select_registry_items_for_persistence,
+)
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 
 
 DEFAULT_AGENT_MAX_ITERATIONS = 50
+DAILY_CHAT_CITATION_PROMPT_RULES = f"""{CITATION_PROMPT_RULES}
+
+When the tool's results already contain the aforementioned private section reference markers, the final answer must retain these markers as is; they must not be deleted, rewritten, or interpreted.
+
+Do not output this rule."""
+
+
+class DailyChatCitationToolWrapper(BaseTool):
+    """Add citation prompt context for daily chat tool invocations."""
+
+    name: str
+    description: str
+    args_schema: Annotated[Optional[ArgsSchema], SkipValidation()] = PydanticField(default=None)
+    tool: BaseTool
+    citation_collector: CitationRegistryCollector = PydanticField(exclude=True)
+
+    @classmethod
+    def wrap(cls, tool: BaseTool, citation_collector: CitationRegistryCollector) -> BaseTool:
+        return cls(
+            name=tool.name,
+            description=tool.description,
+            args_schema=tool.args_schema,
+            tool=tool,
+            citation_collector=citation_collector,
+        )
+
+    def _is_web_search_tool(self) -> bool:
+        return self.tool.name == 'web_search' or getattr(self.tool, 'tool_name', None) == 'web_search'
+
+    def _has_knowledge_rag_tool(self) -> bool:
+        return hasattr(self.tool, 'knowledge_retriever_tool')
+
+    def _append_web_citation(self, output: Any) -> Any:
+        if not isinstance(output, str):
+            return output
+        try:
+            results = json.loads(output)
+        except json.JSONDecodeError:
+            return output
+        if not isinstance(results, list):
+            return output
+        results = annotate_web_results_with_citations(results)
+        self.citation_collector.extend(collect_web_citation_registry_items(results))
+        return json.dumps(results, ensure_ascii=False)
+
+    def _build_knowledge_prompt(self) -> ChatPromptTemplate:
+        messages = list(self.tool.chat_prompt.messages)
+        citation_rules_message = SystemMessagePromptTemplate.from_template(CITATION_PROMPT_RULES)
+        insert_index = 1 if messages and isinstance(messages[0], SystemMessagePromptTemplate) else 0
+        messages.insert(insert_index, citation_rules_message)
+        return ChatPromptTemplate.from_messages(messages)
+
+    def _build_knowledge_inputs(self, query: str, retrieval_result: Any) -> dict:
+        source_documents = list(retrieval_result or [])
+        source_documents = annotate_rag_documents_with_citations(source_documents)
+        self.citation_collector.extend(collect_rag_citation_registry_items(source_documents))
+        inputs = {'context': source_documents}
+        if 'question' in self.tool.chat_prompt.input_variables:
+            inputs['question'] = query
+        return inputs
+
+    def _run(self, query: str, config=None, **kwargs: Any) -> Any:
+        if self._is_web_search_tool():
+            return self._append_web_citation(self.tool.invoke({'query': query}, config=config))
+        if not self._has_knowledge_rag_tool():
+            return self.tool.invoke({'query': query}, config=config)
+
+        retrieval_result = self.tool.knowledge_retriever_tool.invoke({'query': query}, config=config)
+        llm_inputs = self._build_knowledge_inputs(query, retrieval_result)
+        qa_chain = create_stuff_documents_chain(llm=self.tool.llm, prompt=self._build_knowledge_prompt())
+        return qa_chain.invoke(llm_inputs, config=config)
+
+    async def _arun(self, query: str, config=None, **kwargs: Any) -> Any:
+        if self._is_web_search_tool():
+            return self._append_web_citation(await self.tool.ainvoke({'query': query}, config=config))
+        if not self._has_knowledge_rag_tool():
+            return await self.tool.ainvoke({'query': query}, config=config)
+
+        retrieval_result = await self.tool.knowledge_retriever_tool.ainvoke({'query': query}, config=config)
+        llm_inputs = self._build_knowledge_inputs(query, retrieval_result)
+        qa_chain = create_stuff_documents_chain(llm=self.tool.llm, prompt=self._build_knowledge_prompt())
+        return await qa_chain.ainvoke(llm_inputs, config=config)
+
+
+def _wrap_daily_chat_citation_tool(
+    tool: BaseTool,
+    citation_collector: CitationRegistryCollector,
+) -> BaseTool:
+    if tool.name == 'web_search' or hasattr(tool, 'knowledge_retriever_tool'):
+        return DailyChatCitationToolWrapper.wrap(tool, citation_collector)
+    return tool
 
 
 async def _get_agent_max_iterations() -> int:
@@ -319,6 +423,7 @@ async def _build_knowledge_search_tool(
     knowledge_bases_info: list[dict],
     login_user: UserPayload,
     max_token: int,
+    citation_collector: CitationRegistryCollector,
 ) -> StructuredTool | None:
     """StructuredTool wrapper around WorkStationService.queryChunksFromDB.
 
@@ -565,6 +670,8 @@ async def _build_knowledge_search_tool(
                 f'{ {k: len(v) for k, v in file_filter.items()} }'
             )
 
+        docs = annotate_rag_documents_with_citations(docs)
+        citation_collector.extend(collect_rag_citation_registry_items(docs))
         results = [_format_chunk(doc) for doc in docs]
         logger.info(
             f'[search_kb] returning {len(results)} chunks'
@@ -662,8 +769,9 @@ async def _prepare_tools(
     tool_payloads: list[dict] | None,
     login_user: UserPayload,
     ws_config,  # WorkstationConfig; kept untyped to avoid circular import cost
+    citation_collector: CitationRegistryCollector,
     knowledge_bases_info: list[dict] | None = None,
-) -> list[BaseTool]:
+) -> tuple[list[BaseTool], list[dict]]:
     """Assemble the BaseTool list passed to LangGraph create_react_agent.
 
     `tool_payloads` items come from the frontend request; each payload has
@@ -702,7 +810,7 @@ async def _prepare_tools(
                 logger.warning(f'Failed to initialise tool id={tool_id} key={tool_key}: {err}')
 
         if t is not None:
-            tools.append(t)
+            tools.append(_wrap_daily_chat_citation_tool(t, citation_collector))
         elif err:
             failures.append({
                 'tool_key': tool_key or str(tool_id or ''),
@@ -718,6 +826,7 @@ async def _prepare_tools(
             knowledge_bases_info=knowledge_bases_info,
             login_user=login_user,
             max_token=getattr(ws_config, 'maxTokens', 15000) or 15000,
+            citation_collector=citation_collector,
         )
         if kb_tool is not None:
             tools.append(kb_tool)
@@ -939,6 +1048,7 @@ async def _agent_stream_chat_completion(
         inflight_tool_idx: dict[str, int] = {}
         error_flag = False
         error_msg = ''
+        citation_collector = CitationRegistryCollector()
 
         def close_thinking() -> int | None:
             """Finalise the open thinking event (if any). Returns its duration
@@ -969,6 +1079,7 @@ async def _agent_stream_chat_completion(
                 tool_payloads=tool_payloads,
                 login_user=login_user,
                 ws_config=ws_config,
+                citation_collector=citation_collector,
                 knowledge_bases_info=knowledge_bases_info,
             )
 
@@ -1018,6 +1129,15 @@ async def _agent_stream_chat_completion(
                 sys_prompt = ws_config.systemPrompt.replace(
                     '{cur_date}',
                     datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                )
+            if knowledge_bases_info or any(
+                isinstance(tool, DailyChatCitationToolWrapper)
+                for tool in langchain_tools
+            ):
+                sys_prompt = (
+                    f'{sys_prompt}\n\n{DAILY_CHAT_CITATION_PROMPT_RULES}'
+                    if sys_prompt
+                    else DAILY_CHAT_CITATION_PROMPT_RULES
                 )
 
             llm_messages = list(history) + [HumanMessage(content=content_payload)]
@@ -1208,6 +1328,16 @@ async def _agent_stream_chat_completion(
                 extra=json.dumps({'error': True, 'error_msg': error_msg}) if error_flag else '{}',
                 source=0,
             )
+        )
+        citation_items = select_registry_items_for_persistence(
+            citation_collector.list_items(),
+            final_msg,
+        )
+        await save_message_citations(
+            message_id=resp_msg.id,
+            items=citation_items,
+            chat_id=conversation_id,
+            flow_id='',
         )
 
         yield _sse_resp(

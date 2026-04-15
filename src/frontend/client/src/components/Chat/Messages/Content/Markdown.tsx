@@ -1,4 +1,4 @@
-import React, { memo, useEffect, useMemo, useRef, useState } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as Popover from '@radix-ui/react-popover';
 import { ExternalLink, FileText, Globe2, Loader2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
@@ -209,6 +209,8 @@ type CitationPreview = {
   link?: string;
   type: string;
 };
+
+type CitationDetailLoader = (citationId: string) => Promise<ChatCitation | null>;
 
 const CITATION_START = '\ue200';
 const CITATION_SEPARATOR = '\ue201';
@@ -480,11 +482,13 @@ const Citation = ({
   children,
   initialDetail,
   webContent,
+  loadCitationDetail,
 }: {
   data: Partial<CitationDisplayData>;
   children: React.ReactNode;
   initialDetail?: ChatCitation | null;
   webContent?: any;
+  loadCitationDetail: CitationDetailLoader;
 }) => {
   if (!data) return null;
 
@@ -507,7 +511,7 @@ const Citation = ({
     setIsLoading(true);
     setError(false);
     try {
-      const nextDetail = await getCitationDetail(data.citationId);
+      const nextDetail = await loadCitationDetail(data.citationId);
       setDetail(nextDetail);
     } catch (err) {
       console.error('Failed to load citation detail:', err);
@@ -670,6 +674,41 @@ const Markdown = memo(({ content = '', showCursor, isLatestMessage, webContent, 
       return acc;
     }, {});
   }, [citations]);
+  const citationDetailCacheRef = useRef<Record<string, ChatCitation>>({});
+  const citationRequestCacheRef = useRef<Record<string, Promise<ChatCitation | null>>>({});
+
+  useEffect(() => {
+    Object.entries(citationDetailMap).forEach(([citationId, detail]) => {
+      citationDetailCacheRef.current[citationId] = detail;
+    });
+  }, [citationDetailMap]);
+
+  const loadCitationDetail = useCallback<CitationDetailLoader>(async (citationId) => {
+    const cachedDetail = citationDetailCacheRef.current[citationId];
+    if (cachedDetail) {
+      return cachedDetail;
+    }
+
+    const pendingRequest = citationRequestCacheRef.current[citationId];
+    if (pendingRequest) {
+      return pendingRequest;
+    }
+
+    const request = getCitationDetail(citationId)
+      .then((detail) => {
+        if (detail?.citationId) {
+          citationDetailCacheRef.current[detail.citationId] = detail;
+        }
+        citationDetailCacheRef.current[citationId] = detail;
+        return detail;
+      })
+      .finally(() => {
+        delete citationRequestCacheRef.current[citationId];
+      });
+
+    citationRequestCacheRef.current[citationId] = request;
+    return request;
+  }, []);
 
   // Cursor
   if (isInitializing) {
@@ -720,6 +759,7 @@ const Markdown = memo(({ content = '', showCursor, isLatestMessage, webContent, 
                           <Citation
                             key={`legacy-${matchIndex}`}
                             webContent={webContent}
+                            loadCitationDetail={loadCitationDetail}
                             data={{
                               label: legacyIndex,
                               ref: `citation:${legacyIndexValue}`,
@@ -742,6 +782,7 @@ const Markdown = memo(({ content = '', showCursor, isLatestMessage, webContent, 
                             key={`private-${matchIndex}`}
                             data={citationData}
                             initialDetail={citationDetailMap[citationData.citationId]}
+                            loadCitationDetail={loadCitationDetail}
                           >
                             {citationData.label}
                           </Citation>
