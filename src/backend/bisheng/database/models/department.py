@@ -213,6 +213,15 @@ class DepartmentDao:
             return result.all()
 
     @classmethod
+    def get_by_ids(cls, dept_ids: List[int]) -> List[Department]:
+        if not dept_ids:
+            return []
+        with get_sync_db_session() as session:
+            return session.exec(
+                select(Department).where(Department.id.in_(dept_ids))
+            ).all()
+
+    @classmethod
     async def aget_by_dept_id(cls, dept_id: str) -> Optional[Department]:
         async with get_async_db_session() as session:
             result = await session.exec(
@@ -690,6 +699,18 @@ class UserDepartmentDao:
                 )
             )
             return result.all()
+
+    @classmethod
+    def get_by_user_ids(cls, user_ids: List[int]) -> List[UserDepartment]:
+        """Batch load UserDepartment records for multiple users (sync)."""
+        if not user_ids:
+            return []
+        with get_sync_db_session() as session:
+            return session.exec(
+                select(UserDepartment).where(
+                    UserDepartment.user_id.in_(user_ids),
+                )
+            ).all()
 
     @classmethod
     def check_member_exists(cls, user_id: int, department_id: int) -> bool:

@@ -8,7 +8,7 @@ from elasticsearch import AsyncElasticsearch, Elasticsearch, exceptions as es_ex
 
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.schemas.telemetry.base_telemetry_schema import T_EventData, BaseTelemetryEvent, UserContext, \
-    UserGroupInfo, UserRoleInfo
+    UserGroupInfo, UserRoleInfo, UserDepartmentInfo
 from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.core.search.elasticsearch.manager import get_statistics_es_connection, get_statistics_es_connection_sync
 from bisheng.user.domain.models.user import User
@@ -41,6 +41,13 @@ INDEX_MAPPING = {
                             "role_id": {"type": "integer"},
                             "role_name": {"type": "keyword"},
                             "group_id": {"type": "integer"},
+                        }
+                    },
+                    "user_department_infos": {
+                        "type": "object",
+                        "properties": {
+                            "department_id": {"type": "integer"},
+                            "department_name": {"type": "keyword"}
                         }
                     }
                 }
@@ -142,6 +149,12 @@ class BaseTelemetryService(object):
                     role_name=role.role_name,
                     group_id=role.group_id,
                 ) for role in user.roles
+            ],
+            user_department_infos=[
+                UserDepartmentInfo(
+                    department_id=dept.id,
+                    department_name=dept.name
+                ) for dept in getattr(user, 'departments', []) or []
             ]
         )
         return user_context
@@ -178,6 +191,12 @@ class BaseTelemetryService(object):
                     role_name=role.role_name,
                     group_id=role.group_id,
                 ) for role in user.roles
+            ],
+            user_department_infos=[
+                UserDepartmentInfo(
+                    department_id=dept.id,
+                    department_name=dept.name
+                ) for dept in getattr(user, 'departments', []) or []
             ]
         )
         return user_context

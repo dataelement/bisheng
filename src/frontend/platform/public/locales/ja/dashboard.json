@@ -423,6 +423,10 @@
     "user_group_id": "ユーザーグループID",
     "user_group_name": "ユーザーグループ名"
   },
+  "user_department_infos": {
+    "department_id": "部署ID",
+    "department_name": "部署名"
+  },
   "total_user_count": "総ユーザー数",
   "new_user_count": "新規ユーザー数",
   "mid_active_user": "アクティブユーザー規模統計",

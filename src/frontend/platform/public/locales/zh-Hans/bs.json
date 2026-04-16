@@ -1762,6 +1762,8 @@
   "department.confirmDelete": "确认删除该部门？删除后部门将被归档。",
   "department.settings": "部门设置",
   "department.members": "成员列表",
+  "department.trafficControl": "流量控制",
+  "department.deptFlowControl": "部门整体流量控制",
   "department.createLocalUser": "创建本地人员",
   "department.localUserNameRequired": "请填写用户名",
   "department.localUserRolesRequired": "请至少选择一个可分配角色",

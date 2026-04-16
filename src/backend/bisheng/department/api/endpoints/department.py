@@ -62,6 +62,22 @@ async def create_local_member_body(
         return e.return_resp_instance()
 
 
+@router.get('/get_user_primary_department')
+async def get_user_primary_department(
+    user_id: int,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    """Return the user's primary department. Called by Gateway for traffic control."""
+    from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
+    ud = await UserDepartmentDao.aget_user_primary_department(user_id)
+    if not ud:
+        return resp_200([])
+    dept = await DepartmentDao.aget_by_id(ud.department_id)
+    if not dept:
+        return resp_200([])
+    return resp_200([{'id': dept.id, 'dept_id': dept.dept_id, 'name': dept.name}])
+
+
 @router.get('/{dept_id}')
 async def get_department(
     dept_id: str,

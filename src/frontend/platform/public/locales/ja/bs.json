@@ -1768,6 +1768,8 @@
   "department.confirmDelete": "この部門を削除してよろしいですか？アーカイブされます。",
   "department.settings": "部門設定",
   "department.members": "メンバー一覧",
+  "department.trafficControl": "トラフィック制御",
+  "department.deptFlowControl": "部門全体のトラフィック制御",
   "department.createLocalUser": "ローカルアカウント作成",
   "department.localUserNameRequired": "ユーザー名を入力してください",
   "department.localUserRolesRequired": "割り当て可能なロールを1つ以上選択してください",

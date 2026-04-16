@@ -1805,6 +1805,8 @@
   "department.confirmDelete": "Are you sure you want to delete this department? It will be archived.",
   "department.settings": "Department Settings",
   "department.members": "Members",
+  "department.trafficControl": "Traffic Control",
+  "department.deptFlowControl": "Department Traffic Control",
   "department.createLocalUser": "Create local account",
   "department.localUserNameRequired": "Username is required",
   "department.localUserRolesRequired": "Select at least one assignable role",

@@ -1,6 +1,6 @@
 # BiSheng 架构文档
 
-BiSheng v2.4.0 是面向企业的开源 LLM 应用 DevOps 平台，基于 FastAPI + React + LangGraph 构建，采用 DDD 架构组织 15+ 领域模块，支持工作流编排、知识库/RAG、多 Agent 协作（Linsight）、MCP 集成、模型评测与微调。
+BiSheng v2.5.0 是面向企业的开源 LLM 应用 DevOps 平台，基于 FastAPI + React + LangGraph 构建，采用 DDD 架构组织 15+ 领域模块，支持工作流编排、知识库/RAG、多 Agent 协作（Linsight）、MCP 集成、模型评测与微调、多租户隔离。
 
 ## 仓库结构
 
@@ -29,6 +29,7 @@ bisheng/
 | [用户与权限体系](./10-permission-rbac.md) | 三层权限模型、RBAC、协作空间成员制、扩展分析 |
 | [开发指南](./09-development-guide.md) | 环境搭建、模块约定、扩展点、测试 |
 | [商业版 API 网关](./11-gateway.md) | Gateway 架构、SSO/OAuth 流程、内容安全、流控、开发环境 |
+| [多租户架构](./12-multi-tenant.md) | 逻辑隔离、租户上下文传播、自动过滤、存储隔离、Celery 传递 |
 
 ## 快速导航
 
@@ -40,3 +41,4 @@ bisheng/
 - 想了解用户认证、角色权限、资源授权的完整机制，请看 [用户与权限体系](./10-permission-rbac.md)
 - 想了解开发规范、如何新增模块或编写测试，请看 [开发指南](./09-development-guide.md)
 - 想了解商业版网关（SSO/OAuth、内容安全、流控）的架构和开发方式，请看 [商业版 API 网关](./11-gateway.md)
+- 想了解多租户隔离机制、租户上下文传播和开发注意事项，请看 [多租户架构](./12-multi-tenant.md)
