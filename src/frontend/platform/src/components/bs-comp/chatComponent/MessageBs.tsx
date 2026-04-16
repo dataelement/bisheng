@@ -13,6 +13,8 @@ import { useMessageStore } from "./messageStore";
 import { useLinsightConfig } from "@/pages/ModelPage/manage/tabs/WorkbenchModel";
 import { AudioPlayComponent } from "@/components/voiceFunction/audioPlayButton";
 import { useTranslation } from "react-i18next";
+import CitationReferencesDrawer from "./CitationReferencesDrawer";
+import { normalizeCitationItems, parseLegacyWebCitationContent } from "./citationUtils";
 
 
 // 颜色列表
@@ -58,15 +60,36 @@ export const ReasoningLog = ({ loading, msg = '' }) => {
     </div>
 }
 
-export default function MessageBs({ debug,start,version, mark = false, logo, data, onUnlike = () => { }, onSource, onMarkClick, chat }: { logo: string, data: ChatMessageType, onUnlike?: any, onSource?: any }) {
+type MessageBsProps = {
+    debug?: boolean;
+    start?: boolean;
+    version?: string;
+    mark?: boolean;
+    logo?: any;
+    data: ChatMessageType;
+    onUnlike?: any;
+    onSource?: any;
+    onMarkClick?: any;
+    chat?: any;
+};
+
+export default function MessageBs({ debug,start,version, mark = false, logo, data, onUnlike = () => { }, onSource, onMarkClick, chat }: MessageBsProps) {
     const avatarColor = colorList[
-        (data.sender?.split('').reduce((num, s) => num + s.charCodeAt(), 0) || 0) % colorList.length
+        (data.sender?.split('').reduce((num, s) => num + s.charCodeAt(0), 0) || 0) % colorList.length
     ]
-        const { t } = useTranslation('flow')
+    const { t } = useTranslation('flow')
 
     const message = useMemo(() => {
-        return data.message[data.chatKey] || data.message
-    }, [data.message])
+        const rawMessage = typeof data.message === 'string' ? data.message : data.message?.[data.chatKey] || data.message
+        return typeof rawMessage === 'string' ? rawMessage : String(rawMessage || '')
+    }, [data.message, data.chatKey])
+
+    const { content: displayMessage, webContent } = useMemo(
+        () => parseLegacyWebCitationContent(message),
+        [message],
+    )
+    const citations = useMemo(() => normalizeCitationItems(data), [data]);
+    const allowRemoteCitationResolve = Boolean(data.chat_id);
 
 
     const messageRef = useRef<HTMLDivElement>(null)
@@ -81,7 +104,7 @@ export default function MessageBs({ debug,start,version, mark = false, logo, dat
     return <div className="flex w-full">
         <div className="w-fit group max-w-[90%]">
             <ReasoningLog loading={!data.end && data.reasoning_log} msg={data.reasoning_log} />
-            {!(data.reasoning_log && !message && !data.files.length) && <>
+            {!(data.reasoning_log && !displayMessage && !data.files?.length) && <>
                 <div className="flex justify-between items-center mb-1">
                     {data.sender ? <p className="text-gray-600 text-xs">{data.sender}</p> : <p />}
                     <div className={`text-right group-hover:opacity-100 opacity-0`}>
@@ -91,9 +114,16 @@ export default function MessageBs({ debug,start,version, mark = false, logo, dat
                 <div className="min-h-8 px-6 py-4 rounded-2xl bg-[#F5F6F8] dark:bg-[#313336]">
                     <div className="flex gap-2">
                         {logo}
-                        {data.message.toString() ?
+                        {String(data.message || '').toString() ?
                             <div ref={messageRef} className="text-sm max-w-[calc(100%-24px)]">
-                                {<MessageMarkDown message={message} version={version}/>}
+                                {<MessageMarkDown message={displayMessage} version={version} citations={citations} webContent={webContent} allowRemoteCitationResolve={allowRemoteCitationResolve} />}
+                                <CitationReferencesDrawer
+                                    content={String(displayMessage || '')}
+                                    webContent={webContent}
+                                    citations={citations}
+                                    allowRemoteCitationResolve={allowRemoteCitationResolve}
+                                    buttonClassName="mt-2"
+                                />
                                 {/* @user */}
                                 {data.receiver && <p className="text-blue-500 text-sm">@ {data.receiver.user_name}</p>}
                                 {/* 光标 */}
@@ -107,7 +137,7 @@ export default function MessageBs({ debug,start,version, mark = false, logo, dat
                     {linsightConfig?.tts_model?.id && (version !== 'v2')&& (
                         <AudioPlayComponent
                             messageId={String(data.id)}
-                            msg={message}
+                            msg={displayMessage}
                         />
                     )}
                 </div>
@@ -121,7 +151,7 @@ export default function MessageBs({ debug,start,version, mark = false, logo, dat
                             onMarkClick={onMarkClick}
                             version={version}
                             debug={debug}
-                            text={data?.message || data.thought}
+                            text={displayMessage || data.thought}
                         ></MessageButtons>}
                 </div>
 
@@ -137,7 +167,7 @@ export default function MessageBs({ debug,start,version, mark = false, logo, dat
                         onSource={() => onSource?.({
                             chatId,
                             messageId: data.id,
-                            message: data.message || data.thought,
+                            message: displayMessage || data.thought,
                         })} />
                     {!debug && <MessageButtons
                         mark={mark}
@@ -148,7 +178,7 @@ export default function MessageBs({ debug,start,version, mark = false, logo, dat
                         onMarkClick={onMarkClick}
                         version={version}
                         debug={debug}
-                        text={data?.message || data.thought}
+                        text={displayMessage || data.thought}
                     ></MessageButtons>}
                 </div>
             }

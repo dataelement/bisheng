@@ -28,6 +28,101 @@ export const paramsSerializer = (params) => {
 
 const GITHUB_API_URL = "https://api.github.com";
 
+export interface ChatCitationItem {
+    itemId?: string;
+    chunkId?: string;
+    chunkIndex?: number;
+    title?: string;
+    snippet?: string;
+    content?: string;
+    page?: number;
+    bbox?: string | null;
+}
+
+export interface ChatCitation {
+    id?: number;
+    messageId?: number;
+    citationId: string;
+    itemId?: string;
+    type?: string;
+    sourcePayload?: {
+        items?: ChatCitationItem[];
+        url?: string;
+        title?: string;
+        snippet?: string;
+        source?: string;
+        siteIcon?: string;
+        datePublished?: string;
+        knowledgeName?: string;
+        fileType?: string;
+        documentName?: string;
+        previewUrl?: string;
+        downloadUrl?: string;
+        sourceUrl?: string;
+        page?: number;
+        [key: string]: any;
+    };
+    [key: string]: any;
+}
+
+const citationDetailMemoryCache: Record<string, ChatCitation> = {};
+const citationResolveRequestCache: Record<string, Promise<ChatCitation[]>> = {};
+
+export async function getCitationDetail(citationId: string): Promise<ChatCitation> {
+    if (citationDetailMemoryCache[citationId]) {
+        return citationDetailMemoryCache[citationId];
+    }
+
+    const detail = await axios.get<any, ChatCitation>(
+        `/api/v1/citations/${encodeURIComponent(citationId)}`,
+        { silent: true } as any,
+    );
+    if (detail?.citationId) {
+        citationDetailMemoryCache[detail.citationId] = detail;
+    }
+    citationDetailMemoryCache[citationId] = detail;
+    return detail;
+}
+
+export async function resolveCitationDetails(citationIds: string[]): Promise<ChatCitation[]> {
+    const uniqueCitationIds = Array.from(new Set(
+        citationIds.filter((citationId) => citationId && !citationId.startsWith("citation:")),
+    )).filter((citationId) => !citationDetailMemoryCache[citationId]);
+
+    if (!uniqueCitationIds.length) {
+        return citationIds
+            .map((citationId) => citationDetailMemoryCache[citationId])
+            .filter(Boolean);
+    }
+
+    const requestKey = uniqueCitationIds.sort().join("|");
+    const pendingRequest = citationResolveRequestCache[requestKey];
+    const resolvedItems = pendingRequest
+        ? await pendingRequest
+        : await (citationResolveRequestCache[requestKey] = axios.post<any, { items?: ChatCitation[] }>(
+            `/api/v1/citations/resolve`,
+            {
+                citationIds: uniqueCitationIds,
+            },
+            { silent: true } as any,
+        ).then((response) => {
+            const items = Array.isArray(response?.items) ? response.items : [];
+            items.forEach((detail) => {
+                if (detail?.citationId) {
+                    citationDetailMemoryCache[detail.citationId] = detail;
+                }
+            });
+            return items;
+        }).finally(() => {
+            delete citationResolveRequestCache[requestKey];
+        }));
+
+    return citationIds
+        .map((citationId) => citationDetailMemoryCache[citationId])
+        .filter(Boolean)
+        .concat(resolvedItems.filter((detail) => detail?.citationId && !citationIds.includes(detail.citationId)));
+}
+
 export async function getRepoStars(owner, repo) {
     try {
         const response = await axios.get(
@@ -622,7 +717,7 @@ export async function updateQaStatus(id, status) {
 /**
  * Qa问题新增/修改
  */
-export async function updateQa(id, data: { questions, answers, knowledge_id, source }) {
+export async function updateQa(id, data: { questions, answers, knowledge_id, source, id?: any }) {
     if (id) {
         data.id = id
     }

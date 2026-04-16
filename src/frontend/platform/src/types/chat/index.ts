@@ -1,4 +1,5 @@
 import { ReactFlowInstance } from "@xyflow/react";
+import type { ChatCitation } from "@/controllers/API";
 import { FlowType } from "../flow";
 
 export type ChatType = { flow: FlowType; reactFlowInstance: ReactFlowInstance };
@@ -12,6 +13,7 @@ export type ChatMessageType = {
   chatKey: string;
   end: boolean;
   id?: number;
+  chat_id?: string | null;
   source?: number;
   noAccess?: boolean;
   user_name: string;
@@ -22,7 +24,8 @@ export type ChatMessageType = {
   receiver?: any;
   liked?: boolean;
   extra?: string;
-  create_time: string;
-  update_time: string;
+  create_time?: string;
+  update_time?: string;
   reasoning_log?: string;
+  citations?: ChatCitation[] | null;
 };

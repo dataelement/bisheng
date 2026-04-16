@@ -633,7 +633,8 @@ class RedisCallback(BaseCallback):
                                      extra='',
                                      type='end',
                                      flow_id=self.workflow_id,
-                                     chat_id=self.chat_id)
+                                     chat_id=self.chat_id,
+                                     citation_registry_items=data.citation_registry_items)
         msg_id = self.save_chat_message(
             chat_response,
             source_documents=data.source_documents,

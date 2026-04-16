@@ -10,6 +10,7 @@ from bisheng.database.models.assistant import AssistantBase
 from bisheng.database.models.flow import FlowCreate, FlowRead, FlowType
 from bisheng.database.models.message import ChatMessageRead
 from bisheng.database.models.tag import Tag
+from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
 from bisheng.knowledge.domain.models.knowledge import KnowledgeRead
 from bisheng.knowledge.domain.schemas.knowledge_rag_schema import Metadata
 from bisheng.tool.domain.models.gpts_tools import GptsToolsRead
@@ -170,6 +171,7 @@ class ChatResponse(ChatMessage):
     intermediate_steps: Optional[str] = ''
     is_bot: bool | int = True
     category: str = 'processing'
+    citation_registry_items: Optional[List[CitationRegistryItemSchema]] = None
 
     @field_validator('type')
     @classmethod
