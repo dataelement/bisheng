@@ -1363,6 +1363,7 @@
     "explore_more_spaces": "You can explore more knowledge spaces here",
     "explore_square": "Explore Knowledge Square",
     "fail": "Failed",
+    "failure_reason": "Failure reason",
     "failure_status": "Load failed: {{0}}",
     "fetch_preview_link_failed": "Failed to get file preview link",
     "fetch_tags_failed": "Failed to get space tags",

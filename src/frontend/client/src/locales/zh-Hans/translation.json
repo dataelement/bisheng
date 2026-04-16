@@ -1283,6 +1283,7 @@
     "explore_more_spaces": "您可以在这里探索更多的知识空间",
     "explore_square": "探索知识广场",
     "fail": "失败",
+    "failure_reason": "失败原因",
     "failure_status": "加载失败: {{0}}",
     "fetch_preview_link_failed": "无法获取文件预览链接",
     "fetch_tags_failed": "获取空间标签失败",

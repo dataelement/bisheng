@@ -28,6 +28,7 @@ from bisheng.common.models.space_channel_member import (
 from bisheng.permission.domain.services.owner_service import OwnerService, _get_scm_role_to_fga
 from bisheng.permission.domain.services.permission_service import PermissionService
 from bisheng.permission.domain.schemas.permission_schema import AuthorizeGrantItem, AuthorizeRevokeItem
+from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.role import RoleDao
 from bisheng.database.models.tag import TagDao, TagBusinessTypeEnum, Tag
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
