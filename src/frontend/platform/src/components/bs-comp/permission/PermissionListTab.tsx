@@ -103,8 +103,23 @@ export function PermissionListTab({ resourceType, resourceId, refreshKey }: Perm
     const res = await captureAndAlertRequestErrorHoc(
       authorizeResource(
         resourceType, resourceId,
-        [{ subject_type: entry.subject_type, subject_id: entry.subject_id, relation: newLevel, model_id: modelId }],
-        [{ subject_type: entry.subject_type, subject_id: entry.subject_id, relation: entry.relation }],
+        [{
+          subject_type: entry.subject_type,
+          subject_id: entry.subject_id,
+          relation: newLevel,
+          model_id: modelId,
+          ...(entry.subject_type === 'department'
+            ? { include_children: Boolean(entry.include_children) }
+            : {}),
+        }],
+        [{
+          subject_type: entry.subject_type,
+          subject_id: entry.subject_id,
+          relation: entry.relation,
+          ...(entry.subject_type === 'department'
+            ? { include_children: Boolean(entry.include_children) }
+            : {}),
+        }],
       ),
     )
     if (res !== false) {
@@ -122,7 +137,14 @@ export function PermissionListTab({ resourceType, resourceId, refreshKey }: Perm
           authorizeResource(
             resourceType, resourceId,
             [],
-            [{ subject_type: entry.subject_type, subject_id: entry.subject_id, relation: entry.relation }],
+            [{
+              subject_type: entry.subject_type,
+              subject_id: entry.subject_id,
+              relation: entry.relation,
+              ...(entry.subject_type === 'department'
+                ? { include_children: Boolean(entry.include_children) }
+                : {}),
+            }],
           ),
         ).then((res) => {
           if (res !== false) {

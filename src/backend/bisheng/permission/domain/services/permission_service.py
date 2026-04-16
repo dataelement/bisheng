@@ -353,7 +353,7 @@ class PermissionService:
                         subject_id=p['subject_id'],
                         subject_name=name,
                         relation=p['relation'],
-                        include_children=None,
+                        include_children=False,
                     )
                     dept_tracker[dept_key] = item
                     items.append(item)

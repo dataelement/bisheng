@@ -135,8 +135,83 @@ async def _save_bindings(bindings: list[dict]) -> None:
     )
 
 
+def _normalize_binding_include_children(subject_type: str, include_children) -> bool | None:
+    if subject_type != 'department':
+        return None
+    return bool(include_children)
+
+
+def _binding_key_with_scope(
+    resource_type: str,
+    resource_id: str,
+    subject_type: str,
+    subject_id: int,
+    relation: str,
+    include_children,
+) -> str:
+    normalized = _normalize_binding_include_children(subject_type, include_children)
+    scope = '-' if normalized is None else ('1' if normalized else '0')
+    return f'{resource_type}:{resource_id}:{subject_type}:{subject_id}:{relation}:{scope}'
+
+
 def _binding_key(resource_type: str, resource_id: str, subject_type: str, subject_id: int, relation: str) -> str:
+    return _binding_key_with_scope(
+        resource_type, resource_id, subject_type, subject_id, relation, None,
+    )
+
+
+def _legacy_binding_key(
+    resource_type: str, resource_id: str, subject_type: str, subject_id: int, relation: str,
+) -> str:
     return f'{resource_type}:{resource_id}:{subject_type}:{subject_id}:{relation}'
+
+
+def _binding_lookup_keys(
+    resource_type: str,
+    resource_id: str,
+    subject_type: str,
+    subject_id: int,
+    relation: str,
+    include_children,
+) -> list[str]:
+    return [
+        _binding_key_with_scope(
+            resource_type, resource_id, subject_type, subject_id, relation, include_children,
+        ),
+        _legacy_binding_key(
+            resource_type, resource_id, subject_type, subject_id, relation,
+        ),
+    ]
+
+
+def _binding_from_map(
+    bindings_map: dict,
+    resource_type: str,
+    resource_id: str,
+    subject_type: str,
+    subject_id: int,
+    relation: str,
+    include_children,
+):
+    for key in _binding_lookup_keys(
+        resource_type, resource_id, subject_type, subject_id, relation, include_children,
+    ):
+        binding = bindings_map.get(key)
+        if binding:
+            return binding
+    return None
+
+
+def _tuple_signature(item) -> tuple:
+    return (
+        getattr(item, 'subject_type', None),
+        getattr(item, 'subject_id', None),
+        getattr(item, 'relation', None),
+        _normalize_binding_include_children(
+            getattr(item, 'subject_type', None),
+            getattr(item, 'include_children', None),
+        ),
+    )
 
 
 def _caller_satisfies_ceiling(caller_level: str | None, max_caller_index: int) -> bool:
@@ -196,11 +271,15 @@ async def authorize_resource(
                 return PermissionDeniedError.return_resp()
 
         for revoke in (request.revokes or []):
-            key = _binding_key(
-                resource_type, str(resource_id),
-                revoke.subject_type, revoke.subject_id, revoke.relation,
+            binding = _binding_from_map(
+                binding_map,
+                resource_type,
+                str(resource_id),
+                revoke.subject_type,
+                revoke.subject_id,
+                revoke.relation,
+                getattr(revoke, 'include_children', None),
             )
-            binding = binding_map.get(key)
             if binding and binding.get('model_id'):
                 m = model_map.get(binding['model_id'])
                 ceiling = _TIER_MAX_CALLER_INDEX.get(m.get('grant_tier'), _LEGACY_REVOKE_MAX_CALLER_INDEX) if m else _LEGACY_REVOKE_MAX_CALLER_INDEX
@@ -209,20 +288,54 @@ async def authorize_resource(
             if not _caller_satisfies_ceiling(caller_level, ceiling):
                 return PermissionDeniedError.return_resp()
 
-    await PermissionService.authorize(
-        object_type=resource_type,
-        object_id=resource_id,
-        grants=request.grants,
-        revokes=request.revokes,
-    )
+    grant_signatures = {_tuple_signature(g) for g in (request.grants or [])}
+    revoke_signatures = {_tuple_signature(r) for r in (request.revokes or [])}
+    rebind_only_signatures = grant_signatures & revoke_signatures
+
+    tuple_grants = [
+        grant for grant in (request.grants or [])
+        if _tuple_signature(grant) not in rebind_only_signatures
+    ]
+    tuple_revokes = [
+        revoke for revoke in (request.revokes or [])
+        if _tuple_signature(revoke) not in rebind_only_signatures
+    ]
+
+    if tuple_grants or tuple_revokes:
+        await PermissionService.authorize(
+            object_type=resource_type,
+            object_id=resource_id,
+            grants=tuple_grants,
+            revokes=tuple_revokes,
+        )
 
     # Persist relation-model bindings for UI display and model deletion cascade.
     bindings = await _get_bindings()
     bindings_map = {b.get('key'): b for b in bindings if b.get('key')}
+    for revoke in (request.revokes or []):
+        for key in _binding_lookup_keys(
+            resource_type,
+            str(resource_id),
+            revoke.subject_type,
+            revoke.subject_id,
+            revoke.relation,
+            getattr(revoke, 'include_children', None),
+        ):
+            bindings_map.pop(key, None)
     for grant in (request.grants or []):
         if not getattr(grant, 'model_id', None):
             continue
-        key = _binding_key(resource_type, resource_id, grant.subject_type, grant.subject_id, grant.relation)
+        normalized_include_children = _normalize_binding_include_children(
+            grant.subject_type, getattr(grant, 'include_children', None),
+        )
+        key = _binding_key_with_scope(
+            resource_type,
+            str(resource_id),
+            grant.subject_type,
+            grant.subject_id,
+            grant.relation,
+            normalized_include_children,
+        )
         bindings_map[key] = {
             'key': key,
             'resource_type': resource_type,
@@ -230,11 +343,9 @@ async def authorize_resource(
             'subject_type': grant.subject_type,
             'subject_id': grant.subject_id,
             'relation': grant.relation,
+            'include_children': normalized_include_children,
             'model_id': grant.model_id,
         }
-    for revoke in (request.revokes or []):
-        key = _binding_key(resource_type, resource_id, revoke.subject_type, revoke.subject_id, revoke.relation)
-        bindings_map.pop(key, None)
     await _save_bindings(list(bindings_map.values()))
     return resp_200(None)
 
@@ -274,8 +385,15 @@ async def get_resource_permissions(
         if b.get('resource_type') == resource_type and str(b.get('resource_id')) == str(resource_id)
     }
     for p in permissions:
-        key = _binding_key(resource_type, str(resource_id), p.subject_type, p.subject_id, p.relation)
-        matched = binding_map.get(key)
+        matched = _binding_from_map(
+            binding_map,
+            resource_type,
+            str(resource_id),
+            p.subject_type,
+            p.subject_id,
+            p.relation,
+            getattr(p, 'include_children', None),
+        )
         if matched:
             p.model_id = matched.get('model_id')
             p.model_name = model_map.get(p.model_id, {}).get('name')
@@ -400,7 +518,7 @@ async def delete_relation_model(
                 subject_type=b.get('subject_type'),
                 subject_id=int(b.get('subject_id')),
                 relation=b.get('relation'),
-                include_children=True,
+                include_children=bool(b.get('include_children')),
             )],
         )
 
