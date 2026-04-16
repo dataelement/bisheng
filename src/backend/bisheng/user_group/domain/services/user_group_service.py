@@ -157,6 +157,14 @@ class UserGroupService:
     ) -> Dict[str, Any]:
         await _ensure_create_group(login_user)
 
+        requested_admin_ids = {
+            int(uid) for uid in (data.admin_user_ids or [])
+            if uid is not None
+        }
+        extra_admin_ids = requested_admin_ids - {int(login_user.user_id)}
+        if extra_admin_ids:
+            raise UserGroupNoSeparateAdminsError()
+
         # Check name uniqueness within tenant
         if await GroupDao.acheck_name_duplicate(data.group_name):
             raise UserGroupNameDuplicateError()

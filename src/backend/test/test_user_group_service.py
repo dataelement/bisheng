@@ -110,6 +110,7 @@ class TestCreateGroupCompatibility:
                     group_name='Alpha',
                     visibility='public',
                     remark=None,
+                    admin_user_ids=None,
                 ),
                 login_user=mock_group_owner,
             )
@@ -117,3 +118,23 @@ class TestCreateGroupCompatibility:
         mock_user_group_dao.aset_admins_batch.assert_awaited_once_with(
             25, add_ids=[mock_group_owner.user_id], remove_ids=[],
         )
+
+    @pytest.mark.asyncio
+    async def test_create_group_rejects_extra_admin_ids(self, mock_group_owner):
+        from bisheng.common.errcode.user_group import UserGroupNoSeparateAdminsError
+        from bisheng.user_group.domain.services.user_group_service import UserGroupService
+
+        with patch(
+            'bisheng.user_group.domain.services.user_group_service._ensure_create_group',
+            new_callable=AsyncMock,
+        ):
+            with pytest.raises(UserGroupNoSeparateAdminsError):
+                await UserGroupService.acreate_group(
+                    data=SimpleNamespace(
+                        group_name='Alpha',
+                        visibility='public',
+                        remark=None,
+                        admin_user_ids=[mock_group_owner.user_id, 99],
+                    ),
+                    login_user=mock_group_owner,
+                )
