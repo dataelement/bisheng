@@ -170,7 +170,12 @@ class UserGroupService:
         )
         group = await GroupDao.acreate(group)
 
-        # Emit OpenFGA tuple operations（创建者在 FGA 上为 admin，不再写入 user_group 管理员行）
+        # Keep legacy user_group admin rows in sync for older auth/read paths.
+        await UserGroupDao.aset_admins_batch(
+            group.id, add_ids=[login_user.user_id], remove_ids=[],
+        )
+
+        # Emit OpenFGA tuple operations while retaining a legacy admin row for compatibility.
         ops = GroupChangeHandler.on_created(group.id, login_user.user_id)
         await GroupChangeHandler.execute_async(ops)
 
