@@ -1,3 +1,4 @@
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
 import { Badge } from "@/components/bs-ui/badge"
 import { Button } from "@/components/bs-ui/button"
 import { SearchInput } from "@/components/bs-ui/input"
@@ -25,7 +26,10 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/bs-ui/tooltip"
-import { getDepartmentMembersApi } from "@/controllers/API/department"
+import {
+  getDepartmentMembersApi,
+  removeDepartmentMemberApi,
+} from "@/controllers/API/department"
 import { disableUserApi } from "@/controllers/API/user"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { userContext } from "@/contexts/userContext"
@@ -110,6 +114,31 @@ export function MemberTable({ deptId, deptName, onChanged }: MemberTableProps) {
       })
     },
     [loadMembers, onChanged, t]
+  )
+
+  const handleRemove = useCallback(
+    (m: DepartmentMember) => {
+      bsConfirm({
+        title: t("bs:department.removeMember"),
+        desc: t("bs:department.confirmRemoveMember"),
+        onOk: (next) => {
+          captureAndAlertRequestErrorHoc(
+            removeDepartmentMemberApi(deptId, m.user_id)
+          ).then((res) => {
+            if (res !== null) {
+              toast({
+                title: t("bs:department.removeMember"),
+                variant: "success",
+              })
+              loadMembers()
+              onChanged()
+            }
+            next()
+          })
+        },
+      })
+    },
+    [deptId, loadMembers, onChanged, t]
   )
 
   const handleAdded = useCallback(() => {
@@ -237,6 +266,7 @@ export function MemberTable({ deptId, deptName, onChanged }: MemberTableProps) {
                   {(() => {
                     const isSuperAdmin = m.roles.some((role) => role.id === 1)
                     const canResetPwd = user.role === "admin"
+                    const canRemove = !isSuperAdmin && user.user_id !== m.user_id
                     return (
                       <div className="flex flex-wrap items-center justify-end gap-x-1">
                         {isSuperAdmin ? (
@@ -254,6 +284,15 @@ export function MemberTable({ deptId, deptName, onChanged }: MemberTableProps) {
                             {t("edit")}
                           </Button>
                         )}
+                        <Button
+                          variant="link"
+                          size="sm"
+                          className="px-1 text-destructive"
+                          disabled={!canRemove}
+                          onClick={() => handleRemove(m)}
+                        >
+                          {t("bs:department.removeMember")}
+                        </Button>
                         {canResetPwd && (
                           <Button
                             variant="link"
