@@ -108,6 +108,29 @@ class UserGroupService:
     """User group business logic. All methods are async classmethods."""
 
     @classmethod
+    async def _list_manageable_groups(cls, login_user) -> List[Group]:
+        """Groups the caller may mutate.
+
+        System admins may manage any group. Non-admins may only manage
+        groups they created themselves.
+        """
+        if _is_admin(login_user):
+            groups, _ = await GroupDao.aget_all_groups(1, 2000, '')
+            return groups
+
+        visible_groups, _ = await GroupDao.aget_visible_groups(
+            login_user.user_id, 1, 2000, '',
+        )
+        return [g for g in visible_groups if g.create_user == login_user.user_id]
+
+    @classmethod
+    async def alist_manageable_groups(
+        cls, login_user,
+    ) -> List[Dict[str, Any]]:
+        groups = await cls._list_manageable_groups(login_user)
+        return [await cls._enrich_group(g) for g in groups]
+
+    @classmethod
     async def _department_path_label(cls, user_id: int) -> str:
         """主属部门在组织树中的完整路径（用于 PRD 3.2.2 组内成员展示）。"""
         uds = await UserDepartmentDao.aget_user_departments(user_id)
@@ -297,6 +320,34 @@ class UserGroupService:
             await UserGroupDao.aadd_members_batch(group_id, to_add)
             ops = GroupChangeHandler.on_members_added(group_id, to_add)
             await GroupChangeHandler.execute_async(ops)
+
+    @classmethod
+    async def areplace_user_memberships(
+        cls, user_id: int, desired_group_ids: List[int], login_user,
+    ) -> None:
+        """Replace memberships only within the caller's manageable groups.
+
+        Memberships in groups outside the caller's mutation scope are preserved.
+        """
+        manageable_groups = await cls._list_manageable_groups(login_user)
+        manageable_ids = {int(g.id) for g in manageable_groups}
+        desired_ids = {int(gid) for gid in desired_group_ids if int(gid) > 0}
+
+        if not desired_ids.issubset(manageable_ids):
+            raise UserGroupPermissionDeniedError()
+
+        current_links = await UserGroupDao.aget_user_group(user_id)
+        current_ids = {int(link.group_id) for link in current_links}
+        current_manageable_ids = current_ids & manageable_ids
+
+        to_remove = sorted(current_manageable_ids - desired_ids)
+        to_add = sorted(desired_ids - current_manageable_ids)
+
+        for group_id in to_remove:
+            await cls.aremove_member(group_id, user_id, login_user)
+
+        for group_id in to_add:
+            await cls.aadd_members(group_id, [user_id], login_user)
 
     @classmethod
     async def aremove_member(

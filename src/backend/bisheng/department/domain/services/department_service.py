@@ -971,19 +971,17 @@ class DepartmentService:
 
     @classmethod
     async def _manageable_group_options(cls, login_user) -> List[dict]:
-        """Return groups the current user can actually mutate (admin or creator)."""
+        """Return groups the current user can actually mutate."""
         from bisheng.user_group.domain.services.user_group_service import UserGroupService
 
-        res = await UserGroupService.alist_groups(1, 2000, '', login_user)
-        is_admin = login_user.is_admin() if callable(getattr(login_user, 'is_admin', None)) else False
+        res = await UserGroupService.alist_manageable_groups(login_user)
         out = []
-        for x in res.get('data') or []:
-            if is_admin or x.get('create_user') == login_user.user_id:
-                out.append({
-                    'id': x['id'],
-                    'group_name': x.get('group_name', ''),
-                    'visibility': x.get('visibility', 'public'),
-                })
+        for x in res or []:
+            out.append({
+                'id': x['id'],
+                'group_name': x.get('group_name', ''),
+                'visibility': x.get('visibility', 'public'),
+            })
         return out
 
     @classmethod
@@ -1259,7 +1257,6 @@ class DepartmentService:
         from bisheng.database.constants import AdminRole
         from bisheng.user.domain.models.user import UserDao
         from bisheng.user.domain.models.user_role import UserRoleDao
-        from bisheng.database.models.user_group import UserGroupDao
         from bisheng.common.errcode.user import UserNameAlreadyExistError
 
         async with get_async_db_session() as session:
@@ -1321,21 +1318,20 @@ class DepartmentService:
                 await cls._apply_local_primary_department_change(user_id, int(target.id))
 
         if edit_mode != 'affiliate' and data.group_ids is not None:
-            mg = await cls._manageable_group_options(login_user)
-            manageable = {int(x['id']) for x in mg}
+            from bisheng.common.errcode.user_group import (
+                UserGroupPermissionDeniedError,
+            )
+            from bisheng.user_group.domain.services.user_group_service import (
+                UserGroupService,
+            )
+
             req = [int(x) for x in data.group_ids]
-            if any(g not in manageable for g in req):
-                raise DepartmentPermissionDeniedError()
-            old_links = await UserGroupDao.aget_user_group(user_id)
-            old_gids = [int(x.group_id) for x in old_links]
-            preserved = [g for g in old_gids if g not in manageable]
-            final_set = set(preserved) | set(req)
-            to_remove = [g for g in old_gids if g not in final_set]
-            to_add = [g for g in final_set if g not in old_gids]
-            if to_remove:
-                UserGroupDao.delete_user_groups(user_id, to_remove)
-            if to_add:
-                UserGroupDao.add_user_groups(user_id, to_add)
+            try:
+                await UserGroupService.areplace_user_memberships(
+                    user_id, req, login_user,
+                )
+            except UserGroupPermissionDeniedError:
+                raise DepartmentPermissionDeniedError() from None
 
         if edit_mode == 'affiliate':
             a_ctx = await cls._assignable_role_id_set(ctx_dept.dept_id, login_user)
