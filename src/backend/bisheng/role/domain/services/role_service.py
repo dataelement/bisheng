@@ -71,6 +71,8 @@ class RoleService:
         if req.department_id is not None:
             await cls._validate_department(req.department_id)
 
+        await cls._ensure_create_scope(login_user, req.department_id)
+
         role = Role(
             role_name=req.role_name,
             role_type=role_type,
@@ -103,11 +105,13 @@ class RoleService:
         """
         department_ids = None
         permission_level = 'admin'
+        dept_subtree_ids: set[int] | None = None
 
         if not login_user.is_admin():
             permission_level = await cls._check_list_permission(login_user)
             if permission_level == 'dept_admin':
                 department_ids = await cls._get_dept_subtree_ids(login_user)
+                dept_subtree_ids = set(department_ids or [])
 
         roles = await RoleDao.aget_visible_roles(
             tenant_id=login_user.tenant_id,
@@ -133,7 +137,9 @@ class RoleService:
         # Build response
         items = []
         for role in roles:
-            is_readonly = cls._is_readonly(role, login_user, permission_level)
+            is_readonly = cls._is_readonly(
+                role, login_user, permission_level, dept_subtree_ids,
+            )
             items.append(RoleListResponse(
                 id=role.id,
                 role_name=role.role_name,
@@ -166,12 +172,21 @@ class RoleService:
         if not role:
             raise RoleNotFoundError()
 
+        await cls._ensure_role_scope_access(
+            role, login_user, for_mutation=False,
+        )
+
         user_counts = await RoleDao.aget_user_count_by_role_ids([role_id])
         dept_names = await cls._get_department_names([role])
         creator_names = await cls._get_creator_names([role])
 
         permission_level = await cls._get_permission_level(login_user)
-        is_readonly = cls._is_readonly(role, login_user, permission_level)
+        dept_subtree_ids = None
+        if permission_level == 'dept_admin':
+            dept_subtree_ids = set(await cls._get_dept_subtree_ids(login_user) or [])
+        is_readonly = cls._is_readonly(
+            role, login_user, permission_level, dept_subtree_ids,
+        )
 
         return RoleListResponse(
             id=role.id,
@@ -207,6 +222,7 @@ class RoleService:
             raise RolePermissionDeniedError(msg='Cannot modify global role')
 
         await cls._check_role_permission(login_user)
+        await cls._ensure_role_scope_access(role, login_user, for_mutation=True)
 
         # Validate quota_config (AC-10c)
         if req.quota_config is not None:
@@ -260,6 +276,7 @@ class RoleService:
             raise RolePermissionDeniedError(msg='Cannot delete global role')
 
         await cls._check_role_permission(login_user)
+        await cls._ensure_role_scope_access(role, login_user, for_mutation=True)
 
         # AC-08: Cascade delete (UserRole + RoleAccess handled in DAO)
         await RoleDao.adelete_role(role_id)
@@ -282,6 +299,7 @@ class RoleService:
             raise RolePermissionDeniedError(msg='Cannot modify global role menu')
 
         await cls._check_role_permission(login_user)
+        await cls._ensure_role_scope_access(role, login_user, for_mutation=True)
 
         await RoleAccessDao.update_role_access_all(
             role_id=role_id,
@@ -301,6 +319,10 @@ class RoleService:
         role = await RoleDao.aget_role_by_id(role_id)
         if not role:
             raise RoleNotFoundError()
+
+        await cls._ensure_role_scope_access(
+            role, login_user, for_mutation=False,
+        )
 
         records = await RoleAccessDao.aget_role_access(
             role_ids=[role_id],
@@ -355,12 +377,22 @@ class RoleService:
         return await cls._get_permission_level(login_user)
 
     @classmethod
-    def _is_readonly(cls, role, login_user, permission_level: str) -> bool:
+    def _is_readonly(
+        cls,
+        role,
+        login_user,
+        permission_level: str,
+        dept_subtree_ids: Optional[set[int]] = None,
+    ) -> bool:
         """Determine if role is read-only for current user."""
         if permission_level == 'admin':
             return False
         if role.role_type == 'global':
             return True
+        if permission_level == 'dept_admin':
+            return role.department_id is None or (
+                dept_subtree_ids is not None and role.department_id not in dept_subtree_ids
+            )
         if permission_level == 'regular':
             return True
         return False
@@ -420,6 +452,37 @@ class RoleService:
             raise
         except Exception as e:
             logger.warning('Failed to validate department %d: %s', department_id, e)
+
+    @classmethod
+    async def _ensure_create_scope(
+        cls, login_user, department_id: Optional[int],
+    ) -> None:
+        """Department admins may only create roles inside their managed subtree."""
+        permission_level = await cls._get_permission_level(login_user)
+        if permission_level != 'dept_admin':
+            return
+
+        subtree_ids = set(await cls._get_dept_subtree_ids(login_user) or [])
+        if department_id is None or department_id not in subtree_ids:
+            raise RolePermissionDeniedError(
+                msg='Department admin may only create roles within managed departments',
+            )
+
+    @classmethod
+    async def _ensure_role_scope_access(
+        cls, role, login_user, for_mutation: bool,
+    ) -> None:
+        """Department admins may only access roles inside their managed subtree."""
+        permission_level = await cls._get_permission_level(login_user)
+        if permission_level != 'dept_admin':
+            return
+
+        subtree_ids = set(await cls._get_dept_subtree_ids(login_user) or [])
+        if role.department_id is None or role.department_id not in subtree_ids:
+            action = 'modify' if for_mutation else 'view'
+            raise RolePermissionDeniedError(
+                msg=f'Department admin cannot {action} roles outside managed departments',
+            )
 
     @classmethod
     async def _try_set_role_creator(cls, role_id: Optional[int], user_id: Optional[int]) -> None:

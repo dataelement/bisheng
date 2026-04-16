@@ -36,6 +36,15 @@ def mock_normal_user():
     return user
 
 
+@pytest.fixture
+def mock_dept_admin():
+    user = MagicMock()
+    user.user_id = 8
+    user.is_admin.return_value = False
+    user.tenant_id = 1
+    return user
+
+
 def _make_role(role_id, role_name='Test Role', role_type='tenant',
                department_id=None, quota_config=None, tenant_id=1):
     role = MagicMock()
@@ -136,6 +145,46 @@ class TestCreateRole:
 
         with pytest.raises(RolePermissionDeniedError):
             await RoleService.create_role(req, mock_normal_user)
+
+    @pytest.mark.asyncio
+    async def test_dept_admin_cannot_create_unscoped_role(self, mock_dept_admin):
+        from bisheng.common.errcode.role import RolePermissionDeniedError
+        from bisheng.role.domain.schemas.role_schema import RoleCreateRequest
+        from bisheng.role.domain.services.role_service import RoleService
+
+        req = RoleCreateRequest(role_name='Dept Wide')
+
+        with patch.object(RoleService, '_check_role_permission', new_callable=AsyncMock), \
+             patch('bisheng.role.domain.services.role_service.RoleDao') as mock_dao, \
+             patch.object(RoleService, '_get_permission_level', new_callable=AsyncMock,
+                          return_value='dept_admin'), \
+             patch.object(RoleService, '_get_dept_subtree_ids', new_callable=AsyncMock,
+                          return_value=[5, 6]):
+            mock_dao.aget_role_by_name = AsyncMock(return_value=None)
+            with pytest.raises(RolePermissionDeniedError):
+                await RoleService.create_role(req, mock_dept_admin)
+
+    @pytest.mark.asyncio
+    async def test_dept_admin_cannot_create_role_outside_subtree(self, mock_dept_admin):
+        from bisheng.common.errcode.role import RolePermissionDeniedError
+        from bisheng.role.domain.schemas.role_schema import RoleCreateRequest
+        from bisheng.role.domain.services.role_service import RoleService
+
+        req = RoleCreateRequest(role_name='Out of Scope', department_id=99)
+
+        with patch.object(RoleService, '_check_role_permission', new_callable=AsyncMock), \
+             patch('bisheng.role.domain.services.role_service.RoleDao') as mock_dao, \
+             patch('bisheng.role.domain.services.role_service.QuotaService') as mock_qs, \
+             patch.object(RoleService, '_get_permission_level', new_callable=AsyncMock,
+                          return_value='dept_admin'), \
+             patch.object(RoleService, '_get_dept_subtree_ids', new_callable=AsyncMock,
+                          return_value=[5, 6]), \
+             patch.object(RoleService, '_validate_department', new_callable=AsyncMock):
+            mock_dao.aget_role_by_name = AsyncMock(return_value=None)
+            mock_qs.validate_quota_config = MagicMock()
+
+            with pytest.raises(RolePermissionDeniedError):
+                await RoleService.create_role(req, mock_dept_admin)
 
 
 class TestListRoles:
@@ -271,6 +320,28 @@ class TestUpdateRole:
                     role_id=2, req=req, login_user=mock_tenant_admin,
                 )
 
+    @pytest.mark.asyncio
+    async def test_dept_admin_cannot_update_role_outside_subtree(self, mock_dept_admin):
+        from bisheng.common.errcode.role import RolePermissionDeniedError
+        from bisheng.role.domain.schemas.role_schema import RoleUpdateRequest
+        from bisheng.role.domain.services.role_service import RoleService
+
+        role = _make_role(18, 'Tenant Role', role_type='tenant', department_id=99)
+        req = RoleUpdateRequest(remark='nope')
+
+        with patch('bisheng.role.domain.services.role_service.RoleDao') as mock_dao, \
+             patch.object(RoleService, '_check_role_permission', new_callable=AsyncMock), \
+             patch.object(RoleService, '_get_permission_level', new_callable=AsyncMock,
+                          return_value='dept_admin'), \
+             patch.object(RoleService, '_get_dept_subtree_ids', new_callable=AsyncMock,
+                          return_value=[5, 6]):
+            mock_dao.aget_role_by_id = AsyncMock(return_value=role)
+
+            with pytest.raises(RolePermissionDeniedError):
+                await RoleService.update_role(
+                    role_id=18, req=req, login_user=mock_dept_admin,
+                )
+
 
 class TestMenuPermissions:
     """AC-11, AC-12."""
@@ -311,3 +382,25 @@ class TestMenuPermissions:
             result = await RoleService.get_menu(role_id=15, login_user=mock_admin_user)
 
         assert result == ['workstation', 'build']
+
+    @pytest.mark.asyncio
+    async def test_dept_admin_cannot_update_menu_outside_subtree(self, mock_dept_admin):
+        from bisheng.common.errcode.role import RolePermissionDeniedError
+        from bisheng.role.domain.services.role_service import RoleService
+
+        role = _make_role(22, 'Tenant Role', role_type='tenant', department_id=99)
+
+        with patch('bisheng.role.domain.services.role_service.RoleDao') as mock_role_dao, \
+             patch.object(RoleService, '_check_role_permission', new_callable=AsyncMock), \
+             patch.object(RoleService, '_get_permission_level', new_callable=AsyncMock,
+                          return_value='dept_admin'), \
+             patch.object(RoleService, '_get_dept_subtree_ids', new_callable=AsyncMock,
+                          return_value=[5, 6]):
+            mock_role_dao.aget_role_by_id = AsyncMock(return_value=role)
+
+            with pytest.raises(RolePermissionDeniedError):
+                await RoleService.update_menu(
+                    role_id=22,
+                    menu_ids=['workstation'],
+                    login_user=mock_dept_admin,
+                )
