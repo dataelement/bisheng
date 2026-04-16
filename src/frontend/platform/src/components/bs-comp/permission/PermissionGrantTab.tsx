@@ -13,6 +13,7 @@ import { GrantItem, RelationLevel, ResourceType, SelectedSubject, SubjectType } 
 
 const SUBJECT_TYPES: SubjectType[] = ['user', 'department', 'user_group']
 const DEFAULT_MODELS: RelationModelOption[] = [
+  { id: 'owner', name: '所有者', relation: 'owner' },
   { id: 'viewer', name: '可查看', relation: 'viewer' },
   { id: 'editor', name: '可编辑', relation: 'editor' },
   { id: 'manager', name: '可管理', relation: 'manager' },

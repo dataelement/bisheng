@@ -25,6 +25,7 @@ interface RelationSelectProps {
 export function RelationSelect({ value, onChange, className, disabled, options }: RelationSelectProps) {
   const { t } = useTranslation('permission')
   const fallbackOptions: RelationModelOption[] = [
+    { id: 'owner', name: t('level.owner'), relation: 'owner' },
     { id: 'viewer', name: t('level.viewer'), relation: 'viewer' },
     { id: 'editor', name: t('level.editor'), relation: 'editor' },
     { id: 'manager', name: t('level.manager'), relation: 'manager' },
