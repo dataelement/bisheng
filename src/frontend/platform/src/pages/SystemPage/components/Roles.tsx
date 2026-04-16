@@ -28,7 +28,6 @@ import {
   deleteRoleV2Api,
   getRoleMenuV2Api,
   getRolesPageApi,
-  updateRoleMenuV2Api,
   updateRoleV2Api,
 } from "@/controllers/API/user"
 import { message } from "@/components/bs-ui/toast/use-toast"
@@ -245,22 +244,16 @@ export default function Roles() {
       department_id: departmentId === "none" ? null : Number(departmentId),
       quota_config,
       remark: "PRD 2.5 role",
+      menu_ids: menuIds,
     }
     try {
-      let roleId = activeRole?.id
       if (!activeRole) {
         const created = await captureAndAlertRequestErrorHoc(createRoleV2Api(payload))
         if (created === null || created === false) return
-        roleId = (created as { id: number }).id
       } else {
         const updated = await captureAndAlertRequestErrorHoc(updateRoleV2Api(activeRole.id, payload))
         if (updated === null || updated === false) return
-        roleId = activeRole.id
       }
-
-      if (roleId == null) return
-      const menuSaved = await captureAndAlertRequestErrorHoc(updateRoleMenuV2Api(roleId, menuIds))
-      if (menuSaved === false) return
 
       message({ variant: "success", description: t("saved") })
       setEditOpen(false)

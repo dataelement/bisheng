@@ -168,6 +168,7 @@ export async function createRoleV2Api(data: {
   department_id?: number | null
   quota_config?: Record<string, number>
   remark?: string
+  menu_ids?: string[]
 }) {
   return await axios.post(`/api/v1/roles`, data)
 }
@@ -179,6 +180,7 @@ export async function updateRoleV2Api(
     department_id?: number | null
     quota_config?: Record<string, number>
     remark?: string
+    menu_ids?: string[]
   }
 ) {
   return await axios.put(`/api/v1/roles/${roleId}`, data)

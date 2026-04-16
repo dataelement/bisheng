@@ -12,14 +12,17 @@ from __future__ import annotations
 import logging
 from typing import List, Optional
 
+from sqlmodel import delete, select
+
 from bisheng.common.errcode.role import (
     RoleBuiltinProtectedError,
     RoleNameDuplicateError,
     RoleNotFoundError,
     RolePermissionDeniedError,
 )
+from bisheng.core.database import get_async_db_session
 from bisheng.database.models.role import Role, RoleDao
-from bisheng.database.models.role_access import AccessType, RoleAccessDao
+from bisheng.database.models.role_access import AccessType, RoleAccess, RoleAccessDao
 from bisheng.role.domain.schemas.role_schema import (
     RoleCreateRequest,
     RoleListResponse,
@@ -88,6 +91,50 @@ class RoleService:
             if 'Duplicate entry' in str(e) or 'IntegrityError' in type(e).__name__:
                 raise RoleNameDuplicateError()
             raise
+
+    @classmethod
+    async def create_role_with_menu(
+        cls,
+        req: RoleCreateRequest,
+        login_user,
+    ) -> Role:
+        await cls._check_role_permission(login_user)
+
+        if req.quota_config:
+            QuotaService.validate_quota_config(req.quota_config)
+
+        role_type = 'global' if login_user.is_admin() else 'tenant'
+        existing = await RoleDao.aget_role_by_name(
+            tenant_id=login_user.tenant_id,
+            role_type=role_type,
+            role_name=req.role_name,
+        )
+        if existing:
+            raise RoleNameDuplicateError()
+
+        if req.department_id is not None:
+            await cls._validate_department(req.department_id)
+
+        await cls._ensure_create_scope(login_user, req.department_id)
+
+        menu_ids = cls._normalize_menu_ids(req.menu_ids or [])
+        role = Role(
+            role_name=req.role_name,
+            role_type=role_type,
+            department_id=req.department_id,
+            quota_config=req.quota_config,
+            remark=req.remark,
+        )
+
+        async with get_async_db_session() as session:
+            session.add(role)
+            await session.flush()
+            await cls._replace_menu_access_in_session(session, role.id, menu_ids)
+            await session.commit()
+            await session.refresh(role)
+
+        await cls._try_set_role_creator(role.id, login_user.user_id)
+        return role
 
     # ── List ──
 
@@ -253,6 +300,61 @@ class RoleService:
             role.department_id = req.department_id
 
         return await RoleDao.update_role(role)
+
+    @classmethod
+    async def update_role_with_menu(
+        cls,
+        role_id: int,
+        req: RoleUpdateRequest,
+        login_user,
+    ) -> Role:
+        role = await RoleDao.aget_role_by_id(role_id)
+        if not role:
+            raise RoleNotFoundError()
+
+        if not login_user.is_admin() and role.role_type == 'global':
+            raise RolePermissionDeniedError(msg='Cannot modify global role')
+
+        await cls._check_role_permission(login_user)
+        await cls._ensure_role_scope_access(role, login_user, for_mutation=True)
+
+        if req.quota_config is not None:
+            QuotaService.validate_quota_config(req.quota_config)
+
+        if req.role_name and req.role_name != role.role_name:
+            existing = await RoleDao.aget_role_by_name(
+                tenant_id=login_user.tenant_id,
+                role_type=role.role_type,
+                role_name=req.role_name,
+            )
+            if existing and existing.id != role_id:
+                raise RoleNameDuplicateError()
+
+        if req.department_id is not None:
+            await cls._validate_department(req.department_id)
+
+        menu_ids = cls._normalize_menu_ids(req.menu_ids or [])
+
+        async with get_async_db_session() as session:
+            result = await session.exec(select(Role).where(Role.id == role_id))
+            db_role = result.first()
+            if not db_role:
+                raise RoleNotFoundError()
+
+            if req.role_name is not None:
+                db_role.role_name = req.role_name
+            if req.quota_config is not None:
+                db_role.quota_config = req.quota_config
+            if req.remark is not None:
+                db_role.remark = req.remark
+            if req.department_id is not None:
+                db_role.department_id = req.department_id
+
+            session.add(db_role)
+            await cls._replace_menu_access_in_session(session, role_id, menu_ids)
+            await session.commit()
+            await session.refresh(db_role)
+            return db_role
 
     # ── Delete ──
 
@@ -452,6 +554,27 @@ class RoleService:
             raise
         except Exception as e:
             logger.warning('Failed to validate department %d: %s', department_id, e)
+
+    @classmethod
+    def _normalize_menu_ids(cls, menu_ids: List[str]) -> List[str]:
+        return list(dict.fromkeys(str(menu_id) for menu_id in menu_ids))
+
+    @classmethod
+    async def _replace_menu_access_in_session(
+        cls, session, role_id: int, menu_ids: List[str],
+    ) -> None:
+        await session.exec(
+            delete(RoleAccess).where(
+                RoleAccess.role_id == role_id,
+                RoleAccess.type == AccessType.WEB_MENU.value,
+            ),
+        )
+        for menu_id in menu_ids:
+            session.add(RoleAccess(
+                role_id=role_id,
+                third_id=menu_id,
+                type=AccessType.WEB_MENU.value,
+            ))
 
     @classmethod
     async def _ensure_create_scope(

@@ -16,6 +16,7 @@ class RoleCreateRequest(BaseModel):
     department_id: Optional[int] = None
     quota_config: Optional[dict] = None
     remark: Optional[str] = Field(None, max_length=512)
+    menu_ids: Optional[List[str]] = None
 
 
 class RoleUpdateRequest(BaseModel):
@@ -23,6 +24,7 @@ class RoleUpdateRequest(BaseModel):
     department_id: Optional[int] = None
     quota_config: Optional[dict] = None
     remark: Optional[str] = Field(None, max_length=512)
+    menu_ids: Optional[List[str]] = None
 
 
 class RoleListResponse(BaseModel):

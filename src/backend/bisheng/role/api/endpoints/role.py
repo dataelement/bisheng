@@ -19,7 +19,10 @@ async def create_role(
     login_user: LoginUser = Depends(LoginUser.get_login_user),
 ):
     """Create a new role (AC-01, AC-02)."""
-    role = await RoleService.create_role(req, login_user)
+    if req.menu_ids is not None:
+        role = await RoleService.create_role_with_menu(req, login_user)
+    else:
+        role = await RoleService.create_role(req, login_user)
     return resp_200(data={
         'id': role.id,
         'role_name': role.role_name,
@@ -62,7 +65,10 @@ async def update_role(
     login_user: LoginUser = Depends(LoginUser.get_login_user),
 ):
     """Update a role (AC-05, AC-06)."""
-    role = await RoleService.update_role(role_id, req, login_user)
+    if req.menu_ids is not None:
+        role = await RoleService.update_role_with_menu(role_id, req, login_user)
+    else:
+        role = await RoleService.update_role(role_id, req, login_user)
     return resp_200(data={
         'id': role.id,
         'role_name': role.role_name,
