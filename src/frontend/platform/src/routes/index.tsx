@@ -60,6 +60,15 @@ const RedirectToExternalLink = () => {
   return null;
 };
 
+// Redirect standalone chat routes to client app (separate SPA at /workspace)
+const RedirectToClient = () => {
+  useEffect(() => {
+    window.location.replace('/workspace' + window.location.pathname + window.location.search);
+  }, []);
+
+  return null;
+};
+
 const privateRouter = [
   { path: "/", element: <RedirectToExternalLink /> },
   {
@@ -128,14 +137,12 @@ const privateRouter = [
     errorElement: <RouteErrorBoundary />,
     element: <ResoucePage />
   },
-  // 独立会话页
-  { path: "/chat/assistant/auth/:id/", element: <ChatPro type={AppNumType.ASSISTANT} />, errorElement: <RouteErrorBoundary /> },
-  { path: "/chat/flow/auth/:id/", element: <ChatPro type={AppNumType.FLOW} />, errorElement: <RouteErrorBoundary /> },
-  // { path: "/chat/skill/auth/:id/", element: <ChatPro />, errorElement: <RouteErrorBoundary /> },
+  // Standalone chat pages — redirect to client app (/workspace)
+  { path: "/chat/assistant/auth/:id/", element: <RedirectToClient />, errorElement: <RouteErrorBoundary /> },
+  { path: "/chat/flow/auth/:id/", element: <RedirectToClient />, errorElement: <RouteErrorBoundary /> },
   { path: "/chat", element: <SkillChatPage />, errorElement: <RouteErrorBoundary /> },
-  // { path: "/chat/:id/", element: <ChatShare />, errorElement: <RouteErrorBoundary /> },
-  { path: "/chat/flow/:id/", element: <ChatShare type={AppNumType.FLOW} />, errorElement: <RouteErrorBoundary /> },
-  { path: "/chat/assistant/:id/", element: <ChatAssitantShare />, errorElement: <RouteErrorBoundary /> },
+  { path: "/chat/flow/:id/", element: <RedirectToClient />, errorElement: <RouteErrorBoundary /> },
+  { path: "/chat/assistant/:id/", element: <RedirectToClient />, errorElement: <RouteErrorBoundary /> },
   { path: "/report/:id/", element: <Report />, errorElement: <RouteErrorBoundary /> },
   { path: "/diff/:id/:vid/:cid", element: <DiffFlowPage />, errorElement: <RouteErrorBoundary /> },
   { path: "/reset", element: <ResetPwdPage />, errorElement: <RouteErrorBoundary /> },
@@ -176,9 +183,9 @@ export const getAdminRouter = () => {
 export const publicRouter = createBrowserRouter([
   { path: "/", element: <LoginPage />, errorElement: <RouteErrorBoundary /> },
   { path: "/reset", element: <ResetPwdPage />, errorElement: <RouteErrorBoundary /> },
-  { path: "/chat/:id/", element: <ChatShare />, errorElement: <RouteErrorBoundary /> },
-  { path: "/chat/flow/:id/", element: <ChatShare type={AppNumType.FLOW} />, errorElement: <RouteErrorBoundary /> },
-  { path: "/chat/assistant/:id/", element: <ChatAssitantShare />, errorElement: <RouteErrorBoundary /> },
+  { path: "/chat/:id/", element: <RedirectToClient />, errorElement: <RouteErrorBoundary /> },
+  { path: "/chat/flow/:id/", element: <RedirectToClient />, errorElement: <RouteErrorBoundary /> },
+  { path: "/chat/assistant/:id/", element: <RedirectToClient />, errorElement: <RouteErrorBoundary /> },
   { path: "/resouce/:cid/:mid", element: <ResoucePage />, errorElement: <RouteErrorBoundary /> },
   { path: "/403", element: <Page403 /> },
   { path: "*", element: <LoginPage /> }

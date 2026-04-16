@@ -25,6 +25,7 @@ import Root from './Root';
 import Knowledge from '~/pages/knowledge';
 import FilePreviewPage from '~/pages/knowledge/FilePreview/FilePreviewPage';
 import DevLogin from '~/pages/DevLogin';
+import StandaloneChatPage from '~/pages/standaloneChat/StandaloneChatPage';
 
 const AuthLayout = () => (
   <AuthContextProvider>
@@ -95,10 +96,17 @@ export const router = createBrowserRouter([
           { path: 'knowledge/share/:spaceId', element: <Knowledge /> },
         ],
       },
+      // Standalone chat — auth (login required, inside AuthLayout)
+      { path: 'chat/flow/auth/:flowId', element: <StandaloneChatPage mode="auth" flowType="workflow" /> },
+      { path: 'chat/assistant/auth/:flowId', element: <StandaloneChatPage mode="auth" flowType="assistant" /> },
+
       { path: 'share/:token/:vid?', element: <Share /> },
       { path: 'knowledge/file/:fileId', element: <FilePreviewPage /> },
     ],
   },
+  // Standalone chat — guest (no login, outside AuthLayout to avoid 401 redirect)
+  { path: 'chat/flow/:flowId', element: <StandaloneChatPage mode="guest" flowType="workflow" />, errorElement: <RouteErrorBoundary /> },
+  { path: 'chat/assistant/:flowId', element: <StandaloneChatPage mode="guest" flowType="assistant" />, errorElement: <RouteErrorBoundary /> },
   { path: '/html', element: <WebView /> },
   { path: '/__dev/login', element: <DevLogin /> },
   { path: '/404', element: <Page404 /> },

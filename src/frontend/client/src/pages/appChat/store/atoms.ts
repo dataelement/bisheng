@@ -65,6 +65,12 @@ export const chatFileState = atom<{ name: string, path: string }[]>({
     default: [],
 })
 
+// API version for chat endpoints (v1 = authenticated, v2 = guest/open)
+export const chatApiVersionState = atom<'v1' | 'v2'>({
+    key: "chatApiVersionState",
+    default: 'v1',
+})
+
 // 毕昇配置信息
 export const bishengConfState = atom<BishengConfig | null>({
     key: "bishengConfState",

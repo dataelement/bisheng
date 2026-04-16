@@ -803,8 +803,8 @@ export function archiveConversation(
   return request.post(endpoints.updateConversation(), { arg: payload });
 }
 
-export function genTitle(payload: m.TGenTitleRequest): Promise<m.TGenTitleResponse> {
-  return request.post(endpoints.genTitle(), payload).then(res => res.data);
+export function genTitle(payload: m.TGenTitleRequest, version: 'v1' | 'v2' = 'v1'): Promise<m.TGenTitleResponse> {
+  return request.post(endpoints.genTitle(version), payload).then(res => res.data);
 }
 
 export function getPrompt(id: string): Promise<{ prompt: t.TPrompt }> {
