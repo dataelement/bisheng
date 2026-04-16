@@ -18,7 +18,7 @@ import Tip from "@/components/bs-ui/tooltip/tip";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { downloadFile, truncateString } from "@/util/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@radix-ui/react-dropdown-menu";
-import { CircleAlertIcon, ClipboardPenLine, Filter, RotateCw, Trash2, Download } from "lucide-react";
+import { CircleAlertIcon, ClipboardPenLine, Filter, RotateCw, Trash2, Download, Tag as TagIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { SearchInput } from "../../../components/bs-ui/input";
@@ -28,6 +28,8 @@ import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 import { useTable } from "../../../util/hook";
 import useKnowledgeStore from "../useKnowledgeStore";
 import { MetadataManagementDialog } from "./MetadataManagementDialog";
+import FileTagList from "./tags/FileTagList";
+import KnowledgeTagSelect from "./tags/KnowledgeTagSelect";
 
 interface StatusIndicatorProps {
     status: number;
@@ -239,6 +241,7 @@ export default function Files({ onPreview }) {
 
     // Batch Download
     const [isDownloading, setIsDownloading] = useState(false);
+    const canBatchEditTags = isEditable && selectedFileObjs.length > 0 && selectedFileObjs.every(file => file.status === 2);
     const handleBatchDownload = async () => {
         setIsDownloading(true);
         try {
@@ -392,6 +395,24 @@ export default function Files({ onPreview }) {
                             {isDownloading ? <LoadingIcon className="h-4 w-4 mr-1" /> : <Download size={16} />}
                             <span className="hidden sm:inline">{t('download', { ns: 'bs' })}</span>
                         </Button>
+                        <Tip content={!isEditable ? t('noOperationPermission') : !canBatchEditTags ? t('tagOperationRequiresCompletedFiles') : ''} side='bottom'>
+                            <KnowledgeTagSelect
+                                knowledgeId={id}
+                                fileIds={selectedFileObjs.map(f => Number(f.id))}
+                                onUpdate={reload}
+                                isEditable={canBatchEditTags}
+                            >
+                                <Button
+                                    variant="outline"
+                                    disabled={!canBatchEditTags}
+                                    className="flex items-center gap-1 disabled:pointer-events-auto h-9 px-2 sm:px-4"
+                                    onClick={(e) => e.stopPropagation()}
+                                >
+                                    <TagIcon size={16} />
+                                    <span className="hidden sm:inline">{t('tags')}</span>
+                                </Button>
+                            </KnowledgeTagSelect>
+                        </Tip>
                         <Tip content={!isEditable && t('noOperationPermission')} side='bottom'>
                             <Button
                                 variant="outline"
@@ -453,6 +474,7 @@ export default function Files({ onPreview }) {
                                 />
                             </TableHead>
                             <TableHead className="min-w-[250px]">{t('fileName')}</TableHead>
+                            <TableHead className="min-w-[150px]">{t('tags')}</TableHead>
                             <TableHead>{t('segmentationStrategy')}</TableHead>
                             <TableHead className="min-w-[100px]">{t('updateTime')}</TableHead>
                             <TableHead className="flex items-center gap-4 min-w-[130px]">
@@ -601,6 +623,15 @@ export default function Files({ onPreview }) {
                                             {truncateString(el.file_name, 35)}
                                         </div>
                                     </Tip>
+                                </TableCell>
+                                <TableCell className="min-w-[150px]">
+                                    <FileTagList
+                                        knowledgeId={id}
+                                        fileId={el.id}
+                                        tags={el.tags || []}
+                                        isEditable={isEditable && el.status === 2}
+                                        onUpdate={reload}
+                                    />
                                 </TableCell>
                                 <TableCell>
                                     {el.strategy[0] ? (

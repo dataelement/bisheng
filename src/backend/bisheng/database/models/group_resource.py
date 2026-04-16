@@ -17,6 +17,7 @@ class ResourceTypeEnum(Enum):
     DASHBOARD = 6  # KANBAN
     WORKSTATION = 7  # Workstation
     SPACE_FILE = 8  # Knowledge Space File
+    KNOWLEDGE_FILE = 9  # Knowledge Base File
 
 
 class GroupResourceBase(SQLModelSerializable):

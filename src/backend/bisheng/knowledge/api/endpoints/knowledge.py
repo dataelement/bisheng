@@ -33,8 +33,9 @@ from bisheng.knowledge.domain.models.knowledge import (KnowledgeCreate, Knowledg
 from bisheng.knowledge.domain.models.knowledge import KnowledgeState
 from bisheng.knowledge.domain.models.knowledge_file import (KnowledgeFileDao, KnowledgeFileStatus,
                                                             QAKnoweldgeDao, QAKnowledgeUpsert, QAStatus)
-from bisheng.knowledge.domain.schemas.knowledge_schema import AddKnowledgeMetadataFieldsReq, \
-    UpdateKnowledgeMetadataFieldsReq, ModifyKnowledgeFileMetaDataReq
+from bisheng.knowledge.domain.schemas.knowledge_schema import (
+    AddKnowledgeMetadataFieldsReq, UpdateKnowledgeMetadataFieldsReq,
+    ModifyKnowledgeFileMetaDataReq, UpdateFileTagsReq, BatchAddFileTagsReq)
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.llm.domain import LLMService
 from bisheng.llm.domain.const import LLMModelType
@@ -921,6 +922,82 @@ async def batch_download_knowledge_files(
     )
     return resp_200(data={"url": download_url})
 
+
+@router.get("/{knowledge_id}/tags", description="获取知识库下所有标签", response_model=UnifiedResponseModel)
+async def get_knowledge_tags(
+        *,
+        login_user: UserPayload = Depends(UserPayload.get_login_user),
+        knowledge_id: int,
+        keyword: str = Query(default=None, description="标签名称模糊搜索"),
+        page: int = Query(default=1, ge=1, description="页码"),
+        limit: int = Query(default=10, ge=1, le=100, description="每页数量"),
+):
+    tags, total = await KnowledgeService.get_knowledge_tags(
+        login_user,
+        knowledge_id,
+        keyword,
+        page,
+        limit,
+    )
+    return resp_200(data={"data": tags, "total": total})
+
+
+@router.post("/tags", description="创建知识库标签", response_model=UnifiedResponseModel)
+async def add_knowledge_tag(
+        *,
+        login_user: UserPayload = Depends(UserPayload.get_login_user),
+        knowledge_id: int = Body(..., embed=True, description="Knowledge base ID"),
+        tag_name: str = Body(..., embed=True, description="标签名称"),
+):
+    tag = await KnowledgeService.add_knowledge_tag(login_user, knowledge_id, tag_name)
+    return resp_200(data=tag)
+
+
+@router.put("/tags/{tag_id}", description="编辑知识库标签名", response_model=UnifiedResponseModel)
+async def update_knowledge_tag(
+        *,
+        login_user: UserPayload = Depends(UserPayload.get_login_user),
+        tag_id: int,
+        knowledge_id: int = Body(..., embed=True),
+        tag_name: str = Body(..., embed=True, description="新的标签名称"),
+):
+    tag = await KnowledgeService.update_knowledge_tag(login_user, knowledge_id, tag_id, tag_name)
+    return resp_200(data=tag)
+
+
+@router.delete("/tags/{tag_id}", description="删除知识库标签", response_model=UnifiedResponseModel)
+async def delete_knowledge_tag(
+        *,
+        login_user: UserPayload = Depends(UserPayload.get_login_user),
+        tag_id: int,
+        knowledge_id: int = Body(..., embed=True),
+):
+    await KnowledgeService.delete_knowledge_tag(login_user, knowledge_id, tag_id)
+    return resp_200()
+
+
+@router.post("/file/tags", description="设置文件标签(全量替换)", response_model=UnifiedResponseModel)
+async def update_file_tags(
+        *,
+        login_user: UserPayload = Depends(UserPayload.get_login_user),
+        req_data: UpdateFileTagsReq,
+):
+    await KnowledgeService.update_file_tags(
+        login_user, req_data.knowledge_id, req_data.file_id, req_data.tag_ids
+    )
+    return resp_200()
+
+
+@router.post("/file/tags/batch", description="批量给文件追加标签", response_model=UnifiedResponseModel)
+async def batch_add_file_tags(
+        *,
+        login_user: UserPayload = Depends(UserPayload.get_login_user),
+        req_data: BatchAddFileTagsReq,
+):
+    await KnowledgeService.batch_add_file_tags(
+        login_user, req_data.knowledge_id, req_data.file_ids, req_data.tag_ids
+    )
+    return resp_200()
 
 @router.get("/file/info/{file_id}", description="Get knowledge base file information",
             response_model=UnifiedResponseModel)

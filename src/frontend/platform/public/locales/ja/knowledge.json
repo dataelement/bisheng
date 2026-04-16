@@ -410,5 +410,22 @@
     "selectAll": "全選択",
     "import": "インポート",
     "export": "エクスポート",
-    "fileExists": "{{name1}} はすでに {{name2}}として存在しています"
+    "fileExists": "{{name1}} はすでに {{name2}}として存在しています",
+    "tags": "タグ",
+    "addTag": "タグ追加",
+    "editTag": "タグ編集",
+    "searchTags": "タグを検索",
+    "createTag": "タグを作成",
+    "createTagWithName": "タグ「{{name}}」を作成",
+    "deleteTag": "タグ削除",
+    "confirmDeleteTag": "タグ「{{name}}」を削除しますか？",
+    "tagsCountLimitExceeded": "1 ファイルに関連付けできるタグは最大 5 個です",
+    "tagNameMaxLength": "タグ名は {{count}} 文字以内で入力してください",
+    "tagExists": "タグはすでに存在します",
+    "tagAdded": "タグを追加しました",
+    "tagUpdated": "タグを更新しました",
+    "tagDeleted": "削除しました",
+    "noTags": "タグがありません",
+    "noTagsSelected": "タグが選択されていません",
+    "tagOperationRequiresCompletedFiles": "タグ操作は完了済みファイルのみ対応しています"
 }
