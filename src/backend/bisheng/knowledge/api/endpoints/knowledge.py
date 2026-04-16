@@ -898,6 +898,30 @@ def update_knowledge_model(*,
     return resp_200()
 
 
+@router.post("/file/batch_download", description="Batch download knowledge base files",
+             response_model=UnifiedResponseModel)
+async def batch_download_knowledge_files(
+        *,
+        login_user: UserPayload = Depends(UserPayload.get_login_user),
+        knowledge_id: int = Body(..., embed=True, description="Knowledge base ID"),
+        file_ids: List[int] = Body(..., embed=True, description="List of file IDs to download"),
+):
+    """Batch download files from a document knowledge base.
+
+    - **1 file**: returns a presigned URL pointing directly to the original object in MinIO.
+    - **≥ 2 files**: packs all files into a ZIP archive (named ``{kb_name}{YYYYMMDD_HHMM}.zip``),
+      uploads it to the MinIO tmp bucket, and returns a presigned URL valid for **7 days**.
+
+    The caller must have at least read (``KNOWLEDGE``) access to the knowledge base.
+    """
+    download_url = await KnowledgeService.batch_download_files(
+        login_user=login_user,
+        knowledge_id=knowledge_id,
+        file_ids=file_ids,
+    )
+    return resp_200(data={"url": download_url})
+
+
 @router.get("/file/info/{file_id}", description="Get knowledge base file information",
             response_model=UnifiedResponseModel)
 async def get_knowledge_file_info(*,

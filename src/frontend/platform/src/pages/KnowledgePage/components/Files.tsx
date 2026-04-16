@@ -15,14 +15,15 @@ import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Checkbox } from "@/components/bs-ui/checkBox";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
 import Tip from "@/components/bs-ui/tooltip/tip";
-import { truncateString } from "@/util/utils";
+import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { downloadFile, truncateString } from "@/util/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@radix-ui/react-dropdown-menu";
-import { CircleAlertIcon, ClipboardPenLine, Filter, RotateCw, Trash2 } from "lucide-react";
+import { CircleAlertIcon, ClipboardPenLine, Filter, RotateCw, Trash2, Download } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { SearchInput } from "../../../components/bs-ui/input";
 import AutoPagination from "../../../components/bs-ui/pagination/autoPagination";
-import { deleteFile, getKnowledgeDetailApi, readFileByLibDatabase, retryKnowledgeFileApi } from "../../../controllers/API";
+import { deleteFile, getKnowledgeDetailApi, readFileByLibDatabase, retryKnowledgeFileApi, batchDownloadFileApi } from "../../../controllers/API";
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 import { useTable } from "../../../util/hook";
 import useKnowledgeStore from "../useKnowledgeStore";
@@ -104,6 +105,7 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({ status, remark
 export default function Files({ onPreview }) {
     const { t } = useTranslation('knowledge')
     const { id } = useParams()
+    const { toast } = useToast()
 
     const { isEditable, setEditable } = useKnowledgeStore();
     const { page, pageSize, data: datalist, total, loading, setPage, search, reload, filterData } = useTable({ cancelLoadingWhenReload: true }, (param) =>
@@ -235,6 +237,41 @@ export default function Files({ onPreview }) {
         })
     }
 
+    // Batch Download
+    const [isDownloading, setIsDownloading] = useState(false);
+    const handleBatchDownload = async () => {
+        setIsDownloading(true);
+        try {
+            const fileIds = selectedFileObjs.map(f => Number(f.id));
+            if (!fileIds.length) {
+                toast({ variant: 'error', description: t('selectFile', { ns: 'knowledge' }) });
+                setIsDownloading(false);
+                return;
+            }
+            const url = await batchDownloadFileApi({ knowledge_id: Number(id), file_ids: fileIds });
+            if (url) {
+                if (fileIds.length === 1) {
+                    downloadFile(url, selectedFileObjs[0].file_name);
+                } else {
+                    const now = new Date();
+                    const dateStr =
+                        String(now.getFullYear()) +
+                        String(now.getMonth() + 1).padStart(2, '0') +
+                        String(now.getDate()).padStart(2, '0');
+                    const timeStr = String(now.getHours()).padStart(2, '0') + String(now.getMinutes()).padStart(2, '0');
+                    const libName = localStorage.getItem('libname') || '知识库';
+                    downloadFile(url, `${libName}_${dateStr}_${timeStr}.zip`);
+                }
+            } else {
+                toast({ variant: 'error', description: t('errors.10003', { ns: 'bs' }) });
+            }
+        } catch (e) {
+            toast({ variant: 'error', description: t('errors.10003', { ns: 'bs' }) });
+        } finally {
+            setIsDownloading(false);
+        }
+    };
+
     // Batch retry
     const handleBatchRetry = () => {
         // Filter failed files, preserving complete parameters
@@ -346,6 +383,15 @@ export default function Files({ onPreview }) {
                 {/* Batch Actions */}
                 {selectedFileObjs.length > 0 && (
                     <div className="flex items-center gap-2 mr-1 md:mr-0 pr-2 md:pr-4 border-r border-gray-200 dark:border-gray-700">
+                        <Button
+                            variant="outline"
+                            onClick={handleBatchDownload}
+                            disabled={isDownloading}
+                            className="flex items-center gap-1 disabled:pointer-events-auto h-9 px-2 sm:px-4"
+                        >
+                            {isDownloading ? <LoadingIcon className="h-4 w-4 mr-1" /> : <Download size={16} />}
+                            <span className="hidden sm:inline">{t('download', { ns: 'bs' })}</span>
+                        </Button>
                         <Tip content={!isEditable && t('noOperationPermission')} side='bottom'>
                             <Button
                                 variant="outline"

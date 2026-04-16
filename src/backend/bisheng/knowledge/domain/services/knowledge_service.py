@@ -1348,3 +1348,91 @@ class KnowledgeService(KnowledgeUtils):
         if db_knowledge.type != KnowledgeTypeEnum.QA.value:
             raise KnowledgeNotQAError()
         return db_knowledge
+
+    @classmethod
+    async def batch_download_files(
+            cls,
+            login_user: UserPayload,
+            knowledge_id: int,
+            file_ids: List[int],
+    ) -> str:
+        """Batch download knowledge-base files.
+
+        Business rules (from M2 spec):
+        - 1 file  → return a MinIO presigned URL directly pointing to the original object.
+        - ≥2 files → pack into a ZIP archive named ``{knowledge_name}{YYYYMMDD_HHMM}.zip``,
+          upload to the MinIO *tmp* bucket, and return a presigned URL valid for 7 days.
+
+        Permission: the caller must have at least ``AccessType.KNOWLEDGE`` (read) access.
+        """
+        import os
+        import tempfile
+        import zipfile
+        from pathlib import Path
+
+        # ── 1. Permission check ──────────────────────────────────────────────────
+        knowledge = KnowledgeDao.query_by_id(knowledge_id)
+        if not knowledge:
+            raise NotFoundError(msg="knowledge not found")
+        if not login_user.access_check(knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE):
+            raise UnAuthorizedError()
+
+        if not file_ids:
+            raise NotFoundError(msg="file_ids must not be empty")
+
+        # ── 2. Query file records ────────────────────────────────────────────────
+        db_files: List[KnowledgeFile] = KnowledgeFileDao.select_list(file_ids)
+        # Keep only files that actually belong to this knowledge base
+        db_files = [f for f in db_files if f.knowledge_id == knowledge_id]
+        if not db_files:
+            raise NotFoundError(msg="no valid files found")
+
+        minio_client = get_minio_storage_sync()
+
+        # ── 3. Single-file shortcut: return presigned URL directly ───────────────
+        if len(db_files) == 1:
+            file = db_files[0]
+            object_name = file.object_name
+            if not object_name:
+                raise NotFoundError(msg="file has no stored object")
+            return minio_client.get_share_link_sync(object_name)
+
+        # ── 4. Multi-file: pack into ZIP, upload to tmp bucket, return URL ───────
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M")
+        zip_name = f"{knowledge.name}{timestamp}.zip"
+        zip_uuid = generate_uuid()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            zip_path = os.path.join(tmp_dir, zip_name)
+            with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+                for file in db_files:
+                    object_name = file.object_name
+                    if not object_name:
+                        continue
+                    local_path = os.path.join(tmp_dir, file.file_name)
+                    try:
+                        resp = minio_client.download_object_sync(object_name=object_name)
+                        with open(local_path, "wb") as fh:
+                            for chunk in resp.stream(65536):
+                                fh.write(chunk)
+                        zf.write(local_path, arcname=file.file_name)
+                    except Exception as exc:
+                        logger.warning(f"batch_download: skip file {file.id} due to error: {exc}")
+                    finally:
+                        try:
+                            resp.close()
+                            resp.release_conn()
+                        except Exception:
+                            pass
+
+            # ── 5. Upload ZIP to MinIO tmp bucket ────────────────────────────────
+            minio_object_name = f"download/{zip_uuid}/{zip_name}"
+            await minio_client.put_object_tmp(minio_object_name, Path(zip_path), content_type="application/zip")
+            share_url = await minio_client.get_share_link(
+                minio_object_name,
+                bucket=minio_client.tmp_bucket,
+                clear_host=True,
+                expire_days=7,
+            )
+
+        return share_url
