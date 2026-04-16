@@ -39,6 +39,7 @@ from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.llm.domain import LLMService
 from bisheng.llm.domain.const import LLMModelType
 from bisheng.llm.domain.models import LLMDao
+from bisheng.role.domain.services.quota_service import require_quota, QuotaResourceType
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_uuid, calc_data_sha256
 from bisheng.worker.knowledge.qa import insert_qa_celery
@@ -70,6 +71,7 @@ async def upload_file(*, file: UploadFile = File(...)):
 
 
 @router.post('/upload/{knowledge_id}')
+@require_quota(QuotaResourceType.KNOWLEDGE_SPACE_FILE)
 async def upload_knowledge_file(*,
                                 request: Request,
                                 login_user: UserPayload = Depends(UserPayload.get_login_user),

@@ -15,6 +15,7 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.common.schemas.api import PageData
 from bisheng.core.cache.redis_manager import get_redis_client
+from bisheng.role.domain.services.quota_service import require_quota, QuotaResourceType
 from bisheng.database.models.assistant import Assistant
 from bisheng.share_link.api.dependencies import header_share_token_parser
 from bisheng.share_link.domain.models.share_link import ShareLink
@@ -56,6 +57,7 @@ def delete_assistant(*,
 
 
 @router.post('')
+@require_quota(QuotaResourceType.ASSISTANT)
 async def create_assistant(*,
                            request: Request,
                            req: AssistantCreateReq,

@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, Body, Request
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.schemas.api import UnifiedResponseModel, resp_200
+from bisheng.role.domain.services.quota_service import require_quota, QuotaResourceType
 from bisheng.mcp_manage.langchain.tool import McpTool
 from bisheng.mcp_manage.manager import ClientManager
 from bisheng.tool.domain.models.gpts_tools import GptsToolsTypeRead
@@ -26,6 +27,7 @@ async def get_tool_list(*,
 
 
 @router.post('')
+@require_quota(QuotaResourceType.TOOL)
 async def add_tool_type(request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user),
                         req: Dict = Body(default={})):
     """ Add customizationtool """

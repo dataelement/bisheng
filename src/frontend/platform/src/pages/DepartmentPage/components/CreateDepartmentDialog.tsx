@@ -1,3 +1,5 @@
+import { SubjectSearchUser } from "@/components/bs-comp/permission/SubjectSearchUser"
+import type { SelectedSubject } from "@/components/bs-comp/permission/types"
 import { Button } from "@/components/bs-ui/button"
 import {
   Dialog,
@@ -31,6 +33,7 @@ export function CreateDepartmentDialog({
   const { t } = useTranslation()
   const [name, setName] = useState("")
   const [parentId, setParentId] = useState<number | null>(defaultParentId)
+  const [adminPicks, setAdminPicks] = useState<SelectedSubject[]>([])
   const [loading, setLoading] = useState(false)
 
   // Flatten tree for parent selector
@@ -54,7 +57,11 @@ export function CreateDepartmentDialog({
     }
     setLoading(true)
     captureAndAlertRequestErrorHoc(
-      createDepartmentApi({ name, parent_id: parentId })
+      createDepartmentApi({
+        name,
+        parent_id: parentId,
+        admin_user_ids: adminPicks.length ? adminPicks.map((s) => s.id) : undefined,
+      })
     ).then((res) => {
       setLoading(false)
       if (res !== null) {
@@ -99,6 +106,34 @@ export function CreateDepartmentDialog({
               placeholder={t("bs:department.nameRequired")}
               maxLength={50}
             />
+          </div>
+
+          {/* Department admins (optional) */}
+          <div className="space-y-2">
+            <Label>{t("bs:department.admins")}</Label>
+            <SubjectSearchUser
+              value={adminPicks}
+              onChange={setAdminPicks}
+            />
+            {adminPicks.length > 0 && (
+              <div className="flex flex-wrap gap-1 pt-1">
+                {adminPicks.map((s) => (
+                  <span
+                    key={s.id}
+                    className="inline-flex items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-xs"
+                  >
+                    {s.name}
+                    <button
+                      type="button"
+                      className="ml-0.5 text-muted-foreground hover:text-destructive"
+                      onClick={() => setAdminPicks((prev) => prev.filter((p) => p.id !== s.id))}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         </div>
         <DialogFooter>

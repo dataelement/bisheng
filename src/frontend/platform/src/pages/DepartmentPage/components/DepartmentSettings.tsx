@@ -4,10 +4,14 @@ import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
 import { Button } from "@/components/bs-ui/button"
 import { Input } from "@/components/bs-ui/input"
 import { Label } from "@/components/bs-ui/label"
+import MultiSelect from "@/components/bs-ui/select/multi"
 import { toast } from "@/components/bs-ui/toast/use-toast"
 import {
   deleteDepartmentApi,
   getDepartmentAdminsApi,
+  getDepartmentApi,
+  getDepartmentAssignableRolesApi,
+  purgeDepartmentApi,
   setDepartmentAdminsApi,
   updateDepartmentApi,
 } from "@/controllers/API/department"
@@ -28,6 +32,8 @@ export function DepartmentSettings({ dept, tree, onChanged }: DepartmentSettings
   const [name, setName] = useState(dept.name)
   const [admins, setAdmins] = useState<DepartmentAdmin[]>([])
   const [pendingAdminPick, setPendingAdminPick] = useState<SelectedSubject[]>([])
+  const [defaultRoleIds, setDefaultRoleIds] = useState<string[]>([])
+  const [assignableRoles, setAssignableRoles] = useState<{ value: string; label: string }[]>([])
   const isSynced = isSyncedSource(dept.source)
 
   useEffect(() => {
@@ -36,6 +42,18 @@ export function DepartmentSettings({ dept, tree, onChanged }: DepartmentSettings
     captureAndAlertRequestErrorHoc(getDepartmentAdminsApi(dept.dept_id)).then(
       (res) => {
         if (res) setAdmins(res)
+      }
+    )
+    // Load default roles
+    captureAndAlertRequestErrorHoc(getDepartmentApi(dept.dept_id)).then(
+      (res) => {
+        if (res) setDefaultRoleIds((res.default_role_ids ?? []).map(String))
+      }
+    )
+    // Load assignable roles
+    captureAndAlertRequestErrorHoc(getDepartmentAssignableRolesApi(dept.dept_id)).then(
+      (res) => {
+        if (res) setAssignableRoles(res.map((r) => ({ value: String(r.id), label: r.role_name })))
       }
     )
   }, [dept.dept_id])
@@ -96,6 +114,16 @@ export function DepartmentSettings({ dept, tree, onChanged }: DepartmentSettings
     })
   }, [admins, dept.dept_id, onChanged, pendingAdminPick, t])
 
+  const handleSaveDefaultRoles = useCallback(() => {
+    captureAndAlertRequestErrorHoc(
+      updateDepartmentApi(dept.dept_id, { default_role_ids: defaultRoleIds.map(Number) })
+    ).then((res) => {
+      if (res !== null) {
+        toast({ title: t("prompt"), variant: "success" })
+      }
+    })
+  }, [dept.dept_id, defaultRoleIds, t])
+
   const handleDelete = useCallback(() => {
     bsConfirm({
       title: t("bs:department.delete"),
@@ -114,6 +142,26 @@ export function DepartmentSettings({ dept, tree, onChanged }: DepartmentSettings
     })
   }, [dept.dept_id, onChanged, t])
 
+  const handlePurge = useCallback(() => {
+    bsConfirm({
+      title: t("bs:department.permanentDelete"),
+      desc: t("bs:department.confirmPermanentDelete"),
+      onOk: (next) => {
+        captureAndAlertRequestErrorHoc(
+          purgeDepartmentApi(dept.dept_id)
+        ).then((res) => {
+          if (res !== null) {
+            toast({ title: t("bs:department.permanentDelete"), variant: "success" })
+            onChanged()
+          }
+          next()
+        })
+      },
+    })
+  }, [dept.dept_id, onChanged, t])
+
+  const isArchived = dept.status === "archived"
+
   // Find parent name
   const findParentName = (
     nodes: DepartmentTreeNode[],
@@ -130,10 +178,16 @@ export function DepartmentSettings({ dept, tree, onChanged }: DepartmentSettings
 
   return (
     <div className="max-w-lg space-y-6">
+      {isArchived && (
+        <div className="rounded-md border border-orange-200 bg-orange-50 p-3 text-sm text-orange-800 dark:border-orange-800 dark:bg-orange-950 dark:text-orange-200">
+          {t("bs:department.archivedNotice")}
+        </div>
+      )}
+
       {/* Department Name */}
       <div className="space-y-2">
         <Label>{t("bs:department.name")}</Label>
-        {isSynced ? (
+        {isSynced || isArchived ? (
           <div>
             <Input value={name} disabled />
             <p className="mt-1 text-xs text-muted-foreground">
@@ -196,8 +250,33 @@ export function DepartmentSettings({ dept, tree, onChanged }: DepartmentSettings
         </div>
       </div>
 
-      {/* Delete */}
-      {!isSynced && dept.parent_id !== null && (
+      {/* Default Roles */}
+      <div className="space-y-2">
+        <Label>{t("bs:department.defaultRoles")}</Label>
+        <p className="text-xs text-muted-foreground">
+          {t("bs:department.defaultRolesHint")}
+        </p>
+        <MultiSelect
+          multiple
+          value={defaultRoleIds}
+          options={assignableRoles}
+          placeholder={t("bs:department.selectRoles")}
+          onChange={(vals) => setDefaultRoleIds(vals as string[])}
+        />
+        <Button type="button" size="sm" onClick={handleSaveDefaultRoles}>
+          {t("save")}
+        </Button>
+      </div>
+
+      {/* Delete / Purge */}
+      {isArchived && (
+        <div className="border-t pt-6">
+          <Button variant="destructive" onClick={handlePurge}>
+            {t("bs:department.permanentDelete")}
+          </Button>
+        </div>
+      )}
+      {!isArchived && !isSynced && dept.parent_id !== null && (
         <div className="border-t pt-6">
           <Button variant="destructive" onClick={handleDelete}>
             {t("bs:department.delete")}

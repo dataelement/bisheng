@@ -24,6 +24,7 @@ from bisheng.database.models.flow import Flow, FlowCreate, FlowDao, FlowRead, Fl
     FlowStatus
 from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.role_access import AccessType
+from bisheng.role.domain.services.quota_service import require_quota, QuotaResourceType
 from bisheng.share_link.api.dependencies import header_share_token_parser
 from bisheng.share_link.domain.models.share_link import ShareLink
 from bisheng.utils import generate_uuid
@@ -159,6 +160,7 @@ async def workflow_ws(*,
 
 
 @router.post('/create', status_code=201)
+@require_quota(QuotaResourceType.WORKFLOW)
 def create_flow(*, request: Request, flow: FlowCreate, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """Create a new flow."""
     # Determine if the user repeats the skill name

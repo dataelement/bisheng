@@ -291,6 +291,8 @@ def require_quota(resource_type: str):
                     tenant_id=login_user.tenant_id,
                     login_user=login_user,
                 )
-            return await func(*args, **kwargs)
+            if asyncio.iscoroutinefunction(func):
+                return await func(*args, **kwargs)
+            return func(*args, **kwargs)
         return wrapper
     return decorator

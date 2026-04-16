@@ -24,6 +24,7 @@ from bisheng.common.errcode.department import (
     DepartmentMemberExistsError,
     DepartmentMemberNotFoundError,
     DepartmentNameDuplicateError,
+    DepartmentNotArchivedError,
     DepartmentNotFoundError,
     DepartmentOpenFGAUnavailableError,
     DepartmentPermissionDeniedError,
@@ -103,6 +104,12 @@ async def _check_permission(
     raise DepartmentPermissionDeniedError()
 
 
+def _get_dept_id_prefix() -> str:
+    from bisheng.common.services.config_service import settings
+    prefix = settings.get_from_db('dept_id_prefix')
+    return prefix if isinstance(prefix, str) and prefix else 'BS'
+
+
 def generate_dept_id(prefix: str = 'BS') -> str:
     """Generate a business key like 'BS@a3f7e9'."""
     return f'{prefix}@{secrets.token_hex(3)}'
@@ -161,7 +168,7 @@ class DepartmentService:
             # Generate dept_id with retry (3 attempts + 1 fallback with longer hex)
             dept_id = None
             for _ in range(3):
-                candidate = generate_dept_id()
+                candidate = generate_dept_id(_get_dept_id_prefix())
                 existing = (await session.exec(
                     select(Department).where(Department.dept_id == candidate)
                 )).first()
@@ -216,9 +223,11 @@ class DepartmentService:
                 raise DepartmentPermissionDeniedError()
 
         async with get_async_db_session() as session:
-            # Get all active departments for current tenant
+            # Get all departments (including archived) for current tenant
             result = await session.exec(
-                select(Department).where(Department.status == 'active')
+                select(Department).where(
+                    Department.status.in_(['active', 'archived'])
+                )
             )
             depts = result.all()
 
@@ -372,6 +381,70 @@ class DepartmentService:
             await DepartmentChangeHandler.execute_async(ops)
 
     @classmethod
+    async def apurge_department(cls, dept_id: str, login_user) -> None:
+        """Permanently delete an archived department and clean up all references."""
+        async with get_async_db_session() as session:
+            dept = await _get_dept_or_raise(session, dept_id)
+            await _check_permission(login_user, dept_internal_id=dept.id)
+
+            if dept.status != 'archived':
+                raise DepartmentNotArchivedError()
+
+            dept_internal_id = dept.id
+
+            # Collect member user_ids for OpenFGA cleanup
+            member_rows = (await session.exec(
+                select(UserDepartment.user_id).where(
+                    UserDepartment.department_id == dept_internal_id,
+                )
+            )).all()
+            member_user_ids = list(member_rows)
+
+            # Delete UserDepartment records
+            await session.exec(
+                delete(UserDepartment).where(
+                    UserDepartment.department_id == dept_internal_id,
+                )
+            )
+
+            # Unscope roles tied to this department
+            from bisheng.database.models.role import Role
+            await session.exec(
+                update(Role).where(Role.department_id == dept_internal_id).values(
+                    department_id=None,
+                )
+            )
+
+            # Physical delete
+            await session.delete(dept)
+            await session.commit()
+
+        # Collect admin user_ids from OpenFGA
+        admin_user_ids: list[int] = []
+        from bisheng.core.openfga.manager import aget_fga_client
+        fga = await aget_fga_client()
+        if fga is not None:
+            try:
+                tuples = await fga.read_tuples(
+                    relation='admin', object=f'department:{dept_internal_id}',
+                )
+                for t in tuples:
+                    user_str = t.get('user', '') if isinstance(t, dict) else ''
+                    if not user_str and isinstance(t.get('key'), dict):
+                        user_str = t['key'].get('user', '')
+                    if user_str.startswith('user:'):
+                        try:
+                            admin_user_ids.append(int(user_str.split(':', 1)[1]))
+                        except ValueError:
+                            continue
+            except Exception:
+                logger.warning('FGA read_tuples failed during purge of department %s', dept_id)
+
+        # Clean up OpenFGA tuples
+        ops = DepartmentChangeHandler.on_purged(dept_internal_id, member_user_ids, admin_user_ids)
+        await DepartmentChangeHandler.execute_async(ops)
+
+    @classmethod
     async def amove_department(
         cls, dept_id: str, data: DepartmentMoveRequest, login_user,
     ) -> Department:
@@ -444,7 +517,7 @@ class DepartmentService:
                     raise DepartmentRootExistsError()
 
                 # Generate dept_id for root
-                dept_id = generate_dept_id()
+                dept_id = generate_dept_id(_get_dept_id_prefix())
 
                 dept = Department(
                     dept_id=dept_id,
@@ -820,7 +893,7 @@ class DepartmentService:
 
         person_id = None
         for _ in range(5):
-            candidate = generate_dept_id()
+            candidate = generate_dept_id(_get_dept_id_prefix())
             existing = await UserDao.aget_by_source_external_id('local', candidate)
             if not existing:
                 person_id = candidate

@@ -99,6 +99,18 @@ async def delete_department(
         return e.return_resp_instance()
 
 
+@router.delete('/{dept_id}/purge')
+async def purge_department(
+    dept_id: str,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    try:
+        await DepartmentService.apurge_department(dept_id, login_user)
+        return resp_200()
+    except BaseErrorCode as e:
+        return e.return_resp_instance()
+
+
 @router.post('/{dept_id}/move')
 async def move_department(
     dept_id: str,

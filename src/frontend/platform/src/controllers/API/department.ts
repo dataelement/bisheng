@@ -44,6 +44,10 @@ export async function deleteDepartmentApi(deptId: string): Promise<any> {
   return await axios.delete(`/api/v1/departments/${depSeg(deptId)}`)
 }
 
+export async function purgeDepartmentApi(deptId: string): Promise<any> {
+  return await axios.delete(`/api/v1/departments/${depSeg(deptId)}/purge`)
+}
+
 // ── Move ───────────────────────────────────────────────
 
 export async function moveDepartmentApi(

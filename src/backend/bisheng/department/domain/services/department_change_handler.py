@@ -129,6 +129,30 @@ class DepartmentChangeHandler:
         ]
 
     @staticmethod
+    def on_purged(
+        dept_id: int,
+        member_user_ids: List[int],
+        admin_user_ids: List[int],
+    ) -> List[TupleOperation]:
+        """Department permanently deleted — clean up all remaining tuples."""
+        ops: List[TupleOperation] = []
+        for uid in member_user_ids:
+            ops.append(TupleOperation(
+                action='delete',
+                user=f'user:{uid}',
+                relation='member',
+                object=f'department:{dept_id}',
+            ))
+        for uid in admin_user_ids:
+            ops.append(TupleOperation(
+                action='delete',
+                user=f'user:{uid}',
+                relation='admin',
+                object=f'department:{dept_id}',
+            ))
+        return ops
+
+    @staticmethod
     async def execute_async(operations: List[TupleOperation]) -> None:
         """Execute tuple operations via OpenFGA (F004 ReBAC integration).
 

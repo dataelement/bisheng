@@ -94,6 +94,7 @@ export function DepartmentTree({ data, selectedDeptId, onSelect, onCreateChild }
       const hasChildren = node.children && node.children.length > 0
       const isExpanded = expanded.has(node.id)
       const isSelected = node.dept_id === selectedDeptId
+      const isArchived = node.status === "archived"
       const gutterWidth = depth * TREE_INDENT_PER_LEVEL
 
       return (
@@ -102,6 +103,7 @@ export function DepartmentTree({ data, selectedDeptId, onSelect, onCreateChild }
             className={cn(
               "group flex cursor-pointer items-center rounded-md py-1.5 pl-1.5 pr-2 text-sm hover:bg-accent",
               isSelected && "bg-accent font-medium",
+              isArchived && "opacity-50",
             )}
             onClick={() => onSelect(node)}
           >
@@ -136,17 +138,19 @@ export function DepartmentTree({ data, selectedDeptId, onSelect, onCreateChild }
             <Building2 className="mr-1.5 h-4 w-4 shrink-0 text-muted-foreground" />
             <span className="flex-1 truncate">{node.name}</span>
             <span className="mr-1 text-xs text-muted-foreground tabular-nums">{node.member_count}</span>
-            {/* Quick create child button */}
-            <button
-              className="hidden h-5 w-5 shrink-0 items-center justify-center rounded hover:bg-gray-200 group-hover:flex"
-              onClick={(e) => {
-                e.stopPropagation()
-                onCreateChild(node.id)
-              }}
-              title={t("bs:department.create")}
-            >
-              <Plus className="h-3.5 w-3.5" />
-            </button>
+            {/* Quick create child button — hidden for archived departments */}
+            {!isArchived && (
+              <button
+                className="hidden h-5 w-5 shrink-0 items-center justify-center rounded hover:bg-gray-200 group-hover:flex"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onCreateChild(node.id)
+                }}
+                title={t("bs:department.create")}
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
           {hasChildren && isExpanded && (
             <div>

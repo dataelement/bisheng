@@ -78,3 +78,8 @@ class DepartmentMemberDeleteBlockedError(BaseErrorCode):
 class DepartmentMemberDeleteForbiddenError(BaseErrorCode):
     Code: int = 21015
     Msg: str = 'Only local accounts may be deleted from organization management'
+
+
+class DepartmentNotArchivedError(BaseErrorCode):
+    Code: int = 21016
+    Msg: str = 'Only archived departments can be permanently deleted'
