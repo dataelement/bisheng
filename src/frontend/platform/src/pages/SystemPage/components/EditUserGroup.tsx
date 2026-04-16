@@ -11,7 +11,7 @@ import { userContext } from "@/contexts/userContext";
 import { getGroupFlowsApi, saveGroupApi } from "@/controllers/API/pro";
 import {
     createUserGroupV2,
-    getUserGroupMembersV2,
+    getAllUserGroupMembersV2,
     syncUserGroupMembersV2,
     updateUserGroupV2,
     UserGroupMemberRow,
@@ -192,8 +192,7 @@ export default function EditUserGroup({ data, onBeforeChange, onChange }: EditPr
     const [memberPick, setMemberPick] = useState<{ label: string; value: number }[]>([])
 
     const loadMembers = async (groupId: number, creatorUserId?: number | null) => {
-        const res = await getUserGroupMembersV2(groupId)
-        const rows = res?.data ?? []
+        const rows = await getAllUserGroupMembersV2(groupId)
         setMembers(rows)
         const creator = creatorUserId != null ? uid(creatorUserId) : null
         const pickRows = rows.filter(

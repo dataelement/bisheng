@@ -71,6 +71,47 @@ export async function getUserGroupMembersV2(
   });
 }
 
+export async function paginateAllUserGroupMembers(
+  fetchPage: (
+    page: number,
+    limit: number,
+    keyword: string,
+  ) => Promise<{ data: UserGroupMemberRow[]; total: number }>,
+  params?: { limit?: number; keyword?: string },
+): Promise<UserGroupMemberRow[]> {
+  const limit = Math.max(1, params?.limit ?? 500);
+  const keyword = params?.keyword ?? "";
+  const rows: UserGroupMemberRow[] = [];
+  let page = 1;
+  let total = 0;
+  let safety = 0;
+
+  while (safety < 1000) {
+    const res = await fetchPage(page, limit, keyword);
+    const pageRows = res?.data ?? [];
+    total = Number(res?.total ?? rows.length + pageRows.length);
+    rows.push(...pageRows);
+
+    if (pageRows.length === 0 || rows.length >= total) break;
+
+    page += 1;
+    safety += 1;
+  }
+
+  return rows;
+}
+
+export async function getAllUserGroupMembersV2(
+  groupId: number,
+  params?: { limit?: number; keyword?: string },
+): Promise<UserGroupMemberRow[]> {
+  return paginateAllUserGroupMembers(
+    (page, limit, keyword) =>
+      getUserGroupMembersV2(groupId, { page, limit, keyword }),
+    params,
+  );
+}
+
 export async function addUserGroupMembersV2(
   groupId: number,
   user_ids: number[],
