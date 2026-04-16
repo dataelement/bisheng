@@ -26,6 +26,11 @@ export type CitationReferenceItem = {
   legacyPreview?: CitationPreview | null;
 };
 
+export type CitationPdfBBox = {
+  page: number;
+  bbox: [number, number, number, number];
+};
+
 export type CitationDetailLoader = (citationId: string) => Promise<ChatCitation | null>;
 
 export const CITATION_START = '\ue200';
@@ -150,17 +155,83 @@ export function normalizeCitationType(type?: string) {
   return 'rag';
 }
 
+export function isRagCitation(detail?: ChatCitation | null, type?: string) {
+  return normalizeCitationType(detail?.type || type) === 'rag';
+}
+
 export function getCitationSourceLabel(type?: string) {
   return normalizeCitationType(type) === 'web' ? '网页' : '文档';
 }
 
-function getCitationItem(detail: ChatCitation | null, itemId?: string) {
+export function getCitationItem(detail: ChatCitation | null, itemId?: string) {
   const items = detail?.sourcePayload?.items;
   if (!items?.length) {
     return null;
   }
 
   return items.find((item) => item.itemId === itemId || item.chunkId === itemId) ?? items[0];
+}
+
+export function getCitationDocumentName(detail?: ChatCitation | null) {
+  const payload = detail?.sourcePayload;
+  return payload?.documentName || payload?.title || payload?.knowledgeName || '文档预览';
+}
+
+export function getCitationDocumentFileType(detail?: ChatCitation | null) {
+  const payload = detail?.sourcePayload;
+  const fileType = payload?.fileType || getCitationDocumentName(detail).split('.').pop() || '';
+  return String(fileType).toLowerCase();
+}
+
+export function getCitationDocumentUrl(detail?: ChatCitation | null) {
+  const payload = detail?.sourcePayload;
+  return payload?.previewUrl || payload?.downloadUrl || payload?.sourceUrl || '';
+}
+
+export function toAbsolutePreviewUrl(url?: string | null) {
+  if (!url) {
+    return '';
+  }
+
+  if (/^https?:\/\//i.test(url)) {
+    return url;
+  }
+
+  if (url.startsWith('/')) {
+    return `${window.location.origin}${url}`;
+  }
+
+  return `${window.location.origin}${__APP_ENV__.BASE_URL}/${url.replace(/^\/+/, '')}`;
+}
+
+function isValidBBox(value: unknown): value is [number, number, number, number] {
+  return Array.isArray(value)
+    && value.length === 4
+    && value.every((item) => typeof item === 'number' && Number.isFinite(item));
+}
+
+export function parseCitationBBoxes(rawBBox?: string | null): CitationPdfBBox[] {
+  if (!rawBBox) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(rawBBox);
+    const chunkBBoxes = Array.isArray(parsed?.chunk_bboxes) ? parsed.chunk_bboxes : [];
+    return chunkBBoxes
+      .map((item: any) => ({
+        page: Number(item?.page),
+        bbox: item?.bbox,
+      }))
+      .filter((item): item is CitationPdfBBox => Number.isFinite(item.page) && isValidBBox(item.bbox));
+  } catch {
+    return [];
+  }
+}
+
+export function getCitationItemBBoxes(detail: ChatCitation | null, itemId?: string) {
+  const item = getCitationItem(detail, itemId);
+  return parseCitationBBoxes(item?.bbox);
 }
 
 export function getLegacyCitationPreview(webContent: any, label?: number): CitationPreview | null {

@@ -1,15 +1,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronRight, FileText, Globe2, Loader2, X } from 'lucide-react';
-import { getCitationDetail, type ChatCitation } from '~/api/chatApi';
+import { ChevronRight, Loader2, X } from 'lucide-react';
+import { getCitationDetail, resolveCitationDetails, type ChatCitation } from '~/api/chatApi';
 import { cn } from '~/utils';
 import {
   buildCitationDocumentPreview,
   buildCitationReferenceItems,
   createCitationDetailMap,
+  isRagCitation,
   normalizeCitationType,
   type CitationPreview,
   type CitationReferenceItem,
 } from './citationUtils';
+import CitationDocumentPreviewDrawer, { type CitationDocumentPreviewState } from './CitationDocumentPreviewDrawer';
+import {
+  buildCitationSourceIconStackData,
+  CitationSourceIcon,
+  CitationSourceIconStack,
+} from './CitationSourceIcon';
 
 type CitationReferencesDrawerProps = {
   content: string;
@@ -17,12 +24,6 @@ type CitationReferencesDrawerProps = {
   citations?: ChatCitation[] | null;
   buttonClassName?: string;
 };
-
-function SourceIcon({ type, className }: { type?: string; className?: string }) {
-  const isWeb = normalizeCitationType(type) === 'web';
-  const Icon = isWeb ? Globe2 : FileText;
-  return <Icon className={cn('size-4 shrink-0', isWeb ? 'text-[#7C3AED]' : 'text-[#165DFF]', className)} />;
-}
 
 function SourceTypeBadge({ preview, label, type }: { preview: CitationPreview | null; label: number; type?: string }) {
   const isWeb = normalizeCitationType(preview?.type || type) === 'web';
@@ -38,16 +39,19 @@ function CitationReferenceCard({
   detail,
   isLoading,
   hasError,
+  onOpenDocumentPreview,
 }: {
   item: CitationReferenceItem;
   detail: ChatCitation | null;
   isLoading: boolean;
   hasError: boolean;
+  onOpenDocumentPreview: (detail: ChatCitation) => void;
 }) {
   const preview = item.legacyPreview ?? buildCitationDocumentPreview(detail, item.data);
   const type = preview?.type || item.data.type;
   const isWeb = normalizeCitationType(type) === 'web';
   const title = preview?.title || '暂无标题';
+  const canOpenDocument = !!detail && isRagCitation(detail, type);
 
   return (
     <div className="rounded-[8px] bg-[#FAFAFA] px-4 py-3">
@@ -56,8 +60,17 @@ function CitationReferenceCard({
       </div>
 
       <div className="flex min-w-0 items-center gap-2 text-[15px] font-medium leading-6 text-[#1D2129]">
-        <SourceIcon type={type} className={isWeb ? 'text-[#7C3AED]' : 'text-[#F53F3F]'} />
-        {preview?.link ? (
+        <CitationSourceIcon detail={detail} preview={preview} type={type} />
+        {canOpenDocument ? (
+          <button
+            type="button"
+            onClick={() => onOpenDocumentPreview(detail!)}
+            className="min-w-0 truncate text-left hover:text-[#165DFF] hover:underline"
+            title={title}
+          >
+            {title}
+          </button>
+        ) : preview?.link ? (
           <a
             href={preview.link}
             target="_blank"
@@ -86,7 +99,7 @@ function CitationReferenceCard({
       </div>}
 
       <div className="mt-3 flex min-w-0 items-center gap-2 text-[13px] leading-5 text-[#86909C]">
-        <SourceIcon type={type} className="text-[#86909C]" />
+        <CitationSourceIcon detail={detail} preview={preview} type={type} ragIconVariant="knowledge" />
         <span className="min-w-0 truncate">{preview?.sourceName || (isWeb ? '网页' : '政策文件')}</span>
         {preview?.sourceMeta && <span className="shrink-0">{preview.sourceMeta}</span>}
       </div>
@@ -104,8 +117,10 @@ export default function CitationReferencesDrawer({
   const [detailMap, setDetailMap] = useState<Record<string, ChatCitation>>(() => createCitationDetailMap(citations));
   const [loadingMap, setLoadingMap] = useState<Record<string, boolean>>({});
   const [errorMap, setErrorMap] = useState<Record<string, boolean>>({});
+  const [documentPreview, setDocumentPreview] = useState<CitationDocumentPreviewState | null>(null);
   const detailCacheRef = useRef<Record<string, ChatCitation>>({});
   const requestCacheRef = useRef<Record<string, Promise<ChatCitation | null>>>({});
+  const batchRequestKeyRef = useRef<string>('');
 
   const references = useMemo(
     () => buildCitationReferenceItems({ content, webContent, citations }),
@@ -123,6 +138,46 @@ export default function CitationReferencesDrawer({
       ...nextMap,
     }));
   }, [citations]);
+
+  useEffect(() => {
+    const citationIds = Array.from(new Set(
+      references
+        .map((item) => item.data.citationId)
+        .filter((citationId) => citationId && !citationId.startsWith('citation:') && !detailCacheRef.current[citationId]),
+    ));
+
+    if (!citationIds.length) {
+      return;
+    }
+
+    const requestKey = citationIds.sort().join('|');
+    if (batchRequestKeyRef.current === requestKey) {
+      return;
+    }
+    batchRequestKeyRef.current = requestKey;
+
+    void resolveCitationDetails(citationIds)
+      .then((items) => {
+        const nextMap: Record<string, ChatCitation> = {};
+        items.forEach((detail) => {
+          if (detail?.citationId) {
+            detailCacheRef.current[detail.citationId] = detail;
+            nextMap[detail.citationId] = detail;
+          }
+        });
+
+        if (Object.keys(nextMap).length) {
+          setDetailMap((current) => ({
+            ...current,
+            ...nextMap,
+          }));
+        }
+      })
+      .catch((error) => {
+        console.error('Failed to resolve citation details:', error);
+        batchRequestKeyRef.current = '';
+      });
+  }, [references]);
 
   const loadCitationDetail = useCallback(async (citationId: string) => {
     if (!citationId || citationId.startsWith('citation:')) {
@@ -189,11 +244,7 @@ export default function CitationReferencesDrawer({
     return null;
   }
 
-  const previewTypes = references.slice(0, 2).map((item) => {
-    const detail = detailMap[item.data.citationId] ?? item.detail ?? null;
-    const preview = item.legacyPreview ?? buildCitationDocumentPreview(detail, item.data);
-    return preview?.type || item.data.type;
-  });
+  const referenceEntryIcons = buildCitationSourceIconStackData(references, detailMap);
 
   return (
     <>
@@ -205,13 +256,7 @@ export default function CitationReferencesDrawer({
           buttonClassName,
         )}
       >
-        <span className="inline-flex -space-x-1">
-          {previewTypes.map((type, index) => (
-            <span key={`${type}-${index}`} className="flex size-5 items-center justify-center rounded-full bg-white shadow-sm">
-              <SourceIcon type={type} className="size-3.5" />
-            </span>
-          ))}
-        </span>
+        <CitationSourceIconStack icons={referenceEntryIcons} />
         <span>参考资料</span>
         <span className="text-[#165DFF]">{references.length}</span>
         <ChevronRight className="size-4" />
@@ -253,11 +298,21 @@ export default function CitationReferencesDrawer({
                     detail={detail}
                     isLoading={!!loadingMap[item.data.citationId]}
                     hasError={!!errorMap[item.data.citationId]}
+                    onOpenDocumentPreview={(detail) => {
+                      setDocumentPreview({
+                        detail,
+                        locateChunk: false,
+                      });
+                    }}
                   />
                 );
               })}
             </div>
           </aside>
+          <CitationDocumentPreviewDrawer
+            preview={documentPreview}
+            onClose={() => setDocumentPreview(null)}
+          />
         </>
       )}
     </>

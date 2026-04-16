@@ -17,6 +17,7 @@ const API = {
     bsConfig: () => `/api/v1/workstation/config`,
     citationDetail: (citationId: string) =>
         `/api/v1/citations/${encodeURIComponent(citationId)}`,
+    citationResolve: () => `/api/v1/citations/resolve`,
 };
 
 // --- Types ---
@@ -27,6 +28,7 @@ export interface ChatCitationItem {
     content?: string;
     snippet?: string;
     title?: string;
+    bbox?: string | null;
     page?: number;
     [key: string]: any;
 }
@@ -50,6 +52,9 @@ export interface ChatCitation {
     };
     [key: string]: any;
 }
+
+const citationDetailMemoryCache: Record<string, ChatCitation> = {};
+const citationResolveRequestCache: Record<string, Promise<ChatCitation[]>> = {};
 
 // v2.5 Agent-mode tool call shape (server emits these in agent_tool_call SSE events
 // and persists an array of them inside agent_answer messages).
@@ -238,8 +243,57 @@ export async function deleteConversation(
 }
 
 export async function getCitationDetail(citationId: string): Promise<ChatCitation> {
+    if (citationDetailMemoryCache[citationId]) {
+        return citationDetailMemoryCache[citationId];
+    }
+
     const res = await http.get<any>(API.citationDetail(citationId));
-    return res?.data ?? res;
+    const detail = res?.data ?? res;
+    if (detail?.citationId) {
+        citationDetailMemoryCache[detail.citationId] = detail;
+    }
+    citationDetailMemoryCache[citationId] = detail;
+    return detail;
+}
+
+export async function resolveCitationDetails(citationIds: string[]): Promise<ChatCitation[]> {
+    const uniqueCitationIds = Array.from(new Set(
+        citationIds.filter((citationId) => citationId && !citationId.startsWith("citation:")),
+    )).filter((citationId) => !citationDetailMemoryCache[citationId]);
+
+    if (!uniqueCitationIds.length) {
+        return citationIds
+            .map((citationId) => citationDetailMemoryCache[citationId])
+            .filter(Boolean);
+    }
+
+    const requestKey = uniqueCitationIds.slice().sort().join("|");
+    if (!citationResolveRequestCache[requestKey]) {
+        citationResolveRequestCache[requestKey] = http.post(API.citationResolve(), {
+            citationIds: uniqueCitationIds,
+        }).then((res) => {
+            const payload = res?.data ?? res;
+            const items = Array.isArray(payload?.items)
+                ? payload.items
+                : Array.isArray(payload)
+                    ? payload
+                    : [];
+            items.forEach((detail) => {
+                if (detail?.citationId) {
+                    citationDetailMemoryCache[detail.citationId] = detail;
+                }
+            });
+            return items;
+        }).finally(() => {
+            delete citationResolveRequestCache[requestKey];
+        });
+    }
+
+    const resolvedItems = await citationResolveRequestCache[requestKey];
+    return citationIds
+        .map((citationId) => citationDetailMemoryCache[citationId])
+        .filter(Boolean)
+        .concat(resolvedItems.filter((detail) => detail?.citationId && !citationIds.includes(detail.citationId)));
 }
 
 /** Get the full SSE URL (absolute) for creating SSE connection */

@@ -17,6 +17,7 @@ import { PdfViewer } from "./viewers/PdfViewer";
 import { TextViewer } from "./viewers/TextViewer";
 import { XlsxViewer } from "./viewers/XlsxViewer";
 import { useLocalize } from "~/hooks";
+import type { CitationPdfBBox } from "~/components/Chat/Messages/Content/citationUtils";
 
 export interface FilePreviewProps {
     /** File display name (with extension) */
@@ -29,6 +30,10 @@ export interface FilePreviewProps {
     actions?: React.ReactNode;
     /** True when pptx-to-pdf conversion failed on the backend */
     conversionFailed?: boolean;
+    /** Optional PDF highlight boxes in original PDF coordinates. */
+    highlightBboxes?: CitationPdfBBox[];
+    /** Optional PDF box to scroll into view. */
+    targetBBox?: CitationPdfBBox | null;
 }
 
 export default function FilePreview({
@@ -37,6 +42,8 @@ export default function FilePreview({
     fileUrl,
     actions,
     conversionFailed = false,
+    highlightBboxes = [],
+    targetBBox = null,
 }: FilePreviewProps) {
     const localize = useLocalize();
     const viewerType = getViewerType(fileType);
@@ -179,6 +186,8 @@ export default function FilePreview({
                         pdfDoc={pdfDoc}
                         zoomLevel={zoomLevel}
                         targetPage={targetPage}
+                        highlightBboxes={highlightBboxes}
+                        targetBBox={targetBBox}
                         onCurrentPageChange={handleCurrentPageChange}
                     />
                 );

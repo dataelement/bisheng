@@ -1,6 +1,6 @@
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as Popover from '@radix-ui/react-popover';
-import { ExternalLink, FileText, Globe2, Loader2 } from 'lucide-react';
+import { ExternalLink, Loader2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { useRecoilValue } from 'recoil';
 import rehypeHighlight from 'rehype-highlight';
@@ -25,18 +25,21 @@ import useHasAccess from '~/hooks/Roles/useHasAccess';
 import useLocalize from '~/hooks/useLocalize';
 import store from '~/store';
 import { handleDoubleClick, langSubset, preprocessLaTeX } from '~/utils';
-import { getCitationDetail, type ChatCitation } from '~/api/chatApi';
+import { getCitationDetail, resolveCitationDetails, type ChatCitation } from '~/api/chatApi';
 import {
   buildCitationPreview,
   createCitationDetailMap,
   getCitationClassName,
   getCitationSourceLabel,
   getLegacyCitationPreview,
+  isRagCitation,
   transformPrivateCitations,
   type CitationDetailLoader,
   type CitationDisplayData,
   type CitationPreview,
 } from './citationUtils';
+import CitationDocumentPreviewDrawer, { type CitationDocumentPreviewState } from './CitationDocumentPreviewDrawer';
+import { CitationSourceIcon } from './CitationSourceIcon';
 import MermaidBlock from './Mermaid'
 import Echarts from './Echarts'
 
@@ -204,14 +207,18 @@ type TContentProps = {
 
 function CitationPreviewCard({
   preview,
+  detail,
   label,
   isLoading,
   error,
+  onOpenDocumentPreview,
 }: {
   preview: CitationPreview | null;
+  detail?: ChatCitation | null;
   label?: number;
   isLoading: boolean;
   error: boolean;
+  onOpenDocumentPreview?: () => void;
 }) {
   if (isLoading) {
     return (
@@ -231,13 +238,21 @@ function CitationPreviewCard({
   }
 
   const isWeb = preview.type === 'web';
-  const Icon = isWeb ? Globe2 : FileText;
 
   return (
     <div className="w-[420px] max-w-[calc(100vw-32px)] overflow-hidden rounded-lg bg-white text-[#1D2129] shadow-[0_10px_30px_rgba(0,0,0,0.12)]">
       <div className="flex items-center gap-2 border-b border-[#F2F3F5] px-4 py-3">
-        <Icon className={`size-4 shrink-0 ${isWeb ? 'text-[#7C3AED]' : 'text-[#F53F3F]'}`} />
-        {preview.link ? (
+        <CitationSourceIcon detail={detail} preview={preview} type={preview.type} />
+        {preview.type !== 'web' && onOpenDocumentPreview ? (
+          <button
+            type="button"
+            onClick={onOpenDocumentPreview}
+            className="min-w-0 flex-1 truncate text-left text-[15px] font-medium leading-6 text-[#165DFF] hover:underline"
+            title={preview.title}
+          >
+            {preview.title}
+          </button>
+        ) : preview.link ? (
           <a
             href={preview.link}
             target="_blank"
@@ -261,7 +276,7 @@ function CitationPreviewCard({
         </div>
         <div className="mt-3 flex items-center justify-between gap-3 text-[13px] leading-5 text-[#86909C]">
           <div className="flex min-w-0 items-center gap-2">
-            <Icon className="size-4 shrink-0" />
+            <CitationSourceIcon detail={detail} preview={preview} type={preview.type} ragIconVariant="knowledge" />
             <span className="truncate">{preview.sourceName}</span>
             {preview.sourceMeta && <span className="shrink-0">{preview.sourceMeta}</span>}
           </div>
@@ -280,12 +295,14 @@ const Citation = ({
   initialDetail,
   webContent,
   loadCitationDetail,
+  onOpenDocumentPreview,
 }: {
   data: Partial<CitationDisplayData>;
   children: React.ReactNode;
   initialDetail?: ChatCitation | null;
   webContent?: any;
   loadCitationDetail: CitationDetailLoader;
+  onOpenDocumentPreview: (detail: ChatCitation, itemId?: string, locateChunk?: boolean) => void;
 }) => {
   if (!data) return null;
 
@@ -301,8 +318,8 @@ const Citation = ({
   const preview = legacyPreview ?? buildCitationPreview(detail, data);
 
   const fetchDetail = async () => {
-    if (detail || legacyPreview || isLoading || !data.citationId || data.citationId.startsWith('citation:')) {
-      return;
+    if (detail || legacyPreview || !data.citationId || data.citationId.startsWith('citation:')) {
+      return detail;
     }
 
     setIsLoading(true);
@@ -310,12 +327,26 @@ const Citation = ({
     try {
       const nextDetail = await loadCitationDetail(data.citationId);
       setDetail(nextDetail);
+      return nextDetail;
     } catch (err) {
       console.error('Failed to load citation detail:', err);
       setError(true);
+      return null;
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleOpenDocumentPreview = async (event?: React.MouseEvent) => {
+    event?.preventDefault();
+    event?.stopPropagation();
+
+    const nextDetail = detail ?? await fetchDetail();
+    if (!nextDetail || !isRagCitation(nextDetail, data.type)) {
+      return;
+    }
+
+    onOpenDocumentPreview(nextDetail, data.itemId, true);
   };
 
   useEffect(() => {
@@ -364,6 +395,7 @@ const Citation = ({
           data-citation-group-key={data.groupKey}
           data-citation-chunk-id={data.chunkId}
           aria-label={`${getCitationSourceLabel(data.type)}引用 ${data.label ?? ''}`}
+          onClick={handleOpenDocumentPreview}
           onMouseEnter={() => handleOpenChange(true)}
           onMouseLeave={scheduleClose}
           className={`ml-1 inline-flex min-h-6 min-w-6 cursor-pointer items-center justify-center rounded-xl px-2 py-0.5 text-[0.9em] font-medium leading-none transition-colors duration-200 ${citationClassName}`}
@@ -382,9 +414,11 @@ const Citation = ({
         >
           <CitationPreviewCard
             preview={preview}
+            detail={detail}
             label={data.label}
             isLoading={isLoading}
             error={error}
+            onOpenDocumentPreview={() => void handleOpenDocumentPreview()}
           />
         </Popover.Content>
       </Popover.Portal>
@@ -395,6 +429,7 @@ const Citation = ({
 const Markdown = memo(({ content = '', showCursor, isLatestMessage, webContent, citations }: TContentProps & { webContent: any }) => {
   const LaTeXParsing = useRecoilValue<boolean>(store.LaTeXParsing);
   const isInitializing = content === '';
+  const [documentPreview, setDocumentPreview] = useState<CitationDocumentPreviewState | null>(null);
 
   function filterMermaidBlocks(input) {
     const closedMermaidPattern = /```mermaid[\s\S]*?```/g;
@@ -463,15 +498,60 @@ const Markdown = memo(({ content = '', showCursor, isLatestMessage, webContent, 
     [],
   );
 
-  const citationDetailMap = useMemo(() => createCitationDetailMap(citations), [citations]);
+  const initialCitationDetailMap = useMemo(() => createCitationDetailMap(citations), [citations]);
+  const [citationDetailMap, setCitationDetailMap] = useState<Record<string, ChatCitation>>(() => initialCitationDetailMap);
   const citationDetailCacheRef = useRef<Record<string, ChatCitation>>({});
   const citationRequestCacheRef = useRef<Record<string, Promise<ChatCitation | null>>>({});
+  const citationBatchRequestKeyRef = useRef<string>('');
 
   useEffect(() => {
-    Object.entries(citationDetailMap).forEach(([citationId, detail]) => {
+    Object.entries(initialCitationDetailMap).forEach(([citationId, detail]) => {
       citationDetailCacheRef.current[citationId] = detail;
     });
-  }, [citationDetailMap]);
+    setCitationDetailMap((current) => ({
+      ...current,
+      ...initialCitationDetailMap,
+    }));
+  }, [initialCitationDetailMap]);
+
+  useEffect(() => {
+    const citationIds = Array.from(new Set(
+      Object.values(citationMap)
+        .map((item) => item.citationId)
+        .filter((citationId) => citationId && !citationId.startsWith('citation:') && !citationDetailCacheRef.current[citationId]),
+    ));
+
+    if (!citationIds.length) {
+      return;
+    }
+
+    const requestKey = citationIds.sort().join('|');
+    if (citationBatchRequestKeyRef.current === requestKey) {
+      return;
+    }
+    citationBatchRequestKeyRef.current = requestKey;
+
+    void resolveCitationDetails(citationIds)
+      .then((items) => {
+        const nextMap: Record<string, ChatCitation> = {};
+        items.forEach((detail) => {
+          if (detail?.citationId) {
+            citationDetailCacheRef.current[detail.citationId] = detail;
+            nextMap[detail.citationId] = detail;
+          }
+        });
+        if (Object.keys(nextMap).length) {
+          setCitationDetailMap((current) => ({
+            ...current,
+            ...nextMap,
+          }));
+        }
+      })
+      .catch((error) => {
+        console.error('Failed to resolve citation details:', error);
+        citationBatchRequestKeyRef.current = '';
+      });
+  }, [citationMap]);
 
   const loadCitationDetail = useCallback<CitationDetailLoader>(async (citationId) => {
     const cachedDetail = citationDetailCacheRef.current[citationId];
@@ -498,6 +578,14 @@ const Markdown = memo(({ content = '', showCursor, isLatestMessage, webContent, 
 
     citationRequestCacheRef.current[citationId] = request;
     return request;
+  }, []);
+
+  const handleOpenDocumentPreview = useCallback((detail: ChatCitation, itemId?: string, locateChunk = true) => {
+    setDocumentPreview({
+      detail,
+      itemId,
+      locateChunk,
+    });
   }, []);
 
   // Cursor
@@ -550,6 +638,7 @@ const Markdown = memo(({ content = '', showCursor, isLatestMessage, webContent, 
                             key={`legacy-${matchIndex}`}
                             webContent={webContent}
                             loadCitationDetail={loadCitationDetail}
+                            onOpenDocumentPreview={handleOpenDocumentPreview}
                             data={{
                               label: legacyIndex,
                               ref: `citation:${legacyIndexValue}`,
@@ -573,6 +662,7 @@ const Markdown = memo(({ content = '', showCursor, isLatestMessage, webContent, 
                             data={citationData}
                             initialDetail={citationDetailMap[citationData.citationId]}
                             loadCitationDetail={loadCitationDetail}
+                            onOpenDocumentPreview={handleOpenDocumentPreview}
                           >
                             {citationData.label}
                           </Citation>
@@ -603,6 +693,10 @@ const Markdown = memo(({ content = '', showCursor, isLatestMessage, webContent, 
         >
           {isLatestMessage && (showCursor ?? false) ? currentContent + cursor : currentContent}
         </ReactMarkdown>
+        <CitationDocumentPreviewDrawer
+          preview={documentPreview}
+          onClose={() => setDocumentPreview(null)}
+        />
       </CodeBlockProvider>
     </ArtifactProvider>
   );
