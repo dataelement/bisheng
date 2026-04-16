@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from "react";
 import * as mammoth from "mammoth";
 import { LoadingIcon } from "@/components/bs-icons/loading";
 
+declare const __APP_ENV__: any;
+
 const DocxPreview = ({ filePath }) => {
     // 检查文件路径是否以.doc结尾（不区分大小写）
     const isDocFile = filePath.toLowerCase().endsWith('.doc');
@@ -14,7 +16,7 @@ const DocxPreview = ({ filePath }) => {
     // 如果是.doc文件，直接返回不支持预览提示，不执行后续逻辑
     if (isDocFile) {
         return (
-            <div className="flex justify-center items-center h-full text-gray-400">
+            <div className="flex h-full min-h-0 items-center justify-center text-gray-400">
                 <div className="text-center">
                     <img
                         className="size-52 block"
@@ -89,14 +91,14 @@ const DocxPreview = ({ filePath }) => {
     }
 
     return (
-        <div className="border rounded-lg overflow-hidden bg-white">
+        <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border bg-white">
             {/* 注入自定义样式 */}
             <style dangerouslySetInnerHTML={{ __html: docxStyles }} />
 
             {/* 渲染转换后的 HTML */}
             <div
                 ref={previewRef}
-                className="docx-wrapper h-full p-4"
+                className="docx-wrapper h-full min-h-0 overflow-y-auto p-4"
                 dangerouslySetInnerHTML={{ __html: htmlContent }}
             />
 

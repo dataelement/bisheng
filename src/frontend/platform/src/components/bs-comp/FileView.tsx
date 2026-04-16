@@ -5,6 +5,8 @@ import { useTranslation } from "react-i18next";
 import { FixedSizeList as List, areEqual } from 'react-window';
 import { LoadingIcon } from '../bs-icons/loading';
 
+declare const __APP_ENV__: any;
+
 // A4 比例(itemSize：item的高度)
 // 595.32 * 841.92 采用宽高比0.70约束
 let pageScale = 0.7
@@ -139,7 +141,7 @@ const Row = React.memo(({ drawfont, index, style, size, labels, pdf, onLoad, onS
         }
     }
 
-    return <div className="bg-[#fff] border-b-2 overflow-hidden" style={style}>
+    return <div className="relative bg-[#fff] border-b-2 overflow-hidden" style={style}>
         {/* <span className="absolute">{index + 1}</span> */}
         {/* canvas  */}
         <div ref={wrapRef} className="canvasWrapper"></div>
@@ -232,6 +234,18 @@ const DragPanne = ({ onMouseEnd }) => {
         </div>
     );
 };
+
+interface FileViewProps {
+    startIndex?: number;
+    drawfont?: boolean;
+    select?: boolean;
+    scrollTo?: [number, number];
+    fileUrl: string;
+    labels?: Record<string | number, { id: string; label: number[]; active: boolean }[]>;
+    onPageChange?: (offset: number, h: number, paperSize: number, scale: number) => void;
+    onSelectLabel?: (data: { id: string; active: boolean }[]) => void;
+}
+
 export default function FileView({
     startIndex = 1,
     drawfont = false,
@@ -241,7 +255,7 @@ export default function FileView({
     labels,
     onPageChange = (offset, h, paperSize, scale) => { },
     onSelectLabel = () => { }
-}) {
+}: FileViewProps) {
     const { t } = useTranslation()
     const paneRef = useRef(null)
     const listRef = useRef(null)
@@ -340,7 +354,7 @@ export default function FileView({
             const pagelabels = labels[key]
             pagelabels.forEach(item => {
                 const [sx, sy, ex, ey] = item.label
-                const pageH = (key - startIndex) * (boxSize.width / pageScale * scale)
+                const pageH = (Number(key) - startIndex) * (boxSize.width / pageScale * scale)
                 if (x <= sx && y <= sy + pageH && x1 >= ex && y1 >= ey + pageH) {
                     console.log('item.id :>> ', item.id);
                     selects.push({ id: item.id, active: !item.active })
@@ -367,7 +381,7 @@ export default function FileView({
         onSelectLabel={val => select && onSelectLabel([val])}
     ></Row>, [pdf, drawfont, select, labels, boxSize]);
 
-    return <div ref={paneRef} className="flex-1 h-full bg-gray-100 rounded-md py-4 px-2 relative"
+    return <div ref={paneRef} className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-gray-100 rounded-md py-4 px-2 relative"
         onContextMenu={(e) => e.preventDefault()}
     >
         {
@@ -375,7 +389,7 @@ export default function FileView({
                 ? <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
                     <LoadingIcon />
                 </div>
-                : <div id="warp-pdf" className="file-view absolute">
+                : <div id="warp-pdf" className="file-view relative h-full w-full overflow-hidden">
                     <List
                         ref={listRef}
                         itemCount={pdf?.numPages || 100}

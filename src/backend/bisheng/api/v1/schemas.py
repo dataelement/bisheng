@@ -171,6 +171,7 @@ class ChatResponse(ChatMessage):
     intermediate_steps: Optional[str] = ''
     is_bot: bool | int = True
     category: str = 'processing'
+    citations: Optional[List[CitationRegistryItemSchema]] = None
     citation_registry_items: Optional[List[CitationRegistryItemSchema]] = None
 
     @field_validator('type')

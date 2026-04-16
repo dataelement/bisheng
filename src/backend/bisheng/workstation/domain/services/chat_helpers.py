@@ -151,6 +151,7 @@ def _sse_resp(
         message_id=None,
         is_bot: bool = True,
         flow_id: str = '',
+        citations=None,
 ) -> str:
     """Build an SSE event string in ChatResponse format.
 
@@ -168,6 +169,8 @@ def _sse_resp(
     }
     if message_id is not None:
         resp['message_id'] = message_id
+    if citations is not None:
+        resp['citations'] = citations
     return f'event: message\ndata: {json.dumps(resp, ensure_ascii=False, default=custom_json_serializer)}\n\n'
 
 

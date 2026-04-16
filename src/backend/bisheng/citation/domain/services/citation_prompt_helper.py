@@ -8,6 +8,9 @@ from bisheng.citation.domain.repositories.implementations.message_citation_repos
     MessageCitationRepositoryImpl,
 )
 from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
+from bisheng.citation.domain.services.citation_runtime_cache_service import (
+    CitationRuntimeCacheService,
+)
 from bisheng.citation.domain.services.citation_registry_service import CitationRegistryService
 from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.core.prompts.prompt_loader import PromptLoader
@@ -48,6 +51,7 @@ def _load_citation_prompt_rules() -> str:
 
 
 CITATION_PROMPT_RULES = _load_citation_prompt_rules()
+_citation_runtime_cache_service = CitationRuntimeCacheService()
 
 
 def _rag_registry_signature(item: CitationRegistryItemSchema) -> tuple[Any, ...]:
@@ -272,14 +276,36 @@ def select_registry_items_for_persistence(
     return [item for item in items if item.citationId in citation_ids]
 
 
+async def cache_citation_registry_items(
+        items: List[CitationRegistryItemSchema],
+) -> List[CitationRegistryItemSchema]:
+    if not items:
+        return []
+    return await _citation_runtime_cache_service.save_citations(items)
+
+
+def cache_citation_registry_items_sync(
+        items: List[CitationRegistryItemSchema],
+) -> List[CitationRegistryItemSchema]:
+    if not items:
+        return []
+    return _citation_runtime_cache_service.save_citations_sync(items)
+
+
 def save_message_citations_sync(
-        message_id: int,
+        message_id: int | str | None,
         items: List[CitationRegistryItemSchema],
         chat_id: Optional[str] = None,
         flow_id: Optional[str] = None,
 ) -> None:
     """Persist citation registry items for a saved chat message."""
     if not message_id or not items:
+        if items:
+            cache_citation_registry_items_sync(items)
+        return
+
+    if not isinstance(message_id, int):
+        cache_citation_registry_items_sync(items)
         return
 
     with get_sync_db_session() as session:
@@ -291,16 +317,23 @@ def save_message_citations_sync(
             chat_id=chat_id,
             flow_id=flow_id,
         )
+    cache_citation_registry_items_sync(items)
 
 
 async def save_message_citations(
-        message_id: int,
+        message_id: int | str | None,
         items: List[CitationRegistryItemSchema],
         chat_id: Optional[str] = None,
         flow_id: Optional[str] = None,
 ) -> None:
     """Persist citation registry items for a saved chat message asynchronously."""
     if not message_id or not items:
+        if items:
+            await cache_citation_registry_items(items)
+        return
+
+    if not isinstance(message_id, int):
+        await cache_citation_registry_items(items)
         return
 
     async with get_async_db_session() as session:
@@ -312,3 +345,4 @@ async def save_message_citations(
             chat_id=chat_id,
             flow_id=flow_id,
         )
+    await cache_citation_registry_items(items)

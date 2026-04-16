@@ -72,7 +72,7 @@ export default function MessageBs({ debug, mark = false, logo, data, onUnlike = 
         [message],
     )
     const citations = useMemo(() => normalizeCitationItems(data), [data]);
-    const allowRemoteCitationResolve = Boolean(data.chat_id);
+    const allowRemoteCitationResolve = true;
 
     const messageRef = useRef<HTMLDivElement>(null)
     const handleCopyMessage = () => {

@@ -168,9 +168,11 @@ export default function CitationDocumentPreviewDrawer({
           </button>
         </div>
 
-        <div className="min-h-0 flex-1">
+        <div className="min-h-0 flex-1 overflow-hidden">
           {fileUrl ? (
-            renderPreviewContent({ fileType, fileUrl, fileName, bboxes, targetBBox })
+            <div className="h-full min-h-0 overflow-hidden">
+              {renderPreviewContent({ fileType, fileUrl, fileName, bboxes, targetBBox })}
+            </div>
           ) : (
             <div className="flex h-full items-center justify-center text-[14px] text-[#86909C]">
               暂无可预览文件地址

@@ -1339,6 +1339,7 @@ async def _agent_stream_chat_completion(
         yield _sse_resp(
             'agent_answer', 'end', db_content,
             conversation_id, message_id=resp_msg.id,
+            citations=citation_items,
         )
         yield _sse_resp('processing', 'close', '', conversation_id)
 

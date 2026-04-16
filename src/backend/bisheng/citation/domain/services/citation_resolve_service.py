@@ -9,6 +9,7 @@ from bisheng.citation.domain.schemas.citation_schema import (
     RagCitationPayloadSchema,
     WebCitationPayloadSchema,
 )
+from bisheng.citation.domain.services.citation_runtime_cache_service import CitationRuntimeCacheService
 from bisheng.citation.domain.services.citation_registry_service import CitationRegistryService
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import NotFoundError
@@ -21,8 +22,9 @@ from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 class CitationResolveService:
     """Resolve persisted citation items into a unified response payload."""
 
-    def __init__(self, repository: MessageCitationRepository):
+    def __init__(self, repository: MessageCitationRepository, runtime_cache_service: CitationRuntimeCacheService | None = None):
         self.registry_service = CitationRegistryService(repository)
+        self.runtime_cache_service = runtime_cache_service or CitationRuntimeCacheService()
 
     @staticmethod
     async def _has_file_access(login_user: UserPayload, knowledge_id: Optional[int]) -> bool:
@@ -102,7 +104,9 @@ class CitationResolveService:
         login_user: Optional[UserPayload] = None,
     ) -> CitationRegistryItemSchema:
         """Resolve one citation item by business ID."""
-        item = await self.registry_service.get_citation(citation_id)
+        item = await self.runtime_cache_service.get_citation(citation_id)
+        if item is None:
+            item = await self.registry_service.get_citation(citation_id)
         if item is None:
             raise NotFoundError()
         return await self._enrich_item(item, login_user)
@@ -113,7 +117,14 @@ class CitationResolveService:
         login_user: Optional[UserPayload] = None,
     ) -> List[CitationRegistryItemSchema]:
         """Resolve multiple citation items in one round trip."""
-        items = await self.registry_service.list_citations_by_ids(citation_ids)
+        cached_items = await self.runtime_cache_service.get_citations_by_ids(citation_ids)
+        cached_by_id: Dict[str, CitationRegistryItemSchema] = {
+            item.citationId: item for item in cached_items
+        }
+        missing_ids = [citation_id for citation_id in citation_ids if citation_id not in cached_by_id]
+        items = cached_items
+        if missing_ids:
+            items.extend(await self.registry_service.list_citations_by_ids(missing_ids))
         enriched_items = await asyncio.gather(*(self._enrich_item(item, login_user) for item in items))
         item_map: Dict[str, CitationRegistryItemSchema] = {
             item.citationId: item

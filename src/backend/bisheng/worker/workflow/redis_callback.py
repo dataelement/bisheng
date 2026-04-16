@@ -428,6 +428,18 @@ class RedisCallback(BaseCallback):
         return message id
         """
         if not self.chat_id:
+            answer_text = self._extract_message_text(chat_response.message)
+            items = list(citation_registry_items or [])
+            if not items and source_documents:
+                documents = source_documents if isinstance(source_documents, list) else [source_documents]
+                items = collect_rag_citation_registry_items(documents)
+            items = select_registry_items_for_persistence(items, answer_text)
+            save_message_citations_sync(
+                message_id=None,
+                items=items,
+                chat_id=self.chat_id,
+                flow_id=self.workflow_id,
+            )
             # Generate a fake messageidPrevent duplicate front-end message rendering
             return uuid.uuid4().hex
 
@@ -634,6 +646,7 @@ class RedisCallback(BaseCallback):
                                      type='end',
                                      flow_id=self.workflow_id,
                                      chat_id=self.chat_id,
+                                     citations=data.citation_registry_items,
                                      citation_registry_items=data.citation_registry_items)
         msg_id = self.save_chat_message(
             chat_response,

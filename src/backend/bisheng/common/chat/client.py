@@ -168,8 +168,11 @@ class ChatClient:
             intermediate_steps: str = '',
             message_id: int = None,
             citation_registry_items: List[CitationRegistryItemSchema] | None = None,
+            citations: List[CitationRegistryItemSchema] | None = None,
     ):
         is_bot = 0 if msg_type == 'human' else 1
+        if citations is None:
+            citations = citation_registry_items
         await self.send_json(ChatResponse(
             message_id=message_id,
             category=category,
@@ -181,6 +184,7 @@ class ChatClient:
             chat_id=self.chat_id,
             extra=json.dumps({'client_key': self.client_key}, ensure_ascii=False),
             intermediate_steps=intermediate_steps,
+            citations=citations,
             citation_registry_items=citation_registry_items,
         ))
 
@@ -382,6 +386,13 @@ class ChatClient:
                     chat_id=self.chat_id,
                     flow_id=self.client_id,
                 )
+            else:
+                await save_message_citations(
+                    message_id=None,
+                    items=citation_items,
+                    chat_id=self.chat_id,
+                    flow_id=self.client_id,
+                )
             await self.send_response('answer', 'start', '')
             await self.send_response(
                 'answer',
@@ -389,6 +400,7 @@ class ChatClient:
                 answer,
                 message_id=res.id if res else None,
                 citation_registry_items=citation_items,
+                citations=citation_items,
             )
             logger.info(f'gptsAgentOver assistant_id:{self.client_id} chat_id:{self.chat_id} question:{input_msg}')
             logger.info(f'gptsAgentOver assistant_id:{self.client_id} chat_id:{self.chat_id} answer:{answer}')

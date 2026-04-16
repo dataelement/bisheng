@@ -364,7 +364,7 @@ export function normalizeCitationItems(source?: any): ChatCitation[] | null {
     source?.message?.citations,
     source?.message?.citation_registry_items,
   ];
-  const citations = candidates.find((item) => Array.isArray(item));
+  const citations = candidates.find((item) => Array.isArray(item) && item.length);
   return citations?.length ? citations : null;
 }
 
