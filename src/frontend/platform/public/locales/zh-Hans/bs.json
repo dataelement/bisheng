@@ -1769,6 +1769,8 @@
   "department.archivedNotice": "该部门已归档，无法编辑。可选择永久删除。",
   "department.settings": "部门设置",
   "department.members": "成员列表",
+  "department.trafficControl": "流量控制",
+  "department.deptFlowControl": "部门整体流量控制",
   "department.createLocalUser": "创建本地人员",
   "department.localUserNameRequired": "请填写用户名",
   "department.localUserRolesRequired": "请至少选择一个可分配角色",

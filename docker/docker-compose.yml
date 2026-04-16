@@ -39,6 +39,7 @@ services:
       OPENFGA_DATASTORE_ENGINE: mysql
       OPENFGA_DATASTORE_URI: "root:1234@tcp(bisheng-mysql:3306)/openfga?parseTime=true"
       OPENFGA_LOG_FORMAT: json
+      OPENFGA_PLAYGROUND_ENABLED: "true"
     ports:
       - "8080:8080"
       - "8081:8081"

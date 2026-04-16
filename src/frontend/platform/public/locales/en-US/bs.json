@@ -1812,6 +1812,8 @@
   "department.archivedNotice": "This department has been archived and cannot be edited. You may permanently delete it.",
   "department.settings": "Department Settings",
   "department.members": "Members",
+  "department.trafficControl": "Traffic Control",
+  "department.deptFlowControl": "Department Traffic Control",
   "department.createLocalUser": "Create local account",
   "department.localUserNameRequired": "Username is required",
   "department.localUserRolesRequired": "Select at least one assignable role",

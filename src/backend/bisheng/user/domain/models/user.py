@@ -309,7 +309,26 @@ class UserDao(UserBase):
             selectinload(User.roles)  # type: ignore
         )
         with get_sync_db_session() as session:
-            return session.exec(statement).all()
+            users = session.exec(statement).all()
+
+        # Load department info (UserDepartment lacks FK annotations, so query explicitly)
+        if users:
+            from collections import defaultdict
+            from bisheng.database.models.department import (
+                Department, DepartmentDao, UserDepartmentDao,
+            )
+            all_user_ids = [u.user_id for u in users]
+            ud_rows = UserDepartmentDao.get_by_user_ids(all_user_ids)
+            dept_ids = list({ud.department_id for ud in ud_rows})
+            dept_map = {d.id: d for d in DepartmentDao.get_by_ids(dept_ids)}
+            user_dept_map = defaultdict(list)
+            for ud in ud_rows:
+                if ud.department_id in dept_map:
+                    user_dept_map[ud.user_id].append(dept_map[ud.department_id])
+            for user in users:
+                user.departments = user_dept_map.get(user.user_id, [])
+
+        return users
 
     @classmethod
     def get_first_user(cls) -> User | None:

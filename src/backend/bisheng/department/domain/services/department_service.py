@@ -400,6 +400,17 @@ class DepartmentService:
             ops = DepartmentChangeHandler.on_archived(dept.id, parent_id)
             await DepartmentChangeHandler.execute_async(ops)
 
+        # Notify Gateway to clean up traffic control rules
+        import json
+        from bisheng.core.cache.redis_manager import get_redis_client_sync
+        try:
+            redis_client = get_redis_client_sync()
+            msg = json.dumps({'id': dept.id})
+            redis_client.rpush('delete_department', msg, expiration=86400)
+            redis_client.publish('delete_department', msg)
+        except Exception:
+            logger.warning('Failed to publish delete_department event for dept %s', dept.id)
+
     @classmethod
     async def apurge_department(cls, dept_id: str, login_user) -> None:
         """Permanently delete an archived department and clean up all references."""

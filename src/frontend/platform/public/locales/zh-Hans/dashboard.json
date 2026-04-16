@@ -400,6 +400,10 @@
         "user_group_id": "用户组ID",
         "user_group_name": "用户组名称"
     },
+    "user_department_infos": {
+        "department_id": "部门ID",
+        "department_name": "部门名称"
+    },
     "total_user_count": "总用户数",
     "new_user_count": "新增用户数",
     "mid_active_user": "活跃用户规模统计",

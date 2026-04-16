@@ -32,6 +32,15 @@ common_properties = {
                          "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}}},
         }
     },
+    "user_department_infos": {
+        "type": "nested",
+        "properties": {
+            "department_id": {"type": "keyword",
+                              "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}}},
+            "department_name": {"type": "keyword",
+                                "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}}}
+        }
+    },
     "timestamp": {"type": "date", "format": "strict_date_optional_time||epoch_second"},
 }
 common_settings = {

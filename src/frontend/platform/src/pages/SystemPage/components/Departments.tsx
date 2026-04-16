@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useContext, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { getDepartmentTreeApi } from "@/controllers/API/department"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
@@ -7,10 +7,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/bs-ui/tab
 import { DepartmentTree } from "@/pages/DepartmentPage/components/DepartmentTree"
 import { MemberTable } from "@/pages/DepartmentPage/components/MemberTable"
 import { DepartmentSettings } from "@/pages/DepartmentPage/components/DepartmentSettings"
+import { DepartmentTrafficControl } from "@/pages/DepartmentPage/components/DepartmentTrafficControl"
 import { CreateDepartmentDialog } from "@/pages/DepartmentPage/components/CreateDepartmentDialog"
+import { locationContext } from "@/contexts/locationContext"
 
 export default function Departments() {
   const { t } = useTranslation()
+  const { appConfig } = useContext(locationContext)
   const [tree, setTree] = useState<DepartmentTreeNode[]>([])
   const [selectedDeptId, setSelectedDeptId] = useState<string | null>(null)
   const [selectedDept, setSelectedDept] = useState<DepartmentTreeNode | null>(null)
@@ -103,6 +106,9 @@ export default function Departments() {
               <TabsList>
                 <TabsTrigger value="members">{t("bs:department.members")}</TabsTrigger>
                 <TabsTrigger value="settings">{t("bs:department.settings")}</TabsTrigger>
+                {appConfig.isPro && (
+                  <TabsTrigger value="traffic-control">{t("bs:department.trafficControl")}</TabsTrigger>
+                )}
               </TabsList>
             </div>
             <TabsContent value="members">
@@ -115,6 +121,11 @@ export default function Departments() {
             <TabsContent value="settings">
               <DepartmentSettings dept={selectedDept} tree={tree} onChanged={handleTreeChange} />
             </TabsContent>
+            {appConfig.isPro && (
+              <TabsContent value="traffic-control">
+                <DepartmentTrafficControl dept={selectedDept} />
+              </TabsContent>
+            )}
           </Tabs>
         ) : (
           <div className="flex h-full items-center justify-center text-muted-foreground">
