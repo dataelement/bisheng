@@ -19,13 +19,14 @@ chat_manager = ChatManager()
 async def get_online_chat(*,
                           keyword: Optional[str] = None,
                           tag_id: Optional[int] = None,
+                          flow_type: Optional[int] = None,
                           page: Optional[int] = 1,
                           limit: Optional[int] = 10,
                           user: UserPayload = Depends(UserPayload.get_login_user)):
     """Access to online workflows and assistants."""
     data, total = await asyncio.to_thread(
         WorkFlowService.get_all_flows,
-        user, keyword, FlowStatus.ONLINE.value, tag_id, None, page, limit,
+        user, keyword, FlowStatus.ONLINE.value, tag_id, flow_type, page, limit,
         skip_pagination=True)
 
     # Get user's last conversation time per app

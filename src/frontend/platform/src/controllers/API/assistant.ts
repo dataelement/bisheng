@@ -60,12 +60,13 @@ export const deleteAssistantApi = async (id) => {
 
 
 // 获取会话选择列表
-export const getChatOnlineApi = async (page, keyword, tag_id) => {
+export const getChatOnlineApi = async (page, keyword, tag_id, flow_type?: number) => {
     return await axios.get(`/api/v1/chat/online`, {
         params: {
             page, keyword,
             limit: 40,
-            tag_id: tag_id === -1 ? null : tag_id
+            tag_id: tag_id === -1 ? null : tag_id,
+            flow_type
         }
     })
 }
@@ -82,4 +83,9 @@ export const refreshMcpApi = async (): Promise<any> => {
 // 获取自动优化任务taskid
 export const getAssistantOptimizeTaskApi = async (assistant_id, prompt) => {
     return await axios.post(`/api/v1/assistant/auto/task`, { assistant_id, prompt })
+}
+
+// Get recommended apps configured by admin
+export const getRecommendedAppsApi = async () => {
+    return await axios.get('/api/v1/workstation/app/recommended')
 }

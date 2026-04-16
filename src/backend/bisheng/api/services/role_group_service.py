@@ -252,6 +252,22 @@ class RoleGroupService():
         self.update_group_hook(request, login_user, group_info)
         return res
 
+    def set_group_members(self, request: Request, login_user: UserPayload, user_ids: List[int], group_id: int):
+        """Batch set group members (non-admin), overwriting the existing member list."""
+        target_ids = set(user_ids)
+        current_ids = {m.user_id for m in UserGroupDao.get_group_user(group_id)}
+
+        need_add = list(target_ids - current_ids)
+        need_delete = list(current_ids - target_ids)
+
+        UserGroupDao.batch_add_group_members(group_id, need_add)
+        UserGroupDao.batch_delete_group_members(group_id, need_delete)
+
+        GroupDao.update_group_update_user(group_id, login_user.user_id)
+        group_info = GroupDao.get_user_group(group_id)
+        self.update_group_hook(request, login_user, group_info)
+        return None
+
     def set_group_update_user(self, login_user: UserPayload, group_id: int):
         """Set up user group administrators"""
         GroupDao.update_group_update_user(group_id, login_user.user_id)

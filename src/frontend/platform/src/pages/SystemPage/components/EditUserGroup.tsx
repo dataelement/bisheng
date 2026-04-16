@@ -8,7 +8,7 @@ import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
 import { locationContext } from "@/contexts/locationContext";
 import { getGroupFlowsApi, saveGroupApi } from "@/controllers/API/pro";
-import { getAdminsApi, saveUserGroup, updateUserGroup } from "@/controllers/API/user";
+import { getAdminsApi, getGroupUsersApi, saveUserGroup, setGroupMembersApi, updateUserGroup } from "@/controllers/API/user";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useTable } from "@/util/hook";
 import { CircleHelp } from "lucide-react";
@@ -78,7 +78,7 @@ function FlowRadio({ limit, onChange }) {
                     className="inline h-5 w-[70px] font-medium"
                     onChange={(e) => handleCommit(LimitType.LIMITED, e.target.value)}
                     onBlur={(e) => {
-                        if(e.target.value === '') {
+                        if (e.target.value === '') {
                             e.target.value = limitRef.current + ''
                         }
                     }}
@@ -188,10 +188,13 @@ export default function EditUserGroup({ data, onBeforeChange, onChange }) {
      */
     const [selected, setSelected] = useState([])
     const [lockOptions, setLockOptions] = useState([])
+    /**
+     * Members (non-admin)
+     */
+    const [selectedMembers, setSelectedMembers] = useState([])
+    const initialMemberIdsRef = useRef<number[]>([])
 
     const handleSave = async () => {
-        console.log('form', form);
-
         if (!form.groupName) {
             setForm({ ...form, groupName: data.group_name || '' })
             return toast({ title: t('prompt'), description: t('system.groupNameRequired'), variant: 'error' });
@@ -212,16 +215,30 @@ export default function EditUserGroup({ data, onBeforeChange, onChange }) {
         const res: any = await (data.id ? updateUserGroup(data.id, form, users) : // 修改
             saveUserGroup(form, users)) // 保存
 
-        if (appConfig.isPro) {
+        const groupId = data.id ?? res?.id
+        if (appConfig.isPro && groupId) {
             await captureAndAlertRequestErrorHoc(saveGroupApi({
                 ...form,
-                id: data.id || res.id, // 修改id:data.id， 创建id：res.id
+                id: groupId,
                 adminUser: users.map(item => item.label).join(','),
                 adminUserId: users.map(item => item.value).join(',')
             }))
         }
 
+        await handleSaveMembers(groupId)
         onChange(true)
+    }
+
+    const handleSaveMembers = async (groupId?: number) => {
+        if (!groupId) return
+        const memberIds = selectedMembers.map(item => item.value)
+        // Skip API call when member list is unchanged
+        const initial = initialMemberIdsRef.current
+        const unchanged =
+            memberIds.length === initial.length &&
+            memberIds.every((id) => initial.includes(id))
+        if (unchanged) return
+        await setGroupMembersApi(groupId, memberIds)
     }
 
     useEffect(() => { // 初始化数据
@@ -232,6 +249,14 @@ export default function EditUserGroup({ data, onBeforeChange, onChange }) {
             const defaultUsers = res.map(d => ({ label: d.user_name, value: d.user_id }))
             setLockOptions(defaultUsers.map(el => el.value))
             setSelected([...defaultUsers, ...users])
+
+            // Load existing group members for edit mode
+            if (data.id) {
+                const members = (await getGroupUsersApi(data.id)) || []
+                const mapped = members.map(m => ({ label: m.user_name, value: m.user_id }))
+                setSelectedMembers(mapped)
+                initialMemberIdsRef.current = mapped.map(m => m.value)
+            }
         }
         init()
     }, [])
@@ -249,6 +274,16 @@ export default function EditUserGroup({ data, onBeforeChange, onChange }) {
                     lockedValues={lockOptions}
                     value={selected}
                     onChange={setSelected}
+                />
+            </div>
+        </div>
+        <div className="font-bold mt-12">
+            <p className="text-xl mb-4">{t('system.groupMembers', '组内成员')}</p>
+            <div className="">
+                <UsersSelect
+                    multiple
+                    value={selectedMembers}
+                    onChange={setSelectedMembers}
                 />
             </div>
         </div>

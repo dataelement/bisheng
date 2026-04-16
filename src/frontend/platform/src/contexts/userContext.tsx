@@ -110,8 +110,13 @@ export function UserProvider({ children }: { children: ReactNode }) {
         // 异地登录强制退出
         requestInterceptor.remoteLoginFuc = (msg) => {
             logoutApi().then(_ => {
-                setUser(null)
+                const thirdPartyLogoutUrl = localStorage.getItem('THIRD_PARTY_LOGOUT_URL')
                 localStorage.removeItem('isLogin')
+                if (thirdPartyLogoutUrl) {
+                    window.location.href = thirdPartyLogoutUrl
+                    return
+                }
+                setUser(null)
             })
 
             toast({

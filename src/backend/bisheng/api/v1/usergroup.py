@@ -98,7 +98,7 @@ async def get_group_user(group_id: int,
     """
     Get grouped users
     """
-    return RoleGroupService().get_group_user_list(group_id, page_size, page_num)
+    return resp_200(RoleGroupService().get_group_user_list(group_id, page_size, page_num))
 
 
 @router.post('/set_group_admin')
@@ -112,6 +112,17 @@ async def set_group_admin(
     """
 
     return resp_200(RoleGroupService().set_group_admin(request, login_user, user_ids, group_id))
+
+@router.post('/set_group_members')
+async def set_group_members(
+        request: Request,
+        user_ids: Annotated[List[int], Body(embed=True)],
+        group_id: Annotated[int, Body(embed=True)],
+        login_user: UserPayload = Depends(UserPayload.get_admin_user)):
+    """
+    Batch set group members (non-admin), overriding the historical members
+    """
+    return resp_200(RoleGroupService().set_group_members(request, login_user, user_ids, group_id))
 
 
 @router.post('/set_update_user', status_code=200)

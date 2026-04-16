@@ -454,6 +454,7 @@ class WorkstationConfig(BaseModel):
     applicationCenterDescription: Optional[str] = Field(default='', max_length=1000,
                                                         pattern=r'^[\u4e00-\u9fff\w\s\.,;:!@#$%^&*()\-_=+\[\]{}|\\\'"<>/?`~·！￥（）【】、《》，。；：“”‘’？]+$',
                                                         description='App Center Description')
+    recommendedApps: Optional[List[str]] = Field(default=None, description='Ordered list of recommended app IDs configured by admin')
 
 
 class SubscriptionConfig(BaseModel):

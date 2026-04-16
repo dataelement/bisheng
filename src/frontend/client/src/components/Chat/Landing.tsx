@@ -1,7 +1,8 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
+import { useSearchParams } from "react-router-dom";
+import { useLocalize } from '~/hooks';
 import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import { Constants } from '~/types/chat';
-import { useLocalize } from '~/hooks';
 import { useInterruptAudio } from '../Voice/textToSpeechStore';
 import ConvoStarter from './ConvoStarter';
 import SegmentSelector from './SegmentSelector';
@@ -16,6 +17,10 @@ export default function Landing({ Header, isNew, lingsi, lingsiEntry, setLingsi 
   const { data: bsConfig } = useGetBsConfig();
   const interruptAudio = useInterruptAudio();
   const localize = useLocalize();
+  const [searchParams] = useSearchParams();
+  const defaultCategory = searchParams.get('category') || 'favorites';
+
+  const [activeCategory, setActiveCategory] = useState<string>(defaultCategory)
 
   // Conversation starters from bsConfig
   const conversation_starters = ((bsConfig as { conversationStarters?: string[] } | undefined)?.conversationStarters) ?? [];

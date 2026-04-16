@@ -45,8 +45,13 @@ export default function MainLayout() {
             okTxt: t('system.confirm'),
             onOk(next) {
                 captureAndAlertRequestErrorHoc(logoutApi()).then(_ => {
-                    setUser(null)
+                    const thirdPartyLogoutUrl = localStorage.getItem('THIRD_PARTY_LOGOUT_URL')
                     localStorage.removeItem('isLogin')
+                    if (thirdPartyLogoutUrl) {
+                        window.location.href = thirdPartyLogoutUrl
+                    } else {
+                        setUser(null)
+                    }
                 })
                 next()
             }

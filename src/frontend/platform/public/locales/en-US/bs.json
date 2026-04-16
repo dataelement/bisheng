@@ -1290,6 +1290,7 @@
             "appName": "App Name",
             "sessionCreationTime": "Session Creation Time",
             "userName": "Username",
+            "userGroup": "User Group",
             "messageRole": "Message Role",
             "messageSendTime": "Message Send Time",
             "messageContent": "Message Content",

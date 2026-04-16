@@ -14,9 +14,41 @@ from bisheng.database.models.tag import TagDao
 from bisheng.database.models.user_link import UserLinkDao
 
 from ..dependencies import LoginUserDep
+from ...domain.services.workstation_service import WorkStationService
 from ...domain.services.constants import USED_APP_PIN_TYPE
 
 router = APIRouter()
+
+
+@router.get('/app/recommended')
+def get_recommended_apps(login_user=LoginUserDep):
+    """Return admin-configured recommended apps.
+
+    - Admins (config page): return every configured app so the selection can echo
+      even if an app later went offline.
+    - Regular users (chat landing): filter to online apps the user can access.
+    """
+    config = WorkStationService.get_config()
+    if not config or not config.recommendedApps:
+        return resp_200(data=[])
+
+    app_ids = config.recommendedApps
+
+    kwargs: dict = dict(id_list=app_ids, page=0, limit=0)
+    if not login_user.is_admin():
+        kwargs['status'] = FlowStatus.ONLINE.value
+        kwargs['user_id'] = login_user.user_id
+        kwargs['id_extra'] = login_user.get_user_access_resource_ids(
+            [AccessType.FLOW, AccessType.WORKFLOW, AccessType.ASSISTANT_READ]
+        )
+    data, _ = FlowDao.get_all_apps(**kwargs)
+
+    # Restore admin-configured order; unmatched items sort to the end.
+    app_order = {app_id: idx for idx, app_id in enumerate(app_ids)}
+    data.sort(key=lambda x: app_order.get(x['id'], len(app_ids)))
+
+    data = WorkFlowService.add_extra_field(login_user, data)
+    return resp_200(data=data)
 
 
 @router.get('/app/frequently_used')

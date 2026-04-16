@@ -133,6 +133,12 @@ customAxios.interceptors.response.use(
       console.warn('401 error, refreshing token');
       originalRequest._retry = true;
 
+      const thirdPartyLoginUrl = localStorage.getItem('THIRD_PARTY_LOGIN_URL');
+      if (thirdPartyLoginUrl) {
+        window.location.href = thirdPartyLoginUrl;
+        return Promise.reject(error);
+      }
+
       if (import.meta.env.MODE === 'production') {
         localStorage.setItem('LOGIN_PATHNAME', location.pathname)
         location.href = `${location.origin}${__APP_ENV__.BISHENG_HOST}`

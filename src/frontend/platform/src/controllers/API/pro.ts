@@ -77,10 +77,9 @@ export function getUserGroupsProApi() {
     return axios.get(`/api/group/list`);
 }
 
-// GET sso URL
+// GET sso URL (silent: suppress global error toast when service is unavailable)
 export function getSSOurlApi() {
-    // return Promise.resolve(url)
-    return axios.get(`/api/oauth2/list`)
+    return axios.get(`/api/oauth2/list`, { silent: true } as any)
 }
 
 export async function getKeyApi() {

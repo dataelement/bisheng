@@ -1,5 +1,6 @@
 import { BookOpenIcon } from '@/components/bs-icons/bookOpen';
 import { GithubIcon } from '@/components/bs-icons/github';
+import { LoadingIcon } from '@/components/bs-icons/loading';
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from 'react-i18next';
 import json from "../../../package.json";
@@ -13,7 +14,7 @@ import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
 import LoginBridge from './loginBridge';
 import { PWD_RULE, handleEncrypt, handleLdapEncrypt } from './utils';
 import { locationContext } from '@/contexts/locationContext';
-import { ldapLoginApi } from '@/controllers/API/pro';
+import { ldapLoginApi, getSSOurlApi } from '@/controllers/API/pro';
 
 export const LoginPage = () => {
     // const { setErrorData, setSuccessData } = useContext(alertContext);
@@ -29,6 +30,38 @@ export const LoginPage = () => {
 
     // login or register
     const [showLogin, setShowLogin] = useState(true)
+
+    // Check third-party redirect login before rendering the login form
+    const [oauthLoading, setOauthLoading] = useState(true)
+    const [oauthData, setOauthData] = useState<any>(null)
+
+    useEffect(() => {
+        getSSOurlApi()
+            .then((urls: any) => {
+                setOauthData(urls)
+                // Persist redirect URLs for interceptor access (401 / logout)
+                if (urls?.redirect_login_url) {
+                    localStorage.setItem('THIRD_PARTY_LOGIN_URL', urls.redirect_login_url)
+                } else {
+                    localStorage.removeItem('THIRD_PARTY_LOGIN_URL')
+                }
+                if (urls?.redirect_logout_url) {
+                    localStorage.setItem('THIRD_PARTY_LOGOUT_URL', urls.redirect_logout_url)
+                } else {
+                    localStorage.removeItem('THIRD_PARTY_LOGOUT_URL')
+                }
+                // Redirect immediately if third-party login URL is configured
+                if (urls?.redirect_login_url) {
+                    window.location.href = urls.redirect_login_url
+                    return
+                }
+                setOauthLoading(false)
+            })
+            .catch(() => {
+                // Third-party service unavailable — fall through to normal login
+                setOauthLoading(false)
+            })
+    }, [])
 
     useLoginError()
 
@@ -133,6 +166,13 @@ export const LoginPage = () => {
         fetchCaptchaData()
     }
 
+    // Show loading spinner while checking for third-party redirect
+    if (oauthLoading) {
+        return <div className='w-full h-full bg-background-dark flex justify-center items-center'>
+            <LoadingIcon className="w-48 text-primary" />
+        </div>
+    }
+
     return <div className='w-full h-full bg-background-dark'>
         <div className='fixed z-10 sm:w-[1280px] w-full sm:h-[720px] h-full translate-x-[-50%] translate-y-[-50%] left-[50%] top-[50%] border rounded-lg shadow-xl overflow-hidden bg-background-login'>
             <div className='w-[420px] h-[704px] m-[8px] hidden sm:block relative z-20'>
@@ -214,7 +254,7 @@ export const LoginPage = () => {
                                         disabled={isLoading} onClick={handleRegister} >{t('login.registerButton')}</Button>
                                 </>
                         }
-                        {appConfig.isPro && <LoginBridge onHasLdap={setIsLDAP} />}
+                        {appConfig.isPro && <LoginBridge oauthData={oauthData} onHasLdap={setIsLDAP} />}
                     </div>
                     <div className=" absolute right-[16px] bottom-[16px] flex">
                         <span className="mr-4 text-sm text-gray-400 relative top-2">v{json.version}</span>

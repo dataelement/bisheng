@@ -185,11 +185,11 @@ export async function getRolePermissionsApi(
 /**
  * 更新角色基本信息
  */
-export async function updateRoleNameApi(roleId, name,knowledgeSpaceFileLimit) {
+export async function updateRoleNameApi(roleId, name, knowledgeSpaceFileLimit) {
   return axios.patch(`/api/v1/role/${roleId}`, {
     role_name: name,
     remark: "手动创建用户",
-    knowledge_space_file_limit:knowledgeSpaceFileLimit
+    knowledge_space_file_limit: knowledgeSpaceFileLimit
   });
 }
 
@@ -280,6 +280,18 @@ export async function getAdminsApi(): Promise<any> {
   return axios.get(`/api/v1/user/admin`);
 }
 
+// Get users in a group (non-admin members)
+export async function getGroupUsersApi(groupId: number): Promise<any> {
+  return axios.get(`/api/v1/group/get_group_user`, { params: { group_id: groupId } });
+}
+
+// Batch set group members (non-admin)
+export async function setGroupMembersApi(groupId: number, userIds: number[]) {
+  return axios.post(`/api/v1/group/set_group_members`, {
+    group_id: groupId,
+    user_ids: userIds
+  });
+}
 
 /**
  * 重置密码（管理员专用）

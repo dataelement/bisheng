@@ -28,6 +28,10 @@ customAxios.interceptors.response.use(function (response) {
     if (response.data.status_code === 11010) {
         return response.data;
     }
+    // Silent mode: skip all global error handling, let the caller handle it
+    if (response.config.silent) {
+        return Promise.reject(response.data);
+    }
     const statusCode = response.data.status_code
     const i18Msg = i18next.t(`errors.${statusCode}`, response.data.data)
     const errorMessage = i18Msg === `errors.${statusCode}` ? response.data.status_message : i18Msg
@@ -52,6 +56,11 @@ customAxios.interceptors.response.use(function (response) {
     }
     // 异地登录
     if (response.data.status_code === 10604) {
+        const thirdPartyLoginUrl = localStorage.getItem('THIRD_PARTY_LOGIN_URL');
+        if (thirdPartyLoginUrl) {
+            window.location.href = thirdPartyLoginUrl;
+            return Promise.reject(errorMessage);
+        }
         requestInterceptor.remoteLoginFuc(response.data.status_message)
         return Promise.reject(errorMessage);
     }
@@ -61,6 +70,11 @@ customAxios.interceptors.response.use(function (response) {
     if (error.response?.status === 401) {
         // cookie expires
         console.error('登录过期 :>> ');
+        const thirdPartyLoginUrl = localStorage.getItem('THIRD_PARTY_LOGIN_URL');
+        if (thirdPartyLoginUrl) {
+            window.location.href = thirdPartyLoginUrl;
+            return Promise.reject('登录过期');
+        }
         const UUR_INFO = 'UUR_INFO'
         const infoStr = localStorage.getItem(UUR_INFO)
         localStorage.removeItem(UUR_INFO)
@@ -68,6 +82,8 @@ customAxios.interceptors.response.use(function (response) {
         return Promise.reject('登录过期,请重新登录');
     }
     if (error.code === "ERR_CANCELED") return Promise.reject(error);
+    // Silent mode: skip toast, let the caller handle it
+    if (error.config?.silent) return Promise.reject(error);
     // app 弹窗
     toast({
         title: `${i18next.t('prompt')}`,

@@ -1242,6 +1242,7 @@
             "appName": "应用名称",
             "sessionCreationTime": "会话创建时间",
             "userName": "用户名称",
+            "userGroup": "用户组",
             "messageRole": "消息角色",
             "messageSendTime": "消息发送时间",
             "messageContent": "消息文本内容",

@@ -411,6 +411,10 @@ export const getChatOnlineApi = async (page, keyword, tag_id, disableLimit = 8) 
     return await request.get(`/api/v1/chat/online`, { params })
 }
 
+// Get recommended apps configured by admin
+export const getRecommendedAppsApi = async () => {
+    return await request.get('/api/v1/workstation/app/recommended')
+}
 /**
  * Pin/unpin an app in the used apps list.
  */

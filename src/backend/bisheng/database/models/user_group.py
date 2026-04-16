@@ -149,6 +149,32 @@ class UserGroupDao(UserGroupBase):
             session.commit()
 
     @classmethod
+    def batch_add_group_members(cls, group_id: int, user_ids: List[int]) -> None:
+        """Batch add multiple users as non-admin members of a single group in one transaction."""
+        if not user_ids:
+            return
+        with get_sync_db_session() as session:
+            session.add_all([
+                UserGroup(user_id=uid, group_id=group_id, is_group_admin=0)
+                for uid in user_ids
+            ])
+            session.commit()
+
+    @classmethod
+    def batch_delete_group_members(cls, group_id: int, user_ids: List[int]) -> None:
+        """Batch remove non-admin memberships for multiple users from a single group."""
+        if not user_ids:
+            return
+        with get_sync_db_session() as session:
+            statement = delete(UserGroup).where(
+                UserGroup.group_id == group_id,
+                UserGroup.is_group_admin == 0,
+                UserGroup.user_id.in_(user_ids),
+            )
+            session.exec(statement)
+            session.commit()
+
+    @classmethod
     def get_group_user(cls,
                        group_id: int,
                        page_size: str = None,

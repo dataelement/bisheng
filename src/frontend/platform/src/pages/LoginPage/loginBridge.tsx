@@ -1,25 +1,25 @@
 import Separator from "@/components/bs-comp/chatComponent/Separator";
 import { Button } from "@/components/bs-ui/button";
-import { getSSOurlApi } from "@/controllers/API/pro";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 //@ts-ignore
 import Wxpro from "./icons/wxpro.svg?react";
 import { useTranslation } from "react-i18next";
 
-export default function LoginBridge({ onHasLdap }) {
+interface LoginBridgeProps {
+    oauthData: any;
+    onHasLdap: (v: boolean) => void;
+}
+
+export default function LoginBridge({ oauthData, onHasLdap }: LoginBridgeProps) {
 
     const { t } = useTranslation()
 
-    const [ssoUrl, setSsoUrl] = useState<string>('')
-    const [wxUrl, setWxUrl] = useState<string>('')
+    const ssoUrl = oauthData?.sso || ''
+    const wxUrl = oauthData?.wx || ''
 
     useEffect(() => {
-        getSSOurlApi().then((urls: any) => {
-            setSsoUrl(urls.sso) // TODO: 携带重定向链接：localStorage.getItem('LOGIN_PATHNAME')
-            setWxUrl(urls.wx)
-            urls.ldap && onHasLdap(true)
-        })
-    }, [])
+        if (oauthData?.ldap) onHasLdap(true)
+    }, [oauthData])
 
     if (!ssoUrl && !wxUrl) return null
 

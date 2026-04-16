@@ -92,6 +92,11 @@ const AuthContextProvider = ({
   });
   const logoutUser = useLogoutUserMutation({
     onSuccess: (data) => {
+      const thirdPartyLogoutUrl = localStorage.getItem('THIRD_PARTY_LOGOUT_URL');
+      if (thirdPartyLogoutUrl) {
+        window.location.href = thirdPartyLogoutUrl;
+        return;
+      }
       setUserContext({
         token: undefined,
         isAuthenticated: false,
@@ -101,6 +106,11 @@ const AuthContextProvider = ({
     },
     onError: (error) => {
       doSetError((error as Error).message);
+      const thirdPartyLogoutUrl = localStorage.getItem('THIRD_PARTY_LOGOUT_URL');
+      if (thirdPartyLogoutUrl) {
+        window.location.href = thirdPartyLogoutUrl;
+        return;
+      }
       setUserContext({
         token: undefined,
         isAuthenticated: false,

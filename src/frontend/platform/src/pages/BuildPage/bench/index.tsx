@@ -19,7 +19,7 @@ import OrgKbConfig, { OrgKbConfig as OrgKbConfigType } from "./OrgKbConfig";
 import Preview from "./Preview";
 import { ToggleSection } from "./ToggleSection";
 import ToolsConfig, { ToolConfig as ToolConfigType } from "./ToolsConfig";
-
+import RecommendedAppsConfig from "./RecommendedAppsConfig";
 
 export interface FormErrors {
     sidebarSlogan: string;
@@ -68,6 +68,7 @@ export interface ChatConfigForm {
         enabled: boolean;
         prompt: string;
     };
+    recommendedApps: string[];
     /** 日常模式 Tab 名称，对应接口 tabDisplayName */
     tabDisplayName?: string;
     // v2.5 Agent-mode additions
@@ -343,6 +344,13 @@ export default function index() {
                             {null}
                         </ToggleSection>
 
+                        {/* Recommended Apps */}
+                        <RecommendedAppsConfig
+                            selectedAppIds={formData.recommendedApps || []}
+                            onSelectedAppsChange={(ids) =>
+                                setFormData((prev) => ({ ...prev, recommendedApps: ids }))
+                            }
+                        />
                     </div>
                     {/* Action Buttons */}
                     <div className="flex justify-end gap-4 absolute bottom-1 right-4">
@@ -400,6 +408,7 @@ const useChatConfig = (refs: UseChatConfigProps) => {
         tabDisplayName: t('dailyFullName'),
         tools: [],
         orgKbs: [],
+        recommendedApps: [],
     });
 
     // Simple deep comparison to avoid circular refresh caused by parent-child mutual setting
@@ -457,6 +466,7 @@ const useChatConfig = (refs: UseChatConfigProps) => {
                         // v2.5 Agent-mode fields (parse_config auto-migrates legacy webSearch → tools).
                         tools: Array.isArray(cfg.tools) ? cfg.tools : prev.tools,
                         orgKbs: Array.isArray(cfg.orgKbs) ? cfg.orgKbs : prev.orgKbs,
+                        recommendedApps: Array.isArray(cfg.recommendedApps) ? cfg.recommendedApps : prev.recommendedApps,
                     };
                 });
             }
@@ -681,6 +691,7 @@ const useChatConfig = (refs: UseChatConfigProps) => {
             // v2.5 Agent-mode fields
             tools: formData.tools,
             orgKbs: formData.orgKbs,
+            recommendedApps: formData.recommendedApps || [],
         };
 
         console.log('Saving data:', dataToSave);
