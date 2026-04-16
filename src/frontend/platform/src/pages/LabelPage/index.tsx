@@ -175,7 +175,7 @@ export default function Tasks() {
         <div className="relative px-2 pt-4 h-full">
             <div className="h-full overflow-y-auto pb-20">
                 <div className="flex justify-end gap-6">
-                    {['admin', 'group_admin'].includes(user.role) && <Button onClick={() => setOpen(true)}>
+                    {user.role === 'admin' && <Button onClick={() => setOpen(true)}>
                         {t('label.createTask')}
                     </Button>}
                 </div>

@@ -16,6 +16,7 @@ import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { PermissionBadge } from "@/components/bs-comp/permission/PermissionBadge";
 import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
 import { canManageResource, usePermissionLevels } from "@/components/bs-comp/permission/usePermissionLevels";
+import { RelationLevel } from "@/components/bs-comp/permission/types";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/bs-ui/select";
 import { toast, useToast } from "@/components/bs-ui/toast/use-toast";
@@ -336,6 +337,12 @@ export default function KnowledgeFile() {
     // Permission levels for badge display
     const resourceIds = datalist.map((el: any) => String(el.id));
     const { levels: permLevels } = usePermissionLevels('knowledge_space', resourceIds);
+    const hasLevel = (level: RelationLevel | undefined, allowed: RelationLevel[]) => level ? allowed.includes(level) : false;
+    const canRead = (id: string | number) => user.role === 'admin' || hasLevel(permLevels[String(id)], ['owner', 'manager', 'editor', 'viewer']);
+    const canEdit = (id: string | number) => user.role === 'admin' || hasLevel(permLevels[String(id)], ['owner', 'manager', 'editor']);
+    const canDelete = (id: string | number) => user.role === 'admin' || hasLevel(permLevels[String(id)], ['owner']);
+    const visibleLibs = user.role === 'admin' ? datalist : datalist.filter((el: any) => canRead(el.id));
+    const canCreateLibrary = user.role === 'admin' || visibleLibs.some((el: any) => canEdit(el.id));
 
     // Enable polling during copying
     useEffect(() => {
@@ -480,7 +487,7 @@ export default function KnowledgeFile() {
             <div className="h-[calc(100vh-128px)] overflow-y-auto pb-20">
                 <div className="flex justify-end gap-4 items-center absolute right-0 top-[-44px]">
                     <SearchInput placeholder={t('lib.searchPlaceholder', { ns: 'bs' })} onChange={(e) => search(e.target.value)} />
-                    <Button className="px-8 text-[#FFFFFF]" onClick={() => setOpen(true)}>{t('create', { ns: 'bs' })}</Button>
+                    {canCreateLibrary && <Button className="px-8 text-[#FFFFFF]" onClick={() => setOpen(true)}>{t('create', { ns: 'bs' })}</Button>}
                 </div>
                 <Table noScroll>
                     <TableHeader>
@@ -492,11 +499,12 @@ export default function KnowledgeFile() {
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {datalist.map((el: any) => (
+                        {visibleLibs.map((el: any) => (
                             <TableRow
                                 key={el.id}
                                 className=""
                                 onClick={() => {
+                                    if (!canEdit(el.id)) return;
                                     if ([KnowledgeBaseStatus.Copying, KnowledgeBaseStatus.Unpublished].includes(el.state)) return;
                                     window.libname = [el.name, el.description];
                                     navigate(`/filelib/${el.id}`);
@@ -607,12 +615,12 @@ export default function KnowledgeFile() {
                                                         </div>
                                                     </SelectItem>
                                                 )}
-                                                <Tip content={!el.copiable && t('noOperationPermission')} side='top'>
+                                                <Tip content={(!el.copiable || !canEdit(el.id)) && t('noOperationPermission')} side='top'>
                                                     <SelectItem
                                                         showIcon={false}
                                                         value="copy"
                                                         className="data-[disabled]:pointer-events-auto"
-                                                        disabled={!(el.copiable || user.role === 'admin') || el.state !== KnowledgeBaseStatus.Published || copyLoadingId === el.id}
+                                                        disabled={!canEdit(el.id) || !(el.copiable || user.role === 'admin') || el.state !== KnowledgeBaseStatus.Published || copyLoadingId === el.id}
                                                     >
                                                         <div className="flex gap-2 items-center" >
                                                             <Copy className="w-4 h-4" />
@@ -620,10 +628,10 @@ export default function KnowledgeFile() {
                                                         </div>
                                                     </SelectItem>
                                                 </Tip>
-                                                <Tip content={!el.copiable && t('noOperationPermission')} side='top'>
+                                                <Tip content={(!el.copiable || !canEdit(el.id)) && t('noOperationPermission')} side='top'>
                                                     <SelectItem
                                                         value="set"
-                                                        disabled={!el.copiable}
+                                                        disabled={!canEdit(el.id) || !el.copiable}
                                                         className="data-[disabled]:pointer-events-auto"
                                                         showIcon={false}
                                                     >
@@ -633,12 +641,12 @@ export default function KnowledgeFile() {
                                                         </div>
                                                     </SelectItem>
                                                 </Tip>
-                                                <Tip content={!el.copiable && t('noOperationPermission')} side='top'>
+                                                <Tip content={(!el.copiable || !canDelete(el.id)) && t('noOperationPermission')} side='top'>
                                                     <SelectItem
                                                         value="delete"
                                                         showIcon={false}
                                                         className="data-[disabled]:pointer-events-auto"
-                                                        disabled={!el.copiable}
+                                                        disabled={!canDelete(el.id) || !el.copiable}
                                                     >
                                                         <div className="flex gap-2 items-center">
                                                             <Trash2 className="w-4 h-4" />

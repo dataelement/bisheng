@@ -333,7 +333,10 @@ class GroupAndRoles(BaseModel):
 class CreateUserReq(BaseModel):
     user_name: str = Field(max_length=30, description='Username')
     password: str = Field(description='Passwords')
-    group_roles: List[GroupAndRoles] = Field(description='List of user groups and roles to join')
+    group_roles: List[GroupAndRoles] = Field(
+        default_factory=list,
+        description='Optional user groups and roles; roles default to normal user when empty',
+    )
 
 
 class OpenAIChatCompletionReq(BaseModel):

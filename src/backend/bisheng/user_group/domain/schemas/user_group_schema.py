@@ -23,6 +23,12 @@ class UserGroupMemberAdd(BaseModel):
     user_ids: List[int] = Field(..., min_length=1)
 
 
+class UserGroupMemberSync(BaseModel):
+    """全量同步普通成员（is_group_admin=0）；不在列表中的将从组内移除。"""
+
+    user_ids: List[int] = Field(default_factory=list)
+
+
 class UserGroupAdminSet(BaseModel):
     user_ids: List[int]
 
@@ -34,6 +40,7 @@ class UserGroupListItem(BaseModel):
     remark: Optional[str] = None
     member_count: int = 0
     create_user: Optional[int] = None
+    create_user_name: Optional[str] = None
     create_time: Optional[datetime] = None
     update_time: Optional[datetime] = None
     group_admins: List[Dict] = []

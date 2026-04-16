@@ -8,7 +8,7 @@ from fastapi import Request, Depends, UploadFile, HTTPException
 
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.errcode.user import (UserNameAlreadyExistError,
-                                         UserNeedGroupAndRoleError, UserForbiddenError, CaptchaError, UserValidateError,
+                                         UserForbiddenError, CaptchaError, UserValidateError,
                                          UserPasswordMaxTryError, UserPasswordExpireError, UserNameTooLongError)
 from bisheng.common.schemas.api import resp_200
 from bisheng.common.schemas.telemetry.event_data_schema import UserLoginEventData
@@ -17,8 +17,8 @@ from bisheng.common.services.config_service import settings
 from bisheng.core.cache.redis_manager import get_redis_client_sync, get_redis_client
 from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.minio.minio_manager import get_minio_storage, get_minio_storage_sync
-from bisheng.database.models.user_group import UserGroupDao
 from bisheng.user.domain.models.user import User, UserDao, UserLogin, UserRead, UserCreate
+from bisheng.database.constants import DefaultRole
 from bisheng.utils import md5_hash, get_request_ip, generate_uuid
 from bisheng.utils.constants import RSA_KEY
 from .auth import LoginUser, AuthJwt
@@ -120,11 +120,13 @@ class UserService:
         )
         group_ids = []
         role_ids = []
-        for one in req_data.group_roles:
+        for one in req_data.group_roles or []:
             group_ids.append(one.group_id)
             role_ids.extend(one.role_ids)
-        if not group_ids or not role_ids:
-            raise UserNeedGroupAndRoleError.http_exception()
+        group_ids = list(dict.fromkeys(group_ids))
+        role_ids = list(dict.fromkeys(role_ids))
+        if not role_ids:
+            role_ids = [DefaultRole]
         user = UserDao.add_user_with_groups_and_roles(user, group_ids, role_ids)
         return user
 
@@ -192,9 +194,23 @@ class UserService:
         else:
             db_user.user_id = 1
             db_user = await UserDao.add_user_and_admin_role(db_user)
-        # Write users to the default user group
-        await UserGroupDao.add_default_user_group(db_user.user_id)
+        if settings.multi_tenant.enabled:
+            await cls._ensure_user_default_tenant_association(db_user.user_id)
         return db_user
+
+    @classmethod
+    async def _ensure_user_default_tenant_association(cls, user_id: int) -> None:
+        """When multi-tenant is on, every user must have at least one ``user_tenant`` row to log in."""
+        from bisheng.core.context.tenant import DEFAULT_TENANT_ID
+        from bisheng.database.models.tenant import TenantDao, UserTenantDao
+
+        existing = await UserTenantDao.aget_user_tenants(user_id)
+        if existing:
+            return
+        code = (settings.multi_tenant.default_tenant_code or 'default').strip() or 'default'
+        tenant = await TenantDao.aget_by_code(code)
+        tenant_id = tenant.id if tenant else DEFAULT_TENANT_ID
+        await UserTenantDao.aadd_user_to_tenant(user_id=user_id, tenant_id=tenant_id, is_default=1)
 
     @classmethod
     async def user_login(cls, request: Request, user: UserLogin, auth_jwt: AuthJwt = Depends()):
@@ -222,13 +238,29 @@ class UserService:
         tenants_list = None
 
         if settings.multi_tenant.enabled:
-            from bisheng.database.models.tenant import UserTenantDao
+            from bisheng.database.models.tenant import UserTenantDao, TenantDao
             from bisheng.common.errcode.tenant import NoTenantsAvailableError
+            from bisheng.core.context.tenant import DEFAULT_TENANT_ID, bypass_tenant_filter
             user_tenants = await UserTenantDao.aget_user_tenants_with_details(db_user.user_id)
             active_tenants = [t for t in user_tenants if t.get('status') == 'active']
 
             if len(active_tenants) == 0:
-                raise NoTenantsAvailableError()
+                # 注册/历史数据可能未写入 user_tenant；若默认租户存在则自动挂接，避免无法登录
+                code = (settings.multi_tenant.default_tenant_code or 'default').strip() or 'default'
+                with bypass_tenant_filter():
+                    default_tenant = await TenantDao.aget_by_code(code)
+                    if default_tenant is None:
+                        default_tenant = await TenantDao.aget_by_id(DEFAULT_TENANT_ID)
+                if default_tenant and default_tenant.status == 'active':
+                    await UserTenantDao.aadd_user_to_tenant(
+                        user_id=db_user.user_id,
+                        tenant_id=default_tenant.id,
+                        is_default=1,
+                    )
+                    user_tenants = await UserTenantDao.aget_user_tenants_with_details(db_user.user_id)
+                    active_tenants = [t for t in user_tenants if t.get('status') == 'active']
+                if len(active_tenants) == 0:
+                    raise NoTenantsAvailableError()
             elif len(active_tenants) == 1:
                 tenant_id = active_tenants[0]['tenant_id']
                 await UserTenantDao.aupdate_last_access_time(db_user.user_id, tenant_id)

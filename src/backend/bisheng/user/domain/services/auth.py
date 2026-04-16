@@ -430,12 +430,7 @@ class LoginUser(BaseModel):
             else:
                 role_ids.append(user_role.role_id)
         if role != 'admin':
-            # is user group admin ?
-            db_user_groups = await UserGroupDao.aget_user_admin_group(user.user_id)
-            if len(db_user_groups) > 0:
-                role = 'group_admin'
-            else:
-                role = role_ids
+            role = role_ids
             # AC-13: union of all roles' menu permissions
             web_menu = await RoleAccessDao.aget_role_access(role_ids, AccessType.WEB_MENU)
             web_menu = list(set([one.third_id for one in web_menu]))

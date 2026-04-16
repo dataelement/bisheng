@@ -18,8 +18,15 @@ export default function index() {
   const { user } = useContext(userContext)
 
   const { t } = useTranslation()
+  const showUserGroupTab =
+    user?.role === "admin" || !!user?.can_manage_user_groups
+
   const defaultTab =
-    user.role === "admin" ? "organization" : "user"
+    user?.role === "admin"
+      ? "organization"
+      : showUserGroupTab
+        ? "userGroup"
+        : "user"
 
   return (
     <div className="h-full w-full px-2 pt-4">
@@ -35,10 +42,10 @@ export default function index() {
               {t("system.userManagement")}
             </TabsTrigger>
           )}
-          {user.role === "admin" && (
+          {showUserGroupTab && (
             <TabsTrigger value="userGroup">{t("system.userGroupsM")}</TabsTrigger>
           )}
-          <TabsTrigger value="role">{t("system.roleManagement")}</TabsTrigger>
+          <TabsTrigger value="role">{t("system.roleAndPermissions")}</TabsTrigger>
           {user.role === "admin" && (
             <TabsTrigger value="system">{t("system.systemConfiguration")}</TabsTrigger>
           )}
@@ -56,7 +63,7 @@ export default function index() {
             <Users />
           </TabsContent>
         )}
-        {user.role === "admin" && (
+        {showUserGroupTab && (
           <TabsContent value="userGroup">
             <UserGroups />
           </TabsContent>

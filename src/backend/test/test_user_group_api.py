@@ -22,11 +22,11 @@ premock_import_chain()
 from bisheng.user_group.api.router import router as user_group_router
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.user_group import (
-    UserGroupDefaultProtectedError,
     UserGroupHasMembersError,
     UserGroupMemberExistsError,
     UserGroupMemberNotFoundError,
     UserGroupNameDuplicateError,
+    UserGroupNoSeparateAdminsError,
     UserGroupNotFoundError,
     UserGroupPermissionDeniedError,
 )
@@ -171,15 +171,6 @@ class TestUserGroupCRUD:
                 resp = c.delete('/api/v1/user-groups/10')
                 assert resp.json()['status_code'] == 200
 
-    def test_delete_default_group(self):
-        """AC-10: Delete default group returns 23002."""
-        app = _make_app(MockAdminUser)
-        with patch(f'{SERVICE_PATH}.adelete_group', new_callable=AsyncMock,
-                   side_effect=UserGroupDefaultProtectedError()):
-            with TestClient(app) as c:
-                resp = c.delete('/api/v1/user-groups/2')
-                assert resp.json()['status_code'] == 23002
-
     def test_delete_group_has_members(self):
         """AC-11: Delete group with members returns 23003."""
         app = _make_app(MockAdminUser)
@@ -232,6 +223,16 @@ class TestUserGroupMembers:
                 body = resp.json()
                 assert body['status_code'] == 200
                 assert body['data']['total'] == 1
+
+    def test_sync_members_post(self):
+        """全量同步成员：POST /members/sync（前端默认，避免 PUT 在部分环境 405）。"""
+        app = _make_app(MockAdminUser)
+        with patch(f'{SERVICE_PATH}.async_plain_members', new_callable=AsyncMock):
+            with TestClient(app) as c:
+                resp = c.post('/api/v1/user-groups/10/members/sync', json={
+                    'user_ids': [3, 5],
+                })
+                assert resp.json()['status_code'] == 200
 
     def test_remove_member(self):
         """AC-15: Remove a member."""
@@ -294,18 +295,16 @@ class TestUserGroupPermission:
 class TestUserGroupAdmins:
 
     def test_set_admins(self):
-        """AC-20: Set group admins."""
+        """设置独立用户组管理员已废弃，返回 23007。"""
         app = _make_app(MockAdminUser)
-        result = [{'user_id': 1, 'user_name': 'admin'},
-                  {'user_id': 5, 'user_name': 'manager1'}]
         with patch(f'{SERVICE_PATH}.aset_admins', new_callable=AsyncMock,
-                   return_value=result):
+                   side_effect=UserGroupNoSeparateAdminsError()):
             with TestClient(app) as c:
                 resp = c.put('/api/v1/user-groups/10/admins', json={
                     'user_ids': [1, 5],
                 })
                 body = resp.json()
-                assert body['status_code'] == 200
+                assert body['status_code'] == 23007
 
     def test_set_admins_not_found(self):
         """AC-20 error path: group not found."""

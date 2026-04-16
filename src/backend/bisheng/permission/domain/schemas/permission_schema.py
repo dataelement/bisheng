@@ -50,6 +50,7 @@ class AuthorizeGrantItem(BaseModel):
     subject_id: int
     relation: str = Field(description='owner | manager | editor | viewer')
     include_children: bool = Field(default=True, description='For department: include sub-departments')
+    model_id: Optional[str] = Field(default=None, description='Optional relation model id')
 
 
 class AuthorizeRevokeItem(BaseModel):
@@ -58,6 +59,7 @@ class AuthorizeRevokeItem(BaseModel):
     subject_id: int
     relation: str
     include_children: bool = Field(default=True)
+    model_id: Optional[str] = Field(default=None)
 
 
 class AuthorizeRequest(BaseModel):
@@ -73,3 +75,29 @@ class ResourcePermissionItem(BaseModel):
     subject_name: Optional[str] = None
     relation: str
     include_children: Optional[bool] = None
+    model_id: Optional[str] = None
+    model_name: Optional[str] = None
+
+
+class RelationModelItem(BaseModel):
+    id: str
+    name: str
+    relation: str = Field(description='owner | manager | editor | viewer')
+    permissions: List[str] = Field(default_factory=list)
+    is_system: bool = False
+    # 授权级别：决定前台授权人需具备的资源权限档位（与 PRD 管理所有者/管理者/使用者对应）
+    grant_tier: str = Field(
+        default='usage',
+        description='owner=所有者级 | manager=管理级 | usage=使用级',
+    )
+
+
+class RelationModelCreateRequest(BaseModel):
+    name: str
+    relation: str = Field(description='owner | manager | editor | viewer')
+    permissions: List[str] = Field(default_factory=list)
+
+
+class RelationModelUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    permissions: Optional[List[str]] = None

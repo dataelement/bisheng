@@ -1,8 +1,8 @@
 import { PlusIcon } from "@/components/bs-icons/plus"
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
-import { Badge } from "@/components/bs-ui/badge"
 import { Button } from "@/components/bs-ui/button"
 import { Checkbox } from "@/components/bs-ui/checkBox"
+import { Switch } from "@/components/bs-ui/switch"
 import {
   Dialog,
   DialogContent,
@@ -14,13 +14,6 @@ import { Input, SearchInput } from "@/components/bs-ui/input"
 import { Label } from "@/components/bs-ui/label"
 import AutoPagination from "@/components/bs-ui/pagination/autoPagination"
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/bs-ui/select"
-import {
   Table,
   TableBody,
   TableCell,
@@ -28,6 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/bs-ui/table"
+import { userContext } from "@/contexts/userContext"
 import { getDepartmentTreeApi } from "@/controllers/API/department"
 import {
   createRoleV2Api,
@@ -37,64 +31,102 @@ import {
   updateRoleMenuV2Api,
   updateRoleV2Api,
 } from "@/controllers/API/user"
+import { message } from "@/components/bs-ui/toast/use-toast"
+import { TreeDepartmentSelect, getDepartmentDisplayPath } from "@/components/bs-comp/department"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
+import { DepartmentTreeNode } from "@/types/api/department"
 import { ROLE } from "@/types/api/user"
-import { useEffect, useMemo, useState } from "react"
+import { useContext, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 
+const WORKBENCH_PARENT_ID = "workstation"
+const ADMIN_PARENT_ID = "admin"
+const WORKBENCH_CHILD_MENUS = ["subscription", "knowledge_space"] as const
+const ADMIN_CHILD_MENUS = [
+  "board",
+  "model",
+  "log",
+  "knowledge",
+  "build",
+  "evaluation",
+  "system_config",
+  "mark_task",
+] as const
+const DEFAULT_ENABLED_MENU_IDS = [
+  WORKBENCH_PARENT_ID,
+  ADMIN_PARENT_ID,
+  "knowledge_space",
+  "knowledge",
+  "build",
+] as const
+
 export default function Roles() {
-  // NOTE: keep this page lightweight; tiny no-op change for CI retrigger.
   const { t } = useTranslation()
+  const { user } = useContext(userContext)
+  const isPlatformAdmin = user?.role === "admin"
+
   const [roles, setRoles] = useState<ROLE[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
   const [keyword, setKeyword] = useState("")
-  const [departments, setDepartments] = useState<{ id: number; name: string }[]>([])
+  const [deptTree, setDeptTree] = useState<DepartmentTreeNode[]>([])
   const [editOpen, setEditOpen] = useState(false)
-  const [menuOpen, setMenuOpen] = useState(false)
   const [activeRole, setActiveRole] = useState<ROLE | null>(null)
   const [roleName, setRoleName] = useState("")
   const [departmentId, setDepartmentId] = useState<string>("none")
-  const [quotaFileUnlimited, setQuotaFileUnlimited] = useState(true)
+  const [quotaFileUnlimited, setQuotaFileUnlimited] = useState(false)
   const [quotaFileGb, setQuotaFileGb] = useState("500")
   const [quotaChannelUnlimited, setQuotaChannelUnlimited] = useState(false)
   const [quotaChannelCount, setQuotaChannelCount] = useState("10")
   const [menuIds, setMenuIds] = useState<string[]>([])
+  const [initialEditSnapshot, setInitialEditSnapshot] = useState("")
+  const [isSaving, setIsSaving] = useState(false)
 
-  const MENU_OPTIONS = useMemo(
+  const WORKBENCH_MENU_OPTIONS = useMemo(
     () => [
-      { id: "workstation", label: t("menu.workspace") },
-      { id: "admin", label: t("menu.system") },
-      { id: "build", label: t("menu.skills") },
-      { id: "knowledge", label: t("menu.knowledge") },
-      { id: "knowledge_space", label: t("system.spaceName") },
-      { id: "model", label: t("menu.models") },
-      { id: "tool", label: "Tool" },
-      { id: "channel", label: "Channel" },
-      { id: "evaluation", label: t("menu.evaluation") },
-      { id: "dataset", label: t("menu.dataset") },
-      { id: "mark_task", label: t("menu.annotation") },
-      { id: "board", label: t("menu.board") },
+      { id: "subscription", label: t("menu.workbench1") },
+      { id: "knowledge_space", label: t("menu.workbench2") },
     ],
     [t]
   )
 
-  const flatTree = (nodes: any[]): { id: number; name: string }[] => {
-    const out: { id: number; name: string }[] = []
-    const walk = (arr: any[], parent = "") => {
-      arr.forEach((n) => {
-        const path = parent ? `${parent} / ${n.name}` : n.name
-        out.push({ id: n.id, name: path })
-        walk(n.children || [], path)
-      })
-    }
-    walk(nodes)
-    return out
-  }
+  const ADMIN_MENU_OPTIONS = useMemo(
+    () => [
+      { id: "board", label: t("menu.board") },
+      { id: "model", label: t("menu.models") },
+      { id: "log", label: t("menu.log") },
+      { id: "knowledge", label: t("menu.knowledge") },
+      { id: "build", label: t("menu.skills") },
+      { id: "evaluation", label: t("menu.evaluation") },
+      { id: "system_config", label: t("system.systemConfiguration") },
+      { id: "mark_task", label: t("menu.annotation") },
+    ],
+    [t]
+  )
+
+  const defaultMenuIds = useMemo(() => [...DEFAULT_ENABLED_MENU_IDS], [])
+
+  const buildEditSnapshot = (
+    roleNameVal: string,
+    departmentIdVal: string,
+    quotaFileUnlimitedVal: boolean,
+    quotaFileGbVal: string,
+    quotaChannelUnlimitedVal: boolean,
+    quotaChannelCountVal: string,
+    menuIdsVal: string[]
+  ) => JSON.stringify({
+    roleNameVal,
+    departmentIdVal,
+    quotaFileUnlimitedVal,
+    quotaFileGbVal,
+    quotaChannelUnlimitedVal,
+    quotaChannelCountVal,
+    menuIds: [...menuIdsVal].sort(),
+  })
 
   const loadDepartments = async () => {
     const res = await captureAndAlertRequestErrorHoc(getDepartmentTreeApi())
-    if (res) setDepartments(flatTree(res))
+    if (res) setDeptTree(res)
   }
 
   const loadRoles = async (nextPage = page, nextKeyword = keyword) => {
@@ -119,17 +151,23 @@ export default function Roles() {
   const fmtTime = (v?: string) => (v ? String(v).replace("T", " ").slice(0, 19) : "-")
 
   const openCreate = () => {
+    const nextDepartmentId = isPlatformAdmin ? "none" : deptTree[0] ? String(deptTree[0].id) : "none"
+    const nextMenuIds = [...defaultMenuIds]
     setActiveRole(null)
     setRoleName("")
-    setDepartmentId("none")
-    setQuotaFileUnlimited(true)
+    setDepartmentId(nextDepartmentId)
+    setQuotaFileUnlimited(false)
     setQuotaFileGb("500")
     setQuotaChannelUnlimited(false)
     setQuotaChannelCount("10")
+    setMenuIds(nextMenuIds)
+    setInitialEditSnapshot(
+      buildEditSnapshot("", nextDepartmentId, false, "500", false, "10", nextMenuIds)
+    )
     setEditOpen(true)
   }
 
-  const openEdit = (role: ROLE) => {
+  const openEdit = async (role: ROLE) => {
     const qc = role.quota_config || {}
     setActiveRole(role)
     setRoleName(role.role_name || "")
@@ -141,58 +179,187 @@ export default function Roles() {
     setQuotaChannelUnlimited(channelLimit === -1)
     setQuotaChannelCount(channelLimit >= 0 ? String(channelLimit) : "10")
     setEditOpen(true)
+    const menuRes = await captureAndAlertRequestErrorHoc(getRoleMenuV2Api(role.id))
+    let ids = Array.isArray(menuRes) && menuRes.length ? [...menuRes] : [...defaultMenuIds]
+    if (ids.some((id) => (ADMIN_CHILD_MENUS as readonly string[]).includes(id)) && !ids.includes(ADMIN_PARENT_ID)) {
+      ids = [...ids, ADMIN_PARENT_ID]
+    }
+    if (
+      ids.some((id) => (WORKBENCH_CHILD_MENUS as readonly string[]).includes(id)) &&
+      !ids.includes(WORKBENCH_PARENT_ID)
+    ) {
+      ids = [...ids, WORKBENCH_PARENT_ID]
+    }
+    setMenuIds(ids)
+    setInitialEditSnapshot(
+      buildEditSnapshot(
+        role.role_name || "",
+        role.department_id ? String(role.department_id) : "none",
+        fileLimit === -1,
+        fileLimit > 0 ? String(fileLimit) : "500",
+        channelLimit === -1,
+        channelLimit >= 0 ? String(channelLimit) : "10",
+        ids
+      )
+    )
+  }
+
+  const buildQuotaConfig = (): Record<string, number> => {
+    const base: Record<string, number> = activeRole?.quota_config
+      ? { ...(activeRole.quota_config as Record<string, number>) }
+      : {}
+    base.knowledge_space_file = quotaFileUnlimited ? -1 : Math.max(0, Number(quotaFileGb || 0))
+    base.channel = quotaChannelUnlimited ? -1 : Math.max(0, Number(quotaChannelCount || 0))
+    return base
   }
 
   const submitRole = async () => {
-    if (!roleName.trim()) return
-    const fileLimit = quotaFileUnlimited ? -1 : Math.max(0, Number(quotaFileGb || 0))
-    const channelLimit = quotaChannelUnlimited ? -1 : Math.max(0, Number(quotaChannelCount || 0))
+    if (isSaving || !roleName.trim()) return
+    setIsSaving(true)
+    const quota_config = buildQuotaConfig()
     const payload = {
       role_name: roleName.trim(),
       department_id: departmentId === "none" ? null : Number(departmentId),
-      quota_config: {
-        knowledge_space_file: fileLimit,
-        channel: channelLimit,
-      },
+      quota_config,
       remark: "PRD 2.5 role",
     }
-    const res = activeRole
-      ? await captureAndAlertRequestErrorHoc(updateRoleV2Api(activeRole.id, payload))
-      : await captureAndAlertRequestErrorHoc(createRoleV2Api(payload))
-    if (res !== null) {
+    try {
+      let roleId = activeRole?.id
+      if (!activeRole) {
+        const created = await captureAndAlertRequestErrorHoc(createRoleV2Api(payload))
+        if (created === null || created === false) return
+        roleId = (created as { id: number }).id
+      } else {
+        const updated = await captureAndAlertRequestErrorHoc(updateRoleV2Api(activeRole.id, payload))
+        if (updated === null || updated === false) return
+        roleId = activeRole.id
+      }
+
+      if (roleId == null) return
+      const menuSaved = await captureAndAlertRequestErrorHoc(updateRoleMenuV2Api(roleId, menuIds))
+      if (menuSaved === false) return
+
+      message({ variant: "success", description: t("saved") })
       setEditOpen(false)
       loadRoles()
+    } finally {
+      setIsSaving(false)
     }
   }
 
   const onDelete = (item: ROLE) => {
+    const n = item.user_count ?? 0
+    const desc =
+      n > 0 ? (
+        <div className="space-y-2 text-left text-sm">
+          <p>
+            {t("system.confirmText")}「{item.role_name}」？
+          </p>
+          <p className="text-muted-foreground">
+            {t("system.roleDeleteRevokeWarning", { count: n })}
+          </p>
+        </div>
+      ) : (
+        `${t("system.confirmText")}「${item.role_name}」？`
+      )
     bsConfirm({
-      desc: `${t("system.confirmText")}【${item.role_name}】?`,
+      title: t("prompt"),
+      desc,
       okTxt: t("delete"),
-      onOk: (next) => {
-        captureAndAlertRequestErrorHoc(deleteRoleV2Api(item.id)).then((res) => {
-          if (res !== null) loadRoles()
+      onOk: async (next) => {
+        try {
+          const res = await captureAndAlertRequestErrorHoc(deleteRoleV2Api(item.id))
+          if (res === false) return
+          await loadRoles()
+          message({ variant: "success", description: t("deleteSuccess") })
+        } finally {
           next()
-        })
+        }
       },
     })
   }
 
-  const openMenu = async (item: ROLE) => {
-    setActiveRole(item)
-    const res = await captureAndAlertRequestErrorHoc(getRoleMenuV2Api(item.id))
-    setMenuIds(Array.isArray(res) ? res : [])
-    setMenuOpen(true)
+  const isMenuEnabled = (id: string) => menuIds.includes(id)
+  const isGroupAllEnabled = (children: readonly string[]) => children.every((id) => isMenuEnabled(id))
+
+  const toggleMenuGroup = (parentId: string, children: readonly string[], checked: boolean) => {
+    setMenuIds((prev) => {
+      const next = new Set(prev)
+      if (checked) {
+        next.add(parentId)
+        children.forEach((id) => next.add(id))
+      } else {
+        next.delete(parentId)
+        children.forEach((id) => next.delete(id))
+      }
+      return Array.from(next)
+    })
   }
 
-  const saveMenu = async () => {
-    if (!activeRole) return
-    const res = await captureAndAlertRequestErrorHoc(updateRoleMenuV2Api(activeRole.id, menuIds))
-    if (res !== null) setMenuOpen(false)
+  const toggleMenuItem = (parentId: string, children: readonly string[], id: string, checked: boolean) => {
+    setMenuIds((prev) => {
+      const next = new Set(prev)
+      if (checked) {
+        next.add(id)
+        next.add(parentId)
+      } else {
+        next.delete(id)
+        const hasAnyChild = children.some((child) => child !== id && next.has(child))
+        if (!hasAnyChild) next.delete(parentId)
+      }
+      return Array.from(next)
+    })
   }
 
-  const toggleMenu = (id: string) => {
-    setMenuIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+  const scopeLabel = (el: ROLE) => {
+    if (el.role_type === "global" || !el.department_id) return t("system.scopeGlobal")
+    return getDepartmentDisplayPath(deptTree, el.department_id) || el.department_name || "-"
+  }
+
+  const creatorLabel = (el: ROLE) => {
+    if (el.role_type === "global") return t("system.systemPresetGlobal")
+    return el.creator_name?.trim() || "-"
+  }
+
+  const hasUnsavedEditChanges = useMemo(() => {
+    if (!editOpen || !initialEditSnapshot) return false
+    const current = buildEditSnapshot(
+      roleName,
+      departmentId,
+      quotaFileUnlimited,
+      quotaFileGb,
+      quotaChannelUnlimited,
+      quotaChannelCount,
+      menuIds
+    )
+    return current !== initialEditSnapshot
+  }, [
+    editOpen,
+    initialEditSnapshot,
+    roleName,
+    departmentId,
+    quotaFileUnlimited,
+    quotaFileGb,
+    quotaChannelUnlimited,
+    quotaChannelCount,
+    menuIds,
+  ])
+
+  const requestCloseEditDialog = () => {
+    if (!hasUnsavedEditChanges) {
+      setEditOpen(false)
+      return
+    }
+    bsConfirm({
+      title: t("prompt"),
+      desc: t("unsavedChangesConfirmation"),
+      okTxt: t("leave"),
+      canelTxt: t("cancel"),
+      onOk: (next) => {
+        setEditOpen(false)
+        next()
+      },
+    })
   }
 
   return (
@@ -201,7 +368,7 @@ export default function Roles() {
         <div className="mb-3 flex items-center justify-between">
           <div className="w-[220px]">
             <SearchInput
-              placeholder={t("system.roleName")}
+              placeholder={t("system.roleSearchPlaceholder")}
               onChange={(e) => setKeyword(e.target.value)}
             />
           </div>
@@ -214,10 +381,9 @@ export default function Roles() {
           <TableHeader>
             <TableRow>
               <TableHead className="w-[180px]">{t("system.roleName")}</TableHead>
-              <TableHead className="w-[110px]">{t("system.roleType")}</TableHead>
               <TableHead>{t("system.roleScope")}</TableHead>
-              <TableHead className="w-[120px]">{t("system.userCount")}</TableHead>
-              <TableHead className="w-[120px]">{t("system.creator")}</TableHead>
+              <TableHead className="w-[100px]">{t("system.userCount")}</TableHead>
+              <TableHead className="w-[140px]">{t("system.creator")}</TableHead>
               <TableHead className="w-[170px]">{t("createTime")}</TableHead>
               <TableHead className="w-[170px]">{t("system.changeTime")}</TableHead>
               <TableHead className="text-right">{t("operations")}</TableHead>
@@ -226,7 +392,7 @@ export default function Roles() {
           <TableBody>
             {roles.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center text-gray-400">
+                <TableCell colSpan={7} className="text-center text-gray-400">
                   {t("build.empty")}
                 </TableCell>
               </TableRow>
@@ -234,14 +400,11 @@ export default function Roles() {
               roles.map((el) => (
                 <TableRow key={el.id}>
                   <TableCell className="font-medium">{el.role_name}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline">
-                      {el.role_type === "global" ? t("system.scopeGlobal") : t("system.scopeDept")}
-                    </Badge>
+                  <TableCell className="max-w-[280px] truncate" title={scopeLabel(el)}>
+                    {scopeLabel(el)}
                   </TableCell>
-                  <TableCell>{el.department_name || "-"}</TableCell>
                   <TableCell>{el.user_count ?? "-"}</TableCell>
-                  <TableCell>{el.role_type === "global" ? t("system.systemPreset") : t("system.deptAdminCreated")}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{creatorLabel(el)}</TableCell>
                   <TableCell>{fmtTime(el.create_time)}</TableCell>
                   <TableCell>{fmtTime(el.update_time)}</TableCell>
                   <TableCell className="text-right">
@@ -252,9 +415,6 @@ export default function Roles() {
                       onClick={() => openEdit(el)}
                     >
                       {t("edit")}
-                    </Button>
-                    <Button variant="link" className="px-0 pl-4" onClick={() => openMenu(el)}>
-                      {t("system.adminMenuAuthorization")}
                     </Button>
                     <Button
                       variant="link"
@@ -282,55 +442,71 @@ export default function Roles() {
         />
       </div>
 
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="sm:max-w-lg">
+      <Dialog
+        open={editOpen}
+        onOpenChange={(open) => {
+          if (open) {
+            setEditOpen(true)
+          } else {
+            requestCloseEditDialog()
+          }
+        }}
+      >
+        <DialogContent className="flex max-h-[85vh] max-w-2xl flex-col sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>{activeRole ? t("edit") : t("create")}</DialogTitle>
+            <DialogTitle>{activeRole ? t("system.roleEditTitle") : t("system.roleCreateTitle")}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
+            <p className="text-xs text-muted-foreground">{t("system.roleFormIntro")}</p>
+
             <div>
               <Label>{t("system.roleName")}</Label>
-              <Input value={roleName} onChange={(e) => setRoleName(e.target.value)} className="mt-1" />
+              <Input value={roleName} onChange={(e) => setRoleName(e.target.value)} className="mt-1" maxLength={128} />
             </div>
+
             <div>
               <Label>{t("system.roleScope")}</Label>
-              <Select value={departmentId} onValueChange={setDepartmentId}>
-                <SelectTrigger className="mt-1">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">{t("system.scopeGlobal")}</SelectItem>
-                  {departments.map((d) => (
-                    <SelectItem key={d.id} value={String(d.id)}>
-                      {d.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <p className="mt-1 text-xs text-muted-foreground">{t("system.roleScopeHint")}</p>
+              <TreeDepartmentSelect
+                modal={false}
+                className="mt-1"
+                nodes={deptTree}
+                value={departmentId === "none" ? null : Number(departmentId)}
+                onChange={(id) => setDepartmentId(id == null ? "none" : String(id))}
+                allowNone={isPlatformAdmin}
+                noneLabel={t("system.scopeGlobalRole")}
+                placeholder={t("system.treeDepartmentSelectPlaceholder")}
+                emptyText={t("system.treeDepartmentSelectEmpty")}
+              />
             </div>
+
             <div className="rounded-md border p-3">
               <Label>{t("system.knowledgeSpaceFileUploadLimit")}</Label>
-              <div className="mt-2 flex items-center gap-3">
+              <p className="mt-1 text-xs text-muted-foreground">{t("system.knowledgeSpaceFileLimitDesc")}</p>
+              <div className="mt-2 flex flex-wrap items-center gap-3">
                 <Checkbox
                   checked={quotaFileUnlimited}
                   onCheckedChange={(v) => setQuotaFileUnlimited(Boolean(v))}
                 />
                 <span className="text-sm">{t("system.unlimited")}</span>
                 {!quotaFileUnlimited && (
-                  <Input
-                    type="number"
-                    min={0}
-                    value={quotaFileGb}
-                    onChange={(e) => setQuotaFileGb(e.target.value)}
-                    className="w-[120px]"
-                  />
+                  <>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={quotaFileGb}
+                      onChange={(e) => setQuotaFileGb(e.target.value)}
+                      className="w-[120px]"
+                    />
+                    <span className="text-sm">GB</span>
+                  </>
                 )}
-                {!quotaFileUnlimited && <span className="text-sm">GB</span>}
               </div>
             </div>
+
             <div className="rounded-md border p-3">
               <Label>{t("system.channelQuotaLimit")}</Label>
-              <div className="mt-2 flex items-center gap-3">
+              <div className="mt-2 flex flex-wrap items-center gap-3">
                 <Checkbox
                   checked={quotaChannelUnlimited}
                   onCheckedChange={(v) => setQuotaChannelUnlimited(Boolean(v))}
@@ -347,42 +523,159 @@ export default function Roles() {
                 )}
               </div>
             </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditOpen(false)}>
-              {t("cancel")}
-            </Button>
-            <Button onClick={submitRole}>{t("save")}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
-      <Dialog open={menuOpen} onOpenChange={setMenuOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>{t("system.adminMenuAuthorization")}</DialogTitle>
-          </DialogHeader>
-          <div className="max-h-80 space-y-2 overflow-auto">
-            <p className="mb-2 mt-1 text-xs text-muted-foreground">{t("system.workbenchMenuAuthorization")}</p>
-            {MENU_OPTIONS.filter((x) => x.id === "workstation").map((m) => (
-              <label key={m.id} className="flex items-center gap-2 text-sm">
-                <Checkbox checked={menuIds.includes(m.id)} onCheckedChange={() => toggleMenu(m.id)} />
-                <span>{m.label}</span>
-              </label>
-            ))}
-            <p className="mb-2 mt-3 text-xs text-muted-foreground">{t("system.adminMenuAuthorization")}</p>
-            {MENU_OPTIONS.filter((x) => x.id !== "workstation").map((m) => (
-              <label key={m.id} className="flex items-center gap-2 text-sm">
-                <Checkbox checked={menuIds.includes(m.id)} onCheckedChange={() => toggleMenu(m.id)} />
-                <span>{m.label}</span>
-              </label>
-            ))}
+            <div className="rounded-md border p-3">
+              <Label>{t("system.menuPermissionSection")}</Label>
+              <p className="mt-1 text-xs text-muted-foreground">{t("system.menuPermissionHint")}</p>
+              <div className="mt-3 space-y-4">
+                <div className="rounded-md border bg-muted/20 p-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <div className="text-xs font-medium text-muted-foreground">{t("system.workbenchMenuAuthorization")}</div>
+                    <div className="inline-flex items-center gap-2 text-xs">
+                      <Button
+                        type="button"
+                        variant="link"
+                        className="h-auto p-0"
+                        onClick={() => toggleMenuGroup(WORKBENCH_PARENT_ID, WORKBENCH_CHILD_MENUS, true)}
+                        disabled={isGroupAllEnabled(WORKBENCH_CHILD_MENUS)}
+                      >
+                        {t("system.menuEnableAll")}
+                      </Button>
+                      <span className="text-muted-foreground">/</span>
+                      <Button
+                        type="button"
+                        variant="link"
+                        className="h-auto p-0"
+                        onClick={() => toggleMenuGroup(WORKBENCH_PARENT_ID, WORKBENCH_CHILD_MENUS, false)}
+                        disabled={!isMenuEnabled(WORKBENCH_PARENT_ID)}
+                      >
+                        {t("system.menuDisableAll")}
+                      </Button>
+                    </div>
+                  </div>
+                  <label
+                    className="inline-flex cursor-pointer items-center gap-2 rounded-md bg-background px-2 py-1 text-base font-semibold"
+                    onClick={() =>
+                      toggleMenuGroup(
+                        WORKBENCH_PARENT_ID,
+                        WORKBENCH_CHILD_MENUS,
+                        !isMenuEnabled(WORKBENCH_PARENT_ID)
+                      )
+                    }
+                  >
+                    <Switch
+                      checked={isMenuEnabled(WORKBENCH_PARENT_ID)}
+                      onCheckedChange={(checked) =>
+                        toggleMenuGroup(WORKBENCH_PARENT_ID, WORKBENCH_CHILD_MENUS, checked)
+                      }
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                    <span>{t("menu.workspace")}</span>
+                  </label>
+                  <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2">
+                    {WORKBENCH_MENU_OPTIONS.map((m) => (
+                      <label
+                        key={m.id}
+                        className={`inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-background px-2 py-1.5 text-sm ${
+                          !isMenuEnabled(WORKBENCH_PARENT_ID) ? "opacity-50" : ""
+                        }`}
+                        onClick={() =>
+                          isMenuEnabled(WORKBENCH_PARENT_ID) &&
+                          toggleMenuItem(
+                            WORKBENCH_PARENT_ID,
+                            WORKBENCH_CHILD_MENUS,
+                            m.id,
+                            !isMenuEnabled(m.id)
+                          )
+                        }
+                      >
+                        <Switch
+                          checked={isMenuEnabled(m.id)}
+                          disabled={!isMenuEnabled(WORKBENCH_PARENT_ID)}
+                          onCheckedChange={(checked) =>
+                            toggleMenuItem(WORKBENCH_PARENT_ID, WORKBENCH_CHILD_MENUS, m.id, checked)
+                          }
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                        <span>{m.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="rounded-md border bg-muted/20 p-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <div className="text-xs font-medium text-muted-foreground">{t("system.adminMenuAuthorization")}</div>
+                    <div className="inline-flex items-center gap-2 text-xs">
+                      <Button
+                        type="button"
+                        variant="link"
+                        className="h-auto p-0"
+                        onClick={() => toggleMenuGroup(ADMIN_PARENT_ID, ADMIN_CHILD_MENUS, true)}
+                        disabled={isGroupAllEnabled(ADMIN_CHILD_MENUS)}
+                      >
+                        {t("system.menuEnableAll")}
+                      </Button>
+                      <span className="text-muted-foreground">/</span>
+                      <Button
+                        type="button"
+                        variant="link"
+                        className="h-auto p-0"
+                        onClick={() => toggleMenuGroup(ADMIN_PARENT_ID, ADMIN_CHILD_MENUS, false)}
+                        disabled={!isMenuEnabled(ADMIN_PARENT_ID)}
+                      >
+                        {t("system.menuDisableAll")}
+                      </Button>
+                    </div>
+                  </div>
+                  <label
+                    className="inline-flex cursor-pointer items-center gap-2 rounded-md bg-background px-2 py-1 text-base font-semibold"
+                    onClick={() =>
+                      toggleMenuGroup(ADMIN_PARENT_ID, ADMIN_CHILD_MENUS, !isMenuEnabled(ADMIN_PARENT_ID))
+                    }
+                  >
+                    <Switch
+                      checked={isMenuEnabled(ADMIN_PARENT_ID)}
+                      onCheckedChange={(checked) => toggleMenuGroup(ADMIN_PARENT_ID, ADMIN_CHILD_MENUS, checked)}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                    <span>{t("system.adminSpace")}</span>
+                  </label>
+                  <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 md:grid-cols-4">
+                    {ADMIN_MENU_OPTIONS.map((m) => (
+                      <label
+                        key={m.id}
+                        className={`inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-background px-2 py-1.5 text-sm ${
+                          !isMenuEnabled(ADMIN_PARENT_ID) ? "opacity-50" : ""
+                        }`}
+                        onClick={() =>
+                          isMenuEnabled(ADMIN_PARENT_ID) &&
+                          toggleMenuItem(ADMIN_PARENT_ID, ADMIN_CHILD_MENUS, m.id, !isMenuEnabled(m.id))
+                        }
+                      >
+                        <Switch
+                          checked={isMenuEnabled(m.id)}
+                          disabled={!isMenuEnabled(ADMIN_PARENT_ID)}
+                          onCheckedChange={(checked) =>
+                            toggleMenuItem(ADMIN_PARENT_ID, ADMIN_CHILD_MENUS, m.id, checked)
+                          }
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                        <span>{m.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setMenuOpen(false)}>
+          <DialogFooter className="mt-4 shrink-0 border-t pt-2">
+            <Button variant="outline" onClick={requestCloseEditDialog} disabled={isSaving}>
               {t("cancel")}
             </Button>
-            <Button onClick={saveMenu}>{t("save")}</Button>
+            <Button onClick={submitRole} disabled={isSaving}>
+              {isSaving ? `${t("save")}...` : t("save")}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -3,7 +3,8 @@ import AppAvator from "@/components/bs-comp/cardComponent/avatar";
 import LabelShow from "@/components/bs-comp/cardComponent/LabelShow";
 import { PermissionBadge } from "@/components/bs-comp/permission/PermissionBadge";
 import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
-import { canManageResource, usePermissionLevels } from "@/components/bs-comp/permission/usePermissionLevels";
+import { usePermissionLevels } from "@/components/bs-comp/permission/usePermissionLevels";
+import { RelationLevel } from "@/components/bs-comp/permission/types";
 import AppTempSheet from "@/components/bs-comp/sheets/AppTempSheet";
 import { LoadingIcon } from "@/components/bs-icons/loading";
 import { MoveOneIcon } from "@/components/bs-icons/moveOne";
@@ -86,7 +87,16 @@ export default function apps() {
     const [permDialogOpen, setPermDialogOpen] = useState(false);
     const [permTarget, setPermTarget] = useState<{ id: string; name: string; type: string } | null>(null);
     const resourceIds = dataSource.map((item: any) => String(item.id));
-    const { levels: permLevels } = usePermissionLevels('workflow', resourceIds);
+    const { levels: permLevels, loading: permLoading } = usePermissionLevels('workflow', resourceIds);
+    const hasLevel = (level: RelationLevel | undefined, allowed: RelationLevel[]) => level ? allowed.includes(level) : false;
+    const canRead = (id: string | number) => hasLevel(permLevels[String(id)], ['owner', 'manager', 'editor', 'viewer']);
+    const canEdit = (id: string | number) => hasLevel(permLevels[String(id)], ['owner', 'manager', 'editor']);
+    const canManage = (id: string | number) => hasLevel(permLevels[String(id)], ['owner', 'manager']);
+    const canDelete = (id: string | number) => hasLevel(permLevels[String(id)], ['owner']);
+    const visibleApps = user.role === 'admin' || permLoading
+        ? dataSource
+        : dataSource.filter((item: any) => canRead(item.id));
+    const canCreateApp = user.role === 'admin' || visibleApps.some((item: any) => canEdit(item.id));
 
     const handleOpenPermission = (item: any) => {
         const typeMap = { 5: 'assistant', 1: 'workflow', 10: 'workflow' };
@@ -213,7 +223,7 @@ export default function apps() {
                     onChange={(e) => setSearchKey(e.target.value)}
                     onValueChange={handleLabelSearch}>
                 </SelectSearch>
-                {user.role === 'admin' && <Button
+                {canCreateApp && <Button
                     variant="ghost"
                     className="hover:bg-gray-50 flex gap-2 dark:hover:bg-[#34353A] ml-auto"
                     onClick={() => navigate(`/build/temps/${tempTypeRef.current && tempTypeRef.current !== AppType.ALL ? tempTypeRef.current : AppType.FLOW}`)}
@@ -226,25 +236,27 @@ export default function apps() {
                         <LoadingIcon />
                     </div>
                     : <div className="mt-6 flex gap-2 flex-wrap pb-20 min-w-[980px]">
-                        <AppTempSheet onSelect={handleCreateApp} onCustomCreate={handleCreateApp}>
-                            <CardComponent<FlowType>
-                                data={null}
-                                type='assist'
-                                title={t('log.createBuild')}
-                                description={(<>
-                                    <p><p>{t('build.provideSceneTemplates')}</p></p>
-                                </>)}
-                            ></CardComponent>
-                        </AppTempSheet>
+                        {canCreateApp && (
+                            <AppTempSheet onSelect={handleCreateApp} onCustomCreate={handleCreateApp}>
+                                <CardComponent<FlowType>
+                                    data={null}
+                                    type='assist'
+                                    title={t('log.createBuild')}
+                                    description={(<>
+                                        <p><p>{t('build.provideSceneTemplates')}</p></p>
+                                    </>)}
+                                ></CardComponent>
+                            </AppTempSheet>
+                        )}
                         {
-                            dataSource.map((item: any, i) => (
+                            visibleApps.map((item: any, i) => (
                                 <CardComponent<FlowType>
                                     key={item.id}
                                     data={item}
                                     id={item.id}
                                     logo={<AppAvator id={item.name} flowType={item.flow_type} url={item.logo} />}
                                     type={TypeNames[item.flow_type]}
-                                    edit
+                                    edit={canEdit(item.id)}
                                     // edit={item.write}
                                     title={item.name}
                                     isAdmin={user.role === 'admin'}
@@ -252,7 +264,7 @@ export default function apps() {
                                     checked={item.status === 2}
                                     user={item.user_name}
                                     currentUser={user}
-                                    onClick={() => handleSetting(item)}
+                                    onClick={() => canEdit(item.id) && handleSetting(item)}
                                     // onSwitchClick={() => {
                                     //     !item.write && item.status !== 2 && message({
                                     //         description: t('build.noPermissionToPublish', { type: typeCnNames[item.flow_type] }),
@@ -261,10 +273,11 @@ export default function apps() {
                                     // }}
                                     onAddTemp={toggleTempModal}
                                     onCheckedChange={handleCheckedChange}
-                                    onDelete={handleDelete}
+                                    onDelete={canDelete(item.id) ? handleDelete : undefined}
                                     onSetting={(item) => handleSetting(item)}
-                                    onPermission={canManageResource(permLevels, item.id) ? handleOpenPermission : undefined}
+                                    onPermission={canManage(item.id) ? handleOpenPermission : undefined}
                                     permissionBadge={<PermissionBadge level={permLevels[String(item.id)]} />}
+                                    showSwitch={canManage(item.id)}
                                     headSelecter={(
                                         // skills
                                         item.flow_type !== AppNumType.ASSISTANT ? <CardSelectVersion

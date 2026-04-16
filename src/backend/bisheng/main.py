@@ -1,3 +1,4 @@
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request, status
@@ -67,9 +68,21 @@ def create_app():
         lifespan=lifespan,
     )
 
-    origins = [
-        '*',
-    ]
+    # 前端 axios 使用 withCredentials=true 时，浏览器禁止 ACAO 为 *。
+    # 可通过环境变量 BISHENG_CORS_ORIGINS 覆盖，逗号分隔，例如：
+    # BISHENG_CORS_ORIGINS=http://localhost:3001,http://127.0.0.1:3001
+    _cors_raw = (os.getenv('BISHENG_CORS_ORIGINS') or '').strip()
+    if _cors_raw:
+        origins = [o.strip() for o in _cors_raw.split(',') if o.strip()]
+    else:
+        origins = [
+            'http://localhost:3000',
+            'http://localhost:3001',
+            'http://127.0.0.1:3000',
+            'http://127.0.0.1:3001',
+            'http://localhost:5173',
+            'http://127.0.0.1:5173',
+        ]
 
     @app.get('/health')
     def get_health():
@@ -78,7 +91,7 @@ def create_app():
     app.add_middleware(
         CORSMiddleware,
         allow_origins=origins,
-        allow_credentials=False,
+        allow_credentials=True,
         allow_methods=['*'],
         allow_headers=['*'],
     )

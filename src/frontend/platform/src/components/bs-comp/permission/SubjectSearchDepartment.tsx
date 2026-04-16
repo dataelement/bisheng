@@ -1,6 +1,6 @@
 import { Checkbox } from "@/components/bs-ui/checkBox"
 import { SearchInput } from "@/components/bs-ui/input"
-import { getDepartmentTree } from "@/controllers/API/permission"
+import { getDepartmentTreeApi } from "@/controllers/API/department"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { ChevronDown, ChevronRight, Building2 } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
@@ -34,7 +34,7 @@ export function SubjectSearchDepartment({
 
   useEffect(() => {
     setLoading(true)
-    captureAndAlertRequestErrorHoc(getDepartmentTree()).then((res) => {
+    captureAndAlertRequestErrorHoc(getDepartmentTreeApi()).then((res) => {
       if (res) setTree(res)
       setLoading(false)
     })

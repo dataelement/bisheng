@@ -19,6 +19,8 @@ export interface PermissionEntry {
   subject_id: number
   subject_name: string | null
   relation: RelationLevel
+  model_id?: string
+  model_name?: string
   include_children?: boolean
   // Reserved for F008 inherited permissions
   inherited_from?: string
@@ -28,6 +30,7 @@ export interface AuthorizeItem {
   subject_type: SubjectType
   subject_id: number
   relation: RelationLevel
+  model_id?: string
   include_children?: boolean
 }
 

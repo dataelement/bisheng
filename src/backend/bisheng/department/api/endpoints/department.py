@@ -11,6 +11,8 @@ from bisheng.common.schemas.api import resp_200
 from bisheng.department.domain.schemas.department_schema import (
     DepartmentAdminSet,
     DepartmentCreate,
+    DepartmentLocalMemberCreate,
+    DepartmentLocalMemberCreateWithDeptId,
     DepartmentMoveRequest,
     DepartmentUpdate,
 )
@@ -38,6 +40,24 @@ async def get_tree(
     try:
         tree = await DepartmentService.aget_tree(login_user)
         return resp_200([node.model_dump() for node in tree])
+    except BaseErrorCode as e:
+        return e.return_resp_instance()
+
+
+@router.post('/local-members')
+async def create_local_member_body(
+    data: DepartmentLocalMemberCreateWithDeptId,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    """创建本地人员（dept_id 在 body）。必须放在 ``GET /{dept_id}`` 之前，否则 ``local-members`` 会被当成 dept_id 导致 POST→405。"""
+    try:
+        inner = DepartmentLocalMemberCreate(
+            user_name=data.user_name,
+            password=data.password,
+            role_ids=data.role_ids,
+        )
+        out = await DepartmentService.acreate_local_member(data.dept_id, inner, login_user)
+        return resp_200(out)
     except BaseErrorCode as e:
         return e.return_resp_instance()
 

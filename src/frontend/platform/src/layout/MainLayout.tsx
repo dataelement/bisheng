@@ -64,7 +64,7 @@ export default function MainLayout() {
 
     // 系统管理员(超管、组超管)
     const isAdmin = useMemo(() => {
-        return ['admin', 'group_admin'].includes(user.role)
+        return user.role === 'admin'
     }, [user])
 
     const isMenu = (menu) => {

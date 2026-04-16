@@ -2,13 +2,10 @@ from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
 from sqlalchemy import Column, DateTime, delete, func, text, INT
-from sqlmodel import Field, select
+from sqlmodel import Field, col, select
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session, get_async_db_session
-from bisheng.database.models.group import DefaultGroup
-
-
 class UserGroupBase(SQLModelSerializable):
     user_id: Optional[int] = Field(
         default=None,
@@ -220,16 +217,6 @@ class UserGroupDao(UserGroupBase):
             return user_groups
 
     @classmethod
-    async def add_default_user_group(cls, user_id: int) -> None:
-        """
-        Add users to the default user group
-        """
-        async with get_async_db_session() as session:
-            user_group = UserGroup(user_id=user_id, group_id=DefaultGroup, is_group_admin=False)
-            session.add(user_group)
-            await session.commit()
-
-    @classmethod
     def delete_group_admins(cls, group_id: int, admin_ids: List[int]) -> None:
         """
         Bulk delete user groupsadmin
@@ -287,6 +274,46 @@ class UserGroupDao(UserGroupBase):
             return members, total
 
     @classmethod
+    async def aget_plain_member_user_ids(cls, group_id: int) -> List[int]:
+        """当前组内普通成员 user_id 列表（不含 is_group_admin=1，不含已删除用户）。"""
+        from bisheng.user.domain.models.user import User
+        async with get_async_db_session() as session:
+            stmt = (
+                select(UserGroup.user_id)
+                .join(User, UserGroup.user_id == User.user_id)
+                .where(
+                    UserGroup.group_id == group_id,
+                    UserGroup.is_group_admin == False,  # noqa: E712
+                    User.delete == 0,
+                )
+            )
+            rows = (await session.exec(stmt)).all()
+            out: List[int] = []
+            for r in rows:
+                if isinstance(r, (tuple, list)):
+                    out.append(int(r[0]))
+                else:
+                    out.append(int(r))
+            return out
+
+    @classmethod
+    async def adelete_plain_members_batch(
+        cls, group_id: int, user_ids: List[int],
+    ) -> None:
+        """批量删除普通成员行（仅 is_group_admin=0）。"""
+        if not user_ids:
+            return
+        async with get_async_db_session() as session:
+            await session.exec(
+                delete(UserGroup).where(
+                    UserGroup.group_id == group_id,
+                    UserGroup.user_id.in_(user_ids),
+                    UserGroup.is_group_admin == False,  # noqa: E712
+                )
+            )
+            await session.commit()
+
+    @classmethod
     async def aget_group_member_count(cls, group_id: int) -> int:
         """Count non-admin members of a group (excluding deleted users)."""
         from bisheng.user.domain.models.user import User
@@ -315,7 +342,7 @@ class UserGroupDao(UserGroupBase):
     async def aremove_member(cls, group_id: int, user_id: int) -> None:
         """Remove a single non-admin member."""
         async with get_async_db_session() as session:
-            session.exec(
+            await session.exec(
                 delete(UserGroup).where(
                     UserGroup.group_id == group_id,
                     UserGroup.user_id == user_id,
@@ -338,6 +365,20 @@ class UserGroupDao(UserGroupBase):
             return result.all()
 
     @classmethod
+    async def aget_plain_member_row(
+        cls, group_id: int, user_id: int,
+    ) -> Optional[UserGroup]:
+        """Return membership row if user is a non-admin member of the group."""
+        async with get_async_db_session() as session:
+            stmt = select(UserGroup).where(
+                UserGroup.group_id == group_id,
+                UserGroup.user_id == user_id,
+                UserGroup.is_group_admin == False,  # noqa: E712
+            )
+            result = await session.exec(stmt)
+            return result.first()
+
+    @classmethod
     async def aget_group_admins_detail(cls, group_id: int) -> List[Dict]:
         """Get group admins with user details."""
         from bisheng.user.domain.models.user import User
@@ -356,10 +397,10 @@ class UserGroupDao(UserGroupBase):
     async def aset_admins_batch(
         cls, group_id: int, add_ids: List[int], remove_ids: List[int],
     ) -> None:
-        """Batch set/remove admins."""
+        """Batch set/remove admins. Upgrades plain member rows to admin when needed."""
         async with get_async_db_session() as session:
             if remove_ids:
-                session.exec(
+                await session.exec(
                     delete(UserGroup).where(
                         UserGroup.group_id == group_id,
                         UserGroup.user_id.in_(remove_ids),
@@ -367,9 +408,21 @@ class UserGroupDao(UserGroupBase):
                     )
                 )
             for uid in add_ids:
-                session.add(UserGroup(
-                    user_id=uid, group_id=group_id, is_group_admin=True,
-                ))
+                result = await session.exec(
+                    select(UserGroup).where(
+                        UserGroup.group_id == group_id,
+                        UserGroup.user_id == uid,
+                    )
+                )
+                row = result.first()
+                if row:
+                    if not row.is_group_admin:
+                        row.is_group_admin = True
+                        session.add(row)
+                else:
+                    session.add(UserGroup(
+                        user_id=uid, group_id=group_id, is_group_admin=True,
+                    ))
             await session.commit()
 
     @classmethod
@@ -386,13 +439,17 @@ class UserGroupDao(UserGroupBase):
         Async: For a list of user_ids, return a map of user_id -> List[Group].
         Only includes non-admin group memberships (is_group_admin == 0).
         """
-        from bisheng.database.models.group import Group
+        from bisheng.database.models.group import Group, LEGACY_HIDDEN_USER_GROUP_NAMES
         if not user_ids:
             return {}
         statement = (
             select(UserGroup.user_id, Group)
             .join(Group, UserGroup.group_id == Group.id)
-            .where(UserGroup.user_id.in_(user_ids), UserGroup.is_group_admin == 0)
+            .where(
+                UserGroup.user_id.in_(user_ids),
+                UserGroup.is_group_admin == 0,
+                col(Group.group_name).notin_(LEGACY_HIDDEN_USER_GROUP_NAMES),
+            )
         )
         async with get_async_db_session() as session:
             rows = (await session.exec(statement)).all()

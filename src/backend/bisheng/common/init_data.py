@@ -12,7 +12,6 @@ from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.database import get_async_db_session, get_database_connection
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.database.constants import AdminRole, DefaultRole
-from bisheng.database.models.group import Group, DefaultGroup
 from bisheng.database.models.role import Role
 from bisheng.database.models.role_access import RoleAccess, AccessType, WebMenuResource
 from bisheng.database.models.template import Template
@@ -38,10 +37,10 @@ async def init_default_data():
                 if not db_role:
                     # Initialize system configuration, Admin has all permissions
                     db_role = Role(id=AdminRole, role_name='System Admin', remark='System highest privileges',
-                                   group_id=DefaultGroup, role_type='global')
+                                   group_id=None, role_type='global')
                     session.add(db_role)
-                    db_role_normal = Role(id=DefaultRole, role_name='Regular users', remark='Regular users',
-                                          group_id=DefaultGroup, role_type='global')
+                    db_role_normal = Role(id=DefaultRole, role_name='普通用户', remark='普通用户',
+                                          group_id=None, role_type='global')
                     session.add(db_role_normal)
                     # Grant DefaultRole WEB_MENU permissions (F005: updated for v2.5)
                     session.add_all([
@@ -61,18 +60,6 @@ async def init_default_data():
                 await _init_default_tenant(session)
                 # Initialize default root department (F002)
                 await _init_default_root_department(session)
-
-                # Add Default User Group
-                group = await session.exec(select(Group).limit(1))
-                group = group.all()
-                if not group:
-                    group = Group(id=DefaultGroup, group_name='Default user group', create_user=1, update_user=1)
-                    session.add(group)
-                    await session.commit()
-                    await session.refresh(group)
-
-                # Ensure default user group has visibility='public' (F003)
-                await _init_default_user_group(session)
 
                 user = await session.exec(select(User).limit(1))
                 user = user.all()
@@ -170,6 +157,10 @@ async def _init_default_tenant(session):
 
     Called during init_default_data() to ensure the default tenant exists.
     Uses bypass_tenant_filter() since tenant filter events might be active.
+
+    Backfill runs whenever there are users with no ``user_tenant`` row, even if
+    the default tenant row already exists (e.g. first user registered after DB
+    was migrated with tenant but without associations).
     """
     from bisheng.core.context.tenant import DEFAULT_TENANT_ID, bypass_tenant_filter
     from bisheng.database.models.tenant import Tenant, UserTenant
@@ -178,19 +169,17 @@ async def _init_default_tenant(session):
         existing = (await session.exec(
             select(Tenant).where(Tenant.id == DEFAULT_TENANT_ID)
         )).first()
-        if existing:
-            return
+        if not existing:
+            tenant = Tenant(
+                id=DEFAULT_TENANT_ID,
+                tenant_code='default',
+                tenant_name='Default Tenant',
+                status='active',
+            )
+            session.add(tenant)
+            await session.commit()
 
-        tenant = Tenant(
-            id=DEFAULT_TENANT_ID,
-            tenant_code='default',
-            tenant_name='Default Tenant',
-            status='active',
-        )
-        session.add(tenant)
-        await session.commit()
-
-        # Backfill user_tenant for users without any tenant association
+        # Backfill user_tenant for users without any tenant association (always)
         users_without_tenant = (await session.exec(
             select(User.user_id).where(
                 User.user_id.notin_(
@@ -209,7 +198,10 @@ async def _init_default_tenant(session):
         if users_without_tenant:
             await session.commit()
 
-    logger.info(f'Default tenant initialized (id={DEFAULT_TENANT_ID})')
+    logger.info(
+        f'Default tenant ready (id={DEFAULT_TENANT_ID}); '
+        f'user_tenant backfill rows={len(users_without_tenant)}',
+    )
 
 
 async def _init_default_root_department(session):
@@ -250,28 +242,6 @@ async def _init_default_root_department(session):
         await session.commit()
 
     logger.info(f'Default root department initialized (id={dept.id})')
-
-
-async def _init_default_user_group(session):
-    """Ensure default user group has visibility='public' (F003).
-
-    Called during init_default_data() after default group creation.
-    Handles upgrades from pre-v2.5 where visibility column didn't exist.
-    """
-    from bisheng.core.context.tenant import bypass_tenant_filter
-
-    with bypass_tenant_filter():
-        group_result = await session.exec(
-            select(Group).where(Group.id == DefaultGroup)
-        )
-        group = group_result.first()
-        if group is None:
-            return  # Default group not yet created
-
-        if not getattr(group, 'visibility', None) or group.visibility != 'public':
-            group.visibility = 'public'
-            await session.commit()
-            logger.info('Default user group visibility set to public')
 
 
 async def _migrate_rbac_to_rebac_if_needed():

@@ -34,6 +34,7 @@ class RoleListResponse(BaseModel):
     quota_config: Optional[dict] = None
     remark: Optional[str] = None
     user_count: int = 0
+    creator_name: Optional[str] = None
     is_readonly: bool = False
     create_time: Optional[datetime] = None
     update_time: Optional[datetime] = None

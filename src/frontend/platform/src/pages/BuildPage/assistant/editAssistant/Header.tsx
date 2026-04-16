@@ -1,4 +1,5 @@
 import AppAvator from "@/components/bs-comp/cardComponent/avatar";
+import { usePermissionLevels } from "@/components/bs-comp/permission/usePermissionLevels";
 import { Button } from "@/components/bs-ui/button";
 import { Dialog, DialogTrigger } from "@/components/bs-ui/dialog";
 import { useAssistantStore } from "@/store/assistantStore";
@@ -14,6 +15,9 @@ export default function Header({ loca, onSave, onLine, onTabChange }) {
     const navigate = useNavigate()
 
     const { assistantState, dispatchAssistant } = useAssistantStore()
+    const { levels } = usePermissionLevels('assistant', assistantState?.id ? [String(assistantState.id)] : [])
+    const currentLevel = assistantState?.id ? levels[String(assistantState.id)] : undefined
+    const canManage = currentLevel === 'owner' || currentLevel === 'manager'
     console.log('assistantState :>> ', assistantState);
     {/* Edit assistant */ }
     const [editShow, setEditShow] = useState(false);
@@ -59,10 +63,13 @@ export default function Header({ loca, onSave, onLine, onTabChange }) {
                 className={`${tabType === 'edit' ? 'text-primary' : ''} hover:bg-secondary px-4 py-1 rounded-md cursor-pointer`}
                 onClick={() => { setTabType('edit'); onTabChange('edit') }}
             >{t('api.assistantOrchestration')}</div>
-            <div
+            {canManage && <div
                 className={`${tabType === 'api' ? 'text-primary' : ''} hover:bg-secondary px-4 py-1 rounded-md cursor-pointer`}
-                onClick={() => { setTabType('api'); onTabChange('api') }}
-            >{t('api.externalPublishing')}</div>
+                onClick={() => {
+                    setTabType('api');
+                    onTabChange('api')
+                }}
+            >{t('api.externalPublishing')}</div>}
         </div>
         <div className="flex gap-4">
             <Button variant="outline" className="px-10" type="button" onClick={onSave}>{t('build.save')}</Button>

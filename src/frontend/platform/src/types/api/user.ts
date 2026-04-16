@@ -9,6 +9,9 @@ export type User = {
     update_time: string;
     user_id: number;
     role: string;
+    /** PRD 3.2.2：可进入用户组管理（超管 / 部门管理员） */
+    can_manage_user_groups?: boolean;
+    is_department_admin?: boolean;
     // Multi-tenant fields (F010)
     tenant_id?: number;
     tenant_name?: string;
@@ -25,6 +28,7 @@ export type ROLE = {
     department_name?: string | null
     quota_config?: Record<string, any> | null
     user_count?: number
+    creator_name?: string | null
     is_readonly?: boolean
     remark?: string
     create_time?: string

@@ -1,5 +1,6 @@
 import AlertDropdown from "@/alerts/alertDropDown";
 import TipPng from "@/assets/tip.jpg";
+import { usePermissionLevels } from "@/components/bs-comp/permission/usePermissionLevels";
 import { DelIcon } from "@/components/bs-icons/del";
 import { LoadIcon } from "@/components/bs-icons/loading";
 import { SaveIcon } from "@/components/bs-icons/save";
@@ -31,6 +32,9 @@ export default function Header({ flow, preFlow, onTabChange }) {
     const navgate = useNavigate()
     const { t } = useTranslation()
     const { message } = useToast()
+    const { levels } = usePermissionLevels('workflow', flow?.id ? [String(flow.id)] : [])
+    const currentLevel = flow?.id ? levels[String(flow.id)] : undefined
+    const canManage = currentLevel === 'owner' || currentLevel === 'manager'
     const [open, setOpen] = useState(false)
     const AlertWidth = 384;
     const { notificationCenter, setNotificationCenter } = useContext(alertContext);
@@ -153,11 +157,14 @@ export default function Header({ flow, preFlow, onTabChange }) {
                 className={`${tabType === 'edit' ? 'text-primary' : ''} hover:bg-border px-4 py-1 rounded-md cursor-pointer`}
                 onClick={() => { setTabType('edit'); onTabChange('edit') }}
             >{t('api.skillOrchestration')}</div>
-            <div
+            {canManage && <div
                 className={`${tabType === 'api' ? 'text-primary' : ''} hover:bg-border px-4 py-1 rounded-md cursor-pointer`}
-                onClick={() => { setTabType('api'); onTabChange('api') }}
+                onClick={() => {
+                    setTabType('api');
+                    onTabChange('api')
+                }}
             >{t('api.externalPublishing')}
-            </div>
+            </div>}
         </div>
         {
             version && <div className="flex gap-4">

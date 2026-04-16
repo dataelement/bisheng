@@ -3,13 +3,18 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/bs-ui/table"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
-import { authorizeResource, getResourcePermissions } from "@/controllers/API/permission"
+import {
+  authorizeResource,
+  getGrantableRelationModelsApi,
+  getResourcePermissions,
+  type RelationModel,
+} from "@/controllers/API/permission"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { Building2, Loader2, RotateCcw, Trash2, User, Users } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { PermissionBadge } from "./PermissionBadge"
-import { RelationSelect } from "./RelationSelect"
+import { RelationModelOption, RelationSelect } from "./RelationSelect"
 import { PermissionEntry, RelationLevel, ResourceType } from "./types"
 
 const SUBJECT_ICONS = {
@@ -24,12 +29,42 @@ interface PermissionListTabProps {
   refreshKey: number
 }
 
+const DEFAULT_MODELS: RelationModelOption[] = [
+  { id: 'owner', name: '所有者', relation: 'owner' },
+  { id: 'manager', name: '可管理', relation: 'manager' },
+  { id: 'editor', name: '可编辑', relation: 'editor' },
+  { id: 'viewer', name: '可查看', relation: 'viewer' },
+]
+
 export function PermissionListTab({ resourceType, resourceId, refreshKey }: PermissionListTabProps) {
   const { t } = useTranslation('permission')
   const { message } = useToast()
   const [entries, setEntries] = useState<PermissionEntry[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(false)
+  const [models, setModels] = useState<RelationModelOption[]>([])
+
+  const mergeGrantableWithEntries = useCallback(
+    (grantable: RelationModel[], list: PermissionEntry[]): RelationModelOption[] => {
+      const opts: RelationModelOption[] = (grantable || []).map((m) => ({
+        id: m.id,
+        name: m.is_system ? t(`level.${m.relation}`) : m.name,
+        relation: m.relation as RelationLevel,
+      }))
+      const ids = new Set(opts.map((o) => o.id))
+      for (const e of list) {
+        if (!e.model_id || ids.has(e.model_id)) continue
+        ids.add(e.model_id)
+        opts.push({
+          id: e.model_id,
+          name: e.model_name || e.relation,
+          relation: e.relation as RelationLevel,
+        })
+      }
+      return opts
+    },
+    [t],
+  )
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -45,14 +80,30 @@ export function PermissionListTab({ resourceType, resourceId, refreshKey }: Perm
   }, [resourceType, resourceId])
 
   useEffect(() => { loadData() }, [loadData, refreshKey])
+  useEffect(() => {
+    captureAndAlertRequestErrorHoc(
+      getGrantableRelationModelsApi(resourceType, resourceId),
+      () => true,
+    ).then((res) => {
+      if (res === false) {
+        setModels(DEFAULT_MODELS)
+        return
+      }
+      if (!res) return
+      const merged = mergeGrantableWithEntries(res, entries)
+      setModels(merged.length ? merged : DEFAULT_MODELS)
+    })
+  }, [resourceType, resourceId, entries, mergeGrantableWithEntries, refreshKey])
 
   // Modify permission level inline
-  const handleModify = async (entry: PermissionEntry, newLevel: RelationLevel) => {
-    if (newLevel === entry.relation) return
+  const handleModify = async (entry: PermissionEntry, modelId: string) => {
+    const model = models.find((m) => m.id === modelId)
+    const newLevel = (model?.relation || 'viewer') as RelationLevel
+    if (newLevel === entry.relation && (entry.model_id || entry.relation) === modelId) return
     const res = await captureAndAlertRequestErrorHoc(
       authorizeResource(
         resourceType, resourceId,
-        [{ subject_type: entry.subject_type, subject_id: entry.subject_id, relation: newLevel }],
+        [{ subject_type: entry.subject_type, subject_id: entry.subject_id, relation: newLevel, model_id: modelId }],
         [{ subject_type: entry.subject_type, subject_id: entry.subject_id, relation: entry.relation }],
       ),
     )
@@ -147,8 +198,9 @@ export function PermissionListTab({ resourceType, resourceId, refreshKey }: Perm
                     <PermissionBadge level="owner" />
                   ) : (
                     <RelationSelect
-                      value={entry.relation}
+                      value={entry.model_id || entry.relation}
                       onChange={(v) => handleModify(entry, v)}
+                      options={models}
                       className="h-7 w-[110px] text-xs"
                     />
                   )}

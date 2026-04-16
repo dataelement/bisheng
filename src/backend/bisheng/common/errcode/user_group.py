@@ -35,3 +35,8 @@ class UserGroupMemberNotFoundError(BaseErrorCode):
 class UserGroupPermissionDeniedError(BaseErrorCode):
     Code: int = 23006
     Msg: str = 'No permission for this user group operation'
+
+
+class UserGroupNoSeparateAdminsError(BaseErrorCode):
+    Code: int = 23007
+    Msg: str = 'User groups no longer have separate admins; only the creator can manage the group'

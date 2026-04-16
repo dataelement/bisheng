@@ -97,7 +97,7 @@ export default function Departments() {
               <div>
                 <h3 className="text-base font-semibold">{selectedDept.name}</h3>
                 <span className="text-sm text-muted-foreground">
-                  {selectedDept.dept_id} · {t("bs:department.memberCount")}: {selectedDept.member_count}
+                  {t("bs:department.memberCount")}: {selectedDept.member_count}
                 </span>
               </div>
               <TabsList>

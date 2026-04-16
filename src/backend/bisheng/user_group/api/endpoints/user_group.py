@@ -29,7 +29,7 @@ async def create_group(
 @router.get('/')
 async def list_groups(
     page: int = Query(1, ge=1),
-    limit: int = Query(20, ge=1, le=100),
+    limit: int = Query(20, ge=1, le=2000),
     keyword: str = Query(''),
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):

@@ -161,7 +161,7 @@ export default function Users(params) {
             {/* 编辑 */}
             <Button variant="link" disabled={user.user_id === el.user_id} onClick={() => setCurrentUser(el)} className="px-0">{t('edit')}</Button>
             {/* 重置密码 */}
-            {(user.role === 'admin' || user.role === 'group_admin') &&
+            {user.role === 'admin' &&
                 <Button variant="link" className="px-0 pl-4" onClick={() => userPwdModalRef.current.open(el.user_id)}>{t('system.resetPwd')}</Button>}
             {/* 禁用 */}
             {

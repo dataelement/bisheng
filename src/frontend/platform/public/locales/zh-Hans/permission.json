@@ -6,10 +6,10 @@
     "tabShare": "链接分享"
   },
   "level": {
-    "owner": "拥有者",
-    "manager": "管理者",
-    "editor": "编辑者",
-    "viewer": "查看者"
+    "owner": "所有者",
+    "manager": "可管理",
+    "editor": "可编辑",
+    "viewer": "可使用"
   },
   "subject": {
     "user": "用户",

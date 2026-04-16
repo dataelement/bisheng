@@ -1,17 +1,22 @@
 import { Button } from "@/components/bs-ui/button"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
-import { authorizeResource } from "@/controllers/API/permission"
+import { authorizeResource, getGrantableRelationModelsApi } from "@/controllers/API/permission"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { X } from "lucide-react"
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { RelationSelect } from "./RelationSelect"
+import { RelationModelOption, RelationSelect } from "./RelationSelect"
 import { SubjectSearchDepartment } from "./SubjectSearchDepartment"
 import { SubjectSearchUser } from "./SubjectSearchUser"
 import { SubjectSearchUserGroup } from "./SubjectSearchUserGroup"
 import { GrantItem, RelationLevel, ResourceType, SelectedSubject, SubjectType } from "./types"
 
 const SUBJECT_TYPES: SubjectType[] = ['user', 'department', 'user_group']
+const DEFAULT_MODELS: RelationModelOption[] = [
+  { id: 'viewer', name: '可查看', relation: 'viewer' },
+  { id: 'editor', name: '可编辑', relation: 'editor' },
+  { id: 'manager', name: '可管理', relation: 'manager' },
+]
 
 interface PermissionGrantTabProps {
   resourceType: ResourceType
@@ -24,9 +29,41 @@ export function PermissionGrantTab({ resourceType, resourceId, onSuccess }: Perm
   const { message } = useToast()
   const [subjectType, setSubjectType] = useState<SubjectType>('user')
   const [selected, setSelected] = useState<SelectedSubject[]>([])
-  const [relation, setRelation] = useState<RelationLevel>('viewer')
+  const [models, setModels] = useState<RelationModelOption[]>([])
+  const [selectedModelId, setSelectedModelId] = useState<string>('viewer')
   const [includeChildren, setIncludeChildren] = useState(true)
   const [submitting, setSubmitting] = useState(false)
+
+  useEffect(() => {
+    captureAndAlertRequestErrorHoc(
+      getGrantableRelationModelsApi(resourceType, resourceId),
+      () => true,
+    ).then((res) => {
+      if (res === false) {
+        setModels(DEFAULT_MODELS)
+        setSelectedModelId('viewer')
+        return
+      }
+      if (!res) return
+      const options: RelationModelOption[] = (res || [])
+        .map((m) => ({
+          id: m.id,
+          name: m.is_system ? t(`level.${m.relation}`) : m.name,
+          relation: m.relation as RelationLevel,
+        }))
+      if (options.length) {
+        setModels(options)
+        setSelectedModelId(options[0].id)
+      } else {
+        setModels(DEFAULT_MODELS)
+        setSelectedModelId('viewer')
+      }
+    })
+  }, [resourceType, resourceId])
+
+  const relation = useMemo<RelationLevel>(() => {
+    return models.find((m) => m.id === selectedModelId)?.relation || 'viewer'
+  }, [models, selectedModelId])
 
   const handleSubjectTypeChange = (type: SubjectType) => {
     setSubjectType(type)
@@ -44,6 +81,7 @@ export function PermissionGrantTab({ resourceType, resourceId, onSuccess }: Perm
       subject_type: s.type,
       subject_id: s.id,
       relation,
+      model_id: selectedModelId,
       ...(s.type === 'department' ? { include_children: includeChildren } : {}),
     }))
 
@@ -117,7 +155,12 @@ export function PermissionGrantTab({ resourceType, resourceId, onSuccess }: Perm
 
       {/* Relation level + submit */}
       <div className="flex items-center gap-3 pt-2 border-t">
-        <RelationSelect value={relation} onChange={setRelation} className="w-[140px]" />
+        <RelationSelect
+          value={selectedModelId}
+          onChange={setSelectedModelId}
+          options={models}
+          className="w-[160px]"
+        />
         <Button
           onClick={handleSubmit}
           disabled={selected.length === 0 || submitting}

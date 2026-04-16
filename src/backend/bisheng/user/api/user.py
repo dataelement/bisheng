@@ -20,6 +20,7 @@ from bisheng.common.services.config_service import settings
 from bisheng.core.cache.redis_manager import get_redis_client, get_redis_client_sync
 from bisheng.core.database import get_sync_db_session
 from bisheng.database.constants import AdminRole, DefaultRole
+from bisheng.database.models.department import DepartmentDao
 from bisheng.database.models.group import GroupDao
 from bisheng.database.models.mark_task import MarkTaskDao
 from bisheng.database.models.role import Role, RoleCreate, RoleDao, RoleUpdate
@@ -70,7 +71,6 @@ async def sso(*, request: Request, user: UserCreate, auth_jwt: AuthJwt = Depends
             else:
                 # Create as Normal User
                 user_exist = await UserDao.add_user_and_default_role(user_exist)
-            await UserGroupDao.add_default_user_group(user_exist.user_id)
         if 1 == user_exist.delete:
             raise UserForbiddenError.http_exception()
         access_token = LoginUser.create_access_token(user_exist, auth_jwt=auth_jwt)
@@ -138,11 +138,16 @@ async def get_info(login_user: LoginUser = Depends(LoginUser.get_login_user)):
 
     admin_group = await UserGroupDao.aget_user_admin_group(user_id)
     admin_group = [one.group_id for one in admin_group]
+    dept_admin_depts = await DepartmentDao.aget_user_admin_departments(user_id)
+    is_department_admin = bool(dept_admin_depts)
+    can_manage_user_groups = bool(login_user.is_admin() or is_department_admin)
     return resp_200(await UserService.build_user_read(
         db_user,
         role=str(role),
         web_menu=web_menu,
         admin_groups=admin_group,
+        can_manage_user_groups=can_manage_user_groups,
+        is_department_admin=is_department_admin,
     ))
 
 

@@ -60,3 +60,21 @@ class DepartmentInvalidPasswordError(BaseErrorCode):
 class DepartmentInvalidRolesError(BaseErrorCode):
     Code: int = 21011
     Msg: str = 'One or more roles are not assignable in this department'
+
+
+class DepartmentOpenFGAUnavailableError(BaseErrorCode):
+    Code: int = 21012
+    Msg: str = (
+        'OpenFGA is not available; department admin changes cannot be persisted. '
+        'Ensure OpenFGA is deployed and the backend connected successfully.'
+    )
+
+
+class DepartmentMemberDeleteBlockedError(BaseErrorCode):
+    Code: int = 21014
+    Msg: str = 'Cannot delete user while data assets exist'
+
+
+class DepartmentMemberDeleteForbiddenError(BaseErrorCode):
+    Code: int = 21015
+    Msg: str = 'Only local accounts may be deleted from organization management'

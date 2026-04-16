@@ -13,10 +13,40 @@ from bisheng.common.schemas.api import resp_200
 from bisheng.department.domain.schemas.department_schema import (
     DepartmentLocalMemberCreate,
     DepartmentMemberAdd,
+    DepartmentMemberEditApply,
 )
 from bisheng.department.domain.services.department_service import DepartmentService
 
 router = APIRouter()
+
+
+@router.get('/{dept_id}/members/{user_id}/edit-form')
+async def get_member_edit_form(
+    dept_id: str,
+    user_id: int,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    try:
+        data = await DepartmentService.aget_member_edit_form(
+            dept_id, user_id, login_user,
+        )
+        return resp_200(data)
+    except BaseErrorCode as e:
+        return e.return_resp_instance()
+
+
+@router.post('/{dept_id}/members/{user_id}/apply-edit')
+async def apply_member_edit(
+    dept_id: str,
+    user_id: int,
+    data: DepartmentMemberEditApply,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    try:
+        await DepartmentService.aapply_member_edit(dept_id, user_id, data, login_user)
+        return resp_200()
+    except BaseErrorCode as e:
+        return e.return_resp_instance()
 
 
 @router.get('/{dept_id}/members')
@@ -72,6 +102,36 @@ async def create_local_member(
     try:
         out = await DepartmentService.acreate_local_member(dept_id, data, login_user)
         return resp_200(out)
+    except BaseErrorCode as e:
+        return e.return_resp_instance()
+
+
+@router.get('/{dept_id}/members/{user_id}/delete-check')
+async def check_local_member_delete(
+    dept_id: str,
+    user_id: int,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    try:
+        data = await DepartmentService.acheck_local_member_delete(
+            dept_id, user_id, login_user,
+        )
+        return resp_200(data)
+    except BaseErrorCode as e:
+        return e.return_resp_instance()
+
+
+@router.delete('/{dept_id}/members/{user_id}/local-account')
+async def delete_local_organization_member(
+    dept_id: str,
+    user_id: int,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    try:
+        await DepartmentService.adelete_local_organization_member(
+            dept_id, user_id, login_user,
+        )
+        return resp_200()
     except BaseErrorCode as e:
         return e.return_resp_instance()
 

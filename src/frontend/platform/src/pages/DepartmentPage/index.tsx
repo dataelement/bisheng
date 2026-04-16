@@ -104,7 +104,7 @@ export default function DepartmentPage() {
               <div>
                 <h2 className="text-lg font-semibold">{selectedDept.name}</h2>
                 <span className="text-sm text-muted-foreground">
-                  {selectedDept.dept_id} · {t("bs:department.memberCount")}: {selectedDept.member_count}
+                  {t("bs:department.memberCount")}: {selectedDept.member_count}
                 </span>
               </div>
               <TabsList>

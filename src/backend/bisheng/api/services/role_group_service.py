@@ -17,7 +17,7 @@ from bisheng.core.cache.redis_manager import get_redis_client_sync
 from bisheng.database.constants import AdminRole
 from bisheng.database.models.assistant import AssistantDao
 from bisheng.database.models.flow import FlowDao, FlowType
-from bisheng.database.models.group import Group, GroupCreate, GroupDao, GroupRead, DefaultGroup
+from bisheng.database.models.group import Group, GroupCreate, GroupDao, GroupRead
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
 from bisheng.database.models.role import RoleDao
 from bisheng.database.models.user_group import UserGroupCreate, UserGroupDao, UserGroupRead
@@ -103,8 +103,6 @@ class RoleGroupService():
 
     def delete_group(self, request: Request, login_user: UserPayload, group_id: int):
         """Can delete existing usergroups"""
-        if group_id == DefaultGroup:
-            raise HTTPException(status_code=500, detail='Default group cannot be deleted')
         group_info = GroupDao.get_user_group(group_id)
         if not group_info:
             return resp_200()
@@ -121,17 +119,20 @@ class RoleGroupService():
         logger.info(f'act=delete_group_hook user={login_user.user_name} group_id={group_info.id}')
         # Log Audit Logs
         AuditLogService.delete_user_group(login_user, get_request_ip(request), group_info)
-        # Move resources under a group to the default user group
-        # Get all resources under a group
+        # Move resources that only belonged to this group to another existing group (if any)
         all_resource = GroupResourceDao.get_group_all_resource(group_info.id)
         need_move_resource = []
+        fallback_gid = None
+        for g in GroupDao.get_all_group():
+            if g.id != group_info.id:
+                fallback_gid = g.id
+                break
         for one in all_resource:
-            # Getting resources belongs to several groups,If you belong to more than one group, you don't have, Otherwise, transfer the resource to the default user group
             resource_groups = GroupResourceDao.get_resource_group(ResourceTypeEnum(one.type), one.third_id)
             if len(resource_groups) > 1:
                 continue
-            else:
-                one.group_id = DefaultGroup
+            if fallback_gid is not None:
+                one.group_id = str(fallback_gid)
                 need_move_resource.append(one)
         if need_move_resource:
             GroupResourceDao.update_group_resource(need_move_resource)

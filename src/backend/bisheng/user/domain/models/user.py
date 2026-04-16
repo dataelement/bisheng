@@ -70,10 +70,13 @@ class User(UserBase, table=True):
 
 class UserRead(UserBase):
     user_id: Optional[int] = None
-    role: Optional[str] = None  # admin / group_admin
+    role: Optional[str] = None  # admin；非超管时由服务端序列化（见 /user/info）
     access_token: Optional[str] = None
     web_menu: Optional[List[str]] = None
     admin_groups: Optional[List[int]] = None  # Managed User GroupsIDVertical
+    # PRD 3.2.2 用户组管理入口：超管 / 部门管理员
+    can_manage_user_groups: Optional[bool] = None
+    is_department_admin: Optional[bool] = None
     # Multi-tenant fields (F010)
     requires_tenant_selection: Optional[bool] = None
     tenants: Optional[List[dict]] = None

@@ -1,3 +1,5 @@
+import { SubjectSearchUser } from "@/components/bs-comp/permission/SubjectSearchUser"
+import type { SelectedSubject } from "@/components/bs-comp/permission/types"
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
 import { Button } from "@/components/bs-ui/button"
 import { Input } from "@/components/bs-ui/input"
@@ -25,7 +27,7 @@ export function DepartmentSettings({ dept, tree, onChanged }: DepartmentSettings
   const { t } = useTranslation()
   const [name, setName] = useState(dept.name)
   const [admins, setAdmins] = useState<DepartmentAdmin[]>([])
-  const [adminInput, setAdminInput] = useState("")
+  const [pendingAdminPick, setPendingAdminPick] = useState<SelectedSubject[]>([])
   const isSynced = isSyncedSource(dept.source)
 
   useEffect(() => {
@@ -59,11 +61,40 @@ export function DepartmentSettings({ dept, tree, onChanged }: DepartmentSettings
       captureAndAlertRequestErrorHoc(
         setDepartmentAdminsApi(dept.dept_id, newIds)
       ).then((res) => {
-        if (res) setAdmins(res)
+        if (Array.isArray(res)) {
+          setAdmins(res)
+          toast({ title: t("prompt"), variant: "success" })
+        }
       })
     },
-    [dept.dept_id, admins]
+    [dept.dept_id, admins, t]
   )
+
+  const handleAddAdmins = useCallback(() => {
+    if (!pendingAdminPick.length) {
+      toast({
+        title: t("prompt"),
+        variant: "warning",
+        description: t("bs:department.pickAdminFirst"),
+      })
+      return
+    }
+    const existing = new Set(admins.map((a) => a.user_id))
+    const merged = [
+      ...admins.map((a) => a.user_id),
+      ...pendingAdminPick.map((s) => s.id).filter((id) => !existing.has(id)),
+    ]
+    captureAndAlertRequestErrorHoc(
+      setDepartmentAdminsApi(dept.dept_id, merged)
+    ).then((res) => {
+      if (Array.isArray(res)) {
+        setAdmins(res)
+        setPendingAdminPick([])
+        toast({ title: t("prompt"), variant: "success" })
+        onChanged()
+      }
+    })
+  }, [admins, dept.dept_id, onChanged, pendingAdminPick, t])
 
   const handleDelete = useCallback(() => {
     bsConfirm({
@@ -129,16 +160,20 @@ export function DepartmentSettings({ dept, tree, onChanged }: DepartmentSettings
         <Input value={findParentName(tree, dept.parent_id)} disabled />
       </div>
 
-      {/* Department ID */}
-      <div className="space-y-2">
-        <Label>{t("bs:department.deptId")}</Label>
-        <Input value={dept.dept_id} disabled />
-      </div>
-
       {/* Admins */}
       <div className="space-y-2">
         <Label>{t("bs:department.admins")}</Label>
-        <div className="flex flex-wrap gap-2">
+        <p className="text-xs text-muted-foreground">
+          {t("bs:department.adminsHint")}
+        </p>
+        <SubjectSearchUser
+          value={pendingAdminPick}
+          onChange={setPendingAdminPick}
+        />
+        <Button type="button" size="sm" variant="secondary" onClick={handleAddAdmins}>
+          {t("bs:department.addAdmins")}
+        </Button>
+        <div className="flex flex-wrap gap-2 pt-1">
           {admins.length === 0 ? (
             <span className="text-sm text-muted-foreground">-</span>
           ) : (
@@ -149,6 +184,7 @@ export function DepartmentSettings({ dept, tree, onChanged }: DepartmentSettings
               >
                 {a.user_name}
                 <button
+                  type="button"
                   className="ml-1 text-muted-foreground hover:text-destructive"
                   onClick={() => handleRemoveAdmin(a.user_id)}
                 >

@@ -173,7 +173,7 @@ export default function App() {
   // 动态路由根据权限
   const router = useMemo(() => {
     // return getAdminRouter()
-    if (user && ['admin', 'group_admin'].includes(user.role)) return getAdminRouter()
+    if (user && user.role === 'admin') return getAdminRouter()
     return user?.user_id ? getPrivateRouter(user.web_menu) : null
   }, [user])
 

@@ -46,12 +46,8 @@ services:
     depends_on:
       openfga-migrate:
         condition: service_completed_successfully
-    healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080/healthz || exit 1"]
-      start_period: 10s
-      interval: 15s
-      timeout: 5s
-      retries: 3
+    # 不在 compose 里写 HEALTHCHECK：openfga 官方镜像为 distroless，无 /bin/sh、无 wget，
+    # CMD-SHELL 会永久 unhealthy。未定义时 Compose 将 ``service_healthy`` 视为已启动即可。
     restart: unless-stopped
 
   redis:
@@ -109,7 +105,9 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-  
+      openfga:
+        condition: service_healthy
+
   backend_worker:
     container_name: bisheng-backend-worker
     image: dataelement/bisheng-backend:v2.4.0
@@ -139,7 +137,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-
+      openfga:
+        condition: service_healthy
 
   frontend:
     container_name: bisheng-frontend

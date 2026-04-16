@@ -380,14 +380,14 @@ export default function Files({ onPreview }) {
                     setSelectedFileObjs([]);
                     setIsAllSelected(false);
                 }} />
-                <Button
+                {isEditable && <Button
                     variant="outline"
                     onClick={() => setMetadataOpen(true)}
                     className="px-4 whitespace-nowrap"
                 >
                     <ClipboardPenLine size={16} strokeWidth={1.5} className="mr-1" />
                     {t('metaData')}
-                </Button>
+                </Button>}
                 {isEditable && (
                     <Link to={`/filelib/upload/${id}`}>
                         <Button className="px-8">{t('uploadFile')}</Button>

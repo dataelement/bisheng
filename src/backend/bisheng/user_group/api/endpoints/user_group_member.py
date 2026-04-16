@@ -8,6 +8,7 @@ from bisheng.common.schemas.api import resp_200
 from bisheng.user_group.domain.schemas.user_group_schema import (
     UserGroupAdminSet,
     UserGroupMemberAdd,
+    UserGroupMemberSync,
 )
 from bisheng.user_group.domain.services.user_group_service import UserGroupService
 
@@ -18,7 +19,7 @@ router = APIRouter()
 async def get_members(
     group_id: int,
     page: int = Query(1, ge=1),
-    limit: int = Query(20, ge=1, le=100),
+    limit: int = Query(20, ge=1, le=2000),
     keyword: str = Query(''),
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
@@ -39,6 +40,22 @@ async def add_members(
 ):
     try:
         await UserGroupService.aadd_members(group_id, data.user_ids, login_user)
+        return resp_200()
+    except BaseErrorCode as e:
+        return e.return_resp()
+
+
+@router.post('/{group_id}/members/sync')
+@router.put('/{group_id}/members/sync')
+async def sync_plain_members(
+    group_id: int,
+    data: UserGroupMemberSync,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    try:
+        await UserGroupService.async_plain_members(
+            group_id, data.user_ids, login_user,
+        )
         return resp_200()
     except BaseErrorCode as e:
         return e.return_resp()

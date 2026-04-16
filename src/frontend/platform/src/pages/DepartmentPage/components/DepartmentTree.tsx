@@ -8,6 +8,9 @@ import { useTranslation } from "react-i18next"
 /** 每层缩进宽度（px），侧栏内要一眼能看出父子关系 */
 const TREE_INDENT_PER_LEVEL = 22
 
+/** 默认只展开到「第一级」（仅顶层根部门展开，子部门默认折叠），避免大树一次展开过多。 */
+const DEFAULT_EXPAND_MAX_DEPTH = 1
+
 interface DepartmentTreeProps {
   data: DepartmentTreeNode[]
   selectedDeptId: string | null
@@ -20,16 +23,33 @@ export function DepartmentTree({ data, selectedDeptId, onSelect, onCreateChild }
   const [keyword, setKeyword] = useState("")
   const [expanded, setExpanded] = useState<Set<number>>(new Set())
 
-  // Auto-expand root nodes on mount
+  const collectDefaultExpandedIds = useCallback(
+    (
+      nodes: DepartmentTreeNode[],
+      maxDepth: number,
+      currentDepth = 0
+    ): number[] => {
+      const ids: number[] = []
+      for (const n of nodes) {
+        if (currentDepth >= maxDepth) continue
+        ids.push(n.id)
+        if (n.children?.length) {
+          ids.push(
+            ...collectDefaultExpandedIds(n.children, maxDepth, currentDepth + 1)
+          )
+        }
+      }
+      return ids
+    },
+    []
+  )
+
+  // 默认仅展开第一级（depth 0），更深层需用户手动展开
   useEffect(() => {
     if (data.length > 0) {
-      setExpanded((prev) => {
-        const next = new Set(prev)
-        for (const n of data) next.add(n.id)
-        return next
-      })
+      setExpanded(new Set(collectDefaultExpandedIds(data, DEFAULT_EXPAND_MAX_DEPTH)))
     }
-  }, [data])
+  }, [data, collectDefaultExpandedIds])
 
   const toggleExpand = useCallback((id: number, e: React.MouseEvent) => {
     e.stopPropagation()

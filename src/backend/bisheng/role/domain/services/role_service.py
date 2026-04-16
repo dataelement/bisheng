@@ -26,6 +26,7 @@ from bisheng.role.domain.schemas.role_schema import (
     RoleUpdateRequest,
 )
 from bisheng.role.domain.services.quota_service import QuotaService
+from bisheng.user.domain.models.user import UserDao
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +79,9 @@ class RoleService:
             remark=req.remark,
         )
         try:
-            return await RoleDao.ainsert_role(role)
+            created = await RoleDao.ainsert_role(role)
+            await cls._try_set_role_creator(created.id, login_user.user_id)
+            return created
         except Exception as e:
             if 'Duplicate entry' in str(e) or 'IntegrityError' in type(e).__name__:
                 raise RoleNameDuplicateError()
@@ -125,6 +128,7 @@ class RoleService:
 
         # Get department names
         dept_names = await cls._get_department_names(roles)
+        creator_names = await cls._get_creator_names(roles)
 
         # Build response
         items = []
@@ -139,6 +143,7 @@ class RoleService:
                 quota_config=role.quota_config,
                 remark=role.remark,
                 user_count=user_counts.get(role.id, 0),
+                creator_name=creator_names.get(role.id),
                 is_readonly=is_readonly,
                 create_time=role.create_time,
                 update_time=role.update_time,
@@ -163,6 +168,7 @@ class RoleService:
 
         user_counts = await RoleDao.aget_user_count_by_role_ids([role_id])
         dept_names = await cls._get_department_names([role])
+        creator_names = await cls._get_creator_names([role])
 
         permission_level = await cls._get_permission_level(login_user)
         is_readonly = cls._is_readonly(role, login_user, permission_level)
@@ -176,6 +182,7 @@ class RoleService:
             quota_config=role.quota_config,
             remark=role.remark,
             user_count=user_counts.get(role.id, 0),
+            creator_name=creator_names.get(role.id),
             is_readonly=is_readonly,
             create_time=role.create_time,
             update_time=role.update_time,
@@ -413,3 +420,57 @@ class RoleService:
             raise
         except Exception as e:
             logger.warning('Failed to validate department %d: %s', department_id, e)
+
+    @classmethod
+    async def _try_set_role_creator(cls, role_id: Optional[int], user_id: Optional[int]) -> None:
+        """Best-effort: write role.create_user for creator tracing if column exists."""
+        if not role_id or not user_id:
+            return
+        try:
+            from sqlalchemy import text
+            from bisheng.core.database import get_async_db_session
+            async with get_async_db_session() as session:
+                await session.execute(
+                    text('UPDATE role SET create_user = :uid WHERE id = :rid'),
+                    {'uid': user_id, 'rid': role_id},
+                )
+                await session.commit()
+        except Exception as e:
+            # Backward-compatible: old schema may not have create_user
+            logger.debug('Skip setting role.create_user for role %s: %s', role_id, e)
+
+    @classmethod
+    async def _get_creator_names(cls, roles) -> dict:
+        """Resolve creator_name for roles from role.create_user -> user.user_name."""
+        role_ids = [r.id for r in roles if getattr(r, 'id', None)]
+        if not role_ids:
+            return {}
+        try:
+            from sqlalchemy import text
+            from bisheng.core.database import get_async_db_session
+
+            placeholders = ', '.join([f':rid_{i}' for i in range(len(role_ids))])
+            params = {f'rid_{i}': rid for i, rid in enumerate(role_ids)}
+            sql = text(f'SELECT id, create_user FROM role WHERE id IN ({placeholders})')
+
+            async with get_async_db_session() as session:
+                rows = (await session.execute(sql, params)).all()
+        except Exception as e:
+            logger.debug('Skip role creator query: %s', e)
+            return {}
+
+        role_to_uid = {}
+        user_ids = set()
+        for row in rows:
+            rid = row[0]
+            uid = row[1]
+            if uid:
+                role_to_uid[rid] = uid
+                user_ids.add(uid)
+
+        if not user_ids:
+            return {}
+
+        users = await UserDao.aget_user_by_ids(list(user_ids)) or []
+        user_name_map = {u.user_id: u.user_name for u in users}
+        return {rid: user_name_map.get(uid) for rid, uid in role_to_uid.items() if user_name_map.get(uid)}

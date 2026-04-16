@@ -77,6 +77,14 @@ class ConfigDao(ConfigBase):
             return config
 
     @classmethod
+    async def aget_config_by_key(cls, key: str) -> Optional[Config]:
+        """按任意字符串 key 读取配置（用于非 ConfigKeyEnum 的扩展项）。"""
+        async with get_async_db_session() as session:
+            statement = select(Config).where(Config.key == key)
+            result = await session.exec(statement)
+            return result.first()
+
+    @classmethod
     def insert_config(cls, config: Config) -> Config:
         with get_sync_db_session() as session:
             session.add(config)

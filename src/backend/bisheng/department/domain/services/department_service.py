@@ -10,8 +10,8 @@ import re
 import secrets
 from typing import List, Optional
 
-from sqlalchemy import and_, func, or_, update
-from sqlmodel import select
+from sqlalchemy import and_, delete, func, or_, update
+from sqlmodel import col, select
 
 from bisheng.common.errcode.department import (
     DepartmentCircularMoveError,
@@ -19,10 +19,13 @@ from bisheng.common.errcode.department import (
     DepartmentHasMembersError,
     DepartmentInvalidPasswordError,
     DepartmentInvalidRolesError,
+    DepartmentMemberDeleteBlockedError,
+    DepartmentMemberDeleteForbiddenError,
     DepartmentMemberExistsError,
     DepartmentMemberNotFoundError,
     DepartmentNameDuplicateError,
     DepartmentNotFoundError,
+    DepartmentOpenFGAUnavailableError,
     DepartmentPermissionDeniedError,
     DepartmentRootExistsError,
     DepartmentSourceReadonlyError,
@@ -38,6 +41,7 @@ from bisheng.department.domain.schemas.department_schema import (
     DepartmentCreate,
     DepartmentLocalMemberCreate,
     DepartmentMemberAdd,
+    DepartmentMemberEditApply,
     DepartmentMoveRequest,
     DepartmentTreeNode,
     DepartmentUpdate,
@@ -555,7 +559,10 @@ class DepartmentService:
 
         user_ids = []
         for t in tuples:
-            user_str = t.get('key', {}).get('user', '')
+            # FGAClient.read_tuples returns OpenFGA tuple_key dicts: {user, relation, object}
+            user_str = t.get('user', '') if isinstance(t, dict) else ''
+            if not user_str and isinstance(t.get('key'), dict):
+                user_str = t['key'].get('user', '')
             if user_str.startswith('user:'):
                 try:
                     user_ids.append(int(user_str.split(':', 1)[1]))
@@ -591,6 +598,11 @@ class DepartmentService:
         to_add = list(new_ids - current_ids)
         to_remove = list(current_ids - new_ids)
 
+        if to_add or to_remove:
+            from bisheng.core.openfga.manager import aget_fga_client
+            if await aget_fga_client() is None:
+                raise DepartmentOpenFGAUnavailableError()
+
         if to_add:
             ops = DepartmentChangeHandler.on_admin_set(dept.id, to_add)
             await DepartmentChangeHandler.execute_async(ops)
@@ -624,8 +636,9 @@ class DepartmentService:
                     UserDepartment.department_id,
                     UserDepartment.is_primary,
                     UserDepartment.source,
-                    UserDepartment.create_time,
-                    UserDepartment.update_time,
+                    UserDepartment.create_time.label('member_join_time'),
+                    User.create_time.label('user_create_time'),
+                    User.update_time.label('user_update_time'),
                     User.delete.label('user_deleted'),
                 )
                 .join(User, User.user_id == UserDepartment.user_id)
@@ -656,7 +669,7 @@ class DepartmentService:
         if user_ids:
             async with get_async_db_session() as session:
                 # User groups
-                from bisheng.database.models.group import Group
+                from bisheng.database.models.group import Group, LEGACY_HIDDEN_USER_GROUP_NAMES
                 from bisheng.database.models.user_group import UserGroup
                 ug_result = await session.exec(
                     select(
@@ -668,6 +681,7 @@ class DepartmentService:
                     .where(
                         UserGroup.user_id.in_(user_ids),
                         Group.visibility == 'public',
+                        col(Group.group_name).notin_(LEGACY_HIDDEN_USER_GROUP_NAMES),
                     )
                 )
                 for uid, gid, gname in ug_result.all():
@@ -692,6 +706,16 @@ class DepartmentService:
                         {'id': rid, 'role_name': rname},
                     )
 
+        def _last_modified(row) -> object:
+            """成员行「修改时间」：取加入部门、用户创建、用户最近更新中的最晚时刻。"""
+            times = [
+                row.member_join_time,
+                row.user_create_time,
+                row.user_update_time,
+            ]
+            valid = [x for x in times if x is not None]
+            return max(valid) if valid else None
+
         data = [
             {
                 'user_id': r.user_id,
@@ -699,8 +723,8 @@ class DepartmentService:
                 'department_id': r.department_id,
                 'is_primary': r.is_primary,
                 'source': r.source,
-                'create_time': r.create_time,
-                'update_time': r.update_time,
+                'create_time': r.member_join_time,
+                'update_time': _last_modified(r),
                 'enabled': r.user_deleted == 0,
                 'user_groups': user_groups_map.get(r.user_id, []),
                 'roles': roles_map.get(r.user_id, []),
@@ -771,9 +795,9 @@ class DepartmentService:
     async def acreate_local_member(
         cls, dept_id: str, data: DepartmentLocalMemberCreate, login_user,
     ) -> dict:
-        """在部门内创建本地账号：主属当前部门、默认用户组、指定角色、生成人员 ID（external_id）。"""
+        """在部门内创建本地账号：主属当前部门、指定角色、生成人员 ID（external_id）；用户组非必填。"""
         from bisheng.common.errcode.user import UserNameAlreadyExistError
-        from bisheng.database.constants import AdminRole, DefaultGroup
+        from bisheng.database.constants import AdminRole
         from bisheng.user.domain.models.user import User, UserDao
         from bisheng.user.domain.services.user import UserService
         from bisheng.utils import md5_hash
@@ -812,7 +836,7 @@ class DepartmentService:
             external_id=person_id,
         )
         user = UserDao.add_user_with_groups_and_roles(
-            user, [DefaultGroup], list(data.role_ids),
+            user, [], list(data.role_ids),
         )
 
         async with get_async_db_session() as session:
@@ -835,3 +859,439 @@ class DepartmentService:
             'person_id': person_id,
             'dept_id': dept.dept_id,
         }
+
+    @classmethod
+    def _person_display_id(cls, user) -> str:
+        """PRD 人员 ID：本地为 external_id（BS@…）；同步侧优先 external_id。"""
+        if getattr(user, 'external_id', None):
+            return str(user.external_id)
+        return str(getattr(user, 'dept_id', None) or '')
+
+    @classmethod
+    async def _manageable_group_options(cls, login_user) -> List[dict]:
+        from bisheng.user_group.domain.services.user_group_service import UserGroupService
+
+        res = await UserGroupService.alist_groups(1, 2000, '', login_user)
+        out = []
+        for x in res.get('data') or []:
+            out.append({
+                'id': x['id'],
+                'group_name': x.get('group_name', ''),
+                'visibility': x.get('visibility', 'public'),
+            })
+        return out
+
+    @classmethod
+    async def _assignable_role_id_set(cls, dept_key: str, login_user) -> set:
+        rows = await cls.aget_assignable_roles(dept_key, login_user)
+        return {int(r['id']) for r in rows}
+
+    @classmethod
+    async def _department_in_admin_writable_scope(
+        cls, login_user, dept: Department,
+    ) -> bool:
+        """主部门可选范围：超管任意 active 部门；部门管理员为 FGA 管辖子树内部门。"""
+        if not dept or getattr(dept, 'status', '') != 'active':
+            return False
+        if _is_admin(login_user):
+            return True
+        admin_depts = await DepartmentDao.aget_user_admin_departments(login_user.user_id)
+        if not admin_depts:
+            return False
+        paths = [d.path for d in admin_depts if getattr(d, 'path', None)]
+        dp = dept.path or ''
+        return any(dp.startswith(p) for p in paths)
+
+    @classmethod
+    async def _apply_local_primary_department_change(
+        cls, user_id: int, new_dept_id: int,
+    ) -> None:
+        """将本地用户主部门切到 new_dept_id；原主部门行降为附属（is_primary=0）。"""
+        fga_new_dept: Optional[int] = None
+        async with get_async_db_session() as session:
+            uds = list(
+                (await session.exec(
+                    select(UserDepartment).where(UserDepartment.user_id == user_id),
+                )).all()
+            )
+            target_ud = next((u for u in uds if int(u.department_id) == int(new_dept_id)), None)
+            for u in uds:
+                if int(u.is_primary or 0) == 1:
+                    u.is_primary = 0
+                    session.add(u)
+            if target_ud:
+                target_ud.is_primary = 1
+                session.add(target_ud)
+            else:
+                session.add(UserDepartment(
+                    user_id=user_id,
+                    department_id=new_dept_id,
+                    is_primary=1,
+                    source='local',
+                ))
+                fga_new_dept = int(new_dept_id)
+            await session.commit()
+        if fga_new_dept is not None:
+            ops = DepartmentChangeHandler.on_members_added(fga_new_dept, [user_id])
+            await DepartmentChangeHandler.execute_async(ops)
+
+    @classmethod
+    async def _count_user_owned_data_assets(cls, user_id: int) -> dict:
+        """删除人员前：统计用户作为创建者挂载的常见数据资产。"""
+        from bisheng.database.models.assistant import Assistant
+        from bisheng.database.models.flow import Flow
+        from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
+
+        async with get_async_db_session() as session:
+            k = await session.scalar(
+                select(func.count(Knowledge.id)).where(
+                    Knowledge.user_id == user_id,
+                    Knowledge.type == KnowledgeTypeEnum.SPACE.value,
+                ),
+            )
+            f = await session.scalar(
+                select(func.count(Flow.id)).where(Flow.user_id == user_id),
+            )
+            a = await session.scalar(
+                select(func.count(Assistant.id)).where(
+                    Assistant.user_id == user_id,
+                    Assistant.is_delete == 0,
+                ),
+            )
+        return {
+            'knowledge_spaces': int(k or 0),
+            'flows': int(f or 0),
+            'assistants': int(a or 0),
+        }
+
+    @classmethod
+    async def acheck_local_member_delete(
+        cls, dept_id: str, user_id: int, login_user,
+    ) -> dict:
+        """删除人员前预检：是否挂载数据资产。"""
+        from bisheng.database.constants import AdminRole
+        from bisheng.user.domain.models.user import UserDao
+        from bisheng.user.domain.models.user_role import UserRoleDao
+
+        async with get_async_db_session() as session:
+            ctx_dept = await _get_dept_or_raise(session, dept_id)
+            await _check_permission(login_user, dept_internal_id=ctx_dept.id)
+            mem = (
+                await session.exec(
+                    select(UserDepartment).where(
+                        UserDepartment.user_id == user_id,
+                        UserDepartment.department_id == ctx_dept.id,
+                    ),
+                )
+            ).first()
+        if not mem:
+            raise DepartmentMemberNotFoundError()
+
+        user = await UserDao.aget_user(user_id)
+        if not user or user.delete != 0:
+            raise DepartmentMemberNotFoundError()
+        if getattr(user, 'source', 'local') != 'local':
+            raise DepartmentMemberDeleteForbiddenError()
+
+        old_roles = UserRoleDao.get_user_roles(user_id)
+        if any(int(r.role_id) == AdminRole for r in old_roles):
+            raise DepartmentPermissionDeniedError()
+
+        counts = await cls._count_user_owned_data_assets(user_id)
+        total = sum(counts.values())
+        return {'has_assets': total > 0, 'counts': counts}
+
+    @classmethod
+    async def adelete_local_organization_member(
+        cls, dept_id: str, user_id: int, login_user,
+    ) -> None:
+        """删除本地人员账号：清部门关系、角色（保留超管）、用户组，软删用户。"""
+        from bisheng.database.constants import AdminRole
+        from bisheng.user.domain.models.user import User, UserDao
+        from bisheng.user.domain.models.user_role import UserRole
+        from bisheng.database.models.user_group import UserGroup
+
+        await cls.acheck_local_member_delete(dept_id, user_id, login_user)
+        counts = await cls._count_user_owned_data_assets(user_id)
+        if sum(counts.values()) > 0:
+            raise DepartmentMemberDeleteBlockedError(
+                msg='User has data assets',
+                counts=counts,
+            )
+
+        uds = await UserDepartmentDao.aget_user_departments(user_id)
+        dept_ids = [int(u.department_id) for u in uds]
+
+        async with get_async_db_session() as session:
+            await session.exec(delete(UserDepartment).where(UserDepartment.user_id == user_id))
+            await session.exec(
+                delete(UserRole).where(
+                    UserRole.user_id == user_id,
+                    UserRole.role_id != AdminRole,
+                ),
+            )
+            await session.exec(delete(UserGroup).where(UserGroup.user_id == user_id))
+            db_user = (await session.exec(select(User).where(User.user_id == user_id))).first()
+            if db_user:
+                db_user.delete = 1
+                session.add(db_user)
+            await session.commit()
+
+        for did in dept_ids:
+            ops = DepartmentChangeHandler.on_member_removed(did, user_id)
+            await DepartmentChangeHandler.execute_async(ops)
+
+    @classmethod
+    async def aget_member_edit_form(
+        cls, dept_id: str, user_id: int, login_user,
+    ) -> dict:
+        """PRD 3.2.2：编辑人员弹窗数据（区分主属本地/第三方/兼职）。"""
+        from bisheng.database.constants import AdminRole
+        from bisheng.user.domain.models.user import UserDao
+        from bisheng.user.domain.models.user_role import UserRoleDao
+        from bisheng.database.models.user_group import UserGroupDao
+
+        async with get_async_db_session() as session:
+            ctx_dept = await _get_dept_or_raise(session, dept_id)
+            await _check_permission(login_user, dept_internal_id=ctx_dept.id)
+            mem = (
+                await session.exec(
+                    select(UserDepartment).where(
+                        UserDepartment.user_id == user_id,
+                        UserDepartment.department_id == ctx_dept.id,
+                    )
+                )
+            ).first()
+        if not mem:
+            raise DepartmentMemberNotFoundError()
+
+        user = await UserDao.aget_user(user_id)
+        if not user or user.delete != 0:
+            raise DepartmentMemberNotFoundError()
+
+        old_roles = UserRoleDao.get_user_roles(user_id)
+        role_ids_user = {int(r.role_id) for r in old_roles}
+        if AdminRole in role_ids_user:
+            raise DepartmentPermissionDeniedError()
+
+        all_uds = await UserDepartmentDao.aget_user_departments(user_id)
+        dept_int_ids = list({ud.department_id for ud in all_uds})
+        depts = await DepartmentDao.aget_by_ids(dept_int_ids)
+        dept_by_id = {d.id: d for d in depts}
+
+        if mem.is_primary == 0:
+            edit_mode = 'affiliate'
+        elif getattr(user, 'source', 'local') == 'local':
+            edit_mode = 'local_primary'
+        else:
+            edit_mode = 'synced_primary'
+
+        catalog: dict = {}
+        for d in depts:
+            catalog[d.dept_id] = await cls.aget_assignable_roles(d.dept_id, login_user)
+
+        primary_ud = next((x for x in all_uds if x.is_primary == 1), None)
+        primary_block = None
+        primary_role_ids: List[int] = []
+        if primary_ud:
+            pd = dept_by_id.get(primary_ud.department_id)
+            if pd:
+                ap = {int(r['id']) for r in catalog.get(pd.dept_id, [])}
+                primary_role_ids = sorted(list(role_ids_user & ap))
+                primary_block = {
+                    'id': pd.id,
+                    'dept_id': pd.dept_id,
+                    'name': pd.name,
+                    'role_ids': primary_role_ids,
+                }
+
+        affiliate_rows = []
+        for ud in sorted(all_uds, key=lambda x: x.id or 0):
+            if ud.is_primary != 0:
+                continue
+            d = dept_by_id.get(ud.department_id)
+            if not d:
+                continue
+            ap = {int(r['id']) for r in catalog.get(d.dept_id, [])}
+            affiliate_rows.append({
+                'dept_id': d.dept_id,
+                'name': d.name,
+                'role_ids': sorted(list(role_ids_user & ap)),
+            })
+
+        ctx_assignable_ids = {int(r['id']) for r in catalog.get(ctx_dept.dept_id, [])}
+        context_role_ids = sorted(list(role_ids_user & ctx_assignable_ids))
+
+        ug_links = await UserGroupDao.aget_user_group(user_id)
+        current_group_ids = [int(x.group_id) for x in ug_links]
+        manageable_groups = await cls._manageable_group_options(login_user)
+
+        return {
+            'edit_mode': edit_mode,
+            'user': {
+                'user_id': user.user_id,
+                'user_name': user.user_name,
+                'person_id': cls._person_display_id(user),
+                'source': getattr(user, 'source', 'local') or 'local',
+            },
+            'context': {
+                'dept_id': ctx_dept.dept_id,
+                'name': ctx_dept.name,
+                'is_primary': int(mem.is_primary or 0),
+            },
+            'primary_department': primary_block,
+            'affiliate_rows': affiliate_rows,
+            'assignable_roles_catalog': catalog,
+            'context_role_ids': context_role_ids,
+            'manageable_groups': manageable_groups,
+            'current_group_ids': current_group_ids,
+            'can_change_primary': edit_mode == 'local_primary',
+        }
+
+    @classmethod
+    async def aapply_member_edit(
+        cls, dept_id: str, user_id: int, data: DepartmentMemberEditApply, login_user,
+    ) -> None:
+        """PRD 3.2.2：保存编辑（用户组合并替换 + 角色按部门可分配域合并）。"""
+        from bisheng.database.constants import AdminRole
+        from bisheng.user.domain.models.user import UserDao
+        from bisheng.user.domain.models.user_role import UserRoleDao
+        from bisheng.database.models.user_group import UserGroupDao
+        from bisheng.common.errcode.user import UserNameAlreadyExistError
+
+        async with get_async_db_session() as session:
+            ctx_dept = await _get_dept_or_raise(session, dept_id)
+            await _check_permission(login_user, dept_internal_id=ctx_dept.id)
+            mem = (
+                await session.exec(
+                    select(UserDepartment).where(
+                        UserDepartment.user_id == user_id,
+                        UserDepartment.department_id == ctx_dept.id,
+                    )
+                )
+            ).first()
+        if not mem:
+            raise DepartmentMemberNotFoundError()
+
+        user = await UserDao.aget_user(user_id)
+        if not user or user.delete != 0:
+            raise DepartmentMemberNotFoundError()
+
+        old_roles = UserRoleDao.get_user_roles(user_id)
+        old_role_ids = [int(r.role_id) for r in old_roles]
+        if AdminRole in old_role_ids:
+            raise DepartmentPermissionDeniedError()
+
+        role_ids_user = set(old_role_ids)
+
+        if mem.is_primary == 0:
+            edit_mode = 'affiliate'
+        elif getattr(user, 'source', 'local') == 'local':
+            edit_mode = 'local_primary'
+        else:
+            edit_mode = 'synced_primary'
+
+        if data.user_name is not None and edit_mode == 'local_primary':
+            name = (data.user_name or '').strip()
+            if name and name != user.user_name:
+                exists = await UserDao.aget_user_by_username(name)
+                if exists and exists.user_id != user_id:
+                    raise UserNameAlreadyExistError()
+                user.user_name = name
+                await UserDao.aupdate_user(user)
+
+        if edit_mode == 'local_primary' and data.primary_department_id is not None:
+            async with get_async_db_session() as session:
+                target = (
+                    await session.exec(
+                        select(Department).where(
+                            Department.id == int(data.primary_department_id),
+                        ),
+                    )
+                ).first()
+            if not target:
+                raise DepartmentNotFoundError()
+            if not await cls._department_in_admin_writable_scope(login_user, target):
+                raise DepartmentPermissionDeniedError()
+            primary_row = await UserDepartmentDao.aget_user_primary_department(user_id)
+            cur_pid = int(primary_row.department_id) if primary_row else None
+            if cur_pid is None or cur_pid != int(target.id):
+                await cls._apply_local_primary_department_change(user_id, int(target.id))
+
+        if edit_mode != 'affiliate' and data.group_ids is not None:
+            mg = await cls._manageable_group_options(login_user)
+            manageable = {int(x['id']) for x in mg}
+            req = [int(x) for x in data.group_ids]
+            if any(g not in manageable for g in req):
+                raise DepartmentPermissionDeniedError()
+            old_links = await UserGroupDao.aget_user_group(user_id)
+            old_gids = [int(x.group_id) for x in old_links]
+            preserved = [g for g in old_gids if g not in manageable]
+            final_set = set(preserved) | set(req)
+            to_remove = [g for g in old_gids if g not in final_set]
+            to_add = [g for g in final_set if g not in old_gids]
+            if to_remove:
+                UserGroupDao.delete_user_groups(user_id, to_remove)
+            if to_add:
+                UserGroupDao.add_user_groups(user_id, to_add)
+
+        if edit_mode == 'affiliate':
+            a_ctx = await cls._assignable_role_id_set(ctx_dept.dept_id, login_user)
+            picked = {int(x) for x in (data.context_role_ids or [])}
+            if not picked.issubset(a_ctx):
+                raise DepartmentInvalidRolesError()
+            u_union = a_ctx
+            new_roles = (role_ids_user - (role_ids_user & u_union)) | picked
+        else:
+            all_uds = await UserDepartmentDao.aget_user_departments(user_id)
+            primary_ud = next((x for x in all_uds if x.is_primary == 1), None)
+            if not primary_ud:
+                raise DepartmentInvalidRolesError()
+            depts = await DepartmentDao.aget_by_ids([d.department_id for d in all_uds])
+            dept_by_id = {d.id: d for d in depts}
+            pdept = dept_by_id.get(primary_ud.department_id)
+            if not pdept:
+                raise DepartmentInvalidRolesError()
+
+            u_union: set = set()
+            u_union |= await cls._assignable_role_id_set(pdept.dept_id, login_user)
+
+            secondary_keys = []
+            for ud in all_uds:
+                if ud.is_primary != 0:
+                    continue
+                d = dept_by_id.get(ud.department_id)
+                if not d:
+                    continue
+                secondary_keys.append(d.dept_id)
+                u_union |= await cls._assignable_role_id_set(d.dept_id, login_user)
+
+            pr = {int(x) for x in (data.primary_role_ids or [])}
+            ap = await cls._assignable_role_id_set(pdept.dept_id, login_user)
+            if not pr.issubset(ap):
+                raise DepartmentInvalidRolesError()
+
+            aff_rows = data.affiliate_roles or []
+            aff_payload = {str(x.dept_id): [int(r) for r in x.role_ids] for x in aff_rows}
+            if set(aff_payload.keys()) != set(secondary_keys):
+                raise DepartmentInvalidRolesError()
+
+            picked = set(pr)
+            for dk, rlist in aff_payload.items():
+                rs = {int(x) for x in rlist}
+                a_set = await cls._assignable_role_id_set(dk, login_user)
+                if not rs.issubset(a_set):
+                    raise DepartmentInvalidRolesError()
+                picked |= rs
+
+            new_roles = (role_ids_user - (role_ids_user & u_union)) | picked
+
+        if AdminRole in new_roles:
+            raise DepartmentInvalidRolesError()
+
+        need_add = sorted(new_roles - role_ids_user)
+        need_del = sorted(role_ids_user - new_roles)
+        if need_add:
+            UserRoleDao.add_user_roles(user_id, need_add)
+        if need_del:
+            UserRoleDao.delete_user_roles(user_id, need_del)
