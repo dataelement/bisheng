@@ -215,6 +215,7 @@ export function DepartmentSettings({ dept, tree, onChanged }: DepartmentSettings
       </div>
 
       {/* Admins */}
+      {!isArchived && (
       <div className="space-y-2">
         <Label>{t("bs:department.admins")}</Label>
         <p className="text-xs text-muted-foreground">
@@ -249,8 +250,10 @@ export function DepartmentSettings({ dept, tree, onChanged }: DepartmentSettings
           )}
         </div>
       </div>
+      )}
 
       {/* Default Roles */}
+      {!isArchived && (
       <div className="space-y-2">
         <Label>{t("bs:department.defaultRoles")}</Label>
         <p className="text-xs text-muted-foreground">
@@ -267,6 +270,7 @@ export function DepartmentSettings({ dept, tree, onChanged }: DepartmentSettings
           {t("save")}
         </Button>
       </div>
+      )}
 
       {/* Delete / Purge */}
       {isArchived && (

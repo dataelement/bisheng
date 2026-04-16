@@ -267,3 +267,4 @@ docker/office/bisheng/*.gz
 
 bisheng-sync.sh
 !src/backend/bisheng/telemetry_search/**/*.pyc
+.omx/

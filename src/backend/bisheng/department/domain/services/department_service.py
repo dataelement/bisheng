@@ -25,6 +25,7 @@ from bisheng.common.errcode.department import (
     DepartmentMemberNotFoundError,
     DepartmentNameDuplicateError,
     DepartmentNotArchivedError,
+    DepartmentArchivedReadonlyError,
     DepartmentNotFoundError,
     DepartmentOpenFGAUnavailableError,
     DepartmentPermissionDeniedError,
@@ -135,6 +136,24 @@ async def _get_dept_or_raise(session, dept_id: str) -> Department:
     dept = result.first()
     if not dept:
         raise DepartmentNotFoundError()
+    return dept
+
+
+async def _get_dept_and_check_permission(session, dept_id: str, login_user) -> Department:
+    """Look up department + permission check without leaking resource existence.
+
+    Non-admin users get DepartmentPermissionDeniedError for both
+    'not found' and 'no access' to prevent enumeration.
+    """
+    result = await session.exec(
+        select(Department).where(Department.dept_id == dept_id)
+    )
+    dept = result.first()
+    if not dept:
+        if _is_admin(login_user):
+            raise DepartmentNotFoundError()
+        raise DepartmentPermissionDeniedError()
+    await _check_permission(login_user, dept_internal_id=dept.id)
     return dept
 
 
@@ -311,8 +330,10 @@ class DepartmentService:
         cls, dept_id: str, data: DepartmentUpdate, login_user,
     ) -> Department:
         async with get_async_db_session() as session:
-            dept = await _get_dept_or_raise(session, dept_id)
-            await _check_permission(login_user, dept_internal_id=dept.id)
+            dept = await _get_dept_and_check_permission(session, dept_id, login_user)
+
+            if dept.status == 'archived':
+                raise DepartmentArchivedReadonlyError()
 
             # Source-readonly check
             if dept.source != 'local' and data.name is not None:
@@ -348,8 +369,7 @@ class DepartmentService:
     @classmethod
     async def adelete_department(cls, dept_id: str, login_user) -> None:
         async with get_async_db_session() as session:
-            dept = await _get_dept_or_raise(session, dept_id)
-            await _check_permission(login_user, dept_internal_id=dept.id)
+            dept = await _get_dept_and_check_permission(session, dept_id, login_user)
 
             # Check for children
             children = (await session.exec(
@@ -384,11 +404,19 @@ class DepartmentService:
     async def apurge_department(cls, dept_id: str, login_user) -> None:
         """Permanently delete an archived department and clean up all references."""
         async with get_async_db_session() as session:
-            dept = await _get_dept_or_raise(session, dept_id)
-            await _check_permission(login_user, dept_internal_id=dept.id)
+            dept = await _get_dept_and_check_permission(session, dept_id, login_user)
 
             if dept.status != 'archived':
                 raise DepartmentNotArchivedError()
+
+            # Block if any child departments still reference this one
+            child = (await session.exec(
+                select(Department.id).where(
+                    Department.parent_id == dept.id,
+                )
+            )).first()
+            if child is not None:
+                raise DepartmentHasChildrenError()
 
             dept_internal_id = dept.id
 
@@ -407,13 +435,19 @@ class DepartmentService:
                 )
             )
 
-            # Unscope roles tied to this department
+            # Delete department-scoped roles and their user_role bindings
             from bisheng.database.models.role import Role
-            await session.exec(
-                update(Role).where(Role.department_id == dept_internal_id).values(
-                    department_id=None,
+            from bisheng.user.domain.models.user_role import UserRole
+            scoped_role_ids = (await session.exec(
+                select(Role.id).where(Role.department_id == dept_internal_id)
+            )).all()
+            if scoped_role_ids:
+                await session.exec(
+                    delete(UserRole).where(UserRole.role_id.in_(scoped_role_ids))
                 )
-            )
+                await session.exec(
+                    delete(Role).where(Role.department_id == dept_internal_id)
+                )
 
             # Physical delete
             await session.delete(dept)
@@ -449,8 +483,7 @@ class DepartmentService:
         cls, dept_id: str, data: DepartmentMoveRequest, login_user,
     ) -> Department:
         async with get_async_db_session() as session:
-            dept = await _get_dept_or_raise(session, dept_id)
-            await _check_permission(login_user, dept_internal_id=dept.id)
+            dept = await _get_dept_and_check_permission(session, dept_id, login_user)
 
             # Load new parent
             new_parent = (await session.exec(
@@ -554,8 +587,7 @@ class DepartmentService:
         cls, dept_id: str, data: DepartmentMemberAdd, login_user,
     ) -> None:
         async with get_async_db_session() as session:
-            dept = await _get_dept_or_raise(session, dept_id)
-            await _check_permission(login_user, dept_internal_id=dept.id)
+            dept = await _get_dept_and_check_permission(session, dept_id, login_user)
 
             # Batch check for existing members (single query instead of N)
             existing_result = await session.exec(
@@ -589,8 +621,7 @@ class DepartmentService:
         cls, dept_id: str, user_id: int, login_user,
     ) -> None:
         async with get_async_db_session() as session:
-            dept = await _get_dept_or_raise(session, dept_id)
-            await _check_permission(login_user, dept_internal_id=dept.id)
+            dept = await _get_dept_and_check_permission(session, dept_id, login_user)
 
             # Check member exists
             ud = (await session.exec(
@@ -615,8 +646,7 @@ class DepartmentService:
     ) -> List[dict]:
         """Get admin users of a department from OpenFGA."""
         async with get_async_db_session() as session:
-            dept = await _get_dept_or_raise(session, dept_id)
-            await _check_permission(login_user, dept_internal_id=dept.id)
+            dept = await _get_dept_and_check_permission(session, dept_id, login_user)
 
         from bisheng.core.openfga.manager import aget_fga_client
         fga = await aget_fga_client()
@@ -660,8 +690,10 @@ class DepartmentService:
     ) -> List[dict]:
         """Set department admins (full replace). Returns updated admin list."""
         async with get_async_db_session() as session:
-            dept = await _get_dept_or_raise(session, dept_id)
-            await _check_permission(login_user, dept_internal_id=dept.id)
+            dept = await _get_dept_and_check_permission(session, dept_id, login_user)
+
+            if dept.status == 'archived':
+                raise DepartmentArchivedReadonlyError()
 
         # Get current admins from FGA
         current_admins = await cls.aget_admins(dept_id, login_user)
@@ -697,8 +729,7 @@ class DepartmentService:
         limit = max(1, min(limit, 100))
 
         async with get_async_db_session() as session:
-            dept = await _get_dept_or_raise(session, dept_id)
-            await _check_permission(login_user, dept_internal_id=dept.id)
+            dept = await _get_dept_and_check_permission(session, dept_id, login_user)
 
             from bisheng.user.domain.models.user import User
 
@@ -815,8 +846,7 @@ class DepartmentService:
         from bisheng.database.models.role import Role
 
         async with get_async_db_session() as session:
-            dept = await _get_dept_or_raise(session, dept_id)
-            await _check_permission(login_user, dept_internal_id=dept.id)
+            dept = await _get_dept_and_check_permission(session, dept_id, login_user)
 
             subtree = await session.exec(
                 select(Department.id).where(
@@ -876,8 +906,7 @@ class DepartmentService:
         from bisheng.utils import md5_hash
 
         async with get_async_db_session() as session:
-            dept = await _get_dept_or_raise(session, dept_id)
-            await _check_permission(login_user, dept_internal_id=dept.id)
+            dept = await _get_dept_and_check_permission(session, dept_id, login_user)
 
         plain = UserService.decrypt_password_plain(data.password)
         if not _password_meets_prd_policy(plain):
@@ -942,16 +971,19 @@ class DepartmentService:
 
     @classmethod
     async def _manageable_group_options(cls, login_user) -> List[dict]:
+        """Return groups the current user can actually mutate (admin or creator)."""
         from bisheng.user_group.domain.services.user_group_service import UserGroupService
 
         res = await UserGroupService.alist_groups(1, 2000, '', login_user)
+        is_admin = login_user.is_admin() if callable(getattr(login_user, 'is_admin', None)) else False
         out = []
         for x in res.get('data') or []:
-            out.append({
-                'id': x['id'],
-                'group_name': x.get('group_name', ''),
-                'visibility': x.get('visibility', 'public'),
-            })
+            if is_admin or x.get('create_user') == login_user.user_id:
+                out.append({
+                    'id': x['id'],
+                    'group_name': x.get('group_name', ''),
+                    'visibility': x.get('visibility', 'public'),
+                })
         return out
 
     @classmethod
@@ -1047,8 +1079,7 @@ class DepartmentService:
         from bisheng.user.domain.models.user_role import UserRoleDao
 
         async with get_async_db_session() as session:
-            ctx_dept = await _get_dept_or_raise(session, dept_id)
-            await _check_permission(login_user, dept_internal_id=ctx_dept.id)
+            ctx_dept = await _get_dept_and_check_permission(session, dept_id, login_user)
             mem = (
                 await session.exec(
                     select(UserDepartment).where(
@@ -1125,8 +1156,7 @@ class DepartmentService:
         from bisheng.database.models.user_group import UserGroupDao
 
         async with get_async_db_session() as session:
-            ctx_dept = await _get_dept_or_raise(session, dept_id)
-            await _check_permission(login_user, dept_internal_id=ctx_dept.id)
+            ctx_dept = await _get_dept_and_check_permission(session, dept_id, login_user)
             mem = (
                 await session.exec(
                     select(UserDepartment).where(
@@ -1233,8 +1263,7 @@ class DepartmentService:
         from bisheng.common.errcode.user import UserNameAlreadyExistError
 
         async with get_async_db_session() as session:
-            ctx_dept = await _get_dept_or_raise(session, dept_id)
-            await _check_permission(login_user, dept_internal_id=ctx_dept.id)
+            ctx_dept = await _get_dept_and_check_permission(session, dept_id, login_user)
             mem = (
                 await session.exec(
                     select(UserDepartment).where(

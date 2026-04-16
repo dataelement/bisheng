@@ -36,10 +36,11 @@ export function CreateDepartmentDialog({
   const [adminPicks, setAdminPicks] = useState<SelectedSubject[]>([])
   const [loading, setLoading] = useState(false)
 
-  // Flatten tree for parent selector
+  // Flatten tree for parent selector (exclude archived departments)
   const flatList: { id: number; name: string; depth: number }[] = []
   const flatten = (nodes: DepartmentTreeNode[], depth: number) => {
     for (const n of nodes) {
+      if (n.status === "archived") continue
       flatList.push({ id: n.id, name: n.name, depth })
       if (n.children) flatten(n.children, depth + 1)
     }
@@ -69,7 +70,7 @@ export function CreateDepartmentDialog({
         onCreated()
       }
     })
-  }, [name, parentId, onCreated, t])
+  }, [name, parentId, adminPicks, onCreated, t])
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>

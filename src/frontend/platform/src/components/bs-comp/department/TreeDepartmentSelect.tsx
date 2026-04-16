@@ -214,6 +214,7 @@ export function TreeDepartmentSelect({
   const renderNode = useMemo(() => {
     const Render = ({ node, depth }: { node: DepartmentTreeNode; depth: number }) => {
       if (!matchesKeyword(node)) return null
+      if (node.status === "archived") return null
       const hasChildren = Boolean(node.children?.length)
       const isExpanded = expanded.has(node.id)
       const isSelected = value != null && node.id === value

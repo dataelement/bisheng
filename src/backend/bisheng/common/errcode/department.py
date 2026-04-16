@@ -83,3 +83,8 @@ class DepartmentMemberDeleteForbiddenError(BaseErrorCode):
 class DepartmentNotArchivedError(BaseErrorCode):
     Code: int = 21016
     Msg: str = 'Only archived departments can be permanently deleted'
+
+
+class DepartmentArchivedReadonlyError(BaseErrorCode):
+    Code: int = 21017
+    Msg: str = 'Archived departments cannot be modified'

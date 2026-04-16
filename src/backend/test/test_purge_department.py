@@ -9,6 +9,7 @@ def mock_admin_user():
     user = MagicMock()
     user.user_id = 1
     user.is_admin.return_value = True
+    user.user_role = [1]
     user.tenant_id = 1
     return user
 
@@ -35,12 +36,8 @@ class TestApurgeDepartment:
             'bisheng.department.domain.services.department_service.get_async_db_session',
         ) as mock_session_ctx, \
              patch(
-            'bisheng.department.domain.services.department_service._get_dept_or_raise',
+            'bisheng.department.domain.services.department_service._get_dept_and_check_permission',
             new_callable=AsyncMock, return_value=active_dept,
-        ), \
-             patch(
-            'bisheng.department.domain.services.department_service._check_permission',
-            new_callable=AsyncMock,
         ):
             mock_session = AsyncMock()
             mock_session.__aenter__ = AsyncMock(return_value=mock_session)
@@ -52,20 +49,16 @@ class TestApurgeDepartment:
                 await DepartmentService.apurge_department('BS@test', mock_admin_user)
 
     @pytest.mark.asyncio
-    async def test_purge_cleans_up_user_departments(self, mock_admin_user):
-        """Purge deletes UserDepartment records and the department itself."""
+    async def test_purge_deletes_roles_and_department(self, mock_admin_user):
+        """Purge deletes scoped roles, UserDepartment records, and the department itself."""
         archived_dept = _make_dept(status='archived')
 
         with patch(
             'bisheng.department.domain.services.department_service.get_async_db_session',
         ) as mock_session_ctx, \
              patch(
-            'bisheng.department.domain.services.department_service._get_dept_or_raise',
+            'bisheng.department.domain.services.department_service._get_dept_and_check_permission',
             new_callable=AsyncMock, return_value=archived_dept,
-        ), \
-             patch(
-            'bisheng.department.domain.services.department_service._check_permission',
-            new_callable=AsyncMock,
         ), \
              patch(
             'bisheng.department.domain.services.department_service.DepartmentChangeHandler',
@@ -74,7 +67,7 @@ class TestApurgeDepartment:
             'bisheng.department.domain.services.department_service.delete',
         ), \
              patch(
-            'bisheng.department.domain.services.department_service.update',
+            'bisheng.department.domain.services.department_service.select',
         ), \
              patch(
             'bisheng.core.openfga.manager.aget_fga_client',
@@ -83,9 +76,9 @@ class TestApurgeDepartment:
             mock_session = AsyncMock()
             mock_session.__aenter__ = AsyncMock(return_value=mock_session)
             mock_session.__aexit__ = AsyncMock(return_value=False)
-            # Return empty member list for the first exec (select), then no-op for delete/update
             mock_exec_result = MagicMock()
             mock_exec_result.all.return_value = []
+            mock_exec_result.first.return_value = None
             mock_session.exec = AsyncMock(return_value=mock_exec_result)
             mock_session_ctx.return_value = mock_session
 
@@ -95,7 +88,36 @@ class TestApurgeDepartment:
             from bisheng.department.domain.services.department_service import DepartmentService
             await DepartmentService.apurge_department('BS@test', mock_admin_user)
 
-            # Verify physical delete was called
             mock_session.delete.assert_called_once_with(archived_dept)
             mock_session.commit.assert_called_once()
             mock_handler.on_purged.assert_called_once_with(10, [], [])
+
+    @pytest.mark.asyncio
+    async def test_purge_blocks_if_children_exist(self, mock_admin_user):
+        """Purge rejects if any child departments still reference this one."""
+        from bisheng.common.errcode.department import DepartmentHasChildrenError
+
+        archived_dept = _make_dept(status='archived')
+        child_dept = _make_dept(dept_id='BS@child', internal_id=20)
+
+        with patch(
+            'bisheng.department.domain.services.department_service.get_async_db_session',
+        ) as mock_session_ctx, \
+             patch(
+            'bisheng.department.domain.services.department_service._get_dept_and_check_permission',
+            new_callable=AsyncMock, return_value=archived_dept,
+        ), \
+             patch(
+            'bisheng.department.domain.services.department_service.select',
+        ):
+            mock_session = AsyncMock()
+            mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session.__aexit__ = AsyncMock(return_value=False)
+            mock_exec_result = MagicMock()
+            mock_exec_result.first.return_value = child_dept
+            mock_session.exec = AsyncMock(return_value=mock_exec_result)
+            mock_session_ctx.return_value = mock_session
+
+            from bisheng.department.domain.services.department_service import DepartmentService
+            with pytest.raises(DepartmentHasChildrenError):
+                await DepartmentService.apurge_department('BS@test', mock_admin_user)
