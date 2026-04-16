@@ -186,6 +186,8 @@
     "treeDepartmentSelectEmpty": "No departments yet. Create the org tree under Organization & Members first.",
     "menuPermissionSection": "Menu permissions",
     "menuPermissionHint": "Turning off Admin Console disables its child menus; turning off Workspace blocks the workspace entry.",
+    "roleMenuLoading": "Loading menu permissions for this role...",
+    "roleMenuLoadFailed": "Failed to load role menu permissions. Saving is disabled until the menu data is reloaded.",
     "workbenchEntry": "Workspace entry",
     "adminBackendMenus": "Admin console menus",
     "quotaMoreExpand": "More resource quotas (spaces, workflows, …)",

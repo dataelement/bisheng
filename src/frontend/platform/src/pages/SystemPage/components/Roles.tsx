@@ -79,6 +79,8 @@ export default function Roles() {
   const [quotaChannelUnlimited, setQuotaChannelUnlimited] = useState(false)
   const [quotaChannelCount, setQuotaChannelCount] = useState("10")
   const [menuIds, setMenuIds] = useState<string[]>([])
+  const [isMenuLoading, setIsMenuLoading] = useState(false)
+  const [menuLoadFailed, setMenuLoadFailed] = useState(false)
   const [initialEditSnapshot, setInitialEditSnapshot] = useState("")
   const [isSaving, setIsSaving] = useState(false)
 
@@ -161,26 +163,29 @@ export default function Roles() {
     setQuotaChannelUnlimited(false)
     setQuotaChannelCount("10")
     setMenuIds(nextMenuIds)
+    setIsMenuLoading(false)
+    setMenuLoadFailed(false)
     setInitialEditSnapshot(
       buildEditSnapshot("", nextDepartmentId, false, "500", false, "10", nextMenuIds)
     )
     setEditOpen(true)
   }
 
-  const openEdit = async (role: ROLE) => {
-    const qc = role.quota_config || {}
-    setActiveRole(role)
-    setRoleName(role.role_name || "")
-    setDepartmentId(role.department_id ? String(role.department_id) : "none")
-    const fileLimit = Number(qc.knowledge_space_file ?? -1)
-    const channelLimit = Number(qc.channel ?? 10)
-    setQuotaFileUnlimited(fileLimit === -1)
-    setQuotaFileGb(fileLimit > 0 ? String(fileLimit) : "500")
-    setQuotaChannelUnlimited(channelLimit === -1)
-    setQuotaChannelCount(channelLimit >= 0 ? String(channelLimit) : "10")
-    setEditOpen(true)
+  const loadRoleMenus = async (
+    role: ROLE,
+    fileLimit: number,
+    channelLimit: number
+  ) => {
+    setIsMenuLoading(true)
+    setMenuLoadFailed(false)
     const menuRes = await captureAndAlertRequestErrorHoc(getRoleMenuV2Api(role.id))
-    let ids = Array.isArray(menuRes) && menuRes.length ? [...menuRes] : [...defaultMenuIds]
+    if (menuRes === false || !Array.isArray(menuRes)) {
+      setMenuLoadFailed(true)
+      setInitialEditSnapshot("")
+      setIsMenuLoading(false)
+      return
+    }
+    let ids = [...menuRes]
     if (ids.some((id) => (ADMIN_CHILD_MENUS as readonly string[]).includes(id)) && !ids.includes(ADMIN_PARENT_ID)) {
       ids = [...ids, ADMIN_PARENT_ID]
     }
@@ -202,6 +207,24 @@ export default function Roles() {
         ids
       )
     )
+    setIsMenuLoading(false)
+  }
+
+  const openEdit = async (role: ROLE) => {
+    const qc = role.quota_config || {}
+    setActiveRole(role)
+    setRoleName(role.role_name || "")
+    setDepartmentId(role.department_id ? String(role.department_id) : "none")
+    const fileLimit = Number(qc.knowledge_space_file ?? -1)
+    const channelLimit = Number(qc.channel ?? 10)
+    setQuotaFileUnlimited(fileLimit === -1)
+    setQuotaFileGb(fileLimit > 0 ? String(fileLimit) : "500")
+    setQuotaChannelUnlimited(channelLimit === -1)
+    setQuotaChannelCount(channelLimit >= 0 ? String(channelLimit) : "10")
+    setMenuIds([])
+    setMenuLoadFailed(false)
+    setEditOpen(true)
+    await loadRoleMenus(role, fileLimit, channelLimit)
   }
 
   const buildQuotaConfig = (): Record<string, number> => {
@@ -214,7 +237,7 @@ export default function Roles() {
   }
 
   const submitRole = async () => {
-    if (isSaving || !roleName.trim()) return
+    if (isSaving || !roleName.trim() || isMenuLoading || menuLoadFailed) return
     setIsSaving(true)
     const quota_config = buildQuotaConfig()
     const payload = {
@@ -527,6 +550,29 @@ export default function Roles() {
             <div className="rounded-md border p-3">
               <Label>{t("system.menuPermissionSection")}</Label>
               <p className="mt-1 text-xs text-muted-foreground">{t("system.menuPermissionHint")}</p>
+              {isMenuLoading && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {t("system.roleMenuLoading")}
+                </p>
+              )}
+              {menuLoadFailed && activeRole && (
+                <div className="mt-2 flex items-center gap-3 text-xs text-destructive">
+                  <span>{t("system.roleMenuLoadFailed")}</span>
+                  <Button
+                    type="button"
+                    variant="link"
+                    className="h-auto p-0 text-xs"
+                    onClick={() => {
+                      const qc = activeRole.quota_config || {}
+                      const fileLimit = Number(qc.knowledge_space_file ?? -1)
+                      const channelLimit = Number(qc.channel ?? 10)
+                      void loadRoleMenus(activeRole, fileLimit, channelLimit)
+                    }}
+                  >
+                    {t("retry")}
+                  </Button>
+                </div>
+              )}
               <div className="mt-3 space-y-4">
                 <div className="rounded-md border bg-muted/20 p-3">
                   <div className="mb-2 flex items-center justify-between">
@@ -673,7 +719,7 @@ export default function Roles() {
             <Button variant="outline" onClick={requestCloseEditDialog} disabled={isSaving}>
               {t("cancel")}
             </Button>
-            <Button onClick={submitRole} disabled={isSaving}>
+            <Button onClick={submitRole} disabled={isSaving || isMenuLoading || menuLoadFailed}>
               {isSaving ? `${t("save")}...` : t("save")}
             </Button>
           </DialogFooter>

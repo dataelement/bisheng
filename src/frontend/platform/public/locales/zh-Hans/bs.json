@@ -189,6 +189,8 @@
     "treeDepartmentSelectEmpty": "暂无部门数据，请先在组织与成员中维护架构。",
     "menuPermissionSection": "菜单权限",
     "menuPermissionHint": "关闭「管理后台」后，其下各业务菜单将不可用；关闭「工作台」则用户无法从入口进入工作台。",
+    "roleMenuLoading": "正在加载该角色的菜单权限…",
+    "roleMenuLoadFailed": "角色菜单权限加载失败，当前不允许保存，请重试后再编辑。",
     "workbenchEntry": "工作台入口",
     "adminBackendMenus": "管理后台菜单",
     "quotaMoreExpand": "更多资源配额（知识空间数量、工作流等）",

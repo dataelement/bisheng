@@ -188,6 +188,8 @@
     "treeDepartmentSelectEmpty": "部門データがありません。先に「組織とメンバー」で組織を整備してください。",
     "menuPermissionSection": "メニュー権限",
     "menuPermissionHint": "「管理コンソール」をオフにすると配下メニューは利用できません。「ワークスペース」をオフにすると入口から入れません。",
+    "roleMenuLoading": "このロールのメニュー権限を読み込み中…",
+    "roleMenuLoadFailed": "ロールのメニュー権限を読み込めませんでした。再読み込みするまで保存できません。",
     "workbenchEntry": "ワークスペース入口",
     "adminBackendMenus": "管理コンソールのメニュー",
     "quotaMoreExpand": "その他のリソース上限（スペース数・WF など）",
