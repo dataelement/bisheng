@@ -1854,7 +1854,6 @@
   "department.memberEditLoading": "Loading…",
   "department.memberEditLoadFailed": "Failed to load the edit form. Please try again later.",
   "department.memberEditSaved": "Saved",
-  "department.memberEditUserGroupsHint": "You can only assign user groups you are allowed to manage (public and private). Groups not listed here are preserved.",
   "department.memberEditPrimaryReadonly": "Primary department cannot be changed for third-party synced users.",
   "department.memberEditPrimaryHint": "You may only select departments within the organization subtree you administer.",
   "department.memberEditPrimaryPlaceholder": "Select primary department",
@@ -1862,6 +1861,5 @@
   "department.deleteLocalMemberConfirm": "Delete this local account? This removes organization memberships, user groups and non-admin roles, and disables login.",
   "department.deleteLocalMemberBlocked": "This user still owns data assets and cannot be deleted: {{k}} knowledge space(s), {{f}} workflow(s), {{a}} assistant(s).",
   "department.deleteLocalMemberDone": "Member account removed",
-  "department.memberEditRolesHint": "Assignable roles include global roles and roles scoped to this department (and its subtree).",
   "department.memberEditAffiliateSection": "Affiliated departments (part-time)"
 }
