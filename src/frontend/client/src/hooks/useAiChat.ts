@@ -69,11 +69,13 @@ export default function useAiChat(initialConversationId: string = "new", isLings
         // In this case don't reset, messages are still valid.
         if (initialConversationId === internalConvoIdRef.current) return;
 
-        // Genuine sidebar navigation — reset and load new conversation
+        // Genuine sidebar navigation — reset and load new conversation.
+        // Set isLoading=true up-front (not false) so the welcome page doesn't
+        // briefly flash before the load effect fires on the next tick.
         abortSSE();
         setSseSubmission(null);
         setIsStreaming(false);
-        setIsLoading(false);
+        setIsLoading(initialConversationId !== "new");
         setMessages([]);
         setTitle("");
         setConversationId(initialConversationId);

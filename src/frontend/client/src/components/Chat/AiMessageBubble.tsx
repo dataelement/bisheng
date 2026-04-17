@@ -435,7 +435,7 @@ function AssistantBubble({
                 {showWaiting && (
                     <div className="mt-3 inline-flex w-fit items-center justify-center gap-1.5 rounded-xl bg-surface-tertiary px-3 py-2 text-xs leading-[18px] text-text-secondary">
                         <Loader2 className="size-3.5 animate-spin" />
-                        <span>等待模型响应…</span>
+                        <span>thinking…</span>
                     </div>
                 )}
 

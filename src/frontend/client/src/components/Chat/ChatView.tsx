@@ -209,9 +209,17 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
         </video>
 
         <div ref={chatContainerRef} className="relative z-10 h-full overflow-y-auto noscrollbar">
+          {/* Layout: treat "loading an existing conversation" the same as
+              "has messages" so the input stays pinned to the bottom during
+              sidebar navigation (otherwise the centered welcome-page layout
+              briefly floats the input up before messages arrive). */}
+          {(() => {
+            const loadingExistingConvo = isLoading && conversationId !== 'new';
+            const useMessagesLayout = hasMessages || loadingExistingConvo;
+            return (
           <div className={cn(
             showCode ? 'hidden' : 'flex flex-col relative',
-            hasMessages ? 'h-full' : 'h-[calc(100vh-200px)] max-[575px]:min-h-[calc(100dvh-240px)] max-[575px]:h-auto justify-center'
+            useMessagesLayout ? 'h-full' : 'h-[calc(100vh-200px)] max-[575px]:min-h-[calc(100dvh-240px)] max-[575px]:h-auto justify-center'
           )}>
             {/* Content area */}
             {isLoading && conversationId !== 'new' ? (
@@ -290,10 +298,17 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                 />}
             </div>}
           </div>
+            );
+          })()}
 
           {/* Lingsi Cases */}
           <Cases ref={casesRef} t={t} isLingsi={isLingsi} setIsLingsi={setIsLingsi} />
-          <DailyFeaturedApps t={t} isLingsi={isLingsi} />
+          {/* Recommended apps — welcome page only. Also suppress while a
+              sidebar-nav is loading the new conversation, otherwise the chips
+              flicker into view for one frame before messages arrive. */}
+          {!hasMessages && !(isLoading && conversationId !== 'new') && (
+            <DailyFeaturedApps t={t} isLingsi={isLingsi} />
+          )}
         </div>
 
         {/* Invitation Code */}

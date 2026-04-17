@@ -5,10 +5,11 @@
  * Backend still dispatches at child level, so each parent's children[] are
  * flattened into leaf-level entries at request time (see useAiChat).
  */
-import { Settings2Icon, GlobeIcon, Hammer } from "lucide-react";
+import { Settings2Icon, GlobeIcon, Hammer, WebhookIcon } from "lucide-react";
 import { useEffect } from "react";
 import { useRecoilState } from "recoil";
 import { Switch } from "~/components/ui";
+import ApiAppIcon from "~/components/ui/icon/ApiApp";
 import { Select, SelectContent, SelectTrigger } from "~/components/ui/Select";
 import { useLocalize } from "~/hooks";
 import store from "~/store";
@@ -113,15 +114,15 @@ export default function AgentToolSelector({ availableTools, disabled }: Props) {
     <Select disabled={disabled}>
       <SelectTrigger
         className={cn(
-          "h-7 rounded-full px-2 data-[state=open]:border-blue-500 max-[575px]:px-1.5",
-          isActive && "bg-blue-100",
+          "h-8 border-none bg-transparent shadow-none hover:bg-black/5 px-2 text-[#4E5969] focus:ring-0 outline-none w-auto gap-1",
+          isActive && "border border-primary",
         )}
       >
-        <div className={cn("flex gap-2 items-center", isActive && "text-blue-600")}>
-          <Settings2Icon size="16" />
-          <span className="text-xs font-normal max-[575px]:sr-only">
+        <div className="flex gap-1.5 items-center">
+          <ApiAppIcon size="15" className={cn("text-[#165DFF]", isActive && "text-blue-600")} strokeWidth={1.5} />
+          <span className="text-[14px] font-normal max-[575px]:sr-only">
             {localize("com_tools_title")}
-            {isActive ? ` (${activeCount})` : ""}
+            {/* {isActive ? ` (${activeCount})` : ""} */}
           </span>
         </div>
       </SelectTrigger>

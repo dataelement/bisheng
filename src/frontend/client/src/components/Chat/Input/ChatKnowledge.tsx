@@ -418,10 +418,10 @@ export const ChatKnowledge = ({
     <DropdownMenu open={rootOpen} onOpenChange={setRootOpen}>
       <DropdownMenuTrigger disabled={disabled}>
         <div className={cn(
-          "flex size-7 items-center justify-center rounded-full  text-gray-500 cursor-pointer hover:border-blue-400 transition-all outline-none",
-          disabled && "opacity-50 hover:border-slate-200 cursor-not-allowed"
+          "flex h-8 w-8 items-center justify-center rounded-md text-[#4E5969] cursor-pointer hover:bg-black/5 transition-colors outline-none",
+          disabled && "opacity-50 cursor-not-allowed"
         )}>
-          <Plus size={16} />
+          <Plus size={18} strokeWidth={1.5} />
         </div>
       </DropdownMenuTrigger>
 

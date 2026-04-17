@@ -712,6 +712,7 @@
   "com_tools_web_search": "オンライン検索",
   "com_tools_knowledge_search": "ナレッジベース検索",
   "com_tools_generic_fallback": "ツール",
+  "com_tools_result_count": "{{count}}件の結果",
   "com_ui_accept": "同意する",
   "com_ui_add": "追加",
   "com_ui_add_model_preset": "モデルまたはプリセットを追加して追加の返信を取得",

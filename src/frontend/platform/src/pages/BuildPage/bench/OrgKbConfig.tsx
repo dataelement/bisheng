@@ -49,6 +49,8 @@ export default function OrgKbConfig({ orgKbs, onChange }: Props) {
     const { t } = useTranslation();
     const { toast } = useToast();
     const [search, setSearch] = useState("");
+    // Independent keyword for the left "already-configured" panel (spec TC-A44).
+    const [selectedSearch, setSelectedSearch] = useState("");
     const [list, setList] = useState<KnowledgeBase[]>([]);
     const [loading, setLoading] = useState(false);
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -86,6 +88,16 @@ export default function OrgKbConfig({ orgKbs, onChange }: Props) {
     }, [search]);
 
     const selectedIds = useMemo(() => new Set(orgKbs.map((k) => k.id)), [orgKbs]);
+
+    // Left panel filter — pure client-side over already-configured orgKbs.
+    // Drag-n-drop is disabled while a keyword is active to avoid reordering
+    // based on a filtered view (indices would no longer map to orgKbs).
+    const filteredOrgKbs = useMemo(() => {
+        const q = selectedSearch.trim().toLowerCase();
+        if (!q) return orgKbs;
+        return orgKbs.filter((k) => (k.name || "").toLowerCase().includes(q));
+    }, [orgKbs, selectedSearch]);
+    const isFilteringSelected = selectedSearch.trim().length > 0;
 
     // Client-side description filter (server only searches name).
     const filteredList = useMemo(() => {
@@ -146,6 +158,15 @@ export default function OrgKbConfig({ orgKbs, onChange }: Props) {
                 <div className="w-1/2 flex border rounded-lg bg-white" style={{ minHeight: 280 }}>
                     <div className="flex-1 p-4 flex flex-col">
                         {orgKbs.length > 0 && (
+                            <div className="mb-2">
+                                <SearchInput
+                                    placeholder={t("bench.searchKbName", "搜索知识库名称")}
+                                    value={selectedSearch}
+                                    onChange={(e) => setSelectedSearch(e.target.value)}
+                                />
+                            </div>
+                        )}
+                        {orgKbs.length > 0 && (
                             <div className="flex items-center justify-between pb-2 text-xs text-muted-foreground">
                                 <span>{t("bench.knowledgeBaseCol", "知识库")}</span>
                                 <span>{t("bench.defaultChecked")}</span>
@@ -161,9 +182,13 @@ export default function OrgKbConfig({ orgKbs, onChange }: Props) {
                                     {t("bench.pickFromRight", "请在右侧全部知识库中选择")}
                                 </div>
                             </div>
+                        ) : filteredOrgKbs.length === 0 ? (
+                            <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">
+                                {t("bench.noMatchKbs")}
+                            </div>
                         ) : (
                             <DragDropContext onDragEnd={handleDragEnd}>
-                                <Droppable droppableId="orgKbs">
+                                <Droppable droppableId="orgKbs" isDropDisabled={isFilteringSelected}>
                                     {(provided) => (
                                         <div
                                             {...provided.droppableProps}
@@ -171,11 +196,12 @@ export default function OrgKbConfig({ orgKbs, onChange }: Props) {
                                             className="space-y-2 overflow-y-auto"
                                             style={{ maxHeight: 320 }}
                                         >
-                                            {orgKbs.map((kb, index) => (
+                                            {filteredOrgKbs.map((kb, index) => (
                                                 <Draggable
                                                     key={kb.id.toString()}
                                                     draggableId={kb.id.toString()}
                                                     index={index}
+                                                    isDragDisabled={isFilteringSelected}
                                                 >
                                                     {(dragProvided, snapshot) => (
                                                         <div
@@ -187,7 +213,13 @@ export default function OrgKbConfig({ orgKbs, onChange }: Props) {
                                                                 : "bg-white border"
                                                                 }`}
                                                         >
-                                                            <AlignJustify className="w-4 h-4 text-gray-400 shrink-0" />
+                                                            <AlignJustify
+                                                                className={`w-4 h-4 shrink-0 ${
+                                                                    isFilteringSelected
+                                                                        ? "text-gray-200"
+                                                                        : "text-gray-400"
+                                                                }`}
+                                                            />
                                                             <div className="text-primary">
                                                                 <KbTypeIcon type={kb.type} />
                                                             </div>

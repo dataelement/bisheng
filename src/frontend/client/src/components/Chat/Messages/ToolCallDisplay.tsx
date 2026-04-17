@@ -136,19 +136,19 @@ function normaliseKnowledgeResults(items: any[]): { id: string; name: string }[]
         // (e.g. legacy rows persisted before the backend started embedding them).
         const fallbackName = !name
             ? (() => {
-                  const ft = /<file_title>([^<]+)<\/file_title>/.exec(text)?.[1];
-                  if (ft) return ft.trim();
-                  if (typeof raw === "object") {
-                      return (
-                          raw.knowledge_base_name ||
-                          raw.kb_name ||
-                          raw.file_title ||
-                          raw.title ||
-                          ""
-                      ).toString();
-                  }
-                  return "";
-              })()
+                const ft = /<file_title>([^<]+)<\/file_title>/.exec(text)?.[1];
+                if (ft) return ft.trim();
+                if (typeof raw === "object") {
+                    return (
+                        raw.knowledge_base_name ||
+                        raw.kb_name ||
+                        raw.file_title ||
+                        raw.title ||
+                        ""
+                    ).toString();
+                }
+                return "";
+            })()
             : name;
         const finalName = fallbackName || "知识库";
         const key = id || finalName;
@@ -249,7 +249,7 @@ const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall }) => {
     ) : toolCall.error ? (
         <AlertCircle className="mr-1.5 size-3.5 text-red-500" />
     ) : (
-        <span className="mr-1.5 text-text-secondary">{style.icon}</span>
+        <span className="mr-1.5 text-gray-400">{style.icon}</span>
     );
 
     const pill = (
@@ -258,7 +258,7 @@ const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall }) => {
             onClick={hasDetails && !toolCall.inflight ? () => setExpanded((v) => !v) : undefined}
             disabled={!hasDetails || toolCall.inflight}
             className={cn(
-                "group mt-3 flex w-fit items-center justify-center rounded-xl bg-surface-tertiary px-3 py-2 text-xs leading-[18px]",
+                "group mt-3 flex w-fit items-center justify-center py-2 text-sm leading-[18px]",
                 toolCall.inflight && "animate-pulse",
             )}
         >
@@ -268,7 +268,9 @@ const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall }) => {
                 !toolCall.error &&
                 variant !== "tool" &&
                 resultCount > 0 && (
-                    <span className="ml-1 text-text-secondary">({resultCount})</span>
+                    <span className="ml-1 text-text-secondary">
+                        ({localize("com_tools_result_count", { count: resultCount })})
+                    </span>
                 )}
             {hasDetails && !toolCall.inflight && (
                 <ChevronDown
@@ -293,7 +295,7 @@ const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall }) => {
             >
                 <div className="overflow-hidden mt-3">
                     <div className="relative pl-3 text-xs text-text-secondary">
-                        <div className="absolute left-0 h-full border-l-2 border-border-medium dark:border-border-heavy" />
+                        <div className="absolute left-0 h-full pl-1 border-r border-border-medium dark:border-border-heavy" />
 
                         {toolCall.error && (
                             <div className="leading-[22px]">{toolCall.error}</div>
@@ -306,17 +308,14 @@ const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall }) => {
                         )}
 
                         {!toolCall.inflight && !toolCall.error && variant === "knowledge" && knowledgeChips.length > 0 && (
-                            <div className="flex flex-wrap gap-1.5">
+                            <div className="flex flex-wrap gap-2">
                                 {knowledgeChips.map((kb, i) => (
                                     <span
                                         key={kb.id || `${kb.name}-${i}`}
-                                        className={cn(
-                                            "inline-flex items-center gap-1 rounded-md border px-2 py-0.5",
-                                            style.pill,
-                                        )}
+                                        className="inline-flex items-center justify-center gap-1.5 rounded-[4px] bg-[#F7F8FA] px-2 py-[2px] text-[13px] text-[#4E5969]"
                                         title={kb.name}
                                     >
-                                        {style.icon}
+                                        <BookOpen className="size-[14px] text-[#86909C]" />
                                         <span className="truncate max-w-[14rem]">{kb.name}</span>
                                     </span>
                                 ))}
@@ -324,7 +323,7 @@ const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall }) => {
                         )}
 
                         {!toolCall.inflight && !toolCall.error && variant === "web" && webResults.length > 0 && (
-                            <div className="flex flex-wrap gap-1.5">
+                            <div className="flex flex-wrap gap-2">
                                 {webResults.map((item, i) => {
                                     const chip = extractChipLabel(item, variant);
                                     const url = item?.url;
@@ -334,21 +333,18 @@ const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall }) => {
                                         : "";
                                     const content = (
                                         <span
-                                            className={cn(
-                                                "inline-flex items-center gap-1 rounded-md border px-2 py-0.5",
-                                                style.pill,
-                                            )}
+                                            className="inline-flex items-center justify-center gap-1.5 rounded-[4px] bg-[#F7F8FA] px-2 py-[2px] text-[13px] text-[#4E5969]"
                                             title={chip}
                                         >
                                             {favicon ? (
                                                 <img
                                                     src={favicon}
                                                     alt=""
-                                                    className="size-3.5 rounded-sm"
+                                                    className="size-[14px] rounded-[2px]"
                                                     onError={(e) => ((e.currentTarget as HTMLImageElement).style.display = "none")}
                                                 />
                                             ) : (
-                                                style.icon
+                                                <Globe className="size-[14px] text-[#86909C]" />
                                             )}
                                             <span className="truncate max-w-[14rem]">{chip}</span>
                                         </span>
