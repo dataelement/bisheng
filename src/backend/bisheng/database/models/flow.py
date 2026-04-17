@@ -379,7 +379,8 @@ class FlowDao(FlowBase):
                      id_extra: list = None,
                      id_list_not_in: list = None,
                      page: int = 0,
-                     limit: int = 0) -> (List[Dict], int):
+                     limit: int = 0,
+                     search_description: bool = False) -> (List[Dict], int):
         """Get all flow-based apps and assistants."""
         sub_query = select(
             Flow.id, Flow.name, Flow.description, Flow.flow_type, Flow.logo, Flow.user_id,
@@ -393,8 +394,15 @@ class FlowDao(FlowBase):
                            sub_query.c.status, sub_query.c.create_time, sub_query.c.update_time)
         count_statement = select(func.count(sub_query.c.id))
         if name:
-            statement = statement.where(sub_query.c.name.like(f'%{name}%'))
-            count_statement = count_statement.where(sub_query.c.name.like(f'%{name}%'))
+            if search_description:
+                keyword_filter = or_(
+                    sub_query.c.name.like(f'%{name}%'),
+                    sub_query.c.description.like(f'%{name}%'),
+                )
+            else:
+                keyword_filter = sub_query.c.name.like(f'%{name}%')
+            statement = statement.where(keyword_filter)
+            count_statement = count_statement.where(keyword_filter)
         if status is not None:
             statement = statement.where(sub_query.c.status == status)
             count_statement = count_statement.where(sub_query.c.status == status)

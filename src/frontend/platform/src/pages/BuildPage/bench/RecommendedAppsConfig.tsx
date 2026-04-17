@@ -68,7 +68,10 @@ export default function RecommendedAppsConfig({
             loadingRef.current = true;
             setLoading(true);
             try {
-                const res: any = await getChatOnlineApi(pageNum, searchTerm, -1, currentFlowType);
+                const res: any = await getChatOnlineApi(pageNum, searchTerm, -1, currentFlowType, {
+                    sortBy: 'update_time',
+                    searchDescription: true,
+                });
                 const pageData: AppItem[] = res || [];
                 setAppList((prev) => (reset ? pageData : [...prev, ...pageData]));
                 mergeDetails(pageData);
@@ -284,16 +287,18 @@ export default function RecommendedAppsConfig({
                                 {appList.map((app) => {
                                     const isSelected = selectedIdSet.has(app.id);
                                     const isDisabled = !isSelected && isAtLimit;
+                                    const limitTip = `平台最多支持配置${MAX_RECOMMENDED_APPS}个推荐应用`;
                                     return (
                                         <div
                                             key={app.id}
-                                            className={`flex items-start gap-2 p-2 rounded cursor-pointer hover:bg-gray-50 ${isDisabled ? "opacity-50" : ""
+                                            title={isDisabled ? limitTip : undefined}
+                                            className={`flex items-start gap-2 p-2 rounded hover:bg-gray-50 ${isDisabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
                                                 }`}
                                             onClick={() => {
                                                 if (isDisabled) {
                                                     toast({
                                                         variant: "warning",
-                                                        description: `平台最多支持配置${MAX_RECOMMENDED_APPS}个推荐应用`,
+                                                        description: limitTip,
                                                     });
                                                     return;
                                                 }

@@ -90,7 +90,7 @@ class WorkFlowService(BaseService):
     @classmethod
     def get_all_flows(cls, user: UserPayload, name: str, status: int, tag_id: Optional[int], flow_type: Optional[int],
                       page: int = 1, page_size: int = 10, managed: bool = False,
-                      skip_pagination: bool = False) -> (list[dict], int):
+                      skip_pagination: bool = False, search_description: bool = False) -> (list[dict], int):
         """
         Get all the skills
         """
@@ -114,14 +114,14 @@ class WorkFlowService(BaseService):
         # Get a list of skills visible to the user
         if user.is_admin():
             data, total = FlowDao.get_all_apps(name, status, flow_ids, flow_type, None, None, None, query_page,
-                                               query_page_size)
+                                               query_page_size, search_description=search_description)
         else:
             access_list = [AccessType.WORKFLOW, AccessType.ASSISTANT_READ]
             if managed:
                 access_list = [AccessType.WORKFLOW_WRITE, AccessType.ASSISTANT_WRITE]
             flow_id_extra = user.get_user_access_resource_ids(access_list)
             data, total = FlowDao.get_all_apps(name, status, flow_ids, flow_type, user.user_id, flow_id_extra, None,
-                                               query_page, query_page_size)
+                                               query_page, query_page_size, search_description=search_description)
         data = cls.filter_supported_apps(data)
         if flow_type is None and not skip_pagination:
             total = len(data)
