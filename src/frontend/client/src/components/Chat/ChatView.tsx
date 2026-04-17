@@ -12,6 +12,7 @@ import { useAuthContext } from '~/hooks/AuthContext';
 import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import useAiChat from '~/hooks/useAiChat';
 import useLocalize from '~/hooks/useLocalize';
+import useMediaQuery from '~/hooks/useMediaQuery';
 import store from '~/store';
 import { addConversation, cn, generateUUID } from '~/utils';
 import { Button } from '../ui';
@@ -321,6 +322,12 @@ const DailyFeaturedApps = ({ t, isLingsi }: { t: (k: string) => string; isLingsi
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { setConversation } = store.useCreateConversationAtom(0)
+  const isH5 = useMediaQuery('(max-width: 768px)')
+
+  // H5: 2 cols × 2 rows default (4), expand adds 2 rows → 8 total.
+  // PC: 4 cols × 2 rows default (8), expand adds 2 rows → 16 total.
+  const defaultCount = isH5 ? 4 : 8
+  const expandedCount = isH5 ? 8 : 16
 
   const { data: dailyApps = [] } = useQuery<any[]>(
     ['recommendedApps'],
@@ -353,9 +360,11 @@ const DailyFeaturedApps = ({ t, isLingsi }: { t: (k: string) => string; isLingsi
 
   if (isLingsi || dailyApps.length === 0) return null
 
-  // Default show 8 apps (2x4), expanded show all (up to 16, 4x4)
-  const displayApps = expanded ? dailyApps : dailyApps.slice(0, 8)
-  const canExpand = dailyApps.length > 8
+  const displayApps = expanded
+    ? dailyApps.slice(0, expandedCount)
+    : dailyApps.slice(0, defaultCount)
+  // Show button only when collapsed AND there are hidden items — hide after expanding.
+  const canExpand = !expanded && dailyApps.length > defaultCount
 
   return (
     <div className="relative w-full mt-1 md:mt-4 pb-24">
@@ -401,9 +410,9 @@ const DailyFeaturedApps = ({ t, isLingsi }: { t: (k: string) => string; isLingsi
           <Button
             variant="outline"
             className="rounded-full text-xs h-8 text-blue-500 border-blue-200 bg-white shadow-sm"
-            onClick={() => setExpanded(!expanded)}
+            onClick={() => setExpanded(true)}
           >
-            {expanded ? '收起' : '展示更多'}
+            展示更多
           </Button>
         </div>
       )}

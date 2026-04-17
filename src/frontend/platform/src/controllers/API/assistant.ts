@@ -60,13 +60,21 @@ export const deleteAssistantApi = async (id) => {
 
 
 // 获取会话选择列表
-export const getChatOnlineApi = async (page, keyword, tag_id, flow_type?: number) => {
+export const getChatOnlineApi = async (
+    page,
+    keyword,
+    tag_id,
+    flow_type?: number,
+    options?: { sortBy?: 'update_time'; searchDescription?: boolean }
+) => {
     return await axios.get(`/api/v1/chat/online`, {
         params: {
             page, keyword,
             limit: 40,
             tag_id: tag_id === -1 ? null : tag_id,
-            flow_type
+            flow_type,
+            sort_by: options?.sortBy,
+            search_description: options?.searchDescription ? true : undefined,
         }
     })
 }
