@@ -14,6 +14,7 @@ import {
     getCitationSourceLabel,
     getLegacyCitationPreview,
     isRagCitation,
+    normalizeCitationType,
     transformPrivateCitations,
     type CitationDetailLoader,
     type CitationDisplayData,
@@ -179,11 +180,38 @@ const Citation = ({
         }
     };
 
-    const handleOpenDocumentPreview = async (event?: React.MouseEvent) => {
+    const openWebCitation = (url?: string, targetWindow?: Window | null) => {
+        if (!url) {
+            targetWindow?.close();
+            return;
+        }
+        if (targetWindow) {
+            targetWindow.opener = null;
+            targetWindow.location.href = url;
+            return;
+        }
+        window.open(url, "_blank", "noopener,noreferrer");
+    };
+
+    const handleCitationClick = async (event?: React.MouseEvent) => {
         event?.preventDefault();
         event?.stopPropagation();
 
+        const isWebCitation = normalizeCitationType(preview?.type || data.type) === "web";
+        if (isWebCitation && preview?.link) {
+            openWebCitation(preview.link);
+            return;
+        }
+
+        const pendingWebWindow = isWebCitation ? window.open("about:blank", "_blank") : null;
         const nextDetail = detail ?? await fetchDetail();
+        const nextPreview = legacyPreview ?? buildCitationPreview(nextDetail, data);
+        if (normalizeCitationType(nextPreview?.type || nextDetail?.type || data.type) === "web") {
+            openWebCitation(nextPreview?.link, pendingWebWindow);
+            return;
+        }
+        pendingWebWindow?.close();
+
         if (!nextDetail || !isRagCitation(nextDetail, data.type)) {
             return;
         }
@@ -237,7 +265,7 @@ const Citation = ({
                     data-citation-group-key={data.groupKey}
                     data-citation-chunk-id={data.chunkId}
                     aria-label={`${getCitationSourceLabel(data.type)}引用 ${data.label ?? ""}`}
-                    onClick={handleOpenDocumentPreview}
+                    onClick={handleCitationClick}
                     onMouseEnter={() => handleOpenChange(true)}
                     onMouseLeave={scheduleClose}
                     className={`ml-1 inline-flex min-h-6 min-w-6 cursor-pointer items-center justify-center rounded-xl px-2 py-0.5 text-[0.9em] font-medium leading-none transition-colors duration-200 ${citationClassName}`}
@@ -259,7 +287,7 @@ const Citation = ({
                     label={data.label}
                     isLoading={isLoading}
                     error={error}
-                    onOpenDocumentPreview={() => void handleOpenDocumentPreview()}
+                    onOpenDocumentPreview={() => void handleCitationClick()}
                 />
             </PopoverContent>
         </Popover>

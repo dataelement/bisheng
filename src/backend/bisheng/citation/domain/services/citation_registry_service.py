@@ -351,15 +351,24 @@ class CitationRegistryService:
             index: int = 0,
     ) -> WebCitationItemSchema:
         """Build a snippet-level payload item from a web search result."""
-        item_id = cls._parse_optional_text(result.get('itemId') or result.get('snippetId'))
-        if not item_id:
-            raw_id = cls._parse_optional_text(result.get('id'))
-            item_id = raw_id or f'item:{index}'
         return WebCitationItemSchema(
-            itemId=item_id,
+            itemId=cls.build_web_item_id(result=result, index=index),
             snippet=cls._parse_optional_text(result.get('snippet') or result.get('summary')),
             title=cls._parse_optional_text(result.get('title') or result.get('name')),
         )
+
+    @classmethod
+    def build_web_item_id(
+            cls,
+            result: Dict[str, Any],
+            index: int = 0,
+    ) -> str:
+        """Build the model-facing web citation item identifier."""
+        for key in ('itemId', 'snippetId'):
+            item_id = cls._parse_optional_text(result.get(key))
+            if item_id:
+                return item_id
+        return str(index + 1)
 
     @classmethod
     def _build_web_payload(
