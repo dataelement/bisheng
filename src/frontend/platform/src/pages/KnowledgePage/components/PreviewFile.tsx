@@ -229,7 +229,8 @@ export default function PreviewFile({
     // 新版文件预览
     switch (suffix) {
       case 'ppt':
-      case 'pptx': return <div className="flex justify-center items-center h-full text-gray-400">
+      case 'pptx':
+      case 'dps': return <div className="flex justify-center items-center h-full text-gray-400">
         <div className="text-center">
           <img
             className="size-52 block"
@@ -253,7 +254,8 @@ export default function PreviewFile({
       case 'md': return <TxtFileViewer markdown filePath={url} />;
       case 'html': return <TxtFileViewer html filePath={url} />;
       case 'doc':
-      case 'docx': return <DocxPreview filePath={previewUrl || url} />;
+      case 'docx':
+      case 'wps': return <DocxPreview filePath={previewUrl || url} />;
       case 'png':
       case 'jpg':
       case 'jpeg':
@@ -266,6 +268,7 @@ export default function PreviewFile({
       );
       case 'xlsx':
       case 'xls':
+      case 'et':
       case 'csv':
         return (
           <div>
@@ -334,7 +337,7 @@ export default function PreviewFile({
         <span className="text-primary cursor-pointer" onClick={handleOvergap}>{t('overwriteSegment')}</span>
       </div>
     </div>
-    <div className={`relative ${['csv', 'xlsx', 'xls'].includes(file.suffix) ? '' : "overflow-y-auto"}  ${edit ? 'h-[calc(100vh-206px)]' : 'h-[calc(100vh-284px)]'}`}>
+    <div className={`relative ${['csv', 'xlsx', 'xls', 'et'].includes(file.suffix) ? '' : "overflow-y-auto"}  ${edit ? 'h-[calc(100vh-206px)]' : 'h-[calc(100vh-284px)]'}`}>
       {render(file.suffix)}
     </div>
   </div>

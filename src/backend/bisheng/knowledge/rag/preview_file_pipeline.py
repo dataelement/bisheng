@@ -73,7 +73,8 @@ class PreviewFilePipeline(BaseFilePipeline):
             document_id=generate_uuid(),
             knowledge_id=self.knowledge_id,
             knowledge_file=None,
-            retain_images=self.file_split_rule.retain_images == 1
+            retain_images=self.file_split_rule.retain_images == 1,
+            source_file_path=self.local_file_path,
         ))
         transformers.append(
             SplitterTransformer(
@@ -86,4 +87,13 @@ class PreviewFilePipeline(BaseFilePipeline):
         return transformers
 
     def _init_excel_transformers(self) -> List[BaseDocumentTransformer]:
-        return self._init_abstract_transformers()
+        transformers = self._init_abstract_transformers()
+        transformers.append(ExtraFileTransformer(
+            loader=self.loader,
+            document_id=generate_uuid(),
+            knowledge_id=self.knowledge_id,
+            knowledge_file=None,
+            retain_images=self.file_split_rule.retain_images == 1,
+            source_file_path=self.local_file_path,
+        ))
+        return transformers

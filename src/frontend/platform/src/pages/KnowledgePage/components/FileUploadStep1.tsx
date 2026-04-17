@@ -10,6 +10,7 @@ export default function FileUploadStep1({ hidden, onNext, onSave, initialFiles }
     const { t } = useTranslation('knowledge')
     const { id: kid } = useParams()
     const { appConfig } = useContext(locationContext)
+    const tableExtensions = ['xlsx', 'xls', 'csv', 'et']
 
     const [fileCount, setFileCount] = useState(0)
     const [finish, setFinish] = useState(false)
@@ -21,7 +22,7 @@ export default function FileUploadStep1({ hidden, onNext, onSave, initialFiles }
         filesRef.current = files.map(file => ({
             ...file,
             suffix: file.fileName.split('.').pop().toLowerCase() || 'txt',
-            fileType: ['xlsx', 'xls', 'csv'].includes(file.fileName.split('.').pop().toLowerCase()) ? 'table' : 'file',
+            fileType: tableExtensions.includes(file.fileName.split('.').pop().toLowerCase()) ? 'table' : 'file',
             fileId: 0
         }))
         failFilesRef.current = failFiles

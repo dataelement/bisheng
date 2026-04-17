@@ -116,7 +116,7 @@ export default function AdjustFilesUpload() {
   };
   const fileName = initFileData.name || initFileData.file_name || '';
   const fileSuffix = fileName.split('.').pop()?.toLowerCase() || 'txt';
-  const fileType = ['xlsx', 'xls', 'csv'].includes(fileSuffix) ? 'table' : 'file';
+  const fileType = ['xlsx', 'xls', 'csv', 'et'].includes(fileSuffix) ? 'table' : 'file';
 
   const [resultFiles, setResultFiles] = useState([
     {

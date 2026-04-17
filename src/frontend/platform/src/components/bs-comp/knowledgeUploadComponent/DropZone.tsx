@@ -8,11 +8,12 @@ import { useTranslation } from "react-i18next";
 export default function DropZone({ onDrop }) {
     const { t } = useTranslation()
     const { appConfig } = useContext(locationContext)
+    const xinChuangFormats = ['.WPS', '.ET', '.DPS'];
 
     // Define supported file formats (for display purposes only, not for filtering)
     const supportedFormats = appConfig.enableEtl4lm
-        ? ['.PDF', '.TXT', '.DOCX', '.PPT', '.PPTX', '.MD', '.HTML', '.XLS', '.XLSX', '.CSV', '.DOC', '.PNG', '.JPG', '.JPEG', '.BMP']
-        : ['.PDF', '.TXT', '.DOCX', '.DOC', '.PPT', '.PPTX', '.MD', '.HTML', '.XLS', '.XLSX', '.CSV'];
+        ? ['.PDF', '.TXT', '.DOCX', '.PPT', '.PPTX', '.MD', '.HTML', '.XLS', '.XLSX', '.CSV', '.DOC', '.PNG', '.JPG', '.JPEG', '.BMP', ...xinChuangFormats]
+        : ['.PDF', '.TXT', '.DOCX', '.DOC', '.PPT', '.PPTX', '.MD', '.HTML', '.XLS', '.XLSX', '.CSV', ...xinChuangFormats];
     const allowedExts = new Set(
         supportedFormats.map(ext => ext.toLowerCase().replace('.', ''))
     );

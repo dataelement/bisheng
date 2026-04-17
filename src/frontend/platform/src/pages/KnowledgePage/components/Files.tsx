@@ -290,7 +290,8 @@ export default function Files({ onPreview }) {
     // Strategy parsing
     const dataSouce = useMemo(() => {
         return datalist.map(el => {
-            if (el.file_name.includes('xlsx', 'xls', 'csv') && el.parse_type !== "local" && el.parse_type !== "uns") {
+            const suffix = el.file_name.split('.').pop()?.toLowerCase() || '';
+            if (['xlsx', 'xls', 'csv', 'et'].includes(suffix) && el.parse_type !== "local" && el.parse_type !== "uns") {
                 const excel_rule = JSON.parse(el.split_rule).excel_rule
                 return {
                     ...el,
@@ -316,7 +317,7 @@ export default function Files({ onPreview }) {
         const suffix = el.file_name.split('.').pop().toUpperCase()
         const excel_rule = JSON.parse(el.split_rule).excel_rule
         if (!excel_rule) return el.strategy[1].replace(/\n/g, '\\n')
-        return ['XLSX', 'XLS', 'CSV'].includes(suffix) ? t('everyRowsAsOneSegment', { count: excel_rule.slice_length }) : el.strategy[1].replace(/\n/g, '\\n')
+        return ['XLSX', 'XLS', 'CSV', 'ET'].includes(suffix) ? t('everyRowsAsOneSegment', { count: excel_rule.slice_length }) : el.strategy[1].replace(/\n/g, '\\n')
     }
 
     // Check if there are selected parsing failed files

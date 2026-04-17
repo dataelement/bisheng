@@ -91,6 +91,13 @@ class KnowledgeFilePipeline(BaseFilePipeline):
 
     def _init_excel_transformers(self) -> List[BaseDocumentTransformer]:
         abstract_transformers = self._init_abstract_transformers()
+        abstract_transformers.append(ExtraFileTransformer(
+            loader=self.loader,
+            document_id=str(self.db_file.id),
+            knowledge_id=self.db_file.knowledge_id,
+            knowledge_file=self.db_file,
+            retain_images=self.file_split_rule.retain_images == 1,
+        ))
         abstract_transformers.append(PreviewCacheTransformer(
             preview_cache_key=self.preview_cache_key,
             file_metadata=self.file_metadata,

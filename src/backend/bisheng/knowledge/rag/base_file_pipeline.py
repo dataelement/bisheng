@@ -18,20 +18,24 @@ from bisheng.knowledge.rag.pipeline.loader.pdf import LocalPdfLoader
 from bisheng.knowledge.rag.pipeline.loader.ppt import BishengPptLoader
 from bisheng.knowledge.rag.pipeline.loader.txt import BishengTextLoader
 from bisheng.knowledge.rag.pipeline.loader.word import BishengWordLoader
+from bisheng.knowledge.rag.pipeline.loader.x_create import XinChuangFormatterLoader
 from bisheng.knowledge.rag.pipeline.types import PipelineConfig, PipelineResult
 
 FileExtensionMap = {
     "xlsx": {"loader": "_init_excel_loader", "transformers": "_init_excel_transformers"},
     "csv": {"loader": "_init_excel_loader", "transformers": "_init_excel_transformers"},
     "xls": {"loader": "_init_excel_loader", "transformers": "_init_excel_transformers"},
+    "et": {"loader": "_init_xcreate_loader", "transformers": "_init_excel_transformers"},
     "txt": {"loader": "_init_txt_loader", "transformers": "_init_common_transformers"},
     "md": {"loader": "_init_txt_loader", "transformers": "_init_common_transformers"},
     "html": {"loader": "_init_html_loader", "transformers": "_init_common_transformers"},
     "htm": {"loader": "_init_html_loader", "transformers": "_init_common_transformers"},
     "doc": {"loader": "_init_word_loader", "transformers": "_init_common_transformers"},
     "docx": {"loader": "_init_word_loader", "transformers": "_init_common_transformers"},
+    "wps": {"loader": "_init_xcreate_loader", "transformers": "_init_common_transformers"},
     "ppt": {"loader": "_init_ppt_loader", "transformers": "_init_common_transformers"},
     "pptx": {"loader": "_init_ppt_loader", "transformers": "_init_common_transformers"},
+    "dps": {"loader": "_init_xcreate_loader", "transformers": "_init_common_transformers"},
     "pdf": {"loader": "_init_pdf_loader", "transformers": "_init_common_transformers"},
     "png": {"loader": "_init_image_loader", "transformers": "_init_common_transformers"},
     "jpg": {"loader": "_init_image_loader", "transformers": "_init_common_transformers"},
@@ -125,6 +129,18 @@ class BaseFilePipeline(BasePipeline):
         return BishengPptLoader(
             **self._get_loader_common_params(),
             retain_images=self.file_split_rule.retain_images == 1
+        )
+
+    def _init_xcreate_loader(self) -> BaseBishengLoader:
+        return XinChuangFormatterLoader(
+            **self._get_loader_common_params(),
+            retain_images=self.file_split_rule.retain_images == 1,
+            header_rows=[
+                self.file_split_rule.excel_rule.header_start_row,
+                self.file_split_rule.excel_rule.header_end_row,
+            ],
+            data_rows=self.file_split_rule.excel_rule.slice_length,
+            append_header=self.file_split_rule.excel_rule.append_header,
         )
 
     def _init_pdf_loader(self) -> BaseBishengLoader:
