@@ -12,6 +12,7 @@
 import { BookCopyIcon, FolderClosedIcon } from "lucide-react";
 import { useLocalize } from "~/hooks";
 import type { KnowledgeSyncSpaceItem } from "~/api/channels";
+import { ChannelNotebookOneIcon } from "~/components/icons/channels";
 
 interface Props {
     space: KnowledgeSyncSpaceItem;
@@ -32,11 +33,11 @@ export default function SyncSpaceItem({ space, onDelete }: Props) {
 
     return (
         <div className="flex items-center justify-between rounded-md px-2 py-1.5 text-[13px] hover:bg-[#F7F8FA]">
-            <div className="flex min-w-0 items-center gap-2">
+            <div className="flex min-w-0 items-center gap-1">
                 {hasFolder ? (
                     <FolderClosedIcon className="size-4 shrink-0 text-[#86909C]" />
                 ) : (
-                    <BookCopyIcon className="size-4 shrink-0 text-[#86909C]" />
+                    <ChannelNotebookOneIcon className="size-4 shrink-0 text-[#86909C]" />
                 )}
                 {hasFolder && pathParents && (
                     <span className="truncate text-[#86909C]" title={pathParents}>

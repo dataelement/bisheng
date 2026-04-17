@@ -643,27 +643,30 @@ export function CreateChannelDrawer({
                                     </div>
                                 )}
                             </div>
+
+                            {/* v2.5 Module D — 频道同步至知识空间配置 */}
+                            <KnowledgeSyncSection
+                                value={syncDraft}
+                                onChange={setSyncDraft}
+                                mainChannelName={form.channelName.trim()}
+                                subChannelNames={
+                                    form.createSubChannel
+                                        ? form.subChannels
+                                            .map((s) => s.name?.trim())
+                                            .filter((n): n is string => !!n)
+                                        : []
+                                }
+                                // In create mode the current user is always the creator.
+                                // In edit mode, honour the backend's role assignment.
+                                isCreator={
+                                    !isEditMode ||
+                                    String(editingChannel?.role) === "creator"
+                                }
+                            />
                         </div>
                     )}
 
-                    {/* v2.5 Module D — 频道同步至知识空间配置 */}
-                    <KnowledgeSyncSection
-                        value={syncDraft}
-                        onChange={setSyncDraft}
-                        subChannelNames={
-                            form.createSubChannel
-                                ? form.subChannels
-                                    .map((s) => s.name?.trim())
-                                    .filter((n): n is string => !!n)
-                                : []
-                        }
-                        // In create mode the current user is always the creator.
-                        // In edit mode, honour the backend's role assignment.
-                        isCreator={
-                            !isEditMode ||
-                            String(editingChannel?.role) === "creator"
-                        }
-                    />
+
 
                     {/* 底部操作按钮 */}
                     {(!form.showSuccess || isEditMode) && (

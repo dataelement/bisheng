@@ -14,7 +14,7 @@
  *   • "为每个子频道单独设置" toggle with per-sub-channel expansion
  *   • Sub-channel name updates in parent form auto-propagate to this section
  */
-import { Plus } from "lucide-react";
+import { ChevronDown, ChevronUp, PlusSquare } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Switch } from "~/components/ui";
 import type {
@@ -27,6 +27,8 @@ import {
     type AddToKnowledgeSelection,
 } from "~/pages/Subscription/Article/AddToKnowledgeModal";
 import { useLocalize } from "~/hooks";
+import { NotificationSeverity } from "~/common";
+import { useToastContext } from "~/Providers";
 import SyncSpaceItem from "./SyncSpaceItem";
 
 export type KnowledgeSyncDraft = KnowledgeSyncConfig;
@@ -36,6 +38,8 @@ export interface KnowledgeSyncSectionProps {
     value: KnowledgeSyncDraft;
     /** Called with the next draft. Standard controlled-component contract. */
     onChange: (next: KnowledgeSyncDraft) => void;
+    /** Name of the main channel */
+    mainChannelName?: string;
     /** Sub-channel names from the parent form. Drives the per-sub-channel list. */
     subChannelNames: string[];
     /** Only creators get to see this whole section. */
@@ -77,10 +81,12 @@ function withSubChannelNames(
 export default function KnowledgeSyncSection({
     value,
     onChange,
+    mainChannelName,
     subChannelNames,
     isCreator,
 }: KnowledgeSyncSectionProps) {
     const localize = useLocalize();
+    const { showToast } = useToastContext();
     const draft = value || emptyDraft();
 
     const [modalOpen, setModalOpen] = useState(false);
@@ -136,15 +142,7 @@ export default function KnowledgeSyncSection({
         }
     };
 
-    const setSubEnabled = (name: string, enabled: boolean) => {
-        const exists = draft.subs.some((s) => s.sub_channel_name === name);
-        const nextSubs = exists
-            ? draft.subs.map((s) =>
-                  s.sub_channel_name === name ? { ...s, enabled } : s,
-              )
-            : [...draft.subs, { sub_channel_name: name, enabled, spaces: [] }];
-        onChange({ ...draft, subs: nextSubs });
-    };
+
 
     const deleteMainSpace = (spaceKey: string) => {
         onChange({
@@ -180,7 +178,23 @@ export default function KnowledgeSyncSection({
             folder_id: sel.folderId,
             folder_path: sel.folderPath,
         };
+        const newKey = spaceKeyOf(newSpace);
+        // TC-038: block repeat adds of the same (space_id, folder_id) pair
+        // to the same scope. We scope the check per-target so the same
+        // binding can still appear on main vs. sub, or on two subs.
+        const notifyDuplicate = () => {
+            showToast?.({
+                message:
+                    localize?.("com_subscription.knowledge_space_already_added"),
+                severity: NotificationSeverity.WARNING,
+            });
+            setAddTarget(null);
+        };
         if (addTarget.type === "main") {
+            if (draft.main.spaces.some((s) => spaceKeyOf(s) === newKey)) {
+                notifyDuplicate();
+                return;
+            }
             onChange({
                 ...draft,
                 main: {
@@ -190,19 +204,23 @@ export default function KnowledgeSyncSection({
             });
         } else {
             const name = addTarget.subChannelName;
-            const exists = draft.subs.some((s) => s.sub_channel_name === name);
+            const existingSub = draft.subs.find((s) => s.sub_channel_name === name);
+            if (existingSub?.spaces.some((s) => spaceKeyOf(s) === newKey)) {
+                notifyDuplicate();
+                return;
+            }
             onChange({
                 ...draft,
-                subs: exists
+                subs: existingSub
                     ? draft.subs.map((s) =>
-                          s.sub_channel_name === name
-                              ? { ...s, enabled: true, spaces: [...s.spaces, newSpace] }
-                              : s,
-                      )
+                        s.sub_channel_name === name
+                            ? { ...s, enabled: true, spaces: [...s.spaces, newSpace] }
+                            : s,
+                    )
                     : [
-                          ...draft.subs,
-                          { sub_channel_name: name, enabled: true, spaces: [newSpace] },
-                      ],
+                        ...draft.subs,
+                        { sub_channel_name: name, enabled: true, spaces: [newSpace] },
+                    ],
             });
             // Auto-expand the sub-channel we just added a space to.
             setExpandedSubs((prev) => {
@@ -229,49 +247,57 @@ export default function KnowledgeSyncSection({
     const mainEnabled = draft.main.enabled;
 
     return (
-        <div className="mt-6 rounded-[8px] bg-[#F8F8F8] p-4">
+        <div className="mt-6">
             <div className="flex items-center justify-between">
-                <div>
-                    <div className="text-[14px] font-medium text-[#1D2129]">
+                <div className="flex items-center gap-3">
+                    <span className="text-[14px] font-medium text-[#1D2129]">
                         {localize?.("com_subscription.sync_to_knowledge_space") ||
                             "同步至知识空间"}
-                    </div>
-                    <div className="mt-1 text-[12px] text-[#86909C]">
+                    </span>
+                    <span className="text-[12px] text-[#86909C]">
                         {localize?.("com_subscription.sync_to_knowledge_space_hint") ||
                             "该频道下的内容会自动同步到知识空间"}
-                    </div>
+                    </span>
                 </div>
-                <Switch checked={mainEnabled} onCheckedChange={setMainEnabled} />
+                <Switch
+                    checked={mainEnabled}
+                    onCheckedChange={setMainEnabled}
+                    className="data-[state=checked]:bg-[#165DFF] data-[state=unchecked]:bg-[#E5E6EB]"
+                />
             </div>
 
             {mainEnabled && (
-                <div className="mt-3 space-y-1 rounded-md bg-white p-2">
-                    {draft.main.spaces.map((s) => (
-                        <SyncSpaceItem
-                            key={spaceKeyOf(s)}
-                            space={s}
-                            onDelete={() => deleteMainSpace(spaceKeyOf(s))}
-                        />
-                    ))}
-                    <button
-                        type="button"
-                        onClick={() => handleAdd({ type: "main" })}
-                        className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-[13px] text-[#4E5969] hover:bg-[#F7F8FA]"
-                    >
-                        <Plus className="size-4" />
-                        <span>
-                            {localize?.("com_subscription.add_knowledge_space") ||
-                                "添加知识空间"}
-                        </span>
-                    </button>
+                <div className="mt-3 rounded-md border border-[#E5E6EB] text-[#1D2129] bg-[#fbfbfb]">
+                    <div className="px-4 py-3 text-[14px] font-medium">
+                        {mainChannelName || localize?.("com_subscription.main_channel") || "频道名称"}
+                    </div>
+                    <div className="space-y-1 px-2 pb-2">
+                        {draft.main.spaces.map((s) => (
+                            <SyncSpaceItem
+                                key={spaceKeyOf(s)}
+                                space={s}
+                                onDelete={() => deleteMainSpace(spaceKeyOf(s))}
+                            />
+                        ))}
+                        <button
+                            type="button"
+                            onClick={() => handleAdd({ type: "main" })}
+                            className="flex w-full items-center gap-1.5 rounded-md px-2 py-2 text-[13px] text-[#4E5969] hover:bg-[#F7F8FA]"
+                        >
+                            <PlusSquare className="size-3.5 shrink-0 text-gray-700" />
+                            <span>
+                                {localize?.("com_subscription.select_knowledge_space") || "选择知识空间"}
+                            </span>
+                        </button>
+                    </div>
                 </div>
             )}
 
             {mainEnabled && (
                 <div className="mt-6">
                     <div className="flex items-center justify-between">
-                        <div>
-                            <div
+                        <div className="flex flex-wrap items-center gap-3">
+                            <span
                                 className={
                                     "text-[14px] font-medium " +
                                     (noSubChannels ? "text-[#C9CDD4]" : "text-[#1D2129]")
@@ -279,21 +305,22 @@ export default function KnowledgeSyncSection({
                             >
                                 {localize?.("com_subscription.per_sub_channel_sync") ||
                                     "为每个子频道单独设置"}
-                            </div>
-                            <div
+                            </span>
+                            <span
                                 className={
-                                    "mt-1 text-[12px] " +
+                                    "text-[12px] " +
                                     (noSubChannels ? "text-[#C9CDD4]" : "text-[#86909C]")
                                 }
                             >
                                 {localize?.("com_subscription.per_sub_channel_sync_hint") ||
                                     "该子频道下的内容会自动同步到知识空间"}
-                            </div>
+                            </span>
                         </div>
                         <Switch
                             checked={!noSubChannels && subModeActive}
                             disabled={noSubChannels}
                             onCheckedChange={setSubMode}
+                            className=""
                         />
                     </div>
 
@@ -304,27 +331,24 @@ export default function KnowledgeSyncSection({
                                 return (
                                     <div
                                         key={sub.sub_channel_name}
-                                        className="rounded-md border border-[#E5E6EB] bg-white"
+                                        className="rounded-md border border-[#E5E6EB] bg-[#fbfbfb] transition-colors"
                                     >
-                                        <div className="flex w-full items-center justify-between px-3 py-2">
-                                            <button
-                                                type="button"
-                                                onClick={() => toggleExpand(sub.sub_channel_name)}
-                                                className="flex flex-1 items-center text-left"
-                                            >
-                                                <span className="text-[13px] text-[#1D2129]">
-                                                    {isOpen ? "▾" : "▸"} {sub.sub_channel_name}
-                                                </span>
-                                            </button>
-                                            <Switch
-                                                checked={sub.enabled}
-                                                onCheckedChange={(v) =>
-                                                    setSubEnabled(sub.sub_channel_name, v)
-                                                }
-                                            />
-                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => toggleExpand(sub.sub_channel_name)}
+                                            className="flex w-full items-center justify-between px-4 py-3"
+                                        >
+                                            <span className="text-[14px] font-medium text-[#1D2129]">
+                                                {sub.sub_channel_name}
+                                            </span>
+                                            {isOpen ? (
+                                                <ChevronUp className="size-4 shrink-0 text-[#86909C]" />
+                                            ) : (
+                                                <ChevronDown className="size-4 shrink-0 text-[#86909C]" />
+                                            )}
+                                        </button>
                                         {isOpen && (
-                                            <div className="space-y-1 border-t border-[#F2F3F5] px-2 py-2">
+                                            <div className="space-y-1 px-2 pb-2">
                                                 {sub.spaces.map((s) => (
                                                     <SyncSpaceItem
                                                         key={spaceKeyOf(s)}
@@ -345,9 +369,9 @@ export default function KnowledgeSyncSection({
                                                             subChannelName: sub.sub_channel_name,
                                                         })
                                                     }
-                                                    className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-[13px] text-[#4E5969] hover:bg-[#F7F8FA]"
+                                                    className="flex w-full items-center gap-1.5 rounded-md px-2 py-2 text-[13px] text-[#4E5969] hover:bg-[#F7F8FA]"
                                                 >
-                                                    <Plus className="size-4" />
+                                                    <PlusSquare className="size-3.5 shrink-0 text-gray-700" />
                                                     <span>
                                                         {localize?.(
                                                             "com_subscription.add_knowledge_space",

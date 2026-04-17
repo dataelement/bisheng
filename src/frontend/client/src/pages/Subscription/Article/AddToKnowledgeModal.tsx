@@ -9,6 +9,7 @@ import { useToastContext } from "~/Providers";
 import { generateUUID, getFullWidthLength } from "~/utils";
 import {
     getManagedSpacesApi,
+    getMineSpacesApi,
     getSpaceChildrenApi,
     createFolderApi,
     addArticleToKnowledgeApi,
@@ -302,7 +303,15 @@ export function AddToKnowledgeModal({
     useEffect(() => {
         if (!open) return;
         setSpacesLoading(true);
-        getManagedSpacesApi()
+        // v2.5 Module D: channel_sync mode must only show spaces the current
+        // user created (TC-015/TC-037), ordered the same way as the "我创建的"
+        // sidebar (TC-017: order_by=update_time). Article mode keeps the
+        // original managed-scope behaviour so existing callers are untouched.
+        const loader =
+            mode === "channel_sync"
+                ? getMineSpacesApi({ order_by: "update_time" })
+                : getManagedSpacesApi();
+        loader
             .then((spaces) => {
                 const nodes: KnowledgeNode[] = spaces.map(s => ({
                     id: s.id,

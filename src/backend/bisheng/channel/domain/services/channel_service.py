@@ -1050,6 +1050,20 @@ class ChannelService:
         entirely would lose the user's selected spaces once they flip the
         switch back on.
         """
+        # TC-037 defence-in-depth: the UI restricts the picker to spaces the
+        # current user created, but the server must not trust the client —
+        # reject any binding whose space is not owned by `user_id`.
+        referenced_ids = {s.knowledge_space_id for s in cfg.main.spaces}
+        for sub in cfg.subs:
+            referenced_ids.update(s.knowledge_space_id for s in sub.spaces)
+        if referenced_ids:
+            owned_members = await SpaceChannelMemberDao.async_get_user_created_members(
+                int(user_id)
+            )
+            owned_ids = {m.business_id for m in owned_members}
+            if not referenced_ids.issubset(owned_ids):
+                raise SpacePermissionDeniedError()
+
         rows: List[ChannelKnowledgeSync] = []
 
         # main-channel scope
