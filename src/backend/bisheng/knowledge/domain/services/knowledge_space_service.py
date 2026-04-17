@@ -150,6 +150,62 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if not allowed:
             raise SpacePermissionDeniedError()
 
+    async def _require_delete_permission(self, space_id: int) -> Knowledge:
+        """
+        Verify that the current user has can_delete permission on the space.
+        """
+        space = await KnowledgeDao.aquery_by_id(space_id)
+        if not space or space.type != KnowledgeTypeEnum.SPACE.value:
+            raise SpaceNotFoundError()
+        allowed = await PermissionService.check(
+            user_id=self.login_user.user_id,
+            relation='can_delete',
+            object_type='knowledge_space',
+            object_id=str(space_id),
+            login_user=self.login_user,
+        )
+        if not allowed:
+            raise SpacePermissionDeniedError()
+        return space
+
+    @staticmethod
+    def _dedupe_ids(resource_ids: List[int]) -> List[int]:
+        return list(dict.fromkeys(resource_ids))
+
+    @staticmethod
+    def _ensure_space_folder(folder: Optional[KnowledgeFile], space_id: int) -> KnowledgeFile:
+        if (
+                not folder
+                or folder.file_type != FileType.DIR.value
+                or folder.knowledge_id != space_id
+        ):
+            raise SpaceFolderNotFoundError()
+        return folder
+
+    @staticmethod
+    def _ensure_space_file(
+            file_record: Optional[KnowledgeFile],
+            space_id: int,
+            *,
+            allow_folder: bool = False,
+    ) -> KnowledgeFile:
+        if not file_record or file_record.knowledge_id != space_id:
+            raise SpaceFileNotFoundError()
+        if not allow_folder and file_record.file_type != FileType.FILE.value:
+            raise SpaceFileNotFoundError()
+        return file_record
+
+    async def _get_space_files_or_raise(self, space_id: int, file_ids: List[int]) -> List[KnowledgeFile]:
+        unique_file_ids = self._dedupe_ids(file_ids)
+        if not unique_file_ids:
+            return []
+        file_records = await KnowledgeFileDao.aget_file_by_ids(unique_file_ids)
+        if len(file_records) != len(unique_file_ids):
+            raise SpaceFileNotFoundError()
+        for file_record in file_records:
+            self._ensure_space_file(file_record, space_id)
+        return file_records
+
     async def _require_read_permission(self, space_id: int) -> Knowledge:
         space = await KnowledgeDao.aquery_by_id(space_id)
         if not space or space.type != KnowledgeTypeEnum.SPACE.value:
@@ -226,7 +282,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
     async def get_space_info(self, space_id: int) -> KnowledgeSpaceInfoResp:
         from bisheng.worker import rebuild_knowledge_celery
 
-        space = await KnowledgeDao.aquery_by_id(space_id)
+        space = await self._require_read_permission(space_id)
 
         follower_num = await SpaceChannelMemberDao.async_count_space_members(space_id)
         total_file_num = await KnowledgeFileDao.async_count_file_by_knowledge_id(space_id)
@@ -254,11 +310,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         return result
 
     async def delete_space(self, space_id: int) -> None:
-        space = await KnowledgeDao.aquery_by_id(space_id)
-        if not space or space.type != KnowledgeTypeEnum.SPACE.value:
-            raise SpaceNotFoundError()
-        if space.user_id != self.login_user.user_id:
-            raise SpacePermissionDeniedError()
+        space = await self._require_delete_permission(space_id)
 
         # Cleaned vectorData in
         await asyncio.to_thread(KnowledgeService.delete_knowledge_file_in_vector, space)
@@ -940,10 +992,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         from bisheng.worker.knowledge.file_worker import delete_knowledge_file_celery
 
         folder = await KnowledgeFileDao.query_by_id(folder_id)
-        if not folder or folder.file_type != FileType.DIR.value:
-            raise SpaceFolderNotFoundError()
-
         await self._require_write_permission(space_id)
+        folder = self._ensure_space_folder(folder, space_id)
 
         prefix = f"{folder.file_level_path}/{folder.id}"
         children = await SpaceFileDao.get_children_by_prefix(folder.knowledge_id, prefix)
@@ -961,13 +1011,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await self.update_folder_update_time(folder.file_level_path)
 
         await KnowledgeFileDao.adelete_batch(file_ids + floder_ids)
-        await KnowledgeDao.async_update_knowledge_update_time_by_id(space_id)
+        await KnowledgeDao.async_update_knowledge_update_time_by_id(folder.knowledge_id)
 
     async def get_folder_file_parent(self, space_id: int, file_id: int) -> List[Dict]:
         await self._require_read_permission(space_id)
         file_record = await KnowledgeFileDao.query_by_id(file_id)
-        if not file_record:
-            raise SpaceFileNotFoundError()
+        file_record = self._ensure_space_file(file_record, space_id, allow_folder=True)
         if file_record.level == 0:
             return []
         file_level_path_list = file_record.file_level_path.split("/")
@@ -1268,12 +1317,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         for folder_id in folder_ids:
             folder = await KnowledgeFileDao.query_by_id(folder_id)
-            if folder and folder.file_type == 0:
-                await self.delete_folder(knowledge.id, folder_id)
+            self._ensure_space_folder(folder, knowledge_id)
+            await self.delete_folder(knowledge.id, folder_id)
 
         if file_ids:
-            await KnowledgeFileDao.adelete_batch(file_ids)
-            delete_knowledge_file_celery.delay(file_ids=file_ids, knowledge_id=knowledge.id,
+            direct_files = await self._get_space_files_or_raise(knowledge_id, file_ids)
+            direct_file_ids = [file.id for file in direct_files]
+            await KnowledgeFileDao.adelete_batch(direct_file_ids)
+            delete_knowledge_file_celery.delay(file_ids=direct_file_ids, knowledge_id=knowledge.id,
                                                clear_minio=True)
             await KnowledgeDao.async_update_knowledge_update_time_by_id(knowledge.id)
 
@@ -1292,14 +1343,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         # ── 1. Collect all file records to include ────────────────────────────
         # Explicit files requested directly
-        direct_files: List[KnowledgeFile] = await KnowledgeFileDao.aget_file_by_ids(file_ids) if file_ids else []
+        direct_files = await self._get_space_files_or_raise(space_id, file_ids)
 
         # Files & sub-folders under every requested folder_id
         folder_db_records: List[KnowledgeFile] = []
-        for folder_id in folder_ids:
+        for folder_id in self._dedupe_ids(folder_ids):
             folder = await KnowledgeFileDao.query_by_id(folder_id)
-            if not folder or folder.file_type != FileType.DIR.value:
-                continue
+            folder = self._ensure_space_folder(folder, space_id)
             prefix = f"{folder.file_level_path}/{folder.id}"
             descendants = await SpaceFileDao.get_children_by_prefix(folder.knowledge_id, prefix)
             folder_db_records.append(folder)
