@@ -28,6 +28,7 @@ from bisheng.common.models.space_channel_member import (
 from bisheng.permission.domain.services.owner_service import OwnerService, _get_scm_role_to_fga
 from bisheng.permission.domain.services.permission_service import PermissionService
 from bisheng.permission.domain.schemas.permission_schema import AuthorizeGrantItem, AuthorizeRevokeItem
+from bisheng.permission.domain.schemas.tuple_operation import TupleOperation
 from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.role import RoleDao
 from bisheng.database.models.tag import TagDao, TagBusinessTypeEnum, Tag
@@ -246,6 +247,58 @@ class KnowledgeSpaceService(KnowledgeUtils):
         active_members = await SpaceChannelMemberDao.async_get_members_by_space(space_id)
         for member in active_members:
             await self._grant_space_membership_tuple(space_id, member)
+
+    async def _write_resource_parent_tuple(
+            self,
+            object_type: str,
+            object_id: int,
+            parent_type: str,
+            parent_id: int,
+    ) -> None:
+        try:
+            await PermissionService.batch_write_tuples([
+                TupleOperation(
+                    action='write',
+                    user=f'{parent_type}:{parent_id}',
+                    relation='parent',
+                    object=f'{object_type}:{object_id}',
+                ),
+            ])
+        except Exception as e:
+            _logger.warning(
+                'Failed to write parent tuple %s:%s -> %s:%s: %s',
+                parent_type, parent_id, object_type, object_id, e,
+            )
+
+    async def _initialize_child_resource_permissions(
+            self,
+            object_type: str,
+            object_id: int,
+            parent_type: str,
+            parent_id: int,
+    ) -> None:
+        await self._write_resource_parent_tuple(object_type, object_id, parent_type, parent_id)
+        try:
+            await OwnerService.write_owner_tuple(
+                self.login_user.user_id,
+                object_type,
+                str(object_id),
+            )
+        except Exception as e:
+            _logger.warning(
+                'Failed to write owner tuple for %s %s: %s',
+                object_type, object_id, e,
+            )
+
+    async def _cleanup_resource_tuples(self, resources: List[tuple[str, int]]) -> None:
+        for resource_type, resource_id in resources:
+            try:
+                await OwnerService.delete_resource_tuples(resource_type, str(resource_id))
+            except Exception as e:
+                _logger.warning(
+                    'Failed to delete FGA tuples for %s %s: %s',
+                    resource_type, resource_id, e,
+                )
 
     async def _require_read_permission(self, space_id: int) -> Knowledge:
         space = await KnowledgeDao.aquery_by_id(space_id)
@@ -991,6 +1044,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await self._require_write_permission(knowledge_id)
         level = 0
         file_level_path = ""
+        parent_type = 'knowledge_space'
+        parent_resource_id = knowledge_id
 
         if parent_id:
             parent_folder = await KnowledgeFileDao.query_by_id(parent_id)
@@ -1004,6 +1059,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if level > 10:
                 raise SpaceFolderDepthError()
             file_level_path = f"{parent_folder.file_level_path}/{parent_id}"
+            parent_type = 'folder'
+            parent_resource_id = parent_id
 
         if await SpaceFileDao.count_folder_by_name(knowledge_id, folder_name, file_level_path) > 0:
             raise SpaceFolderDuplicateError()
@@ -1020,6 +1077,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
             file_level_path=file_level_path,
             status=KnowledgeFileStatus.SUCCESS.value,
         ))
+        await self._initialize_child_resource_permissions(
+            'folder',
+            added_folder.id,
+            parent_type,
+            parent_resource_id,
+        )
         await KnowledgeDao.async_update_knowledge_update_time_by_id(knowledge_id)
         return added_folder
 
@@ -1053,16 +1116,20 @@ class KnowledgeSpaceService(KnowledgeUtils):
         children = await SpaceFileDao.get_children_by_prefix(folder.knowledge_id, prefix)
         floder_ids = [folder_id]
         file_ids = []
+        resource_tuples_to_cleanup = [('folder', folder_id)]
         for child in children:
             if child.file_type == FileType.DIR.value:
                 floder_ids.append(child.id)
+                resource_tuples_to_cleanup.append(('folder', child.id))
             else:
                 file_ids.append(child.id)
+                resource_tuples_to_cleanup.append(('knowledge_file', child.id))
 
         if file_ids:
             delete_knowledge_file_celery.delay(file_ids=file_ids, knowledge_id=folder.knowledge_id, clear_minio=True)
 
         await self.update_folder_update_time(folder.file_level_path)
+        await self._cleanup_resource_tuples(resource_tuples_to_cleanup)
 
         await KnowledgeFileDao.adelete_batch(file_ids + floder_ids)
         await KnowledgeDao.async_update_knowledge_update_time_by_id(folder.knowledge_id)
@@ -1106,6 +1173,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         level = 0
         file_level_path = ""
+        parent_type = 'knowledge_space'
+        parent_resource_id = knowledge_id
 
         if parent_id:
             parent_folder = await KnowledgeFileDao.query_by_id(parent_id)
@@ -1117,6 +1186,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 raise SpaceFolderNotFoundError()
             level = parent_folder.level + 1
             file_level_path = f"{parent_folder.file_level_path}/{parent_id}"
+            parent_type = 'folder'
+            parent_resource_id = parent_id
 
         default_file_size_limit = 40
 
@@ -1149,6 +1220,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         process_files = []
         failed_files = []
         preview_cache_keys = []
+        created_files = []
         for one in file_path:
             if current_total_file_size > default_file_size_limit:
                 raise SpaceFileSizeLimitError()
@@ -1160,6 +1232,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
                                                         file_kwargs={"level": level,
                                                                      "file_level_path": file_level_path,
                                                                      "file_source": file_source.value})
+            if getattr(db_file, 'id', None):
+                created_files.append(db_file)
             if db_file.status != KnowledgeFileStatus.FAILED.value:
                 # Get a preview cache of this filekey
                 cache_key = self.get_preview_cache_key(
@@ -1174,6 +1248,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 failed_file.file_level_path = file_level_path
                 failed_files.append(failed_file)
 
+        for created_file in created_files:
+            await self._initialize_child_resource_permissions(
+                'knowledge_file',
+                created_file.id,
+                parent_type,
+                parent_resource_id,
+            )
         for index, one in enumerate(process_files):
             file_worker.parse_knowledge_file_celery.delay(one.id, preview_cache_keys[index])
         await self.update_folder_update_time(file_level_path)
@@ -1218,6 +1299,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         await KnowledgeFileDao.adelete_batch([file_id])
         delete_knowledge_file_celery.delay(file_ids=[file_id], knowledge_id=file_record.knowledge_id, clear_minio=True)
+        await self._cleanup_resource_tuples([('knowledge_file', file_id)])
         await self.update_folder_update_time(file_record.file_level_path)
         await KnowledgeDao.async_update_knowledge_update_time_by_id(file_record.knowledge_id)
 
@@ -1380,6 +1462,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             await KnowledgeFileDao.adelete_batch(direct_file_ids)
             delete_knowledge_file_celery.delay(file_ids=direct_file_ids, knowledge_id=knowledge.id,
                                                clear_minio=True)
+            await self._cleanup_resource_tuples([('knowledge_file', file_id) for file_id in direct_file_ids])
             await KnowledgeDao.async_update_knowledge_update_time_by_id(knowledge.id)
 
     async def batch_download(
