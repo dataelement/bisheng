@@ -104,6 +104,10 @@ def _install_schema_stubs() -> None:
             def process_one_file(*args, **kwargs):
                 return None
 
+            @staticmethod
+            def get_file_share_url(*args, **kwargs):
+                return ('original', 'preview')
+
         knowledge_service_module.KnowledgeService = _DummyKnowledgeService
         sys.modules['bisheng.knowledge.domain.services.knowledge_service'] = knowledge_service_module
 
@@ -177,10 +181,14 @@ def _load_service_class():
 
 
 def _make_login_user(user_id: int = 7, user_name: str = 'tester') -> SimpleNamespace:
+    async def _get_user_group_ids(_user_id: int):
+        return []
+
     return SimpleNamespace(
         user_id=user_id,
         user_name=user_name,
         is_admin=lambda: False,
+        get_user_group_ids=_get_user_group_ids,
     )
 
 
@@ -241,6 +249,21 @@ def _make_member(
     )
 
 
+class _FakeReadTuplesFGA:
+    def __init__(self, tuples_by_object=None):
+        self.tuples_by_object = tuples_by_object or {}
+
+    async def read_tuples(self, user=None, relation=None, object=None):
+        if object is not None:
+            return self.tuples_by_object.get(object, [])
+        if user is not None:
+            out = []
+            for tuples in self.tuples_by_object.values():
+                out.extend([t for t in tuples if t.get('user') == user])
+            return out
+        return []
+
+
 @pytest.fixture
 def service():
     return _load_service_class()(MagicMock(), _make_login_user())
@@ -292,6 +315,13 @@ class TestDeleteSpace:
             new_callable=AsyncMock,
             return_value=True,
         ) as mock_check, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceService._require_permission_id',
+            new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceService._list_space_child_resources',
+            new_callable=AsyncMock,
+            return_value=[('folder', 201), ('knowledge_file', 202)],
+        ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.asyncio.to_thread',
             new_callable=AsyncMock,
             return_value=None,
@@ -299,9 +329,9 @@ class TestDeleteSpace:
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_delete_knowledge',
             new_callable=AsyncMock,
         ) as mock_delete, patch(
-            'bisheng.knowledge.domain.services.knowledge_space_service.OwnerService.delete_resource_tuples',
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceService._cleanup_resource_tuples',
             new_callable=AsyncMock,
-        ), patch(
+        ) as mock_cleanup, patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeAuditTelemetryService.audit_delete_knowledge_space',
             new_callable=AsyncMock,
         ), patch(
@@ -311,6 +341,7 @@ class TestDeleteSpace:
 
         assert mock_check.await_args.kwargs['relation'] == 'can_delete'
         mock_delete.assert_awaited_once_with(knowledge_id=1)
+        mock_cleanup.assert_awaited_once_with([('folder', 201), ('knowledge_file', 202), ('knowledge_space', 1)])
 
 
 class TestManagePermissionBoundaries:
@@ -321,7 +352,9 @@ class TestManagePermissionBoundaries:
             service, '_require_manage_permission', new_callable=AsyncMock,
         ) as mock_require_manage, patch.object(
             service, '_require_write_permission', new_callable=AsyncMock,
-        ) as mock_require_write, patch(
+        ) as mock_require_write, patch.object(
+            service, '_require_permission_id', new_callable=AsyncMock,
+        ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.find_space_members_paginated',
             new_callable=AsyncMock,
             return_value=[],
@@ -349,7 +382,9 @@ class TestManagePermissionBoundaries:
             service, '_require_manage_permission', new_callable=AsyncMock,
         ) as mock_require_manage, patch.object(
             service, '_require_write_permission', new_callable=AsyncMock,
-        ) as mock_require_write, patch(
+        ) as mock_require_write, patch.object(
+            service, '_require_permission_id', new_callable=AsyncMock,
+        ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_space',
             new_callable=AsyncMock,
             return_value=updated_space,
@@ -376,7 +411,9 @@ class TestManagePermissionBoundaries:
             service, '_require_manage_permission', new_callable=AsyncMock,
         ) as mock_require_manage, patch.object(
             service, '_require_write_permission', new_callable=AsyncMock,
-        ) as mock_require_write, patch(
+        ) as mock_require_write, patch.object(
+            service, '_require_permission_id', new_callable=AsyncMock,
+        ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_space',
             new_callable=AsyncMock,
             return_value=updated_space,
@@ -391,6 +428,7 @@ class TestSpaceOwnershipValidation:
 
     @pytest.mark.asyncio
     async def test_delete_folder_rejects_cross_space_folder(self, service):
+        public_space = _make_space(auth_type=AuthTypeEnum.PUBLIC)
         foreign_folder = _make_file(
             file_id=21,
             knowledge_id=2,
@@ -399,6 +437,10 @@ class TestSpaceOwnershipValidation:
         )
 
         with patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+            new_callable=AsyncMock,
+            return_value=public_space,
+        ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id',
             new_callable=AsyncMock,
             return_value=foreign_folder,
@@ -446,9 +488,9 @@ class TestSpaceOwnershipValidation:
             new_callable=AsyncMock,
             return_value=True,
         ), patch(
-            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_ids',
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id',
             new_callable=AsyncMock,
-            return_value=[foreign_file],
+            return_value=foreign_file,
         ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.adelete_batch',
             new_callable=AsyncMock,
@@ -468,9 +510,9 @@ class TestSpaceOwnershipValidation:
             new_callable=AsyncMock,
             return_value=public_space,
         ), patch(
-            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_ids',
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id',
             new_callable=AsyncMock,
-            return_value=[foreign_file],
+            return_value=foreign_file,
         ):
             with pytest.raises(SpaceFileNotFoundError):
                 await service.batch_download(1, [51], [])
@@ -506,6 +548,8 @@ class TestTupleLifecycle:
 
         with patch.object(
             service, '_require_write_permission', new_callable=AsyncMock,
+        ), patch.object(
+            service, '_require_permission_id', new_callable=AsyncMock,
         ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.SpaceFileDao.count_folder_by_name',
             new_callable=AsyncMock,
@@ -547,6 +591,8 @@ class TestTupleLifecycle:
 
         with patch.object(
             service, '_require_write_permission', new_callable=AsyncMock,
+        ), patch.object(
+            service, '_require_permission_id', new_callable=AsyncMock,
         ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
             new_callable=AsyncMock,
@@ -585,12 +631,11 @@ class TestTupleLifecycle:
     async def test_delete_file_cleans_knowledge_file_tuples(self, service):
         file_record = _make_file(file_id=82, knowledge_id=1)
 
-        with patch(
-            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id',
-            new_callable=AsyncMock,
+        with patch.object(
+            service, '_require_file_relation', new_callable=AsyncMock,
             return_value=file_record,
         ), patch.object(
-            service, '_require_write_permission', new_callable=AsyncMock,
+            service, '_require_permission_id', new_callable=AsyncMock,
         ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.adelete_batch',
             new_callable=AsyncMock,
@@ -611,12 +656,11 @@ class TestTupleLifecycle:
         child_folder = _make_file(file_id=92, knowledge_id=1, file_type=FileType.DIR.value, file_name='nested')
         child_file = _make_file(file_id=93, knowledge_id=1, file_type=FileType.FILE.value, file_name='doc.txt')
 
-        with patch(
-            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id',
-            new_callable=AsyncMock,
+        with patch.object(
+            service, '_require_folder_relation', new_callable=AsyncMock,
             return_value=folder,
         ), patch.object(
-            service, '_require_write_permission', new_callable=AsyncMock,
+            service, '_require_permission_id', new_callable=AsyncMock,
         ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.SpaceFileDao.get_children_by_prefix',
             new_callable=AsyncMock,
@@ -639,6 +683,109 @@ class TestTupleLifecycle:
             ('folder', '92'),
             ('knowledge_file', '93'),
         ]
+
+    @pytest.mark.asyncio
+    async def test_rename_folder_uses_folder_can_edit(self, service):
+        public_space = _make_space(auth_type=AuthTypeEnum.PUBLIC)
+        folder = _make_file(file_id=94, knowledge_id=1, file_type=FileType.DIR.value, file_name='folder')
+
+        query_mock = AsyncMock(return_value=folder)
+        check_mock = AsyncMock(return_value=True)
+
+        with patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+            new_callable=AsyncMock,
+            return_value=public_space,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id',
+            query_mock,
+        ), patch.object(
+            service, '_require_permission_id', new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.check',
+            check_mock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceFileDao.count_folder_by_name',
+            new_callable=AsyncMock,
+            return_value=0,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.async_update',
+            new_callable=AsyncMock,
+            return_value=folder,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_knowledge_update_time_by_id',
+            new_callable=AsyncMock,
+        ):
+            await service.rename_folder(94, 'renamed-folder')
+
+        assert check_mock.await_args.kwargs['relation'] == 'can_edit'
+        assert check_mock.await_args.kwargs['object_type'] == 'folder'
+        assert check_mock.await_args.kwargs['object_id'] == '94'
+
+    @pytest.mark.asyncio
+    async def test_delete_file_uses_knowledge_file_can_delete(self, service):
+        public_space = _make_space(auth_type=AuthTypeEnum.PUBLIC)
+        file_record = _make_file(file_id=95, knowledge_id=1)
+
+        with patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+            new_callable=AsyncMock,
+            return_value=public_space,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id',
+            new_callable=AsyncMock,
+            return_value=file_record,
+        ), patch.object(
+            service, '_require_permission_id', new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.check',
+            new_callable=AsyncMock,
+            return_value=True,
+        ) as mock_check, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.adelete_batch',
+            new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.OwnerService.delete_resource_tuples',
+            new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_knowledge_update_time_by_id',
+            new_callable=AsyncMock,
+        ):
+            await service.delete_file(95)
+
+        assert mock_check.await_args.kwargs['relation'] == 'can_delete'
+        assert mock_check.await_args.kwargs['object_type'] == 'knowledge_file'
+        assert mock_check.await_args.kwargs['object_id'] == '95'
+
+    @pytest.mark.asyncio
+    async def test_get_file_preview_uses_knowledge_file_can_read(self, service):
+        public_space = _make_space(auth_type=AuthTypeEnum.PUBLIC)
+        file_record = _make_file(file_id=96, knowledge_id=1)
+
+        with patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+            new_callable=AsyncMock,
+            return_value=public_space,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id',
+            new_callable=AsyncMock,
+            return_value=file_record,
+        ), patch.object(
+            service, '_require_permission_id', new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.check',
+            new_callable=AsyncMock,
+            return_value=True,
+        ) as mock_check, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.get_file_share_url',
+            return_value=('original', 'preview'),
+        ):
+            result = await service.get_file_preview(96)
+
+        assert result['original_url'] == 'original'
+        assert mock_check.await_args.kwargs['relation'] == 'can_read'
+        assert mock_check.await_args.kwargs['object_type'] == 'knowledge_file'
+        assert mock_check.await_args.kwargs['object_id'] == '96'
 
     @pytest.mark.asyncio
     async def test_public_subscribe_writes_viewer_tuple(self, service):
@@ -682,6 +829,8 @@ class TestTupleLifecycle:
             return_value=public_space,
         ), patch.object(
             service, '_require_manage_permission', new_callable=AsyncMock,
+        ), patch.object(
+            service, '_require_permission_id', new_callable=AsyncMock,
         ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_space',
             new_callable=AsyncMock,
@@ -715,6 +864,8 @@ class TestTupleLifecycle:
             return_value=approval_space,
         ), patch.object(
             service, '_require_manage_permission', new_callable=AsyncMock,
+        ), patch.object(
+            service, '_require_permission_id', new_callable=AsyncMock,
         ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_space',
             new_callable=AsyncMock,
@@ -781,6 +932,9 @@ class TestTupleLifecycle:
             new_callable=AsyncMock,
             return_value=True,
         ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceService._revoke_user_child_resource_tuples',
+            new_callable=AsyncMock,
+        ) as mock_revoke_child, patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.authorize',
             new_callable=AsyncMock,
         ) as mock_authorize:
@@ -790,3 +944,149 @@ class TestTupleLifecycle:
         revoke = mock_authorize.await_args.kwargs['revokes'][0]
         assert revoke.relation == 'viewer'
         assert revoke.subject_id == service.login_user.user_id
+        mock_revoke_child.assert_awaited_once_with(1, service.login_user.user_id)
+
+    @pytest.mark.asyncio
+    async def test_remove_member_revokes_child_resource_tuples(self, service):
+        target_member = _make_member(user_id=88)
+
+        with patch.object(
+            service, '_require_manage_permission', new_callable=AsyncMock,
+        ), patch.object(
+            service, '_require_permission_id', new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_get_active_member_role',
+            new_callable=AsyncMock,
+            return_value=UserRoleEnum.CREATOR,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_find_member',
+            new_callable=AsyncMock,
+            return_value=target_member,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.delete_space_member',
+            new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceService._revoke_user_child_resource_tuples',
+            new_callable=AsyncMock,
+        ) as mock_revoke_child, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.authorize',
+            new_callable=AsyncMock,
+        ):
+            result = await service.remove_member(SimpleNamespace(space_id=1, user_id=88))
+
+        assert result is True
+        mock_revoke_child.assert_awaited_once_with(1, 88)
+
+
+class TestFineGrainedPermissionRuntime:
+
+    @pytest.mark.asyncio
+    async def test_effective_permissions_use_bound_model_permissions(self, service):
+        file_record = _make_file(file_id=120, knowledge_id=1)
+        private_space = _make_space(space_id=1, auth_type=AuthTypeEnum.PRIVATE)
+        fake_fga = _FakeReadTuplesFGA({
+            'knowledge_file:120': [],
+            'knowledge_space:1': [
+                {'user': 'user:7', 'relation': 'viewer', 'object': 'knowledge_space:1'},
+            ],
+        })
+
+        with patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+            new_callable=AsyncMock,
+            return_value=private_space,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id',
+            new_callable=AsyncMock,
+            return_value=file_record,
+        ), patch.object(
+            service, '_get_current_user_subject_strings', new_callable=AsyncMock,
+            return_value={'user:7'},
+        ), patch.object(
+            service, '_get_relation_bindings', new_callable=AsyncMock,
+            return_value=[{
+                'resource_type': 'knowledge_space',
+                'resource_id': '1',
+                'subject_type': 'user',
+                'subject_id': 7,
+                'relation': 'viewer',
+                'model_id': 'custom_viewer',
+                'include_children': None,
+            }],
+        ), patch.object(
+            service, '_get_binding_department_paths', new_callable=AsyncMock,
+            return_value={},
+        ), patch.object(
+            service, '_get_relation_models_map', new_callable=AsyncMock,
+            return_value={
+                'custom_viewer': {
+                    'id': 'custom_viewer',
+                    'relation': 'viewer',
+                    'permissions': ['view_file'],
+                    'is_system': False,
+                },
+            },
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService._get_fga',
+            return_value=fake_fga,
+        ):
+            permission_ids = await service._get_effective_permission_ids(
+                'knowledge_file',
+                120,
+                space_id=1,
+            )
+
+        assert permission_ids == {'view_file'}
+
+    @pytest.mark.asyncio
+    async def test_batch_download_denied_without_download_file_permission(self, service):
+        file_record = _make_file(file_id=121, knowledge_id=1)
+        public_space = _make_space(space_id=1, auth_type=AuthTypeEnum.PUBLIC)
+
+        with patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+            new_callable=AsyncMock,
+            return_value=public_space,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id',
+            new_callable=AsyncMock,
+            return_value=file_record,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.check',
+            new_callable=AsyncMock,
+            return_value=True,
+        ), patch.object(
+            service, '_get_effective_permission_ids', new_callable=AsyncMock,
+            return_value={'view_file'},
+        ):
+            with pytest.raises(SpacePermissionDeniedError):
+                await service.batch_download(1, [121], [])
+
+    @pytest.mark.asyncio
+    async def test_delete_file_denied_without_delete_file_permission(self, service):
+        file_record = _make_file(file_id=122, knowledge_id=1)
+        public_space = _make_space(space_id=1, auth_type=AuthTypeEnum.PUBLIC)
+
+        with patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+            new_callable=AsyncMock,
+            return_value=public_space,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id',
+            new_callable=AsyncMock,
+            return_value=file_record,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.check',
+            new_callable=AsyncMock,
+            return_value=True,
+        ), patch.object(
+            service, '_get_effective_permission_ids', new_callable=AsyncMock,
+            return_value={'view_file', 'rename_file'},
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.adelete_batch',
+            new_callable=AsyncMock,
+        ) as mock_delete_batch:
+            with pytest.raises(SpacePermissionDeniedError):
+                await service.delete_file(122)
+
+        mock_delete_batch.assert_not_awaited()

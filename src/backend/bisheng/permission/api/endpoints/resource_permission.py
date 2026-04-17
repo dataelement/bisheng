@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.schemas.api import resp_200
+from bisheng.permission.domain.knowledge_space_permission_template import KNOWLEDGE_SPACE_PERMISSION_TEMPLATE
 from bisheng.permission.domain.schemas.permission_schema import (
     VALID_RESOURCE_TYPES,
     AuthorizeRequest,
@@ -547,3 +548,12 @@ async def rebac_schema_summary(
     return resp_200(
         {'schema_version': model.get('schema_version'), 'model_version': MODEL_VERSION, 'types': types_out},
     )
+
+
+@router.get('/permission-templates/knowledge-space')
+async def get_knowledge_space_permission_template(
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    if not login_user.is_admin():
+        return PermissionDeniedError.return_resp()
+    return resp_200(KNOWLEDGE_SPACE_PERMISSION_TEMPLATE)
