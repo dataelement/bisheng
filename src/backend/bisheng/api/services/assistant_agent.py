@@ -23,6 +23,8 @@ from bisheng.citation.domain.services.citation_prompt_helper import (
     CitationRegistryCollector,
     annotate_rag_documents_with_citations,
     annotate_web_results_with_citations,
+    cache_citation_registry_items,
+    cache_citation_registry_items_sync,
     collect_rag_citation_registry_items,
     collect_web_citation_registry_items,
 )
@@ -86,6 +88,19 @@ class AssistantCitationToolWrapper(BaseTool):
         self._extend_citation_registry_items(collect_web_citation_registry_items(results))
         return json.dumps(results, ensure_ascii=False)
 
+    async def _aappend_web_citation(self, output: Any) -> Any:
+        if not isinstance(output, str):
+            return output
+        try:
+            results = json.loads(output)
+        except json.JSONDecodeError:
+            return output
+        if not isinstance(results, list):
+            return output
+        results = annotate_web_results_with_citations(results)
+        await self._aextend_citation_registry_items(collect_web_citation_registry_items(results))
+        return json.dumps(results, ensure_ascii=False)
+
     def _build_knowledge_prompt(self) -> ChatPromptTemplate:
         messages = list(self.tool.chat_prompt.messages)
         citation_rules_message = SystemMessagePromptTemplate.from_template(CITATION_PROMPT_RULES)
@@ -102,7 +117,23 @@ class AssistantCitationToolWrapper(BaseTool):
             inputs['question'] = query
         return inputs
 
+    async def _abuild_knowledge_inputs(self, query: str, retrieval_result: Any) -> dict:
+        source_documents = list(retrieval_result or [])
+        source_documents = annotate_rag_documents_with_citations(source_documents)
+        await self._aextend_citation_registry_items(collect_rag_citation_registry_items(source_documents))
+        inputs = {'context': source_documents}
+        if 'question' in self.tool.chat_prompt.input_variables:
+            inputs['question'] = query
+        return inputs
+
     def _extend_citation_registry_items(self, items: List[CitationRegistryItemSchema]) -> None:
+        cache_citation_registry_items_sync(items)
+        self.citation_registry_items.extend(items)
+        if self.citation_collector:
+            self.citation_collector.extend(items)
+
+    async def _aextend_citation_registry_items(self, items: List[CitationRegistryItemSchema]) -> None:
+        await cache_citation_registry_items(items)
         self.citation_registry_items.extend(items)
         if self.citation_collector:
             self.citation_collector.extend(items)
@@ -120,12 +151,12 @@ class AssistantCitationToolWrapper(BaseTool):
 
     async def _arun(self, query: str, **kwargs: Any) -> Any:
         if self._is_web_search_tool():
-            return self._append_web_citation(await self.tool.ainvoke({'query': query}, config=kwargs.get('config')))
+            return await self._aappend_web_citation(await self.tool.ainvoke({'query': query}, config=kwargs.get('config')))
         if not self._has_knowledge_rag_tool():
             return await self.tool.ainvoke({'query': query}, config=kwargs.get('config'))
 
         retrieval_result = await self.tool.knowledge_retriever_tool.ainvoke({'query': query})
-        llm_inputs = self._build_knowledge_inputs(query, retrieval_result)
+        llm_inputs = await self._abuild_knowledge_inputs(query, retrieval_result)
         qa_chain = create_stuff_documents_chain(llm=self.tool.llm, prompt=self._build_knowledge_prompt())
         return await qa_chain.ainvoke(llm_inputs)
 

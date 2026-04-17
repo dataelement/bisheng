@@ -281,7 +281,8 @@ async def cache_citation_registry_items(
 ) -> List[CitationRegistryItemSchema]:
     if not items:
         return []
-    return await _citation_runtime_cache_service.save_citations(items)
+    grouped_items = CitationRegistryService._group_registry_items(items)
+    return await _citation_runtime_cache_service.save_citations(grouped_items)
 
 
 def cache_citation_registry_items_sync(
@@ -289,7 +290,8 @@ def cache_citation_registry_items_sync(
 ) -> List[CitationRegistryItemSchema]:
     if not items:
         return []
-    return _citation_runtime_cache_service.save_citations_sync(items)
+    grouped_items = CitationRegistryService._group_registry_items(items)
+    return _citation_runtime_cache_service.save_citations_sync(grouped_items)
 
 
 def save_message_citations_sync(

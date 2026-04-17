@@ -12,6 +12,8 @@ from loguru import logger
 from bisheng.citation.domain.services.citation_prompt_helper import (
     CITATION_PROMPT_RULES,
     annotate_rag_documents_with_citations,
+    cache_citation_registry_items_sync,
+    collect_rag_citation_registry_items,
 )
 from bisheng.common.chat.types import IgnoreException
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
@@ -87,6 +89,9 @@ class RagNode(RagUtils):
 
         qa_chain = create_stuff_documents_chain(llm=self._llm, prompt=self._qa_prompt)
         source_documents_with_citations = annotate_rag_documents_with_citations(source_documents)
+        cache_citation_registry_items_sync(
+            collect_rag_citation_registry_items(source_documents_with_citations)
+        )
         inputs = {
             "context": source_documents_with_citations,
         }

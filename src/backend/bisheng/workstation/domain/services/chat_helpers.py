@@ -8,6 +8,7 @@ import aiofiles
 from fastapi import Request
 from langchain_core.documents import Document
 from langchain_core.language_models import BaseChatModel
+from pydantic import BaseModel
 
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.common.chat.utils import SourceType, process_source_document
@@ -22,6 +23,8 @@ from bisheng.workstation.domain.schemas import WorkstationConversation, Workstat
 def custom_json_serializer(obj):
     if isinstance(obj, datetime):
         return obj.isoformat()
+    if isinstance(obj, BaseModel):
+        return obj.model_dump(mode='json')
     raise TypeError(f'Type {type(obj)} not serializable')
 
 
