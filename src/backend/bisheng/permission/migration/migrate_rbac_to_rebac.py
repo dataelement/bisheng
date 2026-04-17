@@ -330,7 +330,7 @@ class RBACToReBACMigrator:
         async with get_async_db_session() as session:
             with bypass_tenant_filter():
                 ra_result = await session.execute(
-                    sa_text('SELECT role_id, third_id, type FROM role_access '
+                    sa_text('SELECT role_id, third_id, type FROM roleaccess '
                             'WHERE type != 99 AND role_id != :admin_rid'),
                     {'admin_rid': AdminRole},
                 )
@@ -542,7 +542,7 @@ class RBACToReBACMigrator:
                         continue
 
                 ra_result = await session.execute(
-                    sa_text('SELECT role_id, third_id, type FROM role_access WHERE type != 99')
+                    sa_text('SELECT role_id, third_id, type FROM roleaccess WHERE type != 99')
                 )
                 role_access_set: set[tuple[int, str, int]] = set()
                 for rid, tid, atype in ra_result.fetchall():

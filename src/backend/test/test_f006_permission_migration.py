@@ -389,7 +389,7 @@ class TestStep3RoleAccess:
         """type=99 (WEB_MENU) records must be skipped."""
         session = patch_db
         await insert_rows(session, 'userrole', [{'user_id': 1, 'role_id': 2}])
-        await insert_rows(session, 'role_access', [
+        await insert_rows(session, 'roleaccess', [
             {'role_id': 2, 'third_id': 'menu1', 'type': 99},
         ])
         count = await migrator_dry.step3_role_access()
@@ -400,7 +400,7 @@ class TestStep3RoleAccess:
         """role_id=1 (AdminRole) role_access records must be skipped."""
         session = patch_db
         await insert_rows(session, 'userrole', [{'user_id': 1, 'role_id': 1}])
-        await insert_rows(session, 'role_access', [
+        await insert_rows(session, 'roleaccess', [
             {'role_id': 1, 'third_id': 'kb-1', 'type': 1},
         ])
         count = await migrator_dry.step3_role_access()
@@ -411,7 +411,7 @@ class TestStep3RoleAccess:
         """Each AccessType correctly maps to (object_type, relation)."""
         session = patch_db
         await insert_rows(session, 'userrole', [{'user_id': 10, 'role_id': 5}])
-        await insert_rows(session, 'role_access', [
+        await insert_rows(session, 'roleaccess', [
             {'role_id': 5, 'third_id': 'res-1', 'type': 1},   # KNOWLEDGE → knowledge_space, viewer
             {'role_id': 5, 'third_id': 'res-2', 'type': 6},   # ASSISTANT_WRITE → assistant, editor
             {'role_id': 5, 'third_id': 'res-3', 'type': 9},   # WORKFLOW → workflow, viewer
@@ -430,7 +430,7 @@ class TestStep3RoleAccess:
             {'user_id': 1, 'role_id': 3},
             {'user_id': 2, 'role_id': 3},
         ])
-        await insert_rows(session, 'role_access', [
+        await insert_rows(session, 'roleaccess', [
             {'role_id': 3, 'third_id': 'wf-1', 'type': 9},
         ])
         count = await migrator_dry.step3_role_access()
@@ -443,7 +443,7 @@ class TestStep3RoleAccess:
         """Same user + resource with READ(viewer) and WRITE(editor) → keeps editor only."""
         session = patch_db
         await insert_rows(session, 'userrole', [{'user_id': 1, 'role_id': 3}])
-        await insert_rows(session, 'role_access', [
+        await insert_rows(session, 'roleaccess', [
             {'role_id': 3, 'third_id': 'kb-1', 'type': 1},   # viewer
             {'role_id': 3, 'third_id': 'kb-1', 'type': 3},   # editor
         ])
@@ -576,7 +576,7 @@ class TestStep5ResourceOwners:
         session = patch_db
         # Step 3 data: role gives viewer on workflow:f1
         await insert_rows(session, 'userrole', [{'user_id': 1, 'role_id': 3}])
-        await insert_rows(session, 'role_access', [
+        await insert_rows(session, 'roleaccess', [
             {'role_id': 3, 'third_id': 'f1', 'type': 9},  # workflow viewer
         ])
         # Step 5 data: user owns flow f1
@@ -674,7 +674,7 @@ async def _seed_comprehensive_data(session):
         {'user_id': 3, 'group_id': 1, 'is_group_admin': 1},
     ])
     # Role access (non-WEB_MENU)
-    await insert_rows(session, 'role_access', [
+    await insert_rows(session, 'roleaccess', [
         {'role_id': 3, 'third_id': 'kb-1', 'type': 1},    # viewer
         {'role_id': 3, 'third_id': 'kb-1', 'type': 3},    # editor (dedup with above)
         {'role_id': 4, 'third_id': 'wf-1', 'type': 9},    # viewer
