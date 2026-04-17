@@ -7,9 +7,14 @@ import rsa
 from fastapi import Request, Depends, UploadFile, HTTPException
 
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
-from bisheng.common.errcode.user import (UserNameAlreadyExistError,
-                                         UserForbiddenError, CaptchaError, UserValidateError,
-                                         UserPasswordMaxTryError, UserPasswordExpireError, UserNameTooLongError)
+from bisheng.common.errcode.user import (
+    UserForbiddenError,
+    CaptchaError,
+    UserValidateError,
+    UserPasswordMaxTryError,
+    UserPasswordExpireError,
+    UserNameTooLongError,
+)
 from bisheng.common.schemas.api import resp_200
 from bisheng.common.schemas.telemetry.event_data_schema import UserLoginEventData
 from bisheng.common.services import telemetry_service
@@ -110,10 +115,6 @@ class UserService:
         """
         Create User
         """
-        exists_user = UserDao.get_user_by_username(req_data.user_name)
-        if exists_user:
-            # Throwing an exception?
-            raise UserNameAlreadyExistError.http_exception()
         user = User(
             user_name=req_data.user_name,
             password=cls.decrypt_md5_password(req_data.password),
@@ -131,13 +132,12 @@ class UserService:
         return user
 
     @staticmethod
-    def get_error_password_key(username: str):
-        return USER_PASSWORD_ERROR.format(username)
+    def get_error_password_key(user_id: int) -> str:
+        return USER_PASSWORD_ERROR.format(int(user_id))
 
     @classmethod
-    async def clear_error_password_key(cls, username: str):
-        # Count of cleanup password errors
-        error_key = cls.get_error_password_key(username)
+    async def clear_error_password_key(cls, user_id: int):
+        error_key = cls.get_error_password_key(user_id)
         (await get_redis_client()).delete(error_key)
 
     @classmethod
@@ -159,7 +159,7 @@ class UserService:
         if not password_conf.login_error_time_window or not password_conf.max_error_times:
             raise UserValidateError()
         # Number of errors plus1
-        error_key = cls.get_error_password_key(db_user.user_name)
+        error_key = cls.get_error_password_key(db_user.user_id)
         error_num = await redis_client.aincr(error_key)
         if error_num == 1:
             # First time setupkeyExpiration date
@@ -179,11 +179,15 @@ class UserService:
                 raise CaptchaError()
 
         db_user = User.model_validate(user)
+        person_id = (db_user.external_id or "").strip()
+        if not person_id:
+            raise UserValidateError(msg='Person ID is required')
+        existing_pid = await UserDao.aget_by_external_id(person_id)
+        if existing_pid:
+            raise UserValidateError(msg='Person ID already exists')
+        db_user.external_id = person_id
 
-        # check if user already exist
-        user_exists = await UserDao.aget_user_by_username(db_user.user_name)
-        if user_exists:
-            raise UserNameAlreadyExistError()
+        # 允许用户名重复；人员唯一性由 external_id / user_id 等保证
         if len(db_user.user_name) > 30:
             raise UserNameTooLongError()
         db_user.password = cls.decrypt_md5_password(user.password)
@@ -196,7 +200,44 @@ class UserService:
             db_user = await UserDao.add_user_and_admin_role(db_user)
         if settings.multi_tenant.enabled:
             await cls._ensure_user_default_tenant_association(db_user.user_id)
+        await cls._ensure_user_guest_department_membership(db_user.user_id)
         return db_user
+
+    @classmethod
+    async def _ensure_user_guest_department_membership(cls, user_id: int) -> None:
+        """注册完成后自动加入“临时访客”部门（主部门）。"""
+        from bisheng.database.models.department import Department, UserDepartment
+        from sqlmodel import select
+
+        guest_dept_id = 'BS@guest'
+        async with get_async_db_session() as session:
+            dept = (
+                await session.exec(
+                    select(Department).where(
+                        Department.dept_id == guest_dept_id,
+                        Department.status == 'active',
+                    )
+                )
+            ).first()
+            if not dept:
+                return
+            exists = (
+                await session.exec(
+                    select(UserDepartment).where(
+                        UserDepartment.user_id == user_id,
+                        UserDepartment.department_id == dept.id,
+                    )
+                )
+            ).first()
+            if exists:
+                return
+            session.add(UserDepartment(
+                user_id=user_id,
+                department_id=dept.id,
+                is_primary=1,
+                source='local',
+            ))
+            await session.commit()
 
     @classmethod
     async def _ensure_user_default_tenant_association(cls, user_id: int) -> None:
@@ -220,17 +261,31 @@ class UserService:
             if not user.captcha_key or not await verify_captcha(user.captcha, user.captcha_key):
                 raise CaptchaError()
 
-        # get user info（支持用户名或本地人员 external_id 登录）
-        db_user = await UserDao.aget_user_for_login(user.user_name)
-        # verify user exists
+        # 支持用户名或 external_id；重名时对候选用户依次校验密码
+        candidates = await UserDao.aget_login_candidates_by_account(user.user_name)
+        if not candidates:
+            return UserValidateError.return_resp()
+
+        password = cls.decrypt_md5_password(user.password)
+        db_user = None
+        for c in candidates:
+            if c.delete == 1:
+                continue
+            try:
+                await cls.judge_user_password(c, password)
+                db_user = c
+                break
+            except UserPasswordExpireError:
+                raise
+            except UserPasswordMaxTryError:
+                raise
+            except UserValidateError:
+                # 该候选用户密码不匹配，尝试下一个同名账号
+                continue
         if not db_user:
             return UserValidateError.return_resp()
-        if db_user.delete == 1:
-            raise UserForbiddenError()
 
-        # verify password
-        password = cls.decrypt_md5_password(user.password)
-        await cls.judge_user_password(db_user, password)
+        await cls.clear_error_password_key(db_user.user_id)
 
         # Multi-tenant login flow
         tenant_id = None

@@ -23,7 +23,8 @@ export const LoginPage = () => {
     const { appConfig } = useContext(locationContext)
     const isLoading = false
 
-    const mailRef = useRef(null)
+    const personIdRef = useRef(null)
+    const userNameRef = useRef(null)
     const pwdRef = useRef(null)
     const agenPwdRef = useRef(null)
 
@@ -47,8 +48,8 @@ export const LoginPage = () => {
     const [isLDAP, setIsLDAP] = useState(false)
     const handleLogin = async () => {
         const error = []
-        const [mail, pwd] = [mailRef.current.value, pwdRef.current.value]
-        if (!mail) error.push(t('login.pleaseEnterAccount'))
+        const [personId, pwd] = [personIdRef.current.value, pwdRef.current.value]
+        if (!personId) error.push(t('login.pleaseEnterPersonId'))
         if (!pwd) error.push(t('login.pleaseEnterPassword'))
         if (captchaData.user_capthca && !captchaRef.current.value) error.push(t('login.pleaseEnterCaptcha'))
         if (error.length) return message({
@@ -64,8 +65,8 @@ export const LoginPage = () => {
         const encryptPwd = isLDAP ? await handleLdapEncrypt(pwd) : await handleEncrypt(pwd)
         captureAndAlertRequestErrorHoc(
             (isLDAP
-                ? ldapLoginApi(mail, encryptPwd)
-                : loginApi(mail, encryptPwd, captchaData.captcha_key, captchaRef.current?.value)
+                ? ldapLoginApi(personId, encryptPwd)
+                : loginApi(personId, encryptPwd, captchaData.captcha_key, captchaRef.current?.value)
             ).then((res: any) => {
                 // Multi-tenant: check if tenant selection is required
                 if (res.requires_tenant_selection) {
@@ -90,7 +91,7 @@ export const LoginPage = () => {
                 }
             }), (error) => {
                 if (error.indexOf('过期') !== -1) { // 有时间改为 code 判断
-                    localStorage.setItem('account', mail)
+                    localStorage.setItem('account', personId)
                     navigate('/reset', { state: { noback: true } })
                     return true // Skip the default error toast; resetPwd page shows its own
                 }
@@ -101,12 +102,20 @@ export const LoginPage = () => {
 
     const handleRegister = async () => {
         const error = []
-        const [mail, pwd, apwd] = [mailRef.current.value, pwdRef.current.value, agenPwdRef.current.value]
-        if (!mail) {
-            error.push(t('login.pleaseEnterAccount'))
+        const [personId, userName, pwd, apwd] = [
+            personIdRef.current.value,
+            userNameRef.current?.value,
+            pwdRef.current.value,
+            agenPwdRef.current.value
+        ]
+        if (!personId) {
+            error.push(t('login.pleaseEnterPersonId'))
         }
-        if (mail.length < 3) {
-            error.push(t('login.accountTooShort'))
+        if (!userName) {
+            error.push(t('login.pleaseEnterUserName'))
+        }
+        if (personId.length < 2) {
+            error.push(t('login.personIdTooShort'))
         }
         if (!/.{8,}/.test(pwd)) {
             error.push(t('login.passwordTooShort'))
@@ -128,7 +137,7 @@ export const LoginPage = () => {
             })
         }
         const encryptPwd = await handleEncrypt(pwd)
-        captureAndAlertRequestErrorHoc(registerApi(mail, encryptPwd, captchaData.captcha_key, captchaRef.current?.value).then(res => {
+        captureAndAlertRequestErrorHoc(registerApi(userName, personId, encryptPwd, captchaData.captcha_key, captchaRef.current?.value).then(res => {
             // setSuccessData({ title: t('login.registrationSuccess') })
             message({
                 title: `${t('prompt')}`,
@@ -161,14 +170,24 @@ export const LoginPage = () => {
                             <Input
                                 id="email"
                                 className='h-[48px] dark:bg-login-input'
-                                ref={mailRef}
+                                ref={personIdRef}
                                 placeholder={t('login.account')}
-                                type="email"
+                                type="text"
                                 autoCapitalize="none"
-                                autoComplete="email"
+                                autoComplete="username"
                                 autoCorrect="off"
                             />
                         </div>
+                        {
+                            !showLogin && <div className="grid">
+                                <Input
+                                    id="userName"
+                                    className='h-[48px] dark:bg-login-input'
+                                    ref={userNameRef}
+                                    placeholder={t('login.userName')}
+                                />
+                            </div>
+                        }
                         <div className="grid">
                             <Input
                                 id="pwd"
@@ -176,15 +195,18 @@ export const LoginPage = () => {
                                 ref={pwdRef}
                                 placeholder={t('login.password')}
                                 type="password"
-                                onKeyDown={e => e.key === 'Enter' && showLogin && handleLogin()} />
+                                onKeyDown={e => e.key === 'Enter' && showLogin && handleLogin()}
+                            />
                         </div>
                         {
                             !showLogin && <div className="grid">
-                                <Input id="pwd"
+                                <Input
+                                    id="pwd"
                                     className='h-[48px] dark:bg-login-input'
                                     ref={agenPwdRef}
                                     placeholder={t('login.confirmPassword')}
-                                    type="password" />
+                                    type="password"
+                                />
                             </div>
                         }
                         {

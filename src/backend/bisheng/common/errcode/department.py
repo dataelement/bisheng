@@ -88,3 +88,8 @@ class DepartmentNotArchivedError(BaseErrorCode):
 class DepartmentArchivedReadonlyError(BaseErrorCode):
     Code: int = 21017
     Msg: str = 'Archived departments cannot be modified'
+
+
+class DepartmentParentArchivedError(BaseErrorCode):
+    Code: int = 21018
+    Msg: str = 'Cannot restore department while parent department is archived'

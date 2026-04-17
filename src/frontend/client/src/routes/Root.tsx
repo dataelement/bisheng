@@ -19,13 +19,21 @@ export default function Root() {
     return savedNavVisible !== null ? JSON.parse(savedNavVisible) : true;
   });
 
-  const { isAuthenticated, logout } = useAuthContext();
+  const { isAuthenticated, isUserLoading, logout } = useAuthContext();
   const assistantsMap = useAssistantsMap({ isAuthenticated });
   const agentsMap = useAgentsMap({ isAuthenticated });
   const fileMap = useFileMap({ isAuthenticated });
   const search = useSearch({ isAuthenticated });
 
 
+
+  if (isUserLoading) {
+    return (
+      <div className="flex h-full w-full items-center justify-center bg-white text-sm text-gray-500 dark:bg-gray-900 dark:text-gray-400">
+        Loading…
+      </div>
+    );
+  }
 
   if (!isAuthenticated) {
     return null;

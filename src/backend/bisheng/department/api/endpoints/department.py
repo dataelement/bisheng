@@ -53,6 +53,7 @@ async def create_local_member_body(
     try:
         inner = DepartmentLocalMemberCreate(
             user_name=data.user_name,
+            person_id=data.person_id,
             password=data.password,
             role_ids=data.role_ids,
         )
@@ -122,6 +123,18 @@ async def purge_department(
 ):
     try:
         await DepartmentService.apurge_department(dept_id, login_user)
+        return resp_200()
+    except BaseErrorCode as e:
+        return e.return_resp_instance()
+
+
+@router.post('/{dept_id}/restore')
+async def restore_department(
+    dept_id: str,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    try:
+        await DepartmentService.arestore_department(dept_id, login_user)
         return resp_200()
     except BaseErrorCode as e:
         return e.return_resp_instance()

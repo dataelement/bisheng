@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 import re
 import secrets
-from typing import List, Optional
+from typing import List, Optional, Set
 
 from sqlalchemy import and_, delete, func, or_, update
 from sqlmodel import col, select
@@ -26,6 +26,7 @@ from bisheng.common.errcode.department import (
     DepartmentNameDuplicateError,
     DepartmentNotArchivedError,
     DepartmentArchivedReadonlyError,
+    DepartmentParentArchivedError,
     DepartmentNotFoundError,
     DepartmentOpenFGAUnavailableError,
     DepartmentPermissionDeniedError,
@@ -78,6 +79,13 @@ async def _check_permission(
         dept_internal_id: Database ID of the target department. When provided,
             checks if the user is an admin of that department (or any ancestor
             via OpenFGA's parent-admin inheritance).
+
+    When OpenFGA is missing ``department:parent#parent department:child`` tuples,
+    inherited ``admin`` checks on the child can fail while MySQL ``path`` still
+    places the node under an admin's subtree (left tree vs member API mismatch).
+    In that case we walk ``parent_id`` in DB and re-use ``PermissionService.check``
+    on each ancestor — same outcome as a fully synced FGA graph without widening
+    scope beyond the org tree.
     """
     # L1: System admin → pass
     if _is_admin(login_user):
@@ -97,6 +105,23 @@ async def _check_permission(
             )
             if is_dept_admin:
                 return
+            # L2b: DB parent chain — tolerate missing FGA ``parent`` edges on some nodes
+            seen: Set[int] = {int(dept_internal_id)}
+            row = await DepartmentDao.aget_by_id(int(dept_internal_id))
+            while row is not None and row.parent_id is not None:
+                pid = int(row.parent_id)
+                if pid in seen:
+                    break
+                seen.add(pid)
+                if await PermissionService.check(
+                    user_id=login_user.user_id,
+                    relation='admin',
+                    object_type='department',
+                    object_id=str(pid),
+                    login_user=login_user,
+                ):
+                    return
+                row = await DepartmentDao.aget_by_id(pid)
         except Exception:
             logger.warning(
                 'PermissionService.check failed for dept admin, user=%d dept=%d',
@@ -109,6 +134,20 @@ def _get_dept_id_prefix() -> str:
     from bisheng.common.services.config_service import settings
     prefix = settings.get_from_db('dept_id_prefix')
     return prefix if isinstance(prefix, str) and prefix else 'BS'
+
+
+def _is_registration_enabled() -> bool:
+    """Whether self-registration is enabled in system config."""
+    from bisheng.common.services.config_service import settings
+
+    env_conf = settings.get_from_db('env') or {}
+    if not isinstance(env_conf, dict):
+        return True
+
+    raw = env_conf.get('enable_registration', True)
+    if isinstance(raw, str):
+        return raw.strip().lower() in ('1', 'true', 'yes', 'on')
+    return bool(raw)
 
 
 def generate_dept_id(prefix: str = 'BS') -> str:
@@ -253,6 +292,12 @@ class DepartmentService:
             if not depts:
                 return []
 
+            # "临时访客" 仅在开放注册时展示
+            if not _is_registration_enabled():
+                depts = [d for d in depts if d.dept_id != 'BS@guest']
+                if not depts:
+                    return []
+
             # Filter to dept admin's subtree if not system admin
             if not is_sys_admin:
                 admin_paths = {d.path for d in admin_depts}
@@ -370,6 +415,8 @@ class DepartmentService:
     async def adelete_department(cls, dept_id: str, login_user) -> None:
         async with get_async_db_session() as session:
             dept = await _get_dept_and_check_permission(session, dept_id, login_user)
+            if dept.dept_id == 'BS@guest':
+                raise DepartmentPermissionDeniedError(msg='Guest department cannot be deleted')
 
             # Check for children
             children = (await session.exec(
@@ -416,6 +463,8 @@ class DepartmentService:
         """Permanently delete an archived department and clean up all references."""
         async with get_async_db_session() as session:
             dept = await _get_dept_and_check_permission(session, dept_id, login_user)
+            if dept.dept_id == 'BS@guest':
+                raise DepartmentPermissionDeniedError(msg='Guest department cannot be deleted')
 
             if dept.status != 'archived':
                 raise DepartmentNotArchivedError()
@@ -488,6 +537,23 @@ class DepartmentService:
         # Clean up OpenFGA tuples
         ops = DepartmentChangeHandler.on_purged(dept_internal_id, member_user_ids, admin_user_ids)
         await DepartmentChangeHandler.execute_async(ops)
+
+    @classmethod
+    async def arestore_department(cls, dept_id: str, login_user) -> None:
+        """Restore an archived department to active status."""
+        async with get_async_db_session() as session:
+            dept = await _get_dept_and_check_permission(session, dept_id, login_user)
+            if dept.status != 'archived':
+                raise DepartmentNotArchivedError(msg='Only archived departments can be restored')
+
+            if dept.parent_id is not None:
+                parent = await DepartmentDao.aget_by_id(dept.parent_id)
+                if parent and parent.status == 'archived':
+                    raise DepartmentParentArchivedError()
+
+            dept.status = 'active'
+            session.add(dept)
+            await session.commit()
 
     @classmethod
     async def amove_department(
@@ -597,8 +663,11 @@ class DepartmentService:
     async def aadd_members(
         cls, dept_id: str, data: DepartmentMemberAdd, login_user,
     ) -> None:
+        default_role_ids_snapshot: List[int] = []
         async with get_async_db_session() as session:
             dept = await _get_dept_and_check_permission(session, dept_id, login_user)
+            raw_defaults = dept.default_role_ids or []
+            default_role_ids_snapshot = [int(x) for x in raw_defaults if x is not None]
 
             # Batch check for existing members (single query instead of N)
             existing_result = await session.exec(
@@ -626,6 +695,24 @@ class DepartmentService:
         # Fire change handler
         ops = DepartmentChangeHandler.on_members_added(dept.id, data.user_ids)
         await DepartmentChangeHandler.execute_async(ops)
+
+        # 部门「默认角色」：加入本部门后自动授予（可分配域内、且用户尚未拥有）
+        if default_role_ids_snapshot:
+            from bisheng.database.constants import AdminRole
+            from bisheng.user.domain.models.user_role import UserRoleDao
+
+            assignable = await cls.aget_assignable_roles(dept_id, login_user)
+            allowed_ids = {r['id'] for r in assignable}
+            to_apply = [
+                rid for rid in default_role_ids_snapshot
+                if rid != AdminRole and rid in allowed_ids
+            ]
+            if to_apply:
+                for uid in data.user_ids:
+                    existing = {int(ur.role_id) for ur in UserRoleDao.get_user_roles(uid)}
+                    need_add = [r for r in to_apply if r not in existing]
+                    if need_add:
+                        UserRoleDao.add_user_roles(uid, need_add)
 
     @classmethod
     async def aremove_member(
@@ -655,6 +742,34 @@ class DepartmentService:
         await DepartmentChangeHandler.execute_async(ops)
 
     @classmethod
+    async def _aget_department_admin_user_ids(cls, dept_internal_id: int) -> Set[int]:
+        """OpenFGA：在 department:{id} 上具有 admin 关系的用户 ID 集合。"""
+        from bisheng.core.openfga.manager import aget_fga_client
+        fga = await aget_fga_client()
+        if fga is None:
+            return set()
+        try:
+            tuples = await fga.read_tuples(
+                relation='admin', object=f'department:{dept_internal_id}',
+            )
+        except Exception:
+            logger.warning(
+                'FGA read_tuples failed for department admin ids dept=%s', dept_internal_id,
+            )
+            return set()
+        user_ids: Set[int] = set()
+        for t in tuples:
+            user_str = t.get('user', '') if isinstance(t, dict) else ''
+            if not user_str and isinstance(t.get('key'), dict):
+                user_str = t['key'].get('user', '')
+            if user_str.startswith('user:'):
+                try:
+                    user_ids.add(int(user_str.split(':', 1)[1]))
+                except ValueError:
+                    continue
+        return user_ids
+
+    @classmethod
     async def aget_admins(
         cls, dept_id: str, login_user,
     ) -> List[dict]:
@@ -662,30 +777,7 @@ class DepartmentService:
         async with get_async_db_session() as session:
             dept = await _get_dept_and_check_permission(session, dept_id, login_user)
 
-        from bisheng.core.openfga.manager import aget_fga_client
-        fga = await aget_fga_client()
-        if fga is None:
-            return []
-        try:
-            tuples = await fga.read_tuples(
-                relation='admin', object=f'department:{dept.id}',
-            )
-        except Exception:
-            logger.warning('FGA read_tuples failed for department %s admins', dept_id)
-            return []
-
-        user_ids = []
-        for t in tuples:
-            # FGAClient.read_tuples returns OpenFGA tuple_key dicts: {user, relation, object}
-            user_str = t.get('user', '') if isinstance(t, dict) else ''
-            if not user_str and isinstance(t.get('key'), dict):
-                user_str = t['key'].get('user', '')
-            if user_str.startswith('user:'):
-                try:
-                    user_ids.append(int(user_str.split(':', 1)[1]))
-                except ValueError:
-                    continue
-
+        user_ids = list(await cls._aget_department_admin_user_ids(dept.id))
         if not user_ids:
             return []
 
@@ -751,6 +843,7 @@ class DepartmentService:
                 select(
                     UserDepartment.user_id,
                     User.user_name,
+                    User.external_id.label('user_external_id'),
                     UserDepartment.department_id,
                     UserDepartment.is_primary,
                     UserDepartment.source,
@@ -824,6 +917,8 @@ class DepartmentService:
                         {'id': rid, 'role_name': rname},
                     )
 
+        admin_uids = await cls._aget_department_admin_user_ids(dept.id)
+
         def _last_modified(row) -> object:
             """成员行「修改时间」：取加入部门、用户创建、用户最近更新中的最晚时刻。"""
             times = [
@@ -834,10 +929,17 @@ class DepartmentService:
             valid = [x for x in times if x is not None]
             return max(valid) if valid else None
 
+        def _person_id_for_row(row) -> Optional[str]:
+            ext = getattr(row, 'user_external_id', None)
+            if ext:
+                return str(ext)
+            return None
+
         data = [
             {
                 'user_id': r.user_id,
                 'user_name': r.user_name,
+                'person_id': _person_id_for_row(r),
                 'department_id': r.department_id,
                 'is_primary': r.is_primary,
                 'source': r.source,
@@ -846,6 +948,7 @@ class DepartmentService:
                 'enabled': r.user_deleted == 0,
                 'user_groups': user_groups_map.get(r.user_id, []),
                 'roles': roles_map.get(r.user_id, []),
+                'is_department_admin': r.user_id in admin_uids,
             }
             for r in rows
         ]
@@ -873,26 +976,26 @@ class DepartmentService:
             for row in raw_ids:
                 subtree_ids.append(int(row[0]) if isinstance(row, tuple) else int(row))
 
+            # 作用域：department_id 为空表示全租户/全局可选；否则仅当前上下文部门及其子树内可授予。
+            # role_type=='global' 的自定义角色仍可能带 department_id，不能再用「凡 global 即全出现」。
+            dept_scope = or_(
+                Role.department_id.is_(None),
+                Role.department_id.in_(subtree_ids),
+            )
             stmt = select(Role).where(
                 Role.id > AdminRole,
                 or_(
-                    Role.role_type == 'global',
+                    and_(Role.role_type == 'global', dept_scope),
                     and_(
                         Role.role_type == 'tenant',
                         Role.tenant_id == login_user.tenant_id,
-                        or_(
-                            Role.department_id.is_(None),
-                            Role.department_id.in_(subtree_ids),
-                        ),
+                        dept_scope,
                     ),
                     # 兼容旧数据：历史角色可能未写 role_type，默认按 tenant 角色处理
                     and_(
                         or_(Role.role_type.is_(None), Role.role_type == ''),
                         Role.tenant_id == login_user.tenant_id,
-                        or_(
-                            Role.department_id.is_(None),
-                            Role.department_id.in_(subtree_ids),
-                        ),
+                        dept_scope,
                     ),
                 ),
             ).order_by(Role.role_name.asc())
@@ -913,36 +1016,37 @@ class DepartmentService:
         cls, dept_id: str, data: DepartmentLocalMemberCreate, login_user,
     ) -> dict:
         """在部门内创建本地账号：主属当前部门、指定角色、生成人员 ID（external_id）；用户组非必填。"""
-        from bisheng.common.errcode.user import UserNameAlreadyExistError
         from bisheng.database.constants import AdminRole
         from bisheng.user.domain.models.user import User, UserDao
         from bisheng.user.domain.services.user import UserService
         from bisheng.utils import md5_hash
 
+        default_role_ids_snapshot: List[int] = []
         async with get_async_db_session() as session:
             dept = await _get_dept_and_check_permission(session, dept_id, login_user)
+            raw_defaults = dept.default_role_ids or []
+            default_role_ids_snapshot = [int(x) for x in raw_defaults if x is not None]
 
         plain = UserService.decrypt_password_plain(data.password)
         if not _password_meets_prd_policy(plain):
             raise DepartmentInvalidPasswordError()
 
-        if await UserDao.aget_user_by_username(data.user_name):
-            raise UserNameAlreadyExistError()
-
         assignable = await cls.aget_assignable_roles(dept_id, login_user)
         allowed_ids = {r['id'] for r in assignable}
-        if AdminRole in data.role_ids or not set(data.role_ids).issubset(allowed_ids):
+        explicit_ids = [int(x) for x in (data.role_ids or [])]
+        default_filtered = [
+            rid for rid in default_role_ids_snapshot
+            if rid != AdminRole and rid in allowed_ids
+        ]
+        final_role_ids = list(dict.fromkeys(explicit_ids + default_filtered))
+        if AdminRole in final_role_ids or not set(final_role_ids).issubset(allowed_ids):
             raise DepartmentInvalidRolesError()
 
-        person_id = None
-        for _ in range(5):
-            candidate = generate_dept_id(_get_dept_id_prefix())
-            existing = await UserDao.aget_by_source_external_id('local', candidate)
-            if not existing:
-                person_id = candidate
-                break
+        person_id = (data.person_id or '').strip()
         if not person_id:
-            person_id = f'BS@{secrets.token_hex(6)}'
+            raise DepartmentInvalidRolesError(msg='Person ID is required')
+        if await UserDao.aget_by_external_id(person_id):
+            raise DepartmentInvalidRolesError(msg='Person ID already exists')
 
         pwd_hash = md5_hash(plain)
         user = User(
@@ -952,7 +1056,7 @@ class DepartmentService:
             external_id=person_id,
         )
         user = UserDao.add_user_with_groups_and_roles(
-            user, [], list(data.role_ids),
+            user, [], final_role_ids,
         )
 
         async with get_async_db_session() as session:
@@ -1312,7 +1416,6 @@ class DepartmentService:
         from bisheng.database.constants import AdminRole
         from bisheng.user.domain.models.user import UserDao
         from bisheng.user.domain.models.user_role import UserRoleDao
-        from bisheng.common.errcode.user import UserNameAlreadyExistError
 
         async with get_async_db_session() as session:
             ctx_dept = await _get_dept_and_check_permission(session, dept_id, login_user)
@@ -1348,9 +1451,6 @@ class DepartmentService:
         if data.user_name is not None and edit_mode == 'local_primary':
             name = (data.user_name or '').strip()
             if name and name != user.user_name:
-                exists = await UserDao.aget_user_by_username(name)
-                if exists and exists.user_id != user_id:
-                    raise UserNameAlreadyExistError()
                 user.user_name = name
                 await UserDao.aupdate_user(user)
 

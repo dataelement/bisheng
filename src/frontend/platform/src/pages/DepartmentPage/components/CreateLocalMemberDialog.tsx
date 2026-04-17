@@ -6,8 +6,8 @@ import { Label } from "@/components/bs-ui/label"
 import { toast } from "@/components/bs-ui/toast/use-toast"
 import {
   createDepartmentLocalMemberApi,
+  getDepartmentAssignableRolesApi,
 } from "@/controllers/API/department"
-import { getRolesApi } from "@/controllers/API/user"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { handleEncrypt, PWD_RULE } from "@/pages/LoginPage/utils"
 import { copyText } from "@/utils"
@@ -29,26 +29,24 @@ export function CreateLocalMemberDialog({
 }: CreateLocalMemberDialogProps) {
   const { t } = useTranslation()
   const [userName, setUserName] = useState("")
+  const [personId, setPersonId] = useState("")
   const [password, setPassword] = useState("")
   const [roles, setRoles] = useState<{ id: number; role_name: string }[]>([])
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [submitting, setSubmitting] = useState(false)
 
   const loadRoles = useCallback(() => {
-    // 先使用稳定角色列表接口，避免部分环境 assignable-roles 404 导致下拉为空
-    captureAndAlertRequestErrorHoc(getRolesApi("")).then((fallback) => {
-      if (fallback && fallback.length > 0) {
-        setRoles(fallback.map((r: any) => ({
-          id: r.id,
-          role_name: r.role_name,
-        })))
+    captureAndAlertRequestErrorHoc(getDepartmentAssignableRolesApi(deptId)).then((list) => {
+      if (list && list.length > 0) {
+        setRoles(list.map((r) => ({ id: r.id, role_name: r.role_name })))
       } else {
         setRoles([])
       }
     })
-  }, [])
+  }, [deptId])
 
   useEffect(() => {
+    setSelected(new Set())
     loadRoles()
   }, [loadRoles])
 
@@ -66,12 +64,12 @@ export function CreateLocalMemberDialog({
       toast({ title: t("prompt"), description: t("bs:department.localUserNameRequired"), variant: "error" })
       return
     }
-    if (!PWD_RULE.test(password)) {
-      toast({ title: t("prompt"), description: t("system.passwordRequirements"), variant: "error" })
+    if (!personId.trim()) {
+      toast({ title: t("prompt"), description: t("bs:department.personIdRequired"), variant: "error" })
       return
     }
-    if (selected.size === 0) {
-      toast({ title: t("prompt"), description: t("bs:department.localUserRolesRequired"), variant: "error" })
+    if (!PWD_RULE.test(password)) {
+      toast({ title: t("prompt"), description: t("system.passwordRequirements"), variant: "error" })
       return
     }
     setSubmitting(true)
@@ -80,6 +78,7 @@ export function CreateLocalMemberDialog({
       const res = await captureAndAlertRequestErrorHoc(
         createDepartmentLocalMemberApi(deptId, {
           user_name: userName.trim(),
+          person_id: personId.trim(),
           password: enc,
           role_ids: Array.from(selected),
         })
@@ -111,6 +110,10 @@ export function CreateLocalMemberDialog({
             <Input value={userName} onChange={(e) => setUserName(e.target.value)} className="mt-1" />
           </div>
           <div>
+            <Label>{t("bs:department.personId")}</Label>
+            <Input value={personId} onChange={(e) => setPersonId(e.target.value)} className="mt-1" />
+          </div>
+          <div>
             <Label>{t("system.initialPassword")}</Label>
             <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} className="mt-1" />
           </div>
@@ -120,6 +123,9 @@ export function CreateLocalMemberDialog({
           </div>
           <div>
             <Label>{t("bs:department.assignRoles")}</Label>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {t("bs:department.assignRolesOptionalHint")}
+            </p>
             <div className="mt-2 max-h-48 space-y-2 overflow-y-auto rounded border p-2">
               {roles.length === 0 ? (
                 <div className="space-y-2">

@@ -19,6 +19,7 @@ export default function Departments() {
   const [selectedDept, setSelectedDept] = useState<DepartmentTreeNode | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [createParentId, setCreateParentId] = useState<number | null>(null)
+  const [membersRefreshSignal, setMembersRefreshSignal] = useState(0)
 
   const loadTree = useCallback(() => {
     captureAndAlertRequestErrorHoc(getDepartmentTreeApi()).then((res) => {
@@ -65,6 +66,7 @@ export default function Departments() {
 
   const handleTreeChange = useCallback(() => {
     loadTree()
+    setMembersRefreshSignal((n) => n + 1)
   }, [loadTree])
 
   useEffect(() => {
@@ -116,6 +118,7 @@ export default function Departments() {
                 deptId={selectedDept.dept_id}
                 deptName={selectedDept.name}
                 onChanged={handleTreeChange}
+                membersRefreshSignal={membersRefreshSignal}
               />
             </TabsContent>
             <TabsContent value="settings">

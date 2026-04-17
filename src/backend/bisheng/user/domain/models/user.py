@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import List, Optional
 
 from pydantic import field_validator
-from sqlalchemy import Column, DateTime, String, UniqueConstraint, func, or_, text
+from sqlalchemy import Column, DateTime, String, UniqueConstraint, func, text
 from sqlalchemy.orm import selectinload
 from sqlmodel import Field, select, Relationship, col
 
@@ -16,7 +16,7 @@ from bisheng.user.domain.models.user_role import UserRole
 
 
 class UserBase(SQLModelSerializable):
-    user_name: str = Field(index=True, unique=True)
+    user_name: str = Field(index=True)
     email: Optional[str] = Field(default=None, index=True)
     phone_number: Optional[str] = Field(default=None, index=True)
     dept_id: Optional[str] = Field(default=None, index=True)
@@ -96,6 +96,7 @@ class UserLogin(UserBase):
 
 
 class UserCreate(UserBase):
+    external_id: Optional[str] = Field(default=None, max_length=128)
     password: Optional[str] = Field(default='')
     captcha_key: Optional[str] = None
     captcha: Optional[str] = None
@@ -149,14 +150,32 @@ class UserDao(UserBase):
             return result.first()
 
     @classmethod
-    async def aget_user_for_login(cls, account: str) -> User | None:
-        """按用户名或 external_id（本地人员 ID）查找可登录用户。"""
+    async def aget_users_by_username(cls, username: str) -> List[User]:
+        """同名用户可能多条；用于重名校验等。"""
+        async with get_async_db_session() as session:
+            statement = select(User).where(User.user_name == username)
+            result = await session.exec(statement)
+            return list(result.all())
+
+    @classmethod
+    async def aget_login_candidates_by_account(cls, account: str) -> List[User]:
+        """登录账号仅支持 external_id（人员ID），并过滤禁用账号。"""
+        acc = (account or '').strip()
+        if not acc:
+            return []
         async with get_async_db_session() as session:
             statement = select(User).where(
-                or_(User.user_name == account, User.external_id == account),
+                User.delete == 0,
+                User.external_id == acc,
             )
             result = await session.exec(statement)
-            return result.first()
+            return list(result.all())
+
+    @classmethod
+    async def aget_user_for_login(cls, account: str) -> User | None:
+        """兼容旧调用：仅返回首条；登录请用 ``aget_login_candidates_by_account``。"""
+        rows = await cls.aget_login_candidates_by_account(account)
+        return rows[0] if rows else None
 
     @classmethod
     def update_user(cls, user: User) -> User:
@@ -344,6 +363,14 @@ class UserDao(UserBase):
                 User.source == source,
                 User.external_id == external_id,
             )
+            result = await session.exec(statement)
+            return result.first()
+
+    @classmethod
+    async def aget_by_external_id(cls, external_id: str) -> Optional['User']:
+        """Get user by external_id globally (cross-source)."""
+        async with get_async_db_session() as session:
+            statement = select(User).where(User.external_id == external_id)
             result = await session.exec(statement)
             return result.first()
 

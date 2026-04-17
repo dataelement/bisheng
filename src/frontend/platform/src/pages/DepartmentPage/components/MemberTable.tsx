@@ -1,4 +1,3 @@
-import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
 import { Badge } from "@/components/bs-ui/badge"
 import { Button } from "@/components/bs-ui/button"
 import { SearchInput } from "@/components/bs-ui/input"
@@ -26,17 +25,15 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/bs-ui/tooltip"
-import {
-  getDepartmentMembersApi,
-  removeDepartmentMemberApi,
-} from "@/controllers/API/department"
+import { getDepartmentMembersApi } from "@/controllers/API/department"
 import { disableUserApi } from "@/controllers/API/user"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { userContext } from "@/contexts/userContext"
 import UserPwdModal from "@/pages/LoginPage/UserPwdModal"
 import { isSyncedSource } from "@/pages/DepartmentPage/constants/syncReadonly"
 import { DepartmentMember } from "@/types/api/department"
-import { useCallback, useContext, useEffect, useRef, useState } from "react"
+import { buildMemberDisplayNameMap } from "@/utils/userDisplayName"
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { CreateLocalMemberDialog } from "./CreateLocalMemberDialog"
 import { OrganizationMemberEditDialog } from "./OrganizationMemberEditDialog"
@@ -45,9 +42,16 @@ interface MemberTableProps {
   deptId: string
   deptName: string
   onChanged: () => void
+  /** 父级在部门设置等变更后递增，用于在不切换部门时强制重新拉取成员（如部门管理员 FGA 更新后刷新「角色」列） */
+  membersRefreshSignal?: number
 }
 
-export function MemberTable({ deptId, deptName, onChanged }: MemberTableProps) {
+export function MemberTable({
+  deptId,
+  deptName,
+  onChanged,
+  membersRefreshSignal = 0,
+}: MemberTableProps) {
   const { t } = useTranslation()
   const { user } = useContext(userContext)
   const userPwdModalRef = useRef<{ open: (userId: string | number) => void } | null>(null)
@@ -60,6 +64,11 @@ export function MemberTable({ deptId, deptName, onChanged }: MemberTableProps) {
   const [editMember, setEditMember] = useState<DepartmentMember | null>(null)
   const pageRef = useRef(page)
   pageRef.current = page
+
+  const memberDisplayNames = useMemo(
+    () => buildMemberDisplayNameMap(members),
+    [members]
+  )
 
   const loadMembers = useCallback(() => {
     const params: Record<string, string | number> = {
@@ -85,6 +94,11 @@ export function MemberTable({ deptId, deptName, onChanged }: MemberTableProps) {
     pageRef.current = 1
     loadMembers()
   }, [deptId, keyword, isPrimaryFilter])
+
+  useEffect(() => {
+    if (membersRefreshSignal === 0) return
+    loadMembers()
+  }, [membersRefreshSignal, loadMembers])
 
   const handlePageChange = useCallback(
     (p: number) => {
@@ -114,31 +128,6 @@ export function MemberTable({ deptId, deptName, onChanged }: MemberTableProps) {
       })
     },
     [loadMembers, onChanged, t]
-  )
-
-  const handleRemove = useCallback(
-    (m: DepartmentMember) => {
-      bsConfirm({
-        title: t("bs:department.removeMember"),
-        desc: t("bs:department.confirmRemoveMember"),
-        onOk: (next) => {
-          captureAndAlertRequestErrorHoc(
-            removeDepartmentMemberApi(deptId, m.user_id)
-          ).then((res) => {
-            if (res !== null) {
-              toast({
-                title: t("bs:department.removeMember"),
-                variant: "success",
-              })
-              loadMembers()
-              onChanged()
-            }
-            next()
-          })
-        },
-      })
-    },
-    [deptId, loadMembers, onChanged, t]
   )
 
   const handleAdded = useCallback(() => {
@@ -198,7 +187,7 @@ export function MemberTable({ deptId, deptName, onChanged }: MemberTableProps) {
             <TableHead>{t("bs:department.roles")}</TableHead>
             <TableHead>{t("bs:department.updateTime")}</TableHead>
             <TableHead>{t("bs:department.enabled")}</TableHead>
-            <TableHead className="min-w-[220px] text-right">{t("operations")}</TableHead>
+            <TableHead className="min-w-[140px] text-right">{t("operations")}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -211,7 +200,9 @@ export function MemberTable({ deptId, deptName, onChanged }: MemberTableProps) {
           ) : (
             members.map((m) => (
               <TableRow key={m.user_id}>
-                <TableCell>{m.user_name}</TableCell>
+                <TableCell title={memberDisplayNames.get(m.user_id) ?? m.user_name}>
+                  {memberDisplayNames.get(m.user_id) ?? m.user_name}
+                </TableCell>
                 <TableCell>
                   <Badge variant={m.is_primary === 1 ? "default" : "outline"}>
                     {m.is_primary === 1
@@ -237,7 +228,12 @@ export function MemberTable({ deptId, deptName, onChanged }: MemberTableProps) {
                 </TableCell>
                 <TableCell className="max-w-[150px]">
                   {(() => {
-                    const text = m.roles.map((r) => r.role_name).join(", ") || "-"
+                    const roleNames: string[] = []
+                    if (m.is_department_admin) {
+                      roleNames.push(t("bs:department.deptAdminRoleName"))
+                    }
+                    roleNames.push(...m.roles.map((r) => r.role_name))
+                    const text = roleNames.join(", ") || "-"
                     return (
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -266,7 +262,6 @@ export function MemberTable({ deptId, deptName, onChanged }: MemberTableProps) {
                   {(() => {
                     const isSuperAdmin = m.roles.some((role) => role.id === 1)
                     const canResetPwd = user.role === "admin"
-                    const canRemove = !isSuperAdmin && user.user_id !== m.user_id
                     return (
                       <div className="flex flex-wrap items-center justify-end gap-x-1">
                         {isSuperAdmin ? (
@@ -284,15 +279,6 @@ export function MemberTable({ deptId, deptName, onChanged }: MemberTableProps) {
                             {t("edit")}
                           </Button>
                         )}
-                        <Button
-                          variant="link"
-                          size="sm"
-                          className="px-1 text-destructive"
-                          disabled={!canRemove}
-                          onClick={() => handleRemove(m)}
-                        >
-                          {t("bs:department.removeMember")}
-                        </Button>
                         {canResetPwd && (
                           <Button
                             variant="link"

@@ -69,6 +69,8 @@ const privateRouter = [
     element: <MainLayout />,
     errorElement: <RouteErrorBoundary />,
     children: [
+      // 开发环境登录后曾跳转 /admin，但业务路由无该 path，会落入 * → 404；统一进管理端后再由 userContext 纠偏
+      { path: "admin", element: <Navigate to="/label" replace /> },
       // { path: "", element: <SkillChatPage />, },
       { path: "filelib", element: <KnowledgePage />, permission: 'knowledge', },
       { path: "filelib/:id", element: <FilesPage />, permission: 'knowledge', },
@@ -148,6 +150,14 @@ const privateRouter = [
   { path: "*", element: <Navigate to="/404" replace /> }
 ]
 
+/** 与角色菜单 third_id 对齐：/sys 路由使用 permission `sys`，角色侧存为 system_config */
+function hasRoutePermission(permissions: string[], key: string) {
+  if (key === "sys") {
+    return permissions.includes("sys") || permissions.includes("system_config")
+  }
+  return permissions.includes(key)
+}
+
 export const getPrivateRouter = (permissions) => {
   const filterMenuItem = (_privateRouter) => {
     const result = _privateRouter.reduce((res, cur) => {
@@ -157,7 +167,7 @@ export const getPrivateRouter = (permissions) => {
       }
 
       const { permission, ...other } = cur
-      if (permission && !permissions.includes(permission)) {
+      if (permission && !hasRoutePermission(permissions, permission)) {
         return res
       }
 

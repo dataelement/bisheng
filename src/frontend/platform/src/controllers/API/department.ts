@@ -48,6 +48,10 @@ export async function purgeDepartmentApi(deptId: string): Promise<any> {
   return await axios.delete(`/api/v1/departments/${depSeg(deptId)}/purge`)
 }
 
+export async function restoreDepartmentApi(deptId: string): Promise<any> {
+  return await axios.post(`/api/v1/departments/${depSeg(deptId)}/restore`)
+}
+
 // ── Move ───────────────────────────────────────────────
 
 export async function moveDepartmentApi(
@@ -171,7 +175,7 @@ export async function getDepartmentAssignableRolesApi(
 
 export async function createDepartmentLocalMemberApi(
   deptId: string,
-  data: { user_name: string; password: string; role_ids: number[] }
+  data: { user_name: string; person_id: string; password: string; role_ids: number[] }
 ): Promise<{ user_id: number; user_name: string; person_id: string; dept_id: string }> {
   // dept_id 放 body，避免路径含 BS@ 时部分网关/反代误解析为 404（与 POST .../{dept_id}/local-members 等价）
   return await axios.post(`/api/v1/departments/local-members`, {

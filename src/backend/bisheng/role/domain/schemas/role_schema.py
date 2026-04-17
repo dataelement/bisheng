@@ -33,6 +33,10 @@ class RoleListResponse(BaseModel):
     role_type: str  # 'global' | 'tenant'
     department_id: Optional[int] = None
     department_name: Optional[str] = None
+    department_scope_path: Optional[str] = Field(
+        default=None,
+        description='从组织根到作用域部门的完整路径（基于 Department.path），与前端树是否裁剪无关',
+    )
     quota_config: Optional[dict] = None
     remark: Optional[str] = None
     user_count: int = 0

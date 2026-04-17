@@ -2,6 +2,7 @@ import type { AxiosResponse } from 'axios';
 import * as endpoints from './api-endpoints';
 import * as config from '~/types/chat/config';
 import request from '~/api/request';
+import { getPlatformAdminPanelUrl } from '~/utils/platformAdminUrl';
 import * as r from '~/types/chat/roles';
 import * as s from '~/types/chat/schemas';
 import type * as t from '~/types/chat/types';
@@ -125,15 +126,20 @@ export function getSearchEnabled(): Promise<boolean> {
 export function getUser(): Promise<t.TUser> {
   return request.get(endpoints.user()).then(res => {
     const { user_id, user_name, create_time, update_time, role, web_menu, avatar } = res.data;
-    if (role !== 'admin' && !web_menu.includes('frontend')) {
-      if (!web_menu.includes('backend')) {
-        // No frontend or backend permission — logout to avoid infinite redirect loop
-        // between the two systems.
+    const canWorkspace =
+      web_menu.includes('frontend') ||
+      web_menu.includes('workstation');
+    const canManagement =
+      web_menu.includes('backend') ||
+      web_menu.includes('admin');
+    if (role !== 'admin' && !canWorkspace) {
+      if (!canManagement) {
+        // 无工作台也无管理端菜单 — 退出并回管理端登录
         logout().catch(() => { });
-        location.href = `${location.origin}${__APP_ENV__.BISHENG_HOST}`;
+        location.href = getPlatformAdminPanelUrl();
         return Promise.reject(new Error('no_permission'));
       }
-      location.href = `${location.origin}${__APP_ENV__.BISHENG_HOST}?error=90002`  // workspace useErrorPrompt
+      location.href = getPlatformAdminPanelUrl('error=90002');
     }
     return {
       "_id": user_id,

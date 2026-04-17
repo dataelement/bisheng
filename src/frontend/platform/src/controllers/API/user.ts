@@ -20,18 +20,19 @@ export async function logoutApi() {
   return await axios.post(`/api/v1/user/logout`);
 }
 // 登录
-export async function loginApi(name, pwd, captcha_key?, captcha?) {
+export async function loginApi(personId, pwd, captcha_key?, captcha?) {
   return await axios.post(`/api/v1/user/login`, {
-    user_name: name,
+    user_name: personId,
     password: pwd,
     captcha_key,
     captcha,
   });
 }
 // 注册
-export async function registerApi(name, pwd, captcha_key?, captcha?) {
+export async function registerApi(userName, personId, pwd, captcha_key?, captcha?) {
   return await axios.post(`/api/v1/user/regist`, {
-    user_name: name,
+    user_name: userName,
+    external_id: personId,
     password: pwd,
     captcha_key,
     captcha,
@@ -344,9 +345,9 @@ export async function resetPasswordApi(userId, password): Promise<any> {
 /**
  * 密码过期重置个人密码
  */
-export async function changePasswordApi(userName, password, new_password): Promise<any> {
+export async function changePasswordApi(personId, password, new_password): Promise<any> {
   return axios.post(`/api/v1/user/change_password_public`, {
-    username: userName,
+    person_id: personId,
     password,
     new_password
   });

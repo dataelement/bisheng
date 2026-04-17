@@ -76,6 +76,8 @@ async def init_default_data():
                     await session.refresh(user)
                     await UserRoleDao.set_admin_user(user.user_id)
 
+                await _backfill_guest_department_membership(session)
+
                 # Initialize preset application templates
                 templates = await session.exec(select(Template).limit(1))
                 templates = templates.all()
@@ -216,32 +218,111 @@ async def _init_default_root_department(session):
     from bisheng.database.models.department import Department
     from bisheng.database.models.tenant import Tenant
 
+    guest_dept_id = 'BS@guest'
+    guest_name = '临时访客'
+    guest_sort_order = 2147483647
+
     with bypass_tenant_filter():
         # Check if default tenant exists and has no root_dept_id yet
         tenant = (await session.exec(
             select(Tenant).where(Tenant.id == DEFAULT_TENANT_ID)
         )).first()
-        if tenant is None or tenant.root_dept_id is not None:
+        if tenant is None:
             return
 
-        dept = Department(
-            dept_id='BS@root',
-            name='Default Organization',
-            parent_id=None,
-            tenant_id=DEFAULT_TENANT_ID,
-            path='',
-            source='local',
-            status='active',
+        root_dept = None
+        if tenant.root_dept_id is not None:
+            root_dept = (await session.exec(
+                select(Department).where(Department.id == tenant.root_dept_id)
+            )).first()
+
+        if root_dept is None:
+            root_dept = Department(
+                dept_id='BS@root',
+                name='Default Organization',
+                parent_id=None,
+                tenant_id=DEFAULT_TENANT_ID,
+                path='',
+                source='local',
+                status='active',
+            )
+            session.add(root_dept)
+            await session.flush()
+            await session.refresh(root_dept)
+            root_dept.path = f'/{root_dept.id}/'
+            tenant.root_dept_id = root_dept.id
+            session.add(root_dept)
+            await session.commit()
+
+        guest = (await session.exec(
+            select(Department).where(Department.dept_id == guest_dept_id)
+        )).first()
+        if guest is None:
+            guest = Department(
+                dept_id=guest_dept_id,
+                name=guest_name,
+                parent_id=root_dept.id,
+                tenant_id=DEFAULT_TENANT_ID,
+                path=f'{root_dept.path}',
+                source='local',
+                status='active',
+                sort_order=guest_sort_order,
+            )
+            session.add(guest)
+            await session.flush()
+            await session.refresh(guest)
+            guest.path = f'{root_dept.path}{guest.id}/'
+            session.add(guest)
+            await session.commit()
+        else:
+            changed = False
+            if guest.parent_id != root_dept.id:
+                guest.parent_id = root_dept.id
+                changed = True
+            if guest.sort_order != guest_sort_order:
+                guest.sort_order = guest_sort_order
+                changed = True
+            expected_path_prefix = root_dept.path or ''
+            if not (guest.path or '').startswith(expected_path_prefix):
+                guest.path = f'{expected_path_prefix}{guest.id}/'
+                changed = True
+            if changed:
+                session.add(guest)
+                await session.commit()
+
+    logger.info(f'Default root department ready (id={root_dept.id}), guest dept ready (dept_id={guest_dept_id})')
+
+
+async def _backfill_guest_department_membership(session):
+    """Ensure users have at least one department; fallback to 临时访客."""
+    from bisheng.database.models.department import Department, UserDepartment
+
+    guest = (await session.exec(
+        select(Department).where(
+            Department.dept_id == 'BS@guest',
+            Department.status == 'active',
         )
-        session.add(dept)
-        await session.flush()
-        await session.refresh(dept)
+    )).first()
+    if not guest:
+        return
 
-        dept.path = f'/{dept.id}/'
-        tenant.root_dept_id = dept.id
-        await session.commit()
+    user_rows = (await session.exec(select(User.user_id))).all()
+    if not user_rows:
+        return
 
-    logger.info(f'Default root department initialized (id={dept.id})')
+    for uid in user_rows:
+        has_any = (await session.exec(
+            select(UserDepartment.id).where(UserDepartment.user_id == uid)
+        )).first()
+        if has_any is not None:
+            continue
+        session.add(UserDepartment(
+            user_id=uid,
+            department_id=guest.id,
+            is_primary=1,
+            source='local',
+        ))
+    await session.commit()
 
 
 async def _migrate_rbac_to_rebac_if_needed():

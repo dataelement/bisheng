@@ -1,5 +1,6 @@
 export type User = {
     user_name: string;
+    external_id?: string | null;
     email: string | null;
     phone_number: string | null;
     dept_id: number | null;
@@ -26,6 +27,8 @@ export type ROLE = {
     role_type?: string
     department_id?: number | null
     department_name?: string | null
+    /** 组织根 → 作用域部门 全路径（后端按 Department.path 解析） */
+    department_scope_path?: string | null
     quota_config?: Record<string, any> | null
     user_count?: number
     creator_name?: string | null

@@ -65,8 +65,12 @@ class DepartmentLocalMemberCreate(BaseModel):
     """PRD §3.2.1：在部门内创建本地人员（主部门固定为当前部门）。"""
 
     user_name: str = Field(..., min_length=1, max_length=128)
+    person_id: str = Field(..., min_length=1, max_length=128, description='人员ID（登录唯一凭证）')
     password: str = Field(..., description='RSA 加密后的密码（与 /user/create 一致）')
-    role_ids: List[int] = Field(..., min_length=1, description='全局角色 + 本部门角色的 id 列表')
+    role_ids: List[int] = Field(
+        default_factory=list,
+        description='可选；与部门「默认角色」合并后写入，均须落在当前部门可分配角色内',
+    )
 
 
 class DepartmentLocalMemberCreateWithDeptId(DepartmentLocalMemberCreate):

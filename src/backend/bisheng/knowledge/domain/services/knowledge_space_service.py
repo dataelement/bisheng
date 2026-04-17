@@ -33,6 +33,7 @@ from bisheng.permission.domain.schemas.permission_schema import AuthorizeGrantIt
 from bisheng.permission.domain.schemas.tuple_operation import TupleOperation
 from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.role import RoleDao
+from bisheng.role.domain.services.quota_service import QuotaService
 from bisheng.database.models.tag import TagDao, TagBusinessTypeEnum, Tag
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao, KnowledgeTypeEnum, AuthTypeEnum, \
@@ -1559,13 +1560,19 @@ class KnowledgeSpaceService(KnowledgeUtils):
             parent_type = 'folder'
             parent_resource_id = parent_id
 
+        # GB → bytes cap for space owner; multi-role 取各角色上限的最大值；-1 表示不限制
         default_file_size_limit = 40
 
         roles = await UserRoleDao.aget_user_roles(db_knowledge.user_id)
         if roles:
-            roles = await RoleDao.aget_role_by_ids([one.role_id for one in roles])
-            for one in roles:
-                default_file_size_limit = max(default_file_size_limit, one.knowledge_space_file_limit)
+            role_rows = await RoleDao.aget_role_by_ids([one.role_id for one in roles])
+            for one in role_rows:
+                gb = QuotaService.role_knowledge_space_file_limit_gb(one)
+                if gb == -1:
+                    default_file_size_limit = 10**9
+                    break
+                if gb > 0:
+                    default_file_size_limit = max(default_file_size_limit, gb)
         default_file_size_limit = default_file_size_limit * 1024 * 1024 * 1024
         current_total_file_size = int(await SpaceFileDao.get_user_total_file_size(self.login_user.user_id))
 

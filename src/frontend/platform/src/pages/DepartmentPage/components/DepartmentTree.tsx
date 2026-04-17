@@ -2,7 +2,7 @@ import { SearchInput } from "@/components/bs-ui/input"
 import { cn } from "@/utils"
 import { DepartmentTreeNode } from "@/types/api/department"
 import { Building2, ChevronDown, ChevronRight, Plus } from "lucide-react"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 /** 每层缩进宽度（px），侧栏内要一眼能看出父子关系 */
@@ -22,6 +22,8 @@ export function DepartmentTree({ data, selectedDeptId, onSelect, onCreateChild }
   const { t } = useTranslation()
   const [keyword, setKeyword] = useState("")
   const [expanded, setExpanded] = useState<Set<number>>(new Set())
+  /** 仅首次有数据时应用「默认只展开第一级」；后续 data 刷新（建部门、保存等）不重置，保留用户展开状态 */
+  const defaultExpandAppliedRef = useRef(false)
 
   const collectDefaultExpandedIds = useCallback(
     (
@@ -44,11 +46,12 @@ export function DepartmentTree({ data, selectedDeptId, onSelect, onCreateChild }
     []
   )
 
-  // 默认仅展开第一级（depth 0），更深层需用户手动展开
+  // 进入页面后首次拿到树数据时：默认仅展开第一级；之后不因 refetch 重置展开
   useEffect(() => {
-    if (data.length > 0) {
-      setExpanded(new Set(collectDefaultExpandedIds(data, DEFAULT_EXPAND_MAX_DEPTH)))
-    }
+    if (data.length === 0) return
+    if (defaultExpandAppliedRef.current) return
+    setExpanded(new Set(collectDefaultExpandedIds(data, DEFAULT_EXPAND_MAX_DEPTH)))
+    defaultExpandAppliedRef.current = true
   }, [data, collectDefaultExpandedIds])
 
   const toggleExpand = useCallback((id: number, e: React.MouseEvent) => {
@@ -136,7 +139,10 @@ export function DepartmentTree({ data, selectedDeptId, onSelect, onCreateChild }
               )}
             </span>
             <Building2 className="mr-1.5 h-4 w-4 shrink-0 text-muted-foreground" />
-            <span className="flex-1 truncate">{node.name}</span>
+            <span className="flex-1 truncate">
+              {node.name}
+              {isArchived ? ` ${t("bs:department.archivedTag")}` : ""}
+            </span>
             <span className="mr-1 text-xs text-muted-foreground tabular-nums">{node.member_count}</span>
             {/* Quick create child button — hidden for archived departments */}
             {!isArchived && (

@@ -16,6 +16,7 @@ export default function DepartmentPage() {
   const [selectedDept, setSelectedDept] = useState<DepartmentTreeNode | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [createParentId, setCreateParentId] = useState<number | null>(null)
+  const [membersRefreshSignal, setMembersRefreshSignal] = useState(0)
 
   const loadTree = useCallback(() => {
     captureAndAlertRequestErrorHoc(getDepartmentTreeApi()).then((res) => {
@@ -102,7 +103,10 @@ export default function DepartmentPage() {
           <Tabs defaultValue="members" className="w-full">
             <div className="mb-4 flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-semibold">{selectedDept.name}</h2>
+                <h2 className="text-lg font-semibold">
+                  {selectedDept.name}
+                  {selectedDept.status === "archived" ? ` ${t("bs:department.archivedTag")}` : ""}
+                </h2>
                 <span className="text-sm text-muted-foreground">
                   {t("bs:department.memberCount")}: {selectedDept.member_count}
                 </span>
@@ -117,6 +121,7 @@ export default function DepartmentPage() {
                 deptId={selectedDept.dept_id}
                 deptName={selectedDept.name}
                 onChanged={handleTreeChange}
+                membersRefreshSignal={membersRefreshSignal}
               />
             </TabsContent>
             <TabsContent value="settings">

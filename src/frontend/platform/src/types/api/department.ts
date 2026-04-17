@@ -32,6 +32,8 @@ export interface DepartmentDetail {
 export interface DepartmentMember {
   user_id: number
   user_name: string
+  /** 本地人员 ID（external_id），用于重名展示；非展示字段 */
+  person_id?: string | null
   department_id: number
   is_primary: number
   source: string
@@ -40,6 +42,8 @@ export interface DepartmentMember {
   enabled: boolean
   user_groups: { id: number; group_name: string }[]
   roles: { id: number; role_name: string }[]
+  /** 当前部门 OpenFGA admin；用于在角色列最前展示「部门管理员」 */
+  is_department_admin?: boolean
 }
 
 export interface DepartmentCreateForm {

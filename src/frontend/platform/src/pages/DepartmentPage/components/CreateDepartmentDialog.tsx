@@ -65,10 +65,10 @@ export function CreateDepartmentDialog({
       })
     ).then((res) => {
       setLoading(false)
-      if (res !== null) {
-        toast({ title: t("bs:department.create"), variant: "success" })
-        onCreated()
-      }
+      // captureAndAlertRequestErrorHoc 在接口失败时返回 false（不是 null）
+      if (res === false) return
+      toast({ title: t("bs:department.create"), variant: "success" })
+      onCreated()
     })
   }, [name, parentId, adminPicks, onCreated, t])
 

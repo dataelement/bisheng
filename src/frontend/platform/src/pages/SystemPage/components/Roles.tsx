@@ -48,7 +48,6 @@ const ADMIN_CHILD_MENUS = [
   "knowledge",
   "build",
   "evaluation",
-  "system_config",
   "mark_task",
 ] as const
 const DEFAULT_ENABLED_MENU_IDS = [
@@ -99,7 +98,6 @@ export default function Roles() {
       { id: "knowledge", label: t("menu.knowledge") },
       { id: "build", label: t("menu.skills") },
       { id: "evaluation", label: t("menu.evaluation") },
-      { id: "system_config", label: t("system.systemConfiguration") },
       { id: "mark_task", label: t("menu.annotation") },
     ],
     [t]
@@ -184,7 +182,7 @@ export default function Roles() {
       setIsMenuLoading(false)
       return
     }
-    let ids = [...menuRes]
+    let ids = [...menuRes].filter((id) => id !== "system_config")
     if (ids.some((id) => (ADMIN_CHILD_MENUS as readonly string[]).includes(id)) && !ids.includes(ADMIN_PARENT_ID)) {
       ids = [...ids, ADMIN_PARENT_ID]
     }
@@ -257,7 +255,7 @@ export default function Roles() {
 
       message({ variant: "success", description: t("saved") })
       setEditOpen(false)
-      loadRoles()
+      await loadRoles()
     } finally {
       setIsSaving(false)
     }
@@ -328,7 +326,10 @@ export default function Roles() {
   }
 
   const scopeLabel = (el: ROLE) => {
-    if (el.role_type === "global" || !el.department_id) return t("system.scopeGlobal")
+    // 作用域以 department_id 为准；全路径优先用后端按 path 解析的字段（不受部门树裁剪影响）
+    if (!el.department_id) return t("system.scopeGlobal")
+    const fromApi = (el.department_scope_path || "").trim()
+    if (fromApi) return fromApi
     return getDepartmentDisplayPath(deptTree, el.department_id) || el.department_name || "-"
   }
 
@@ -416,7 +417,7 @@ export default function Roles() {
               roles.map((el) => (
                 <TableRow key={el.id}>
                   <TableCell className="font-medium">{el.role_name}</TableCell>
-                  <TableCell className="max-w-[280px] truncate" title={scopeLabel(el)}>
+                  <TableCell className="min-w-[200px] max-w-md whitespace-normal break-words text-left">
                     {scopeLabel(el)}
                   </TableCell>
                   <TableCell>{el.user_count ?? "-"}</TableCell>
@@ -424,22 +425,27 @@ export default function Roles() {
                   <TableCell>{fmtTime(el.create_time)}</TableCell>
                   <TableCell>{fmtTime(el.update_time)}</TableCell>
                   <TableCell className="text-right">
-                    <Button
-                      variant="link"
-                      disabled={Boolean(el.is_readonly)}
-                      className="px-0 pl-4"
-                      onClick={() => openEdit(el)}
-                    >
-                      {t("edit")}
-                    </Button>
-                    <Button
-                      variant="link"
-                      disabled={Boolean(el.is_readonly) || [1, 2].includes(el.id)}
-                      className="px-0 pl-4 text-red-500"
-                      onClick={() => onDelete(el)}
-                    >
-                      {t("delete")}
-                    </Button>
+                    {el.is_readonly ? (
+                      <span className="text-sm text-muted-foreground">&mdash;</span>
+                    ) : (
+                      <>
+                        <Button
+                          variant="link"
+                          className="px-0 pl-4"
+                          onClick={() => openEdit(el)}
+                        >
+                          {t("edit")}
+                        </Button>
+                        <Button
+                          variant="link"
+                          disabled={[1, 2].includes(el.id)}
+                          className="px-0 pl-4 text-red-500"
+                          onClick={() => onDelete(el)}
+                        >
+                          {t("delete")}
+                        </Button>
+                      </>
+                    )}
                   </TableCell>
                 </TableRow>
               ))

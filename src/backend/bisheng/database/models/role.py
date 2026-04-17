@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List, Optional
 
-from sqlalchemy import Column, DateTime, Integer, JSON, String, text, func, delete, and_, or_, UniqueConstraint
+from sqlalchemy import Column, DateTime, Integer, JSON, String, false, text, func, delete, and_, or_, UniqueConstraint
 from sqlmodel import Field, select
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -172,15 +172,22 @@ class RoleDao(RoleBase):
     # ── New methods for F005 (AD-09) ──
 
     @classmethod
-    def _build_visible_roles_stmt(cls, tenant_id: int, keyword: str = None,
-                                  department_ids: List[int] = None):
+    def _build_visible_roles_stmt(
+        cls,
+        tenant_id: int,
+        keyword: str = None,
+        department_ids: List[int] = None,
+        tenant_custom_roles_only: bool = False,
+    ):
         """Build statement for visible roles: global + current tenant, excluding AdminRole.
 
         Args:
             tenant_id: Current tenant ID.
             keyword: Optional keyword filter on role_name.
-            department_ids: Optional list of department IDs to filter by
-                (for department admin scope). None = no dept filtering.
+            department_ids: When set (department admin): **global** preset roles (read-only in
+                UI) plus **tenant** roles whose ``department_id`` is in this subtree.
+            tenant_custom_roles_only: When True and ``department_ids`` is None (tenant admin),
+                exclude ``global`` roles so the list only contains editable tenant roles.
         """
         # bypass_tenant_filter is used by callers, so explicitly scope tenant roles
         stmt = select(Role).where(
@@ -193,27 +200,42 @@ class RoleDao(RoleBase):
         if keyword:
             stmt = stmt.where(Role.role_name.like(f'%{keyword}%'))
         if department_ids is not None:
-            # Department admin: only see global roles + roles in their dept subtree
-            stmt = stmt.where(
-                or_(
-                    Role.role_type == 'global',
-                    Role.department_id.in_(department_ids),
-                    Role.department_id.is_(None),
+            if not department_ids:
+                stmt = stmt.where(Role.role_type == 'global')
+            else:
+                stmt = stmt.where(
+                    or_(
+                        Role.role_type == 'global',
+                        and_(
+                            Role.role_type == 'tenant',
+                            Role.department_id.isnot(None),
+                            Role.department_id.in_(department_ids),
+                        ),
+                    ),
                 )
-            )
+        elif tenant_custom_roles_only:
+            stmt = stmt.where(Role.role_type == 'tenant')
         return stmt
 
     @classmethod
-    async def aget_visible_roles(cls, tenant_id: int, keyword: str = None,
-                                 page: int = 1, limit: int = 10,
-                                 department_ids: List[int] = None) -> List[Role]:
+    async def aget_visible_roles(
+        cls,
+        tenant_id: int,
+        keyword: str = None,
+        page: int = 1,
+        limit: int = 10,
+        department_ids: List[int] = None,
+        tenant_custom_roles_only: bool = False,
+    ) -> List[Role]:
         """Get visible roles for role list API (AD-09).
 
         Returns global roles + current tenant's roles, excluding AdminRole(id=1).
         Uses bypass_tenant_filter so global roles from other tenants are visible.
         """
         from bisheng.core.context.tenant import bypass_tenant_filter
-        stmt = cls._build_visible_roles_stmt(tenant_id, keyword, department_ids)
+        stmt = cls._build_visible_roles_stmt(
+            tenant_id, keyword, department_ids, tenant_custom_roles_only,
+        )
         stmt = stmt.order_by(Role.create_time.desc())
         if page and limit:
             stmt = stmt.offset((page - 1) * limit).limit(limit)
@@ -222,11 +244,18 @@ class RoleDao(RoleBase):
                 return (await session.exec(stmt)).all()
 
     @classmethod
-    async def acount_visible_roles(cls, tenant_id: int, keyword: str = None,
-                                   department_ids: List[int] = None) -> int:
+    async def acount_visible_roles(
+        cls,
+        tenant_id: int,
+        keyword: str = None,
+        department_ids: List[int] = None,
+        tenant_custom_roles_only: bool = False,
+    ) -> int:
         """Count visible roles (companion for aget_visible_roles)."""
         from bisheng.core.context.tenant import bypass_tenant_filter
-        base_stmt = cls._build_visible_roles_stmt(tenant_id, keyword, department_ids)
+        base_stmt = cls._build_visible_roles_stmt(
+            tenant_id, keyword, department_ids, tenant_custom_roles_only,
+        )
         stmt = select(func.count()).select_from(base_stmt.subquery())
         with bypass_tenant_filter():
             async with get_async_db_session() as session:

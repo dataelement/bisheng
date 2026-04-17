@@ -25,6 +25,12 @@ from ..models.user_role import UserRoleDao
 
 logger = logging.getLogger(__name__)
 
+# 部门管理员：工作台 + 管理后台全量菜单（含路由用的 sys、仅 UI 的 log/system_config）
+_DEPARTMENT_ADMIN_WEB_MENU_FULL = frozenset(
+    {e.value for e in WebMenuResource}
+    | {'log', 'system_config', 'sys'}
+)
+
 # ── AccessType → ReBAC mapping (F008, AD-02) ────────────────
 # Maps old RBAC AccessType to (relation, object_type) for ReBAC delegation.
 # Unmapped AccessType values fall back to the legacy RoleAccessDao logic.
@@ -419,8 +425,19 @@ class LoginUser(BaseModel):
         return login_user
 
     @classmethod
-    async def get_roles_web_menu(cls, user: User) -> (List[int] | str, List[str]):
-        """ get user roles and web menu (F005: updated for v2.5 WebMenuResource) """
+    async def get_roles_web_menu(
+        cls,
+        user: User,
+        *,
+        is_department_admin: bool = False,
+    ) -> (List[int] | str, List[str]):
+        """Resolve role key(s) and web_menu.
+
+        - AC-13: multi-role web_menu is the **union** of each role's WEB_MENU entries.
+        - Department admins get workstation + admin console menus in full (PRD 2.5).
+        - ``system_config`` is only granted via super-admin or department-admin; it is
+          stripped for other users even if legacy role_access rows exist.
+        """
         db_user_role = await UserRoleDao.aget_user_roles(user.user_id)
         role = ''
         role_ids = []
@@ -433,7 +450,11 @@ class LoginUser(BaseModel):
             role = role_ids
             # AC-13: union of all roles' menu permissions
             web_menu = await RoleAccessDao.aget_role_access(role_ids, AccessType.WEB_MENU)
-            web_menu = list(set([one.third_id for one in web_menu]))
+            web_menu = list({one.third_id for one in web_menu})
+            if is_department_admin:
+                web_menu = list(set(web_menu) | set(_DEPARTMENT_ADMIN_WEB_MENU_FULL))
+            else:
+                web_menu = [m for m in web_menu if m not in ('system_config', 'sys')]
         else:
             # AC-14: admin returns all WebMenuResource values (including deprecated for compat)
             web_menu = [one.value for one in WebMenuResource]

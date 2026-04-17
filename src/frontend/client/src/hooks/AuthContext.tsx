@@ -22,6 +22,7 @@ import {
 import { TAuthConfig, TUserContext, TAuthContext, TResError } from '~/common';
 import useTimeout from './useTimeout';
 import store from '~/store';
+import { getPlatformAdminPanelUrl } from '~/utils/platformAdminUrl';
 
 const AuthContext = createContext<TAuthContext | undefined>(undefined);
 
@@ -96,7 +97,7 @@ const AuthContextProvider = ({
         token: undefined,
         isAuthenticated: false,
         // user: undefined,
-        redirect: `${location.origin}${__APP_ENV__.BISHENG_HOST}` // data.redirect ?? bsConfig?.host,
+        redirect: getPlatformAdminPanelUrl(),
       });
     },
     onError: (error) => {
@@ -150,6 +151,7 @@ const AuthContextProvider = ({
   useEffect(() => {
     if (userQuery.data) {
       setUser(userQuery.data);
+      setIsAuthenticated(true);
     } else if (userQuery.isError) {
       doSetError((userQuery.error as Error).message);
       // navigate(`/${__APP_ENV__.BISHENG_HOST}`, { replace: true });

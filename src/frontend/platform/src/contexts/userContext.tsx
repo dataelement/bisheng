@@ -129,7 +129,22 @@ export function UserProvider({ children }: { children: ReactNode }) {
             // 是否有访问后台权限
             if (/^(\/\w+)?\/chat/.test(location.pathname)) return // 排除免登陆
 
-            if (res.role !== 'admin' && !web_menu.includes('backend')) {
+            // v2.5 角色菜单使用 admin 作为管理端父级；旧数据可能仍为 backend（WebMenuResource 遗留）
+            const adminMenuKeys = new Set([
+                'backend',
+                'admin',
+                'board',
+                'model',
+                'log',
+                'knowledge',
+                'build',
+                'evaluation',
+                'system_config',
+                'mark_task',
+            ])
+            const canAccessPlatform =
+                res.role === 'admin' || web_menu.some((k: string) => adminMenuKeys.has(k))
+            if (!canAccessPlatform) {
                 location.href = `${location.origin}/workspace/c/new?error=90001`;
                 return;
             }

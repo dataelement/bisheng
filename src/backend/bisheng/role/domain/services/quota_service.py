@@ -195,8 +195,25 @@ class QuotaService:
         return items
 
     @classmethod
+    def role_knowledge_space_file_limit_gb(cls, role) -> int:
+        """Single role: storage quota (GB) from quota_config vs deprecated column.
+
+        Returns ``-1`` when quota_config marks unlimited for this role.
+        """
+        qc = (role.quota_config or {}).get('knowledge_space_file')
+        if qc == -1:
+            return -1
+        legacy = getattr(role, 'knowledge_space_file_limit', None) or 0
+        candidates: list[int] = []
+        if qc is not None and isinstance(qc, int) and qc > 0:
+            candidates.append(qc)
+        if isinstance(legacy, int) and legacy > 0:
+            candidates.append(legacy)
+        return max(candidates) if candidates else 0
+
+    @classmethod
     def _compute_role_quotas(cls, roles) -> dict:
-        """Compute multi-role quota: take max per resource type, -1 wins."""
+        """Compute multi-role quota: take max per resource type, -1 wins (AC-16)."""
         result = {}
         for resource_type in DEFAULT_ROLE_QUOTA:
             max_q = None

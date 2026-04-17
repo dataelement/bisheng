@@ -10,7 +10,7 @@ from captcha.image import ImageCaptcha
 from fastapi import APIRouter, Depends, HTTPException, Query, Body, Request, UploadFile, File
 from fastapi.security import OAuth2PasswordBearer
 from loguru import logger
-from sqlmodel import select
+from sqlmodel import col, select
 
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.api.v1.schemas import resp_200, CreateUserReq
@@ -18,9 +18,9 @@ from bisheng.common.errcode.http_error import UnAuthorizedError, NotFoundError
 from bisheng.common.errcode.user import (UserNotPasswordError, UserValidateError, UserPasswordError, UserForbiddenError)
 from bisheng.common.services.config_service import settings
 from bisheng.core.cache.redis_manager import get_redis_client, get_redis_client_sync
-from bisheng.core.database import get_sync_db_session
+from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.database.constants import AdminRole, DefaultRole
-from bisheng.database.models.department import DepartmentDao
+from bisheng.database.models.department import DepartmentDao, UserDepartment
 from bisheng.database.models.group import GroupDao
 from bisheng.database.models.mark_task import MarkTaskDao
 from bisheng.database.models.role import Role, RoleCreate, RoleDao, RoleUpdate
@@ -94,13 +94,12 @@ async def sso(*, request: Request, user: UserCreate, auth_jwt: AuthJwt = Depends
         raise ValueError('Interface not supported')
 
 
-def get_error_password_key(username: str):
-    return USER_PASSWORD_ERROR.format(username)
+def get_error_password_key(user_id: int) -> str:
+    return USER_PASSWORD_ERROR.format(int(user_id))
 
 
-def clear_error_password_key(username: str):
-    # Count of cleanup password errors
-    error_key = get_error_password_key(username)
+def clear_error_password_key(user_id: int):
+    error_key = get_error_password_key(user_id)
     get_redis_client_sync().delete(error_key)
 
 
@@ -134,12 +133,15 @@ async def get_info(login_user: LoginUser = Depends(LoginUser.get_login_user)):
     db_user = await UserDao.aget_user(user_id)
     if not db_user:
         raise NotFoundError()
-    role, web_menu = await login_user.get_roles_web_menu(db_user)
 
     admin_group = await UserGroupDao.aget_user_admin_group(user_id)
     admin_group = [one.group_id for one in admin_group]
     dept_admin_depts = await DepartmentDao.aget_user_admin_departments(user_id)
     is_department_admin = bool(dept_admin_depts)
+    role, web_menu = await login_user.get_roles_web_menu(
+        db_user,
+        is_department_admin=is_department_admin,
+    )
     can_manage_user_groups = bool(login_user.is_admin() or is_department_admin)
     return resp_200(await UserService.build_user_read(
         db_user,
@@ -157,6 +159,30 @@ async def logout(auth_jwt: AuthJwt = Depends()):
     return resp_200()
 
 
+async def _department_admin_scoped_user_ids(user_id: int) -> Optional[List[int]]:
+    """部门管理员：返回其管辖部门子树内出现过的 user_id；非部门管理员返回 None。"""
+    admin_depts = await DepartmentDao.aget_user_admin_departments(user_id)
+    if not admin_depts:
+        return None
+    internal_ids: set[int] = set()
+    for dept in admin_depts:
+        path = getattr(dept, 'path', None) or ''
+        if not path:
+            continue
+        subtree = await DepartmentDao.aget_subtree_ids(path)
+        for did in subtree:
+            internal_ids.add(int(did))
+    if not internal_ids:
+        return []
+    async with get_async_db_session() as session:
+        stmt = select(UserDepartment.user_id).where(
+            col(UserDepartment.department_id).in_(list(internal_ids)),
+        )
+        result = await session.exec(stmt)
+        rows = result.all()
+    return list({int(uid) for uid in rows})
+
+
 @router.get('/user/list', status_code=201)
 async def list_user(*,
                     name: Optional[str] = None,
@@ -168,26 +194,34 @@ async def list_user(*,
     groups = group_id
     roles = role_id
     user_admin_groups = []
+    dept_scope_user_ids: Optional[List[int]] = None
     if not login_user.is_admin():
         # Query if you are an administrator of another user group under
         user_admin_groups = UserGroupDao.get_user_admin_group(login_user.user_id)
         user_admin_groups = [one.group_id for one in user_admin_groups]
         groups = user_admin_groups
-        # Not an administrator of any user group does not have permission to view
         if not groups:
-            raise HTTPException(status_code=500, detail="Quit that! You don't have rights to view this.")
-        # Filter bygroup_idand administrator permissionsgroupsDoing Intersections
-        if group_id:
-            groups = list(set(groups) & set(group_id))
-            if not groups:
+            # 无用户组管理权时，允许部门管理员按部门子树查看用户
+            dept_scope_user_ids = await _department_admin_scoped_user_ids(login_user.user_id)
+            if dept_scope_user_ids is None:
                 raise HTTPException(status_code=500, detail="Quit that! You don't have rights to view this.")
-        # Query roles under user groups, Intersect with the role filter to get the role that really needs to be queriedID
-        group_roles = RoleDao.get_role_by_groups(groups, None, 0, 0)
-        if role_id:
-            roles = list(set(role_id) & set([one.id for one in group_roles]))
+        else:
+            # Filter bygroup_idand administrator permissionsgroupsDoing Intersections
+            if group_id:
+                groups = list(set(groups) & set(group_id))
+                if not groups:
+                    raise HTTPException(status_code=500, detail="Quit that! You don't have rights to view this.")
+            # Query roles under user groups, Intersect with the role filter to get the role that really needs to be queriedID
+            group_roles = RoleDao.get_role_by_groups(groups, None, 0, 0)
+            if role_id:
+                roles = list(set(role_id) & set([one.id for one in group_roles]))
     # Users filtered by user groups and rolesid
     user_ids = []
-    if groups:
+    if dept_scope_user_ids is not None:
+        if not dept_scope_user_ids:
+            return resp_200({'data': [], 'total': 0})
+        user_ids = dept_scope_user_ids
+    elif groups:
         # Query users under user groupsID
         groups_user_ids = UserGroupDao.get_groups_user(groups)
         if not groups_user_ids:
@@ -302,7 +336,7 @@ async def update(*,
         db_user.delete = user.delete
     if db_user.delete == 0:  # Enable User
         # Count of cleanup password errors
-        clear_error_password_key(db_user.user_name)
+        clear_error_password_key(db_user.user_id)
     with get_sync_db_session() as session:
         session.add(db_user)
         session.commit()
@@ -652,7 +686,7 @@ async def reset_password(
     user_info.password_update_time = datetime.now()
     UserDao.update_user(user_info)
 
-    clear_error_password_key(user_info.user_name)
+    clear_error_password_key(user_info.user_id)
     return resp_200()
 
 
@@ -678,20 +712,20 @@ async def change_password(*,
     user_info.password_update_time = datetime.now()
     UserDao.update_user(user_info)
 
-    clear_error_password_key(user_info.user_name)
+    clear_error_password_key(user_info.user_id)
     return resp_200()
 
 
 @router.post('/user/change_password_public', status_code=200)
 async def change_password_public(*,
-                                 username: str = Body(embed=True),
+                                 person_id: str = Body(embed=True),
                                  password: str = Body(embed=True),
                                  new_password: str = Body(embed=True)):
     """
     Not Logged-In Users Change my password
     """
 
-    user_info = UserDao.get_user_by_username(username)
+    user_info = await UserDao.aget_by_external_id((person_id or '').strip())
     if not user_info.password:
         return UserValidateError.return_resp()
 
@@ -702,7 +736,7 @@ async def change_password_public(*,
     user_info.password_update_time = datetime.now()
     UserDao.update_user(user_info)
 
-    clear_error_password_key(username)
+    clear_error_password_key(user_info.user_id)
     return resp_200()
 
 

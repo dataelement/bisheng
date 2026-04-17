@@ -9,13 +9,14 @@ import { VitePWA } from 'vite-plugin-pwa';
 import { viteStaticCopy } from 'vite-plugin-static-copy';
 import { createHtmlPlugin } from 'vite-plugin-html';
 
-const app_env = {
-  BASE_URL: '/workspace',
-  BISHENG_HOST: '/admin'
-}
-
 // https://vitejs.dev/config/
 export default defineConfig(({ command, mode }) => {
+  const app_env = {
+    BASE_URL: '/workspace',
+    // 须为路由合法 path（见 routes/index.tsx）；跨端口用 PLATFORM_ORIGIN + href 工具函数
+    BISHENG_HOST: '/admin',
+    PLATFORM_ORIGIN: command === 'serve' ? 'http://localhost:3001' : '',
+  };
   const env = loadEnv(mode, process.cwd(), 'VITE_');
   const apiProxyTarget =
     env.VITE_PROXY_TARGET || process.env.VITE_PROXY_TARGET || 'http://127.0.0.1:7860';

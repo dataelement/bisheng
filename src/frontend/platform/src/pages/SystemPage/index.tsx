@@ -18,26 +18,31 @@ export default function index() {
   const { user } = useContext(userContext)
 
   const { t } = useTranslation()
+  const isSuperAdmin = user?.role === "admin"
+  const isDeptAdmin = !!user?.is_department_admin
+  const showOrgTab = isSuperAdmin || isDeptAdmin
+  const canAccessSystemConfig = isSuperAdmin || isDeptAdmin
   const showUserGroupTab =
     user?.role === "admin" || !!user?.can_manage_user_groups
+  /** 仅非部门管理员、非超管展示旧版扁平用户表（依赖用户组维度） */
+  const showLegacyUserTab = !isSuperAdmin && !isDeptAdmin
 
-  const defaultTab =
-    user?.role === "admin"
-      ? "organization"
-      : showUserGroupTab
-        ? "userGroup"
-        : "user"
+  const defaultTab = showOrgTab
+    ? "organization"
+    : showUserGroupTab
+      ? "userGroup"
+      : "user"
 
   return (
     <div className="h-full w-full px-2 pt-4">
       <Tabs defaultValue={defaultTab} className="w-full">
         <TabsList className="">
-          {user.role === "admin" && (
+          {showOrgTab && (
             <TabsTrigger value="organization">
               {t("system.orgAndMembers")}
             </TabsTrigger>
           )}
-          {user.role !== "admin" && (
+          {showLegacyUserTab && (
             <TabsTrigger value="user" className="roundedrounded-xl">
               {t("system.userManagement")}
             </TabsTrigger>
@@ -46,19 +51,19 @@ export default function index() {
             <TabsTrigger value="userGroup">{t("system.userGroupsM")}</TabsTrigger>
           )}
           <TabsTrigger value="role">{t("system.roleAndPermissions")}</TabsTrigger>
-          {user.role === "admin" && (
+          {canAccessSystemConfig && (
             <TabsTrigger value="system">{t("system.systemConfiguration")}</TabsTrigger>
           )}
-          {user.role === "admin" && (
+          {canAccessSystemConfig && (
             <TabsTrigger value="theme">{t("system.themeColor")}</TabsTrigger>
           )}
         </TabsList>
-        {user.role === "admin" && (
+        {showOrgTab && (
           <TabsContent value="organization">
             <OrganizationAndMembers />
           </TabsContent>
         )}
-        {user.role !== "admin" && (
+        {showLegacyUserTab && (
           <TabsContent value="user">
             <Users />
           </TabsContent>
@@ -71,12 +76,12 @@ export default function index() {
         <TabsContent value="role">
           <RolesAndPermissions />
         </TabsContent>
-        {user.role === "admin" && (
+        {canAccessSystemConfig && (
           <TabsContent value="system">
             <Config />
           </TabsContent>
         )}
-        {user.role === "admin" && (
+        {canAccessSystemConfig && (
           <TabsContent value="theme">
             <Theme />
           </TabsContent>

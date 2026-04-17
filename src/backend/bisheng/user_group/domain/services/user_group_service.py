@@ -70,10 +70,21 @@ async def _ensure_manage_user_groups(login_user) -> None:
 
 
 async def _ensure_mutate_group(login_user, group: Group) -> None:
-    """更新成员等：仅系统超管或该用户组的创建者。"""
+    """修改用户组元数据（名称、可见性等）：仅系统超管或创建者。"""
     if _is_admin(login_user):
         return
     if group.create_user == login_user.user_id:
+        return
+    raise UserGroupPermissionDeniedError()
+
+
+async def _ensure_mutate_group_members(login_user, group: Group) -> None:
+    """增删普通成员：超管、创建者，或「公开组」下的部门管理员（与组织成员编辑 PRD 一致）。"""
+    if _is_admin(login_user):
+        return
+    if group.create_user == login_user.user_id:
+        return
+    if getattr(group, 'visibility', None) == 'public' and await _is_department_admin(login_user):
         return
     raise UserGroupPermissionDeniedError()
 
@@ -109,10 +120,11 @@ class UserGroupService:
 
     @classmethod
     async def _list_manageable_groups(cls, login_user) -> List[Group]:
-        """Groups the caller may mutate.
+        """Groups whose **membership** the caller may assign (编辑人员用户组多选).
 
-        System admins may manage any group. Non-admins may only manage
-        groups they created themselves.
+        System admins: any group. Department admins: public groups + groups they
+        created (private groups created by others remain out of scope). Other
+        users: only groups they created.
         """
         if _is_admin(login_user):
             groups, _ = await GroupDao.aget_all_groups(1, 2000, '')
@@ -121,6 +133,11 @@ class UserGroupService:
         visible_groups, _ = await GroupDao.aget_visible_groups(
             login_user.user_id, 1, 2000, '',
         )
+        if await _is_department_admin(login_user):
+            return [
+                g for g in visible_groups
+                if g.visibility == 'public' or g.create_user == login_user.user_id
+            ]
         return [g for g in visible_groups if g.create_user == login_user.user_id]
 
     @classmethod
@@ -282,7 +299,7 @@ class UserGroupService:
         group = await GroupDao.aget_by_id(group_id)
         if not group:
             raise UserGroupNotFoundError()
-        await _ensure_mutate_group(login_user, group)
+        await _ensure_mutate_group_members(login_user, group)
 
         if not user_ids:
             return
@@ -306,7 +323,7 @@ class UserGroupService:
         group = await GroupDao.aget_by_id(group_id)
         if not group:
             raise UserGroupNotFoundError()
-        await _ensure_mutate_group(login_user, group)
+        await _ensure_mutate_group_members(login_user, group)
 
         desired_set = {int(x) for x in desired_user_ids if x and int(x) > 0}
         current_ids = set(await UserGroupDao.aget_plain_member_user_ids(group_id))
@@ -361,7 +378,7 @@ class UserGroupService:
         group = await GroupDao.aget_by_id(group_id)
         if not group:
             raise UserGroupNotFoundError()
-        await _ensure_mutate_group(login_user, group)
+        await _ensure_mutate_group_members(login_user, group)
 
         row = await UserGroupDao.aget_plain_member_row(group_id, user_id)
         if not row:

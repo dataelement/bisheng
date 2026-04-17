@@ -12,6 +12,7 @@ import {
   getDepartmentApi,
   getDepartmentAssignableRolesApi,
   purgeDepartmentApi,
+  restoreDepartmentApi,
   setDepartmentAdminsApi,
   updateDepartmentApi,
 } from "@/controllers/API/department"
@@ -132,8 +133,13 @@ export function DepartmentSettings({ dept, tree, onChanged }: DepartmentSettings
         captureAndAlertRequestErrorHoc(
           deleteDepartmentApi(dept.dept_id)
         ).then((res) => {
-          if (res !== null) {
-            toast({ title: t("bs:department.delete"), variant: "success" })
+          // captureAndAlertRequestErrorHoc returns false when request failed.
+          if (res !== false && res !== "canceled") {
+            toast({
+              title: t("prompt"),
+              description: t("deleteSuccess"),
+              variant: "success",
+            })
             onChanged()
           }
           next()
@@ -150,8 +156,34 @@ export function DepartmentSettings({ dept, tree, onChanged }: DepartmentSettings
         captureAndAlertRequestErrorHoc(
           purgeDepartmentApi(dept.dept_id)
         ).then((res) => {
-          if (res !== null) {
-            toast({ title: t("bs:department.permanentDelete"), variant: "success" })
+          if (res !== false && res !== "canceled") {
+            toast({
+              title: t("prompt"),
+              description: t("deleteSuccess"),
+              variant: "success",
+            })
+            onChanged()
+          }
+          next()
+        })
+      },
+    })
+  }, [dept.dept_id, onChanged, t])
+
+  const handleRestore = useCallback(() => {
+    bsConfirm({
+      title: t("bs:department.restore"),
+      desc: t("bs:department.confirmRestore"),
+      onOk: (next) => {
+        captureAndAlertRequestErrorHoc(
+          restoreDepartmentApi(dept.dept_id)
+        ).then((res) => {
+          if (res !== false && res !== "canceled") {
+            toast({
+              title: t("prompt"),
+              description: t("save") + t("success"),
+              variant: "success",
+            })
             onChanged()
           }
           next()
@@ -275,9 +307,14 @@ export function DepartmentSettings({ dept, tree, onChanged }: DepartmentSettings
       {/* Delete / Purge */}
       {isArchived && (
         <div className="border-t pt-6">
-          <Button variant="destructive" onClick={handlePurge}>
-            {t("bs:department.permanentDelete")}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={handleRestore}>
+              {t("bs:department.restore")}
+            </Button>
+            <Button variant="destructive" onClick={handlePurge}>
+              {t("bs:department.permanentDelete")}
+            </Button>
+          </div>
         </div>
       )}
       {!isArchived && !isSynced && dept.parent_id !== null && (

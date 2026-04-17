@@ -332,17 +332,26 @@ export function OrganizationMemberEditDialog({
                 <div>
                   <Label>{t("bs:department.userGroups")}</Label>
                   <div className="max-h-40 space-y-2 overflow-y-auto rounded border p-2">
-                    {form.manageable_groups.map((g) => (
-                      <label key={g.id} className="flex cursor-pointer items-center gap-2 text-sm">
-                        <Checkbox
-                          checked={groupSel.has(g.id)}
-                          onCheckedChange={(c) =>
-                            setGroupSel((prev) => toggleSet(prev, g.id, Boolean(c)))
-                          }
-                        />
-                        <span>{g.group_name}</span>
-                      </label>
-                    ))}
+                    {form.manageable_groups.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">
+                        {t("bs:department.memberEditUserGroupsEmpty")}
+                      </p>
+                    ) : (
+                      form.manageable_groups.map((g) => (
+                        <label
+                          key={g.id}
+                          className="flex cursor-pointer items-center gap-2 text-sm"
+                        >
+                          <Checkbox
+                            checked={groupSel.has(g.id)}
+                            onCheckedChange={(c) =>
+                              setGroupSel((prev) => toggleSet(prev, g.id, Boolean(c)))
+                            }
+                          />
+                          <span>{g.group_name}</span>
+                        </label>
+                      ))
+                    )}
                   </div>
                 </div>
                 {form.primary_department && (

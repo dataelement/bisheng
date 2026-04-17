@@ -58,17 +58,18 @@ export default function MainLayout() {
     // 重置密码
     const navigator = useNavigate()
     const JumpResetPage = () => {
-        localStorage.setItem('account', user.user_name)
+        localStorage.setItem('account', user.external_id || user.user_name)
         navigator('/reset')
     }
 
-    // 系统管理员(超管、组超管)
-    const isAdmin = useMemo(() => {
-        return user.role === 'admin'
-    }, [user])
+    // 系统超管（租户超管仍走自定义角色 web_menu；部门管理员由服务端合并全量菜单）
+    const isSuperAdmin = useMemo(() => user.role === "admin", [user])
+    const isDeptAdmin = Boolean(user.is_department_admin)
+    // 侧栏：数据集 / 日志 / 系统管理 — 超管与部门管理员
+    const isFullAdminShell = isSuperAdmin || isDeptAdmin
 
-    const isMenu = (menu) => {
-        return user.web_menu.includes(menu) || user.role === 'admin'
+    const isMenu = (menu: string) => {
+        return user.web_menu?.includes(menu) || isSuperAdmin
     }
 
     return <div className="flex">
@@ -100,7 +101,7 @@ export default function MainLayout() {
                             </Tooltip>
                         </TooltipProvider>
                         <Separator className="mx-[4px] dark:bg-[#111111]" orientation="vertical" />
-                        {appConfig.multiTenantEnabled && <TenantSwitcher user={user} isAdmin={isAdmin} />}
+                        {appConfig.multiTenantEnabled && <TenantSwitcher user={user} isAdmin={isSuperAdmin} />}
                         <SelectHover
                             className={"-top-4"}
                             triagger={
@@ -160,7 +161,7 @@ export default function MainLayout() {
                             </NavLink>
                         }
                         {
-                            user.role === 'admin' && <>
+                            isFullAdminShell && <>
                                 <NavLink to='/dataset' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
                                     <DatasetIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.dataset')}</span>
                                 </NavLink>
@@ -184,21 +185,21 @@ export default function MainLayout() {
                             </NavLink>
                         }
                         {
-                            isAdmin && <>
+                            isFullAdminShell && <>
                                 <NavLink to='/log' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
                                     <LogIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[56px] text-[14px] leading-[48px]">{t('menu.log')}</span>
                                 </NavLink>
                             </>
                         }
                         {
-                            isAdmin && <>
+                            isFullAdminShell && <>
                                 <NavLink to='/sys' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
                                     <SystemIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[56px] text-[14px] leading-[48px]">{t('menu.system')}</span>
                                 </NavLink>
                             </>
                         }
                         {
-                            isAdmin && appConfig.multiTenantEnabled && <>
+                            isSuperAdmin && appConfig.multiTenantEnabled && <>
                                 <NavLink to='/tenant' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
                                     <SystemIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[56px] text-[14px] leading-[48px]">{t('tenant.management')}</span>
                                 </NavLink>
