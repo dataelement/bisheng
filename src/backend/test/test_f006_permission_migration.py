@@ -508,6 +508,26 @@ class TestStep4SpaceChannelMembers:
         assert ('user:1', 'knowledge_space:sp-1') in migrator_dry._global_seen
         assert ('user:2', 'channel:ch-1') in migrator_dry._global_seen
 
+    @pytest.mark.asyncio
+    async def test_uppercase_enum_values(self, migrator_dry, patch_db):
+        """Production MySQL enum is uppercase (SPACE/CHANNEL, CREATOR/ADMIN/MEMBER).
+        Migration must normalize case before mapping lookup.
+        """
+        session = patch_db
+        await insert_rows(session, 'space_channel_member', [
+            {'business_id': 'sp-1', 'business_type': 'SPACE', 'user_id': 1,
+             'user_role': 'CREATOR', 'status': 'ACTIVE'},
+            {'business_id': 'sp-1', 'business_type': 'SPACE', 'user_id': 2,
+             'user_role': 'ADMIN', 'status': 'ACTIVE'},
+            {'business_id': 'ch-1', 'business_type': 'CHANNEL', 'user_id': 3,
+             'user_role': 'MEMBER', 'status': 'ACTIVE'},
+        ])
+        count = await migrator_dry.step4_space_channel_members()
+        assert count == 3
+        assert migrator_dry._global_seen[('user:1', 'knowledge_space:sp-1')] == 'owner'
+        assert migrator_dry._global_seen[('user:2', 'knowledge_space:sp-1')] == 'manager'
+        assert migrator_dry._global_seen[('user:3', 'channel:ch-1')] == 'viewer'
+
 
 class TestStep5ResourceOwners:
     """Step 5: resource tables → owner tuples."""

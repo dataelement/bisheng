@@ -379,8 +379,10 @@ class RBACToReBACMigrator:
 
         ops = []
         for biz_id, biz_type, uid, role in members:
-            relation = SCM_ROLE_MAPPING.get(role)
-            obj_type = SCM_TYPE_MAPPING.get(biz_type)
+            # Production enum values are uppercase; test fixtures use
+            # lowercase varchar. Normalize before lookup.
+            relation = SCM_ROLE_MAPPING.get((role or '').lower())
+            obj_type = SCM_TYPE_MAPPING.get((biz_type or '').lower())
             if not relation or not obj_type:
                 logger.warning(f'Step 4: skip unknown role={role} or type={biz_type}')
                 continue
@@ -556,7 +558,8 @@ class RBACToReBACMigrator:
                                 "FROM space_channel_member WHERE status = 'ACTIVE'")
                     )
                     for s_uid, s_btype, s_bid in scm_result.fetchall():
-                        scm_set.add((s_uid, s_btype, s_bid))
+                        # Normalize case to match scm_type_reverse lookup below.
+                        scm_set.add((s_uid, (s_btype or '').lower(), s_bid))
                 except Exception:
                     pass  # table may not exist
 
