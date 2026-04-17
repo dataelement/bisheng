@@ -206,6 +206,47 @@ class KnowledgeSpaceService(KnowledgeUtils):
             self._ensure_space_file(file_record, space_id)
         return file_records
 
+    async def _grant_space_membership_tuple(self, space_id: int, member: SpaceChannelMember) -> None:
+        relation = _get_scm_role_to_fga().get(member.user_role)
+        if not relation:
+            return
+        try:
+            await PermissionService.authorize(
+                object_type='knowledge_space', object_id=str(space_id),
+                grants=[AuthorizeGrantItem(
+                    subject_type='user', subject_id=member.user_id,
+                    relation=relation, include_children=False,
+                )],
+            )
+        except Exception as e:
+            _logger.warning(
+                'Failed to write FGA %s tuple for space %s member %s: %s',
+                relation, space_id, member.user_id, e,
+            )
+
+    async def _revoke_space_membership_tuple(self, space_id: int, user_id: int, user_role: UserRoleEnum) -> None:
+        relation = _get_scm_role_to_fga().get(user_role)
+        if not relation:
+            return
+        try:
+            await PermissionService.authorize(
+                object_type='knowledge_space', object_id=str(space_id),
+                revokes=[AuthorizeRevokeItem(
+                    subject_type='user', subject_id=user_id,
+                    relation=relation, include_children=False,
+                )],
+            )
+        except Exception as e:
+            _logger.warning(
+                'Failed to delete FGA %s tuple for space %s member %s: %s',
+                relation, space_id, user_id, e,
+            )
+
+    async def _sync_active_member_tuples(self, space_id: int) -> None:
+        active_members = await SpaceChannelMemberDao.async_get_members_by_space(space_id)
+        for member in active_members:
+            await self._grant_space_membership_tuple(space_id, member)
+
     async def _require_read_permission(self, space_id: int) -> Knowledge:
         space = await KnowledgeDao.aquery_by_id(space_id)
         if not space or space.type != KnowledgeTypeEnum.SPACE.value:
@@ -360,9 +401,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         space.is_released = is_released
 
         space = await KnowledgeDao.async_update_space(space)
+        new_auth_type = space.auth_type
 
         # When switching to PRIVATE, remove all non-creator members
-        if old_auth_type != AuthTypeEnum.PRIVATE and auth_type == AuthTypeEnum.PRIVATE:
+        if old_auth_type != AuthTypeEnum.PRIVATE and new_auth_type == AuthTypeEnum.PRIVATE:
             await SpaceChannelMemberDao.async_delete_non_creator_members(space_id)
             # F008: Clear all FGA tuples and re-write owner only
             try:
@@ -372,8 +414,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 )
             except Exception as e:
                 _logger.warning('Failed to sync FGA tuples after PRIVATE switch for space %s: %s', space_id, e)
-        elif old_auth_type == AuthTypeEnum.APPROVAL and auth_type == AuthTypeEnum.PUBLIC:
+        elif old_auth_type == AuthTypeEnum.APPROVAL and new_auth_type == AuthTypeEnum.PUBLIC:
+            pending_members = await SpaceChannelMemberDao.async_get_members_by_space(
+                space_id, status=MembershipStatusEnum.PENDING,
+            )
+            for member in pending_members:
+                member.status = MembershipStatusEnum.ACTIVE
+                await SpaceChannelMemberDao.update(member)
             await SpaceChannelMemberDao.async_delete_rejected_members(space_id)
+            await self._sync_active_member_tuples(space_id)
+        elif old_auth_type == AuthTypeEnum.PUBLIC and new_auth_type == AuthTypeEnum.APPROVAL:
+            await self._sync_active_member_tuples(space_id)
 
         return space
 
@@ -1528,6 +1579,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if previous_status != MembershipStatusEnum.PENDING:
             await self._send_subscription_notification(space)
 
+        if member.status == MembershipStatusEnum.ACTIVE:
+            await self._grant_space_membership_tuple(space_id, member)
+
         return {
             "status": "subscribed" if member.status == MembershipStatusEnum.ACTIVE else "pending",
             "space_id": space_id,
@@ -1556,4 +1610,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if not space or space.type != KnowledgeTypeEnum.SPACE.value:
             raise SpaceNotFoundError()
 
-        return await SpaceChannelMemberDao.delete_space_member(space_id, self.login_user.user_id)
+        current_membership = await SpaceChannelMemberDao.async_find_member(space_id, self.login_user.user_id)
+        if (
+                space.user_id == self.login_user.user_id
+                or (current_membership and current_membership.user_role == UserRoleEnum.CREATOR)
+        ):
+            raise SpacePermissionDeniedError()
+
+        deleted = await SpaceChannelMemberDao.delete_space_member(space_id, self.login_user.user_id)
+        if current_membership and current_membership.is_active:
+            await self._revoke_space_membership_tuple(space_id, self.login_user.user_id, current_membership.user_role)
+        return deleted
