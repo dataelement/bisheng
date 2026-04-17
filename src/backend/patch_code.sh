@@ -74,7 +74,5 @@ python_path=$(python -c 'from distutils.sysconfig import get_python_lib; print(g
 python_path=$(win_to_gitbash_path "$python_path")
 
 echo "检测到python环境依赖目录：$python_path"
-
-patch_code_file "$cpath/bisheng/patches/langchain_openai.patch" "$python_path/langchain_openai/chat_models/base.py" "additional_kwargs\['reasoning_content'\]"
-
+echo "langchain-openai reasoning_content 已改为项目内继承实现，无需再打补丁"
 

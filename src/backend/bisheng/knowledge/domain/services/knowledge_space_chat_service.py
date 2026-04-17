@@ -29,6 +29,7 @@ from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
 from bisheng.knowledge.domain.models.knowledge_space_file import SpaceFileDao
+from bisheng.llm.domain.utils import extract_reasoning_content
 from bisheng.llm.domain import LLMService
 from bisheng.llm.domain.schemas import WorkbenchModelConfig
 from bisheng.tool.domain.langchain.knowledge import KnowledgeRetrieverTool
@@ -136,15 +137,16 @@ class KnowledgeSpaceChatService:
             inputs = history
 
         async for one in llm.astream(inputs):
+            chunk_reasoning_content = extract_reasoning_content(one)
             yield ChatResponse(
                 category=MessageCategory.STREAM,
                 message={
                     "content": one.content,
-                    "reasoning_content": one.additional_kwargs.get("reasoning_content", ""),
+                    "reasoning_content": chunk_reasoning_content,
                 },
                 type="stream"
             )
-            reasoning_content += one.additional_kwargs.get("reasoning_content", "")
+            reasoning_content += chunk_reasoning_content
             answer += one.content
         question_message = await ChatMessageDao.ainsert_one(ChatMessage(
             category=MessageCategory.QUESTION,
