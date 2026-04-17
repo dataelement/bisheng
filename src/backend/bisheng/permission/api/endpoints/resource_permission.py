@@ -554,6 +554,11 @@ async def rebac_schema_summary(
 async def get_knowledge_space_permission_template(
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
+    """Return the canonical backend template for knowledge-space permissions.
+
+    Frontend relation-model editors should consume this endpoint instead of
+    hardcoding their own copy so runtime and UI stay aligned.
+    """
     if not login_user.is_admin():
         return PermissionDeniedError.return_resp()
     return resp_200(KNOWLEDGE_SPACE_PERMISSION_TEMPLATE)

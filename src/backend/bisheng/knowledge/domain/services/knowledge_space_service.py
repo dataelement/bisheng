@@ -420,13 +420,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
             relation: str,
             model: Optional[dict] = None,
     ) -> set[str]:
+        # Runtime is permission-first. If a relation model explicitly defines
+        # permissions[], those ids are authoritative for action checks.
         if model is not None:
             permissions = model.get('permissions') or []
             if permissions:
                 return set(permissions)
+            # Built-in system models still rely on their canonical defaults.
             if model.get('is_system'):
                 return default_permission_ids_for_relation(model.get('relation'))
             return set()
+        # Legacy tuples without binding metadata fall back to system defaults so
+        # old data remains readable during migration.
         return default_permission_ids_for_relation(relation)
 
     @staticmethod
@@ -534,6 +539,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
             *,
             space_id: Optional[int] = None,
     ) -> set[str]:
+        # Evaluate permissions across the resource lineage from child -> parent.
+        # For a tuple backed by a custom relation model, permissions[] controls
+        # runtime actions. Relation-only defaults are kept only as a legacy
+        # fallback for old tuples or built-in system models.
         lineage = await self._build_resource_lineage(object_type, object_id, space_id=space_id)
         user_subject_strings = await self._get_current_user_subject_strings()
         bindings = await self._get_relation_bindings()
@@ -578,8 +587,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if space_resource:
             space = await KnowledgeDao.aquery_by_id(space_resource[1])
             if space and space.auth_type == AuthTypeEnum.PUBLIC:
+                # Public space visibility is a product-level compatibility rule:
+                # without explicit bindings, public resources still expose the
+                # viewer defaults for read-only operations.
                 return default_permission_ids_for_relation('viewer')
 
+        # Final legacy fallback: if the tuple has no model binding metadata, we
+        # derive the built-in defaults from the highest OpenFGA relation level.
         level = await PermissionService.get_permission_level(
             user_id=self.login_user.user_id,
             object_type=object_type,

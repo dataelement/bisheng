@@ -1,4 +1,9 @@
-"""Canonical knowledge-space permission template."""
+"""Canonical knowledge-space permission template.
+
+This module is the backend source of truth for knowledge-space permission ids.
+Runtime authorization and future frontend permission UIs should both derive from
+this definition instead of maintaining duplicated lists.
+"""
 
 from __future__ import annotations
 
@@ -59,10 +64,12 @@ KNOWLEDGE_SPACE_PERMISSION_TEMPLATE: dict = {
 
 
 def knowledge_space_template_sections() -> List[dict]:
+    """Return the grouped template for UI-style rendering."""
     return KNOWLEDGE_SPACE_PERMISSION_TEMPLATE['columns']
 
 
 def knowledge_space_template_permissions() -> List[dict]:
+    """Flatten the grouped template into a simple permission list."""
     return [
         item
         for column in knowledge_space_template_sections()
@@ -71,6 +78,11 @@ def knowledge_space_template_permissions() -> List[dict]:
 
 
 def default_permission_ids_for_relation(relation: str) -> Set[str]:
+    """System-model default permissions for owner/manager/editor/viewer.
+
+    This is a compatibility helper for built-in relation models. Custom models
+    should prefer their explicit permissions[] instead of these defaults.
+    """
     relation_level = _MODEL_LEVEL.get(relation, 0)
     return {
         item['id']
