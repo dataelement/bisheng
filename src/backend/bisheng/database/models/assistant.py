@@ -31,7 +31,7 @@ class AssistantBase(SQLModelSerializable):
     guide_question: Optional[List] = Field(default_factory=list, sa_column=Column(JSON),
                                            description='Facilitation Questions')
     model_name: str = Field(default='', description='Corresponds to the only model in the model managementID')
-    temperature: float = Field(default=0.5, description='Model Temperature')
+    temperature: float = Field(default=1, description='Model Temperature')
     max_token: int = Field(default=32000, description='MaxtokenQuantity')
     status: int = Field(default=AssistantStatus.OFFLINE.value, description='Whether the assistant is online')
     user_id: int = Field(default=0, description='Create UserID')

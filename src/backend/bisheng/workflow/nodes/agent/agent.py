@@ -201,7 +201,7 @@ class AgentNode(BaseNode):
         self._chat_history_num = self.node_params['chat_history_flag']['value']
 
         self._llm = LLMService.get_bisheng_llm_sync(model_id=self.node_params['model_id'],
-                                                    temperature=self.node_params.get('temperature', 0.3),
+                                                    temperature=self.node_params.get('temperature', 1),
                                                     app_id=self.workflow_id,
                                                     app_name=self.workflow_name,
                                                     app_type=ApplicationTypeEnum.WORKFLOW,

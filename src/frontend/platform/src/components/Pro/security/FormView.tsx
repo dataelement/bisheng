@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next"
 
 export default function FormView({ data }) {
     const { t } = useTranslation();
+    const showReviewType = false;
     const map = {
         '1': t('build.builtinWordList'),
         '2': t('build.customWordList')
@@ -9,10 +10,12 @@ export default function FormView({ data }) {
 
     return (
         <div className="mb-4 px-6">
-            <div className="flex items-center mb-4">
-                <span className="bisheng-label">{t('build.reviewType')}：</span> 
-                <span className="bg-gray-200 dark:bg-slate-900 px-2 rounded-xl text-xs">{t('build.sensitiveWordMatch')}</span>
-            </div>
+            {showReviewType && (
+                <div className="flex items-center mb-4">
+                    <span className="bisheng-label">{t('build.reviewType')}：</span>
+                    <span className="bg-gray-200 dark:bg-slate-900 px-2 rounded-xl text-xs">{t('build.sensitiveWordMatch')}</span>
+                </div>
+            )}
             <div className="flex items-center mb-4">
                 <span className="bisheng-label">{t('build.wordListType')}：</span>
                 <div className="inline">

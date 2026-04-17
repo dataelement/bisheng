@@ -177,7 +177,7 @@ class BishengLLM(BishengBase, BaseChatModel):
     """
 
     streaming: Optional[bool] = Field(default=None, description="Whether to use streaming output", alias="stream")
-    temperature: Optional[float] = Field(default=None, description="Model Generated Temperature")
+    temperature: Optional[float] = Field(default=1, description="Model Generated Temperature")
 
     llm: Optional[BaseChatModel] = Field(default=None)
 
@@ -200,7 +200,7 @@ class BishengLLM(BishengBase, BaseChatModel):
 
     def _init_client(self, model_info: LLMModel, server_info: LLMServer, **kwargs):
         ignore_online = kwargs.get('ignore_online', False)
-        self.temperature = kwargs.get('temperature', None)
+        self.temperature = kwargs.get('temperature', 1)
         self.streaming = kwargs.get('streaming', None)
 
         if not model_info:
