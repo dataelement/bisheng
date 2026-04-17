@@ -1,17 +1,18 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { useRecoilState, useRecoilValue } from 'recoil';
+import { useRecoilState } from 'recoil';
 import { Menu } from 'lucide-react';
 import { useAuthContext, useMediaQuery } from '~/hooks';
 import { AuthContext } from '~/hooks/AuthContext';
 import NavToggle from '~/components/Nav/NavToggle';
 import { sidebarVisibleState } from '~/pages/appChat/store/appSidebarAtoms';
 import AppChat from '~/pages/appChat';
+import { ChatEmptyState } from '~/pages/appChat/components/ChatEmptyState';
 import { cn } from '~/utils';
 import { StandaloneChatContext } from './StandaloneChatContext';
 import type { StandaloneChatContextValue } from './StandaloneChatContext';
 import { StandaloneSideNav } from './StandaloneSideNav';
-import { standaloneChatIdState } from './store/atoms';
+import { useStandaloneSidebar } from './hooks/useStandaloneSidebar';
 
 interface StandaloneChatPageProps {
   mode: 'guest' | 'auth';
@@ -73,12 +74,9 @@ function AuthStandaloneChatInner({ mode, flowType }: StandaloneChatPageProps) {
 function StandaloneChatInner({ mode, flowType }: StandaloneChatPageProps) {
   const { flowId } = useParams<{ flowId: string }>();
   const [sidebarVisible, setSidebarVisible] = useRecoilState(sidebarVisibleState);
-  const activeChatId = useRecoilValue(standaloneChatIdState);
   const [isHovering, setIsHovering] = useState(false);
   const isTabletOrMobile = useMediaQuery('(max-width: 768px)');
   const sidebarWidth = isTabletOrMobile ? 240 : 280;
-
-  if (!flowId) return null;
 
   const apiVersion = mode === 'guest' ? 'v2' : 'v1';
   const numericFlowType = FLOW_TYPE_MAP[flowType];
@@ -86,11 +84,18 @@ function StandaloneChatInner({ mode, flowType }: StandaloneChatPageProps) {
   const contextValue: StandaloneChatContextValue = {
     mode,
     flowType,
-    flowId,
+    flowId: flowId ?? '',
     apiVersion,
   };
 
+  // Lifted to page level so both sidebar and chat panel share one instance
+  // (single init, single draft registry, shared createNewChat for CTA).
+  const sidebar = useStandaloneSidebar(contextValue);
+  const { activeChatId, historyLoaded, createNewChat } = sidebar;
+
   const toggleSidebar = () => setSidebarVisible((prev) => !prev);
+
+  if (!flowId) return null;
 
   return (
     <StandaloneChatContext.Provider value={contextValue}>
@@ -105,7 +110,7 @@ function StandaloneChatInner({ mode, flowType }: StandaloneChatPageProps) {
                 sidebarVisible ? 'w-[280px]' : 'w-0',
               )}
             >
-              <StandaloneSideNav />
+              <StandaloneSideNav sidebar={sidebar} />
             </div>
           )}
 
@@ -113,7 +118,7 @@ function StandaloneChatInner({ mode, flowType }: StandaloneChatPageProps) {
           {isTabletOrMobile && sidebarVisible && (
             <div className="absolute inset-0 z-[55] flex">
               <div className="h-full w-[240px] border-r border-[#ececec] bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
-                <StandaloneSideNav />
+                <StandaloneSideNav sidebar={sidebar} />
               </div>
               <button
                 type="button"
@@ -157,14 +162,16 @@ function StandaloneChatInner({ mode, flowType }: StandaloneChatPageProps) {
           {/* Chat panel */}
           <div className="relative flex h-full max-w-full min-w-0 flex-1 flex-col overflow-hidden p-2">
             <div className="min-h-0 min-w-0 flex-1 overflow-hidden rounded-[8px] bg-white">
-              {activeChatId && (
+              {activeChatId ? (
                 <AppChat
                   chatId={activeChatId}
                   flowId={flowId}
                   flowType={numericFlowType}
                   apiVersion={apiVersion}
                 />
-              )}
+              ) : historyLoaded ? (
+                <ChatEmptyState onNewChat={createNewChat} />
+              ) : null}
             </div>
           </div>
 

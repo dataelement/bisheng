@@ -92,7 +92,7 @@ export function SideNav() {
     const flowData = chatState?.flow ?? currentApp;
 
     return (
-        <div className="relative w-[240px] h-full bg-white border-r border-[#ececec] flex flex-col gap-4 px-2 py-2 overflow-hidden text-[#212121]">
+        <div className="relative w-[280px] h-full bg-white border-r border-[#ececec] flex flex-col gap-4 px-2 py-2 overflow-hidden text-[#212121]">
             <button
                 onClick={() => setSidebarVisible(false)}
                 className="absolute right-2 top-2 z-20 flex shrink-0 items-center justify-center size-[28px] rounded-[6px] hover:bg-[#f7f8fa] transition-colors"

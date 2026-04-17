@@ -286,7 +286,7 @@ export default function KnowledgeSyncSection({
                         >
                             <PlusSquare className="size-3.5 shrink-0 text-gray-700" />
                             <span>
-                                {localize?.("com_subscription.select_knowledge_space") || "选择知识空间"}
+                                {localize?.("com_subscription.add_knowledge_space")}
                             </span>
                         </button>
                     </div>
