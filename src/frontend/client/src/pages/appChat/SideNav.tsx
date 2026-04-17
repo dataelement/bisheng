@@ -1,4 +1,4 @@
-import { X } from 'lucide-react';
+import { ChevronLeft, X } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useSetRecoilState, useRecoilValue } from 'recoil';
@@ -92,17 +92,34 @@ export function SideNav() {
     const flowData = chatState?.flow ?? currentApp;
 
     return (
-        <div className="relative w-[240px] h-full bg-white border-r border-[#ececec] flex flex-col gap-4 px-2 py-2 overflow-hidden text-[#212121]">
+        <div className="relative w-[280px] h-full bg-white border-r border-[#ececec] flex flex-col gap-4 px-2 py-2 overflow-hidden text-[#212121]">
+            {/* H5 overlay: close sidebar — PC uses NavToggle to collapse */}
             <button
+                type="button"
                 onClick={() => setSidebarVisible(false)}
-                className="absolute right-2 top-2 z-20 flex shrink-0 items-center justify-center size-[28px] rounded-[6px] hover:bg-[#f7f8fa] transition-colors"
+                className="absolute right-2 top-2 z-20 flex shrink-0 items-center justify-center size-[28px] rounded-[6px] hover:bg-[#f7f8fa] transition-colors md:hidden"
                 aria-label={localize('com_nav_close_sidebar')}
             >
                 <X size={16} className="text-[#4E5969]" />
             </button>
 
-            {/* Top module tabs */}
-            <div className="pt-8">
+            {/* PC: back + title — original desktop sidebar chrome */}
+            <div className="hidden md:flex shrink-0 items-center gap-2 pt-1">
+                <button
+                    type="button"
+                    onClick={() => navigate('/apps')}
+                    className="flex size-7 shrink-0 items-center justify-center rounded-[6px] text-[#212121] transition-colors hover:bg-[#f7f8fa]"
+                    aria-label={localize('com_ui_go_back')}
+                >
+                    <ChevronLeft className="size-4" />
+                </button>
+                <span className="min-w-0 truncate text-[14px] font-medium leading-[22px] text-[#212121]">
+                    {localize('com_app_chat_sidebar_title')}
+                </span>
+            </div>
+
+            {/* Top module tabs — H5 only (MainLayout hub nav handles PC) */}
+            <div className="pt-8 md:hidden">
                 <SideNavModuleTabs />
             </div>
 

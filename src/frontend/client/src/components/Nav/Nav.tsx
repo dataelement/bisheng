@@ -39,14 +39,6 @@ const Nav = ({
     permission: Permissions.USE,
   });
 
-  const handleMouseEnter = useCallback(() => {
-    setIsHovering(true);
-  }, []);
-
-  const handleMouseLeave = useCallback(() => {
-    setIsHovering(false);
-  }, []);
-
   useEffect(() => {
     if (isSmallScreen) {
       const savedNavVisible = localStorage.getItem('navVisible');
@@ -148,11 +140,8 @@ const Nav = ({
                   />
                   <div
                     className={cn(
-                      '-mr-2 min-h-0 flex-1 flex-col overflow-y-auto pr-2 transition-opacity duration-500',
-                      isHovering ? '' : 'scrollbar-transparent',
+                      '-mr-2 min-h-0 flex-1 flex-col overflow-y-auto scroll-no-hover pr-2'
                     )}
-                    onMouseEnter={handleMouseEnter}
-                    onMouseLeave={handleMouseLeave}
                     ref={containerRef}
                   >
                     {/* 会话列表 */}

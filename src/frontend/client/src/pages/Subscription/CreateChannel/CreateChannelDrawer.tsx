@@ -238,7 +238,7 @@ export function CreateChannelDrawer({
                 <SheetContent
                     side="right"
                     hideClose
-                    className="flex w-full max-w-[900px] flex-col overflow-y-auto scroll-on-scroll bg-white px-20 sm:max-w-[1000px] max-md:px-4"
+                    className="flex w-full max-w-[900px] flex-col overflow-y-auto scrollbar-on-hover bg-white px-20 sm:max-w-[1000px] max-md:px-4"
                     onScroll={handleBodyScroll}
                     data-scrolling={isBodyScrolling ? "true" : "false"}
                 >

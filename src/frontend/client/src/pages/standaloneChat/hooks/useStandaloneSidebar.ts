@@ -13,13 +13,19 @@ import {
 import { chatsState, runningState } from '~/pages/appChat/store/atoms';
 import { closeAppChatWebSocket } from '~/pages/appChat/useWebsocket';
 import { standaloneChatIdState } from '../store/atoms';
-import { useStandaloneChatContext } from '../StandaloneChatContext';
+import type { StandaloneChatContextValue } from '../StandaloneChatContext';
 import {
   getLocalConversations,
   addLocalConversation,
   renameLocalConversation as renameLocal,
   deleteLocalConversation as deleteLocal,
 } from '../localConversationStore';
+
+// Module-level draft registry: conversation ids that exist only in memory and
+// have not yet been persisted (guest: localStorage, auth: server via first
+// message). Survives component unmounts within the same page session so that
+// remounting the sidebar hook doesn't duplicate drafts.
+const draftChatIds = new Set<string>();
 
 const FLOW_TYPE_ASSISTANT = 5;
 const FLOW_TYPE_WORKFLOW = 10;
@@ -29,8 +35,8 @@ const FLOW_TYPE_WORKFLOW = 10;
  * Guest mode: conversations from localStorage, no server API calls for list/rename/delete.
  * Auth mode: delegates to server APIs (same as useAppSidebar but with different URL scheme).
  */
-export function useStandaloneSidebar() {
-  const { mode, flowType, flowId, apiVersion } = useStandaloneChatContext();
+export function useStandaloneSidebar(ctx: StandaloneChatContextValue) {
+  const { mode, flowType, flowId, apiVersion } = ctx;
   const localize = useLocalize();
   const isGuest = mode === 'guest';
   const numericFlowType = flowType === 'assistant' ? FLOW_TYPE_ASSISTANT : FLOW_TYPE_WORKFLOW;
@@ -40,15 +46,33 @@ export function useStandaloneSidebar() {
   const [conversations, setConversations] = useRecoilState(appConversationsState);
   const [sidebarVisible, setSidebarVisible] = useRecoilState(sidebarVisibleState);
   const [activeChatId, setActiveChatId] = useRecoilState(standaloneChatIdState);
-  const setChats = useSetRecoilState(chatsState);
+  const [chats, setChats] = useRecoilState(chatsState);
   const setRunning = useSetRecoilState(runningState);
 
   const [loading, setLoading] = useState(false);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
   const initializedRef = useRef(false);
+  // Snapshot of latest conversations for draft-preservation in async callbacks
+  const conversationsRef = useRef<AppConversation[]>(conversations);
+  useEffect(() => {
+    conversationsRef.current = conversations;
+  }, [conversations]);
 
   // Fetch conversation list
   const fetchConversations = useCallback(async (): Promise<AppConversation[]> => {
     if (!flowId) return [];
+
+    // Merge fetched list with any in-memory drafts (conversations created via
+    // createNewChat() but not yet persisted). Without this merge, a refetch
+    // triggered by rename/delete would wipe unsent drafts from the sidebar.
+    const preserveDrafts = (fetched: AppConversation[]): AppConversation[] => {
+      if (draftChatIds.size === 0) return fetched;
+      const fetchedIds = new Set(fetched.map((c) => c.id));
+      const drafts = conversationsRef.current.filter(
+        (c) => draftChatIds.has(c.id) && !fetchedIds.has(c.id),
+      );
+      return [...drafts, ...fetched];
+    };
 
     if (isGuest) {
       const local = getLocalConversations(flowId);
@@ -60,8 +84,9 @@ export function useStandaloneSidebar() {
         updatedAt: c.updatedAt,
         createdAt: c.createdAt,
       }));
-      setConversations(convos);
-      return convos;
+      const merged = preserveDrafts(convos);
+      setConversations(merged);
+      return merged;
     }
 
     // Auth mode: fetch from server
@@ -78,8 +103,9 @@ export function useStandaloneSidebar() {
         updatedAt: item.update_time || '',
         createdAt: item.create_time || '',
       }));
-      setConversations(list);
-      return list;
+      const merged = preserveDrafts(list);
+      setConversations(merged);
+      return merged;
     } catch {
       console.error('Failed to fetch standalone conversations');
       return [];
@@ -91,7 +117,7 @@ export function useStandaloneSidebar() {
   // Grouped conversations
   const groups: ConversationGroup[] = groupConversationsByTime(conversations);
 
-  // Create new conversation
+  // Create new conversation (as draft — not persisted until first user message)
   const createNewChat = useCallback(() => {
     if (!flowId) return;
     const chatId = generateUUID(32);
@@ -107,13 +133,14 @@ export function useStandaloneSidebar() {
       createdAt: now,
     };
 
-    if (isGuest) {
-      addLocalConversation(flowId, { id: chatId, title, updatedAt: now, createdAt: now });
-    }
-
+    // Do not persist yet (guest localStorage / server). Mark as draft so the
+    // first-user-message effect below can commit it when the user actually
+    // sends something. This prevents empty conversations from polluting the
+    // history list if the user navigates away without sending (TC-APP-PUB-019).
+    draftChatIds.add(chatId);
     setConversations((prev) => [conv, ...prev]);
     setActiveChatId(chatId);
-  }, [flowId, numericFlowType, isGuest, setConversations, setActiveChatId, localize]);
+  }, [flowId, numericFlowType, setConversations, setActiveChatId, localize]);
 
   // Switch to a conversation
   const switchConversation = useCallback(
@@ -142,6 +169,7 @@ export function useStandaloneSidebar() {
       if (isGuest) {
         deleteLocal(flowId, chatId);
       }
+      draftChatIds.delete(chatId);
       // Clean up websocket and recoil state
       closeAppChatWebSocket(chatId);
       setChats((prev) => {
@@ -158,18 +186,17 @@ export function useStandaloneSidebar() {
       });
       setConversations((prev) => prev.filter((c) => c.id !== chatId));
 
-      // If deleting the active conversation, switch to next one
+      // If deleting the active conversation, fall back to next one or empty state
       if (chatId === activeChatId) {
         const remaining = conversations.filter((c) => c.id !== chatId);
         if (remaining.length > 0) {
           setActiveChatId(remaining[0].id);
         } else {
-          // Create a fresh conversation
-          createNewChat();
+          setActiveChatId('');
         }
       }
     },
-    [flowId, isGuest, activeChatId, conversations, setChats, setRunning, setConversations, setActiveChatId, createNewChat],
+    [flowId, isGuest, activeChatId, conversations, setChats, setRunning, setConversations, setActiveChatId],
   );
 
   // Toggle sidebar
@@ -205,27 +232,53 @@ export function useStandaloneSidebar() {
     })();
   }, [flowId, numericFlowType, apiVersion, setCurrentApp]);
 
-  // Initialize: fetch conversations and resolve initial chatId
+  // Initialize: fetch conversations only. Do NOT auto-create a new chat when
+  // the list is empty — the page renders an empty-state CTA (TC-APP-PUB-013/014/015)
+  // that invokes createNewChat() on user click.
   useEffect(() => {
-    console.log('[standalone] init effect:', { flowId, initialized: initializedRef.current });
     if (initializedRef.current || !flowId) return;
     initializedRef.current = true;
 
     fetchConversations().then((list) => {
       if (list.length > 0) {
         setActiveChatId(list[0].id);
-      } else {
-        createNewChat();
       }
+      setHistoryLoaded(true);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flowId]);
+
+  // Persist draft conversation to localStorage/server once the user sends
+  // their first message (detected by the presence of an `isSend` message in
+  // chatsState). This enforces TC-APP-PUB-019: no message sent = no entry in
+  // the history list.
+  useEffect(() => {
+    if (draftChatIds.size === 0) return;
+    draftChatIds.forEach((draftId) => {
+      const chat = chats[draftId];
+      const hasUserMessage = chat?.messages?.some((m) => m.isSend);
+      if (!hasUserMessage) return;
+
+      draftChatIds.delete(draftId);
+      if (!isGuest) return; // Auth mode: server creates the conversation on first message
+
+      const conv = conversations.find((c) => c.id === draftId);
+      if (!conv) return;
+      addLocalConversation(flowId, {
+        id: conv.id,
+        title: conv.title,
+        updatedAt: new Date().toISOString(),
+        createdAt: conv.createdAt,
+      });
+    });
+  }, [chats, conversations, flowId, isGuest]);
 
   return {
     currentApp,
     conversations,
     groups,
     loading,
+    historyLoaded,
     activeChatId,
     sidebarVisible,
     fetchConversations,
