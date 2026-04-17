@@ -981,7 +981,7 @@ class TestTupleLifecycle:
         mock_revoke_child.assert_awaited_once_with(1, 88)
 
     @pytest.mark.asyncio
-    async def test_add_space_tag_uses_manage_space_tags_permission(self, service):
+    async def test_add_space_tag_uses_edit_space_permission(self, service):
         with patch.object(
             service, '_require_write_permission', new_callable=AsyncMock,
         ), patch.object(
@@ -997,10 +997,10 @@ class TestTupleLifecycle:
         ):
             await service.add_space_tag(1, 'tag')
 
-        mock_require_permission_id.assert_awaited_once_with('knowledge_space', 1, 'manage_space_tags')
+        mock_require_permission_id.assert_awaited_once_with('knowledge_space', 1, 'edit_space')
 
     @pytest.mark.asyncio
-    async def test_update_file_tags_uses_manage_file_tags_permission(self, service):
+    async def test_update_file_tags_uses_edit_permission(self, service):
         file_record = _make_file(file_id=123, knowledge_id=1)
 
         with patch.object(
@@ -1017,10 +1017,10 @@ class TestTupleLifecycle:
         ):
             await service.update_file_tags(1, 123, [1, 2])
 
-        mock_require_permission_id.assert_awaited_once_with('knowledge_file', 123, 'manage_file_tags', space_id=1)
+        mock_require_permission_id.assert_awaited_once_with('knowledge_file', 123, 'rename_file', space_id=1)
 
     @pytest.mark.asyncio
-    async def test_retry_space_files_uses_retry_file_permission(self, service):
+    async def test_retry_space_files_relies_on_edit_permission_only(self, service):
         space = _make_space(auth_type=AuthTypeEnum.PUBLIC)
         file_record = _make_file(file_id=124, knowledge_id=1)
 
@@ -1036,15 +1036,13 @@ class TestTupleLifecycle:
             return_value=[file_record],
         ), patch.object(
             service, '_require_resource_permission', new_callable=AsyncMock,
-        ), patch.object(
-            service, '_require_permission_id', new_callable=AsyncMock,
-        ) as mock_require_permission_id, patch(
+        ) as mock_require_resource_permission, patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_knowledge_update_time_by_id',
             new_callable=AsyncMock,
         ):
             await service.retry_space_files(1, {'file_objs': [{'id': 124}]})
 
-        mock_require_permission_id.assert_awaited_once_with('knowledge_file', 124, 'retry_file', space_id=1)
+        mock_require_resource_permission.assert_awaited_once_with('can_edit', 'knowledge_file', 124)
 
 
 class TestFineGrainedPermissionRuntime:

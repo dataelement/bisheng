@@ -24,8 +24,10 @@ import { userContext } from "@/contexts/userContext"
 import {
   createRelationModelApi,
   deleteRelationModelApi,
+  getKnowledgeSpacePermissionTemplateApi,
   getRebacSchemaApi,
   getRelationModelsApi,
+  type PermissionTemplateSection,
   type RebacSchemaType,
   type RelationModel,
   updateRelationModelApi,
@@ -161,20 +163,11 @@ const TEMPLATE_SECTIONS: TemplateSection[] = [
   },
 ]
 
-function defaultPermissionIdsForRelation(relation: ModelRelation): string[] {
-  return TEMPLATE_SECTIONS.flatMap((section) =>
-    section.columns.flatMap((column) =>
-      column.items
-        .filter((item) => MODEL_LEVEL[relation] >= (RELATION_LEVEL[item.relation] ?? 99))
-        .map((item) => item.id),
-    ),
-  )
-}
-
 export default function RolesAndPermissions() {
   const { t } = useTranslation()
   const { user } = useContext(userContext)
   const [types, setTypes] = useState<RebacSchemaType[] | null>(null)
+  const [knowledgeTemplate, setKnowledgeTemplate] = useState<PermissionTemplateSection | null>(null)
   const [relationModels, setRelationModels] = useState<RelationModel[]>([])
   const [modelId, setModelId] = useState<string>("owner")
   const [selectedPermissionIds, setSelectedPermissionIds] = useState<string[]>([])
@@ -207,6 +200,34 @@ export default function RolesAndPermissions() {
     })
   }, [user?.role])
 
+  useEffect(() => {
+    if (user?.role !== "admin") {
+      setKnowledgeTemplate(null)
+      return
+    }
+    captureAndAlertRequestErrorHoc(getKnowledgeSpacePermissionTemplateApi(), () => true).then((res) => {
+      if (res) setKnowledgeTemplate(res)
+    })
+  }, [user?.role])
+
+  const templateSections = useMemo<TemplateSection[]>(() => {
+    const sections = [...TEMPLATE_SECTIONS]
+    if (knowledgeTemplate) {
+      sections[0] = knowledgeTemplate as TemplateSection
+    }
+    return sections
+  }, [knowledgeTemplate])
+
+  const defaultPermissionIdsForRelation = (relation: ModelRelation): string[] => {
+    return templateSections.flatMap((section) =>
+      section.columns.flatMap((column) =>
+        column.items
+          .filter((item) => MODEL_LEVEL[relation] >= (RELATION_LEVEL[item.relation] ?? 99))
+          .map((item) => item.id),
+      ),
+    )
+  }
+
   const backendRelations = useMemo(() => {
     const rels = new Set<string>()
     ;(types || []).forEach((x) => x.relations.forEach((r) => rels.add(r)))
@@ -224,7 +245,7 @@ export default function RolesAndPermissions() {
       setSelectedPermissionIds(currentModel.permissions)
       return
     }
-    const ids = TEMPLATE_SECTIONS.flatMap((section) =>
+    const ids = templateSections.flatMap((section) =>
       section.columns.flatMap((column) =>
         column.items
           .filter((item) => MODEL_LEVEL[currentModel.relation] >= (RELATION_LEVEL[item.relation] ?? 99))
@@ -232,7 +253,7 @@ export default function RolesAndPermissions() {
       )
     )
     setSelectedPermissionIds(ids)
-  }, [currentModel])
+  }, [currentModel, templateSections])
 
   const togglePermission = (permissionId: string, checked: boolean) => {
     setSelectedPermissionIds((prev) => {
@@ -356,7 +377,7 @@ export default function RolesAndPermissions() {
                 </Select>
               </div>
 
-              {TEMPLATE_SECTIONS.map((section) => (
+              {templateSections.map((section) => (
                 <div key={section.title} className="rounded-md border p-3">
                   <p className="mb-2 text-base font-medium">{section.title}</p>
                   <div className={`grid gap-4 ${section.columns.length === 3 ? "md:grid-cols-3" : "md:grid-cols-2"}`}>

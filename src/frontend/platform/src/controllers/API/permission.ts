@@ -31,6 +31,22 @@ export type RelationModel = {
   is_system: boolean
 }
 
+export type PermissionTemplateItem = {
+  id: string
+  label: string
+  relation: PermissionRelation
+}
+
+export type PermissionTemplateColumn = {
+  title: string
+  items: PermissionTemplateItem[]
+}
+
+export type PermissionTemplateSection = {
+  title: string
+  columns: PermissionTemplateColumn[]
+}
+
 export const getDepartmentTree = getDepartmentTreeApi
 
 export async function getRebacSchemaApi(): Promise<{
@@ -39,6 +55,10 @@ export async function getRebacSchemaApi(): Promise<{
   types: RebacSchemaType[]
 }> {
   return await axios.get(`/api/v1/permissions/rebac-schema`)
+}
+
+export async function getKnowledgeSpacePermissionTemplateApi(): Promise<PermissionTemplateSection> {
+  return await axios.get(`/api/v1/permissions/permission-templates/knowledge-space`)
 }
 
 export async function getResourcePermissions(
