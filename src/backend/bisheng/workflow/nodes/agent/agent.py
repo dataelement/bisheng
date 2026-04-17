@@ -3,7 +3,7 @@ import typing
 from typing import Any, Dict, Optional
 
 from langchain.chains.combine_documents import create_stuff_documents_chain
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate
 from langchain_core.retrievers import BaseRetriever
 from langchain_core.runnables import RunnableConfig
@@ -31,6 +31,7 @@ from bisheng.workflow.callback.event import StreamMsgOverData
 from bisheng.workflow.callback.llm_callback import LLMNodeCallbackHandler
 from bisheng.workflow.nodes.base import BaseNode
 from bisheng.workflow.nodes.prompt_template import PromptTemplateParser
+from bisheng_langchain.agents.llm_functions_agent.base import _format_intermediate_steps
 from bisheng_langchain.gpts.assistant import ConfigurableAssistant
 from bisheng_langchain.gpts.load_tools import load_tools
 
@@ -193,6 +194,7 @@ class AgentNode(BaseNode):
         self._user_prompt_list = []
         self._tool_invoke_list = []
         self._log_reasoning_content = []
+        self._chat_history_messages: list[BaseMessage] = []
 
         # Chat Message
         self._chat_history_flag = self.node_params['chat_history_flag']['value'] > 0
@@ -231,6 +233,18 @@ class AgentNode(BaseNode):
         self._agent_executor_type = 'React'
         self._agent = None
         self._citation_tools: list[WorkflowCitationToolWrapper] = []
+
+    def _get_chat_history_messages(self) -> list[BaseMessage]:
+        if not self._chat_history_flag:
+            return []
+        if not self._chat_history_num:
+            return list(self._chat_history_messages)
+        return self._chat_history_messages[-self._chat_history_num:]
+
+    def _append_chat_history_messages(self, messages: list[BaseMessage]) -> None:
+        if not messages:
+            return
+        self._chat_history_messages.extend(messages)
 
     def _init_agent(self, system_prompt: str):
         # Get a list of configured helper models
@@ -524,9 +538,9 @@ class AgentNode(BaseNode):
         user = self._user_prompt.format(variable_map)
         self._user_prompt_list.append(user)
 
-        chat_history = []
+        chat_history: list[BaseMessage] = []
         if self._chat_history_flag:
-            chat_history = self.graph_state.get_history_list(self._chat_history_num)
+            chat_history = self._get_chat_history_messages()
 
         llm_callback = LLMNodeCallbackHandler(callback=self.callback_manager,
                                               unique_id=unique_id,
@@ -554,11 +568,19 @@ class AgentNode(BaseNode):
             output = result['agent_outcome'].return_values['output']
             if isinstance(output, dict):
                 output = list(output.values())[0]
+            round_messages = [human_message]
+            round_messages.extend(_format_intermediate_steps(result.get('intermediate_steps', [])))
+            round_messages.append(AIMessage(content=output))
+            self._append_chat_history_messages(round_messages)
             return output, llm_callback.reasoning_content, self._collect_citation_registry_items()
         else:
             result = self._agent.invoke({'messages': chat_history}, config=config)
-            result = result['messages']
-            return result[-1].content, llm_callback.reasoning_content, self._collect_citation_registry_items()
+            result_messages = result['messages']
+            new_messages = [human_message]
+            if len(result_messages) > len(chat_history):
+                new_messages.extend(result_messages[len(chat_history):])
+            self._append_chat_history_messages(new_messages)
+            return result_messages[-1].content, llm_callback.reasoning_content, self._collect_citation_registry_items()
 
     def _reset_citation_registry_items(self) -> None:
         for tool in self._citation_tools:
