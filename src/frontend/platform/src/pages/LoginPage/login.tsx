@@ -39,6 +39,13 @@ export const LoginPage = () => {
         getSSOurlApi()
             .then((urls: any) => {
                 setOauthData(urls)
+                if (urls?.ldap) {
+                    setHasLdap(true)
+                }
+                if (urls?.ldapCheckboxLabel) {
+                    setLdapCheckboxLabel(urls.ldapCheckboxLabel)
+                    setIsLdapLogin(true)
+                }
                 // Persist redirect URLs for interceptor access (401 / logout)
                 if (urls?.redirect_login_url) {
                     localStorage.setItem('THIRD_PARTY_LOGIN_URL', urls.redirect_login_url)
@@ -77,13 +84,19 @@ export const LoginPage = () => {
         getCaptchaApi().then(setCaptchaData)
     };
 
-    const [isLDAP, setIsLDAP] = useState(false)
+    const [hasLdap, setHasLdap] = useState(false)
+    const [ldapCheckboxLabel, setLdapCheckboxLabel] = useState('')
+    const [isLdapLogin, setIsLdapLogin] = useState(true)
+    const enableDualLogin = hasLdap && !!ldapCheckboxLabel
+    const shouldUseLdap = hasLdap && (!enableDualLogin || isLdapLogin)
+    const showCaptcha = captchaData.user_capthca && (!showLogin || !shouldUseLdap)
+
     const handleLogin = async () => {
         const error = []
         const [mail, pwd] = [mailRef.current.value, pwdRef.current.value]
         if (!mail) error.push(t('login.pleaseEnterAccount'))
         if (!pwd) error.push(t('login.pleaseEnterPassword'))
-        if (captchaData.user_capthca && !captchaRef.current.value) error.push(t('login.pleaseEnterCaptcha'))
+        if (!shouldUseLdap && captchaData.user_capthca && !captchaRef.current.value) error.push(t('login.pleaseEnterCaptcha'))
         if (error.length) return message({
             title: `${t('prompt')}`,
             variant: 'warning',
@@ -94,9 +107,9 @@ export const LoginPage = () => {
         //     list: error,
         // });
 
-        const encryptPwd = isLDAP ? await handleLdapEncrypt(pwd) : await handleEncrypt(pwd)
+        const encryptPwd = shouldUseLdap ? await handleLdapEncrypt(pwd) : await handleEncrypt(pwd)
         captureAndAlertRequestErrorHoc(
-            (isLDAP
+            (shouldUseLdap
                 ? ldapLoginApi(mail, encryptPwd)
                 : loginApi(mail, encryptPwd, captchaData.captcha_key, captchaRef.current?.value)
             ).then((res: any) => {
@@ -219,7 +232,7 @@ export const LoginPage = () => {
                             </div>
                         }
                         {
-                            captchaData.user_capthca && (<div className="flex items-center gap-4">
+                            showCaptcha && (<div className="flex items-center gap-4">
                                 <Input
                                     type="text"
                                     ref={captchaRef}
@@ -238,8 +251,18 @@ export const LoginPage = () => {
                         }
                         {
                             showLogin ? <>
+                                {enableDualLogin && (
+                                    <label className="flex items-center gap-2 text-sm text-tx-color">
+                                        <input
+                                            type="checkbox"
+                                            checked={isLdapLogin}
+                                            onChange={(event) => setIsLdapLogin(event.target.checked)}
+                                        />
+                                        <span>{ldapCheckboxLabel}</span>
+                                    </label>
+                                )}
                                 <div className="text-center">
-                                    {!isLDAP && appConfig.register && <a href="javascript:;" className=" text-blue-500 text-sm hover:underline" onClick={() => setShowLogin(false)}>{t('login.noAccountRegister')}</a>}
+                                    {!shouldUseLdap && appConfig.register && <a href="javascript:;" className=" text-blue-500 text-sm hover:underline" onClick={() => setShowLogin(false)}>{t('login.noAccountRegister')}</a>}
                                 </div>
                                 <Button
                                     className='h-[48px] mt-[32px] dark:bg-button'
@@ -254,7 +277,7 @@ export const LoginPage = () => {
                                         disabled={isLoading} onClick={handleRegister} >{t('login.registerButton')}</Button>
                                 </>
                         }
-                        {appConfig.isPro && <LoginBridge oauthData={oauthData} onHasLdap={setIsLDAP} />}
+                        {appConfig.isPro && <LoginBridge oauthData={oauthData} onHasLdap={setHasLdap} />}
                     </div>
                     <div className=" absolute right-[16px] bottom-[16px] flex">
                         <span className="mr-4 text-sm text-gray-400 relative top-2">v{json.version}</span>

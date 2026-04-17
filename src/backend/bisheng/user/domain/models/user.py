@@ -9,7 +9,7 @@ from sqlmodel import Field, select, Relationship, col
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.database.constants import AdminRole, DefaultRole
-from bisheng.database.models.group import Group
+from bisheng.database.models.group import DefaultGroup, Group
 from bisheng.database.models.role import Role
 from bisheng.database.models.user_group import UserGroup
 from bisheng.user.domain.models.user_role import UserRole
@@ -73,6 +73,8 @@ class UserCreate(UserBase):
     password: Optional[str] = Field(default='')
     captcha_key: Optional[str] = None
     captcha: Optional[str] = None
+    default_groupid: Optional[int] = Field(default=None)
+    default_roleid: Optional[int] = Field(default=None)
 
 
 class UserUpdate(SQLModelSerializable):
@@ -211,6 +213,45 @@ class UserDao(UserBase):
             await session.refresh(user)
             db_user_role = UserRole(user_id=user.user_id, role_id=DefaultRole)
             session.add(db_user_role)
+            await session.commit()
+            await session.refresh(user)
+            return user
+
+    @classmethod
+    async def add_user_and_configured_default_auth(
+            cls,
+            user: User,
+            default_groupid: Optional[int] = None,
+            default_roleid: Optional[int] = None) -> User:
+        """
+        Add SSO users with configured default group and role.
+        """
+        group_id = default_groupid or DefaultGroup
+        role_id = default_roleid or DefaultRole
+
+        async with get_async_db_session() as session:
+            if default_groupid is not None:
+                group_result = await session.exec(select(Group).where(Group.id == group_id))
+                if not group_result.first():
+                    raise ValueError('Configured default_groupid does not exist')
+
+            role_result = await session.exec(select(Role).where(Role.id == role_id))
+            role = role_result.first()
+            if not role:
+                raise ValueError('Configured default_roleid does not exist')
+            if role.group_id != group_id:
+                raise ValueError('Configured default_roleid does not belong to default_groupid')
+
+            session.add(user)
+            await session.commit()
+            await session.refresh(user)
+
+            db_user_role = UserRole(user_id=user.user_id, role_id=role_id)
+            session.add(db_user_role)
+
+            db_user_group = UserGroup(user_id=user.user_id, group_id=group_id, is_group_admin=False)
+            session.add(db_user_group)
+
             await session.commit()
             await session.refresh(user)
             return user

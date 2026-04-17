@@ -69,8 +69,11 @@ async def sso(*, request: Request, user: UserCreate, auth_jwt: AuthJwt = Depends
                 user_exist = await UserDao.add_user_and_admin_role(user_exist)
             else:
                 # Create as Normal User
-                user_exist = await UserDao.add_user_and_default_role(user_exist)
-            await UserGroupDao.add_default_user_group(user_exist.user_id)
+                user_exist = await UserDao.add_user_and_configured_default_auth(
+                    user_exist,
+                    default_groupid=user.default_groupid,
+                    default_roleid=user.default_roleid,
+                )
         if 1 == user_exist.delete:
             raise UserForbiddenError.http_exception()
         access_token = LoginUser.create_access_token(user_exist, auth_jwt=auth_jwt)
