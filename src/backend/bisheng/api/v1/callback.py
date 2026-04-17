@@ -15,6 +15,7 @@ from langchain_core.messages import ToolMessage
 from bisheng.api.v1.schemas import ChatResponse
 from bisheng.database.models.message import ChatMessage as ChatMessageModel
 from bisheng.database.models.message import ChatMessageDao
+from bisheng.llm.domain.utils import extract_reasoning_content
 from loguru import logger
 
 
@@ -50,8 +51,7 @@ class AsyncStreamingLLMCallbackHandler(AsyncCallbackHandler):
         # azureOccasionally returns aNone
         if token is None and chunk is None:
             return
-        reasoning_content = getattr(chunk.message, 'additional_kwargs',
-                                    {}).get('reasoning_content')
+        reasoning_content = extract_reasoning_content(chunk)
         if token is None:
             token = ''
         resp = ChatResponse(message={

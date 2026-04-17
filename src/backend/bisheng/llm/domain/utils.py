@@ -16,6 +16,84 @@ from bisheng.core.logger import trace_id_var
 from bisheng.llm.domain.const import LLMModelStatus, LLM_CACHE
 
 
+def _stringify_reasoning_value(value: Any) -> str:
+    if value is None:
+        return ''
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        parts = [_stringify_reasoning_value(one) for one in value]
+        return ''.join(part for part in parts if part)
+    if isinstance(value, dict):
+        for key in ('text', 'content', 'reasoning_content', 'reasoning'):
+            nested_value = value.get(key)
+            nested_text = _stringify_reasoning_value(nested_value)
+            if nested_text:
+                return nested_text
+        return ''
+    return str(value)
+
+
+def extract_reasoning_content(payload: Any) -> str:
+    if payload is None:
+        return ''
+
+    if isinstance(payload, dict):
+        reasoning_content = _stringify_reasoning_value(payload.get('reasoning_content'))
+        if reasoning_content:
+            return reasoning_content
+        return _stringify_reasoning_value(payload.get('reasoning'))
+
+    for attr in ('additional_kwargs', 'response_metadata', 'generation_info'):
+        reasoning_content = extract_reasoning_content(getattr(payload, attr, None))
+        if reasoning_content:
+            return reasoning_content
+
+    message = getattr(payload, 'message', None)
+    if message is not None:
+        return extract_reasoning_content(message)
+
+    generations = getattr(payload, 'generations', None)
+    if generations:
+        for one in generations:
+            if isinstance(one, list):
+                for sub_one in one:
+                    reasoning_content = extract_reasoning_content(sub_one)
+                    if reasoning_content:
+                        return reasoning_content
+            else:
+                reasoning_content = extract_reasoning_content(one)
+                if reasoning_content:
+                    return reasoning_content
+
+    return ''
+
+
+def normalize_reasoning_content(payload: Any) -> Any:
+    message = getattr(payload, 'message', None)
+    if message is not None:
+        normalize_reasoning_content(message)
+
+    generations = getattr(payload, 'generations', None)
+    if generations:
+        for one in generations:
+            if isinstance(one, list):
+                for sub_one in one:
+                    normalize_reasoning_content(sub_one)
+            else:
+                normalize_reasoning_content(one)
+
+    reasoning_content = extract_reasoning_content(payload)
+    if not reasoning_content:
+        return payload
+
+    additional_kwargs = getattr(payload, 'additional_kwargs', None)
+    if isinstance(additional_kwargs, dict):
+        additional_kwargs['reasoning_content'] = reasoning_content
+
+    return payload
+
+
 async def bisheng_model_limit_check(self: 'BishengBase'):
     now = datetime.now().strftime("%Y-%m-%d")
     if self.server_info.limit_flag:

@@ -29,6 +29,7 @@ from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.channel import ChannelChatConversationNotFoundError
 from bisheng.common.errcode.http_error import ServerError, UnAuthorizedError
 from bisheng.common.schemas.api import resp_500, SSEResponse
+from bisheng.llm.domain.utils import extract_reasoning_content
 from bisheng.database.constants import MessageCategory
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession
@@ -194,7 +195,7 @@ async def chat_completions(
             # Streaming call to LLM
             async for chunk in bishengllm.astream(inputs):
                 content = chunk.content
-                reasoning_content = chunk.additional_kwargs.get('reasoning_content', '')
+                reasoning_content = extract_reasoning_content(chunk)
                 answer += content
                 reasoning_answer += reasoning_content
                 yield SSEResponse(data=ChatResponse(
