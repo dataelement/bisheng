@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS user_tenant (
 )"""
 
 # ---------------------------------------------------------------------------
-# Existing tables: user, group, role, role_access, flow, knowledge
+# Existing tables: user, group, role, roleaccess, flow, knowledge
 # ---------------------------------------------------------------------------
 
 TABLE_USER = """\
@@ -112,7 +112,7 @@ CREATE TABLE IF NOT EXISTS role (
 )"""
 
 TABLE_ROLE_ACCESS = """\
-CREATE TABLE IF NOT EXISTS role_access (
+CREATE TABLE IF NOT EXISTS roleaccess (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     role_id INTEGER,
     third_id VARCHAR(255),
@@ -292,7 +292,7 @@ TABLE_DEFINITIONS: dict[str, str] = {
     'group': TABLE_GROUP,
     'usergroup': TABLE_USERGROUP,
     'role': TABLE_ROLE,
-    'role_access': TABLE_ROLE_ACCESS,
+    'roleaccess': TABLE_ROLE_ACCESS,
     'flow': TABLE_FLOW,
     'knowledge': TABLE_KNOWLEDGE,
     'department': TABLE_DEPARTMENT,

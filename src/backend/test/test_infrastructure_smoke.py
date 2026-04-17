@@ -31,7 +31,7 @@ class TestDbEngine:
                 "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
             )).fetchall()
             table_names = {row[0] for row in tables}
-            expected = {'tenant', 'user_tenant', 'user', 'role', 'role_access',
+            expected = {'tenant', 'user_tenant', 'user', 'role', 'roleaccess',
                         'flow', 'knowledge', 'department', 'user_department'}
             assert expected.issubset(table_names), f'Missing: {expected - table_names}'
 
