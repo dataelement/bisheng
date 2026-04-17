@@ -154,12 +154,12 @@ def annotate_web_results_with_citations(results: List[dict]) -> List[dict]:
         annotated_result = dict(result)
         raw_url = CitationRegistryService._parse_optional_text(result.get('url') or result.get('link')) or ''
         normalized_url = CitationRegistryService.normalize_url(raw_url)
-        item_id = str(result.get('itemId') or result.get('snippetId') or result.get('id') or '')
-        if not item_id:
-            item_id = f'item:{fallback_indexes_by_url[normalized_url]}'
+        item_index = fallback_indexes_by_url[normalized_url]
+        item_id = CitationRegistryService.build_web_item_id(result, item_index)
         fallback_indexes_by_url[normalized_url] += 1
         citation_key = key_by_url_item_id.get((normalized_url, item_id))
         if citation_key:
+            annotated_result['itemId'] = item_id
             annotated_result['citation_key'] = citation_key
         annotated_results.append(annotated_result)
     return annotated_results
