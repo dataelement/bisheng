@@ -49,6 +49,7 @@
     "@tanstack/react-query": "^4.28.0",
     "@tanstack/react-table": "^8.11.7",
     "axios": "^1.8.4",
+    "bisheng-design-system": "github:dataelement/bisheng-design-system",
     "class-variance-authority": "^0.6.0",
     "clsx": "^1.2.1",
     "copy-to-clipboard": "^3.3.3",

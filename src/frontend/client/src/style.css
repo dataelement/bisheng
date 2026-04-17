@@ -540,6 +540,15 @@ select {
   overflow-x: overlay;
 }
 
+/* Reset to native system scrollbar (follows OS preferences) */
+.scrollbar-system {
+  scrollbar-width: auto;
+  scrollbar-color: auto;
+}
+.scrollbar-system::-webkit-scrollbar {
+  display: none;
+}
+
 .reset-rc-number-input input {
   width: 100%;
   border: none !important;

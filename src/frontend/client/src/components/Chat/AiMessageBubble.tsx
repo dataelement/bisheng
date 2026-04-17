@@ -3,12 +3,13 @@
  */
 import {
     BotIcon,
-    CheckIcon,
     ChevronLeftIcon,
     ChevronRightIcon,
-    CopyIcon,
-    RefreshCwIcon
 } from "lucide-react";
+import Copy from "bisheng-design-system/src/icons/outlined/Copy";
+import Copied from "bisheng-design-system/src/icons/outlined/Copied";
+import Refresh from "bisheng-design-system/src/icons/outlined/Refresh";
+import { SingleIconButton } from "bisheng-design-system/src/components/Button";
 import { memo, useCallback, useMemo, useState, useRef } from "react";
 import Thinking from "~/components/Artifacts/Thinking";
 import Markdown from "~/components/Chat/Messages/Content/Markdown";
@@ -23,6 +24,7 @@ import { copyText, cn } from "~/utils";
 import type { ChatMessage } from "~/api/chatApi";
 import Image from "~/components/Chat/Messages/Content/Image";
 import { FileIcon, getFileTypebyFileName } from "~/components/ui/icon/File/FileIcon";
+import MoreActionsDropdown from "~/components/Chat/MoreActionsDropdown";
 
 interface AiMessageBubbleProps {
     message: ChatMessage;
@@ -47,14 +49,14 @@ function CopyButton({ text }: { text: string }) {
     }, [text]);
 
     return (
-        <button
-            type="button"
+        <SingleIconButton
+            variant="ghost"
+            size="mini"
+            icon={copied ? <Copied /> : <Copy />}
+            aria-label="复制"
+            className="text-gray-400 hover:text-gray-600"
             onClick={handleCopy}
-            className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
-            title="复制"
-        >
-            {copied ? <CheckIcon size={16} /> : <CopyIcon size={16} />}
-        </button>
+        />
     );
 }
 
@@ -217,7 +219,7 @@ function UserBubble({
 
     return (
         <div className={cn("flex justify-end py-3", knowledgeChatLayout ? "w-full px-4" : "px-4")}>
-            <div className={cn("min-w-0", knowledgeChatLayout ? "max-w-[min(92%,56rem)]" : "max-w-[80%]")}>
+            <div className={cn("min-w-0 group", knowledgeChatLayout ? "max-w-[min(92%,56rem)]" : "max-w-[80%]")}>
                 {/* Render uploaded files if any */}
                 {message.files && message.files.length > 0 && (
                     <div className="flex flex-wrap gap-2 mb-2 mt-1">
@@ -295,8 +297,8 @@ function UserBubble({
                         </div>
                     </div>
                 </div>
-                {/* Action buttons */}
-                <div className="flex items-center justify-end gap-1 mt-1.5">
+                {/* Action buttons — hover only for user messages */}
+                <div className="flex items-center justify-end gap-1 mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                     <CopyButton text={tag ? `#${tag.name} ${bodyText}` : message.text} />
                     {siblingIdx !== undefined && siblingCount !== undefined && setSiblingIdx && (
                         <SiblingSwitch siblingIdx={siblingIdx} siblingCount={siblingCount} setSiblingIdx={setSiblingIdx} />
@@ -393,7 +395,7 @@ function AssistantBubble({
 
                 {/* Action buttons (only show when not streaming) */}
                 {!isStreaming && regularContent && (
-                    <div className="flex items-center gap-1 mt-1.5 text-gray-400">
+                    <div className="flex w-full items-center gap-1 mt-1.5 text-gray-400">
                         {/* Reference Sources */}
                         {message.source !== 0 && (
                             <div className="mr-2 pt-0.5">
@@ -413,22 +415,25 @@ function AssistantBubble({
                         )}
                         <CopyButton text={regularContent} />
                         {onRegenerate && (
-                            <button
-                                type="button"
+                            <SingleIconButton
+                                variant="ghost"
+                                size="mini"
+                                icon={<Refresh />}
+                                aria-label="重新生成"
+                                className="text-gray-400 hover:text-gray-600"
                                 onClick={onRegenerate}
-                                className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
-                                title="regenerate"
-                            >
-                                <RefreshCwIcon size={16} />
-                            </button>
+                            />
                         )}
                         <TextToSpeechButton
                             messageId={message.messageId || ""}
                             text={regularContent}
                         />
-                        {/* Sibling paging */}
+                        <MoreActionsDropdown />
+                        {/* Sibling paging — pushed to the far right */}
                         {siblingIdx !== undefined && siblingCount !== undefined && setSiblingIdx && (
-                            <SiblingSwitch siblingIdx={siblingIdx} siblingCount={siblingCount} setSiblingIdx={setSiblingIdx} />
+                            <div className="ml-auto">
+                                <SiblingSwitch siblingIdx={siblingIdx} siblingCount={siblingCount} setSiblingIdx={setSiblingIdx} />
+                            </div>
                         )}
                     </div>
                 )}

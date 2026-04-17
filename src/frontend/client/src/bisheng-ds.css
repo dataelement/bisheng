@@ -1,0 +1,108 @@
+/*
+ * Selective import of bisheng-design-system tokens + button component styles.
+ * Only includes CSS variables and .btn classes needed by SingleIconButton.
+ * Does NOT import the full tokens.css to avoid global resets and Tailwind v4 conflicts.
+ */
+
+:root {
+  --spacing-2: 8px;
+  --font-family-base: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-weight-regular: 400;
+  --font-size-xs: 12px;
+  --font-size-base: 14px;
+  --font-size-md: 16px;
+  --line-height-12: 20px;
+  --radius-md: 6px;
+  --transition-fast: 100ms ease;
+
+  --surface-muted: #f2f4f7;
+  --action-fg-default: #4e5969;
+  --action-fg-default-hover: #1d2129;
+  --action-fg-disabled: #c9cdd4;
+  --fill-primary: #024de3;
+  --fill-hover: #0244c8;
+  --fill-active: #023bad;
+  --shadow-base: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+/* ===== BUTTON BASE ===== */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-2);
+  font-family: var(--font-family-base);
+  font-weight: var(--font-weight-regular);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+  position: relative;
+  text-decoration: none;
+  outline: none;
+}
+
+.btn:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--fill-primary) 25%, transparent);
+}
+
+/* Sizes */
+.btn--mini { height: 24px; padding: 0 8px; font-size: var(--font-size-xs); line-height: var(--line-height-12); }
+.btn--mini svg { width: 14px; height: 14px; }
+
+.btn--small { padding: 3px 12px; font-size: var(--font-size-base); }
+.btn--small svg { width: 16px; height: 16px; }
+
+.btn--medium { padding: 5px 16px; font-size: var(--font-size-base); }
+.btn--medium svg { width: 16px; height: 16px; }
+
+.btn--large { padding: 8px 16px; font-size: var(--font-size-md); }
+.btn--large svg { width: 20px; height: 20px; }
+
+/* Ghost variant */
+.btn--ghost {
+  background: transparent;
+  color: var(--action-fg-default);
+  border-color: transparent;
+}
+.btn--ghost:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--surface-muted) 50%, transparent);
+  color: var(--action-fg-default-hover);
+  backdrop-filter: blur(4px);
+}
+.btn--ghost:active:not(:disabled) {
+  background: var(--surface-muted);
+  color: var(--action-fg-default-hover);
+}
+
+/* Disabled */
+.btn:disabled, .btn--loading {
+  opacity: 0.5;
+  color: var(--action-fg-disabled);
+  cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+/* Icon only (SingleIconButton) */
+.btn--icon { display: inline-flex; justify-content: center; align-items: center; }
+.btn--icon.btn--mini { padding: 5px; font-size: 14px; width: 24px; height: 24px; }
+.btn--icon.btn--small { padding: 6px; font-size: 16px; width: 28px; height: 28px; }
+.btn--icon.btn--medium { padding: 8px; font-size: 16px; width: 32px; height: 32px; }
+.btn--icon.btn--large { padding: 10px; font-size: 20px; width: 40px; height: 40px; }
+
+/* Loading spinner */
+.btn__spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: btn-spin 0.6s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes btn-spin {
+  to { transform: rotate(360deg); }
+}

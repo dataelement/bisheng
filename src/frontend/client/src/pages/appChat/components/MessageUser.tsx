@@ -1,4 +1,3 @@
-import { RefreshCw, Search, SquarePen } from "lucide-react";
 import { useMemo } from "react";
 import { useRecoilState } from "recoil";
 import { useAuthContext, useLocalize } from "~/hooks";
@@ -6,6 +5,10 @@ import { formatStrTime } from "~/utils";
 import { bishengConfState } from "../store/atoms";
 import { emitAreaTextEvent, EVENT_TYPE } from "../useAreaText";
 import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
+import { SingleIconButton } from "bisheng-design-system/src/components/Button";
+import Edit from "bisheng-design-system/src/icons/outlined/Edit";
+import Refresh from "bisheng-design-system/src/icons/outlined/Refresh";
+import SearchIcon from "bisheng-design-system/src/icons/outlined/Search";
 
 export default function MessageUser({ useName, data, showButton, disabledSearch = false, readOnly }) {
     // const avatar = useMemo(() => {
@@ -58,13 +61,13 @@ export default function MessageUser({ useName, data, showButton, disabledSearch 
                 </div>
             </div>
             {/* footer */}
-            {!readOnly && <div className="flex justify-end mt-2 opacity-0 group-hover:opacity-100 transition-opacity gap-2">
-                <span className="text-slate-400 text-sm pt-0.5">{formatStrTime(data.create_time, 'MM 月 dd 日 HH:mm')}</span>
-                <div className="flex gap-0.5 text-gray-400 cursor-pointer self-end">
-                    {showButton && <SquarePen className="size-6 p-1 hover:text-gray-500" onClick={() => handleResend(false)} />}
-                    {showButton && <RefreshCw className="size-6 p-1 hover:text-gray-500" onClick={() => handleResend(true)} />}
-                    {!disabledSearch && config?.dialog_quick_search && <Search className="size-6 p-1 hover:text-gray-500" onClick={handleSearch} />}
+            {!readOnly && <div className="flex items-center mt-2 opacity-0 group-hover:opacity-100 transition-opacity gap-2 px-4" style={{ paddingLeft: 'calc(16px + 24px + 12px)' }}>
+                <div className="flex gap-0.5">
+                    {showButton && <SingleIconButton variant="ghost" size="mini" icon={<Edit />} aria-label="编辑" className="text-gray-400 hover:text-gray-500" onClick={() => handleResend(false)} />}
+                    {showButton && <SingleIconButton variant="ghost" size="mini" icon={<Refresh />} aria-label="重新发送" className="text-gray-400 hover:text-gray-500" onClick={() => handleResend(true)} />}
+                    {!disabledSearch && config?.dialog_quick_search && <SingleIconButton variant="ghost" size="mini" icon={<SearchIcon />} aria-label="搜索" className="text-gray-400 hover:text-gray-500" onClick={handleSearch} />}
                 </div>
+                <span className="text-slate-400 text-sm">{formatStrTime(data.create_time, 'MM 月 dd 日 HH:mm')}</span>
             </div>}
         </div>
     </div>

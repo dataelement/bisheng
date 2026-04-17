@@ -29,7 +29,7 @@ export function Sidebar({ open, pdfDoc, currentPage, onPageClick }: SidebarProps
 
     return (
         <div
-            className="w-[160px] h-full border-r border-[#e5e6eb] bg-[#f7f8fa] overflow-y-auto flex-shrink-0 py-2 px-2 flex flex-col gap-2"
+            className="w-[160px] h-full border-r border-[#e5e6eb] bg-[#f7f8fa] overflow-y-auto scrollbar-system flex-shrink-0 py-2 px-2 flex flex-col gap-2"
             ref={containerRef}
         >
             {pdfDoc &&
@@ -79,8 +79,8 @@ function ThumbnailItem({
             const canvas = canvasRef.current;
             canvas.width = scaledViewport.width;
             canvas.height = scaledViewport.height;
-            canvas.style.width = `${thumbWidth}px`;
-            canvas.style.height = `${scaledViewport.height}px`;
+            canvas.style.width = "100%";
+            canvas.style.height = "auto";
 
             // 更新容器高度：canvas高度 + 底部文字及边距预估
             setItemHeight(scaledViewport.height + 24);
@@ -111,7 +111,7 @@ function ThumbnailItem({
                     ? "border-[#165dff] shadow-sm"
                     : "border-transparent hover:border-[#c9cdd4]"
             )}
-            style={{ height: itemHeight }}
+            style={{ minHeight: itemHeight }}
         >
             <canvas ref={canvasRef} className="w-full block shrink-0" />
             {!isActive && (

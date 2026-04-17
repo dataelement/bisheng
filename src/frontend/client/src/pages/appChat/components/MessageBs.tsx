@@ -98,26 +98,24 @@ export default function MessageBs({ logo, title, data, onUnlike = () => { },read
             </>}
             {/* 附加信息 */}
             {
-                data.end && <div className="flex justify-between">
-                    <MessageSource
-                        extra={data.extra || {}}
-                        end={data.end}
-                        source={data.source}
-                        className="pl-4"
-                        onSource={() => onSource?.({
-                            messageId: data.id,
-                            message,
-                        })}
-                    />
+                data.end && <div className="flex items-center gap-2 px-4" style={{ paddingLeft: 'calc(16px + 24px + 12px)' }}>
                     {!readOnly && <MessageButtons
                         id={data.id}
                         data={data.liked}
                         text={message}
                         onUnlike={onUnlike}
                         onCopy={handleCopyMessage}
-                    >
-                        <span className="text-slate-400 text-sm pt-0.5">{formatStrTime(data.create_time, 'MM 月 dd 日 HH:mm')}</span>
-                    </MessageButtons>}
+                    />}
+                    <MessageSource
+                        extra={data.extra || {}}
+                        end={data.end}
+                        source={data.source}
+                        onSource={() => onSource?.({
+                            messageId: data.id,
+                            message,
+                        })}
+                    />
+                    <span className="text-slate-400 text-sm">{formatStrTime(data.create_time, 'MM 月 dd 日 HH:mm')}</span>
                 </div>
             }
         </div>

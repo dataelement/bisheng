@@ -20,6 +20,7 @@ import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { cn } from "~/utils";
 import useLocalize, { type TranslationKeys } from "~/hooks/useLocalize";
+import { useAuthContext } from "~/hooks";
 
 interface NotificationsDialogProps {
     open?: boolean;
@@ -69,6 +70,22 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
     const [loadingMore, setLoadingMore] = useState(false);
     const { showToast } = useToastContext();
     const navigate = useNavigate();
+    const { user: currentUser } = useAuthContext();
+
+    /**
+     * Action codes whose narrative is second-person ("您已不再是…"), i.e. the subject is
+     * the message recipient. For these, we always render the current user as the message
+     * author regardless of what `sender` / `user` content the backend returns.
+     */
+    const RECIPIENT_AS_AUTHOR_ACTION_CODES = new Set([
+        "removed_as_channel_admin",
+        "removed_as_space_admin",
+        "batch_upload_failed",
+    ]);
+    const shouldRenderAsCurrentUser = (notification: MessageItem) => {
+        const code = getSystemTextCode(notification);
+        return RECIPIENT_AS_AUTHOR_ACTION_CODES.has(code);
+    };
     const requestHoverTimersRef = useRef<Record<string, number>>({});
     const autoReadTimersRef = useRef<Record<string, number>>({});
     const observersRef = useRef<Record<string, IntersectionObserver>>({});
@@ -149,8 +166,8 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
 
     const loadNotifications = async (nextPage: number, append: boolean) => {
         if (!append) setLoading(true);
+        const tab: MessageTab = activeTab === "request" ? "request" : "all";
         try {
-            const tab: MessageTab = activeTab === "request" ? "request" : "all";
             const { data, total } = await getMessageListApi({
                 tab,
                 only_unread: onlyUnread,
@@ -158,7 +175,6 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                 page: nextPage,
                 page_size: PAGE_SIZE,
             });
-
             setNotifications(prev => append ? [...prev, ...data] : data);
             setHasMore((nextPage * PAGE_SIZE) < total);
             setPage(nextPage);
@@ -311,13 +327,19 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
         const actionCode = getSystemTextCode(notification);
         const actionTextKey = NOTIFICATION_ACTION_TEXT_KEYS[actionCode] || (actionCode ? `com_notifications_action_${actionCode}` : "");
         const fallbackText = notification.content?.map((c) => c.content).filter(Boolean).join("") || "";
+        // Extra template vars (beyond {{target}}) can be carried on the system_text part's metadata.vars,
+        // so templates like "... failed at {{timestamp}}, total {{total}}, failed {{failed}}" work.
+        const systemTextPart = notification.content?.find((c: any) => c?.type === "system_text") as any;
+        const extraVars = (systemTextPart?.metadata?.vars && typeof systemTextPart.metadata.vars === "object")
+            ? (systemTextPart.metadata.vars as Record<string, string>)
+            : {};
         const safeLocalize = (key: string, vars?: Record<string, string>) => {
             if (!key) return "";
             const translated = localize(key as TranslationKeys, vars as any);
             return translated && translated !== key ? translated : "";
         };
         const text =
-            safeLocalize(actionTextKey, { target: targetName }) ||
+            safeLocalize(actionTextKey, { target: targetName, ...extraVars }) ||
             safeLocalize(
                 targetName ? "com_notifications_action_generic_with_target" : "com_notifications_action_generic",
                 targetName ? { target: targetName } : undefined
@@ -492,7 +514,6 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
         const userPart = notification.content?.find((c: any) => c?.type === "user") as any;
         const userMeta = (userPart?.metadata ?? {}) as any;
         const rawName = notification.sender_name || userPart?.content || "";
-        const userName = String(rawName).replace(/^@/, "");
         const groupNamesRaw =
             userMeta?.group_names ??
             userMeta?.groupNames ??
@@ -505,8 +526,16 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                 .split(/[,/]/)
                 .map((g) => g.trim())
                 .filter(Boolean);
-        const userGroup = groupNames.join("、");
-        const userAvatar = userMeta?.avatar || userMeta?.user_avatar || "";
+        // For second-person ("您已不再是…") messages, always present the current user as the
+        // author: avatar, @name and tooltip all show "you" regardless of the raw sender.
+        const recipientAsAuthor = shouldRenderAsCurrentUser(notification);
+        const userName = recipientAsAuthor
+            ? (currentUser?.username || String(rawName).replace(/^@/, ""))
+            : String(rawName).replace(/^@/, "");
+        const userGroup = recipientAsAuthor ? "" : groupNames.join("、");
+        const userAvatar = recipientAsAuthor
+            ? (currentUser?.avatar || "")
+            : (userMeta?.avatar || userMeta?.user_avatar || "");
         const createdAt = notification.create_time;
         const approvalStatus = notification.status;
         const { text, targetName, showApproval } = getNotificationText(notification);
@@ -633,10 +662,11 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                         </Avatar>
                     </TooltipAnchor>
 
-                    {/* Message text */}
-                    <div className={cn("flex-1 min-w-0 text-[14px] flex items-center gap-1 flex-wrap", textColor)}>
-                        <span className="shrink-0 font-medium hover:text-[#165dff]">@{userName}</span>
-                        <span className="min-w-0">
+                    {/* Message text — inline paragraph so @name and body flow together and word-wrap naturally */}
+                    <div className={cn("flex-1 min-w-0 text-[14px] leading-[1.57] break-words", textColor)}>
+                        <span className="font-medium hover:text-[#165dff]">@{userName}</span>
+                        {' '}
+                        <span>
                             {textPrefix}
                             {canNavigateTarget && (
                                 <span
@@ -693,8 +723,9 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                         </span>
                     </div>
 
-                    {/* Right slot: fixed width so hover swap (时间 ↔ 删除) does not shrink flex-1 文案区导致 @名 换行/抖动 */}
-                    <div className="relative flex h-7 w-[184px] flex-shrink-0 items-center justify-end whitespace-nowrap">
+                    {/* Right slot: fixed width so hover swap (时间 ↔ 删除) does not cause layout shift.
+                        130px fits both the timestamp (~110px) and the delete button (~105px). */}
+                    <div className="relative flex h-7 w-[130px] flex-shrink-0 items-center justify-end whitespace-nowrap">
                         <span
                             className={cn(
                                 "text-[14px] tabular-nums text-[#999999]",

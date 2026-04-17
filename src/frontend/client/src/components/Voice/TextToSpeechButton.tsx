@@ -1,10 +1,13 @@
 "use client"
 
-import { Loader2, Pause, Volume2 } from "lucide-react"
+import { Loader2 } from "lucide-react"
+import VolumeNotice from "bisheng-design-system/src/icons/outlined/VolumeNotice"
+import PlayerPause from "bisheng-design-system/src/icons/outlined/PlayerPause"
+import { SingleIconButton } from "bisheng-design-system/src/components/Button"
+import { cn } from "~/utils"
 import { textToSpeech } from "~/api"
 import { useGetWorkbenchModelsQuery } from "~/hooks/queries/data-provider"
 import { useToastContext } from "~/Providers"
-import { cn } from "~/utils"
 import {
     useAudioPlayer
 } from "./textToSpeechStore"
@@ -79,29 +82,14 @@ export const TextToSpeechButton = ({ messageId, text, className }: TextToSpeechB
         }
     }
 
-    // Render icon based on state
-    const renderIcon = () => {
+    const getIcon = () => {
         if (isCurrentLoading) {
-            return <Loader2 size={20} strokeWidth={1.8} className="animate-spin text-gray-400" />
+            return <Loader2 className="animate-spin" />
         }
-
         if (isCurrentPlaying) {
-            return (
-                <Pause
-                    size={20}
-                    strokeWidth={1.8}
-                    className="text-gray-400 hover:text-primary transition-colors cursor-pointer"
-                />
-            )
+            return <PlayerPause />
         }
-
-        return (
-            <Volume2
-                size={20}
-                strokeWidth={1.8}
-                className="text-gray-400 hover:text-primary transition-colors cursor-pointer"
-            />
-        )
+        return <VolumeNotice />
     }
 
     // Disabled when tts_model is not configured
@@ -109,14 +97,16 @@ export const TextToSpeechButton = ({ messageId, text, className }: TextToSpeechB
     if (!modelData?.tts_model.id) return null
 
     return (
-        <button
+        <SingleIconButton
+            variant="ghost"
+            size="mini"
+            icon={getIcon()}
+            aria-label={isCurrentPlaying ? "暂停" : "朗读"}
             onClick={handlePlayPause}
             disabled={isCurrentLoading}
-            aria-label={isCurrentPlaying ? "Pause" : "Play"}
-            className={cn("inline-flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed", className)}
-        >
-            {renderIcon()}
-        </button>
+            loading={isCurrentLoading}
+            className={cn("text-gray-400 hover:text-gray-600", className)}
+        />
     )
 }
 
