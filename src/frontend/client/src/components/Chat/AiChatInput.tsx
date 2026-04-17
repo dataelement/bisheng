@@ -255,7 +255,7 @@ const AiChatInput = memo(
         );
 
         return (
-            <div className="px-4 pb-4 max-[575px]:px-0 max-[575px]:pb-3 shrink-0 relative">
+            <div className="px-4 sm:px-0 pb-4 max-[575px]:px-0 max-[575px]:pb-3 shrink-0 relative">
                 {/* Drag-drop overlay */}
                 {isDragging && <DragDropOverlay />}
 

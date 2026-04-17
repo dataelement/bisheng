@@ -243,7 +243,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
             )}
 
             {/* Input area — using new AiChatInput */}
-            {!shareToken && <div className="w-full max-w-[768px] mx-auto max-[575px]:max-w-full max-[575px]:px-3 shrink-0">
+            {!shareToken && <div className="w-full max-w-[800px] mx-auto max-[575px]:max-w-full max-[575px]:px-3 shrink-0">
               {isLingsi ?
                 <LinsightChatInput
                   disabled={!!shareToken}
@@ -303,20 +303,6 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   );
 };
 
-// Icon background by flow type: 10=workflow(blue), 5=assistant(orange), 1=skill(black)
-const getIconBgClass = (flowType: number) => {
-  switch (Number(flowType)) {
-    case 10:
-      return "bg-primary"
-    case 5:
-      return "bg-orange-400"
-    case 1:
-      return "bg-black"
-    default:
-      return "bg-gray-100"
-  }
-}
-
 const DailyFeaturedApps = ({ t, isLingsi }: { t: (k: string) => string; isLingsi: boolean }) => {
   const [expanded, setExpanded] = useState(false)
   const navigate = useNavigate()
@@ -367,40 +353,46 @@ const DailyFeaturedApps = ({ t, isLingsi }: { t: (k: string) => string; isLingsi
   const canExpand = !expanded && dailyApps.length > defaultCount
 
   return (
-    <div className="relative w-full mt-1 md:mt-4 pb-24">
-      <div className="flex justify-between items-center mb-3 text-sm text-gray-500 md:max-w-2xl xl:max-w-3xl mx-auto">
+    <div className="relative w-full -mt-2 md:-mt-40 pb-24 z-10">
+      <div className="flex justify-between items-center mb-3 text-sm text-gray-500 max-w-[800px] mx-auto px-4 sm:px-0">
         <h2 className="text-sm text-gray-400">平台推荐应用</h2>
       </div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3 md:max-w-2xl xl:max-w-3xl mx-auto">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3 max-w-[800px] mx-auto px-4 sm:px-0">
         {displayApps.map((appItem) => (
           <Card
             key={appItem.id}
-            className="flex flex-col py-0 rounded-[6px] shadow-sm border border-[#ebecf0] bg-gradient-to-br from-[#F9FBFE] via-white to-[#F9FBFE] overflow-hidden cursor-pointer hover:border-[#335cff] hover:shadow-[0px_2px_8px_1px_rgba(117,145,212,0.12)] transition-all"
+            className="group flex flex-col py-0 rounded-[6px] shadow-[0_2px_4px_rgba(0,0,0,0.02)] border border-[#E5E6EB] overflow-hidden cursor-pointer hover:border-[#335cff] hover:shadow-[0_4px_14px_rgba(51,92,255,0.12)] transition-all duration-300 h-[142px] hover:-translate-y-1"
+            style={{ background: 'linear-gradient(135deg, #f9fbfe 0%, #fff 50%, #f9fbfe 100%)' }}
             onClick={() => handleCardClick(appItem)}
           >
-            <CardContent className="h-full p-3 flex flex-col">
-              <div className="flex items-center gap-2 mb-2">
+            <CardContent className="h-full p-2 flex flex-col relative w-full">
+              <div className="flex items-center gap-2.5 mb-2 shrink-0">
                 <AppAvator
                   id={appItem.name}
                   url={appItem.logo}
-                  flowType={appItem.flow_type}
-                  className={`size-5 min-w-5 p-0.5 rounded-md ${getIconBgClass(appItem.flow_type || appItem.type)}`}
+                  flowType={appItem.flow_type || appItem.type}
+                  className={`size-[32px] min-w-[32px] !rounded-[8px]`}
+                  iconClassName="w-5 h-5"
                 />
-                <div className="text-sm font-medium text-gray-800 line-clamp-1 break-all">{appItem.name}</div>
+                <div className="text-[15px] font-medium text-[#1D2129] line-clamp-1 break-all">{appItem.name}</div>
               </div>
-              <div className="text-xs text-gray-500 line-clamp-2 break-all font-light">{appItem.description}</div>
-              {appItem.tags && appItem.tags.length > 0 && (
-                <div className="flex gap-1 flex-wrap mt-auto pt-2">
-                  {appItem.tags.map((tag) => (
+              <div className="text-[13px] text-[#86909C] line-clamp-2 break-all font-normal leading-[1.5]">{appItem.description}</div>
+
+              <div className="mt-auto pt-2 relative h-[30px] shrink-0 w-full overflow-hidden">
+                <div className="absolute inset-x-0 bottom-0 top-1 flex gap-1.5 flex-wrap overflow-hidden opacity-100 group-hover:opacity-0 transition-opacity duration-200 pointer-events-none">
+                  {appItem.tags && appItem.tags.map((tag: any) => (
                     <div
-                      key={tag.id}
-                      className="bg-[#F2F3F5] text-[#4E5969] text-xs px-2 py-0.5 rounded-[4px] font-normal"
+                      key={tag.id || tag.name || tag}
+                      className="bg-[#F2F3F5] text-[#4E5969] text-[12px] px-2 py-[2px] rounded-[4px] font-normal whitespace-nowrap"
                     >
-                      {tag.name}
+                      {tag.name || tag}
                     </div>
                   ))}
                 </div>
-              )}
+                <div className="absolute inset-x-0 bottom-0 top-1 flex items-center justify-center bg-[#335cff] rounded-[6px] text-white text-[13px] font-medium opacity-0 group-hover:opacity-100 transform translate-y-2 group-hover:translate-y-0 transition-all duration-300">
+                  开始对话
+                </div>
+              </div>
             </CardContent>
           </Card>
         ))}
