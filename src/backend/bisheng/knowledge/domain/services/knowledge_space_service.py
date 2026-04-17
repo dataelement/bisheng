@@ -233,6 +233,15 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         await KnowledgeDao.async_delete_knowledge(knowledge_id=space_id)
 
+        # TC-040: prune channel ➜ knowledge-space sync bindings that target
+        # this space so the channel UI and the Celery sync worker stop
+        # referencing a tombstone. Import lazily to avoid pulling the channel
+        # module into the knowledge module's import graph.
+        from bisheng.channel.domain.models.channel_knowledge_sync import (
+            ChannelKnowledgeSyncDao,
+        )
+        await ChannelKnowledgeSyncDao.adelete_by_space_id(str(space_id))
+
         # Audit log and telemetry
         await KnowledgeAuditTelemetryService.audit_delete_knowledge_space(self.login_user, self.request, space)
         KnowledgeAuditTelemetryService.telemetry_delete_knowledge(self.login_user)

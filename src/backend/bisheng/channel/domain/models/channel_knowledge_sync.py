@@ -212,6 +212,23 @@ class ChannelKnowledgeSyncDao:
             return len(rows)
 
     @classmethod
+    async def adelete_by_space_id(cls, space_id: str) -> int:
+        """Remove every sync row targeting a given knowledge space.
+
+        Called when the knowledge space is deleted so channel-side config
+        does not keep pointing at a tombstone (TC-040).
+        """
+        async with get_async_db_session() as session:
+            stmt = select(ChannelKnowledgeSync).where(
+                ChannelKnowledgeSync.knowledge_space_id == str(space_id),
+            )
+            rows = list((await session.exec(stmt)).all())
+            for r in rows:
+                await session.delete(r)
+            await session.commit()
+            return len(rows)
+
+    @classmethod
     async def areplace_for_channel(
         cls, channel_id: str, rows: List["ChannelKnowledgeSync"],
     ) -> int:
