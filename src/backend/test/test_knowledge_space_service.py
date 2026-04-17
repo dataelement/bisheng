@@ -306,6 +306,80 @@ class TestDeleteSpace:
         mock_delete.assert_awaited_once_with(knowledge_id=1)
 
 
+class TestManagePermissionBoundaries:
+
+    @pytest.mark.asyncio
+    async def test_get_space_members_requires_manage_permission(self, service):
+        with patch.object(
+            service, '_require_manage_permission', new_callable=AsyncMock,
+        ) as mock_require_manage, patch.object(
+            service, '_require_write_permission', new_callable=AsyncMock,
+        ) as mock_require_write, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.find_space_members_paginated',
+            new_callable=AsyncMock,
+            return_value=[],
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.count_space_members_with_keyword',
+            new_callable=AsyncMock,
+            return_value=0,
+        ):
+            resp = await service.get_space_members(1, page=1, page_size=20)
+
+        assert resp.total == 0
+        mock_require_manage.assert_awaited_once_with(1)
+        mock_require_write.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_update_space_uses_manage_permission_when_auth_type_is_present(self, service):
+        existing_space = _make_space(auth_type=AuthTypeEnum.PUBLIC)
+        updated_space = _make_space(auth_type=AuthTypeEnum.APPROVAL)
+
+        with patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+            new_callable=AsyncMock,
+            return_value=existing_space,
+        ), patch.object(
+            service, '_require_manage_permission', new_callable=AsyncMock,
+        ) as mock_require_manage, patch.object(
+            service, '_require_write_permission', new_callable=AsyncMock,
+        ) as mock_require_write, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_space',
+            new_callable=AsyncMock,
+            return_value=updated_space,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_get_members_by_space',
+            new_callable=AsyncMock,
+            return_value=[],
+        ):
+            await service.update_knowledge_space(1, auth_type=AuthTypeEnum.APPROVAL)
+
+        mock_require_manage.assert_awaited_once_with(1)
+        mock_require_write.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_update_space_without_auth_type_stays_on_write_permission(self, service):
+        existing_space = _make_space(auth_type=AuthTypeEnum.PUBLIC)
+        updated_space = _make_space(auth_type=AuthTypeEnum.PUBLIC)
+
+        with patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+            new_callable=AsyncMock,
+            return_value=existing_space,
+        ), patch.object(
+            service, '_require_manage_permission', new_callable=AsyncMock,
+        ) as mock_require_manage, patch.object(
+            service, '_require_write_permission', new_callable=AsyncMock,
+        ) as mock_require_write, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_space',
+            new_callable=AsyncMock,
+            return_value=updated_space,
+        ):
+            await service.update_knowledge_space(1, name='Renamed Space')
+
+        mock_require_write.assert_awaited_once_with(1)
+        mock_require_manage.assert_not_awaited()
+
+
 class TestSpaceOwnershipValidation:
 
     @pytest.mark.asyncio
@@ -460,7 +534,7 @@ class TestTupleLifecycle:
             new_callable=AsyncMock,
             return_value=public_space,
         ), patch.object(
-            service, '_require_write_permission', new_callable=AsyncMock,
+            service, '_require_manage_permission', new_callable=AsyncMock,
         ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_space',
             new_callable=AsyncMock,
@@ -493,7 +567,7 @@ class TestTupleLifecycle:
             new_callable=AsyncMock,
             return_value=approval_space,
         ), patch.object(
-            service, '_require_write_permission', new_callable=AsyncMock,
+            service, '_require_manage_permission', new_callable=AsyncMock,
         ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_space',
             new_callable=AsyncMock,

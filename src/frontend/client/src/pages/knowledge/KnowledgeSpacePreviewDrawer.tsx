@@ -14,7 +14,8 @@ import {
     getJoinedSpacesApi,
     getSpaceChildrenApi,
     getSpaceInfoApi,
-    subscribeSpaceApi
+    subscribeSpaceApi,
+    unsubscribeSpaceApi
 } from "~/api/knowledge";
 import { useLocalize } from "~/hooks";
 
@@ -170,36 +171,46 @@ export function KnowledgeSpacePreviewDrawer({
 
     const handleClickAction = () => {
         if (!space) return;
-
-        if (status === "joined" || status === "pending" || status === "rejected") return;
         if (subscribing) return;
 
         (async () => {
             setSubscribing(true);
             try {
-                // Join/apply upper limit (includes followed + pending applications)
-                try {
-                    const joinedSpaces = await getJoinedSpacesApi();
-                    if (joinedSpaces.length >= MAX_JOINED_SPACES) {
-                        showToast({
-                            message: localize("com_knowledge.join_space_limit_reached_50"),
-                            severity: NotificationSeverity.WARNING,
-                        });
-                        return;
-                    }
-                } catch {
-                    // If the limit check fails, fall back to existing behavior.
-                }
-
-                await subscribeSpaceApi(space.id);
-                if (isPublic) {
-                    setStatus("joined");
-                    onSquareStatusChange?.(String(space.id), "joined");
-                    showToast({ message: localize("com_knowledge.join_success"), severity: NotificationSeverity.SUCCESS });
+                if (status === "joined" || status === "pending") {
+                    await unsubscribeSpaceApi(space.id);
+                    setStatus("none");
+                    onSquareStatusChange?.(String(space.id), "join");
+                    showToast({
+                        message: status === "joined"
+                            ? localize("com_knowledge.exited_space")
+                            : localize("com_knowledge.withdraw_application_success"),
+                        severity: NotificationSeverity.SUCCESS,
+                    });
                 } else {
-                    setStatus("pending");
-                    onSquareStatusChange?.(String(space.id), "pending");
-                    showToast({ message: localize("com_knowledge.subscribe_apply_sent"), severity: NotificationSeverity.SUCCESS });
+                    // Join/apply upper limit (includes followed + pending applications)
+                    try {
+                        const joinedSpaces = await getJoinedSpacesApi();
+                        if (joinedSpaces.length >= MAX_JOINED_SPACES) {
+                            showToast({
+                                message: localize("com_knowledge.join_space_limit_reached_50"),
+                                severity: NotificationSeverity.WARNING,
+                            });
+                            return;
+                        }
+                    } catch {
+                        // If the limit check fails, fall back to existing behavior.
+                    }
+
+                    await subscribeSpaceApi(space.id);
+                    if (isPublic) {
+                        setStatus("joined");
+                        onSquareStatusChange?.(String(space.id), "joined");
+                        showToast({ message: localize("com_knowledge.join_success"), severity: NotificationSeverity.SUCCESS });
+                    } else {
+                        setStatus("pending");
+                        onSquareStatusChange?.(String(space.id), "pending");
+                        showToast({ message: localize("com_knowledge.subscribe_apply_sent"), severity: NotificationSeverity.SUCCESS });
+                    }
                 }
             } catch (e) {
                 const rawMessage =
@@ -214,7 +225,9 @@ export function KnowledgeSpacePreviewDrawer({
                 } else {
                     const message =
                         rawMessage ||
-                        localize("com_knowledge.operation_failed_retry");
+                        (status === "joined"
+                            ? localize("com_knowledge.exit_space_failed")
+                            : localize("com_knowledge.operation_failed_retry"));
                     showToast({ message, severity: NotificationSeverity.ERROR });
                 }
             }
@@ -225,10 +238,9 @@ export function KnowledgeSpacePreviewDrawer({
     };
 
     const getButtonConfig = () => {
-        // 仅把“订阅/申请”改成“加入”；“已订阅/申请中/已驳回”保持原文案
-        if (status === "joined") return { label: localize("com_knowledge.subscribed"), variant: "secondary" as const, disabled: true };
-        if (status === "pending") return { label: localize("com_knowledge.applying"), variant: "secondary" as const, disabled: true };
-        if (status === "rejected") return { label: localize("rejected"), variant: "secondary" as const, disabled: true };
+        if (status === "joined") return { label: localize("com_knowledge.exit_space_short"), variant: "secondary" as const, disabled: subscribing };
+        if (status === "pending") return { label: localize("com_knowledge.withdraw_application"), variant: "secondary" as const, disabled: subscribing };
+        if (status === "rejected") return { label: localize("com_knowledge.reapply"), variant: "outline" as const, disabled: subscribing };
         if (isPublic) return { label: localize("com_knowledge.join"), variant: "default" as const, disabled: subscribing };
         return { label: localize("com_knowledge.join"), variant: "outline" as const, disabled: subscribing };
     };
@@ -285,7 +297,7 @@ export function KnowledgeSpacePreviewDrawer({
                                     variant={btn.variant}
                                     className={`h-8 px-5 py-1 text-sm font-normal rounded-md flex-shrink-0 ${status === "joined"
                                         ? "bg-[#F2F3F5] text-[#86909C] border-[#E5E6EB]"
-                                        : status === "pending" || status === "rejected"
+                                        : status === "pending"
                                             ? "bg-[#F2F3F5] text-[#C9CDD4] border-[#E5E6EB]"
                                             : ""
                                         }`}

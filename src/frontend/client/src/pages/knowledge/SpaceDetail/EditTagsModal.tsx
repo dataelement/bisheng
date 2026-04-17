@@ -1,6 +1,6 @@
 import { useState, KeyboardEvent, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { X } from "lucide-react";
+import { Trash2, X } from "lucide-react";
 import {
     Dialog,
     DialogContent,
@@ -14,6 +14,7 @@ import {
     SpaceTag,
     getSpaceTagsApi,
     addSpaceTagApi,
+    deleteSpaceTagApi,
     updateFileTagsApi,
     batchUpdateTagsApi,
 } from "~/api/knowledge";
@@ -48,6 +49,7 @@ export function EditTagsModal({
     const [selectedTagIds, setSelectedTagIds] = useState<Set<number>>(new Set());
     const [inputValue, setInputValue] = useState("");
     const [loading, setLoading] = useState(false);
+    const [deletingTagId, setDeletingTagId] = useState<number | null>(null);
     const { showToast } = useToastContext();
     const queryClient = useQueryClient();
 
@@ -161,6 +163,27 @@ export function EditTagsModal({
         }
     };
 
+    const handleDeleteSpaceTag = async (tag: SpaceTag) => {
+        if (deletingTagId !== null) return;
+        setDeletingTagId(tag.id);
+        try {
+            await deleteSpaceTagApi(spaceId, tag.id);
+            setSpaceTags((prev) => prev.filter((item) => item.id !== tag.id));
+            setSelectedTagIds((prev) => {
+                const next = new Set(prev);
+                next.delete(tag.id);
+                return next;
+            });
+            queryClient.invalidateQueries({ queryKey: ['spaceTags', spaceId] });
+            showToast({ message: localize("com_knowledge.delete_tag_success"), status: "success" });
+            onSaved?.();
+        } catch {
+            showToast({ message: localize("com_knowledge.delete_tag_failed"), status: "error" });
+        } finally {
+            setDeletingTagId(null);
+        }
+    };
+
     const handleClose = () => {
         const hasChanges = isBatchMode
             ? selectedTagIds.size > 0
@@ -238,12 +261,24 @@ export function EditTagsModal({
                                     <span
                                         key={tag.id}
                                         onClick={() => toggleTag(tag)}
-                                        className={`px-2 h-7 flex items-center justify-center text-[12px] leading-[20px] rounded-[4px] transition-colors ${isSelected
+                                        className={`px-2 h-7 flex items-center justify-center gap-1 text-[12px] leading-[20px] rounded-[4px] transition-colors ${isSelected
                                             ? "text-[#165dff] cursor-default bg-primary/10"
                                             : "bg-[#f2f3f5] text-[#4e5969] hover:bg-[#e5e6eb] cursor-pointer"
                                             }`}
                                     >
                                         {tag.name}
+                                        <button
+                                            type="button"
+                                            className="flex items-center justify-center text-[#86909c] hover:text-[#f53f3f] disabled:cursor-not-allowed disabled:text-[#c9cdd4]"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                void handleDeleteSpaceTag(tag);
+                                            }}
+                                            disabled={deletingTagId === tag.id}
+                                            title={localize("com_knowledge.delete")}
+                                        >
+                                            <Trash2 className="size-3" />
+                                        </button>
                                     </span>
                                 );
                             })}

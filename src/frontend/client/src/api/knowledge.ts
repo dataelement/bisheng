@@ -772,6 +772,16 @@ export async function addSpaceTagApi(space_id: string, tag_name: string): Promis
 }
 
 /**
+ * Delete a space tag.
+ * Backend: DELETE /api/v1/knowledge/space/{space_id}/tag
+ */
+export async function deleteSpaceTagApi(space_id: string, tag_id: number): Promise<void> {
+    await request.deleteWithOptions(`/api/v1/knowledge/space/${space_id}/tag`, {
+        data: { tag_id },
+    });
+}
+
+/**
  * Overwrite tags for a single file.
  * Backend: POST /api/v1/knowledge/space/{space_id}/files/{file_id}/tag
  */

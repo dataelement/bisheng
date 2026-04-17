@@ -4,7 +4,14 @@ import { Input } from "~/components/ui/Input";
 import { Button } from "~/components/ui/Button";
 import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
-import { getJoinedSpacesApi, getSquareSpacesApi, subscribeSpaceApi, type KnowledgeSpace, VisibilityType } from "~/api/knowledge";
+import {
+    getJoinedSpacesApi,
+    getSquareSpacesApi,
+    subscribeSpaceApi,
+    unsubscribeSpaceApi,
+    type KnowledgeSpace,
+    VisibilityType
+} from "~/api/knowledge";
 import { useLocalize } from "~/hooks";
 import KnowledgeSquareCard from "./KnowledgeSquareCard";
 
@@ -146,45 +153,59 @@ export default function KnowledgeSquare({
         return () => node.removeEventListener("scroll", onScroll);
     }, [hasMorePage, loadingMore, load, page]);
 
-    const handleJoin = async (space: KnowledgeSpace) => {
-        const nextStatus: SquareSpaceStatus =
-            space.visibility === VisibilityType.PUBLIC ? "joined" : "pending";
-
-        // Only join when currently "join"
+    const handleAction = async (space: KnowledgeSpace) => {
         const currentStatus = (space.squareStatus as SquareSpaceStatus) || "join";
-        if (currentStatus !== "join") return;
         if (joiningId) return;
-
-        // Join/apply upper limit (includes followed + pending applications)
-        try {
-            const joinedSpaces = await getJoinedSpacesApi();
-            if (joinedSpaces.length >= MAX_JOINED_SPACES) {
-                showToast({
-                    message: localize("com_knowledge.join_space_limit_reached_50"),
-                    severity: NotificationSeverity.WARNING,
-                });
-                return;
-            }
-        } catch {
-            // If the limit check fails, keep the existing behavior instead of blocking.
-        }
-
         setJoiningId(space.id);
         const prevSpaces = spaces;
 
         try {
-            await subscribeSpaceApi(space.id);
-            setSpaces((prev) =>
-                prev.map((s) =>
-                    s.id === space.id
-                        ? { ...s, squareStatus: nextStatus, isFollowed: nextStatus === "joined", isPending: nextStatus === "pending" }
-                        : s
-                )
-            );
-            if (nextStatus === "joined") {
-                showToast({ message: localize("com_knowledge.join_success"), severity: NotificationSeverity.SUCCESS });
+            if (currentStatus === "joined" || currentStatus === "pending") {
+                await unsubscribeSpaceApi(space.id);
+                setSpaces((prev) =>
+                    prev.map((s) =>
+                        s.id === space.id
+                            ? { ...s, squareStatus: "join", isFollowed: false, isPending: false }
+                            : s
+                    )
+                );
+                showToast({
+                    message: currentStatus === "joined"
+                        ? localize("com_knowledge.exited_space")
+                        : localize("com_knowledge.withdraw_application_success"),
+                    severity: NotificationSeverity.SUCCESS,
+                });
             } else {
-                showToast({ message: `${tJoinPrefix}`, severity: NotificationSeverity.SUCCESS });
+                const nextStatus: SquareSpaceStatus =
+                    space.visibility === VisibilityType.PUBLIC ? "joined" : "pending";
+
+                // Join/apply upper limit (includes followed + pending applications)
+                try {
+                    const joinedSpaces = await getJoinedSpacesApi();
+                    if (joinedSpaces.length >= MAX_JOINED_SPACES) {
+                        showToast({
+                            message: localize("com_knowledge.join_space_limit_reached_50"),
+                            severity: NotificationSeverity.WARNING,
+                        });
+                        return;
+                    }
+                } catch {
+                    // If the limit check fails, keep the existing behavior instead of blocking.
+                }
+
+                await subscribeSpaceApi(space.id);
+                setSpaces((prev) =>
+                    prev.map((s) =>
+                        s.id === space.id
+                            ? { ...s, squareStatus: nextStatus, isFollowed: nextStatus === "joined", isPending: nextStatus === "pending" }
+                            : s
+                    )
+                );
+                if (nextStatus === "joined") {
+                    showToast({ message: localize("com_knowledge.join_success"), severity: NotificationSeverity.SUCCESS });
+                } else {
+                    showToast({ message: `${tJoinPrefix}`, severity: NotificationSeverity.SUCCESS });
+                }
             }
         } catch (e) {
             // rollback (keep original status/label)
@@ -196,14 +217,16 @@ export default function KnowledgeSquare({
 
             // Backend errcode 18032: SpaceSubscribeLimitError
             // Msg: "You can subscribe to a maximum of 50 knowledge spaces"
-            if (typeof rawMessage === "string" && rawMessage.includes("maximum of 50 knowledge spaces")) {
-                showToast({ message: localize("com_knowledge.join_space_limit_reached_50"), severity: NotificationSeverity.WARNING });
-            } else {
-                const message =
-                    rawMessage ||
-                    localize("com_knowledge.operation_failed_retry");
-                showToast({ message, severity: NotificationSeverity.ERROR });
-            }
+                if (typeof rawMessage === "string" && rawMessage.includes("maximum of 50 knowledge spaces")) {
+                    showToast({ message: localize("com_knowledge.join_space_limit_reached_50"), severity: NotificationSeverity.WARNING });
+                } else {
+                    const message =
+                        rawMessage ||
+                        (currentStatus === "joined"
+                            ? localize("com_knowledge.exit_space_failed")
+                            : localize("com_knowledge.operation_failed_retry"));
+                    showToast({ message, severity: NotificationSeverity.ERROR });
+                }
         } finally {
             setJoiningId(null);
         }
@@ -277,8 +300,9 @@ export default function KnowledgeSquare({
                                                 statusOverride?.[String(space.id)] ??
                                                 ((space.squareStatus as SquareSpaceStatus) || "join")
                                             }
+                                            isActing={joiningId === space.id}
                                             onPreview={() => onPreviewSpace?.(space.id)}
-                                            onAction={() => handleJoin(space)}
+                                            onAction={() => handleAction(space)}
                                         />
                                     ))}
 
@@ -302,4 +326,3 @@ export default function KnowledgeSquare({
         </div>
     );
 }
-

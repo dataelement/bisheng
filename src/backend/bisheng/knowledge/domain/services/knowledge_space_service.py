@@ -386,7 +386,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if not space or space.type != KnowledgeTypeEnum.SPACE.value:
             raise SpaceNotFoundError()
 
-        await self._require_write_permission(space_id)
+        if auth_type is not None:
+            await self._require_manage_permission(space_id)
+        else:
+            await self._require_write_permission(space_id)
 
         old_auth_type = space.auth_type
 
@@ -599,7 +602,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         - Return user information and associated user groups
         - Sorting: Creators and administrators at the top, regular members sorted by user_id
         """
-        await self._require_write_permission(space_id)
+        await self._require_manage_permission(space_id)
 
         search_user_ids = None
         if keyword:

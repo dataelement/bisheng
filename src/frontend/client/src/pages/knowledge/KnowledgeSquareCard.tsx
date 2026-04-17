@@ -14,6 +14,7 @@ interface KnowledgeSquareCardProps {
     onAction?: () => void;
     onPreview?: () => void;
     isHighlighted?: boolean;
+    isActing?: boolean;
 }
 
 export default function KnowledgeSquareCard({
@@ -22,23 +23,24 @@ export default function KnowledgeSquareCard({
     onAction,
     onPreview,
     isHighlighted = false,
+    isActing = false,
 }: KnowledgeSquareCardProps) {
     const localize = useLocalize();
 
     const getButtonConfig = () => {
         switch (status) {
             case "joined":
-                return { text: localize("subscribed") || localize("com_knowledge.joined"), variant: "secondary" as const, disabled: true };
+                return { text: localize("com_knowledge.exit_space_short"), variant: "secondary" as const, disabled: isActing };
             case "pending":
-                return { text: localize("pending") || localize("com_knowledge.applying"), variant: "secondary" as const, disabled: true };
+                return { text: localize("com_knowledge.withdraw_application"), variant: "secondary" as const, disabled: isActing };
             case "rejected":
-                return { text: localize("rejected") || "已驳回", variant: "secondary" as const, disabled: true };
+                return { text: localize("com_knowledge.reapply"), variant: "outline" as const, disabled: isActing };
             default: {
                 return {
                     // “订阅/申请”动作统一展示为“加入”
                     text: localize("com_knowledge.join"),
                     variant: "outline" as const,
-                    disabled: false,
+                    disabled: isActing,
                 };
             }
         }
@@ -112,4 +114,3 @@ export default function KnowledgeSquareCard({
         </Card>
     );
 }
-
