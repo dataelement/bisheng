@@ -1811,7 +1811,6 @@
   "department.memberEditLoading": "加载中…",
   "department.memberEditLoadFailed": "加载编辑表单失败，请稍后重试",
   "department.memberEditSaved": "已保存",
-  "department.memberEditUserGroupsHint": "可选范围为管理员可管理的用户组（含公开与私密）。未展示的用户组不会被移除。",
   "department.memberEditPrimaryReadonly": "第三方同步人员主部门不可修改。",
   "department.memberEditPrimaryHint": "仅可选择您作为部门管理员所负责的组织范围内的部门。",
   "department.memberEditPrimaryPlaceholder": "选择主部门",
@@ -1819,6 +1818,5 @@
   "department.deleteLocalMemberConfirm": "确定删除该本地人员账号？将移除其组织关系、用户组与普通角色，并禁用登录。",
   "department.deleteLocalMemberBlocked": "该用户仍挂载数据资产，无法删除：知识空间 {{k}} 个、工作流 {{f}} 个、助手 {{a}} 个。",
   "department.deleteLocalMemberDone": "已删除该人员账号",
-  "department.memberEditRolesHint": "可选范围为全局角色与本部门（及子部门）范围内的角色。",
   "department.memberEditAffiliateSection": "附属部门（兼职）"
 }

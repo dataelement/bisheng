@@ -647,8 +647,11 @@ class DepartmentService:
             await session.delete(ud)
             await session.commit()
 
-        # Fire change handler
-        ops = DepartmentChangeHandler.on_member_removed(dept.id, user_id)
+        # Fire change handler：移除成员同时卸掉该部门的部门管理员（FGA）
+        ops = (
+            DepartmentChangeHandler.on_member_removed(dept.id, user_id)
+            + DepartmentChangeHandler.on_admin_removed(dept.id, [user_id])
+        )
         await DepartmentChangeHandler.execute_async(ops)
 
     @classmethod
@@ -1020,19 +1023,51 @@ class DepartmentService:
     async def _apply_local_primary_department_change(
         cls, user_id: int, new_dept_id: int,
     ) -> None:
-        """将本地用户主部门切到 new_dept_id；原主部门行降为附属（is_primary=0）。"""
-        fga_new_dept: Optional[int] = None
+        """将本地用户主部门切到 new_dept_id：从原主部门移除，不再保留为附属。"""
+        old_dept_id_for_fga: Optional[int] = None
+        fga_add_new: bool = False
         async with get_async_db_session() as session:
             uds = list(
                 (await session.exec(
                     select(UserDepartment).where(UserDepartment.user_id == user_id),
                 )).all()
             )
-            target_ud = next((u for u in uds if int(u.department_id) == int(new_dept_id)), None)
-            for u in uds:
-                if int(u.is_primary or 0) == 1:
-                    u.is_primary = 0
-                    session.add(u)
+            primary_rows = [u for u in uds if int(u.is_primary or 0) == 1]
+            old_primary = primary_rows[0] if primary_rows else None
+
+            if not old_primary:
+                target_ud = next(
+                    (u for u in uds if int(u.department_id) == int(new_dept_id)),
+                    None,
+                )
+                if target_ud:
+                    target_ud.is_primary = 1
+                    session.add(target_ud)
+                else:
+                    session.add(UserDepartment(
+                        user_id=user_id,
+                        department_id=new_dept_id,
+                        is_primary=1,
+                        source='local',
+                    ))
+                    fga_add_new = True
+                await session.commit()
+                if fga_add_new:
+                    ops = DepartmentChangeHandler.on_members_added(new_dept_id, [user_id])
+                    await DepartmentChangeHandler.execute_async(ops)
+                return
+
+            if int(old_primary.department_id) == int(new_dept_id):
+                return
+
+            old_dept_id_for_fga = int(old_primary.department_id)
+            target_ud = next(
+                (u for u in uds if int(u.department_id) == int(new_dept_id)),
+                None,
+            )
+
+            await session.delete(old_primary)
+
             if target_ud:
                 target_ud.is_primary = 1
                 session.add(target_ud)
@@ -1043,11 +1078,20 @@ class DepartmentService:
                     is_primary=1,
                     source='local',
                 ))
-                fga_new_dept = int(new_dept_id)
+                fga_add_new = True
+
             await session.commit()
-        if fga_new_dept is not None:
-            ops = DepartmentChangeHandler.on_members_added(fga_new_dept, [user_id])
-            await DepartmentChangeHandler.execute_async(ops)
+
+        if old_dept_id_for_fga is not None:
+            # 离开原部门后不再担任该部门的部门管理员（仅 FGA admin 关系）
+            ops_rm = (
+                DepartmentChangeHandler.on_member_removed(old_dept_id_for_fga, user_id)
+                + DepartmentChangeHandler.on_admin_removed(old_dept_id_for_fga, [user_id])
+            )
+            await DepartmentChangeHandler.execute_async(ops_rm)
+        if fga_add_new:
+            ops_add = DepartmentChangeHandler.on_members_added(new_dept_id, [user_id])
+            await DepartmentChangeHandler.execute_async(ops_add)
 
     @classmethod
     async def _count_user_owned_data_assets(cls, user_id: int) -> dict:

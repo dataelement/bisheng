@@ -331,9 +331,6 @@ export function OrganizationMemberEditDialog({
               <>
                 <div>
                   <Label>{t("bs:department.userGroups")}</Label>
-                  <p className="mb-1 text-xs text-muted-foreground">
-                    {t("bs:department.memberEditUserGroupsHint")}
-                  </p>
                   <div className="max-h-40 space-y-2 overflow-y-auto rounded border p-2">
                     {form.manageable_groups.map((g) => (
                       <label key={g.id} className="flex cursor-pointer items-center gap-2 text-sm">
@@ -383,9 +380,6 @@ export function OrganizationMemberEditDialog({
                 {form.primary_department && (
                   <div>
                     <Label>{t("bs:department.roles")}</Label>
-                    <p className="mb-1 text-xs text-muted-foreground">
-                      {t("bs:department.memberEditRolesHint")}
-                    </p>
                     {renderRoleChecks(
                       primaryRoleOptions,
                       primaryRoles,
@@ -421,9 +415,6 @@ export function OrganizationMemberEditDialog({
             {form.edit_mode === "affiliate" && (
               <div>
                 <Label>{t("bs:department.roles")}</Label>
-                <p className="mb-1 text-xs text-muted-foreground">
-                  {t("bs:department.memberEditRolesHint")}
-                </p>
                 {renderRoleChecks(
                   form.assignable_roles_catalog[form.context.dept_id] ?? [],
                   ctxRoles,

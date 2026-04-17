@@ -1817,7 +1817,6 @@
   "department.memberEditLoading": "読み込み中…",
   "department.memberEditLoadFailed": "編集フォームの読み込みに失敗しました。しばらくしてから再試行してください。",
   "department.memberEditSaved": "保存しました",
-  "department.memberEditUserGroupsHint": "選択できるのは、管理者が管理できるユーザーグループ（公開・非公開）です。一覧にないグループは維持されます。",
   "department.memberEditPrimaryReadonly": "サードパーティ同期ユーザーの主所属部門は変更できません。",
   "department.memberEditPrimaryHint": "部門管理者として管轄する組織ツリー内の部門のみ選択できます。",
   "department.memberEditPrimaryPlaceholder": "主所属部門を選択",
@@ -1825,6 +1824,5 @@
   "department.deleteLocalMemberConfirm": "このローカルアカウントを削除しますか？組織所属・ユーザーグループ・一般ロールを解除し、ログインを無効化します。",
   "department.deleteLocalMemberBlocked": "データ資産が残っているため削除できません：ナレッジスペース {{k}}、ワークフロー {{f}}、アシスタント {{a}}。",
   "department.deleteLocalMemberDone": "メンバーアカウントを削除しました",
-  "department.memberEditRolesHint": "選択できるのはグローバルロールと、当該部門（および配下）のロールです。",
   "department.memberEditAffiliateSection": "兼務先部門"
 }
