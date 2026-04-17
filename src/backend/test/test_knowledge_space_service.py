@@ -140,6 +140,9 @@ def _install_schema_stubs() -> None:
             def get_preview_cache_key(self, *args, **kwargs):
                 return 'preview-cache-key'
 
+            async def process_retry_files(self, *args, **kwargs):
+                return ([], set())
+
         knowledge_utils_module.KnowledgeUtils = _DummyKnowledgeUtils
         sys.modules['bisheng.knowledge.domain.services.knowledge_utils'] = knowledge_utils_module
 
@@ -976,6 +979,72 @@ class TestTupleLifecycle:
 
         assert result is True
         mock_revoke_child.assert_awaited_once_with(1, 88)
+
+    @pytest.mark.asyncio
+    async def test_add_space_tag_uses_manage_space_tags_permission(self, service):
+        with patch.object(
+            service, '_require_write_permission', new_callable=AsyncMock,
+        ), patch.object(
+            service, '_require_permission_id', new_callable=AsyncMock,
+        ) as mock_require_permission_id, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.TagDao.get_tags_by_business',
+            new_callable=AsyncMock,
+            return_value=[],
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.TagDao.ainsert_tag',
+            new_callable=AsyncMock,
+            return_value=SimpleNamespace(id=1, name='tag'),
+        ):
+            await service.add_space_tag(1, 'tag')
+
+        mock_require_permission_id.assert_awaited_once_with('knowledge_space', 1, 'manage_space_tags')
+
+    @pytest.mark.asyncio
+    async def test_update_file_tags_uses_manage_file_tags_permission(self, service):
+        file_record = _make_file(file_id=123, knowledge_id=1)
+
+        with patch.object(
+            service, '_require_file_relation', new_callable=AsyncMock,
+            return_value=file_record,
+        ), patch.object(
+            service, '_require_permission_id', new_callable=AsyncMock,
+        ) as mock_require_permission_id, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.TagDao.aupdate_resource_tags',
+            new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_knowledge_update_time_by_id',
+            new_callable=AsyncMock,
+        ):
+            await service.update_file_tags(1, 123, [1, 2])
+
+        mock_require_permission_id.assert_awaited_once_with('knowledge_file', 123, 'manage_file_tags', space_id=1)
+
+    @pytest.mark.asyncio
+    async def test_retry_space_files_uses_retry_file_permission(self, service):
+        space = _make_space(auth_type=AuthTypeEnum.PUBLIC)
+        file_record = _make_file(file_id=124, knowledge_id=1)
+
+        with patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+            new_callable=AsyncMock,
+            return_value=space,
+        ), patch.object(
+            service, '_require_read_permission', new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_ids',
+            new_callable=AsyncMock,
+            return_value=[file_record],
+        ), patch.object(
+            service, '_require_resource_permission', new_callable=AsyncMock,
+        ), patch.object(
+            service, '_require_permission_id', new_callable=AsyncMock,
+        ) as mock_require_permission_id, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_knowledge_update_time_by_id',
+            new_callable=AsyncMock,
+        ):
+            await service.retry_space_files(1, {'file_objs': [{'id': 124}]})
+
+        mock_require_permission_id.assert_awaited_once_with('knowledge_file', 124, 'retry_file', space_id=1)
 
 
 class TestFineGrainedPermissionRuntime:

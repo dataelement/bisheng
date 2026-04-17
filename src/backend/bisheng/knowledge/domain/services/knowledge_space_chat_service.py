@@ -42,6 +42,30 @@ class KnowledgeSpaceChatService:
         self.request = request
         self.login_user = login_user
 
+    def _permission_service(self):
+        from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
+
+        if not hasattr(self, '_knowledge_space_permission_service'):
+            self._knowledge_space_permission_service = KnowledgeSpaceService(self.request, self.login_user)
+        return self._knowledge_space_permission_service
+
+    async def _require_space_view_permission(self, space_id: int):
+        svc = self._permission_service()
+        await svc._require_read_permission(space_id)
+        await svc._require_permission_id('knowledge_space', space_id, 'view_space')
+
+    async def _require_folder_view_permission(self, space_id: int, folder_id: int):
+        svc = self._permission_service()
+        folder = await svc._require_folder_relation(space_id, folder_id, 'can_read')
+        await svc._require_permission_id('folder', folder_id, 'view_folder', space_id=space_id)
+        return folder
+
+    async def _require_file_view_permission(self, space_id: int, file_id: int):
+        svc = self._permission_service()
+        file_record = await svc._require_file_relation(file_id, 'can_read', space_id=space_id)
+        await svc._require_permission_id('knowledge_file', file_id, 'view_file', space_id=space_id)
+        return file_record
+
     @classmethod
     def generate_flow_id_for_file(cls, knowledge_id: int, file_id: int) -> str:
         """ Generate a unique flow_id representation for a single file chat """
@@ -56,9 +80,7 @@ class KnowledgeSpaceChatService:
             -> AsyncIterator[ChatResponse]:
         """ Single file RAG query """
         # Verify file exists and is a file
-        file_record = await KnowledgeFileDao.query_by_id(file_id)
-        if not file_record or file_record.knowledge_id != knowledge_id or file_record.file_type != 1:
-            raise NotFoundError(msg="Invalid file for chat")
+        file_record = await self._require_file_view_permission(knowledge_id, file_id)
 
         space = await KnowledgeDao.aquery_by_id(file_record.knowledge_id)
         if not space:
@@ -208,6 +230,7 @@ class KnowledgeSpaceChatService:
 
     async def single_file_history(self, knowledge_id: int, file_id: int, page_size: int = 20) \
             -> List[ChatMessageHistoryResponse]:
+        await self._require_file_view_permission(knowledge_id, file_id)
         flow_id = self.generate_flow_id_for_file(knowledge_id, file_id)
 
         session = await MessageSessionDao.afilter_session(flow_ids=[flow_id],
@@ -220,6 +243,7 @@ class KnowledgeSpaceChatService:
         return await ChatSessionService.get_chat_history(session.chat_id, session.flow_id, page_size=page_size)
 
     async def clear_file_history(self, knowledge_id: int, file_id: int) -> bool:
+        await self._require_file_view_permission(knowledge_id, file_id)
         flow_id = self.generate_flow_id_for_file(knowledge_id, file_id)
         session = await MessageSessionDao.afilter_session(flow_ids=[flow_id],
                                                           flow_type=[FlowType.KNOLEDGE_SPACE.value],
@@ -233,6 +257,10 @@ class KnowledgeSpaceChatService:
 
     async def get_chat_folder_session(self, space_id: int, folder_id: int) -> List[MessageSession]:
         """ Query sessions for a specific folder_id """
+        if folder_id:
+            await self._require_folder_view_permission(space_id, folder_id)
+        else:
+            await self._require_space_view_permission(space_id)
 
         flow_id = self.generate_flow_id_for_folder(space_id, folder_id)
 
@@ -243,14 +271,13 @@ class KnowledgeSpaceChatService:
         return session
 
     async def create_chat_folder_session(self, space_id: int, folder_id: int) -> MessageSession:
+        await self._require_space_view_permission(space_id)
         space = await KnowledgeDao.aquery_by_id(space_id)
         if not space:
             raise NotFoundError(msg="Knowledge space not found for chat")
         flow_name = space.name
         if folder_id:
-            folder_record = await KnowledgeFileDao.query_by_id(folder_id)
-            if not folder_record or folder_record.knowledge_id != space_id:
-                raise NotFoundError(msg="Knowledge folder not found for chat")
+            folder_record = await self._require_folder_view_permission(space_id, folder_id)
             flow_name = f"{flow_name}-{folder_record.file_name}"
         flow_id = self.generate_flow_id_for_folder(space_id, folder_id)
         session = await MessageSessionDao.async_insert_one(MessageSession(
@@ -263,6 +290,10 @@ class KnowledgeSpaceChatService:
         return session
 
     async def delete_chat_folder_session(self, space_id: int, folder_id: int, chat_id: str) -> bool:
+        if folder_id:
+            await self._require_folder_view_permission(space_id, folder_id)
+        else:
+            await self._require_space_view_permission(space_id)
         flow_id = self.generate_flow_id_for_folder(space_id, folder_id)
         session = await MessageSessionDao.afilter_session(chat_ids=[chat_id],
                                                           flow_ids=[flow_id],
@@ -275,10 +306,18 @@ class KnowledgeSpaceChatService:
 
     async def get_chat_folder_history(self, space_id: int, folder_id: int, chat_id: str, page_size: int = 20) \
             -> List[ChatMessageHistoryResponse]:
+        if folder_id:
+            await self._require_folder_view_permission(space_id, folder_id)
+        else:
+            await self._require_space_view_permission(space_id)
         flow_id = self.generate_flow_id_for_folder(space_id, folder_id)
         return await ChatSessionService.get_chat_history(chat_id, flow_id, page_size=page_size)
 
     async def delete_chat_folder_history(self, space_id: int, folder_id: int, chat_id: str) -> bool:
+        if folder_id:
+            await self._require_folder_view_permission(space_id, folder_id)
+        else:
+            await self._require_space_view_permission(space_id)
         flow_id = self.generate_flow_id_for_folder(space_id, folder_id)
         session = await MessageSessionDao.afilter_session(chat_ids=[chat_id],
                                                           flow_ids=[flow_id],
@@ -303,6 +342,7 @@ class KnowledgeSpaceChatService:
             raise NotFoundError(msg="Folder session not found")
         session = session[0]
 
+        await self._require_space_view_permission(knowledge_id)
         space = await KnowledgeDao.aquery_by_id(knowledge_id)
         if not space:
             raise NotFoundError(msg="Knowledge space not found for chat")
@@ -318,9 +358,7 @@ class KnowledgeSpaceChatService:
             })
             es_retriever = es_vector.as_retriever(search_kwargs={"k": 100})
         else:
-            file_record = await KnowledgeFileDao.query_by_id(folder_id)
-            if not file_record or file_record.knowledge_id != knowledge_id or file_record.file_type != 0:
-                raise NotFoundError(msg="Invalid folder for chat")
+            file_record = await self._require_folder_view_permission(knowledge_id, folder_id)
             file_level_path = file_record.file_level_path + f"/{file_record.id}"
 
             file_ids = await SpaceFileDao.get_children_by_prefix(space.id, file_level_path)

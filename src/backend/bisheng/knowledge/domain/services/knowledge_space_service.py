@@ -1688,7 +1688,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
     async def add_space_tag(self, space_id: int, tag_name: str) -> Tag:
         await self._require_write_permission(space_id)
-        await self._require_permission_id('knowledge_space', space_id, 'edit_space')
+        await self._require_permission_id('knowledge_space', space_id, 'manage_space_tags')
 
         existing_tags = await TagDao.get_tags_by_business(business_type=TagBusinessTypeEnum.KNOWLEDGE_SPACE,
                                                           business_id=str(space_id), name=tag_name)
@@ -1705,13 +1705,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
     async def delete_space_tag(self, space_id: int, tag_id: int):
         await self._require_write_permission(space_id)
-        await self._require_permission_id('knowledge_space', space_id, 'edit_space')
+        await self._require_permission_id('knowledge_space', space_id, 'manage_space_tags')
         return await TagDao.delete_business_tag(tag_id, business_id=str(space_id),
                                                 business_type=TagBusinessTypeEnum.KNOWLEDGE_SPACE)
 
     async def update_file_tags(self, space_id: int, file_id: int, tag_ids: List[int]):
         """ 2：支持对单文件的标签管理: Overwrite tags for a single file. """
         file_record = await self._require_file_relation(file_id, 'can_edit', space_id=space_id)
+        await self._require_permission_id('knowledge_file', file_id, 'manage_file_tags', space_id=space_id)
 
         resource_id = str(file_id)
         resource_type = ResourceTypeEnum.SPACE_FILE
@@ -1729,6 +1730,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         resource_type = ResourceTypeEnum.SPACE_FILE
         for file_record in files:
             await self._require_resource_permission('can_edit', 'knowledge_file', file_record.id)
+            await self._require_permission_id('knowledge_file', file_record.id, 'manage_file_tags', space_id=space_id)
             await TagDao.add_tags(tag_ids, str(file_record.id), resource_type, self.login_user.user_id)
 
         await KnowledgeDao.async_update_knowledge_update_time_by_id(space_id)
@@ -1757,6 +1759,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if db_file.knowledge_id != space_id:
                 raise SpaceFileNotFoundError()
             await self._require_resource_permission('can_edit', 'knowledge_file', db_file.id)
+            await self._require_permission_id('knowledge_file', db_file.id, 'retry_file', space_id=space_id)
 
         tmp, file_level_path = await self.process_retry_files(db_files, id2input, self.login_user)
 
@@ -1782,6 +1785,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 continue
             if file.file_type == FileType.FILE.value and file.status == KnowledgeFileStatus.FAILED.value:
                 await self._require_resource_permission('can_edit', 'knowledge_file', file.id)
+                await self._require_permission_id('knowledge_file', file.id, 'retry_file', space_id=space_id)
                 retry_knowledge_file_celery.delay(file.id)
                 all_file_ids.append(file.id)
             elif file.file_type == FileType.DIR.value:
@@ -1792,6 +1796,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 for item in all_failed_files:
                     if item.status == KnowledgeFileStatus.FAILED.value and item.file_type == FileType.FILE:
                         await self._require_resource_permission('can_edit', 'knowledge_file', item.id)
+                        await self._require_permission_id('knowledge_file', item.id, 'retry_file', space_id=space_id)
                         retry_knowledge_file_celery.delay(item.id)
                         all_file_ids.append(item.id)
         if all_file_ids:

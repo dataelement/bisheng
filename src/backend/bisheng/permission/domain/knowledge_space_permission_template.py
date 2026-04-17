@@ -34,6 +34,7 @@ KNOWLEDGE_SPACE_PERMISSION_TEMPLATE: dict = {
                 {'id': 'delete_space', 'label': '删除空间', 'relation': 'can_delete'},
                 {'id': 'share_space', 'label': '分享空间', 'relation': 'can_manage'},
                 {'id': 'manage_space_relation', 'label': '管理空间协作者', 'relation': 'can_manage'},
+                {'id': 'manage_space_tags', 'label': '管理空间标签', 'relation': 'can_edit'},
             ],
         },
         {
@@ -57,6 +58,8 @@ KNOWLEDGE_SPACE_PERMISSION_TEMPLATE: dict = {
                 {'id': 'download_file', 'label': '下载文件', 'relation': 'can_read'},
                 {'id': 'share_file', 'label': '分享文件', 'relation': 'can_manage'},
                 {'id': 'manage_file_relation', 'label': '管理文件协作者', 'relation': 'can_manage'},
+                {'id': 'manage_file_tags', 'label': '管理文件标签', 'relation': 'can_edit'},
+                {'id': 'retry_file', 'label': '重试文件处理', 'relation': 'can_edit'},
             ],
         },
     ],
