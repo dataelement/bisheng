@@ -1,6 +1,6 @@
 import json
 import os
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from fastapi import (APIRouter, BackgroundTasks, Body, File, Form, HTTPException, Query, Request,
                      UploadFile)
@@ -82,6 +82,7 @@ def clear_knowledge_files(*, request: Request, knowledge_id: int):
 async def upload_file(
         request: Request,
         knowledge_id: int,
+        split_mode: Optional[Literal['auto', 'custom', 'hierarchical']] = Form(default='auto'),
         separator: Optional[List[str]] = Form(default=None,
                                               description='Split text rule, If not passed on, it is the default'),
         separator_rule: Optional[List[str]] = Form(
@@ -89,6 +90,9 @@ async def upload_file(
         chunk_size: Optional[int] = Form(default=None, description='Split text length, default if not passed'),
         chunk_overlap: Optional[int] = Form(default=None,
                                             description='Split text overlap length, default if not passed'),
+        hierarchy_level: Optional[int] = Form(default=3),
+        append_title: Optional[bool] = Form(default=False),
+        max_chunk_size: Optional[int] = Form(default=1000),
         callback_url: Optional[str] = Form(default=None, description='Return URL'),
         file_url: Optional[str] = Form(default=None, description='File URL'),
         file: Optional[UploadFile] = File(default=None, description='Upload file'),
@@ -110,10 +114,14 @@ async def upload_file(
 
     loging_user = await get_default_operator_async()
     req_data = KnowledgeFileProcess(knowledge_id=knowledge_id,
+                                    split_mode=split_mode,
                                     separator=separator,
                                     separator_rule=separator_rule,
                                     chunk_size=chunk_size,
                                     chunk_overlap=chunk_overlap,
+                                    hierarchy_level=hierarchy_level,
+                                    append_title=append_title,
+                                    max_chunk_size=max_chunk_size,
                                     retain_images=retain_images,
                                     force_ocr=force_ocr,
                                     enable_formula=enable_formula,
@@ -162,10 +170,14 @@ def get_filelist(request: Request,
 async def post_chunks(request: Request,
                       knowledge_id: int = Form(...),
                       metadata: str = Form(...),
+                      split_mode: Optional[Literal['auto', 'custom', 'hierarchical']] = Form(default='auto'),
                       separator: Optional[List[str]] = Form(default=None),
                       separator_rule: Optional[List[str]] = Form(default=None),
                       chunk_size: Optional[int] = Form(default=None),
                       chunk_overlap: Optional[int] = Form(default=None),
+                      hierarchy_level: Optional[int] = Form(default=3),
+                      append_title: Optional[bool] = Form(default=False),
+                      max_chunk_size: Optional[int] = Form(default=1000),
                       file: UploadFile = File(...)):
     """ Upload files to the knowledge base and sync the interface """
     file_name = file.filename
@@ -176,10 +188,14 @@ async def post_chunks(request: Request,
     login_user = await get_default_operator_async()
 
     req_data = KnowledgeFileProcess(knowledge_id=knowledge_id,
+                                    split_mode=split_mode,
                                     separator=separator,
                                     separator_rule=separator_rule,
                                     chunk_size=chunk_size,
                                     chunk_overlap=chunk_overlap,
+                                    hierarchy_level=hierarchy_level,
+                                    append_title=append_title,
+                                    max_chunk_size=max_chunk_size,
                                     file_list=[KnowledgeFileOne(file_path=file_path)])
 
     res = await sync_func_to_async(KnowledgeService.sync_process_knowledge_file)(request, login_user, req_data)

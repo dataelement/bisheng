@@ -540,10 +540,14 @@ class KnowledgeService(KnowledgeUtils):
 
         file_rule = FileProcessBase(
             knowledge_id=req_data.knowledge_id,
+            split_mode=req_data.split_mode,
             separator=req_data.separator,
             separator_rule=req_data.separator_rule,
             chunk_size=req_data.chunk_size,
             chunk_overlap=req_data.chunk_overlap,
+            hierarchy_level=req_data.hierarchy_level,
+            append_title=req_data.append_title,
+            max_chunk_size=req_data.max_chunk_size,
             force_ocr=req_data.force_ocr,
             enable_formula=req_data.enable_formula,
             filter_page_header_footer=req_data.filter_page_header_footer,
@@ -585,7 +589,6 @@ class KnowledgeService(KnowledgeUtils):
 
         file_share_url = minio_client.clear_minio_share_host(file_path)
         if file_ext in ['doc', 'docx', 'wps', 'xls', 'xlsx', 'et', 'ppt', 'pptx', 'dps']:
-            file_share_url = ''
             new_file_name = KnowledgeUtils.get_tmp_preview_file_object_name(filepath)
             if await minio_client.object_exists(minio_client.tmp_bucket, new_file_name):
                 file_share_url = await minio_client.get_share_link(

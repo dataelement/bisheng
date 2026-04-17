@@ -9,7 +9,9 @@ from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 from bisheng.knowledge.domain.schemas.knowledge_rag_schema import Metadata
 from bisheng.knowledge.rag.base_file_pipeline import BaseFilePipeline
 from bisheng.knowledge.rag.pipeline.transformer.abstract import AbstractTransformer
+from bisheng.knowledge.rag.pipeline.transformer.direct_chunk import DirectChunkTransformer
 from bisheng.knowledge.rag.pipeline.transformer.extra_file import ExtraFileTransformer
+from bisheng.knowledge.rag.pipeline.transformer.hierarchical_splitter import HierarchicalSplitterTransformer
 from bisheng.knowledge.rag.pipeline.transformer.preview_cache import PreviewCacheTransformer
 from bisheng.knowledge.rag.pipeline.transformer.splitter import SplitterTransformer
 from bisheng.knowledge.rag.pipeline.transformer.thumbnail import ThumbnailTransformer
@@ -77,12 +79,20 @@ class KnowledgeFilePipeline(BaseFilePipeline):
                 loader=self.loader,
                 knowledge_file=self.db_file,
             ))
-        abstract_transformers.append(SplitterTransformer(
-            separator=self.file_split_rule.separator,
-            separator_rule=self.file_split_rule.separator_rule,
-            chunk_size=self.file_split_rule.chunk_size,
-            chunk_overlap=self.file_split_rule.chunk_overlap
-        ))
+        if self.should_use_ppt_page_split():
+            abstract_transformers.append(DirectChunkTransformer())
+        elif self.should_use_hierarchical_split():
+            abstract_transformers.append(HierarchicalSplitterTransformer(
+                hierarchy_level=self.file_split_rule.hierarchy_level,
+                append_title=self.file_split_rule.append_title,
+                max_chunk_size=self.file_split_rule.max_chunk_size,
+                fallback_separator=self.file_split_rule.separator,
+                fallback_separator_rule=self.file_split_rule.separator_rule,
+                fallback_chunk_size=self.file_split_rule.chunk_size,
+                fallback_chunk_overlap=self.get_splitter_kwargs()["chunk_overlap"],
+            ))
+        else:
+            abstract_transformers.append(SplitterTransformer(**self.get_splitter_kwargs()))
         abstract_transformers.append(PreviewCacheTransformer(
             preview_cache_key=self.preview_cache_key,
             file_metadata=self.file_metadata,

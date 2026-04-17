@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, Generic, List, Optional, TypeVar, Union
+from typing import Any, Dict, Generic, List, Literal, Optional, TypeVar, Union
 
 from langchain.docstore.document import Document
 from orjson import orjson
@@ -483,12 +483,19 @@ class ExcelRule(BaseModel):
 # File Split Request Base Parameters
 class FileProcessBase(BaseModel):
     knowledge_id: int = Field(..., description='The knowledge base uponID')
+    split_mode: Literal['auto', 'custom', 'hierarchical'] = Field(
+        default='auto',
+        description='Document split mode: auto/custom/hierarchical'
+    )
     separator: Optional[List[str]] = Field(default=None,
                                            description='Split text rule, If not passed on, it is the default')
     separator_rule: Optional[List[str]] = Field(default=None,
                                                 description='Segmentation before or after the segmentation rule;before/after')
     chunk_size: Optional[int] = Field(default=1000, description='Split text length, default if not passed')
     chunk_overlap: Optional[int] = Field(default=100, description='Split text overlap length, default if not passed')
+    hierarchy_level: Optional[int] = Field(default=3, ge=1, le=6, description='Max hierarchy level to retain')
+    append_title: Optional[bool] = Field(default=False, description='Whether to prepend title path to chunk text')
+    max_chunk_size: Optional[int] = Field(default=1000, ge=1, description='Max chunk size for hierarchical mode')
     retain_images: Optional[int] = Field(default=1, description='Keep document image')
     force_ocr: Optional[int] = Field(default=0, description='EnableOCR')
     enable_formula: Optional[int] = Field(default=1, description='latexFormula Recognition')
@@ -500,6 +507,8 @@ class FileProcessBase(BaseModel):
     @model_validator(mode='before')
     @classmethod
     def check_separator_rule(cls, values: Any):
+        if values.get('split_mode') is None:
+            values['split_mode'] = 'auto'
         if not values.get('separator', None):
             values['separator'] = ['\n\n', '\n']
         if not values.get('separator_rule', None):
@@ -508,6 +517,12 @@ class FileProcessBase(BaseModel):
             values['chunk_size'] = 1000
         if values.get('chunk_overlap') is None:
             values['chunk_overlap'] = 100
+        if values.get('hierarchy_level') is None:
+            values['hierarchy_level'] = 3
+        if values.get('append_title') is None:
+            values['append_title'] = False
+        if values.get('max_chunk_size') is None:
+            values['max_chunk_size'] = 1000
         if values.get('filter_page_header_footer') is None:
             values['filter_page_header_footer'] = 0
         if values.get('force_ocr') is None:

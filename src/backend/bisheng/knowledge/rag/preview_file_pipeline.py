@@ -8,7 +8,9 @@ from bisheng.api.v1.schemas import FileProcessBase
 from bisheng.knowledge.domain.schemas.knowledge_rag_schema import Metadata
 from bisheng.knowledge.rag.base_file_pipeline import BaseFilePipeline
 from bisheng.knowledge.rag.pipeline.transformer.abstract import AbstractTransformer
+from bisheng.knowledge.rag.pipeline.transformer.direct_chunk import DirectChunkTransformer
 from bisheng.knowledge.rag.pipeline.transformer.extra_file import ExtraFileTransformer
+from bisheng.knowledge.rag.pipeline.transformer.hierarchical_splitter import HierarchicalSplitterTransformer
 from bisheng.knowledge.rag.pipeline.transformer.splitter import SplitterTransformer
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_uuid
@@ -76,14 +78,20 @@ class PreviewFilePipeline(BaseFilePipeline):
             retain_images=self.file_split_rule.retain_images == 1,
             source_file_path=self.local_file_path,
         ))
-        transformers.append(
-            SplitterTransformer(
-                separator=self.file_split_rule.separator,
-                separator_rule=self.file_split_rule.separator_rule,
-                chunk_size=self.file_split_rule.chunk_size,
-                chunk_overlap=self.file_split_rule.chunk_overlap,
-            )
-        )
+        if self.should_use_ppt_page_split():
+            transformers.append(DirectChunkTransformer())
+        elif self.should_use_hierarchical_split():
+            transformers.append(HierarchicalSplitterTransformer(
+                hierarchy_level=self.file_split_rule.hierarchy_level,
+                append_title=self.file_split_rule.append_title,
+                max_chunk_size=self.file_split_rule.max_chunk_size,
+                fallback_separator=self.file_split_rule.separator,
+                fallback_separator_rule=self.file_split_rule.separator_rule,
+                fallback_chunk_size=self.file_split_rule.chunk_size,
+                fallback_chunk_overlap=self.get_splitter_kwargs()["chunk_overlap"],
+            ))
+        else:
+            transformers.append(SplitterTransformer(**self.get_splitter_kwargs()))
         return transformers
 
     def _init_excel_transformers(self) -> List[BaseDocumentTransformer]:

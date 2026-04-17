@@ -11,6 +11,7 @@ from bisheng.knowledge.rag.pipeline.base import BasePipeline, NormalPipeline
 from bisheng.knowledge.rag.pipeline.loader.base import BaseBishengLoader
 from bisheng.knowledge.rag.pipeline.loader.etl4lm import Etl4lmLoader
 from bisheng.knowledge.rag.pipeline.loader.excel import ExcelLoader
+from bisheng.knowledge.rag.pipeline.loader.hierarchical import HierarchicalMarkdownLoader, HierarchicalWordLoader
 from bisheng.knowledge.rag.pipeline.loader.html import BishengHtmlLoader
 from bisheng.knowledge.rag.pipeline.loader.mineru import MineruLoader
 from bisheng.knowledge.rag.pipeline.loader.paddle_ocr import PaddleOcrLoader
@@ -45,6 +46,8 @@ FileExtensionMap = {
 
 
 class BaseFilePipeline(BasePipeline):
+    hierarchical_file_exts = {"md", "doc", "docx"}
+    ppt_page_split_exts = {"ppt", "pptx"}
 
     def __init__(self, invoke_user_id: int, file_name: str, file_rule: FileProcessBase, **kwargs):
         super(BaseFilePipeline, self).__init__(**kwargs)
@@ -63,6 +66,31 @@ class BaseFilePipeline(BasePipeline):
             return self.file_name.split(".")[-1].lower()
         else:
             return None
+
+    @cached_property
+    def split_mode(self) -> str:
+        split_mode = self.file_split_rule.split_mode or "auto"
+        if split_mode == "hierarchical" and self.file_extension not in self.hierarchical_file_exts:
+            return "auto"
+        return split_mode
+
+    def should_use_hierarchical_split(self) -> bool:
+        return self.split_mode == "hierarchical" and self.file_extension in self.hierarchical_file_exts
+
+    def should_use_ppt_page_split(self) -> bool:
+        return self.split_mode == "auto" and self.file_extension in self.ppt_page_split_exts
+
+    def get_splitter_kwargs(self) -> Dict:
+        chunk_overlap = self.file_split_rule.chunk_overlap
+        if self.split_mode == "auto" and "chunk_overlap" not in self.file_split_rule.model_fields_set:
+            chunk_overlap = 0
+
+        return {
+            "separator": self.file_split_rule.separator,
+            "separator_rule": self.file_split_rule.separator_rule,
+            "chunk_size": self.file_split_rule.chunk_size,
+            "chunk_overlap": chunk_overlap,
+        }
 
     @property
     @abstractmethod
@@ -110,6 +138,10 @@ class BaseFilePipeline(BasePipeline):
         )
 
     def _init_txt_loader(self) -> BaseBishengLoader:
+        if self.should_use_hierarchical_split():
+            return HierarchicalMarkdownLoader(
+                **self._get_loader_common_params(),
+            )
         return BishengTextLoader(
             **self._get_loader_common_params(),
         )
@@ -120,6 +152,11 @@ class BaseFilePipeline(BasePipeline):
         )
 
     def _init_word_loader(self) -> BaseBishengLoader:
+        if self.should_use_hierarchical_split():
+            return HierarchicalWordLoader(
+                **self._get_loader_common_params(),
+                retain_images=self.file_split_rule.retain_images == 1
+            )
         return BishengWordLoader(
             **self._get_loader_common_params(),
             retain_images=self.file_split_rule.retain_images == 1
@@ -128,7 +165,8 @@ class BaseFilePipeline(BasePipeline):
     def _init_ppt_loader(self) -> BaseBishengLoader:
         return BishengPptLoader(
             **self._get_loader_common_params(),
-            retain_images=self.file_split_rule.retain_images == 1
+            retain_images=self.file_split_rule.retain_images == 1,
+            page_chunk_mode=self.should_use_ppt_page_split(),
         )
 
     def _init_xcreate_loader(self) -> BaseBishengLoader:
@@ -150,6 +188,7 @@ class BaseFilePipeline(BasePipeline):
                 self.db_file.parse_type = ParseType.ETL4LM.value
             return Etl4lmLoader(
                 **self._get_loader_common_params(),
+                filter_page_header_footer=self.file_split_rule.filter_page_header_footer == 1,
                 **knowledge_conf.etl4lm.model_dump()
             )
         elif knowledge_conf.loader_provider == ParseType.MINERU.value and knowledge_conf.mineru.url:
@@ -157,6 +196,7 @@ class BaseFilePipeline(BasePipeline):
                 self.db_file.parse_type = ParseType.MINERU.value
             return MineruLoader(
                 **self._get_loader_common_params(),
+                filter_page_header_footer=self.file_split_rule.filter_page_header_footer == 1,
                 **knowledge_conf.mineru.model_dump()
             )
         elif knowledge_conf.loader_provider == ParseType.PADDLE_OCR.value and knowledge_conf.paddle_ocr.url:
@@ -164,11 +204,12 @@ class BaseFilePipeline(BasePipeline):
                 self.db_file.parse_type = ParseType.MINERU.value
             return PaddleOcrLoader(
                 **self._get_loader_common_params(),
+                filter_page_header_footer=self.file_split_rule.filter_page_header_footer == 1,
                 **knowledge_conf.paddle_ocr.model_dump()
             )
         return LocalPdfLoader(
             **self._get_loader_common_params(),
-            retain_images=self.file_split_rule.retain_images == 1
+            retain_images=self.file_split_rule.retain_images == 1,
         )
 
     def _init_image_loader(self) -> BaseBishengLoader:

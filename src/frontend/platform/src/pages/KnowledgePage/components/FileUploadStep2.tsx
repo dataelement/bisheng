@@ -172,7 +172,7 @@ const FileUploadStep2 = forwardRef(({
             return onNext(nextStep, config);
         }
 
-        const { fileList, pageHeaderFooter, chunkOverlap, chunkSize, enableFormula, forceOcr, retainImages, separator, separatorRule } = rules;
+        const { fileList, pageHeaderFooter, chunkOverlap, chunkSize, enableFormula, forceOcr, retainImages, separator, separatorRule, splitMode, hierarchyLevel, appendTitle, maxChunkSize } = rules;
         const params = {
             knowledge_id: kid || kId,
             file_list: fileList.map(item => ({
@@ -186,7 +186,11 @@ const FileUploadStep2 = forwardRef(({
             retain_images: retainImages,
             enable_formula: enableFormula,
             force_ocr: forceOcr,
-            fileter_page_header_footer: pageHeaderFooter
+            filter_page_header_footer: pageHeaderFooter ? 1 : 0,
+            split_mode: splitMode,
+            hierarchy_level: Number(hierarchyLevel),
+            append_title: appendTitle,
+            max_chunk_size: Number(maxChunkSize)
         };
 
         onNext(nextStep, params);
@@ -364,7 +368,11 @@ const useFileProcessingRules = (
             retainImages: parsedSplitRule?.retain_images ?? true,
             enableFormula: parsedSplitRule?.enable_formula ?? true,
             forceOcr: parsedSplitRule?.force_ocr ?? true,
-            pageHeaderFooter: parsedSplitRule?.filter_page_header_footer ?? true
+            pageHeaderFooter: parsedSplitRule?.filter_page_header_footer ?? false,
+            splitMode: parsedSplitRule?.split_mode ?? "auto",
+            hierarchyLevel: parsedSplitRule?.hierarchy_level?.toString() || "3",
+            appendTitle: parsedSplitRule?.append_title ?? false,
+            maxChunkSize: parsedSplitRule?.max_chunk_size?.toString() || "1000",
         };
     });
 

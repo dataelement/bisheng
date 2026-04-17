@@ -380,7 +380,11 @@ type UploadFileFc = {
     retain_images?: boolean; //保留文档图片
     force_ocr?: boolean;//强制开启ocr
     enable_formula?: boolean;//开启公式识别
-    filter_page_header_footer?: boolean;//过滤页眉页脚
+    filter_page_header_footer?: number;//过滤页眉页脚，0=不过滤，1=过滤
+    split_mode?: 'auto' | 'custom' | 'hierarchical'; //切分模式
+    hierarchy_level?: number; //切分层级
+    append_title?: boolean; //切片是否追加章节标题
+    max_chunk_size?: number; //单 chunk 最大字符数
     excel_rules: {
         [uuid: string]: ExcelRule
     };

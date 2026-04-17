@@ -427,5 +427,21 @@
     "tagDeleted": "削除しました",
     "noTags": "タグがありません",
     "noTagsSelected": "タグが選択されていません",
-    "tagOperationRequiresCompletedFiles": "タグ操作は完了済みファイルのみ対応しています"
+    "tagOperationRequiresCompletedFiles": "タグ操作は完了済みファイルのみ対応しています",
+    "docAnalysisStrategy": "ドキュメント解析戦略",
+    "docSplitStrategy": "ドキュメント分割戦略",
+    "autoSplit": "自動分割",
+    "customSplit": "カスタム分割",
+    "hierarchicalSplit": "階層分割",
+    "autoSplitDesc": "プラットフォームのデフォルトルールに従って分割。ほとんどのドキュメントに適しています",
+    "customSplitDesc": "設定された正規表現に基づき、柔軟にドキュメントを分割します",
+    "hierarchicalSplitDesc": "MarkdownやWordドキュメントの章構造を自動的に解析・抽出します",
+    "splitLevel": "分割レベル",
+    "splitLevelTooltip": "分割レベルを2に設定すると、2つの階層を抽出します",
+    "layer": "層",
+    "appendTitle": "チャンクに章題を追加",
+    "appendTitleTooltip": "ドキュメントの構造情報（見出しレベル、番号など）を保持し、インデックス生成に使用します",
+    "maxChunkSize": "最大分割長",
+    "maxChunkSizeTooltip": "単一チャンクの最大文字数を設定できます",
+    "hfFilterTooltip": "解析時にヘッダーとフッターの内容を自動的にフィルタリングします"
 }

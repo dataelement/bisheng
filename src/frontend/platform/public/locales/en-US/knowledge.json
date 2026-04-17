@@ -405,5 +405,21 @@
     "noTags": "No tags",
     "noTagsSelected": "No tags selected",
     "tagOperationRequiresCompletedFiles": "Only completed files support tag operations",
-    "splitMethodTooltip": "Determine the priority of splitting positions based on rule order (drag to reorder); supports custom regex and selecting whether to split before or after the matched content."
+    "splitMethodTooltip": "Determine the priority of splitting positions based on rule order (drag to reorder); supports custom regex and selecting whether to split before or after the matched content.",
+    "docAnalysisStrategy": "Document Parsing Strategy",
+    "docSplitStrategy": "Document Slicing Strategy",
+    "autoSplit": "Auto Split",
+    "customSplit": "Custom Split",
+    "hierarchicalSplit": "Hierarchical Split",
+    "autoSplitDesc": "Split by default platform rules, suitable for most documents",
+    "customSplitDesc": "Flexible splitting based on set regular expressions",
+    "hierarchicalSplitDesc": "Automatically parse and extract document chapter structure, suitable for Markdown and Word documents",
+    "splitLevel": "Slicing Level",
+    "splitLevelTooltip": "If set to 2, 2 levels of headings will be extracted",
+    "layer": "Layer",
+    "appendTitle": "Append Chapter Titles to Chunks",
+    "appendTitleTooltip": "Retain structured document information (e.g., heading levels, numbers) for indexing",
+    "maxChunkSize": "Max Chunk Length",
+    "maxChunkSizeTooltip": "Users can set the maximum characters for a single chunk",
+    "hfFilterTooltip": "Automatically filter headers and footers during parsing"
 }
