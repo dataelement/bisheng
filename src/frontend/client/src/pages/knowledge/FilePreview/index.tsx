@@ -34,6 +34,8 @@ export interface FilePreviewProps {
     highlightBboxes?: CitationPdfBBox[];
     /** Optional PDF box to scroll into view. */
     targetBBox?: CitationPdfBBox | null;
+    /** Render viewer-only layout (hide top toolbar and sidebar controls). */
+    compactMode?: boolean;
 }
 
 export default function FilePreview({
@@ -44,12 +46,13 @@ export default function FilePreview({
     conversionFailed = false,
     highlightBboxes = [],
     targetBBox = null,
+    compactMode = false,
 }: FilePreviewProps) {
     const localize = useLocalize();
     const viewerType = getViewerType(fileType);
-    const hasSidebar = supportsSidebar(viewerType);
-    const hasPagination = supportsPagination(viewerType);
-    const hasZoom = supportsZoom(viewerType);
+    const hasSidebar = !compactMode && supportsSidebar(viewerType);
+    const hasPagination = !compactMode && supportsPagination(viewerType);
+    const hasZoom = !compactMode && supportsZoom(viewerType);
 
     // --- PDF-specific state ---
     const [pdfDoc, setPdfDoc] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
@@ -123,7 +126,7 @@ export default function FilePreview({
     if (viewerType === "unsupported") {
         return (
             <div className="w-full h-full flex flex-col">
-                <TopBar fileName={fileName} onDownload={handleDownload} actions={actions} showZoom={false} />
+                {!compactMode && <TopBar fileName={fileName} onDownload={handleDownload} actions={actions} showZoom={false} />}
                 <div className="flex-1 flex items-center justify-center bg-[#fbfbfb]">
                     <div className="flex flex-col items-center gap-4 text-[#86909c]">
                         <div className="text-5xl">📄</div>
@@ -143,15 +146,17 @@ export default function FilePreview({
     if (conversionFailed) {
         return (
             <div className="w-full h-full flex flex-col">
-                <TopBar
-                    fileName={fileName}
-                    showZoom={true}
-                    zoomLevel={zoomLevel}
-                    onZoomIn={handleZoomIn}
-                    onZoomOut={handleZoomOut}
-                    onDownload={fileUrl ? handleDownload : undefined}
-                    actions={actions}
-                />
+                {!compactMode && (
+                    <TopBar
+                        fileName={fileName}
+                        showZoom={true}
+                        zoomLevel={zoomLevel}
+                        onZoomIn={handleZoomIn}
+                        onZoomOut={handleZoomOut}
+                        onDownload={fileUrl ? handleDownload : undefined}
+                        actions={actions}
+                    />
+                )}
                 <div className="flex-1 flex items-center justify-center bg-[#fbfbfb]">
                     <div className="flex flex-col items-center gap-3 text-[#86909c]">
                         <div className="text-5xl">📄</div>
@@ -166,7 +171,7 @@ export default function FilePreview({
     if (error) {
         return (
             <div className="w-full h-full flex flex-col">
-                <TopBar fileName={fileName} onDownload={handleDownload} actions={actions} showZoom={false} />
+                {!compactMode && <TopBar fileName={fileName} onDownload={handleDownload} actions={actions} showZoom={false} />}
                 <div className="flex-1 flex items-center justify-center bg-[#fbfbfb]">
                     <div className="flex flex-col items-center gap-3 text-[#86909c]">
                         <div className="text-4xl">📄</div>
@@ -210,22 +215,24 @@ export default function FilePreview({
 
     return (
         <div className="w-full h-full flex flex-col overflow-hidden">
-            <TopBar
-                fileName={fileName}
-                showSidebar={hasSidebar}
-                sidebarOpen={sidebarOpen}
-                onToggleSidebar={() => setSidebarOpen((prev) => !prev)}
-                showZoom={hasZoom}
-                zoomLevel={zoomLevel}
-                onZoomIn={handleZoomIn}
-                onZoomOut={handleZoomOut}
-                showPagination={hasPagination}
-                currentPage={currentPage}
-                totalPages={totalPages}
-                onPageChange={handlePageChange}
-                onDownload={handleDownload}
-                actions={actions}
-            />
+            {!compactMode && (
+                <TopBar
+                    fileName={fileName}
+                    showSidebar={hasSidebar}
+                    sidebarOpen={sidebarOpen}
+                    onToggleSidebar={() => setSidebarOpen((prev) => !prev)}
+                    showZoom={hasZoom}
+                    zoomLevel={zoomLevel}
+                    onZoomIn={handleZoomIn}
+                    onZoomOut={handleZoomOut}
+                    showPagination={hasPagination}
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    onPageChange={handlePageChange}
+                    onDownload={handleDownload}
+                    actions={actions}
+                />
+            )}
             <div className="flex flex-1 min-h-0">
                 {hasSidebar && (
                     <Sidebar

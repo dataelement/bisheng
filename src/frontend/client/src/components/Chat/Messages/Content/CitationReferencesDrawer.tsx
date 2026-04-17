@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronRight, Loader2, X } from 'lucide-react';
 import { getCitationDetail, resolveCitationDetails, type ChatCitation } from '~/api/chatApi';
+import { useMediaQuery } from '~/hooks';
 import { cn } from '~/utils';
 import {
   buildCitationDocumentPreview,
@@ -40,18 +41,79 @@ function CitationReferenceCard({
   isLoading,
   hasError,
   onOpenDocumentPreview,
+  isH5 = false,
 }: {
   item: CitationReferenceItem;
   detail: ChatCitation | null;
   isLoading: boolean;
   hasError: boolean;
   onOpenDocumentPreview: (detail: ChatCitation) => void;
+  isH5?: boolean;
 }) {
   const preview = item.legacyPreview ?? buildCitationDocumentPreview(detail, item.data);
   const type = preview?.type || item.data.type;
   const isWeb = normalizeCitationType(type) === 'web';
   const title = preview?.title || '暂无标题';
   const canOpenDocument = !!detail && isRagCitation(detail, type);
+  const sourceMetaText = [preview?.sourceName, preview?.sourceMeta].filter(Boolean).join(' | ');
+
+  if (isH5) {
+    return (
+      <div className="border-b border-[#F2F3F5] py-3">
+        <div className="mb-2 flex items-center justify-between gap-2 text-[13px] leading-5 text-[#86909C]">
+          <div className="flex min-w-0 items-center gap-2">
+            <CitationSourceIcon detail={detail} preview={preview} type={type} ragIconVariant="knowledge" />
+            <span className="min-w-0 truncate">{sourceMetaText || (isWeb ? '网页来源' : '知识库')}</span>
+          </div>
+          <span className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-[#F2F3F5] text-[12px] leading-none text-[#86909C]">
+            {item.data.label}
+          </span>
+        </div>
+
+        <div className="min-w-0 text-[16px] font-semibold leading-6 text-[#1D2129]">
+          {canOpenDocument ? (
+            <button
+              type="button"
+              onClick={() => onOpenDocumentPreview(detail!)}
+              className="min-w-0 truncate text-left hover:text-[#165DFF] hover:underline"
+              title={title}
+            >
+              {title}
+            </button>
+          ) : preview?.link ? (
+            <a
+              href={preview.link}
+              target="_blank"
+              rel="noreferrer"
+              className="min-w-0 truncate hover:text-[#165DFF] hover:underline"
+              title={title}
+            >
+              {title}
+            </a>
+          ) : (
+            <span className="min-w-0 truncate" title={title}>{title}</span>
+          )}
+        </div>
+
+        <div className="mt-1 text-[13px] leading-5 text-[#86909C] line-clamp-2">
+          {preview?.snippet || '暂无内容摘要'}
+        </div>
+
+        {(isLoading || hasError) && (
+          <div className="mt-2 min-h-[22px] text-[13px] leading-[22px] text-[#4E5969]">
+            {isLoading ? (
+              <span className="inline-flex items-center gap-2 text-[#86909C]">
+                <Loader2 className="size-3.5 animate-spin" />
+                加载溯源详情...
+              </span>
+            ) : hasError ? (
+              <span className="text-[#86909C]">溯源详情加载失败</span>
+            ) : null}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-[8px] bg-[#FAFAFA] px-4 py-3">
@@ -113,6 +175,7 @@ export default function CitationReferencesDrawer({
   citations,
   buttonClassName,
 }: CitationReferencesDrawerProps) {
+  const isH5 = useMediaQuery('(max-width: 768px)');
   const [open, setOpen] = useState(false);
   const [detailMap, setDetailMap] = useState<Record<string, ChatCitation>>(() => createCitationDetailMap(citations));
   const [loadingMap, setLoadingMap] = useState<Record<string, boolean>>({});
@@ -265,18 +328,28 @@ export default function CitationReferencesDrawer({
       {open && (
         <>
           <div
-            className="fixed inset-0 z-40 bg-transparent"
+            className={cn('fixed inset-0 z-40', isH5 ? 'bg-black/30' : 'bg-transparent')}
             aria-hidden="true"
             onClick={() => setOpen(false)}
           />
           <aside
-            className="fixed inset-y-0 right-0 z-50 flex w-[min(520px,calc(100vw-24px))] flex-col border-l border-[#E5E6EB] bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)]"
+            className={cn(
+              'fixed z-50 flex flex-col bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)]',
+              isH5
+                ? 'inset-x-0 bottom-0 max-h-[78vh] rounded-t-2xl border-t border-[#E5E6EB]'
+                : 'inset-y-0 right-0 w-[min(520px,calc(100vw-24px))] border-l border-[#E5E6EB]',
+            )}
             aria-label="参考资料"
           >
-            <div className="flex h-16 shrink-0 items-center justify-between border-b border-[#F2F3F5] px-6">
+            <div className={cn(
+              'flex shrink-0 items-center justify-between border-b border-[#F2F3F5]',
+              isH5 ? 'h-14 px-4' : 'h-16 px-6',
+            )}>
               <div className="flex items-center gap-3">
-                <h2 className="text-[16px] font-semibold leading-6 text-[#1D2129]">参考资料</h2>
-                <span className="text-[16px] leading-6 text-[#165DFF]">{references.length}</span>
+                <h2 className="text-[16px] font-semibold leading-6 text-[#1D2129]">
+                  {isH5 ? `参考来源 ${references.length}` : '参考资料'}
+                </h2>
+                {!isH5 && <span className="text-[16px] leading-6 text-[#165DFF]">{references.length}</span>}
               </div>
               <button
                 type="button"
@@ -288,7 +361,10 @@ export default function CitationReferencesDrawer({
               </button>
             </div>
 
-            <div className="flex-1 space-y-4 overflow-y-auto px-6 py-5">
+            <div className={cn(
+              'flex-1 overflow-y-auto',
+              isH5 ? 'px-4 py-1' : 'space-y-4 px-6 py-5',
+            )}>
               {references.map((item) => {
                 const detail = detailMap[item.data.citationId] ?? item.detail ?? null;
                 return (
@@ -298,6 +374,7 @@ export default function CitationReferencesDrawer({
                     detail={detail}
                     isLoading={!!loadingMap[item.data.citationId]}
                     hasError={!!errorMap[item.data.citationId]}
+                    isH5={isH5}
                     onOpenDocumentPreview={(detail) => {
                       setDocumentPreview({
                         detail,
