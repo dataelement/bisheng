@@ -29,6 +29,9 @@
     "userGroup": "搜索用户组..."
   },
   "includeChildren": "包含子部门",
+  "list": {
+    "emptyForSubject": "该分类下暂无授权记录"
+  },
   "empty": {
     "permissions": "暂无权限记录",
     "departments": "暂无部门数据",

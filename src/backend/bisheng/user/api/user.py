@@ -635,19 +635,15 @@ async def get_captcha():
 
 
 @router.get('/user/public_key', status_code=200)
-async def get_rsa_publish_key():
-    # redis Storage
+def get_rsa_publish_key():
+    """同步 Redis：避免 Windows 上 redis.asyncio 连接池与当前请求事件循环不一致（different event loop）。"""
     key = RSA_KEY
-    redis_client = await get_redis_client()
-    # redis lock
-    if await redis_client.asetNx(key, 1):
-        # Generate a key pair
+    redis_client = get_redis_client_sync()
+    if redis_client.setNx(key, 1):
         (pubkey, privkey) = rsa.newkeys(512)
-
-        # Save the keys to strings
-        await redis_client.aset(key, (pubkey, privkey), 3600)
+        redis_client.set(key, (pubkey, privkey), 3600)
     else:
-        pubkey, privkey = await redis_client.aget(key)
+        pubkey, privkey = redis_client.get(key)
 
     pubkey_str = pubkey.save_pkcs1().decode()
 

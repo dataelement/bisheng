@@ -250,11 +250,13 @@ export async function delRoleApi(roleId) {
   return axios.delete(`/api/v1/role/${roleId}`);
 }
 
-// 用户组列表
-export function getUserGroupsApi(config) {
-  return axios.get(`/api/v1/group/list`, {
-    signal: config?.signal, // 绑定 AbortSignal
+/** 用户组列表（后端 data 为 { records: GroupRead[] }，此处统一为数组） */
+export async function getUserGroupsApi(config?: { signal?: AbortSignal }) {
+  const data = await axios.get(`/api/v1/group/list`, {
+    signal: config?.signal,
   });
+  const rows = (data as { records?: unknown })?.records ?? data;
+  return Array.isArray(rows) ? rows : [];
 }
 
 

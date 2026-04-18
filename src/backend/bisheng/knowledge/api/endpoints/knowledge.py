@@ -235,8 +235,13 @@ async def copy_knowledge(*,
                          knowledge_name: str = Body(default=None, embed=True)):
     """ Copy Knowledge Base. """
     knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
+    if not knowledge:
+        return KnowledgeNotExistError.return_resp()
 
-    if not login_user.is_admin and knowledge.user_id != login_user.user_id:
+    await UserPayload.assert_effective_web_menu_contains(
+        login_user.user_id, WebMenuResource.CREATE_KNOWLEDGE.value)
+    if not await login_user.async_access_check(
+            knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE):
         return UnAuthorizedError.return_resp()
 
     knowledge_count = await KnowledgeFileDao.async_count_file_by_filters(
@@ -265,7 +270,13 @@ async def copy_qa_knowledge(*,
     """
 
     qa_knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
-    if not login_user.is_admin and qa_knowledge.user_id != login_user.user_id:
+    if not qa_knowledge:
+        return KnowledgeNotExistError.return_resp()
+
+    await UserPayload.assert_effective_web_menu_contains(
+        login_user.user_id, WebMenuResource.CREATE_KNOWLEDGE.value)
+    if not await login_user.async_access_check(
+            qa_knowledge.user_id, str(qa_knowledge.id), AccessType.KNOWLEDGE):
         return UnAuthorizedError.return_resp()
 
     if qa_knowledge.type != KnowledgeTypeEnum.QA.value:

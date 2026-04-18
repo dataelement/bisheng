@@ -343,15 +343,24 @@ export default function KnowledgeFile() {
     const resourceIds = datalist.map((el: any) => String(el.id));
     const { levels: permLevels } = usePermissionLevels('knowledge_space', resourceIds);
     const hasLevel = (level: RelationLevel | undefined, allowed: RelationLevel[]) => level ? allowed.includes(level) : false;
-    const canRead = (id: string | number) => user.role === 'admin' || hasLevel(permLevels[String(id)], ['owner', 'manager', 'editor', 'viewer']);
-    const canEdit = (id: string | number) => user.role === 'admin' || hasLevel(permLevels[String(id)], ['owner', 'manager', 'editor']);
-    const canDelete = (id: string | number) => user.role === 'admin' || hasLevel(permLevels[String(id)], ['owner']);
-    const visibleLibs = user.role === 'admin' ? datalist : datalist.filter((el: any) => canRead(el.id));
-    // PRD 3.3.3：「创建」与 ReBAC 编辑权解耦，由 WEB_MENU `create_knowledge` 控制（对齐「创建应用」）
+    const isCreator = (el: any) => Number(el?.user_id) === Number(user?.user_id);
+    // 列表已由后端 get_knowledge 按 ReBAC 过滤；勿再用批量 check 二次过滤，否则与 FGA/缓存短暂不同步时会出现「接口有数据但表格空白」。
+    const visibleLibs = datalist;
+    const canEdit = (el: any) =>
+        user.role === 'admin' || isCreator(el) || hasLevel(permLevels[String(el.id)], ['owner', 'manager', 'editor']);
+    const canDelete = (el: any) =>
+        user.role === 'admin' || isCreator(el) || hasLevel(permLevels[String(el.id)], ['owner']);
+    // PRD 3.3.3：「创建」「复制」与 ReBAC 编辑权解耦，由 WEB_MENU `create_knowledge` 控制（对齐「创建应用」+ 列表「复制」）
     const canCreateLibrary =
         user.role === 'admin' ||
         Boolean(user.is_department_admin) ||
         (user.web_menu || []).includes('create_knowledge');
+    const canReadRow = (el: any) =>
+        user.role === 'admin' ||
+        isCreator(el) ||
+        hasLevel(permLevels[String(el.id)], ['owner', 'manager', 'editor', 'viewer']);
+    /** 与 apps.tsx 一致：create_knowledge 菜单 + 对目标库具备使用/可见（can_read） */
+    const canUseCopy = (el: any) => canCreateLibrary && canReadRow(el);
 
     // Enable polling during copying
     useEffect(() => {
@@ -513,7 +522,7 @@ export default function KnowledgeFile() {
                                 key={el.id}
                                 className=""
                                 onClick={() => {
-                                    if (!canEdit(el.id)) return;
+                                    if (!canEdit(el)) return;
                                     if ([KnowledgeBaseStatus.Copying, KnowledgeBaseStatus.Unpublished].includes(el.state)) return;
                                     window.libname = [el.name, el.description];
                                     navigate(`/filelib/${el.id}`);
@@ -580,7 +589,9 @@ export default function KnowledgeFile() {
                                                         setPermDialogOpen(true);
                                                         break;
                                                     case 'copy':
-                                                        el.state === KnowledgeBaseStatus.Published && handleCopy(el);
+                                                        canUseCopy(el) &&
+                                                            el.state === KnowledgeBaseStatus.Published &&
+                                                            handleCopy(el);
                                                         break;
                                                     case 'set':
                                                         handleOpenSettings(el);
@@ -624,12 +635,16 @@ export default function KnowledgeFile() {
                                                         </div>
                                                     </SelectItem>
                                                 )}
-                                                <Tip content={(!el.copiable || !canEdit(el.id)) && t('noOperationPermission')} side='top'>
+                                                <Tip content={!canUseCopy(el) && t('noOperationPermission')} side='top'>
                                                     <SelectItem
                                                         showIcon={false}
                                                         value="copy"
                                                         className="data-[disabled]:pointer-events-auto"
-                                                        disabled={!canEdit(el.id) || !(el.copiable || user.role === 'admin') || el.state !== KnowledgeBaseStatus.Published || copyLoadingId === el.id}
+                                                        disabled={
+                                                            !canUseCopy(el) ||
+                                                            el.state !== KnowledgeBaseStatus.Published ||
+                                                            copyLoadingId === el.id
+                                                        }
                                                     >
                                                         <div className="flex gap-2 items-center" >
                                                             <Copy className="w-4 h-4" />
@@ -637,10 +652,10 @@ export default function KnowledgeFile() {
                                                         </div>
                                                     </SelectItem>
                                                 </Tip>
-                                                <Tip content={(!el.copiable || !canEdit(el.id)) && t('noOperationPermission')} side='top'>
+                                                <Tip content={(!el.copiable || !canEdit(el)) && t('noOperationPermission')} side='top'>
                                                     <SelectItem
                                                         value="set"
-                                                        disabled={!canEdit(el.id) || !el.copiable}
+                                                        disabled={!canEdit(el) || !el.copiable}
                                                         className="data-[disabled]:pointer-events-auto"
                                                         showIcon={false}
                                                     >
@@ -650,12 +665,12 @@ export default function KnowledgeFile() {
                                                         </div>
                                                     </SelectItem>
                                                 </Tip>
-                                                <Tip content={(!el.copiable || !canDelete(el.id)) && t('noOperationPermission')} side='top'>
+                                                <Tip content={(!el.copiable || !canDelete(el)) && t('noOperationPermission')} side='top'>
                                                     <SelectItem
                                                         value="delete"
                                                         showIcon={false}
                                                         className="data-[disabled]:pointer-events-auto"
-                                                        disabled={!canDelete(el.id) || !el.copiable}
+                                                        disabled={!canDelete(el) || !el.copiable}
                                                     >
                                                         <div className="flex gap-2 items-center">
                                                             <Trash2 className="w-4 h-4" />

@@ -199,6 +199,26 @@ class KnowledgeDao(KnowledgeBase):
             return result.all()
 
     @classmethod
+    async def aget_knowledge_ids_created_by(
+        cls, user_id: int, knowledge_type: KnowledgeTypeEnum,
+    ) -> List[int]:
+        """当前用户在指定类型下创建的知识库主键，用于与 OpenFGA can_read 列表取并集。"""
+        async with get_async_db_session() as session:
+            stmt = select(Knowledge.id).where(
+                Knowledge.user_id == user_id,
+                Knowledge.type == knowledge_type.value,
+            )
+            result = await session.exec(stmt)
+            rows = result.all()
+        out: List[int] = []
+        for row in rows:
+            if row is None:
+                continue
+            rid = row[0] if isinstance(row, tuple) else row
+            out.append(int(rid))
+        return out
+
+    @classmethod
     def _user_knowledge_filters(
             cls,
             statement: Any,
@@ -216,7 +236,8 @@ class KnowledgeDao(KnowledgeBase):
             statement = statement.where(Knowledge.user_id == user_id)
         if filter_knowledge:
             statement = statement.where(Knowledge.id.in_(filter_knowledge))
-        if knowledge_type:
+        # 使用 is not None：避免 NORMAL=0 被当作「未传类型」而漏掉 type 条件
+        if knowledge_type is not None:
             statement = statement.where(Knowledge.type == knowledge_type.value)
         if name:
 
@@ -420,7 +441,7 @@ class KnowledgeDao(KnowledgeBase):
                                       statement,
                                       name: str = None,
                                       knowledge_type: KnowledgeTypeEnum = None):
-        if knowledge_type:
+        if knowledge_type is not None:
             statement = statement.where(Knowledge.type == knowledge_type.value)
 
         if name:

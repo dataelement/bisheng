@@ -11,7 +11,7 @@ import {
 } from "@/controllers/API/permission"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { Building2, Loader2, RotateCcw, Trash2, User, Users } from "lucide-react"
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { PermissionBadge } from "./PermissionBadge"
 import { RelationModelOption, RelationSelect } from "./RelationSelect"
@@ -36,10 +36,14 @@ const DEFAULT_MODELS: RelationModelOption[] = [
   { id: 'viewer', name: '可查看', relation: 'viewer' },
 ]
 
+const LIST_SUBJECT_TYPES = ['user', 'department', 'user_group'] as const
+type ListSubjectType = (typeof LIST_SUBJECT_TYPES)[number]
+
 export function PermissionListTab({ resourceType, resourceId, refreshKey }: PermissionListTabProps) {
   const { t } = useTranslation('permission')
   const { message } = useToast()
   const [entries, setEntries] = useState<PermissionEntry[]>([])
+  const [listTab, setListTab] = useState<ListSubjectType>('user')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(false)
   const [models, setModels] = useState<RelationModelOption[]>([])
@@ -80,6 +84,17 @@ export function PermissionListTab({ resourceType, resourceId, refreshKey }: Perm
   }, [resourceType, resourceId])
 
   useEffect(() => { loadData() }, [loadData, refreshKey])
+
+  const filteredEntries = useMemo(
+    () => entries.filter((e) => e.subject_type === listTab),
+    [entries, listTab],
+  )
+
+  /** 换资源时回到「用户」Tab；不在用户操作切换时强行改 tab（空 tab 也要能停留并展示空态） */
+  useEffect(() => {
+    setListTab('user')
+  }, [resourceId])
+
   useEffect(() => {
     captureAndAlertRequestErrorHoc(
       getGrantableRelationModelsApi(resourceType, resourceId),
@@ -187,19 +202,48 @@ export function PermissionListTab({ resourceType, resourceId, refreshKey }: Perm
     )
   }
 
+  const subjectColumnLabel =
+    listTab === 'user_group'
+      ? t('subject.userGroup')
+      : listTab === 'department'
+        ? t('subject.department')
+        : t('subject.user')
+
   return (
-    <div className="max-h-[400px] overflow-y-auto">
+    <div className="flex flex-col gap-3">
+      <div className="flex gap-1 p-1 bg-muted rounded-md w-fit">
+        {LIST_SUBJECT_TYPES.map((st) => (
+          <button
+            key={st}
+            type="button"
+            className={`px-3 py-1.5 text-sm rounded transition-colors ${
+              listTab === st
+                ? 'bg-background shadow text-foreground'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+            onClick={() => setListTab(st)}
+          >
+            {t(`subject.${st === 'user_group' ? 'userGroup' : st}`)}
+          </button>
+        ))}
+      </div>
+      <div className="max-h-[400px] overflow-y-auto">
+        {filteredEntries.length === 0 ? (
+          <div className="py-10 text-center text-sm text-muted-foreground">
+            {t('list.emptyForSubject')}
+          </div>
+        ) : (
       <Table>
         <TableHeader>
           <TableRow>
             <TableHead className="w-[40px]"></TableHead>
-            <TableHead>{t('subject.user')}</TableHead>
+            <TableHead>{subjectColumnLabel}</TableHead>
             <TableHead className="w-[140px]">{t('level.viewer')}</TableHead>
             <TableHead className="w-[60px]"></TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {entries.map((entry, idx) => {
+          {filteredEntries.map((entry, idx) => {
             const Icon = SUBJECT_ICONS[entry.subject_type] || User
             const isOwner = entry.relation === 'owner'
             return (
@@ -242,6 +286,8 @@ export function PermissionListTab({ resourceType, resourceId, refreshKey }: Perm
           })}
         </TableBody>
       </Table>
+        )}
+      </div>
     </div>
   )
 }

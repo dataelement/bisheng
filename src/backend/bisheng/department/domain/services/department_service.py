@@ -954,33 +954,54 @@ class DepartmentService:
         ]
         return {'data': data, 'total': total}
 
+    @staticmethod
+    async def _aget_ancestor_chain_ids(session, dept: Department) -> List[int]:
+        """沿 parent_id 自当前部门上至根，返回内部 id 列表（含当前与各级祖先）。
+
+        用于角色可分配判定：作用域为部门 S 的角色，仅当「当前上下文部门 T 落在 S 的子树下」
+        （即 S 为 T 的祖先或与 T 相同）时可授予；等价于 Role.department_id ∈ 本列表。
+        """
+        chain: List[int] = []
+        seen: Set[int] = set()
+        current: Optional[Department] = dept
+        while current is not None and current.id is not None:
+            cid = int(current.id)
+            if cid in seen:
+                break
+            seen.add(cid)
+            chain.append(cid)
+            pid = current.parent_id
+            if pid is None:
+                break
+            current = (
+                await session.exec(select(Department).where(Department.id == int(pid)))
+            ).first()
+        return chain
+
     @classmethod
     async def aget_assignable_roles(
         cls, dept_id: str, login_user,
     ) -> List[dict]:
-        """当前部门可授予的角色：全局 + 本部门子树内定义的角色（不含内置超管）。"""
+        """当前部门上下文中可授予的角色：全局 + 作用域落在上级链（含本部门）上的角色（不含内置超管）。
+
+        规则：角色若绑定作用域部门 S，则可在任意「当前成员所属/操作上下文部门 T」为 S 或 S 的下级时使用；
+        实现为 Role.department_id 为空，或 Role.department_id 属于当前部门 T 的祖先链（含 T）。
+        """
         from bisheng.database.constants import AdminRole
         from bisheng.database.models.role import Role
 
         async with get_async_db_session() as session:
             dept = await _get_dept_and_check_permission(session, dept_id, login_user)
 
-            subtree = await session.exec(
-                select(Department.id).where(
-                    Department.path.like(f'{dept.path}%'),
-                    Department.status == 'active',
-                )
-            )
-            raw_ids = subtree.all()
-            subtree_ids = []
-            for row in raw_ids:
-                subtree_ids.append(int(row[0]) if isinstance(row, tuple) else int(row))
+            scope_chain_ids = await cls._aget_ancestor_chain_ids(session, dept)
+            if not scope_chain_ids:
+                scope_chain_ids = [int(dept.id)] if dept.id is not None else []
 
-            # 作用域：department_id 为空表示全租户/全局可选；否则仅当前上下文部门及其子树内可授予。
-            # role_type=='global' 的自定义角色仍可能带 department_id，不能再用「凡 global 即全出现」。
+            # 作用域：department_id 为空表示无部门限制、全局可选；
+            # 否则仅当角色作用域部门为「当前上下文部门的祖先或自身」时可授予（非兄弟子树）。
             dept_scope = or_(
                 Role.department_id.is_(None),
-                Role.department_id.in_(subtree_ids),
+                Role.department_id.in_(scope_chain_ids),
             )
             stmt = select(Role).where(
                 Role.id > AdminRole,

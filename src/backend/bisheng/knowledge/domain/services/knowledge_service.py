@@ -1,3 +1,4 @@
+import asyncio
 import json
 import math
 import os
@@ -129,11 +130,15 @@ class KnowledgeService(KnowledgeUtils):
             page: int = 1,
             limit: int = 10,
     ) -> Tuple[List[KnowledgeRead], int]:
-        # F008: Use ReBAC to filter accessible knowledge (AC-04)
+        # F008: 列表可见性 = OpenFGA `can_read`（与 PRD「使用知识库」/关系模型 can_read 一致）。
+        # 与「当前用户创建」的知识库 ID 取并集：避免 list_objects 滞后、缓存或计算差异导致创建者看不到自己的库。
         accessible_ids = await login_user.rebac_list_accessible('can_read', 'knowledge_space')
         if accessible_ids is not None:
-            # Normal user: filter by accessible IDs
-            knowledge_id_extra = [int(kid) for kid in accessible_ids]
+            creator_ids = await KnowledgeDao.aget_knowledge_ids_created_by(
+                login_user.user_id, knowledge_type,
+            )
+            merged = set(int(k) for k in accessible_ids) | set(creator_ids)
+            knowledge_id_extra = list(merged)
             res = await KnowledgeDao.aget_user_knowledge(
                 login_user.user_id,
                 knowledge_id_extra,
@@ -152,8 +157,34 @@ class KnowledgeService(KnowledgeUtils):
             )
             total = await KnowledgeDao.acount_all_knowledge(name, knowledge_type)
 
-        result = cls.convert_knowledge_read(login_user, res)
+        result = await cls.aconvert_knowledge_read(login_user, res)
         return result, total
+
+    @classmethod
+    async def aconvert_knowledge_read(
+            cls, login_user: UserPayload, knowledge_list: List[Knowledge]
+    ) -> List[KnowledgeRead]:
+        """异步组装列表项；避免在 async 路由里调用 sync access_check（_run_async_safe 易死锁/10s 超时）。"""
+        if not knowledge_list:
+            return []
+        db_user_ids = {one.user_id for one in knowledge_list}
+        db_user_info = UserDao.get_user_by_ids(list(db_user_ids))
+        db_user_dict = {one.user_id: one.user_name for one in db_user_info}
+
+        async def _row(one: Knowledge) -> KnowledgeRead:
+            if login_user.user_id == one.user_id:
+                copiable = True
+            else:
+                copiable = await login_user.async_access_check(
+                    one.user_id, str(one.id), AccessType.KNOWLEDGE_WRITE
+                )
+            return KnowledgeRead(
+                **one.model_dump(),
+                user_name=db_user_dict.get(one.user_id, str(one.user_id)),
+                copiable=copiable,
+            )
+
+        return list(await asyncio.gather(*[_row(one) for one in knowledge_list]))
 
     @classmethod
     def convert_knowledge_read(
@@ -165,13 +196,17 @@ class KnowledgeService(KnowledgeUtils):
         res = []
 
         for one in knowledge_list:
+            if login_user.user_id == one.user_id:
+                copiable = True
+            else:
+                copiable = login_user.access_check(
+                    one.user_id, str(one.id), AccessType.KNOWLEDGE_WRITE
+                )
             res.append(
                 KnowledgeRead(
                     **one.model_dump(),
                     user_name=db_user_dict.get(one.user_id, str(one.user_id)),
-                    copiable=login_user.access_check(
-                        one.user_id, str(one.id), AccessType.KNOWLEDGE_WRITE
-                    ),
+                    copiable=copiable,
                 )
             )
         return res

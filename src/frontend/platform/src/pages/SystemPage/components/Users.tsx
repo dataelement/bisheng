@@ -123,7 +123,7 @@ export default function Users(params) {
     const [userGroups, setUserGroups] = useState([])
     const getUserGoups = async () => {
         const res: any = await getUserGroupsApi()
-        setUserGroups(res.records)
+        setUserGroups(res)
     }
     // 获取角色类型数据
     const [roles, setRoles] = useState([])

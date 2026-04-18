@@ -29,6 +29,9 @@
     "userGroup": "Search user groups..."
   },
   "includeChildren": "Include sub-departments",
+  "list": {
+    "emptyForSubject": "No grants in this category"
+  },
   "empty": {
     "permissions": "No permissions yet",
     "departments": "No departments available",

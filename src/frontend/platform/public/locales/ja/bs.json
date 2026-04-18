@@ -1793,7 +1793,7 @@
   "department.localUserRolesRequired": "割り当て可能なロールを1つ以上選択してください",
   "department.primaryDeptFixed": "主所属部門（固定）",
   "department.assignRoles": "ロール割当",
-  "department.assignRolesOptionalHint": "任意です。未選択の場合は部門設定の「デフォルトロール」のみ付与されます。一覧は当該部門で付与可能なロールのみです。",
+  "department.assignRolesOptionalHint": "任意です。未選択の場合は部門設定の「デフォルトロール」のみ付与されます。一覧にはスコープなしのグローバルロールと、当該部門またはその上位部門をスコープとするロールが含まれます。",
   "department.localUserCreatedTip": "ユーザー {{name}} を作成しました。個人 ID：{{person}}。アカウント情報と初期パスワードをクリップボードにコピーしました。",
   "department.personId": "個人 ID",
   "department.updateTime": "更新日時",

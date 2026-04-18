@@ -58,7 +58,7 @@ const useGroups = () => {
             const res = await getUserGroupsApi({
                 signal: abortControllerRef.current.signal
             });
-            setGroups(res.records || []);
+            setGroups(res || []);
         } catch (error) {
             if (error.name !== 'AbortError') {
                 console.error('Failed to load user groups:', error);

@@ -314,9 +314,11 @@ class PermissionService:
             if not m:
                 continue
             subject_type, subject_id_str, member_suffix = m.groups()
-            # Skip #member suffix tuples (membership relations, not direct grants)
+            # OpenFGA 中部门/用户组对资源的授权 subject 写作 department:id#member、user_group:id#member；
+            # 仅 user 不应带 #member，若出现则跳过。
             if member_suffix:
-                continue
+                if subject_type == 'user':
+                    continue
             parsed.append({
                 'subject_type': subject_type,
                 'subject_id': int(subject_id_str),

@@ -29,6 +29,9 @@
     "userGroup": "グループを検索..."
   },
   "includeChildren": "サブ部門を含む",
+  "list": {
+    "emptyForSubject": "この分類に該当する権限はありません"
+  },
   "empty": {
     "permissions": "権限レコードなし",
     "departments": "部門データなし",

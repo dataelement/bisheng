@@ -288,14 +288,21 @@ export default function KnowledgeQa(params) {
     const resourceIds = datalist.map((el: any) => String(el.id));
     const { levels: permLevels } = usePermissionLevels('knowledge_space', resourceIds);
     const hasLevel = (level: RelationLevel | undefined, allowed: RelationLevel[]) => level ? allowed.includes(level) : false;
-    const canRead = (id: string | number) => user.role === 'admin' || hasLevel(permLevels[String(id)], ['owner', 'manager', 'editor', 'viewer']);
-    const canEdit = (id: string | number) => user.role === 'admin' || hasLevel(permLevels[String(id)], ['owner', 'manager', 'editor']);
-    const canDelete = (id: string | number) => user.role === 'admin' || hasLevel(permLevels[String(id)], ['owner']);
-    const visibleLibs = user.role === 'admin' ? datalist : datalist.filter((el: any) => canRead(el.id));
+    const isCreator = (el: any) => Number(el?.user_id) === Number(user?.user_id);
+    const visibleLibs = datalist;
+    const canEdit = (el: any) =>
+        user.role === 'admin' || isCreator(el) || hasLevel(permLevels[String(el.id)], ['owner', 'manager', 'editor']);
+    const canDelete = (el: any) =>
+        user.role === 'admin' || isCreator(el) || hasLevel(permLevels[String(el.id)], ['owner']);
     const canCreateLibrary =
         user.role === 'admin' ||
         Boolean(user.is_department_admin) ||
         (user.web_menu || []).includes('create_knowledge');
+    const canReadRow = (el: any) =>
+        user.role === 'admin' ||
+        isCreator(el) ||
+        hasLevel(permLevels[String(el.id)], ['owner', 'manager', 'editor', 'viewer']);
+    const canUseCopy = (el: any) => canCreateLibrary && canReadRow(el);
 
     useEffect(() => {
         const todos = datalist.filter(lib => lib.state === KnowledgeBaseStatus.Copying);
@@ -402,7 +409,7 @@ export default function KnowledgeQa(params) {
                             <TableRow
                                 key={el.id}
                                 onClick={() => {
-                                    if (!canEdit(el.id)) return;
+                                    if (!canEdit(el)) return;
                                     if ([KnowledgeBaseStatus.Copying, KnowledgeBaseStatus.Unpublished].includes(el.state)) return;
                                     window.libname = [el.name, el.description];
                                     navigate(`/filelib/qalib/${el.id}`);
@@ -453,7 +460,9 @@ export default function KnowledgeQa(params) {
                                                 setSelectOpenId(null);
                                                 switch (selectedValue) {
                                                     case 'copy':
-                                                        el.state === KnowledgeBaseStatus.Published && handleCopy(el);
+                                                        canUseCopy(el) &&
+                                                            el.state === KnowledgeBaseStatus.Published &&
+                                                            handleCopy(el);
                                                         break;
                                                     case 'set':
                                                         handleOpenSettings(el);
@@ -485,11 +494,15 @@ export default function KnowledgeQa(params) {
                                                 onClick={(e) => e.stopPropagation()}
                                                 className="z-50 overflow-visible"
                                             >
-                                                <Tip content={(!el.copiable || !canEdit(el.id)) && t('noPermission')} side='top'>
+                                                <Tip content={!canUseCopy(el) && t('noPermission')} side='top'>
                                                     <SelectItem
                                                         showIcon={false}
                                                         value="copy"
-                                                        disabled={!canEdit(el.id) || !(el.copiable || user.role === 'admin') || el.state !== KnowledgeBaseStatus.Published || copyLoadingId === el.id}
+                                                        disabled={
+                                                            !canUseCopy(el) ||
+                                                            el.state !== KnowledgeBaseStatus.Published ||
+                                                            copyLoadingId === el.id
+                                                        }
                                                     >
                                                         <div className="flex gap-2 items-center">
                                                             <Copy className="w-4 h-4" />
@@ -497,10 +510,10 @@ export default function KnowledgeQa(params) {
                                                         </div>
                                                     </SelectItem>
                                                 </Tip>
-                                                <Tip content={(!el.copiable || !canEdit(el.id)) && t('noPermission')} side='top'>
+                                                <Tip content={(!el.copiable || !canEdit(el)) && t('noPermission')} side='top'>
                                                     <SelectItem
                                                         value="set"
-                                                        disabled={!canEdit(el.id) || !el.copiable}
+                                                        disabled={!canEdit(el) || !el.copiable}
                                                         showIcon={false}
                                                     >
                                                         <div className="flex gap-2 items-center">
@@ -509,11 +522,11 @@ export default function KnowledgeQa(params) {
                                                         </div>
                                                     </SelectItem>
                                                 </Tip>
-                                                <Tip content={(!el.copiable || !canDelete(el.id)) && t('noPermission')} side='top'>
+                                                <Tip content={(!el.copiable || !canDelete(el)) && t('noPermission')} side='top'>
                                                     <SelectItem
                                                         value="delete"
                                                         showIcon={false}
-                                                        disabled={!canDelete(el.id) || !(el.copiable || user.role === 'admin')}
+                                                        disabled={!canDelete(el) || !(el.copiable || user.role === 'admin')}
                                                     >
                                                         <div className="flex gap-2 items-center">
                                                             <Trash2 className="w-4 h-4" />
