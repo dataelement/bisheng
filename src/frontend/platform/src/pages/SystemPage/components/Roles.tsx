@@ -46,15 +46,26 @@ const ADMIN_CHILD_MENUS = [
   "model",
   "log",
   "knowledge",
+  "create_knowledge",
   "build",
+  "create_app",
   "evaluation",
   "mark_task",
 ] as const
+/**
+ * 某些子菜单依赖另一个子菜单（父项关闭则隐藏、且会级联移除）。
+ * `create_app` 依赖 `build`；"新建知识库"依赖 `knowledge`（PRD 3.3.3）。
+ */
+const ADMIN_CHILD_DEPENDENTS: Record<string, readonly string[]> = {
+  build: ["create_app"],
+  knowledge: ["create_knowledge"],
+}
 const DEFAULT_ENABLED_MENU_IDS = [
   WORKBENCH_PARENT_ID,
   ADMIN_PARENT_ID,
   "knowledge_space",
   "knowledge",
+  "create_knowledge",
   "build",
 ] as const
 
@@ -96,7 +107,10 @@ export default function Roles() {
       { id: "model", label: t("menu.models") },
       { id: "log", label: t("menu.log") },
       { id: "knowledge", label: t("menu.knowledge") },
+      { id: "create_knowledge", label: t("menu.createKnowledge"), parentMenuId: "knowledge" as const },
       { id: "build", label: t("menu.skills") },
+      // `create_app` 依赖 `build`：只有当构建开启时渲染，关闭构建时级联移除。
+      { id: "create_app", label: t("menu.createApp"), parentMenuId: "build" as const },
       { id: "evaluation", label: t("menu.evaluation") },
       { id: "mark_task", label: t("menu.annotation") },
     ],
@@ -183,6 +197,10 @@ export default function Roles() {
       return
     }
     let ids = [...menuRes].filter((id) => id !== "system_config")
+    // 依赖约束：若父项未启用则剔除依赖项（例如 create_app 依赖 build）。
+    Object.entries(ADMIN_CHILD_DEPENDENTS).forEach(([parent, deps]) => {
+      if (!ids.includes(parent)) ids = ids.filter((id) => !deps.includes(id))
+    })
     if (ids.some((id) => (ADMIN_CHILD_MENUS as readonly string[]).includes(id)) && !ids.includes(ADMIN_PARENT_ID)) {
       ids = [...ids, ADMIN_PARENT_ID]
     }
@@ -237,12 +255,19 @@ export default function Roles() {
     if (isSaving || !roleName.trim() || isMenuLoading || menuLoadFailed) return
     setIsSaving(true)
     const quota_config = buildQuotaConfig()
+    // 保存前清理依赖：父项未开则不应持久化依赖项（例如 build 关闭时移除 create_app）。
+    const sanitizedMenuIds = menuIds.filter((id) => {
+      const parent = Object.entries(ADMIN_CHILD_DEPENDENTS).find(([, deps]) =>
+        (deps as readonly string[]).includes(id),
+      )?.[0]
+      return !parent || menuIds.includes(parent)
+    })
     const payload = {
       role_name: roleName.trim(),
       department_id: departmentId === "none" ? null : Number(departmentId),
       quota_config,
       remark: "PRD 2.5 role",
-      menu_ids: menuIds,
+      menu_ids: sanitizedMenuIds,
     }
     try {
       if (!activeRole) {
@@ -318,6 +343,9 @@ export default function Roles() {
         next.add(parentId)
       } else {
         next.delete(id)
+        // 关闭父级子菜单时，级联移除其依赖的子菜单（例如 build -> create_app）
+        const dependents = ADMIN_CHILD_DEPENDENTS[id] || []
+        dependents.forEach((dep) => next.delete(dep))
         const hasAnyChild = children.some((child) => child !== id && next.has(child))
         if (!hasAnyChild) next.delete(parentId)
       }
@@ -687,7 +715,9 @@ export default function Roles() {
                     <span>{t("system.adminSpace")}</span>
                   </label>
                   <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 md:grid-cols-4">
-                    {ADMIN_MENU_OPTIONS.map((m) => (
+                    {ADMIN_MENU_OPTIONS.filter(
+                      (m) => !("parentMenuId" in m) || !m.parentMenuId || isMenuEnabled(m.parentMenuId)
+                    ).map((m) => (
                       <label
                         key={m.id}
                         className={`inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-background px-2 py-1.5 text-sm ${

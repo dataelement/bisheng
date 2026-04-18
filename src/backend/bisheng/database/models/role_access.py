@@ -40,7 +40,9 @@ class WebMenuResource(Enum):
     ADMIN = 'admin'                       # Admin console (management portal)
     # Level-2 menus — build / resources
     BUILD = 'build'                       # Application build
+    CREATE_APP = 'create_app'             # Entry for "新建应用"/"管理应用模板" (sub-toggle of BUILD)
     KNOWLEDGE = 'knowledge'               # Knowledge management
+    CREATE_KNOWLEDGE = 'create_knowledge' # Admin KB list: "创建" (doc/QA lib); sub-toggle of KNOWLEDGE
     KNOWLEDGE_SPACE = 'knowledge_space'   # Knowledge space
     MODEL = 'model'                       # Model management
     TOOL = 'tool'                         # Tool management

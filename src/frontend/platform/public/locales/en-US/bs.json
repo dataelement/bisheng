@@ -113,6 +113,8 @@
     "workspace": "Workspace",
     "app": "Chat",
     "skills": "Build",
+    "createApp": "Create app",
+    "createKnowledge": "Create knowledge base",
     "knowledge": "Knowledge",
     "evaluation": "Evaluation",
     "board": "Dashboard",

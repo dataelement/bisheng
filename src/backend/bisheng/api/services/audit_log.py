@@ -317,14 +317,21 @@ class AuditLogService:
         AuditLogDao.insert_audit_logs([audit_log])
 
     @classmethod
-    def create_knowledge(cls, user: UserPayload, ip_address: str, knowledge_id: int):
+    def create_knowledge(cls, user: UserPayload, ip_address: str, knowledge):
         """
         New Knowledge Base Audit Log
+
+        :param knowledge: ``Knowledge`` ORM row (preferred — avoids a second DB read and
+            races where ``query_by_id`` might not yet see the new row in some setups).
         """
+        knowledge_id = knowledge.id if isinstance(knowledge, Knowledge) else int(knowledge)
+        object_name = knowledge.name if isinstance(knowledge, Knowledge) else None
+        if object_name is None:
+            knowledge_info = KnowledgeDao.query_by_id(knowledge_id)
+            object_name = knowledge_info.name if knowledge_info else str(knowledge_id)
         logger.info(f"act=create_knowledge user={user.user_name} ip={ip_address} knowledge={knowledge_id}")
-        knowledge_info = KnowledgeDao.query_by_id(knowledge_id)
         cls._knowledge_log(user, ip_address, EventType.CREATE_KNOWLEDGE, ObjectType.KNOWLEDGE,
-                           str(knowledge_id), knowledge_info.name, ResourceTypeEnum.KNOWLEDGE, str(knowledge_id))
+                           str(knowledge_id), object_name, ResourceTypeEnum.KNOWLEDGE, str(knowledge_id))
 
     @classmethod
     def delete_knowledge(cls, user: UserPayload, ip_address: str, knowledge: Knowledge):

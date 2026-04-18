@@ -26,7 +26,7 @@ from bisheng.common.services import telemetry_service
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.cache.utils import save_uploaded_file
 from bisheng.core.logger import trace_id_var
-from bisheng.database.models.role_access import AccessType
+from bisheng.database.models.role_access import AccessType, WebMenuResource
 from bisheng.knowledge.api.dependencies import get_knowledge_service, get_knowledge_file_service
 from bisheng.knowledge.domain.models.knowledge import (KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum,
                                                        KnowledgeUpdate)
@@ -215,11 +215,13 @@ async def rebuild_knowledge_file(*,
 
 
 @router.post('/create')
-def create_knowledge(*,
-                     request: Request,
-                     login_user: UserPayload = Depends(UserPayload.get_login_user),
-                     knowledge: KnowledgeCreate):
+async def create_knowledge(*,
+                           request: Request,
+                           login_user: UserPayload = Depends(UserPayload.get_login_user),
+                           knowledge: KnowledgeCreate):
     """ Create Knowledge Base. """
+    await UserPayload.assert_effective_web_menu_contains(
+        login_user.user_id, WebMenuResource.CREATE_KNOWLEDGE.value)
     db_knowledge = KnowledgeService.create_knowledge(request, login_user, knowledge)
     return resp_200(db_knowledge)
 

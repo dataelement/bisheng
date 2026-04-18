@@ -193,40 +193,43 @@ async def list_user(*,
                     login_user: LoginUser = Depends(LoginUser.get_login_user)):
     groups = group_id
     roles = role_id
-    user_admin_groups = []
-    dept_scope_user_ids: Optional[List[int]] = None
+    user_admin_groups: List[int] = []
+    user_ids: List[int] = []
+
     if not login_user.is_admin():
-        # Query if you are an administrator of another user group under
+        # 用户组管理员：可管理哪些用户组
         user_admin_groups = UserGroupDao.get_user_admin_group(login_user.user_id)
         user_admin_groups = [one.group_id for one in user_admin_groups]
-        groups = user_admin_groups
-        if not groups:
-            # 无用户组管理权时，允许部门管理员按部门子树查看用户
-            dept_scope_user_ids = await _department_admin_scoped_user_ids(login_user.user_id)
-            if dept_scope_user_ids is None:
+        managed_groups = user_admin_groups
+        # 部门管理员：管辖部门子树内用户（与是否同时为用户组管理员无关，均需纳入可选列表）
+        dept_scoped_ids = await _department_admin_scoped_user_ids(login_user.user_id)
+
+        if not managed_groups:
+            # 仅部门管理员：仅能看子树内用户
+            if dept_scoped_ids is None:
                 raise HTTPException(status_code=500, detail="Quit that! You don't have rights to view this.")
+            if not dept_scoped_ids:
+                return resp_200({'data': [], 'total': 0})
+            user_ids = dept_scoped_ids
         else:
-            # Filter bygroup_idand administrator permissionsgroupsDoing Intersections
+            # 同时为用户组管理员时：历史上仅查用户组成员，导致部门子树用户不可见；改为「组成员 ∪ 部门子树用户」
+            groups = managed_groups
             if group_id:
                 groups = list(set(groups) & set(group_id))
                 if not groups:
                     raise HTTPException(status_code=500, detail="Quit that! You don't have rights to view this.")
-            # Query roles under user groups, Intersect with the role filter to get the role that really needs to be queriedID
             group_roles = RoleDao.get_role_by_groups(groups, None, 0, 0)
             if role_id:
                 roles = list(set(role_id) & set([one.id for one in group_roles]))
-    # Users filtered by user groups and rolesid
-    user_ids = []
-    if dept_scope_user_ids is not None:
-        if not dept_scope_user_ids:
-            return resp_200({'data': [], 'total': 0})
-        user_ids = dept_scope_user_ids
-    elif groups:
-        # Query users under user groupsID
-        groups_user_ids = UserGroupDao.get_groups_user(groups)
-        if not groups_user_ids:
-            return resp_200({'data': [], 'total': 0})
-        user_ids = list(set([one.user_id for one in groups_user_ids]))
+
+            groups_user_ids = UserGroupDao.get_groups_user(groups)
+            gids = {one.user_id for one in groups_user_ids} if groups_user_ids else set()
+            if dept_scoped_ids is not None:
+                user_ids = list(gids | set(dept_scoped_ids))
+            else:
+                user_ids = list(gids)
+            if not user_ids:
+                return resp_200({'data': [], 'total': 0})
 
     if roles:
         roles_user_ids = UserRoleDao.get_roles_user(roles)

@@ -292,7 +292,10 @@ export default function KnowledgeQa(params) {
     const canEdit = (id: string | number) => user.role === 'admin' || hasLevel(permLevels[String(id)], ['owner', 'manager', 'editor']);
     const canDelete = (id: string | number) => user.role === 'admin' || hasLevel(permLevels[String(id)], ['owner']);
     const visibleLibs = user.role === 'admin' ? datalist : datalist.filter((el: any) => canRead(el.id));
-    const canCreateLibrary = user.role === 'admin' || visibleLibs.some((el: any) => canEdit(el.id));
+    const canCreateLibrary =
+        user.role === 'admin' ||
+        Boolean(user.is_department_admin) ||
+        (user.web_menu || []).includes('create_knowledge');
 
     useEffect(() => {
         const todos = datalist.filter(lib => lib.state === KnowledgeBaseStatus.Copying);

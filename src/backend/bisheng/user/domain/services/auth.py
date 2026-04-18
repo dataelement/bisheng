@@ -17,10 +17,11 @@ from bisheng.common.exceptions.auth import JWTDecodeError
 from bisheng.common.services.config_service import settings
 from bisheng.database.constants import AdminRole
 from bisheng.database.models.group import GroupDao
+from bisheng.database.models.department import DepartmentDao
 from bisheng.database.models.role_access import AccessType, RoleAccessDao, WebMenuResource
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.core.context.tenant import DEFAULT_TENANT_ID
-from ..models.user import User
+from ..models.user import User, UserDao
 from ..models.user_role import UserRoleDao
 
 logger = logging.getLogger(__name__)
@@ -459,3 +460,14 @@ class LoginUser(BaseModel):
             # AC-14: admin returns all WebMenuResource values (including deprecated for compat)
             web_menu = [one.value for one in WebMenuResource]
         return role, web_menu
+
+    @classmethod
+    async def assert_effective_web_menu_contains(cls, user_id: int, menu_key: str) -> None:
+        """Raise if user's effective web_menu (after dept-admin merge) does not include ``menu_key``."""
+        db_user = await UserDao.aget_user(user_id)
+        if not db_user:
+            raise UnAuthorizedError.http_exception()
+        is_department_admin = bool(await DepartmentDao.aget_user_admin_departments(user_id))
+        _, web_menu = await cls.get_roles_web_menu(db_user, is_department_admin=is_department_admin)
+        if menu_key not in set(web_menu):
+            raise UnAuthorizedError.http_exception()

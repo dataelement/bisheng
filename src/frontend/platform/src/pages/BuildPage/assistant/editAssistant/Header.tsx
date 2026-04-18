@@ -18,7 +18,7 @@ export default function Header({ loca, onSave, onLine, onTabChange }) {
     const { levels } = usePermissionLevels('assistant', assistantState?.id ? [String(assistantState.id)] : [])
     const currentLevel = assistantState?.id ? levels[String(assistantState.id)] : undefined
     const canManage = currentLevel === 'owner' || currentLevel === 'manager'
-    console.log('assistantState :>> ', assistantState);
+    const canEdit = canManage || currentLevel === 'editor'
     {/* Edit assistant */ }
     const [editShow, setEditShow] = useState(false);
 
@@ -63,7 +63,7 @@ export default function Header({ loca, onSave, onLine, onTabChange }) {
                 className={`${tabType === 'edit' ? 'text-primary' : ''} hover:bg-secondary px-4 py-1 rounded-md cursor-pointer`}
                 onClick={() => { setTabType('edit'); onTabChange('edit') }}
             >{t('api.assistantOrchestration')}</div>
-            {canManage && <div
+            {canEdit && <div
                 className={`${tabType === 'api' ? 'text-primary' : ''} hover:bg-secondary px-4 py-1 rounded-md cursor-pointer`}
                 onClick={() => {
                     setTabType('api');

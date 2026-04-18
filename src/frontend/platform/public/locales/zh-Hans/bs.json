@@ -115,6 +115,8 @@
     "workspace": "工作台",
     "app": "会  话",
     "skills": "构  建",
+    "createApp": "创建应用",
+    "createKnowledge": "新建知识库",
     "knowledge": "知  识",
     "evaluation": "评  测",
     "board": "看  板",

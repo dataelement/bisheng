@@ -15,7 +15,7 @@ class KnowledgeAuditTelemetryService:
 
     @staticmethod
     def audit_create_knowledge(login_user, request, knowledge: Knowledge) -> None:
-        AuditLogService.create_knowledge(login_user, get_request_ip(request), knowledge.id)
+        AuditLogService.create_knowledge(login_user, get_request_ip(request), knowledge)
 
     @staticmethod
     async def audit_create_knowledge_space(login_user, request, knowledge: Knowledge) -> None:

@@ -46,7 +46,6 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
     const level = flowId ? permLevels[flowId] : undefined;
     const hasLevel = (current: RelationLevel | undefined, allowed: RelationLevel[]) => current ? allowed.includes(current) : false;
     const canEdit = hasLevel(level, ['owner', 'manager', 'editor']);
-    const canManage = hasLevel(level, ['owner', 'manager']);
 
     // console.log('flow :>> ', flow);
 
@@ -308,7 +307,7 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
                 >
                     {t('processOrchestration')}
                 </Button>
-                {canManage && <Button variant="secondary" className={`${tabType === 'api' ? 'bg-[#fff] dark:bg-gray-950 hover:bg-[#fff]/70 text-primary h-8"' : ''} h-8`}
+                {canEdit && <Button variant="secondary" className={`${tabType === 'api' ? 'bg-[#fff] dark:bg-gray-950 hover:bg-[#fff]/70 text-primary h-8"' : ''} h-8`}
                     onClick={() => {
                         setTabType('api');
                         onTabChange('api');
@@ -390,9 +389,9 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
                         )}
                     >{t('skills.saveVersion', { ns: 'bs' })}</ActionButton>
                 }
-                {isOnlineVersion ? <Button size="sm" className={`h-8 px-6`} disabled={!canManage} onClick={handleOfflineClick}>
+                {isOnlineVersion ? <Button size="sm" className={`h-8 px-6`} disabled={!canEdit} onClick={handleOfflineClick}>
                     {t('takeOffline')}
-                </Button> : <Button size="sm" className={`h-8 px-6`} disabled={!canManage} onClick={handleOnlineClick}>
+                </Button> : <Button size="sm" className={`h-8 px-6`} disabled={!canEdit} onClick={handleOnlineClick}>
                     {t('goOnline')}
                 </Button>}
                 <Popover open={open && canEdit} onOpenChange={(next) => canEdit && setOpen(next)}>

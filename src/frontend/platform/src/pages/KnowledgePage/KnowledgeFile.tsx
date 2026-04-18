@@ -151,6 +151,11 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
             return;
         }
 
+        if (mode === 'create' && !modelId) {
+            handleError(t('modelRequired', { ns: 'bs' }));
+            return;
+        }
+
         setIsSubmitting(true)
         if (mode === 'create') {
             await captureAndAlertRequestErrorHoc(createFileLib({
@@ -342,7 +347,11 @@ export default function KnowledgeFile() {
     const canEdit = (id: string | number) => user.role === 'admin' || hasLevel(permLevels[String(id)], ['owner', 'manager', 'editor']);
     const canDelete = (id: string | number) => user.role === 'admin' || hasLevel(permLevels[String(id)], ['owner']);
     const visibleLibs = user.role === 'admin' ? datalist : datalist.filter((el: any) => canRead(el.id));
-    const canCreateLibrary = user.role === 'admin' || visibleLibs.some((el: any) => canEdit(el.id));
+    // PRD 3.3.3：「创建」与 ReBAC 编辑权解耦，由 WEB_MENU `create_knowledge` 控制（对齐「创建应用」）
+    const canCreateLibrary =
+        user.role === 'admin' ||
+        Boolean(user.is_department_admin) ||
+        (user.web_menu || []).includes('create_knowledge');
 
     // Enable polling during copying
     useEffect(() => {

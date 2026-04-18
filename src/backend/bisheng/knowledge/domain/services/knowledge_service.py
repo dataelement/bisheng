@@ -212,7 +212,11 @@ class KnowledgeService(KnowledgeUtils):
         # CorrectionembeddingModels
         if not db_knowledge.model:
             raise KnowledgeNoEmbeddingError.http_exception()
-        embed_info = LLMDao.get_model_by_id(int(db_knowledge.model))
+        try:
+            embedding_model_id = int(str(db_knowledge.model).strip())
+        except (TypeError, ValueError):
+            raise KnowledgeNoEmbeddingError.http_exception()
+        embed_info = LLMDao.get_model_by_id(embedding_model_id)
         if not embed_info:
             raise KnowledgeNoEmbeddingError.http_exception()
         if embed_info.model_type != LLMModelType.EMBEDDING.value:

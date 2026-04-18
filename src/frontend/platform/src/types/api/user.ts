@@ -10,6 +10,8 @@ export type User = {
     update_time: string;
     user_id: number;
     role: string;
+    /** WEB_MENU third_id 列表（构建/知识等侧栏与动态路由） */
+    web_menu?: string[];
     /** PRD 3.2.2：可进入用户组管理（超管 / 部门管理员） */
     can_manage_user_groups?: boolean;
     is_department_admin?: boolean;

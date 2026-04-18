@@ -26,8 +26,9 @@ export function SubjectSearchUser({ value, onChange }: SubjectSearchUserProps) {
 
     setLoading(true)
     try {
+      // 与后端部门子树/用户组并集后的结果量可能较大；单次多取避免只看到第一页
       const res = await getUsersApi(
-        { name, page: 1, pageSize: 20 },
+        { name, page: 1, pageSize: 200 },
         { signal: controller.signal },
       )
       if (!controller.signal.aborted) {
@@ -75,7 +76,7 @@ export function SubjectSearchUser({ value, onChange }: SubjectSearchUserProps) {
         value={keyword}
         onChange={handleInput}
       />
-      <div className="max-h-[200px] overflow-y-auto border rounded-md">
+      <div className="max-h-[min(320px,50vh)] min-h-[120px] overflow-y-auto overscroll-contain border rounded-md">
         {loading && (
           <div className="py-4 text-center text-sm text-muted-foreground">{t('loading', { ns: 'bs' })}</div>
         )}

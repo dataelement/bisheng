@@ -19,8 +19,9 @@ import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { userContext } from "@/contexts/userContext";
 import { readTempsDatabase } from "@/controllers/API";
 import { changeAssistantStatusApi, deleteAssistantApi } from "@/controllers/API/assistant";
-import { deleteFlowFromDatabase, getAppsApi, saveFlowToDatabase, updataOnlineState } from "@/controllers/API/flow";
-import { onlineWorkflow } from "@/controllers/API/workflow";
+import { createAssistantsApi, getAssistantDetailApi, saveAssistanttApi } from "@/controllers/API/assistant";
+import { deleteFlowFromDatabase, getAppsApi, getFlowApi, saveFlowToDatabase, updataOnlineState } from "@/controllers/API/flow";
+import { copyReportTemplate, createWorkflowApi, onlineWorkflow } from "@/controllers/API/workflow";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { AppNumType, AppType } from "@/types/app";
 import { FlowType } from "@/types/flow";
@@ -96,7 +97,85 @@ export default function apps() {
     const visibleApps = user.role === 'admin' || permLoading
         ? dataSource
         : dataSource.filter((item: any) => canRead(item.id));
-    const canCreateApp = user.role === 'admin' || visibleApps.some((item: any) => canEdit(item.id));
+
+    // 角色菜单权限：`create_app` 控制"新建应用/管理应用模板"入口是否可见。
+    // 超管：始终可见。组织上的部门管理员（is_department_admin）：与 PRD 一致默认可见（与 MainLayout 全量子壳一致）。
+    // 其余用户：依赖 web_menu 中的 create_app（角色里「创建应用」开关）。
+    const canCreateApp =
+        user.role === 'admin' ||
+        Boolean(user.is_department_admin) ||
+        (user.web_menu || []).includes('create_app');
+
+    const [copyingId, setCopyingId] = useState<string | number | null>(null);
+
+    const handleCopyApp = async (item: any) => {
+        if (!canCreateApp || !canRead(item.id) || copyingId) return;
+        setCopyingId(item.id);
+        try {
+            if (item.flow_type === AppNumType.ASSISTANT) {
+                const detail = await captureAndAlertRequestErrorHoc(getAssistantDetailApi(String(item.id), 'v1'));
+                if (!detail) return;
+                const newName = `${detail.name}-${generateUUID(5)}`;
+                const created = await captureAndAlertRequestErrorHoc(
+                    createAssistantsApi(newName, detail.prompt || '', detail.logo || '')
+                );
+                if (!created?.id) return;
+                await captureAndAlertRequestErrorHoc(
+                    saveAssistanttApi({
+                        ...detail,
+                        id: created.id,
+                        name: newName,
+                        flow_list: (detail.flow_list || []).map((f: { id: string }) => f.id),
+                        tool_list: (detail.tool_list || []).map((tool: { id: number }) => tool.id),
+                        knowledge_list: (detail.knowledge_list || []).map((k: { id: number }) => k.id),
+                        guide_question: (detail.guide_question || []).filter(Boolean),
+                        logo: detail.logo || '',
+                    })
+                );
+                reload();
+                return;
+            }
+            const flow = await captureAndAlertRequestErrorHoc(getFlowApi(String(item.id)));
+            if (!flow) return;
+            if (item.flow_type === AppNumType.FLOW) {
+                const payload = JSON.parse(JSON.stringify(flow)) as typeof flow;
+                payload.name = `${flow.name}-${generateUUID(5)}`;
+                if (payload.data?.source) delete payload.data.source;
+                if (payload.data?.nodes?.length) {
+                    for (const node of payload.data.nodes) {
+                        await copyReportTemplate(node.data);
+                    }
+                }
+                delete (payload as any).id;
+                const res = await captureAndAlertRequestErrorHoc(
+                    createWorkflowApi(payload.name, payload.description || '', payload.logo || '', payload)
+                );
+                if (res?.id) {
+                    reload();
+                    navigate(`/flow/${res.id}`);
+                }
+                return;
+            }
+            if (item.flow_type === AppNumType.SKILL) {
+                const newName = `${flow.name}-${generateUUID(5)}`;
+                const res: any = await captureAndAlertRequestErrorHoc(
+                    saveFlowToDatabase({
+                        name: newName,
+                        id: '' as any,
+                        data: flow.data,
+                        description: flow.description,
+                    })
+                );
+                if (res?.id) {
+                    reload();
+                    const vid = res.version_id ?? res.version_list?.find((v: any) => v.is_current === 1)?.id;
+                    if (vid) navigate(`/build/skill/${res.id}/${vid}`, { state: { flow: res } });
+                }
+            }
+        } finally {
+            setCopyingId(null);
+        }
+    };
 
     const handleOpenPermission = (item: any) => {
         const typeMap = { 5: 'assistant', 1: 'workflow', 10: 'workflow' };
@@ -223,11 +302,13 @@ export default function apps() {
                     onChange={(e) => setSearchKey(e.target.value)}
                     onValueChange={handleLabelSearch}>
                 </SelectSearch>
-                {canCreateApp && <Button
-                    variant="ghost"
-                    className="hover:bg-gray-50 flex gap-2 dark:hover:bg-[#34353A] ml-auto"
-                    onClick={() => navigate(`/build/temps/${tempTypeRef.current && tempTypeRef.current !== AppType.ALL ? tempTypeRef.current : AppType.FLOW}`)}
-                ><MoveOneIcon className="dark:text-slate-50" />{t('build.manageAppTemplates')}</Button>}
+                {canCreateApp && (
+                    <Button
+                        variant="ghost"
+                        className="hover:bg-gray-50 flex gap-2 dark:hover:bg-[#34353A] ml-auto"
+                        onClick={() => navigate(`/build/temps/${tempTypeRef.current && tempTypeRef.current !== AppType.ALL ? tempTypeRef.current : AppType.FLOW}`)}
+                    ><MoveOneIcon className="dark:text-slate-50" />{t('build.manageAppTemplates')}</Button>
+                )}
             </div>
             {/* list */}
             {
@@ -277,7 +358,10 @@ export default function apps() {
                                     onSetting={(item) => handleSetting(item)}
                                     onPermission={canManage(item.id) ? handleOpenPermission : undefined}
                                     permissionBadge={<PermissionBadge level={permLevels[String(item.id)]} />}
-                                    showSwitch={canManage(item.id)}
+                                    // PRD：「可编辑」含上线/下线；与 ReBAC can_edit 对齐（非仅 owner/manager）
+                                    showSwitch={canEdit(item.id)}
+                                    showCopy={canCreateApp && canRead(item.id)}
+                                    onCopy={canCreateApp && canRead(item.id) ? handleCopyApp : undefined}
                                     headSelecter={(
                                         // skills
                                         item.flow_type !== AppNumType.ASSISTANT ? <CardSelectVersion
