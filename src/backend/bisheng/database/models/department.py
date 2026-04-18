@@ -28,6 +28,22 @@ from bisheng.core.database import get_async_db_session, get_sync_db_session
 logger = logging.getLogger(__name__)
 
 
+def _normalize_id_scalar_rows(rows) -> List[int]:
+    """Normalize SQLAlchemy/SQLModel scalar select rows to plain int ids.
+
+    Depending on driver/version, ``select(Department.id)`` rows may be bare ints,
+    ``Row((id,))``, or tuples — callers comparing to ``int(department_id)`` must
+    not receive tuple elements inside sets (``5 in {(5,)}`` is False).
+    """
+    out: List[int] = []
+    for row in rows or []:
+        if isinstance(row, (list, tuple)):
+            out.append(int(row[0]))
+        else:
+            out.append(int(row))
+    return out
+
+
 class Department(SQLModelSerializable, table=True):
     __tablename__ = 'department'
 
@@ -306,12 +322,13 @@ class DepartmentDao:
     @classmethod
     def get_subtree_ids(cls, path_prefix: str) -> List[int]:
         with get_sync_db_session() as session:
-            return session.exec(
+            raw = session.exec(
                 select(Department.id).where(
                     Department.path.like(f'{path_prefix}%'),
                     Department.status == 'active',
                 )
             ).all()
+            return _normalize_id_scalar_rows(raw)
 
     @classmethod
     async def aget_subtree_ids(cls, path_prefix: str) -> List[int]:
@@ -322,7 +339,7 @@ class DepartmentDao:
                     Department.status == 'active',
                 )
             )
-            return result.all()
+            return _normalize_id_scalar_rows(result.all())
 
     @classmethod
     def get_all_active(cls) -> List[Department]:

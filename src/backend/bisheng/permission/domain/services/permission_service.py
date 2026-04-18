@@ -134,7 +134,9 @@ class PermissionService:
         if relation not in UNCACHEABLE_RELATIONS:
             cached = await PermissionCache.get_list_objects(user_id, relation, object_type)
             if cached is not None:
-                return cached
+                # 必须与隐式部门范围并集：旧缓存可能仅有 FGA list_objects，或部署前未合并隐式 ID
+                implicit = await cls._resource_ids_implicit_dept_admin_scope(user_id, object_type)
+                return list(set(cached) | set(implicit or []))
 
         try:
             fga = cls._get_fga()
@@ -598,18 +600,38 @@ class PermissionService:
         from bisheng.database.models.department import DepartmentDao
 
         admin_depts = await DepartmentDao.aget_user_admin_departments(viewer_user_id)
+        logger.info(
+            '[implicit-scope] viewer=%s type=%s admin_depts=%s',
+            viewer_user_id, object_type,
+            [(d.id, getattr(d, 'name', None), getattr(d, 'path', None)) for d in admin_depts or []],
+        )
         if not admin_depts:
             return []
         subtree: Set[int] = set()
         for ad in admin_depts:
             if ad and getattr(ad, 'path', None):
-                subtree |= set(await DepartmentDao.aget_subtree_ids(ad.path))
+                ids = await DepartmentDao.aget_subtree_ids(ad.path)
+                logger.info(
+                    '[implicit-scope] subtree from path=%s ids=%s',
+                    ad.path, ids,
+                )
+                subtree |= set(ids)
         if not subtree:
+            logger.info('[implicit-scope] empty subtree for viewer=%s', viewer_user_id)
             return []
         member_uids = await cls._distinct_user_ids_in_departments(subtree)
+        logger.info(
+            '[implicit-scope] viewer=%s subtree=%s members=%s',
+            viewer_user_id, sorted(subtree), sorted(member_uids),
+        )
         if not member_uids:
             return []
-        return await cls._resource_ids_by_creator_user_ids(object_type, member_uids)
+        ids = await cls._resource_ids_by_creator_user_ids(object_type, member_uids)
+        logger.info(
+            '[implicit-scope] viewer=%s type=%s resource_ids=%s',
+            viewer_user_id, object_type, ids,
+        )
+        return ids
 
     @classmethod
     async def _expand_subject(

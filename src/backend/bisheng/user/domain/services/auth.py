@@ -321,6 +321,32 @@ class LoginUser(BaseModel):
         role_access = await RoleAccessDao.aget_role_access_batch(self.user_role, access_types)
         return list(set([one.third_id for one in role_access]))
 
+    def get_merged_rebac_app_resource_ids(self, *, for_write: bool = False) -> List[str]:
+        """合并 workflow + assistant 的 ReBAC 可见 ID（构建/工作台应用列表）。
+
+        ⚠️ 仅供 async 调用方使用 sync 适配器时兜底。新代码请用
+        ``aget_merged_rebac_app_resource_ids``：在 FastAPI 的 sync endpoint
+        线程池里新建 event loop 调 FGAClient 会跨 loop 失败，导致部门管理员
+        看不到下属创建的应用。
+        """
+        from bisheng.permission.domain.services.owner_service import _run_async_safe
+
+        relation = 'can_edit' if for_write else 'can_read'
+        wf_ids = _run_async_safe(self.rebac_list_accessible(relation, 'workflow'))
+        asst_ids = _run_async_safe(self.rebac_list_accessible(relation, 'assistant'))
+        wf_ids = wf_ids or []
+        asst_ids = asst_ids or []
+        return list(set(wf_ids) | set(asst_ids))
+
+    async def aget_merged_rebac_app_resource_ids(
+        self, *, for_write: bool = False,
+    ) -> List[str]:
+        """async 版本：合并 workflow + assistant 的 ReBAC 可见 ID。"""
+        relation = 'can_edit' if for_write else 'can_read'
+        wf_ids = await self.rebac_list_accessible(relation, 'workflow')
+        asst_ids = await self.rebac_list_accessible(relation, 'assistant')
+        return list(set(wf_ids or []) | set(asst_ids or []))
+
     # ── ReBAC permission methods (F004, INV-3) ─────────────────
 
     async def rebac_check(self, relation: str, object_type: str, object_id: str) -> bool:

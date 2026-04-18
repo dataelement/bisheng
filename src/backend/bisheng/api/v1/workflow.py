@@ -297,18 +297,19 @@ async def update_flow_status(request: Request, login_user: UserPayload = Depends
 
 
 @router.get('/list', status_code=200)
-def read_flows(*,
-               login_user: UserPayload = Depends(UserPayload.get_login_user),
-               name: str = Query(default=None, description='accordingnameFind databases with fuzzy searches for descriptions'),
-               tag_id: int = Query(default=None, description='labelID'),
-               flow_type: int = Query(default=None, description='Type 5 assistant 10 workflow'),
-               page_size: int = Query(default=10, description='Items per page'),
-               page_num: int = Query(default=1, description='Page'),
-               status: int = None,
-               managed: bool = Query(default=False, description='Whether to query the list of apps with administrative permissions')):
+async def read_flows(*,
+                     login_user: UserPayload = Depends(UserPayload.get_login_user),
+                     name: str = Query(default=None, description='accordingnameFind databases with fuzzy searches for descriptions'),
+                     tag_id: int = Query(default=None, description='labelID'),
+                     flow_type: int = Query(default=None, description='Type 5 assistant 10 workflow'),
+                     page_size: int = Query(default=10, description='Items per page'),
+                     page_num: int = Query(default=1, description='Page'),
+                     status: int = None,
+                     managed: bool = Query(default=False, description='Whether to query the list of apps with administrative permissions')):
     """Read all flows."""
-    data, total = WorkFlowService.get_all_flows(login_user, name, status, tag_id, flow_type, page_num, page_size,
-                                                managed)
+    data, total = await WorkFlowService.get_all_flows(
+        login_user, name, status, tag_id, flow_type, page_num, page_size, managed,
+    )
     return resp_200(data={
         'data': data,
         'total': total

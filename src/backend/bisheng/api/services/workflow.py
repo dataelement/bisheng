@@ -79,16 +79,13 @@ class WorkFlowService(BaseService):
         return data
 
     @classmethod
-    def get_all_flows(cls, user: UserPayload, name: str, status: int, tag_id: Optional[int], flow_type: Optional[int],
-                      page: int = 1, page_size: int = 10, managed: bool = False,
-                      skip_pagination: bool = False) -> (list[dict], int):
-        """
-        Get all the skills
-        """
+    async def get_all_flows(cls, user: UserPayload, name: str, status: int, tag_id: Optional[int],
+                            flow_type: Optional[int], page: int = 1, page_size: int = 10,
+                            managed: bool = False, skip_pagination: bool = False) -> (list[dict], int):
+        """Get all the skills (async, ReBAC + 部门管理员隐式可见 兼容)."""
         if flow_type is not None and flow_type not in cls.SUPPORTED_APP_TYPES:
             return [], 0
 
-        # SetujutagDapatkanidVertical
         flow_ids = []
         if tag_id:
             ret = TagDao.get_resources_by_tags_batch([tag_id], [ResourceTypeEnum.WORK_FLOW, ResourceTypeEnum.ASSISTANT])
@@ -102,17 +99,13 @@ class WorkFlowService(BaseService):
             query_page = 0
             query_page_size = 0
 
-        # F008: Use ReBAC to filter accessible flows (AC-04)
         if user.is_admin():
-            data, total = FlowDao.get_all_apps(name, status, flow_ids, flow_type, None, None, None, query_page,
-                                               query_page_size)
+            data, total = await FlowDao.aget_all_apps(name, status, flow_ids, flow_type, None, None, None,
+                                                     query_page, query_page_size)
         else:
-            if managed:
-                flow_id_extra = user.get_user_access_resource_ids([AccessType.WORKFLOW_WRITE, AccessType.ASSISTANT_WRITE])
-            else:
-                flow_id_extra = user.get_user_access_resource_ids([AccessType.WORKFLOW, AccessType.ASSISTANT_READ])
-            data, total = FlowDao.get_all_apps(name, status, flow_ids, flow_type, user.user_id, flow_id_extra, None,
-                                               query_page, query_page_size)
+            flow_id_extra = await user.aget_merged_rebac_app_resource_ids(for_write=managed)
+            data, total = await FlowDao.aget_all_apps(name, status, flow_ids, flow_type, user.user_id,
+                                                     flow_id_extra, None, query_page, query_page_size)
         data = cls.filter_supported_apps(data)
         if flow_type is None and not skip_pagination:
             total = len(data)
@@ -371,8 +364,7 @@ class WorkFlowService(BaseService):
         if user.is_admin():
             data, _ = FlowDao.get_all_apps(status=FlowStatus.ONLINE.value, id_list=flow_ids, page=0, limit=0)
         else:
-            flow_id_extra = user.get_user_access_resource_ids(
-                [AccessType.WORKFLOW, AccessType.ASSISTANT_READ])
+            flow_id_extra = user.get_merged_rebac_app_resource_ids(for_write=False)
             data, _ = FlowDao.get_all_apps(status=FlowStatus.ONLINE.value, id_list=flow_ids, user_id=user.user_id,
                                            id_extra=flow_id_extra, page=0, limit=0)
         data = cls.filter_supported_apps(data)
@@ -420,8 +412,7 @@ class WorkFlowService(BaseService):
         if user.is_admin():
             data, _ = FlowDao.get_all_apps(None, FlowStatus.ONLINE.value, None, None, None, None, flow_ids_not_in, 0, 0)
         else:
-            flow_id_extra = user.get_user_access_resource_ids(
-                [AccessType.WORKFLOW, AccessType.ASSISTANT_READ])
+            flow_id_extra = user.get_merged_rebac_app_resource_ids(for_write=False)
             data, _ = FlowDao.get_all_apps(None, FlowStatus.ONLINE.value, None, None, user.user_id, flow_id_extra,
                                            flow_ids_not_in, 0, 0)
         data = cls.filter_supported_apps(data)

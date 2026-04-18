@@ -1,4 +1,3 @@
-import asyncio
 from typing import Optional
 
 from fastapi import APIRouter, Query
@@ -23,10 +22,10 @@ async def get_online_chat(*,
                           limit: Optional[int] = 10,
                           user: UserPayload = Depends(UserPayload.get_login_user)):
     """Access to online workflows and assistants."""
-    data, total = await asyncio.to_thread(
-        WorkFlowService.get_all_flows,
+    data, total = await WorkFlowService.get_all_flows(
         user, keyword, FlowStatus.ONLINE.value, tag_id, None, page, limit,
-        skip_pagination=True)
+        skip_pagination=True,
+    )
 
     # Get user's last conversation time per app
     used_apps = await MessageSessionDao.get_user_used_apps(use_create_time=True)

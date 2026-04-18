@@ -69,8 +69,7 @@ async def get_used_apps(login_user=LoginUserDep, page: int = 1, limit: int = 20)
     if login_user.is_admin():
         apps, _ = await FlowDao.aget_all_apps(id_list=flow_ids, status=FlowStatus.ONLINE.value, page=0, limit=0)
     else:
-        access_types = [AccessType.WORKFLOW, AccessType.ASSISTANT_READ]
-        id_extra = login_user.get_user_access_resource_ids(access_types)
+        id_extra = login_user.get_merged_rebac_app_resource_ids(for_write=False)
         apps, _ = await FlowDao.aget_all_apps(
             id_list=flow_ids,
             status=FlowStatus.ONLINE.value,
