@@ -1,11 +1,12 @@
 """PermissionService — core ReBAC permission engine (T07b).
 
-Five-level permission check chain (AC-02):
-  L1: Super admin shortcircuit
-  L2: L2 Redis cache (10s TTL, UNCACHEABLE_RELATIONS bypass)
+Permission check chain (AC-02):
+  L1: Super admin shortcircuit（等效 owner，无 FGA 元组）
+  L2: Redis cache（10s TTL，UNCACHEABLE_RELATIONS bypass）
   L3: OpenFGA check
-  L4: Owner fallback (DB user_id field)
-  L5: Fail-closed on FGA connection error (AD-03)
+  L4: DB creator = self → owner
+  L4b: 部门管理员隐式「可管理」（管辖子树内成员创建的应用/知识库，无 FGA 元组、不出现在授权列表）
+  L5: Fail-closed on FGA connection error（AD-03）
 
 All methods are @classmethod — no instance state.
 """
@@ -15,7 +16,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-from typing import List, Optional
+from typing import List, Optional, Set
 
 from bisheng.core.openfga.exceptions import FGAConnectionError
 from bisheng.permission.domain.schemas.permission_schema import (
@@ -34,6 +35,11 @@ logger = logging.getLogger(__name__)
 
 class PermissionService:
     """Stateless service for ReBAC permission operations."""
+
+    #: 隐式「部门管理范围」仅适用于应用/助手/知识库（与创建者主属部门树相关）
+    _IMPLICIT_SCOPE_RESOURCE_TYPES = frozenset({
+        'workflow', 'assistant', 'knowledge_space',
+    })
 
     # ── Public API ──────────────────────────────────────────────
 
@@ -65,9 +71,13 @@ class PermissionService:
         try:
             fga = cls._get_fga()
             if fga is None:
-                logger.warning('FGAClient not available, falling back to owner check')
+                logger.warning('FGAClient not available, falling back to owner / implicit dept-admin')
                 creator_id = await cls._get_resource_creator(object_type, object_id)
-                return creator_id is not None and creator_id == user_id
+                if creator_id is not None and creator_id == user_id:
+                    return True
+                if creator_id is not None and await cls._implicit_dept_admin_covers(user_id, creator_id):
+                    return cls._relation_implicit_manager_ok(relation, object_type)
+                return False
 
             allowed = await fga.check(
                 user=f'user:{user_id}',
@@ -79,6 +89,12 @@ class PermissionService:
             if not allowed:
                 creator_id = await cls._get_resource_creator(object_type, object_id)
                 if creator_id is not None and creator_id == user_id:
+                    allowed = True
+                elif (
+                    creator_id is not None
+                    and await cls._implicit_dept_admin_covers(user_id, creator_id)
+                    and cls._relation_implicit_manager_ok(relation, object_type)
+                ):
                     allowed = True
 
             # Write to cache
@@ -123,8 +139,11 @@ class PermissionService:
         try:
             fga = cls._get_fga()
             if fga is None:
-                logger.warning('FGAClient not available for list_objects')
-                return []
+                logger.warning('FGAClient not available for list_objects, using implicit dept-admin scope only')
+                ids = await cls._resource_ids_implicit_dept_admin_scope(user_id, object_type)
+                if relation not in UNCACHEABLE_RELATIONS:
+                    await PermissionCache.set_list_objects(user_id, relation, object_type, ids)
+                return ids
 
             # OpenFGA returns ["workflow:abc", "workflow:def"]
             raw_objects = await fga.list_objects(
@@ -140,6 +159,11 @@ class PermissionService:
                 if len(parts) == 2:
                     ids.append(parts[1])
 
+            # 与 OpenFGA 并集：部门管理员对其管辖子树内成员创建的资源隐式具备可读/可管（不写 FGA）
+            implicit = await cls._resource_ids_implicit_dept_admin_scope(user_id, object_type)
+            if implicit:
+                ids = list(set(ids) | set(implicit))
+
             # Cache result (skip for UNCACHEABLE_RELATIONS)
             if relation not in UNCACHEABLE_RELATIONS:
                 await PermissionCache.set_list_objects(user_id, relation, object_type, ids)
@@ -148,7 +172,8 @@ class PermissionService:
 
         except FGAConnectionError as e:
             logger.error('OpenFGA unreachable during list_objects: %s', e)
-            return []
+            ids = await cls._resource_ids_implicit_dept_admin_scope(user_id, object_type)
+            return ids
         except Exception as e:
             logger.error('Unexpected error during list_accessible_ids: %s', e)
             return []
@@ -437,6 +462,11 @@ class PermissionService:
         try:
             fga = cls._get_fga()
             if fga is None:
+                creator_id = await cls._get_resource_creator(object_type, object_id)
+                if creator_id is not None and creator_id == user_id:
+                    return PermissionLevel.owner.value
+                if creator_id is not None and await cls._implicit_dept_admin_covers(user_id, creator_id):
+                    return PermissionLevel.can_manage.value
                 return None
 
             # Batch check all 4 levels
@@ -451,10 +481,12 @@ class PermissionService:
                 if allowed:
                     return level.value
 
-            # Check owner fallback
             creator_id = await cls._get_resource_creator(object_type, object_id)
             if creator_id is not None and creator_id == user_id:
                 return PermissionLevel.owner.value
+            # 部门管理员对管辖子树内成员创建的资源隐式为「可管理」档位（不写 FGA，不出现在授权列表）
+            if creator_id is not None and await cls._implicit_dept_admin_covers(user_id, creator_id):
+                return PermissionLevel.can_manage.value
 
             return None
 
@@ -466,6 +498,118 @@ class PermissionService:
             return None
 
     # ── Internal helpers ────────────────────────────────────────
+
+    @classmethod
+    def _relation_implicit_manager_ok(cls, relation: str, object_type: str) -> bool:
+        """隐式部门管理档位可满足的 relation（不写 FGA；所有者/删除仍走显式规则）。"""
+        if object_type not in cls._IMPLICIT_SCOPE_RESOURCE_TYPES:
+            return False
+        if relation in ('owner', 'can_delete'):
+            return False
+        if relation in ('can_manage', 'can_edit', 'can_read', 'manager', 'editor', 'viewer'):
+            return True
+        return False
+
+    @classmethod
+    async def _implicit_dept_admin_covers(cls, viewer_user_id: int, creator_user_id: int) -> bool:
+        """当前用户作为部门管理员时，其管辖部门子树是否覆盖创建者的任职部门之一。"""
+        if viewer_user_id == creator_user_id:
+            return False
+        from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
+
+        admin_depts = await DepartmentDao.aget_user_admin_departments(viewer_user_id)
+        if not admin_depts:
+            return False
+        subtree: Set[int] = set()
+        for ad in admin_depts:
+            if ad and getattr(ad, 'path', None):
+                subtree |= set(await DepartmentDao.aget_subtree_ids(ad.path))
+        if not subtree:
+            return False
+        uds = await UserDepartmentDao.aget_user_departments(creator_user_id)
+        if not uds:
+            return False
+        for ud in uds:
+            if int(ud.department_id) in subtree:
+                return True
+        return False
+
+    @classmethod
+    async def _distinct_user_ids_in_departments(cls, department_ids: Set[int]) -> Set[int]:
+        if not department_ids:
+            return set()
+        from bisheng.core.database import get_async_db_session
+        from bisheng.database.models.department import UserDepartment
+        from sqlmodel import col, select
+
+        async with get_async_db_session() as session:
+            stmt = select(UserDepartment.user_id).where(
+                col(UserDepartment.department_id).in_(list(department_ids)),
+            )
+            result = await session.exec(stmt)
+            rows = result.all()
+        out: Set[int] = set()
+        for row in rows:
+            uid = row[0] if isinstance(row, tuple) else row
+            out.add(int(uid))
+        return out
+
+    @classmethod
+    async def _resource_ids_by_creator_user_ids(
+        cls, object_type: str, creator_uids: Set[int],
+    ) -> List[str]:
+        if not creator_uids:
+            return []
+        uids = list(creator_uids)
+        from bisheng.core.database import get_async_db_session
+        from sqlmodel import col, select
+
+        async with get_async_db_session() as session:
+            if object_type == 'knowledge_space':
+                from bisheng.knowledge.domain.models.knowledge import Knowledge
+
+                stmt = select(Knowledge.id).where(col(Knowledge.user_id).in_(uids))
+                result = await session.exec(stmt)
+                rows = result.all()
+                return [str(row[0] if isinstance(row, tuple) else row) for row in rows]
+            if object_type == 'workflow':
+                from bisheng.database.models.flow import Flow
+
+                stmt = select(Flow.id).where(col(Flow.user_id).in_(uids))
+                result = await session.exec(stmt)
+                rows = result.all()
+                return [str(row[0] if isinstance(row, tuple) else row) for row in rows]
+            if object_type == 'assistant':
+                from bisheng.database.models.assistant import Assistant
+
+                stmt = select(Assistant.id).where(col(Assistant.user_id).in_(uids))
+                result = await session.exec(stmt)
+                rows = result.all()
+                return [str(row[0] if isinstance(row, tuple) else row) for row in rows]
+        return []
+
+    @classmethod
+    async def _resource_ids_implicit_dept_admin_scope(
+        cls, viewer_user_id: int, object_type: str,
+    ) -> List[str]:
+        """部门管理员在 list_objects 并集中额外可见的资源（子树成员创建）。"""
+        if object_type not in cls._IMPLICIT_SCOPE_RESOURCE_TYPES:
+            return []
+        from bisheng.database.models.department import DepartmentDao
+
+        admin_depts = await DepartmentDao.aget_user_admin_departments(viewer_user_id)
+        if not admin_depts:
+            return []
+        subtree: Set[int] = set()
+        for ad in admin_depts:
+            if ad and getattr(ad, 'path', None):
+                subtree |= set(await DepartmentDao.aget_subtree_ids(ad.path))
+        if not subtree:
+            return []
+        member_uids = await cls._distinct_user_ids_in_departments(subtree)
+        if not member_uids:
+            return []
+        return await cls._resource_ids_by_creator_user_ids(object_type, member_uids)
 
     @classmethod
     async def _expand_subject(
