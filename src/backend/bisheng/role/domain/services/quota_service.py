@@ -47,13 +47,20 @@ VALID_QUOTA_KEYS = set(DEFAULT_ROLE_QUOTA.keys()) | _TENANT_ONLY_QUOTA_KEYS
 # Resource counting SQL templates — keyed by {col}=:{param} placeholder.
 # Shared between tenant-level and user-level counts.
 _RESOURCE_COUNT_TEMPLATES: dict[str, str] = {
-    'knowledge_space': "SELECT COUNT(*) FROM knowledge WHERE {col}=:{param} AND status != -1",
+    # v2.5.0 F005 KI-01 fix (2026-04-19): removed bogus `AND status != -1`
+    # — knowledge table has no `status` column (has `state` + `is_released`)
+    # and delete_knowledge uses hard DELETE, so a plain COUNT(*) is correct.
+    'knowledge_space': "SELECT COUNT(*) FROM knowledge WHERE {col}=:{param}",
     'knowledge_space_file': "SELECT COALESCE(SUM(file_size), 0) FROM knowledgefile WHERE {col}=:{param} AND status IN (1,2)",
-    'channel': "SELECT COUNT(*) FROM channel WHERE {col}=:{param} AND status='active'",
-    'channel_subscribe': "SELECT COUNT(*) FROM channel WHERE {col}=:{param} AND status='active'",
+    # KI-01 fix: channel has no `status` column either; removed filter to
+    # avoid silent 0 counts via _count_resource's try/except.
+    'channel': "SELECT COUNT(*) FROM channel WHERE {col}=:{param}",
+    'channel_subscribe': "SELECT COUNT(*) FROM channel WHERE {col}=:{param}",
     'workflow': "SELECT COUNT(*) FROM flow WHERE {col}=:{param} AND flow_type=10 AND status!=0",
     'assistant': "SELECT COUNT(*) FROM flow WHERE {col}=:{param} AND flow_type=5 AND status!=0",
-    'tool': "SELECT COUNT(*) FROM gpts_tools WHERE {col}=:{param} AND is_delete=0",
+    # KI-01 fix: actual table is `t_gpts_tools` (t_ prefix); `gpts_tools`
+    # does not exist on any deployment.
+    'tool': "SELECT COUNT(*) FROM t_gpts_tools WHERE {col}=:{param} AND is_delete=0",
     'dashboard': "SELECT COUNT(*) FROM flow WHERE {col}=:{param} AND flow_type=15 AND status!=0",
     # F016 T02: tenant-only resource types.
     # storage_gb: total bytes of active knowledge files; converted to GB in _count_resource.

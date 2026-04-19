@@ -148,9 +148,9 @@ class ChatMessageService:
 - F011-tenant-tree-model（Tenant 树 + share_default_to_children 字段）
 - v2.5.0/F008-resource-rebac-adaptation（资源创建服务）
 
-### 6.1 前置修复建议（可顺带处理）
+### 6.1 前置修复（已完成）
 
-- **v2.5.0 F005 KI-01** `_RESOURCE_COUNT_TEMPLATES['knowledge_space']` SQL 模板引用不存在的 `knowledge.status` 列（`status != -1`），运行时被 `_count_resource` try/except 吞掉，`knowledge_space.used` 计数**恒为 0**。F017 的"共享 knowledge_space 不计入 Child 用量"（AC-02 / INV-T6）在真实数据下验证时会踩此坑——即使模板修好之前都不会报错，但两侧都是 0 无法证伪。详见 [v2.5.0/F005 §9.1 KI-01](../../v2.5.0/005-role-menu-quota/spec.md#91-known-post-release-issuesv251-自测发现)。F017 开发时建议把模板改为 `WHERE {col}=:{param} AND state != 0`（或其它"已生效"条件）并补 integration test。
+- **v2.5.0 F005 KI-01** 已于 2026-04-19 F016 自测时修复：`_RESOURCE_COUNT_TEMPLATES['knowledge_space']` / `channel` / `channel_subscribe` / `tool` 共 4 个模板的 SQL 错误（不存在的 `status` 列、错误的表名 `gpts_tools`）已修正，114 probe 验证 `knowledge_space` 计数 0→15、`tool` 计数 0→37。F017 AC-02 "共享 knowledge_space 不计入 Child 用量" 现在可以用真实数据证伪。详见 [v2.5.0/F005 §9.1](../../v2.5.0/005-role-menu-quota/spec.md#91-known-post-release-issuesv251-自测发现)。
 
 ---
 

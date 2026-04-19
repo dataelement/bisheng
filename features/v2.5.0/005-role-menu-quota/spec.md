@@ -669,14 +669,14 @@ F005 后端变更对前端的影响（F010 需要处理）：
 ## 9.1 Known Post-Release Issues（v2.5.1 自测发现）
 
 > 2026-04-19 F016-tenant-quota-hierarchy 在 114 服务器跑 `/tenants/quota/tree`
-> 自测时暴露以下遗留 bug，由 F016 ac-verification.md 追溯到 F005。修复目前
-> 未排期；后续 F017 共享资源场景或独立 hotfix 择机处理。
+> 自测时暴露以下遗留 bug，由 F016 ac-verification.md 追溯到 F005。**2026-04-19
+> 已修复**（见末尾"修复"行）。
 
 | ID | Bug | 位置 | 现状 |
 |----|-----|------|------|
-| KI-01 | `knowledge_space` SQL 模板引用不存在的 `status` 列 | `quota_service.py` L41 `_RESOURCE_COUNT_TEMPLATES['knowledge_space']` = `"SELECT COUNT(*) FROM knowledge WHERE {col}=:{param} AND status != -1"`；实际 `knowledge` 表只有 `state` / `is_released`，无 `status` 列 | `_count_resource` try/except 捕获 `Unknown column 'status'` 后返 0，导致 `/quota/tree.root.usage[knowledge_space].used` **恒为 0**，前端 UI 显示的知识库用量失真；F016 单测用 mock 未暴露，E2E 触达后才发现 |
-| 影响面 | — | F016 `/quota/tree`、v2.5.0 F008 `@require_quota(KNOWLEDGE_SPACE)` 依赖此计数的端点 | F016 未修（tenant-quota 只负责沿树聚合，底层 SQL 模板归属 F005） |
-| 建议修复 | — | 把模板改为 `WHERE {col}=:{param} AND state != 0`（或其他正确的"已生效"条件）+ 补一条 integration test | hotfix/v2.5.1 或 F017 顺带 |
+| KI-01 | 4 个 SQL 模板引用不存在的列/表 → `_count_resource` try/except 吞掉 → 计数恒为 0 | `quota_service.py` `_RESOURCE_COUNT_TEMPLATES`：(a) `knowledge_space` 用 `AND status != -1`，knowledge 表无 status 列（只有 state/is_released，且 delete 走硬删）；(b) `channel` + `channel_subscribe` 用 `AND status='active'`，channel 表无 status 列（只有 is_released）；(c) `tool` 用 `FROM gpts_tools`，实际表名是 `t_gpts_tools`（t_ 前缀） | F016 `/quota/tree` knowledge_space / tool / channel 用量 **均恒为 0**；UI 显示失真；`@require_quota(KNOWLEDGE_SPACE)` / `@require_quota(TOOL)` / `@require_quota(CHANNEL)` 在资源达到 role quota 前永远不会触发阻断 |
+| 影响面 | — | F005 F008 F016 三个 feature 的配额检查路径 | 2026-04-19 F016 T09 自测 `/tenants/quota/tree` 时发现 |
+| **修复**（2026-04-19） | commit `<pending>` | (a) `knowledge_space` 模板去掉 `AND status != -1` → `SELECT COUNT(*) FROM knowledge WHERE {col}=:{param}`；(b) `channel` / `channel_subscribe` 模板去掉 `AND status='active'`；(c) `tool` 模板改表名 `gpts_tools` → `t_gpts_tools`；(d) 新增 3 条 regression 静态 assertion test (`test_quota_service.py::TestKI01SqlTemplateSchema`)；(e) 114 probe 验证 `knowledge_space.used` 0→15、`tool.used` 0→37 | — |
 
 ---
 

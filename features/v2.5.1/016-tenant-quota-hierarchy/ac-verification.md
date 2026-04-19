@@ -126,9 +126,9 @@ Execute on 114 after `uv sync` + `.venv/bin/uvicorn bisheng.main:app --port 7860
 | §7-9 Delete releases | ⏳ manual | No F016 hook; relies on existing resource delete path + SQL COUNT recompute — trivially correct if counters are live |
 | Unlimited (-1) | ✅ verified | `root.usage[workflow].limit=-1 utilization=0.0` returned with no error; covered by `test_unlimited_effective_returns_true` unit test |
 
-**Known issues uncovered during self-test (not F016 scope)**:
+**Known issues uncovered during self-test (now fixed)**:
 
-- **KI-01** `knowledge.status` 列不存在导致 `_RESOURCE_COUNT_TEMPLATES['knowledge_space']` SQL (`WHERE status != -1`) 在 114 MySQL 报 `Unknown column 'status'`；`_count_resource` try/except 吞掉后返 0 → `/quota/tree.root.usage[knowledge_space].used` 恒为 0。归属 v2.5.0/F005（SQL 模板 Owner）。已在 [v2.5.0/F005 spec §9.1](../../v2.5.0/005-role-menu-quota/spec.md#91-known-post-release-issuesv251-自测发现) 登记，F017 前置依赖建议顺带修。
+- **KI-01** (2026-04-19 **FIXED**) `_RESOURCE_COUNT_TEMPLATES` 4 个模板的 SQL 错误（`knowledge_space` / `channel` / `channel_subscribe` / `tool`）导致 `_count_resource` try/except 吞掉后恒返 0。修复：去掉不存在的 `status` 列过滤 + 修正 `gpts_tools` → `t_gpts_tools` 表名，加 3 条 regression test。**114 probe 验证**：`/quota/tree.root.usage[knowledge_space].used` 从 0 → 15，`tool` 从 0 → 37，`channel` 保持 0（真实空表）。详见 [v2.5.0/F005 §9.1](../../v2.5.0/005-role-menu-quota/spec.md#91-known-post-release-issuesv251-自测发现)。
 
 **Follow-up fixes committed during T09**:
 

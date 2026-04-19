@@ -265,6 +265,40 @@ class TestCheckQuota:
         assert result is True
 
 
+class TestKI01SqlTemplateSchema:
+    """Regression for v2.5.0/F005 KI-01 (2026-04-19 fixed).
+
+    Four SQL templates in ``_RESOURCE_COUNT_TEMPLATES`` referenced columns
+    or tables that do not exist on any deployment; ``_count_resource``
+    caught the MySQL error and returned 0, making quota counts silently
+    wrong. Guard against re-introduction with static assertions — cheap
+    and DB-free (full integration verified via 114 ``/quota/tree`` probe,
+    see F016 ac-verification.md).
+    """
+
+    def test_knowledge_space_no_phantom_status_filter(self):
+        from bisheng.role.domain.services.quota_service import _RESOURCE_COUNT_TEMPLATES
+        tmpl = _RESOURCE_COUNT_TEMPLATES['knowledge_space']
+        assert 'status' not in tmpl.lower(), (
+            f'knowledge table has no status column; template must not filter by it: {tmpl!r}'
+        )
+
+    def test_channel_no_phantom_status_filter(self):
+        from bisheng.role.domain.services.quota_service import _RESOURCE_COUNT_TEMPLATES
+        for key in ('channel', 'channel_subscribe'):
+            tmpl = _RESOURCE_COUNT_TEMPLATES[key]
+            assert "status='active'" not in tmpl, (
+                f'channel table has no status column; {key} template must not filter by it: {tmpl!r}'
+            )
+
+    def test_tool_uses_t_prefix_table_name(self):
+        from bisheng.role.domain.services.quota_service import _RESOURCE_COUNT_TEMPLATES
+        tmpl = _RESOURCE_COUNT_TEMPLATES['tool']
+        assert 'FROM t_gpts_tools' in tmpl, (
+            f'actual table is t_gpts_tools (t_ prefix); template must use that: {tmpl!r}'
+        )
+
+
 class TestValidateQuotaConfig:
     """AC-10c: quota_config validation."""
 
