@@ -259,6 +259,40 @@ OrgSyncPage/
 
 ---
 
+## 8.5 自测清单（对应 AC）
+
+> 开发者在完成实现后必须自行运行以下测试；不依赖用户/产品人肉点击。企微 API 用 mock httpx client；E2E 用 Playwright 覆盖前端流程。
+
+| Test | AC | 类型 | 备注 |
+|------|----|------|------|
+| `test_wecom_form_fields_switch_on_provider_change` | AC-35 | 前端 Vitest | 下拉切换到企业微信，显示 3 必填 + 1 可选字段 |
+| `test_wecom_config_missing_field_rejected` | AC-36 | pytest 单元测试 | 缺 corpid/corpsecret/agent_id 返 22006 |
+| `test_wecom_config_invalid_allow_dept_ids` | AC-37 | pytest 单元测试 | 非整数数组返 22006 |
+| `test_wecom_config_response_masks_corpsecret` | AC-38 | pytest 集成测试 | GET 响应 corpsecret='****' |
+| `test_wecom_test_connection_success` | AC-39 | pytest 集成测试 | mock 企微 API，返回 connected/org_name/total 等；不含 token |
+| `test_wecom_test_connection_auth_failed` | AC-40 | pytest 集成测试 | mock errcode=40001/40013 返 22002，不泄露 corpsecret |
+| `test_wecom_test_connection_no_scope` | AC-41 | pytest 集成测试 | mock errcode=60011 返 22002 + 提示文案 |
+| `test_wecom_fetch_departments_default_from_root_1` | AC-42 | pytest 单元测试 | 默认 root=1 拉取 + DTO 转换 |
+| `test_wecom_fetch_departments_with_allow_dept_ids` | AC-43 | pytest 单元测试 | 多 root 合并去重 |
+| `test_wecom_department_id_type_conversion` | AC-44 | pytest 单元测试 | int → str + sort_order 取 order |
+| `test_wecom_fetch_members_default` | AC-45 | pytest 单元测试 | 默认 allow_dept_ids=[1]，fetch_child=1 |
+| `test_wecom_member_main_department_handling` | AC-46 | pytest 单元测试 | primary = main_department，secondary = 其他 |
+| `test_wecom_member_main_department_fallback` | AC-47 | pytest 单元测试 | 缺失 main_department 时取 department[0] |
+| `test_wecom_member_status_mapping` | AC-48 | pytest 单元测试 | status=1 → active；2/4/5 → disabled |
+| `test_wecom_duplicate_userid_dedup_across_roots` | AC-49 | pytest 单元测试 | 多 root 下同 userid 只产生一条 DTO |
+| `test_wecom_token_cached_in_redis` | AC-50 | pytest 集成测试 | Redis key + TTL = expires_in - 300 |
+| `test_wecom_token_cache_hit_skips_gettoken` | AC-51 | pytest 集成测试 | 缓存有效期内不调用 gettoken |
+| `test_wecom_token_refresh_concurrency_lock` | AC-52 | pytest 集成测试 | 并发仅一个真实 gettoken；其余等待读缓存 |
+| `test_wecom_token_expired_retries_once` | AC-53 | pytest 单元测试 | errcode=42001/40014 重新 gettoken 并重试一次 |
+| `test_wecom_rate_limit_exponential_backoff` | AC-54 | pytest 单元测试 | errcode=45009/45033/45011 指数退避 4 次 |
+| `test_wecom_new_user_writes_source_and_external_id` | AC-55 | pytest 集成测试 | source=wecom、external_id 写入；触发 F009 handler |
+| `test_wecom_local_user_merged_by_email` | AC-56 | pytest 集成测试 | source=local 且 email 匹配时合并不建重复账号 |
+| `test_wecom_log_masks_sensitive_fields` | AC-57 | pytest 单元测试 | error_details 手机号/邮箱脱敏；userid 保留首末 2 字 |
+| `test_wecom_no_plaintext_token_or_secret_in_logs` | AC-58 | pytest 集成测试 | 所有响应/日志不含 access_token / corpsecret 原文 |
+| `test_e2e_org_sync_wecom_full_flow` | AC-35~58 综合 | Playwright E2E | WeCom 配置 → 测试连接 → 手动触发 → 查看 log，前端测试框架搭建后落地 |
+
+---
+
 ## 9. 文件清单
 
 ### 新建

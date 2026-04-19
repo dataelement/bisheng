@@ -393,6 +393,38 @@ multi_tenant:
 
 ---
 
+## 8.5 自测清单（对应 AC）
+
+> 开发者在完成实现后必须自行运行以下测试；不依赖用户/产品人肉点击。WeCom/OpenAI 外部依赖用 mock client。
+
+| Test | AC | 类型 | 备注 |
+|------|----|------|------|
+| `test_root_llm_default_shared_writes_viewer_tuple` | AC-01 | pytest 集成测试 | 默认 share_to_children=true，写入 FGA viewer 元组 |
+| `test_root_llm_share_off_skips_viewer_tuple` | AC-02 | pytest 集成测试 | share_to_children=false 不写 FGA，Child 不可见 |
+| `test_child_user_llm_list_merges_root_shared` | AC-03 | pytest 集成测试 | Child 叶子 List 包含本 Child + Root 共享 |
+| `test_toggle_root_llm_share_updates_fga_tuples` | AC-04 | pytest 集成测试 | PUT 切换 share 开关 → FGA 元组动态写/删 |
+| `test_child_admin_creates_own_llm_not_shared` | AC-05 | pytest 集成测试 | Child Admin POST 创建 tenant_id=Child；不写 shared_to |
+| `test_child_admin_updates_own_llm` | AC-06 | pytest 集成测试 | Child Admin PUT 本 Child 自注册模型 |
+| `test_child_admin_deletes_own_llm_cascades_fga` | AC-07 | pytest 集成测试 | DELETE 级联撤销 FGA 元组 |
+| `test_child_admin_cannot_edit_root_shared_llm` | AC-08 | pytest 集成测试 | PUT Root 共享模型返 403 + 19801 |
+| `test_child_admin_cannot_delete_root_shared_llm` | AC-09 | pytest 集成测试 | DELETE Root 共享模型返 403 + 19801 |
+| `test_child_admin_cross_child_access_denied` | AC-10 | pytest 集成测试 | Child 5 Admin 改 Child 7 模型返 404/403 |
+| `test_child_admin_system_config_forbidden` | AC-11 | pytest 集成测试 | PUT /llm/workbench 返 403 + 19803 |
+| `test_llm_crud_writes_audit_log_with_hashed_key` | AC-12 | pytest 集成测试 | audit_log payload 含 api_key_hash；无明文 |
+| `test_super_admin_with_scope_acts_as_child` | AC-13, AC-14 | pytest 集成测试 | F019 scope=Child 5 时视图等价 Child Admin |
+| `test_super_admin_without_scope_sees_all_root` | AC-15 | pytest 集成测试 | 未设 scope 返 Root 全部（含仅 Root 专用） |
+| `test_legacy_llm_migrated_to_root` | AC-16 | pytest 单元测试 | v2.4 升级后 tenant_id=1（验证 F001 迁移结果） |
+| `test_mount_child_preview_shared_llm_list` | AC-17 | pytest 集成测试 | 挂载弹窗预览 Root 共享模型列表 |
+| `test_mount_child_default_distributes_shared_llm` | AC-18 | pytest 集成测试 | 挂载默认分发所有 Root 共享 |
+| `test_mount_child_skip_distribute` | AC-19 | pytest 集成测试 | 挂载勾选"不自动分发"时 Child 初始不可见 |
+| `test_knowledge_using_root_model_works_for_child` | AC-20 | pytest 集成测试 | 存量知识库引用 Root 模型 Child 可用 |
+| `test_knowledge_model_inaccessible_raises_19802` | AC-21, AC-23 | pytest 集成测试 | 模型被改为仅 Root 或跨 Child 后抛 19802 |
+| `test_knowledge_own_model_reference_works` | AC-22 | pytest 集成测试 | Child 5 引用 tenant_id=5 模型正常 |
+| `test_knowledge_model_select_validates_visibility` | AC-24 | pytest 集成测试 | PUT /knowledge 选型时校验 model.tenant_id ∈ {Child, Root} |
+| `test_endpoint_whitelist_enforced_for_child_admin` | 边界 | pytest 单元测试 | endpoint_whitelist 非空时校验 + 19804 |
+
+---
+
 ## 9. 不做的事（Out of Scope）
 
 - LLM Server 的物理隔离（独立 Kubernetes Namespace 等）

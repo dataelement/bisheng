@@ -765,7 +765,7 @@ T01 (SSOSyncConf + errcode)
   - 每任务完成后执行 `/task-review features/v2.5.1/014-sso-org-realtime-sync <Txx>`
   - 全部完成后执行 `/e2e-test features/v2.5.1/014-sso-org-realtime-sync`
   - 性能专项：独立 `locust_sso_sync.py`，10k 并发 P99 < 500ms（AC-07）；不在 CI
-  - 更新 spec §7 手工 QA 清单为 `[x]`
+  - 更新 spec §7 自测清单 AC 覆盖状态
   - 汇总 AC-01 ~ AC-11 覆盖表
   **覆盖 AC**: 全部
   **依赖**: T01-T14

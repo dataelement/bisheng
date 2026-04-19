@@ -120,14 +120,22 @@ Returns: {"applied_upsert": N, "applied_remove": M, "skipped_ts_conflict": K, "o
 
 ---
 
-## 7. 手工 QA 清单
+## 7. 自测清单（对应 AC）
 
-- [x] 新用户首次登录成功 + 叶子 Tenant 正确派生（`test_new_user_happy_path` + `test_sync_user_called_with_login_trigger`）
-- [x] 主部门变更触发 sync_user（`test_sync_user_called_with_login_trigger` — 通过 UserTenantSyncService，F012 契约保证 token_version +1）
-- [x] tenant_mapping 首次生效、二次忽略（`test_first_time_mount_creates_tenant_and_audit` + `test_already_mounted_dept_is_idempotent_skip`）
-- [x] 部门删除后 Tenant 进入 orphaned + 告警（`test_remove_mounted_triggers_deletion_handler` — 触发 F011 handler；实际 orphaned 切换 + 告警由 F011 owner 承担）
-- [x] HMAC 鉴权失败拦截（`test_invalid_signature_rejected` + `test_missing_header_rejected` + `test_empty_secret_fails_closed` + 集成层 `test_invalid_signature_rejected`）
-- [ ] 10 万人并发压测 P99 < 500ms（独立 locust 脚本，不在 CI；发版前压测专项）
+> 开发者在完成实现后必须自行运行以下测试；不依赖用户/产品人肉点击。不可自动化项明确标 `[发版前专项]`，由发版前独立拉出执行。
+
+| Test | AC | 类型 | 备注 |
+|------|----|------|------|
+| `test_new_user_happy_path` + `test_sync_user_called_with_login_trigger` | AC-01 | pytest 集成测试 | 新用户首次登录 + 叶子 Tenant 正确派生 |
+| `test_sync_user_called_with_login_trigger` | AC-02 | pytest 集成测试 | 主部门变更触发 UserTenantSyncService；F012 契约保证 token_version +1 |
+| `test_first_time_mount_creates_tenant_and_audit` + `test_already_mounted_dept_is_idempotent_skip` | AC-03 | pytest 集成测试 | tenant_mapping 首次生效、二次忽略 |
+| `test_remove_mounted_triggers_deletion_handler` | AC-04, AC-05, AC-11 | pytest 集成测试 | 触发 F011 `DepartmentDeletionHandler`；实际 orphaned 切换 + 告警由 F011 owner 承担 |
+| `test_invalid_signature_rejected` + `test_missing_header_rejected` + `test_empty_secret_fails_closed` | AC-06 | pytest 集成测试 | HMAC 鉴权失败拦截 |
+| `test_stale_ts_skipped_with_warn` | AC-08, AC-09 | pytest 单元测试 | ts 守卫：陈旧消息跳过 + org_sync_log warn |
+| `test_departments_sync_batch_upsert` | AC-10 | pytest 集成测试 | `/departments/sync` 批量 upsert + 逐项 ts 冲突守卫 |
+
+**发版前专项**（不在 CI/自测范围）：
+- AC-07：10 万人并发登录压测 P99 < 500ms（locust 脚本，独立执行）
 
 ---
 

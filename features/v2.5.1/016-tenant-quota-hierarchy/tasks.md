@@ -642,12 +642,12 @@ T09 (手工 QA + ac-verification.md)  ← T08
 
   **验收**: `/sdd-review tasks` 通过；文档 grep 一致性校验。
 
-- [ ] **T09**: 手工 QA 执行 + ac-verification.md 填表
+- [ ] **T09**: 自测清单执行 + ac-verification.md 填表
 
   **文件（修改）**:
-  - `features/v2.5.1/016-tenant-quota-hierarchy/ac-verification.md` — 填入 spec §7 九条 QA 实际运行结果（Pass/Fail + 截图或日志）
+  - `features/v2.5.1/016-tenant-quota-hierarchy/ac-verification.md` — 填入 spec §7 自测清单实际运行结果（Pass/Fail + 日志）
 
-  **手工 QA 清单**（spec §7 全部 9 条）：
+  **自测清单**（spec §7 全部 12 条）：
   1. 单 Tenant 内配额 100% 阻断 — T04/T07 已自动化，仅校验
   2. Root 硬限 < Child 配额时 Root 限触发 — T04/T07 已自动化
   3. 共享资源仅计入 Root — T07 已自动化

@@ -128,18 +128,24 @@ class QuotaChecker:
 
 ---
 
-## 7. 手工 QA 清单
+## 7. 自测清单（对应 AC）
 
-- [ ] 单 Tenant 内配额 100% 阻断
-- [ ] Root 硬限 < Child 配额时，Root 限触发
-- [ ] 共享资源仅计入 Root（Child 用量不被叠加）
-- [ ] **Root 用量聚合**：Child A=30G + Child B=50G + Root 自身=20G → Root 用量=100G
-- [ ] **Root 满触发 Child 阻断**：Root 配额=100G，已用 100G 时，Child 创建新文件返回 HTTP 200 + `status_code=19401`（msg 含"集团总量已耗尽"）
-- [ ] **strict_tenant_filter 验证**：Root 创建共享资源后，Child 用量 SQL 不包含此资源（IN 列表场景下也不算）
-- [ ] **衍生数据归属**：Child 用户调 Root 共享 LLM 模型，token 计入 Child `model_tokens_monthly`，不算 Root
-- [ ] 全局超管手工调整 quota_config 立即生效
-- [ ] 删除资源释放配额
-- [ ] -1 配额无限制
+> 开发者在完成实现后必须自行运行以下测试；不依赖用户/产品人肉点击。
+
+| Test | AC | 类型 | 备注 |
+|------|----|------|------|
+| `test_single_tenant_quota_blocks_at_100pct` | AC-01 | pytest 集成测试 | 单 Tenant 内配额 100% 阻断 |
+| `test_root_hard_limit_triggers_before_child_quota` | AC-08 | pytest 集成测试 | Root 硬限先于 Child 自身配额触发 |
+| `test_shared_resource_only_counts_to_root` | AC-02, AC-09 | pytest 集成测试 | 共享资源仅计 Root；Child 用量不叠加（依赖 `strict_tenant_filter`） |
+| `test_root_usage_aggregates_all_children` | AC-07 | pytest 集成测试 | Child A=30G + Child B=50G + Root 自身=20G → Root 用量=100G |
+| `test_child_blocked_when_root_quota_exhausted` | AC-08 | pytest 集成测试 | Root 满时 Child 创建返回 19401，msg 含"集团总量已耗尽" |
+| `test_strict_tenant_filter_excludes_shared_from_child_in_list` | AC-09 | pytest 单元测试 | IN 列表场景下共享资源不算进 Child |
+| `test_derived_token_attributed_to_child_leaf` | AC-10 | pytest 集成测试 | Child 用户调 Root 共享 LLM，token 计入 Child `model_tokens_monthly`；依赖 F017 §5.4 |
+| `test_super_admin_quota_update_takes_effect_immediately` | AC-03 | pytest 集成测试 | `PUT /tenants/{id}/quota` 无缓存延迟 |
+| `test_storage_quota_exceeded_returns_19403` | AC-04 | pytest 集成测试 | HTTP 200 + status_code=19403（TenantStorageQuotaExceededError） |
+| `test_resource_deletion_releases_quota` | AC-05 | pytest 单元测试 | 删除后配额恢复，可继续创建 |
+| `test_quota_tree_api_returns_root_and_children` | AC-06 | pytest 集成测试 | `GET /tenants/quota/tree` 返回结构正确 |
+| `test_neg_one_means_unlimited` | AC-01 | pytest 单元测试 | quota=-1 跳过阻断 |
 
 ---
 

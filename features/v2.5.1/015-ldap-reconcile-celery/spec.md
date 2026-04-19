@@ -152,15 +152,29 @@ WHERE level = 'warn'
 
 ---
 
-## 7. 手工 QA 清单
+## 7. 自测清单（对应 AC）
 
-- [ ] Celery Beat 启用后每 6h 执行
-- [ ] 全量校对日志完整
-- [ ] 部门新增/删除/移动的不同漂移场景处理正确
-- [ ] relink 单候选自动 apply
-- [ ] relink 多候选返回冲突列表
-- [ ] dry_run 模式不写入
-- [ ] 10 万部门压测（发版前 2 周专项）
+> 开发者在完成实现后必须自行运行以下测试；不依赖用户/产品人肉点击。不可自动化项明确标 `[发版前专项]`。
+
+| Test | AC | 类型 | 备注 |
+|------|----|------|------|
+| `test_celery_beat_scheduled_every_6h` | AC-01 | Celery 单元测试 | 校验 beat schedule 注册 + 周期 |
+| `test_reconcile_upsert_new_dept_preserves_mount` | AC-02 | pytest 集成测试 | 新部门 upsert 不动挂载标记 |
+| `test_reconcile_removes_dept_triggers_handler` | AC-03 | pytest 集成测试 | 触发 F011 `DepartmentDeletionHandler` |
+| `test_reconcile_primary_dept_change_triggers_sync_user` | AC-04 | pytest 集成测试 | UserTenantSyncService 被调用；token_version +1 |
+| `test_relink_external_id_map_strategy` | AC-05 | pytest 集成测试 | 显式 external_id 映射应用 |
+| `test_relink_path_plus_name_single_candidate_auto_apply` | AC-06 | pytest 集成测试 | 单候选自动 apply |
+| `test_relink_path_plus_name_multi_candidate_conflict` | AC-06 | pytest 集成测试 | 多候选返回 conflicts 列表 |
+| `test_relink_dry_run_no_write` | AC-07 | pytest 单元测试 | dry_run 返回 would_apply，无 DB 写入 |
+| `test_ts_guard_skips_stale_celery_push` | AC-09 | pytest 单元测试 | T0 < T1 跳过 + warn 日志 |
+| `test_ts_guard_applies_newer_celery_push` | AC-10 | pytest 单元测试 | T2 > T1 应用变更 + 更新 last_sync_ts |
+| `test_same_ts_upsert_vs_remove_prefers_remove` | AC-11 | pytest 集成测试 | 同 ts 冲突以 remove 为准 + audit_log |
+| `test_report_ts_conflicts_weekly_notifies_super_admin` | AC-12 | Celery 单元测试 | 周报聚合 ≥3 次冲突 + 站内消息/邮件 |
+| `test_report_ts_conflicts_daily_escalation` | AC-12 | Celery 单元测试 | 周报后 5 天未解决升级至每日 |
+| `test_concurrent_same_ts_deduped_by_redis_setnx` | AC-13 | pytest 集成测试 | Redis SETNX 幂等 |
+
+**发版前专项**（不在 CI/自测范围）：
+- AC-08：10 万部门全量校对压测 < 30 min（发版前 2 周专项，MySQL/Redis 压力基线 TBD）
 
 ---
 
