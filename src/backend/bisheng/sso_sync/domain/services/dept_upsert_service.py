@@ -26,12 +26,13 @@ from typing import Dict, Iterable, List, Optional
 
 from bisheng.common.errcode.sso_sync import SsoDeptParentMissingError
 from bisheng.database.models.department import Department, DepartmentDao
+from bisheng.sso_sync.domain.constants import SSO_SOURCE
 from bisheng.sso_sync.domain.schemas.payloads import DepartmentUpsertItem
 
 
 class DeptUpsertService:
 
-    SOURCE = 'sso'
+    SOURCE = SSO_SOURCE
 
     # -----------------------------------------------------------------------
     # Pre-flight checks for login-sync flow
@@ -77,6 +78,7 @@ class DeptUpsertService:
         item: DepartmentUpsertItem,
         source: str,
         last_sync_ts: int,
+        parent_cache: Optional[Dict[str, Department]] = None,
     ) -> Department:
         """Apply a single upsert. The caller is responsible for running
         :class:`OrgSyncTsGuard` and passing only APPLY-verdicted items.
@@ -85,13 +87,23 @@ class DeptUpsertService:
         parent must already exist in bisheng (same source) — otherwise
         raises 19312. Top-level items (``parent_external_id is None``)
         attach directly under Root (``parent_id=None``).
+
+        ``parent_cache`` — optional ``{external_id: Department}`` map the
+        batch orchestrator pre-populates so repeated upserts sharing the
+        same parent don't re-query its row on every item. Cache miss falls
+        back to the DAO so insertion order within a batch can still expose
+        a freshly created parent that wasn't present at pre-load time.
         """
         parent_id: Optional[int] = None
         parent_path: str = ''
         if item.parent_external_id:
-            parent = await DepartmentDao.aget_by_source_external_id(
-                source, item.parent_external_id,
-            )
+            parent: Optional[Department] = None
+            if parent_cache is not None:
+                parent = parent_cache.get(item.parent_external_id)
+            if parent is None:
+                parent = await DepartmentDao.aget_by_source_external_id(
+                    source, item.parent_external_id,
+                )
             if parent is None or parent.is_deleted == 1:
                 raise SsoDeptParentMissingError.http_exception(
                     f'parent {item.parent_external_id} not synced for '
