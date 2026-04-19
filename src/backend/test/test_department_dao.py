@@ -37,6 +37,8 @@ def dao_engine():
                 source VARCHAR(32) DEFAULT 'local',
                 external_id VARCHAR(128),
                 status VARCHAR(16) DEFAULT 'active',
+                is_tenant_root INTEGER NOT NULL DEFAULT 0,
+                mounted_tenant_id INTEGER,
                 default_role_ids JSON,
                 create_user INTEGER,
                 create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
@@ -404,3 +406,93 @@ class TestUserDepartmentModel:
             )
         ).first()
         assert result is not None
+
+
+# =========================================================================
+# v2.5.1 F011: tenant mount point tests
+# =========================================================================
+
+class TestTenantMountFields:
+
+    def test_defaults_are_unmounted(self, session):
+        dept = _create_dept(session, 'F011@1', 'Dept')
+        assert dept.is_tenant_root == 0
+        assert dept.mounted_tenant_id is None
+
+    def test_mount_persists(self, session):
+        dept = _create_dept(session, 'F011@2', 'Dept')
+        dept.is_tenant_root = 1
+        dept.mounted_tenant_id = 42
+        session.add(dept)
+        session.commit()
+        session.refresh(dept)
+
+        fetched = session.exec(
+            select(Department).where(Department.id == dept.id)
+        ).one()
+        assert fetched.is_tenant_root == 1
+        assert fetched.mounted_tenant_id == 42
+
+    def test_aget_mount_point_select_semantics(self, session):
+        """Equivalent SELECT for DAO.aget_mount_point — only marked depts."""
+        marked = _create_dept(session, 'F011@3', 'Marked')
+        marked.is_tenant_root = 1
+        marked.mounted_tenant_id = 7
+        unmarked = _create_dept(session, 'F011@4', 'Unmarked')
+        session.add_all([marked, unmarked])
+        session.commit()
+
+        # DAO.aget_mount_point matches WHERE id=X AND is_tenant_root=1
+        for dept_id in (marked.id, unmarked.id):
+            result = session.exec(
+                select(Department).where(
+                    Department.id == dept_id,
+                    Department.is_tenant_root == 1,
+                )
+            ).first()
+            if dept_id == marked.id:
+                assert result is not None
+                assert result.mounted_tenant_id == 7
+            else:
+                assert result is None
+
+    def test_nearest_ancestor_select_semantics(self, session):
+        """Equivalent SELECT for DAO.aget_ancestors_with_mount — path walk."""
+        # Tree: A(id=10, mount) → B(id=20, /10/20/) → C(id=30, /10/20/30/)
+        a = _create_dept(session, 'A', 'A', path='/10/', sort_order=0)
+        # Force ids for deterministic path.
+        a.is_tenant_root = 1
+        a.mounted_tenant_id = 77
+        session.add(a)
+        session.commit()
+
+        # For testing ancestor walk we construct candidate_ids from the path
+        # of the leaf then SELECT only those marked as mount points.
+        leaf_path = f'/{a.id}/something-inner/'
+        candidate_ids = [
+            int(p) for p in leaf_path.split('/') if p and p.isdigit()
+        ]
+        result = session.exec(
+            select(Department).where(
+                Department.id.in_(candidate_ids),
+                Department.is_tenant_root == 1,
+            ).order_by(func.length(Department.path).desc()).limit(1)
+        ).first()
+        assert result is not None
+        assert result.id == a.id
+        assert result.mounted_tenant_id == 77
+
+    def test_no_ancestor_mount_returns_none(self, session):
+        """When no ancestor is marked, the walk yields nothing."""
+        dept = _create_dept(session, 'Z@1', 'Z', path='/100/200/')
+        result = session.exec(
+            select(Department).where(
+                Department.id.in_([100, 200, dept.id]),
+                Department.is_tenant_root == 1,
+            ).limit(1)
+        ).first()
+        assert result is None
+
+
+# Import guard so func is available in the test above.
+from sqlalchemy import func  # noqa: E402

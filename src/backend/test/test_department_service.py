@@ -44,6 +44,8 @@ def svc_engine():
                 source VARCHAR(32) DEFAULT 'local',
                 external_id VARCHAR(128),
                 status VARCHAR(16) DEFAULT 'active',
+                is_tenant_root INTEGER NOT NULL DEFAULT 0,
+                mounted_tenant_id INTEGER,
                 default_role_ids JSON,
                 create_user INTEGER,
                 create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,

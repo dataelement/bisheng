@@ -88,3 +88,24 @@ class UserTenantItem(BaseModel):
     status: str
     last_access_time: Optional[datetime] = None
     is_default: int = 0
+
+
+# ---------------------------------------------------------------------------
+# F011 mount / unmount / migrate-from-root DTOs (v2.5.1)
+# ---------------------------------------------------------------------------
+
+class MountTenantRequest(BaseModel):
+    tenant_code: str = Field(..., min_length=1, max_length=64)
+    tenant_name: str = Field(..., min_length=1, max_length=128)
+
+
+class UnmountTenantRequest(BaseModel):
+    policy: Literal['migrate', 'archive', 'manual']
+
+
+class MigrateFromRootRequest(BaseModel):
+    resource_type: Literal[
+        'knowledge', 'flow', 'assistant', 'channel', 't_gpts_tools',
+    ]
+    resource_ids: List[int] = Field(..., min_length=1, max_length=500)
+    new_owner_user_id: Optional[int] = None

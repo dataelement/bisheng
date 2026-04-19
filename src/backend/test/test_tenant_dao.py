@@ -29,6 +29,8 @@ def dao_engine():
                 logo VARCHAR(512),
                 root_dept_id INTEGER,
                 status VARCHAR(16) NOT NULL DEFAULT 'active',
+                parent_tenant_id INTEGER,
+                share_default_to_children INTEGER NOT NULL DEFAULT 1,
                 contact_name VARCHAR(64),
                 contact_phone VARCHAR(32),
                 contact_email VARCHAR(128),
@@ -46,6 +48,7 @@ def dao_engine():
                 tenant_id INTEGER NOT NULL,
                 is_default INTEGER NOT NULL DEFAULT 0,
                 status VARCHAR(16) NOT NULL DEFAULT 'active',
+                is_active INTEGER,
                 last_access_time DATETIME,
                 join_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
                 UNIQUE(user_id, tenant_id)

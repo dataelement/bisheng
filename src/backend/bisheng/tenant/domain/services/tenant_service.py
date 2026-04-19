@@ -15,9 +15,10 @@ from bisheng.common.errcode.tenant import (
     TenantNotFoundError,
     TenantSwitchForbiddenError,
 )
+from bisheng.common.errcode.tenant_tree import TenantTreeRootProtectedError
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.context.tenant import bypass_tenant_filter
-from bisheng.database.models.tenant import Tenant, TenantDao, UserTenantDao
+from bisheng.database.models.tenant import ROOT_TENANT_ID, Tenant, TenantDao, UserTenantDao
 from bisheng.tenant.domain.schemas.tenant_schema import (
     TenantCreate,
     TenantDetail,
@@ -33,7 +34,6 @@ from bisheng.tenant.domain.schemas.tenant_schema import (
 logger = logging.getLogger(__name__)
 
 DISABLED_TENANT_KEY = 'disabled_tenant:{}'
-DEFAULT_TENANT_ID = 1
 
 
 def _get_storage_quota(tenant: Tenant) -> Optional[float]:
@@ -44,9 +44,9 @@ def _get_storage_quota(tenant: Tenant) -> Optional[float]:
 
 
 def _guard_default_tenant(tenant_id: int) -> None:
-    """Prevent modification of the default tenant (id=1)."""
-    if tenant_id == DEFAULT_TENANT_ID:
-        raise TenantNotFoundError()  # Reuse existing error — default tenant is not manageable
+    """INV-T11: Root tenant is system-protected (disable/archive/delete → 22008)."""
+    if tenant_id == ROOT_TENANT_ID:
+        raise TenantTreeRootProtectedError()
 
 
 # Fields safe to include in API responses (excludes create_user, storage_config internals)

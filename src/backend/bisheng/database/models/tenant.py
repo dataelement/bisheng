@@ -4,15 +4,24 @@ Part of F001-multi-tenant-core.
 Extended in F010-tenant-management-ui.
 """
 
+import logging
 from datetime import datetime
 from typing import List, Optional, Tuple
 
-from sqlalchemy import Column, DateTime, Integer, JSON, String, UniqueConstraint, func, text
+from sqlalchemy import (
+    Column, DateTime, Integer, JSON, String, UniqueConstraint,
+    bindparam, func, text,
+)
 from sqlmodel import Field, select
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.core.database import get_async_db_session, get_sync_db_session
+
+logger = logging.getLogger(__name__)
+
+# v2.5.1 F011 tenant tree: canonical Root tenant id.
+ROOT_TENANT_ID: int = 1
 
 
 class Tenant(SQLModelSerializable, table=True):
@@ -41,7 +50,22 @@ class Tenant(SQLModelSerializable, table=True):
         sa_column=Column(
             String(16), nullable=False,
             server_default=text("'active'"), index=True,
-            comment='Status: active/disabled/archived',
+            comment='Status: active/disabled/archived/orphaned (orphaned added in v2.5.1 F011)',
+        ),
+    )
+    # v2.5.1 F011: tenant tree fields (2-layer MVP — Root + 0~N Child).
+    parent_tenant_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(
+            Integer, nullable=True, index=True,
+            comment='NULL=Root tenant; else points to Root id (MVP locks to 2 layers)',
+        ),
+    )
+    share_default_to_children: int = Field(
+        default=1,
+        sa_column=Column(
+            Integer, nullable=False, server_default=text('1'),
+            comment='1=Root-created resources default to shared_to all children (v2.5.1 F011)',
         ),
     )
     contact_name: Optional[str] = Field(
@@ -113,6 +137,17 @@ class UserTenant(SQLModelSerializable, table=True):
             comment='Status: active/disabled',
         ),
     )
+    # v2.5.1 F011: unique-leaf semantic.
+    # is_active=1 marks the current leaf tenant; NULL marks history.
+    # MySQL UNIQUE allows multiple NULLs, so uk_user_active constrains at
+    # most one is_active=1 row per user without forbidding history rows.
+    is_active: Optional[int] = Field(
+        default=None,
+        sa_column=Column(
+            Integer, nullable=True,
+            comment='1=active leaf (unique per user); NULL=historical record',
+        ),
+    )
     last_access_time: Optional[datetime] = Field(
         default=None,
         sa_column=Column(DateTime, nullable=True, comment='Last access time'),
@@ -125,8 +160,12 @@ class UserTenant(SQLModelSerializable, table=True):
         ),
     )
 
+    # v2.5.1 F011: replaced uk_user_tenant(user_id, tenant_id) with
+    # uk_user_active(user_id, is_active). The Alembic migration DROPs the
+    # old index and ADDs the new one; the ORM layer only reflects the new
+    # unique contract.
     __table_args__ = (
-        UniqueConstraint('user_id', 'tenant_id', name='uk_user_tenant'),
+        UniqueConstraint('user_id', 'is_active', name='uk_user_active'),
     )
 
 
@@ -279,6 +318,161 @@ class TenantDao:
             )
             result = await session.exec(stmt)
             return {row[0]: row[1] for row in result.all()}
+
+    # -----------------------------------------------------------------------
+    # v2.5.1 F011: tenant tree DAO methods (spec §5.4.3).
+    # Callers: F016 (Root usage aggregation), F019 (admin_scope cleanup).
+    # -----------------------------------------------------------------------
+
+    @classmethod
+    async def aget_children_ids_active(cls, root_id: int = ROOT_TENANT_ID) -> List[int]:
+        """Return ids of active Child tenants whose parent == root_id.
+
+        Used by F016 Root usage aggregation (INV-T9): only active children
+        count toward Root quota. MVP keeps root_id parameterized for 3+ layer
+        compatibility but in practice root_id is always 1.
+        """
+        with bypass_tenant_filter():
+            async with get_async_db_session() as session:
+                stmt = select(Tenant.id).where(
+                    Tenant.parent_tenant_id == root_id,
+                    Tenant.status == 'active',
+                )
+                result = await session.exec(stmt)
+                return [row for row in result.all()]
+
+    @classmethod
+    async def aget_non_active_ids(cls) -> List[int]:
+        """Return ids of tenants in disabled/archived/orphaned status.
+
+        Used by F019 Celery sweep to clear admin_scope Redis keys pointing
+        at tenants that are no longer reachable.
+        """
+        with bypass_tenant_filter():
+            async with get_async_db_session() as session:
+                stmt = select(Tenant.id).where(
+                    Tenant.status.in_(['disabled', 'archived', 'orphaned'])
+                )
+                result = await session.exec(stmt)
+                return [row for row in result.all()]
+
+    @classmethod
+    async def aexists(cls, tenant_id: int) -> bool:
+        """Return whether a tenant with this id exists in any status.
+
+        Used by F019 TenantScopeService.set_scope to validate body.tenant_id
+        before writing the Redis key (AC-15 → 400 + 19702 if missing).
+        """
+        with bypass_tenant_filter():
+            async with get_async_db_session() as session:
+                stmt = select(func.count()).select_from(Tenant).where(
+                    Tenant.id == tenant_id,
+                )
+                result = await session.exec(stmt)
+                return result.one() > 0
+
+    @classmethod
+    async def aget_by_parent(cls, parent_id: Optional[int]) -> List['Tenant']:
+        """Return tenants whose parent_tenant_id == parent_id (any status).
+
+        Used by F011 mount conflict checks and admin dashboards. Passing
+        None returns Root tenants (MVP: at most one row with id=1).
+        """
+        with bypass_tenant_filter():
+            async with get_async_db_session() as session:
+                if parent_id is None:
+                    stmt = select(Tenant).where(Tenant.parent_tenant_id.is_(None))
+                else:
+                    stmt = select(Tenant).where(Tenant.parent_tenant_id == parent_id)
+                result = await session.exec(stmt)
+                return list(result.all())
+
+    # -----------------------------------------------------------------------
+    # Cross-table tenant_id rewrite helpers (F011 unmount + migrate-from-root).
+    # Kept at the DAO layer so services do not execute raw SQL — even when
+    # iterating over a large list of tables maintained as a constant.
+    # -----------------------------------------------------------------------
+
+    @classmethod
+    async def abulk_update_tenant_id(
+        cls,
+        tables: List[str],
+        from_tenant_id: int,
+        to_tenant_id: int,
+    ) -> dict:
+        """For each ``table``, run ``UPDATE SET tenant_id=<to> WHERE tenant_id=<from>``.
+
+        **Atomic** — any single-table failure aborts the whole batch. The
+        session rolls back and the exception propagates to the caller,
+        so F011 AC-04a ("事务保证一致性") holds. If a deploy is missing
+        one of the whitelisted tables, the caller is expected to prune
+        the table list beforehand rather than rely on silent-skip.
+
+        Caller supplies the whitelist — SQL injection is not a concern
+        because the names come from application constants, never from
+        user input.
+
+        Returns ``{table_name: rowcount}`` on success.
+        """
+        counts: dict = {}
+        with bypass_tenant_filter():
+            async with get_async_db_session() as session:
+                try:
+                    for table in tables:
+                        res = await session.execute(
+                            text(
+                                f'UPDATE {table} SET tenant_id = :to_tid '
+                                f'WHERE tenant_id = :from_tid'
+                            ),
+                            {'to_tid': to_tenant_id, 'from_tid': from_tenant_id},
+                        )
+                        counts[table] = getattr(res, 'rowcount', 0) or 0
+                    await session.commit()
+                except Exception:
+                    # AC-04a atomicity: partial updates must not persist.
+                    # Explicit rollback before re-raising — the async context
+                    # manager also rolls back but doing it here makes the
+                    # intent unmistakable for callers who patch the session.
+                    await session.rollback()
+                    logger.error(
+                        'abulk_update_tenant_id aborted; '
+                        'rolling back %d partially-updated tables',
+                        len(counts),
+                    )
+                    raise
+        return counts
+
+    @classmethod
+    async def afetch_resource_tenant_ids(
+        cls, table: str, resource_ids: List[int],
+    ) -> dict:
+        """Return ``{id: tenant_id}`` for rows in ``table`` with id in list."""
+        if not resource_ids:
+            return {}
+        with bypass_tenant_filter():
+            async with get_async_db_session() as session:
+                stmt = text(
+                    f'SELECT id, tenant_id FROM {table} WHERE id IN :ids'
+                ).bindparams(bindparam('ids', expanding=True))
+                res = await session.execute(stmt, {'ids': resource_ids})
+                return {row[0]: row[1] for row in res.all()}
+
+    @classmethod
+    async def aupdate_resource_tenant_ids(
+        cls, table: str, resource_ids: List[int], new_tenant_id: int,
+    ) -> None:
+        """Bulk set ``tenant_id = :new`` for rows in ``table`` with id in list."""
+        if not resource_ids:
+            return
+        with bypass_tenant_filter():
+            async with get_async_db_session() as session:
+                stmt = text(
+                    f'UPDATE {table} SET tenant_id = :tid WHERE id IN :ids'
+                ).bindparams(bindparam('ids', expanding=True))
+                await session.execute(
+                    stmt, {'tid': new_tenant_id, 'ids': resource_ids},
+                )
+                await session.commit()
 
 
 # ---------------------------------------------------------------------------
@@ -506,3 +700,95 @@ class UserTenantDao:
             )
             await session.commit()
             return result.rowcount
+
+    # -----------------------------------------------------------------------
+    # v2.5.1 F011: unique-leaf operations.
+    # Callers: F012 TenantResolver (deactivate on primary-department relocate,
+    # activate new leaf), F013 permission checks (resolve current leaf).
+    # -----------------------------------------------------------------------
+
+    @classmethod
+    async def aget_active_user_tenant(cls, user_id: int) -> Optional[UserTenant]:
+        """Return the user's current active leaf UserTenant, or None."""
+        with bypass_tenant_filter():
+            async with get_async_db_session() as session:
+                result = await session.exec(
+                    select(UserTenant).where(
+                        UserTenant.user_id == user_id,
+                        UserTenant.is_active == 1,
+                    )
+                )
+                return result.first()
+
+    @classmethod
+    async def adeactivate_user_tenant(
+        cls, user_id: int, tenant_id: int,
+    ) -> int:
+        """Set is_active=NULL for a specific (user_id, tenant_id) pair.
+
+        Returns the number of rows affected. Used when a user's primary
+        department changes — the old leaf is demoted to history and a new
+        active row is created/promoted by ``aactivate_user_tenant``.
+        """
+        from sqlalchemy import update as sa_update
+        with bypass_tenant_filter():
+            async with get_async_db_session() as session:
+                result = await session.execute(
+                    sa_update(UserTenant)
+                    .where(
+                        UserTenant.user_id == user_id,
+                        UserTenant.tenant_id == tenant_id,
+                        UserTenant.is_active == 1,
+                    )
+                    .values(is_active=None)
+                )
+                await session.commit()
+                return result.rowcount
+
+    @classmethod
+    async def aactivate_user_tenant(
+        cls, user_id: int, tenant_id: int,
+    ) -> UserTenant:
+        """Promote (user_id, tenant_id) to is_active=1 atomically.
+
+        Steps (single transaction):
+          1. Demote the user's current active row (any tenant) to NULL.
+          2. UPSERT target row with is_active=1.
+
+        Returns the activated UserTenant row.
+        """
+        from sqlalchemy import update as sa_update
+        with bypass_tenant_filter():
+            async with get_async_db_session() as session:
+                # 1. Demote any existing active row for this user.
+                await session.execute(
+                    sa_update(UserTenant)
+                    .where(
+                        UserTenant.user_id == user_id,
+                        UserTenant.is_active == 1,
+                    )
+                    .values(is_active=None)
+                )
+                # 2. If a history row exists for target (user_id, tenant_id),
+                #    promote it; otherwise insert a new one.
+                existing = (await session.exec(
+                    select(UserTenant).where(
+                        UserTenant.user_id == user_id,
+                        UserTenant.tenant_id == tenant_id,
+                    )
+                )).first()
+                if existing is not None:
+                    existing.is_active = 1
+                    existing.status = 'active'
+                    session.add(existing)
+                    await session.commit()
+                    await session.refresh(existing)
+                    return existing
+                new_row = UserTenant(
+                    user_id=user_id, tenant_id=tenant_id,
+                    is_active=1, is_default=1, status='active',
+                )
+                session.add(new_row)
+                await session.commit()
+                await session.refresh(new_row)
+                return new_row

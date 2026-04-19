@@ -114,6 +114,24 @@ class Department(SQLModelSerializable, table=True):
             comment='Status: active/archived',
         ),
     )
+    # v2.5.1 F011: tenant mount point flag + linked tenant FK.
+    # Only 1=mount point; mounted_tenant_id resolves to the Child Tenant
+    # whose root department is this node. No DB-level FK to avoid circular
+    # dependency with tenant table — consistency enforced at service layer.
+    is_tenant_root: int = Field(
+        default=0,
+        sa_column=Column(
+            Integer, nullable=False, server_default=text('0'),
+            comment='1=Tenant mount point (Child Tenant root dept); v2.5.1 F011',
+        ),
+    )
+    mounted_tenant_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(
+            Integer, nullable=True, index=True,
+            comment='FK→tenant.id when is_tenant_root=1 (v2.5.1 F011)',
+        ),
+    )
     default_role_ids: Optional[list] = Field(
         default=None,
         sa_column=Column(
@@ -458,6 +476,104 @@ class DepartmentDao:
                 stmt = stmt.where(Department.id != exclude_id)
             result = await session.exec(stmt)
             return result.first() is not None
+
+    # -----------------------------------------------------------------------
+    # v2.5.1 F011: tenant mount point DAO (spec §5.3).
+    # -----------------------------------------------------------------------
+
+    @classmethod
+    async def aget_mount_point(cls, dept_id: int) -> Optional[Department]:
+        """Return the department only if it is flagged as a tenant mount point.
+
+        Used by F011 mount conflict checks and F012 JWT leaf derivation.
+        """
+        async with get_async_db_session() as session:
+            result = await session.exec(
+                select(Department).where(
+                    Department.id == dept_id,
+                    Department.is_tenant_root == 1,
+                )
+            )
+            return result.first()
+
+    @classmethod
+    async def aget_ancestors_with_mount(
+        cls, dept_id: int,
+    ) -> Optional[Department]:
+        """Return the nearest ancestor (or self) that is a tenant mount point.
+
+        Walks the materialized ``path`` column. Used by:
+          - F011 mount: reject if any ancestor is already a mount point
+                        (enforces INV-T1: 2-layer lock).
+          - F012 TenantResolver: derive a user's leaf tenant from their
+                                 primary department path.
+
+        Returns None if no ancestor (nor self) carries ``is_tenant_root=1``.
+        """
+        dept = await cls.aget_by_id(dept_id)
+        if dept is None:
+            return None
+        # path is like "/1/2/3/"; split and keep non-empty numeric ids.
+        candidate_ids: List[int] = []
+        malformed_parts: List[str] = []
+        if dept.path:
+            for part in dept.path.split('/'):
+                if not part:
+                    continue
+                if part.isdigit():
+                    candidate_ids.append(int(part))
+                else:
+                    malformed_parts.append(part)
+        if malformed_parts:
+            # F002 materialized path should always be "/\\d+/\\d+/..."; a
+            # non-numeric segment means the path column got corrupted or
+            # the format contract was broken by another migration. Surface
+            # it via a WARNING so ops can investigate instead of silently
+            # returning "no mount ancestor".
+            logger.warning(
+                'Malformed department path on dept_id=%s: %r (non-numeric: %s)',
+                dept_id, dept.path, malformed_parts,
+            )
+        # Include self: "self is a mount point" also counts.
+        if dept_id not in candidate_ids:
+            candidate_ids.append(dept_id)
+        if not candidate_ids:
+            return None
+        async with get_async_db_session() as session:
+            result = await session.exec(
+                select(Department)
+                .where(
+                    Department.id.in_(candidate_ids),
+                    Department.is_tenant_root == 1,
+                )
+                .order_by(func.length(Department.path).desc())
+                .limit(1)
+            )
+            return result.first()
+
+    @classmethod
+    async def aset_mount(
+        cls, dept_id: int, tenant_id: int,
+    ) -> None:
+        """Mark ``dept_id`` as a tenant mount point pointing to ``tenant_id``."""
+        async with get_async_db_session() as session:
+            await session.execute(
+                update(Department)
+                .where(Department.id == dept_id)
+                .values(is_tenant_root=1, mounted_tenant_id=tenant_id)
+            )
+            await session.commit()
+
+    @classmethod
+    async def aunset_mount(cls, dept_id: int) -> None:
+        """Clear mount flag + linked tenant on ``dept_id`` (unmount path)."""
+        async with get_async_db_session() as session:
+            await session.execute(
+                update(Department)
+                .where(Department.id == dept_id)
+                .values(is_tenant_root=0, mounted_tenant_id=None)
+            )
+            await session.commit()
 
     @classmethod
     async def aget_user_admin_departments(cls, user_id: int) -> List[Department]:

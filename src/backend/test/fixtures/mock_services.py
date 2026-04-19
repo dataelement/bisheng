@@ -20,7 +20,13 @@ from unittest.mock import MagicMock
 
 # Pre-mock celery before any bisheng module can import it (settings.py uses celery.schedules).
 # Must happen before the MultiTenantConf import below, which traverses the config chain.
-for _mod in ('celery', 'celery.schedules', 'celery.app', 'celery.app.task'):
+# F011 adds: docstring_parser (pulled in by bisheng.utils.util when tenant_service imports),
+# fakeredis (some fixtures), and a defensive list of optional dependencies.
+for _mod in (
+    'celery', 'celery.schedules', 'celery.app', 'celery.app.task',
+    'docstring_parser',
+    'redis', 'redis.asyncio', 'redis.exceptions',
+):
     if _mod not in sys.modules:
         sys.modules[_mod] = MagicMock()
 
@@ -46,6 +52,9 @@ PREMOCK_MODULES: list[str] = [
     # error/exception modules
     'bisheng.common.errcode.http_error',
     'bisheng.common.exceptions.auth',
+    # F011: tenant_service pulls in redis_manager/openfga on import
+    'bisheng.core.cache.redis_conn',
+    'bisheng.core.cache.redis_manager',
 ]
 
 

@@ -31,6 +31,8 @@ CREATE TABLE IF NOT EXISTS tenant (
     logo VARCHAR(512),
     root_dept_id INTEGER,
     status VARCHAR(16) NOT NULL DEFAULT 'active',
+    parent_tenant_id INTEGER,
+    share_default_to_children INTEGER NOT NULL DEFAULT 1,
     contact_name VARCHAR(64),
     contact_phone VARCHAR(32),
     contact_email VARCHAR(128),
@@ -48,9 +50,10 @@ CREATE TABLE IF NOT EXISTS user_tenant (
     tenant_id INTEGER NOT NULL,
     is_default INTEGER NOT NULL DEFAULT 0,
     status VARCHAR(16) NOT NULL DEFAULT 'active',
+    is_active INTEGER,
     last_access_time DATETIME,
     join_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    UNIQUE(user_id, tenant_id)
+    UNIQUE(user_id, is_active)
 )"""
 
 # ---------------------------------------------------------------------------
@@ -173,11 +176,37 @@ CREATE TABLE IF NOT EXISTS department (
     source VARCHAR(32) DEFAULT 'local',
     external_id VARCHAR(128),
     status VARCHAR(16) DEFAULT 'active',
+    is_tenant_root INTEGER NOT NULL DEFAULT 0,
+    mounted_tenant_id INTEGER,
     default_role_ids JSON,
     create_user INTEGER,
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
     UNIQUE(source, external_id)
+)"""
+
+TABLE_AUDIT_LOG = """\
+CREATE TABLE IF NOT EXISTS auditlog (
+    id VARCHAR(255) PRIMARY KEY,
+    operator_id INTEGER NOT NULL,
+    operator_name VARCHAR(255),
+    group_ids JSON,
+    system_id VARCHAR(64),
+    event_type VARCHAR(64),
+    object_type VARCHAR(64),
+    object_id VARCHAR(64),
+    object_name TEXT,
+    note TEXT,
+    ip_address VARCHAR(64),
+    tenant_id INTEGER,
+    operator_tenant_id INTEGER,
+    action VARCHAR(64),
+    target_type VARCHAR(32),
+    target_id VARCHAR(64),
+    reason TEXT,
+    metadata JSON,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
 )"""
 
 TABLE_USER_DEPARTMENT = """\
@@ -297,6 +326,7 @@ TABLE_DEFINITIONS: dict[str, str] = {
     'knowledge': TABLE_KNOWLEDGE,
     'department': TABLE_DEPARTMENT,
     'user_department': TABLE_USER_DEPARTMENT,
+    'auditlog': TABLE_AUDIT_LOG,
     'failed_tuple': TABLE_FAILED_TUPLE,
     # F006 migration source tables
     'userrole': TABLE_USER_ROLE,
