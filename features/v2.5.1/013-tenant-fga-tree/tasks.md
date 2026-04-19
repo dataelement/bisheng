@@ -251,7 +251,7 @@ T10 (手工 QA + ac-verification.md)  ← T01-T09
 
 ---
 
-- [ ] **T05**: `FGAClient` 双写旁路（write_tuples 灰度期双写，check 仅走新 model）
+- [x] **T05**: `FGAClient` 双写旁路（write_tuples 灰度期双写，check 仅走新 model）
   **文件（修改）**:
   - `src/backend/bisheng/core/openfga/client.py` — `write_tuples` 方法灰度期向 legacy model 二次写入
   **逻辑**:
