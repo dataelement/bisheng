@@ -11,6 +11,7 @@ from pydantic import ConfigDict, BaseModel, Field, field_validator, model_valida
 
 from bisheng.core.config.multi_tenant import MultiTenantConf
 from bisheng.core.config.openfga import OpenFGAConf
+from bisheng.core.config.sso_sync import SSOSyncConf
 from bisheng.core.config.user_tenant_sync import UserTenantSyncConf
 
 secret_key = 'TI31VYJ-ldAq-FXo5QNPKV_lqGTFfp-MIdbK2Hm5F1E='
@@ -336,6 +337,7 @@ class Settings(BaseModel):
     multi_tenant: MultiTenantConf = MultiTenantConf()
     openfga: OpenFGAConf = OpenFGAConf()
     user_tenant_sync: UserTenantSyncConf = UserTenantSyncConf()
+    sso_sync: SSOSyncConf = SSOSyncConf()
 
     @field_validator('database_url')
     @classmethod

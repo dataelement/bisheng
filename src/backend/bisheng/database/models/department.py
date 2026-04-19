@@ -132,6 +132,30 @@ class Department(SQLModelSerializable, table=True):
             comment='FK→tenant.id when is_tenant_root=1 (v2.5.1 F011)',
         ),
     )
+    # v2.5.1 F014: distinguishes "authoritatively removed by the SSO/HR source
+    # of truth" from F009's reversible archive. Only consumed by
+    # OrgSyncTsGuard (INV-T12) and F015 reconciliation — existing queries keep
+    # using ``status='active'`` for visibility, so this flag never affects
+    # tenant-tree visibility.
+    is_deleted: int = Field(
+        default=0,
+        sa_column=Column(
+            SmallInteger, nullable=False,
+            server_default=text('0'),
+            comment='F014: 1=removed by SSO authoritative source',
+        ),
+    )
+    # v2.5.1 F014/F015 INV-T12: per-external_id high-water mark so that
+    # Gateway realtime sync and Celery reconciliation converge on
+    # "ts max wins; same ts with upsert vs remove → remove wins".
+    last_sync_ts: int = Field(
+        default=0,
+        sa_column=Column(
+            BigInteger, nullable=False,
+            server_default=text('0'), index=True,
+            comment='F014/F015 INV-T12: latest Gateway/Celery sync ts',
+        ),
+    )
     default_role_ids: Optional[list] = Field(
         default=None,
         sa_column=Column(
@@ -600,6 +624,111 @@ class DepartmentDao:
         if not dept_ids:
             return []
         return await cls.aget_by_ids(dept_ids)
+
+    # -----------------------------------------------------------------------
+    # v2.5.1 F014: SSO realtime sync DAO (spec §5.1/§5.2, INV-T12).
+    # -----------------------------------------------------------------------
+
+    @classmethod
+    async def aget_by_source_external_id(
+        cls, source: str, external_id: str,
+    ) -> Optional[Department]:
+        """Get department by (source, external_id) — includes ``is_deleted=1``
+        rows so that :class:`OrgSyncTsGuard` can observe the prior remove and
+        honor INV-T12 (same ts with upsert vs remove → remove wins)."""
+        async with get_async_db_session() as session:
+            result = await session.exec(
+                select(Department).where(
+                    Department.source == source,
+                    Department.external_id == external_id,
+                )
+            )
+            return result.first()
+
+    @classmethod
+    async def aupsert_by_external_id(
+        cls,
+        *,
+        source: str,
+        external_id: str,
+        name: str,
+        parent_id: Optional[int],
+        path: str,
+        sort_order: int,
+        last_sync_ts: int,
+        tenant_id: int = 1,
+    ) -> Department:
+        """Idempotent upsert keyed by (source, external_id) for F014
+        ``/internal/sso/login-sync`` + ``/departments/sync`` flows.
+
+        **Never touches** ``is_tenant_root`` / ``mounted_tenant_id`` — those
+        are bisheng-internal state and SSO sync must stay robust against
+        accidental remount (PRD §5.2.5). On resurrect (previously
+        ``is_deleted=1``), clears the flag and restores ``status='active'``
+        so the department becomes visible again.
+        """
+        existing = await cls.aget_by_source_external_id(source, external_id)
+        async with get_async_db_session() as session:
+            if existing is None:
+                dept = Department(
+                    dept_id=f'{source.upper()}@{external_id}',
+                    name=name,
+                    parent_id=parent_id,
+                    tenant_id=tenant_id,
+                    path=path,
+                    sort_order=sort_order,
+                    source=source,
+                    external_id=external_id,
+                    status='active',
+                    is_deleted=0,
+                    last_sync_ts=last_sync_ts,
+                )
+                session.add(dept)
+                await session.commit()
+                await session.refresh(dept)
+                return dept
+            await session.execute(
+                update(Department)
+                .where(Department.id == existing.id)
+                .values(
+                    name=name,
+                    parent_id=parent_id,
+                    path=path,
+                    sort_order=sort_order,
+                    status='active',
+                    is_deleted=0,
+                    last_sync_ts=last_sync_ts,
+                )
+            )
+            await session.commit()
+        refreshed = await cls.aget_by_id(existing.id)
+        return refreshed if refreshed is not None else existing
+
+    @classmethod
+    async def aarchive_by_external_id(
+        cls, source: str, external_id: str, last_sync_ts: int,
+    ) -> Optional[Department]:
+        """Soft-delete a department by (source, external_id) for F014 remove
+        flow. Sets ``status='archived'``, ``is_deleted=1`` and bumps
+        ``last_sync_ts`` atomically. Returns the pre-update row (so callers
+        can inspect ``mounted_tenant_id`` for orphan handling) or None if
+        the department does not exist.
+        """
+        existing = await cls.aget_by_source_external_id(source, external_id)
+        if existing is None:
+            return None
+        async with get_async_db_session() as session:
+            await session.execute(
+                update(Department)
+                .where(Department.id == existing.id)
+                .values(
+                    status='archived',
+                    is_deleted=1,
+                    last_sync_ts=last_sync_ts,
+                )
+            )
+            await session.commit()
+        return existing
 
 
 # ---------------------------------------------------------------------------

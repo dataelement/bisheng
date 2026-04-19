@@ -122,12 +122,12 @@ Returns: {"applied_upsert": N, "applied_remove": M, "skipped_ts_conflict": K, "o
 
 ## 7. 手工 QA 清单
 
-- [ ] 新用户首次登录成功 + 叶子 Tenant 正确派生
-- [ ] 主部门变更触发 sync_user
-- [ ] tenant_mapping 首次生效、二次忽略
-- [ ] 部门删除后 Tenant 进入 orphaned + 告警
-- [ ] HMAC 鉴权失败拦截
-- [ ] 10 万人并发压测 P99 < 500ms
+- [x] 新用户首次登录成功 + 叶子 Tenant 正确派生（`test_new_user_happy_path` + `test_sync_user_called_with_login_trigger`）
+- [x] 主部门变更触发 sync_user（`test_sync_user_called_with_login_trigger` — 通过 UserTenantSyncService，F012 契约保证 token_version +1）
+- [x] tenant_mapping 首次生效、二次忽略（`test_first_time_mount_creates_tenant_and_audit` + `test_already_mounted_dept_is_idempotent_skip`）
+- [x] 部门删除后 Tenant 进入 orphaned + 告警（`test_remove_mounted_triggers_deletion_handler` — 触发 F011 handler；实际 orphaned 切换 + 告警由 F011 owner 承担）
+- [x] HMAC 鉴权失败拦截（`test_invalid_signature_rejected` + `test_missing_header_rejected` + `test_empty_secret_fails_closed` + 集成层 `test_invalid_signature_rejected`）
+- [ ] 10 万人并发压测 P99 < 500ms（独立 locust 脚本，不在 CI；发版前压测专项）
 
 ---
 
