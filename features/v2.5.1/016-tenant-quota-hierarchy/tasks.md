@@ -547,7 +547,7 @@ T09 (手工 QA + ac-verification.md)  ← T08
   - `pytest test/test_require_quota_decorator.py test/test_e2e_role_menu_quota.py` 全绿
   - 覆盖 AC: AC-01（回归）
 
-- [ ] **T07**: E2E 测试 `test_e2e_tenant_quota_hierarchy.py`
+- [x] **T07**: E2E 测试 `test_e2e_tenant_quota_hierarchy.py`
 
   **文件（新建）**:
   - `src/backend/test/e2e/test_e2e_tenant_quota_hierarchy.py` — 端到端测试
