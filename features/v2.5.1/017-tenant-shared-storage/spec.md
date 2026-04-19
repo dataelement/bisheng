@@ -148,21 +148,31 @@ class ChatMessageService:
 - F011-tenant-tree-model（Tenant 树 + share_default_to_children 字段）
 - v2.5.0/F008-resource-rebac-adaptation（资源创建服务）
 
+### 6.1 前置修复建议（可顺带处理）
+
+- **v2.5.0 F005 KI-01** `_RESOURCE_COUNT_TEMPLATES['knowledge_space']` SQL 模板引用不存在的 `knowledge.status` 列（`status != -1`），运行时被 `_count_resource` try/except 吞掉，`knowledge_space.used` 计数**恒为 0**。F017 的"共享 knowledge_space 不计入 Child 用量"（AC-02 / INV-T6）在真实数据下验证时会踩此坑——即使模板修好之前都不会报错，但两侧都是 0 无法证伪。详见 [v2.5.0/F005 §9.1 KI-01](../../v2.5.0/005-role-menu-quota/spec.md#91-known-post-release-issuesv251-自测发现)。F017 开发时建议把模板改为 `WHERE {col}=:{param} AND state != 0`（或其它"已生效"条件）并补 integration test。
+
 ---
 
-## 7. 手工 QA 清单
+## 7. 自测清单（对应 AC）
 
-- [ ] 共享开关生效，Child 用户可见
-- [ ] 新 Child 挂载自动继承
-- [ ] **取消共享元组撤销**：关闭开关后 `{resource}#viewer → tenant:{root}#shared_to#member` 元组被删除；Child 立即不可见；资源仍在 Root
-- [ ] **解绑 Child 元组撤销**：解绑后 `tenant:{root}#shared_to → tenant:{child}` 元组被删除（无悬挂）
-- [ ] MinIO fallback 读取共享文件
-- [ ] Milvus 合并查询共享 collection
-- [ ] Child 用户无法编辑共享资源
-- [ ] 共享资源 tenant_id = Root；用量仅计 Root
-- [ ] **衍生对话归属**：Child 用户与 Root 共享知识库对话，`chat_message.tenant_id = Child 叶子`
-- [ ] **衍生 token 归属**：Child 用户调 Root 共享 LLM，token 累加进 Child `model_tokens_monthly` 用量
-- [ ] **存储不重复计入**：Root 共享文件 100MB → Root 用量 +100MB，所有 Child 用量均不变
+> 开发者在完成实现后必须自行运行以下测试；不依赖用户/产品人肉点击。FGA/MinIO/Milvus 依赖可用 fixture 起真实服务或 mock client。
+
+| Test | AC | 类型 | 备注 |
+|------|----|------|------|
+| `test_share_toggle_writes_viewer_tuple` | AC-01 | pytest 集成测试 | 共享开关 ON 写入 `{resource}#viewer → tenant:{root}#shared_to#member` 元组 |
+| `test_new_child_auto_distributes_shared_tenants` | AC-02 | pytest 集成测试 | 新 Child 挂载自动写 `tenant:{root}#shared_to → tenant:{child}` |
+| `test_child_user_sees_shared_resource_via_fga` | AC-03 | pytest 集成测试 | FGA check shared_to 链路返 viewer |
+| `test_child_user_cannot_edit_shared_resource` | AC-04 | pytest 集成测试 | FGA editor 拒绝；API 返 403 |
+| `test_revoke_share_deletes_viewer_tuple` | AC-05, AC-12 | pytest 集成测试 | 关闭开关撤销 viewer 元组；owner 保留；资源仍在 Root；衍生数据不级联清理 |
+| `test_minio_fallback_reads_shared_file_from_root` | AC-06 | pytest 集成测试 | Child 路径 miss → fallback Root 前缀 |
+| `test_unmount_child_revokes_shared_to_tuple` | AC-07 | pytest 集成测试 | 解绑 Child 撤销 `tenant:{root}#shared_to → tenant:{child}` + Child 名下 owner/member 元组 |
+| `test_chat_message_tenant_id_is_child_leaf` | AC-08 | pytest 集成测试 | 衍生对话 `chat_message.tenant_id = Child 叶子`（§5.4 写入层） |
+| `test_llm_token_attributed_to_child_leaf` | AC-09 | pytest 集成测试 | Root 共享 LLM 的 token 计入 Child `model_tokens_monthly` |
+| `test_shared_storage_counted_once_on_root` | AC-10 | pytest 单元测试 | Root 共享文件 100MB → Root +100MB，Child 不叠加 |
+| `test_missing_tenant_context_raises_error` | AC-11 | pytest 单元测试 | `get_current_tenant_id()` 为 None 时抛 `TenantContextMissing`；返 19504 |
+| `test_mount_child_skip_auto_distribute` | AC-13 | pytest 集成测试 | `auto_distribute=False` 跳过 shared_to 写入；audit_log 记录 metadata |
+| `test_milvus_fallback_queries_shared_collection` | AC-06 | pytest 集成测试 | Child 检索合并 Root collection 结果 |
 
 ---
 

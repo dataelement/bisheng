@@ -666,6 +666,20 @@ F005 后端变更对前端的影响（F010 需要处理）：
 
 ---
 
+## 9.1 Known Post-Release Issues（v2.5.1 自测发现）
+
+> 2026-04-19 F016-tenant-quota-hierarchy 在 114 服务器跑 `/tenants/quota/tree`
+> 自测时暴露以下遗留 bug，由 F016 ac-verification.md 追溯到 F005。修复目前
+> 未排期；后续 F017 共享资源场景或独立 hotfix 择机处理。
+
+| ID | Bug | 位置 | 现状 |
+|----|-----|------|------|
+| KI-01 | `knowledge_space` SQL 模板引用不存在的 `status` 列 | `quota_service.py` L41 `_RESOURCE_COUNT_TEMPLATES['knowledge_space']` = `"SELECT COUNT(*) FROM knowledge WHERE {col}=:{param} AND status != -1"`；实际 `knowledge` 表只有 `state` / `is_released`，无 `status` 列 | `_count_resource` try/except 捕获 `Unknown column 'status'` 后返 0，导致 `/quota/tree.root.usage[knowledge_space].used` **恒为 0**，前端 UI 显示的知识库用量失真；F016 单测用 mock 未暴露，E2E 触达后才发现 |
+| 影响面 | — | F016 `/quota/tree`、v2.5.0 F008 `@require_quota(KNOWLEDGE_SPACE)` 依赖此计数的端点 | F016 未修（tenant-quota 只负责沿树聚合，底层 SQL 模板归属 F005） |
+| 建议修复 | — | 把模板改为 `WHERE {col}=:{param} AND state != 0`（或其他正确的"已生效"条件）+ 补一条 integration test | hotfix/v2.5.1 或 F017 顺带 |
+
+---
+
 ## 10. 非功能要求
 
 - **性能**: 配额检查为 SQL COUNT + Redis 缓存场景。get_effective_quota 涉及 2-3 次数据库查询（用户角色 + 角色详情 + 资源计数），应控制在 50ms 内。批量配额查询（get_all_effective_quotas）使用单次角色查询 + N 次资源计数查询。

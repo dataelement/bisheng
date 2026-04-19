@@ -126,6 +126,10 @@ Execute on 114 after `uv sync` + `.venv/bin/uvicorn bisheng.main:app --port 7860
 | §7-9 Delete releases | ⏳ manual | No F016 hook; relies on existing resource delete path + SQL COUNT recompute — trivially correct if counters are live |
 | Unlimited (-1) | ✅ verified | `root.usage[workflow].limit=-1 utilization=0.0` returned with no error; covered by `test_unlimited_effective_returns_true` unit test |
 
+**Known issues uncovered during self-test (not F016 scope)**:
+
+- **KI-01** `knowledge.status` 列不存在导致 `_RESOURCE_COUNT_TEMPLATES['knowledge_space']` SQL (`WHERE status != -1`) 在 114 MySQL 报 `Unknown column 'status'`；`_count_resource` try/except 吞掉后返 0 → `/quota/tree.root.usage[knowledge_space].used` 恒为 0。归属 v2.5.0/F005（SQL 模板 Owner）。已在 [v2.5.0/F005 spec §9.1](../../v2.5.0/005-role-menu-quota/spec.md#91-known-post-release-issuesv251-自测发现) 登记，F017 前置依赖建议顺带修。
+
 **Follow-up fixes committed during T09**:
 
 1. `tenant_service.py` `aset_quota` — added `QuotaService.validate_quota_config(data.quota_config)` before persist. **Real bug**: unknown key like `nonexistent_resource` was previously stored unchecked (F010 AC-4.2 gap, surfaced by F016 E2E).
