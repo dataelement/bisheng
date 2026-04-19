@@ -24,6 +24,9 @@ class TenantAuditAction(str, Enum):
     DISABLE = 'tenant.disable'
     ORPHANED = 'tenant.orphaned'
     RESOURCE_MIGRATE = 'resource.migrate_tenant'
+    # v2.5.1 F012 — primary-department change → leaf tenant relocation
+    USER_TENANT_RELOCATED = 'user.tenant_relocated'
+    USER_TENANT_RELOCATE_BLOCKED = 'user.tenant_relocate_blocked'
 
 
 class DeletionSource(str, Enum):
@@ -33,5 +36,17 @@ class DeletionSource(str, Enum):
     """
 
     SSO_REALTIME = 'sso_realtime'
+    CELERY_RECONCILE = 'celery_reconcile'
+    MANUAL = 'manual'
+
+
+class UserTenantSyncTrigger(str, Enum):
+    """Why ``UserTenantSyncService.sync_user`` was invoked — goes into
+    ``audit_log.metadata.trigger`` so operators can tell a login-time sync
+    apart from a primary-dept-change sync apart from a Celery reconcile.
+    """
+
+    LOGIN = 'login'
+    DEPT_CHANGE = 'dept_change'
     CELERY_RECONCILE = 'celery_reconcile'
     MANUAL = 'manual'

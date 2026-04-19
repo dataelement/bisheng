@@ -70,10 +70,13 @@ CREATE TABLE IF NOT EXISTS user (
     dept_id VARCHAR(255),
     remark VARCHAR(512),
     avatar VARCHAR(512),
+    source VARCHAR(32) NOT NULL DEFAULT 'local',
+    external_id VARCHAR(128),
     "delete" INTEGER DEFAULT 0,
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    password_update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+    password_update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    token_version INTEGER NOT NULL DEFAULT 0
 )"""
 
 TABLE_GROUP = """\

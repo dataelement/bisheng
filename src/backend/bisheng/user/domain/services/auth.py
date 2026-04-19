@@ -126,6 +126,12 @@ class LoginUser(BaseModel):
     user_role: List[int] = Field(default_factory=list, description="Users GroupsIDVertical")
     group_cache: Dict[int, Any] = Field(default_factory=dict, description="User Group Cache")
     tenant_id: int = Field(default=1, description="Current tenant ID")
+    # v2.5.1 F012: JWT invalidation counter carried from JWT payload.
+    # Middleware compares this against user.token_version and rejects
+    # stale tokens (AC-09). Defaults to 0 so v2.5.0 JWTs still decode.
+    token_version: int = Field(
+        default=0, description='JWT invalidation counter (F012)',
+    )
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -134,6 +140,7 @@ class LoginUser(BaseModel):
         self.user_role = kwargs.get('user_role')
         self.group_cache = kwargs.get('group_cache', {})
         self.tenant_id = kwargs.get('tenant_id', DEFAULT_TENANT_ID)
+        # token_version is validated by Pydantic Field(default=0) above.
 
         if not self.user_role:
             self.user_role = []
@@ -380,12 +387,27 @@ class LoginUser(BaseModel):
 
     # some methods related to AuthJwt
     @classmethod
-    def create_access_token(cls, user: User, auth_jwt: AuthJwt, tenant_id: int = None) -> str:
-        """ Create access token for user, includes tenant_id in payload. """
+    def create_access_token(
+        cls,
+        user: User,
+        auth_jwt: AuthJwt,
+        tenant_id: int = None,
+        token_version: int = None,
+    ) -> str:
+        """Create access token for user with tenant_id + token_version.
+
+        v2.5.1 F012: ``token_version`` is read from the user row (falls back to
+        ``getattr(user, 'token_version', 0)`` so v2.5.0 tests that build a
+        bare User pydantic model without that field still work). Embedded in
+        the JWT so the middleware can invalidate stale tokens.
+        """
+        if token_version is None:
+            token_version = int(getattr(user, 'token_version', 0) or 0)
         payload = {
             'user_id': user.user_id,
             'user_name': user.user_name,
             'tenant_id': tenant_id or DEFAULT_TENANT_ID,
+            'token_version': token_version,
         }
         token = auth_jwt.create_access_token(subject=payload)
         return token
@@ -400,22 +422,36 @@ class LoginUser(BaseModel):
         auth_jwt.unset_access_token()
 
     @classmethod
-    async def init_login_user(cls, user_id: int, user_name: str, tenant_id: int = None) -> Self:
+    async def init_login_user(
+        cls,
+        user_id: int,
+        user_name: str,
+        tenant_id: int = None,
+        token_version: int = 0,
+    ) -> Self:
         user_roles = await UserRoleDao.aget_user_roles(user_id)
         role_ids = [user_role.role_id for user_role in user_roles]
         login_user = cls(
             user_id=user_id, user_name=user_name, user_role=role_ids,
             tenant_id=tenant_id or DEFAULT_TENANT_ID,
+            token_version=token_version,
         )
         return login_user
 
     @classmethod
-    def init_login_user_sync(cls, user_id: int, user_name: str, tenant_id: int = None) -> Self:
+    def init_login_user_sync(
+        cls,
+        user_id: int,
+        user_name: str,
+        tenant_id: int = None,
+        token_version: int = 0,
+    ) -> Self:
         user_roles = UserRoleDao.get_user_roles(user_id)
         role_ids = [user_role.role_id for user_role in user_roles]
         login_user = cls(
             user_id=user_id, user_name=user_name, user_role=role_ids,
             tenant_id=tenant_id or DEFAULT_TENANT_ID,
+            token_version=token_version,
         )
         return login_user
 
@@ -426,6 +462,7 @@ class LoginUser(BaseModel):
             user_id=subject['user_id'],
             user_name=subject['user_name'],
             tenant_id=subject.get('tenant_id', DEFAULT_TENANT_ID),
+            token_version=int(subject.get('token_version', 0) or 0),
         )
 
     @classmethod
@@ -442,6 +479,7 @@ class LoginUser(BaseModel):
             user_id=subject['user_id'],
             user_name=subject['user_name'],
             tenant_id=subject.get('tenant_id', DEFAULT_TENANT_ID),
+            token_version=int(subject.get('token_version', 0) or 0),
         )
 
     @classmethod

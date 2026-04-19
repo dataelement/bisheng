@@ -16,8 +16,18 @@ from bisheng.database.models.audit_log import AuditLogDao
 from bisheng.database.models.department import DepartmentDao
 from bisheng.database.models.tenant import ROOT_TENANT_ID, TenantDao
 from bisheng.tenant.domain.constants import DeletionSource, TenantAuditAction
+from bisheng.tenant.domain.services.inbox_helper import (
+    list_global_super_admin_ids as _list_global_super_admin_ids,
+    send_inbox_notice as _send_inbox_notice,
+)
 
 logger = logging.getLogger(__name__)
+
+__all__ = [
+    'DepartmentDeletionHandler',
+    '_list_global_super_admin_ids',  # re-export for back-compat tests
+    '_send_inbox_notice',
+]
 
 
 class DepartmentDeletionHandler:
@@ -84,15 +94,16 @@ class DepartmentDeletionHandler:
 
 
 async def _notify_super_admins(title: str, body: str, tenant_id: int) -> None:
-    """Fan out the orphan notice to every global super admin in one inbox call.
+    """Fan out the orphan notice to every global super admin via inbox.
 
-    MessageService is constructed on demand (not a DI-managed singleton here)
-    because DepartmentDeletionHandler is called from Celery + SSO contexts
-    without an active FastAPI request scope. Delivery is best-effort: the
-    authoritative record is the ``audit_log`` row written by the caller.
+    Best-effort: the authoritative trace is the ``audit_log`` row written
+    by the caller.
     """
+    from bisheng.tenant.domain.services.inbox_helper import (
+        list_global_super_admin_ids, send_inbox_notice,
+    )
     try:
-        recipients = await _list_global_super_admin_ids()
+        recipients = await list_global_super_admin_ids()
     except Exception as exc:  # noqa: BLE001
         logger.error('Cannot enumerate super admins: %s', exc)
         return
@@ -103,76 +114,4 @@ async def _notify_super_admins(title: str, body: str, tenant_id: int) -> None:
             tenant_id, title,
         )
         return
-    await _send_inbox_notice(title, body, recipients)
-
-
-async def _send_inbox_notice(
-    title: str, body: str, recipients: List[int],
-) -> None:
-    """Build a one-shot ``NOTIFY`` message with ``receiver=recipients``.
-
-    ``MessageService.send_message`` already accepts a receiver list, so a
-    single call fans out to every admin without a per-user await loop.
-    Import is lazy to avoid pulling the message DI chain on every import of
-    this handler (and to keep Celery boot fast).
-    """
-    try:
-        from bisheng.core.database import get_async_db_session
-        from bisheng.message.domain.models.inbox_message import (
-            MessageStatusEnum,
-            MessageTypeEnum,
-        )
-        from bisheng.message.domain.repositories.implementations.inbox_message_read_repository_impl import (  # noqa: E501
-            InboxMessageReadRepositoryImpl,
-        )
-        from bisheng.message.domain.repositories.implementations.inbox_message_repository_impl import (  # noqa: E501
-            InboxMessageRepositoryImpl,
-        )
-        from bisheng.message.domain.services.message_service import MessageService
-    except ImportError as exc:
-        logger.warning(
-            'MessageService unavailable (%s); orphan notice only in audit_log',
-            exc,
-        )
-        return
-
-    content = [{'type': 'text', 'title': title, 'body': body}]
-    try:
-        async with get_async_db_session() as session:
-            service = MessageService(
-                message_repository=InboxMessageRepositoryImpl(session),
-                message_read_repository=InboxMessageReadRepositoryImpl(session),
-            )
-            await service.send_message(
-                content=content,
-                sender=0,
-                message_type=MessageTypeEnum.NOTIFY,
-                receiver=recipients,
-                status=MessageStatusEnum.APPROVED,
-            )
-    except Exception as exc:  # noqa: BLE001
-        logger.warning(
-            'Inbox delivery failed for %d recipients: %s',
-            len(recipients), exc,
-        )
-
-
-async def _list_global_super_admin_ids() -> List[int]:
-    """Resolve the set of user ids carrying ``system:global#super_admin``.
-
-    Returns ``[]`` on any FGA failure so the handler degrades gracefully
-    (the ``audit_log`` entry is the authoritative trace).
-    """
-    try:
-        from bisheng.core.openfga.manager import aget_fga_client
-        fga = await aget_fga_client()
-        if fga is None:
-            return []
-        raw = await fga.list_users(
-            object='system:global', relation='super_admin',
-            user_type='user',
-        )
-        return [int(u.split(':', 1)[1]) for u in raw if ':' in u]
-    except Exception as exc:  # noqa: BLE001
-        logger.warning('FGA super-admin lookup failed: %s', exc)
-        return []
+    await send_inbox_notice(title, body, recipients)
