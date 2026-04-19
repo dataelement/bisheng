@@ -221,19 +221,27 @@ class TestGetEffectiveQuota:
 
 
 class TestCheckQuota:
-    """AC-20, AC-21: quota enforcement."""
+    """AC-20, AC-21: quota enforcement.
+
+    F016 T04 rewired check_quota to call _apply_tenant_chain_cap directly
+    (bypassing get_effective_quota) and raise 194xx subclasses instead of
+    the v2.5.0 QuotaExceededError(24001). These two tests are updated to
+    mock the new call target + assert the new exception class.
+    """
 
     @pytest.mark.asyncio
     async def test_quota_exceeded_raises(self, mock_normal_user):
-        """AC-20: QuotaExceededError when effective_quota == used count."""
+        """AC-20: TenantRoleQuotaExceededError(19402) when user_used >= effective."""
         from bisheng.role.domain.services.quota_service import QuotaService
-        from bisheng.common.errcode.role import QuotaExceededError
+        from bisheng.common.errcode.tenant_quota import TenantRoleQuotaExceededError
 
-        with patch.object(QuotaService, 'get_effective_quota',
-                          new_callable=AsyncMock, return_value=10), \
+        with patch('bisheng.role.domain.services.quota_service.UserRoleDao.aget_user_roles',
+                   new=AsyncMock(return_value=[])), \
+             patch.object(QuotaService, '_apply_tenant_chain_cap',
+                          new=AsyncMock(return_value=(10, None))), \
              patch.object(QuotaService, 'get_user_resource_count',
-                          new_callable=AsyncMock, return_value=10):
-            with pytest.raises(QuotaExceededError):
+                          new=AsyncMock(return_value=10)):
+            with pytest.raises(TenantRoleQuotaExceededError):
                 await QuotaService.check_quota(
                     user_id=10, resource_type='knowledge_space', tenant_id=1,
                     login_user=mock_normal_user,
@@ -244,10 +252,12 @@ class TestCheckQuota:
         """AC-21: check_quota returns True when quota is sufficient."""
         from bisheng.role.domain.services.quota_service import QuotaService
 
-        with patch.object(QuotaService, 'get_effective_quota',
-                          new_callable=AsyncMock, return_value=10), \
+        with patch('bisheng.role.domain.services.quota_service.UserRoleDao.aget_user_roles',
+                   new=AsyncMock(return_value=[])), \
+             patch.object(QuotaService, '_apply_tenant_chain_cap',
+                          new=AsyncMock(return_value=(10, None))), \
              patch.object(QuotaService, 'get_user_resource_count',
-                          new_callable=AsyncMock, return_value=5):
+                          new=AsyncMock(return_value=5)):
             result = await QuotaService.check_quota(
                 user_id=10, resource_type='knowledge_space', tenant_id=1,
                 login_user=mock_normal_user,

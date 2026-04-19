@@ -19,7 +19,7 @@
 | F013 | [tenant-fga-tree](./013-tenant-fga-tree/) | P0 | 🔲 未开始 | F011, F012 |
 | F014 | [sso-org-realtime-sync](./014-sso-org-realtime-sync/) | P1 | 🔲 未开始 | F012 |
 | F015 | [ldap-reconcile-celery](./015-ldap-reconcile-celery/) | P1 | 🔲 未开始 | F014 |
-| F016 | [tenant-quota-hierarchy](./016-tenant-quota-hierarchy/) | P1 | 🔲 未开始 | F013 |
+| F016 | [tenant-quota-hierarchy](./016-tenant-quota-hierarchy/) | P1 | 🟢 代码就绪，待 T09 手工 QA | F013 |
 | F017 | [tenant-shared-storage](./017-tenant-shared-storage/) | P1 | 🔲 未开始 | F013 |
 | F018 | [resource-owner-transfer](./018-resource-owner-transfer/) | P0 | 🔲 未开始 | F011, F013 |
 | F019 | [admin-tenant-scope](./019-admin-tenant-scope/) | P1 | 🔲 未开始 | F013 |

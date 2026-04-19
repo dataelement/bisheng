@@ -126,6 +126,22 @@ async def delete_tenant(
         return e.return_resp_instance()
 
 
+@router.get('/quota/tree')
+async def get_quota_tree(
+    login_user: UserPayload = Depends(UserPayload.get_admin_user),
+):
+    """F016 AC-06 — Return Root + all active Children quota usage tree.
+
+    Only exposed to global super admin. Child Admins use the scalar
+    `GET /tenants/{id}/quota` endpoint for their own Child view.
+    """
+    try:
+        result = await TenantService.aget_quota_tree(login_user)
+        return resp_200(result)
+    except BaseErrorCode as e:
+        return e.return_resp_instance()
+
+
 @router.get('/{tenant_id}/quota')
 async def get_quota(
     tenant_id: int,

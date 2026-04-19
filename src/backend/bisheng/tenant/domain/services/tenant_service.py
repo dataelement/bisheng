@@ -24,7 +24,10 @@ from bisheng.tenant.domain.schemas.tenant_schema import (
     TenantDetail,
     TenantListItem,
     TenantQuotaResponse,
+    TenantQuotaTreeNode,
+    TenantQuotaTreeResponse,
     TenantQuotaUpdate,
+    TenantQuotaUsageItem,
     TenantStatusUpdate,
     TenantUpdate,
     TenantUserAdd,
@@ -282,6 +285,75 @@ class TenantService:
         if not tenant:
             raise TenantNotFoundError()
         return _safe_tenant_dump(tenant)
+
+    # F016 AC-06: tenant quota tree (global super admin only).
+
+    @classmethod
+    async def aget_quota_tree(cls, login_user) -> TenantQuotaTreeResponse:
+        """Build the full Tenant quota tree (Root + all active Children).
+
+        Root usage is aggregated (Root self + Σ active Child, INV-T9) so the
+        group-wide ceiling is visible; Child usage is strict-equality (INV-T6)
+        so shared Root resources don't double-count.
+
+        Only exposed to global super admin per AC-06; Child Admins continue
+        using the scalar `GET /tenants/{id}/quota` endpoint to avoid cross-
+        Child visibility leaks.
+        """
+        from bisheng.role.domain.services.quota_service import (
+            QuotaService,
+            VALID_QUOTA_KEYS,
+        )
+
+        with bypass_tenant_filter():
+            root = await TenantDao.aget_by_id(ROOT_TENANT_ID)
+            if not root:
+                raise TenantNotFoundError()
+            child_ids = await TenantDao.aget_children_ids_active(ROOT_TENANT_ID)
+            children = [await TenantDao.aget_by_id(cid) for cid in child_ids]
+
+        sorted_keys = sorted(VALID_QUOTA_KEYS)
+
+        async def _build_usage(tid: int, is_root: bool, config: dict) -> List[TenantQuotaUsageItem]:
+            items: List[TenantQuotaUsageItem] = []
+            for rt in sorted_keys:
+                limit = (config or {}).get(rt, -1)
+                used = (
+                    await QuotaService._aggregate_root_usage(tid, rt) if is_root
+                    else await QuotaService._count_usage_strict(tid, rt)
+                )
+                if limit == -1:
+                    utilization = 0.0  # front-end renders as "unlimited"
+                elif limit == 0:
+                    utilization = 1.0 if used > 0 else 0.0
+                else:
+                    utilization = used / limit
+                items.append(TenantQuotaUsageItem(
+                    resource_type=rt, used=used, limit=limit, utilization=utilization,
+                ))
+            return items
+
+        root_node = TenantQuotaTreeNode(
+            tenant_id=root.id,
+            tenant_name=root.tenant_name,
+            parent_tenant_id=root.parent_tenant_id,
+            quota_config=root.quota_config or {},
+            usage=await _build_usage(root.id, is_root=True, config=root.quota_config or {}),
+        )
+
+        child_nodes: List[TenantQuotaTreeNode] = []
+        for c in children:
+            if c is None:
+                continue
+            child_nodes.append(TenantQuotaTreeNode(
+                tenant_id=c.id,
+                tenant_name=c.tenant_name,
+                parent_tenant_id=c.parent_tenant_id,
+                quota_config=c.quota_config or {},
+                usage=await _build_usage(c.id, is_root=False, config=c.quota_config or {}),
+            ))
+
+        return TenantQuotaTreeResponse(root=root_node, children=child_nodes)
 
     # ── Tenant Users ───────────────────────────────────────────
 

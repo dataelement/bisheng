@@ -52,9 +52,9 @@ class TestRequireQuotaAsync:
 
     @pytest.mark.asyncio
     async def test_raises_when_quota_exceeded(self, mock_login_user):
-        """Decorator propagates QuotaExceededError from check_quota."""
+        """Decorator propagates TenantQuotaExceededError from check_quota (F016 T04)."""
         from bisheng.role.domain.services.quota_service import require_quota, QuotaResourceType
-        from bisheng.common.errcode.role import QuotaExceededError
+        from bisheng.common.errcode.tenant_quota import TenantQuotaExceededError
 
         endpoint_called = False
 
@@ -66,9 +66,9 @@ class TestRequireQuotaAsync:
         with patch(
             'bisheng.role.domain.services.quota_service.QuotaService.check_quota',
             new_callable=AsyncMock,
-            side_effect=QuotaExceededError(),
+            side_effect=TenantQuotaExceededError(),
         ):
-            with pytest.raises(QuotaExceededError):
+            with pytest.raises(TenantQuotaExceededError):
                 await create_space(login_user=mock_login_user)
 
         assert not endpoint_called
@@ -115,9 +115,9 @@ class TestRequireQuotaSync:
 
     @pytest.mark.asyncio
     async def test_sync_function_raises_on_exceeded(self, mock_login_user):
-        """Sync function also gets blocked by QuotaExceededError."""
+        """Sync function also gets blocked by TenantQuotaExceededError (F016 T04)."""
         from bisheng.role.domain.services.quota_service import require_quota, QuotaResourceType
-        from bisheng.common.errcode.role import QuotaExceededError
+        from bisheng.common.errcode.tenant_quota import TenantQuotaExceededError
 
         @require_quota(QuotaResourceType.CHANNEL)
         def create_channel_sync(*, login_user=None):
@@ -126,7 +126,7 @@ class TestRequireQuotaSync:
         with patch(
             'bisheng.role.domain.services.quota_service.QuotaService.check_quota',
             new_callable=AsyncMock,
-            side_effect=QuotaExceededError(),
+            side_effect=TenantQuotaExceededError(),
         ):
-            with pytest.raises(QuotaExceededError):
+            with pytest.raises(TenantQuotaExceededError):
                 await create_channel_sync(login_user=mock_login_user)
