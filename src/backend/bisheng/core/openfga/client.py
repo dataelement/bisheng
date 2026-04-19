@@ -19,10 +19,12 @@ logger = logging.getLogger(__name__)
 class FGAClient:
     """Async HTTP client for OpenFGA REST API."""
 
-    def __init__(self, api_url: str, store_id: str, model_id: str, timeout: int = 5):
+    def __init__(self, api_url: str, store_id: str, model_id: str,
+                 timeout: int = 5, legacy_model_id: Optional[str] = None):
         self._api_url = api_url.rstrip('/')
         self._store_id = store_id
         self._model_id = model_id
+        self._legacy_model_id = legacy_model_id  # F013: dual-model gray release
         self._http = httpx.AsyncClient(
             base_url=self._api_url,
             timeout=httpx.Timeout(timeout),
@@ -35,6 +37,11 @@ class FGAClient:
     @property
     def model_id(self) -> str:
         return self._model_id
+
+    @property
+    def legacy_model_id(self) -> Optional[str]:
+        """Legacy model id for shadow writes during gray period; None when disabled."""
+        return self._legacy_model_id
 
     # ── Core permission methods ──────────────────────────────────
 
@@ -94,8 +101,40 @@ class FGAClient:
         """Batch write and/or delete tuples.
 
         Each tuple: {"user": "user:7", "relation": "owner", "object": "workflow:abc"}
-        Raises FGAWriteError on failure.
+        Raises FGAWriteError on failure of the primary model write.
+
+        F013: when legacy_model_id is set (dual_model_mode in OpenFGAConf), a
+        shadow write is sent to the legacy model for the gray release window.
+        Shadow failures are logged at WARNING and never propagate — the legacy
+        model is being phased out and must not block production writes.
         """
+        body = self._build_write_body(writes, deletes)
+        if body is None:
+            return
+
+        # Primary write (current authorization model)
+        primary_body = {**body, 'authorization_model_id': self._model_id}
+        try:
+            await self._post(f'/stores/{self._store_id}/write', primary_body)
+        except FGAConnectionError:
+            raise
+        except FGAClientError as e:
+            raise FGAWriteError(str(e)) from e
+
+        # Shadow write (legacy model during gray period; failures swallowed)
+        if self._legacy_model_id:
+            shadow_body = {**body, 'authorization_model_id': self._legacy_model_id}
+            try:
+                await self._post(f'/stores/{self._store_id}/write', shadow_body)
+            except Exception as e:  # noqa: BLE001 — gray period tolerance
+                logger.warning(
+                    'Shadow write to legacy model %s failed (ignored): %s',
+                    self._legacy_model_id, e,
+                )
+
+    def _build_write_body(self, writes: list[dict] = None,
+                          deletes: list[dict] = None) -> Optional[dict]:
+        """Assemble the OpenFGA write request body, or None when nothing to do."""
         body: dict[str, Any] = {}
         if writes:
             body['writes'] = {
@@ -111,14 +150,7 @@ class FGAClient:
                     for t in deletes
                 ]
             }
-        if not body:
-            return
-        try:
-            await self._post(f'/stores/{self._store_id}/write', body)
-        except FGAConnectionError:
-            raise
-        except FGAClientError as e:
-            raise FGAWriteError(str(e)) from e
+        return body if body else None
 
     async def read_tuples(self, user: Optional[str] = None,
                           relation: Optional[str] = None,

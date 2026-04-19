@@ -1,15 +1,26 @@
-"""Static OpenFGA authorization model for BiSheng v2.5.
+"""Static OpenFGA authorization model for BiSheng v2.5.1.
 
-Defines 13 types: user, system, tenant, department, user_group,
-knowledge_space, folder, knowledge_file, channel, workflow, assistant, tool, dashboard.
+Defines 15 types: user, system, tenant, department, user_group,
+knowledge_space, folder, knowledge_file, channel, workflow, assistant, tool, dashboard,
+llm_server, llm_model.
 
 Permission pyramid: owner > manager(can_manage) > editor(can_edit) > viewer(can_read)
 can_delete: owner (top-level) or owner|can_manage from parent (hierarchical)
+
+v2.5.1 F013 changes:
+- tenant type: adds shared_to relation (Root → Child explicit share); admin no longer
+  inherits via parent (two-tier admin model); tenant#parent relation removed (FGA
+  redundant — parent_tenant_id lives in MySQL)
+- Resource viewer adds tenant#shared_to#member directly_related_user_type for shared
+  resource visibility. manager/editor are NOT extended with any tenant relation —
+  resource grants stay at four sources (user + department#member + user_group#member +
+  owner). 2026-04-21 Round 3 narrowing.
+- New types llm_server / llm_model preallocated for F020 LLM multi-tenant.
 """
 
 import copy
 
-MODEL_VERSION = 'v1.0.0'
+MODEL_VERSION = 'v2.0.0'
 
 
 def _user_types():
@@ -21,8 +32,22 @@ def _user_types():
     ]
 
 
+def _viewer_user_types(include_tenant_shared: bool = True):
+    """Viewer-specific user types: standard sources plus optional tenant#shared_to#member.
+
+    F013 (2026-04-21 Round 3 narrowing): only viewer carries tenant#shared_to#member;
+    manager/editor stay at the standard three sources to keep resource authorization
+    bounded to owner + user + department#member + user_group#member.
+    """
+    types = _user_types()
+    if include_tenant_shared:
+        types.append({'type': 'tenant', 'relation': 'shared_to#member'})
+    return types
+
+
 def _standard_resource_type(type_name: str, *, has_parent: bool = False,
-                            parent_types: list = None) -> dict:
+                            parent_types: list = None,
+                            viewer_includes_tenant_shared: bool = True) -> dict:
     """Build a standard resource type with owner/manager/editor/viewer pyramid + can_delete."""
     relations = {}
     metadata = {}
@@ -81,7 +106,9 @@ def _standard_resource_type(type_name: str, *, has_parent: bool = False,
             }
         })
     relations['viewer'] = {'union': {'child': viewer_children}}
-    metadata['viewer'] = {'directly_related_user_types': _user_types()}
+    metadata['viewer'] = {
+        'directly_related_user_types': _viewer_user_types(viewer_includes_tenant_shared),
+    }
 
     # computed: can_manage, can_edit, can_read
     relations['can_manage'] = {'computedUserset': {'relation': 'manager'}}
@@ -136,12 +163,21 @@ AUTHORIZATION_MODEL: dict = {
             },
         },
 
-        # === tenant: admin + member ===
+        # === tenant: admin + member + shared_to ===
+        # F013 (v2.5.1):
+        # - admin: Child Tenant only; does NOT inherit via parent (two-tier admin model);
+        #          Root tenant has no admin tuples (super_admin handles Root mgmt — INV-T3).
+        # - member: belongs-to lookup; not used in resource grants (Round 3 narrowing).
+        # - shared_to: Root → Child explicit share; resource viewer chains via
+        #              tenant#shared_to#member directly_related_user_type.
+        # tenant#parent relation intentionally absent — parent_tenant_id lives in MySQL only
+        # (AD-05, 2026-04-20 Round 2 narrowing).
         {
             'type': 'tenant',
             'relations': {
                 'admin': {'this': {}},
                 'member': {'this': {}},
+                'shared_to': {'this': {}},
             },
             'metadata': {
                 'relations': {
@@ -150,6 +186,9 @@ AUTHORIZATION_MODEL: dict = {
                     },
                     'member': {
                         'directly_related_user_types': [{'type': 'user'}],
+                    },
+                    'shared_to': {
+                        'directly_related_user_types': [{'type': 'tenant'}],
                     },
                 },
             },
@@ -209,7 +248,7 @@ AUTHORIZATION_MODEL: dict = {
             },
         },
 
-        # === Resource types (8) ===
+        # === Resource types (10) ===
         _standard_resource_type('knowledge_space'),
         _standard_resource_type('folder', has_parent=True,
                                 parent_types=['knowledge_space', 'folder']),
@@ -220,6 +259,11 @@ AUTHORIZATION_MODEL: dict = {
         _standard_resource_type('assistant'),
         _standard_resource_type('tool'),
         _standard_resource_type('dashboard'),
+        # F013 (v2.5.1) preallocates llm_server/llm_model for F020 LLM multi-tenant.
+        # Without these types, F020 cannot write {llm_server:id}#viewer →
+        # tenant:{root}#shared_to#member tuples to enable Root → Child sharing.
+        _standard_resource_type('llm_server'),
+        _standard_resource_type('llm_model'),
     ],
 }
 

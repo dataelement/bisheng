@@ -72,14 +72,21 @@ class FGAManager(BaseContextManager[FGAClient]):
         finally:
             await temp_http.aclose()
 
-        # 3. Build production client with resolved store_id and model_id
+        # 3. Build production client with resolved store_id and model_id.
+        # F013: pass legacy_model_id only when dual_model_mode is on so an
+        # accidentally-set legacy id is ignored unless gray release is active.
+        legacy_id = config.legacy_model_id if config.dual_model_mode else None
         client = FGAClient(
             api_url=api_url,
             store_id=store_id,
             model_id=model_id,
             timeout=config.timeout,
+            legacy_model_id=legacy_id,
         )
-        logger.info('FGAClient initialized: store=%s model=%s', store_id, model_id)
+        logger.info(
+            'FGAClient initialized: store=%s model=%s legacy=%s dual=%s',
+            store_id, model_id, legacy_id, config.dual_model_mode,
+        )
         return client
 
     def _sync_initialize(self) -> FGAClient:

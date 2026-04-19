@@ -5,6 +5,7 @@ Part of F010-tenant-management-ui.
 
 from fastapi import APIRouter
 
+from bisheng.tenant.api.endpoints.tenant_admin import router as admin_router
 from bisheng.tenant.api.endpoints.tenant_crud import router as crud_router
 from bisheng.tenant.api.endpoints.tenant_mount import router as mount_router
 from bisheng.tenant.api.endpoints.tenant_users import router as users_router
@@ -15,6 +16,8 @@ router = APIRouter(tags=['Tenant'])
 # Admin endpoints: /tenants/*
 router.include_router(crud_router, prefix='/tenants')
 router.include_router(users_router, prefix='/tenants')
+# F013: Child Tenant admin CRUD at /tenants/{id}/admins
+router.include_router(admin_router, prefix='/tenants')
 
 # User-facing endpoints: /user/*
 router.include_router(user_tenant_router, prefix='/user')
