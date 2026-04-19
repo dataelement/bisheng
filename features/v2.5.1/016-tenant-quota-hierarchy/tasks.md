@@ -12,7 +12,7 @@
 |------|------|------|
 | spec.md | ✅ 已评审 | 2026-04-19 `/sdd-review spec` 修复 3 项 medium + 2 项 low；新增 §9 API 契约 |
 | tasks.md | ✅ 已拆解 | 2026-04-19 `/sdd-review tasks` 第 2 轮通过；修复 T05 4 文件超标（集成测并入 T07）；Test-Alongside 模式沿用 F013 |
-| 实现 | 🔲 未开始 | 9 任务待启动 |
+| 实现 | 🟢 T01-T07 完成 | 2026-04-19 本地会话；T08-T09 文档 + 手工 QA 进行中（T09 需在 114 执行） |
 
 ---
 
@@ -625,7 +625,7 @@ T09 (手工 QA + ac-verification.md)  ← T08
 
 ### 文档
 
-- [ ] **T08**: 文档同步 + README / release-contract / CLAUDE.md 校验
+- [x] **T08**: 文档同步 + README / release-contract / CLAUDE.md 校验
 
   **文件（修改）**:
   - `features/v2.5.1/README.md` — F016 状态 `🔲 未开始` → `✅ 已完成`
