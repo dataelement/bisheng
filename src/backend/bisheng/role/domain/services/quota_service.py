@@ -167,18 +167,27 @@ class QuotaService:
         ``_aggregate_root_usage``, and INV-T6 (shared-resource sibling
         isolation) via ``_count_usage_strict``.
         """
-        tenant = await TenantDao.aget_by_id(tenant_id)
-        if not tenant:
-            # Tenant disappeared — fail open (do not block); caller will
-            # surface other errors upstream.
-            return role_quota, None
+        # Tenant metadata lookups cross tenant boundaries (leaf + parent Root);
+        # wrap in bypass_tenant_filter() so any future ORM-event-listener
+        # injection on the `tenant` table (were it ever to gain a tenant_id
+        # column) cannot silently filter them out. The Tenant model currently
+        # has no tenant_id column so this is defensive, matching the
+        # project-wide convention (see TenantDao.aget_children_ids_active).
+        from bisheng.core.context.tenant import bypass_tenant_filter
 
-        # MVP 2-layer: chain is [leaf] or [leaf, Root]; F011 INV-T1.
-        chain: list = [tenant]
-        if tenant.parent_tenant_id is not None:
-            root = await TenantDao.aget_by_id(tenant.parent_tenant_id)
-            if root:
-                chain.append(root)
+        with bypass_tenant_filter():
+            tenant = await TenantDao.aget_by_id(tenant_id)
+            if not tenant:
+                # Tenant disappeared — fail open (do not block); caller will
+                # surface other errors upstream.
+                return role_quota, None
+
+            # MVP 2-layer: chain is [leaf] or [leaf, Root]; F011 INV-T1.
+            chain: list = [tenant]
+            if tenant.parent_tenant_id is not None:
+                root = await TenantDao.aget_by_id(tenant.parent_tenant_id)
+                if root:
+                    chain.append(root)
 
         tenant_min_remaining: int = -1
         for t in chain:
