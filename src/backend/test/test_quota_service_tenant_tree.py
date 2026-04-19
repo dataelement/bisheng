@@ -33,13 +33,14 @@ class TestCountUsageStrict:
 
     @pytest.mark.asyncio
     async def test_count_usage_strict_returns_zero_on_missing_template(self):
-        """Resource type with no SQL template + strict_filter enabled → 0 (stub-safe)."""
+        """Resource type with no SQL template + strict_filter enabled → 0 (stub-safe).
+
+        ``_count_resource`` returns 0 early when the template map lookup misses,
+        so no DB session is opened and no patching is needed.
+        """
         from bisheng.role.domain.services.quota_service import QuotaService
 
-        # Use a bogus resource_type → _count_resource returns 0 because template missing.
-        # This also verifies the strict_tenant_filter CM does not affect raw-text SQL path.
-        with patch('bisheng.role.domain.services.quota_service.get_async_db_session'):
-            result = await QuotaService._count_usage_strict(5, 'nonexistent_type')
+        result = await QuotaService._count_usage_strict(5, 'nonexistent_type')
         assert result == 0
 
 

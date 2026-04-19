@@ -280,7 +280,17 @@ class TenantService:
 
     @classmethod
     async def aset_quota(cls, tenant_id: int, data: TenantQuotaUpdate, login_user) -> dict:
-        """Set tenant quota config."""
+        """Set tenant quota config.
+
+        Validates ``quota_config`` keys/values via
+        ``QuotaService.validate_quota_config`` before persisting so unknown
+        resource types and malformed values are rejected with
+        ``QuotaConfigInvalidError(24005)`` (F010 AC-4.2 / F016 AC-03 fix —
+        the endpoint previously accepted any JSON payload unchecked).
+        """
+        from bisheng.role.domain.services.quota_service import QuotaService
+        QuotaService.validate_quota_config(data.quota_config)
+
         tenant = await TenantDao.aupdate_tenant(tenant_id, quota_config=data.quota_config)
         if not tenant:
             raise TenantNotFoundError()
