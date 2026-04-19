@@ -296,7 +296,7 @@ T10 (手工 QA + ac-verification.md)  ← T01-T09
 
 ### 领域层：用户可见租户派生
 
-- [ ] **T06**: `UserPayload` 扩展 stub —— `get_visible_tenants` / `has_tenant_admin`
+- [x] **T06**: `UserPayload` 扩展 stub —— `get_visible_tenants` / `has_tenant_admin`
   **文件（修改）**:
   - `src/backend/bisheng/common/dependencies/user_deps.py` — `UserPayload` 新增两个 async 方法
   **文件（新建）**:
