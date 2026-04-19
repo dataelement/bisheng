@@ -136,7 +136,7 @@
   - Confirm：`bsConfirm`（删除、重置）。
   **覆盖 AC**: AC-35, AC-36, AC-37, AC-38, AC-39, AC-40, AC-41
   **手动验证清单**:
-  1. 访问 http://192.168.106.114:3001/system/org-sync → 能看到列表页（空态）
+  1. 访问 http://192.168.106.114:4001/system/org-sync → 能看到列表页（空态）
   2. 点击"新建"，Provider 选"企业微信" → 显示 4 个字段；缺 corpid 提交 → toast 报错 22006
   3. 填入测试配置（corpid=`wwa04427c3f62b5769` / AgentId=`1000017` / Secret=`qVldC5Kp5houi1fG8yBvmZMaufN2KmFNkijdls1DdVc`），保存 → 列表出现新条目
   4. 点击"测试连接" → toast 显示 total_depts 与 total_members；浏览器 Network 面板检查响应体无 token

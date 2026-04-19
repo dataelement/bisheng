@@ -1,6 +1,6 @@
 # E2E 验证清单: F010 Tenant Management UI
 
-**测试环境**: http://192.168.106.114:3001 (Platform)
+**测试环境**: http://192.168.106.114:4001 (Platform)
 **前置条件**: 
 - 后端 multi_tenant.enabled = true
 - 至少一个管理员账号 (admin/admin123)

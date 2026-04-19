@@ -165,7 +165,7 @@ cd src/backend
 ```markdown
 # E2E 验证清单: {feature_name}
 
-**测试环境**: http://192.168.106.114:3001 (Platform) / :4001 (Client)
+**测试环境**: http://192.168.106.114:4001 (Platform) / :4001/workspace (Client)
 **前置条件**: <描述测试前需要的数据/账号>
 
 ## Platform 前端

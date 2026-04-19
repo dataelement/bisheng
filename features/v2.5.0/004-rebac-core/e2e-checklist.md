@@ -1,6 +1,6 @@
 # E2E 验证清单: F004 ReBAC Permission Engine Core
 
-**测试环境**: http://192.168.106.114:3001 (Platform) / http://192.168.106.114:7860/docs (API Docs)
+**测试环境**: http://192.168.106.114:4001 (Platform) / http://192.168.106.114:7860/docs (API Docs)
 **前置条件**: 后端 + OpenFGA 运行中，默认管理员 admin/Bisheng@top1
 
 ## API 手动验证

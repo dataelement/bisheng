@@ -1,6 +1,6 @@
 # E2E 验证清单: F007 Resource Permission UI
 
-**测试环境**: http://192.168.106.114:3001 (Platform)
+**测试环境**: http://192.168.106.114:4001 (Platform)
 **前置条件**: 
 - OpenFGA 服务运行 (localhost:8080)
 - 至少两个用户: admin (super_admin) + 一个普通用户
