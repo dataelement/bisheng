@@ -730,6 +730,49 @@ class DepartmentDao:
             await session.commit()
         return existing
 
+    @classmethod
+    async def aget_active_by_source_path_name(
+        cls, source: str, path: str, name: str,
+        exclude_id: Optional[int] = None,
+    ) -> List[Department]:
+        """F015 relink helper: active depts matching (source, path, name).
+
+        Used by :class:`DepartmentRelinkService` to discover candidates
+        for the ``path_plus_name`` strategy after an SSO system
+        migration. ``exclude_id`` lets callers drop the old dept from
+        the candidate pool so it never matches itself.
+        """
+        async with get_async_db_session() as session:
+            stmt = select(Department).where(
+                Department.source == source,
+                Department.path == path,
+                Department.name == name,
+                Department.status == 'active',
+            )
+            if exclude_id is not None:
+                stmt = stmt.where(Department.id != exclude_id)
+            result = await session.exec(stmt)
+            return result.all()
+
+    @classmethod
+    async def aupdate_external_id(
+        cls, dept_id: int, new_external_id: str,
+    ) -> bool:
+        """F015 relink helper: rewrite a dept's external_id in place.
+
+        Returns True when exactly one row was updated. The caller is
+        responsible for writing the audit_log entry around the rewrite.
+        """
+        async with get_async_db_session() as session:
+            stmt = (
+                update(Department)
+                .where(Department.id == dept_id)
+                .values(external_id=new_external_id)
+            )
+            result = await session.execute(stmt)
+            await session.commit()
+            return result.rowcount > 0
+
 
 # ---------------------------------------------------------------------------
 # DAO: UserDepartmentDao
@@ -1012,6 +1055,29 @@ class UserDepartmentDao:
                 )
             )
             return result.all()
+
+    @classmethod
+    async def aget_user_ids_by_department(
+        cls, department_id: int, is_primary: Optional[bool] = None,
+    ) -> List[int]:
+        """F015: list user ids assigned to a department.
+
+        ``is_primary=True`` returns only primary-department members,
+        which is what the reconcile service needs to trigger
+        ``UserTenantSyncService.sync_user`` on cross-tenant moves
+        (INV-T2). Passing ``None`` returns primary + secondary members
+        alike.
+        """
+        async with get_async_db_session() as session:
+            stmt = select(UserDepartment).where(
+                UserDepartment.department_id == department_id,
+            )
+            if is_primary is True:
+                stmt = stmt.where(UserDepartment.is_primary == 1)
+            elif is_primary is False:
+                stmt = stmt.where(UserDepartment.is_primary == 0)
+            result = await session.exec(stmt)
+            return [row.user_id for row in result.all()]
 
     @classmethod
     async def aset_primary_flag(

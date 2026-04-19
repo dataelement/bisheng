@@ -11,6 +11,7 @@ from pydantic import ConfigDict, BaseModel, Field, field_validator, model_valida
 
 from bisheng.core.config.multi_tenant import MultiTenantConf
 from bisheng.core.config.openfga import OpenFGAConf
+from bisheng.core.config.reconcile import ReconcileConf
 from bisheng.core.config.sso_sync import SSOSyncConf
 from bisheng.core.config.user_tenant_sync import UserTenantSyncConf
 
@@ -192,6 +193,25 @@ class CeleryConf(BaseModel):
                 'task': 'bisheng.worker.tenant_reconcile.tasks.reconcile_user_tenant_assignments',
                 'schedule': crontab.from_string('0 */6 * * *'),  # every 6 hours
             }
+        # v2.5.1 F015: 6h forced reconcile of every OrgSyncConfig +
+        # weekly/daily ts_conflict reporting. Cron strings are sourced
+        # from ``settings.reconcile`` so operators can override via env
+        # without touching the code path.
+        if 'reconcile_all_organizations' not in self.beat_schedule:
+            self.beat_schedule['reconcile_all_organizations'] = {
+                'task': 'bisheng.worker.org_sync.reconcile_tasks.reconcile_all_organizations',
+                'schedule': crontab.from_string('0 */6 * * *'),  # every 6h
+            }
+        if 'report_ts_conflicts_weekly' not in self.beat_schedule:
+            self.beat_schedule['report_ts_conflicts_weekly'] = {
+                'task': 'bisheng.worker.org_sync.reconcile_tasks.report_ts_conflicts_weekly',
+                'schedule': crontab.from_string('0 9 * * MON'),  # Mon 09:00
+            }
+        if 'report_ts_conflicts_daily_escalation' not in self.beat_schedule:
+            self.beat_schedule['report_ts_conflicts_daily_escalation'] = {
+                'task': 'bisheng.worker.org_sync.reconcile_tasks.report_ts_conflicts_daily_escalation',
+                'schedule': crontab.from_string('0 9 * * *'),  # every 09:00
+            }
 
         # convert str to crontab
         for key, task_info in self.beat_schedule.items():
@@ -338,6 +358,7 @@ class Settings(BaseModel):
     openfga: OpenFGAConf = OpenFGAConf()
     user_tenant_sync: UserTenantSyncConf = UserTenantSyncConf()
     sso_sync: SSOSyncConf = SSOSyncConf()
+    reconcile: ReconcileConf = ReconcileConf()
 
     @field_validator('database_url')
     @classmethod

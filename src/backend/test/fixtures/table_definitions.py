@@ -342,6 +342,64 @@ CREATE TABLE IF NOT EXISTS failed_tuple (
 )"""
 
 # ---------------------------------------------------------------------------
+# F009 + F015: org_sync_config / org_sync_log
+# ---------------------------------------------------------------------------
+
+TABLE_ORG_SYNC_CONFIG = """\
+CREATE TABLE IF NOT EXISTS org_sync_config (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id INTEGER NOT NULL DEFAULT 1,
+    provider VARCHAR(32) NOT NULL,
+    config_name VARCHAR(128) NOT NULL,
+    auth_type VARCHAR(16) NOT NULL,
+    auth_config TEXT NOT NULL,
+    sync_scope JSON,
+    schedule_type VARCHAR(16) NOT NULL DEFAULT 'manual',
+    cron_expression VARCHAR(64),
+    sync_status VARCHAR(16) NOT NULL DEFAULT 'idle',
+    last_sync_at DATETIME,
+    last_sync_result VARCHAR(16),
+    status VARCHAR(16) NOT NULL DEFAULT 'active',
+    create_user INTEGER,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    UNIQUE (tenant_id, provider, config_name)
+)"""
+
+# F015: event_type / level / external_id / source_ts + idx_conflict_lookup
+TABLE_ORG_SYNC_LOG = """\
+CREATE TABLE IF NOT EXISTS org_sync_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id INTEGER NOT NULL DEFAULT 1,
+    config_id INTEGER NOT NULL,
+    trigger_type VARCHAR(16) NOT NULL,
+    trigger_user INTEGER,
+    status VARCHAR(16) NOT NULL DEFAULT 'running',
+    dept_created INTEGER NOT NULL DEFAULT 0,
+    dept_updated INTEGER NOT NULL DEFAULT 0,
+    dept_archived INTEGER NOT NULL DEFAULT 0,
+    member_created INTEGER NOT NULL DEFAULT 0,
+    member_updated INTEGER NOT NULL DEFAULT 0,
+    member_disabled INTEGER NOT NULL DEFAULT 0,
+    member_reactivated INTEGER NOT NULL DEFAULT 0,
+    error_details JSON,
+    event_type VARCHAR(32) NOT NULL DEFAULT '',
+    level VARCHAR(16) NOT NULL DEFAULT 'info',
+    external_id VARCHAR(128),
+    source_ts BIGINT,
+    start_time DATETIME,
+    end_time DATETIME,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+)"""
+
+# Composite index supporting F015 weekly conflict aggregation.
+# SQLite does not support inline INDEX DDL in CREATE TABLE, so emit separately.
+INDEX_ORG_SYNC_LOG_CONFLICT = """\
+CREATE INDEX IF NOT EXISTS idx_conflict_lookup
+    ON org_sync_log (level, event_type, external_id, create_time)"""
+
+
+# ---------------------------------------------------------------------------
 # Registry & helpers
 # ---------------------------------------------------------------------------
 
@@ -367,21 +425,34 @@ TABLE_DEFINITIONS: dict[str, str] = {
     'channel': TABLE_CHANNEL,
     # F018: owner transfer targets the standalone assistant table.
     'assistant': TABLE_ASSISTANT,
+    # F009 + F015: organization sync config + event-scoped log rows.
+    'org_sync_config': TABLE_ORG_SYNC_CONFIG,
+    'org_sync_log': TABLE_ORG_SYNC_LOG,
 }
+
+# Indexes emitted after CREATE TABLE via create_all_tables.
+INDEX_DEFINITIONS: list[str] = [
+    INDEX_ORG_SYNC_LOG_CONFLICT,
+]
 
 
 def create_all_tables(engine: Engine) -> None:
-    """Create all registered tables in the given engine."""
+    """Create all registered tables + supporting indexes."""
     with engine.begin() as conn:
         for ddl in TABLE_DEFINITIONS.values():
             conn.execute(text(ddl))
+        for idx in INDEX_DEFINITIONS:
+            conn.execute(text(idx))
 
 
 def create_tables(engine: Engine, *table_names: str) -> None:
-    """Create only the specified tables.
+    """Create only the specified tables + their supporting indexes.
 
     Raises KeyError if a table name is not in TABLE_DEFINITIONS.
     """
     with engine.begin() as conn:
         for name in table_names:
             conn.execute(text(TABLE_DEFINITIONS[name]))
+        # Also emit indexes whose underlying table was just created.
+        if 'org_sync_log' in table_names:
+            conn.execute(text(INDEX_ORG_SYNC_LOG_CONFLICT))
