@@ -1,12 +1,16 @@
 """PermissionService — core ReBAC permission engine (T07b).
 
-Permission check chain (AC-02):
-  L1: Super admin shortcircuit（等效 owner，无 FGA 元组）
-  L2: Redis cache（10s TTL，UNCACHEABLE_RELATIONS bypass）
-  L3: OpenFGA check
-  L4: DB creator = self → owner
-  L4b: 部门管理员隐式「可管理」（管辖子树内成员创建的应用/知识库，无 FGA 元组、不出现在授权列表）
-  L5: Fail-closed on FGA connection error（AD-03）
+Permission check chain (AC-02 / F013 spec §6):
+  L1: Super admin shortcircuit (等效 owner，无 FGA 元组)
+  L2: Redis cache (10s TTL, UNCACHEABLE_RELATIONS bypass)
+  L3: F013 — Tenant IN-list visibility gate (resolve resource tenant_id;
+      reject when not in user's visible set unless tenant#shared_to#member)
+  L4: F013 — Child Tenant admin shortcut (skip Root: no tenant#admin tuples
+      by design, INV-T3)
+  L5: OpenFGA check (was L3)
+  L6: DB creator = self → owner fallback (was L4)
+  L6b: 部门管理员隐式「可管理」（管辖子树内成员创建的应用/知识库）
+  L7: Fail-closed on FGA connection error (AD-03)
 
 All methods are @classmethod — no instance state.
 """
@@ -67,7 +71,28 @@ class PermissionService:
             if cached is not None:
                 return cached
 
-        # L3: OpenFGA check
+        # L3 / L4 — F013 tenant gating (only when login_user is supplied; legacy
+        # call sites that pass None preserve their previous behavior).
+        if login_user is not None:
+            resource_tenant_id = await cls._resolve_resource_tenant(object_type, object_id)
+            if resource_tenant_id is not None:
+                # L3: Tenant IN-list visibility gate.
+                visible = await login_user.get_visible_tenants()
+                if resource_tenant_id not in visible:
+                    if not await cls._is_shared_to(user_id, resource_tenant_id):
+                        return False
+
+                # L4: Child Tenant admin shortcut. Skip Root: no tenant#admin
+                # tuples for Root by design (INV-T3); Root admin authority
+                # flows through L1 super_admin only.
+                from bisheng.database.models.tenant import ROOT_TENANT_ID, TenantDao
+                if resource_tenant_id != ROOT_TENANT_ID:
+                    tenant = await TenantDao.aget_by_id(resource_tenant_id)
+                    if tenant is not None and tenant.parent_tenant_id is not None:
+                        if await login_user.has_tenant_admin(resource_tenant_id):
+                            return True
+
+        # L5: OpenFGA check
         try:
             fga = cls._get_fga()
             if fga is None:
@@ -778,3 +803,58 @@ class PermissionService:
         """Get FGAClient from app context. Returns None if unavailable."""
         from bisheng.core.openfga.manager import get_fga_client
         return get_fga_client()
+
+    # ── F013 helpers (Tenant tree) ──────────────────────────────
+
+    @classmethod
+    async def _resolve_resource_tenant(cls, object_type: str, object_id: str):
+        """Resolve a resource's owning tenant_id, or None to skip tenant gating.
+
+        F013 only enforces tenant gating for primary resource types that carry
+        an owning tenant_id we can look up cheaply (workflow, assistant,
+        knowledge_space). Other types (folder, knowledge_file, channel, tool,
+        dashboard, llm_*) inherit visibility via their parent or are not yet
+        wired to multi-tenant; for those, returning None falls through to the
+        existing FGA chain which still honors tenant#shared_to#member at the
+        DSL level. Any DAO error degrades to None for safety (legacy paths).
+        """
+        try:
+            if object_type == 'workflow':
+                from bisheng.database.models.flow import FlowDao
+                obj = await FlowDao.aget_flow_by_id(str(object_id))
+                return obj.tenant_id if obj else None
+            if object_type == 'assistant':
+                from bisheng.database.models.assistant import AssistantDao
+                obj = await AssistantDao.aget_one_assistant(str(object_id))
+                return obj.tenant_id if obj else None
+            if object_type == 'knowledge_space':
+                from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+                obj = await KnowledgeDao.aquery_by_id(int(object_id))
+                return obj.tenant_id if obj else None
+        except Exception as e:  # noqa: BLE001 — defensive degradation
+            logger.warning(
+                '_resolve_resource_tenant failed for %s:%s: %s',
+                object_type, object_id, e,
+            )
+            return None
+        return None
+
+    @classmethod
+    async def _is_shared_to(cls, user_id: int, target_tenant_id: int) -> bool:
+        """True iff user belongs to target_tenant#shared_to#member (Root → Child share).
+
+        Used by L3 visibility gate when the resource tenant is not in the
+        user's visible set. Depends on F017 to write the shared_to tuples
+        at resource creation time. Returns False on any FGA error.
+        """
+        fga = cls._get_fga()
+        if fga is None:
+            return False
+        try:
+            return await fga.check(
+                user=f'user:{user_id}',
+                relation='member',
+                object=f'tenant:{target_tenant_id}#shared_to',
+            )
+        except FGAConnectionError:
+            return False

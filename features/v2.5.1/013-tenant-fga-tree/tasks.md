@@ -483,7 +483,7 @@ T10 (手工 QA + ac-verification.md)  ← T01-T09
 
 ### 核心链路：PermissionService 五级短路扩展
 
-- [ ] **T08**: `PermissionService.check` 插入 L2/L3 + `_is_shared_to` 辅助
+- [x] **T08**: `PermissionService.check` 插入 L2/L3 + `_is_shared_to` 辅助
   **文件（修改）**:
   - `src/backend/bisheng/permission/domain/services/permission_service.py` — `check` 方法 L1 后插入 L2/L3；新增 `_is_shared_to` 辅助
   **文件（修改）**:
