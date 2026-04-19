@@ -19,10 +19,12 @@ logger = logging.getLogger(__name__)
 class FGAClient:
     """Async HTTP client for OpenFGA REST API."""
 
-    def __init__(self, api_url: str, store_id: str, model_id: str, timeout: int = 5):
+    def __init__(self, api_url: str, store_id: str, model_id: str,
+                 timeout: int = 5, legacy_model_id: Optional[str] = None):
         self._api_url = api_url.rstrip('/')
         self._store_id = store_id
         self._model_id = model_id
+        self._legacy_model_id = legacy_model_id  # F013: dual-model gray release
         self._http = httpx.AsyncClient(
             base_url=self._api_url,
             timeout=httpx.Timeout(timeout),
@@ -35,6 +37,11 @@ class FGAClient:
     @property
     def model_id(self) -> str:
         return self._model_id
+
+    @property
+    def legacy_model_id(self) -> Optional[str]:
+        """Legacy model id for shadow writes during gray period; None when disabled."""
+        return self._legacy_model_id
 
     # ── Core permission methods ──────────────────────────────────
 

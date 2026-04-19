@@ -214,7 +214,7 @@ T10 (手工 QA + ac-verification.md)  ← T01-T09
 
 ---
 
-- [ ] **T04**: `FGAManager` 双 model bootstrap
+- [x] **T04**: `FGAManager` 双 model bootstrap
   **文件（修改）**:
   - `src/backend/bisheng/core/openfga/manager.py` — `_async_initialize` 在写新 model 时，若 `dual_model_mode=True` 且 `legacy_model_id` 已配置，保留旧 id 在 client 上
   **文件（修改）**:
