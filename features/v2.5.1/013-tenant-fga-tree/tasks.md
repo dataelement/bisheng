@@ -366,7 +366,7 @@ T10 (手工 QA + ac-verification.md)  ← T01-T09
 
 ### 服务层：Tenant Admin 管理
 
-- [ ] **T07**: `TenantAdminService` 新增（Child admin CRUD + Root 守卫）
+- [x] **T07**: `TenantAdminService` 新增（Child admin CRUD + Root 守卫）
   **文件（新建）**:
   - `src/backend/bisheng/permission/domain/services/tenant_admin_service.py` — 服务类
   - `src/backend/test/test_tenant_admin_service.py` — 单测
