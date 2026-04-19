@@ -20,6 +20,11 @@ from typing import List, Optional
 from loguru import logger
 
 from bisheng.common.services.config_service import settings
+from bisheng.core.context.tenant import (
+    bypass_tenant_filter,
+    current_tenant_id,
+    set_current_tenant_id,
+)
 from bisheng.database.models.tenant import ROOT_TENANT_ID
 from bisheng.org_sync.domain.models.org_sync import (
     OrgSyncLog,
@@ -101,8 +106,18 @@ async def flush_log(
         start_time=buffer.start_time,
         end_time=datetime.utcnow(),
     )
+    # The endpoint calls flush_log *after* the service returns, by which
+    # point the bypass_tenant_filter + current_tenant_id context set up
+    # inside the service has already been torn down. Re-enter it here so
+    # the write bypasses the F001 tenant-scoping event hooks (the log row
+    # is tenant_id=1 by design, not the caller's JWT leaf).
     try:
-        return await OrgSyncLogDao.acreate(log)
+        with bypass_tenant_filter():
+            token = set_current_tenant_id(ROOT_TENANT_ID)
+            try:
+                return await OrgSyncLogDao.acreate(log)
+            finally:
+                current_tenant_id.reset(token)
     except Exception as e:  # pragma: no cover
         logger.warning('F014 org_sync_log flush failed: %s', e)
         return None
