@@ -670,3 +670,4 @@ T10 (手工 QA + ac-verification.md)  ← T01-T09
 - **偏差 5**：T03 实际 `config.yaml` 不需要修改（grep 确认无 openfga 配置块；纯 Pydantic 默认值生效）。tasks.md T03 中"配置 yaml 文件修改"实际跳过
 - **偏差 6**：本地 mac 环境无 BiShengVENV conda env，pytest 无法执行；所有自动化验证用 `python -m py_compile` + 直接 import 完成 syntax + 功能性 smoke。完整 pytest 推到 T10 在测试服务器 192.168.106.114 执行
 - **偏差 7**：T10 实际只完成 ac-verification.md **模板**初稿（标注所有手工 QA 项为 ⏳ pending），未执行真实 OpenFGA 端到端验证（需测试服务器）；ac-verification.md 末尾"Pending Items Summary"列出测试服务器执行步骤
+- **偏差 8**（2026-04-19 合并 F012 后）：T06 `UserPayload.get_visible_tenants` 改造完成——原 `TODO(F012)` stub 已切换为读 `bisheng.core.context.tenant.get_visible_tenant_ids()` ContextVar（F012 `CustomMiddleware` 注入），DB 反查降为 fallback 路径（供超管和无 middleware 的 legacy 调用使用）。权限检查热路径省 1 次 DB 往返。`has_tenant_admin` 保持 FGA 直查——F012 未提供等价缓存渠道

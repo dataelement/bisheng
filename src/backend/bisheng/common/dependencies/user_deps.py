@@ -17,15 +17,31 @@ class UserPayload(LoginUser):
 
         Visible set = {leaf} ∪ {root}. Deduplicated when leaf == root.
 
-        Currently a stub: looks up the active leaf via UserTenantDao on every
-        call. F012 will replace this with a JWT claim plus the hardcoded
-        Root id, eliminating the DB roundtrip.
+        Primary path reads the ``visible_tenant_ids`` ContextVar injected by
+        F012's ``CustomMiddleware`` — for Child users it holds ``{leaf, 1}``;
+        for Root users ``{1}``; for global super admins without admin-scope
+        it is ``None``. Returning ordered ``[leaf, root]`` preserves prior
+        test expectations.
 
-        TODO(F012): replace with JWT claim ``payload.tenant_id`` + ROOT_TENANT_ID.
+        Fallback: when the ContextVar is ``None`` (super admin, tests without
+        middleware, or any legacy call site bypassing the HTTP layer), look
+        up the active leaf via ``UserTenantDao``. Both paths end up with the
+        same 2-element (or 1-element) list.
         """
-        # Local imports keep this module import-light and avoid circular deps
-        # at module load time (LoginUser is the parent class).
-        from bisheng.core.context.tenant import DEFAULT_TENANT_ID
+        from bisheng.core.context.tenant import (
+            DEFAULT_TENANT_ID,
+            get_visible_tenant_ids,
+        )
+
+        visible = get_visible_tenant_ids()
+        if visible is not None:
+            if DEFAULT_TENANT_ID in visible and len(visible) > 1:
+                others = sorted(visible - {DEFAULT_TENANT_ID})
+                return [*others, DEFAULT_TENANT_ID]
+            return sorted(visible)
+
+        # Fallback: no ContextVar set. Local import keeps the module import-light
+        # and avoids circular deps at load time (LoginUser is the parent class).
         from bisheng.database.models.tenant import UserTenantDao
 
         active = await UserTenantDao.aget_active_user_tenant(self.user_id)

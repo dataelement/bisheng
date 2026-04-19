@@ -34,8 +34,42 @@ def payload_factory():
 
 
 @pytest.mark.asyncio
-async def test_visible_tenants_dedupes_when_leaf_is_root(payload_factory):
-    """Active leaf == Root → returns [Root] only (no duplicate)."""
+async def test_visible_tenants_reads_context_var_when_set(payload_factory):
+    """Primary path: F012 middleware set the ContextVar → no DB lookup."""
+    user = payload_factory(user_id=100)
+
+    from bisheng.core.context.tenant import set_visible_tenant_ids
+    token = set_visible_tenant_ids(frozenset({5, 1}))
+    try:
+        with patch('bisheng.database.models.tenant.UserTenantDao') as dao:
+            dao.aget_active_user_tenant = AsyncMock()
+            result = await user.get_visible_tenants()
+            dao.aget_active_user_tenant.assert_not_called()
+    finally:
+        from bisheng.core.context.tenant import visible_tenant_ids
+        visible_tenant_ids.reset(token)
+
+    assert result == [5, 1]  # leaf first, root last
+
+
+@pytest.mark.asyncio
+async def test_visible_tenants_context_var_root_only(payload_factory):
+    """Root-only visible set (single element frozenset) returns [1]."""
+    user = payload_factory(user_id=100)
+
+    from bisheng.core.context.tenant import set_visible_tenant_ids, visible_tenant_ids
+    token = set_visible_tenant_ids(frozenset({1}))
+    try:
+        result = await user.get_visible_tenants()
+    finally:
+        visible_tenant_ids.reset(token)
+
+    assert result == [1]
+
+
+@pytest.mark.asyncio
+async def test_visible_tenants_dedupes_when_leaf_is_root_fallback(payload_factory):
+    """Fallback path: ContextVar unset + DAO returns Root leaf → [1]."""
     user = payload_factory(user_id=100)
 
     fake_active = SimpleNamespace(tenant_id=1)
@@ -47,7 +81,8 @@ async def test_visible_tenants_dedupes_when_leaf_is_root(payload_factory):
 
 
 @pytest.mark.asyncio
-async def test_visible_tenants_child_returns_leaf_plus_root(payload_factory):
+async def test_visible_tenants_child_returns_leaf_plus_root_fallback(payload_factory):
+    """Fallback path: ContextVar unset + DAO returns Child leaf → [leaf, 1]."""
     user = payload_factory(user_id=100)
 
     fake_active = SimpleNamespace(tenant_id=5)
@@ -60,6 +95,7 @@ async def test_visible_tenants_child_returns_leaf_plus_root(payload_factory):
 
 @pytest.mark.asyncio
 async def test_visible_tenants_no_active_falls_back_to_root(payload_factory):
+    """Fallback path: ContextVar unset + no active UserTenant → [Root]."""
     user = payload_factory(user_id=100)
 
     with patch('bisheng.database.models.tenant.UserTenantDao') as dao:
