@@ -118,7 +118,7 @@ T09 (手工 QA + ac-verification.md)  ← T08
 
   **验收**: `python -c "from bisheng.common.errcode.tenant_quota import TenantQuotaExceededError; e=TenantQuotaExceededError(); print(e.return_resp_instance().model_dump())"` 返回 `{status_code: 19401, status_message: 'Tenant quota exceeded', data: None}`
 
-- [ ] **T02**: `VALID_QUOTA_KEYS` 扩展 + `_RESOURCE_COUNT_TEMPLATES` 新增 3 个 SQL 模板
+- [x] **T02**: `VALID_QUOTA_KEYS` 扩展 + `_RESOURCE_COUNT_TEMPLATES` 新增 3 个 SQL 模板
 
   **文件（修改）**:
   - `src/backend/bisheng/role/domain/services/quota_service.py`

@@ -33,7 +33,11 @@ DEFAULT_ROLE_QUOTA: dict[str, int] = {
     'dashboard': -1,
 }
 
-VALID_QUOTA_KEYS = set(DEFAULT_ROLE_QUOTA.keys())
+# Tenant-level only quota keys (F016): not in DEFAULT_ROLE_QUOTA because these
+# are not role-level limits, but still need to pass validate_quota_config.
+_TENANT_ONLY_QUOTA_KEYS = {'storage_gb', 'user_count', 'model_tokens_monthly'}
+
+VALID_QUOTA_KEYS = set(DEFAULT_ROLE_QUOTA.keys()) | _TENANT_ONLY_QUOTA_KEYS
 
 # Resource counting SQL templates — keyed by {col}=:{param} placeholder.
 # Shared between tenant-level and user-level counts.
@@ -46,6 +50,22 @@ _RESOURCE_COUNT_TEMPLATES: dict[str, str] = {
     'assistant': "SELECT COUNT(*) FROM flow WHERE {col}=:{param} AND flow_type=5 AND status!=0",
     'tool': "SELECT COUNT(*) FROM gpts_tools WHERE {col}=:{param} AND is_delete=0",
     'dashboard': "SELECT COUNT(*) FROM flow WHERE {col}=:{param} AND flow_type=15 AND status!=0",
+    # F016 T02: tenant-only resource types.
+    # storage_gb: total bytes of active knowledge files; converted to GB in _count_resource.
+    'storage_gb': "SELECT COALESCE(SUM(file_size), 0) FROM knowledgefile WHERE {col}=:{param} AND status IN (1,2)",
+    # user_count: active users in the tenant; only meaningful when {col}='tenant_id'
+    # (user-level count returns 0 because user_tenant.user_id column is the join, not filter).
+    'user_count': (
+        "SELECT COUNT(DISTINCT ut.user_id) FROM user_tenant ut "
+        "INNER JOIN user u ON u.user_id = ut.user_id "
+        "WHERE ut.{col}=:{param} AND ut.is_active=1 AND u.delete=0"
+    ),
+    # model_tokens_monthly: F017 dependency. Table llm_token_log may not exist
+    # yet; _count_resource's try/except returns 0 on missing table (stub-safe).
+    'model_tokens_monthly': (
+        "SELECT COALESCE(SUM(total_tokens), 0) FROM llm_token_log "
+        "WHERE {col}=:{param} AND created_at >= DATE_FORMAT(NOW(), '%Y-%m-01')"
+    ),
 }
 
 
@@ -59,6 +79,10 @@ class QuotaResourceType:
     ASSISTANT = 'assistant'
     TOOL = 'tool'
     DASHBOARD = 'dashboard'
+    # F016 T02: tenant-only.
+    STORAGE_GB = 'storage_gb'
+    USER_COUNT = 'user_count'
+    MODEL_TOKENS_MONTHLY = 'model_tokens_monthly'
 
 
 class QuotaService:
@@ -245,7 +269,7 @@ class QuotaService:
             async with get_async_db_session() as session:
                 result = await session.execute(text(sql), {param: val})
                 count = result.scalar() or 0
-                if resource_type == 'knowledge_space_file':
+                if resource_type in ('knowledge_space_file', 'storage_gb'):
                     count = count // (1024 * 1024 * 1024)
                 return count
         except Exception as e:
