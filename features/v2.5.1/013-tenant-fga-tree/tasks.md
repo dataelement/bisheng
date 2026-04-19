@@ -586,7 +586,7 @@ T10 (手工 QA + ac-verification.md)  ← T01-T09
 
 ### 集成层：OpenFGA 端到端 + AC 映射
 
-- [ ] **T09**: 集成测试 `test_f013_tenant_fga_tree.py`（FGA 端到端，AC-01/02/03/04/05/06/07/08/10/11/12/13 映射）
+- [x] **T09**: 集成测试 `test_f013_tenant_fga_tree.py`（FGA 端到端，AC-01/02/03/04/05/06/07/08/10/11/12/13 映射）
   **文件（新建）**:
   - `src/backend/test/test_f013_tenant_fga_tree.py` — 集成测试套件
   **测试降级标注**：
