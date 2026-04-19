@@ -1,8 +1,9 @@
 # F013 AC Verification Record
 
-> Template populated at end of T10. Auto-covered items reference the
-> automated tests; items requiring a real OpenFGA store are queued for
-> execution on the test server (192.168.106.114) with docker-compose.
+> **2026-04-19 execution run (Claude on test server 192.168.106.114)** — see
+> "Executed Results" section below for what was actually verified this pass.
+> Pending items (perf, dual-model live switch, shared_to end-to-end once
+> F017 lands) remain ⏳.
 
 ---
 
@@ -10,9 +11,25 @@
 
 | Layer | Used | Notes |
 |-------|------|-------|
-| Local mac | partial | syntax + Python smoke; pytest not installed in mac default env |
-| Test server (192.168.106.114) | pending | needs `docker compose -p bisheng up -d openfga` then `pytest test/` |
-| Real OpenFGA | pending | required for AC-01 CLI verify, AC-10 latency, AC-09 dual-model live switch |
+| Local mac | partial | `py_compile` + import smoke only; no BiShengVENV conda env |
+| Test server (192.168.106.114) | ✅ executed 2026-04-19 | pytest after `uv sync --extra test`; OpenFGA docker already up at :8080 |
+| Real OpenFGA store | ✅ verified 2026-04-19 | `bisheng` store `01KP3NQ94E4JC3BZK4FPMZG4QQ`; new model deployed `01KPJP967NH4PM3WRRRX80E0YY` |
+
+---
+
+## Executed Results (2026-04-19)
+
+| Item | Result | Evidence |
+|------|--------|----------|
+| pytest 9 F013 files | ✅ 130 passed / 0 failed | `.venv/bin/pytest` after `uv sync --extra test` |
+| AC-01 DSL v2.0.1 deploy | ✅ HTTP 201 | `POST /stores/.../authorization-models` → `{authorization_model_id: 01KPJP967NH4PM3WRRRX80E0YY}` |
+| AC-01 DSL structure check | ✅ | tenant.relations=[admin,member,shared_to]; workflow.shared_with=True; llm_server/llm_model present; 15 types |
+| AC-05 (normal user no tenant#admin) | ✅ | `check(user:999, admin, tenant:1)` → `{allowed:false}` |
+| AC-06 (Root tenant no admin tuples) | ✅ | `check(user:1, admin, tenant:1)` → `{allowed:false}` — super_admin routed via system:global not tenant#admin |
+| AC-13 POST /tenants/1/admins | ✅ HTTP 403 + errcode 19204 | `{status_code:19204,status_message:"Root tenant admin granting is forbidden..."}` |
+| AC-13 DELETE /tenants/1/admins/10 | ✅ HTTP 403 + errcode 19204 | symmetric to POST |
+| GET /tenants/1/admins (AC-06 variant) | ✅ HTTP 200 `{user_ids:[]}` | Root returns empty by design |
+| DSL v2.0.0 rejection finding | discovered + fixed | OpenFGA rejected `relation: 'shared_to#member'` (regex `^[^:#@\s]{1,50}$`); switched to resource.shared_with + tupleToUserset in commit |
 
 ---
 
