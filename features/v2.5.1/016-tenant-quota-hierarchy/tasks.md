@@ -262,7 +262,7 @@ T09 (手工 QA + ac-verification.md)  ← T08
   - `pytest test/test_quota_service_tenant_tree.py` 全绿
   - 覆盖 AC: AC-02（strict 避免叠加）, AC-07（Root 聚合算法）, AC-09（strict_tenant_filter 包裹）
 
-- [ ] **T04**: `_apply_tenant_chain_cap` 重写 + `check_quota` 异常切换 + 单测
+- [x] **T04**: `_apply_tenant_chain_cap` 重写 + `check_quota` 异常切换 + 单测
 
   **文件（修改）**:
   - `src/backend/bisheng/role/domain/services/quota_service.py` — 重写 L96-134

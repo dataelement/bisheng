@@ -16,6 +16,11 @@ import logging
 from typing import Optional
 
 from bisheng.common.errcode.role import QuotaExceededError, QuotaConfigInvalidError
+from bisheng.common.errcode.tenant_quota import (
+    TenantQuotaExceededError,
+    TenantRoleQuotaExceededError,
+    TenantStorageQuotaExceededError,
+)
 from bisheng.database.models.role import RoleDao
 from bisheng.database.models.tenant import TenantDao
 from bisheng.user.domain.models.user_role import UserRoleDao
@@ -119,7 +124,12 @@ class QuotaService:
 
     @classmethod
     async def _apply_tenant_cap(cls, role_quota: int, tenant_id: int, resource_type: str) -> int:
-        """Apply tenant hard limit to role quota."""
+        """Apply tenant hard limit to role quota (single-tenant view).
+
+        v2.5.0 baseline — retained for `get_effective_quota` which powers the
+        front-end `/me/quotas` endpoint. The Tenant-tree-aware variant is
+        `_apply_tenant_chain_cap` (F016 T04, used only by `check_quota`).
+        """
         tenant = await TenantDao.aget_by_id(tenant_id)
         tenant_limit = (tenant.quota_config or {}).get(resource_type, -1) if tenant else -1
 
@@ -134,6 +144,69 @@ class QuotaService:
         return min(tenant_remaining, role_quota)
 
     @classmethod
+    async def _apply_tenant_chain_cap(
+        cls,
+        role_quota: int,
+        tenant_id: int,
+        resource_type: str,
+    ) -> tuple[int, Optional[tuple[int, str]]]:
+        """F016 T04 — Tenant-chain hard-limit check (leaf + Root if Child).
+
+        Returns ``(effective_remaining, blocker)``:
+          - ``effective_remaining`` — min of all chain nodes' remaining values,
+            further min with ``role_quota``; ``-1`` means unlimited across
+            chain + role.
+          - ``blocker`` — ``None`` if chain passes; otherwise
+            ``(blocker_tenant_id, reason)`` where ``reason`` is one of:
+              * ``'tenant_limit'`` — leaf (Child) tenant limit exhausted
+              * ``'root_hardcap'`` — Root tenant hard-cap exhausted; for
+                Child users this means the group-wide ceiling is reached
+                (AC-08, msg variant must contain '集团总量已耗尽').
+
+        Implements INV-T9 (Root usage = self + Σ active Child) via
+        ``_aggregate_root_usage``, and INV-T6 (shared-resource sibling
+        isolation) via ``_count_usage_strict``.
+        """
+        tenant = await TenantDao.aget_by_id(tenant_id)
+        if not tenant:
+            # Tenant disappeared — fail open (do not block); caller will
+            # surface other errors upstream.
+            return role_quota, None
+
+        # MVP 2-layer: chain is [leaf] or [leaf, Root]; F011 INV-T1.
+        chain: list = [tenant]
+        if tenant.parent_tenant_id is not None:
+            root = await TenantDao.aget_by_id(tenant.parent_tenant_id)
+            if root:
+                chain.append(root)
+
+        tenant_min_remaining: int = -1
+        for t in chain:
+            limit = (t.quota_config or {}).get(resource_type, -1)
+            if limit == -1:
+                continue
+            is_root = t.parent_tenant_id is None
+            used = (
+                await cls._aggregate_root_usage(t.id, resource_type)
+                if is_root
+                else await cls._count_usage_strict(t.id, resource_type)
+            )
+            remaining = max(limit - used, 0)
+            if remaining == 0:
+                reason = 'root_hardcap' if is_root else 'tenant_limit'
+                return 0, (t.id, reason)
+            tenant_min_remaining = (
+                remaining if tenant_min_remaining == -1
+                else min(tenant_min_remaining, remaining)
+            )
+
+        if role_quota == -1:
+            return tenant_min_remaining, None
+        if tenant_min_remaining == -1:
+            return role_quota, None
+        return min(tenant_min_remaining, role_quota), None
+
+    @classmethod
     async def check_quota(
         cls,
         user_id: int,
@@ -141,19 +214,67 @@ class QuotaService:
         tenant_id: int,
         login_user=None,
     ) -> bool:
-        """Check if user can create one more resource.
+        """Check if user can create one more resource (F016 T04 Tenant-tree aware).
 
-        Returns True if allowed.
-        Raises QuotaExceededError if quota exhausted (AC-20).
+        Enforcement order (fail-fast):
+          1. Admin short-circuit (INV-T5 global super admin bypasses all quota).
+          2. Tenant-chain check via ``_apply_tenant_chain_cap``:
+               - blocker.reason == 'tenant_limit' → ``TenantQuotaExceededError(19401)``
+               - blocker.reason == 'root_hardcap' → ``TenantQuotaExceededError(19401)``
+                 with msg containing '集团总量已耗尽' (AC-08).
+               - If resource_type is storage-related ('storage_gb' or
+                 'knowledge_space_file'), upgrade exception to
+                 ``TenantStorageQuotaExceededError(19403)`` (AC-04).
+          3. Role-quota check on top of Tenant-chain effective:
+               - ``TenantRoleQuotaExceededError(19402)``.
+
+        Returns True when allowed. Raises one of the 194xx subclasses when
+        exceeded.
         """
-        effective = await cls.get_effective_quota(user_id, resource_type, tenant_id, login_user)
+        if login_user and login_user.is_admin():
+            return True
+
+        user_roles = await UserRoleDao.aget_user_roles(user_id)
+        role_ids = [r.role_id for r in user_roles]
+        if not role_ids:
+            role_quota = DEFAULT_ROLE_QUOTA.get(resource_type, -1)
+        else:
+            roles = await RoleDao.aget_role_by_ids(role_ids)
+            all_quotas = cls._compute_role_quotas(roles)
+            role_quota = all_quotas.get(resource_type, DEFAULT_ROLE_QUOTA.get(resource_type, -1))
+
+        effective, blocker = await cls._apply_tenant_chain_cap(role_quota, tenant_id, resource_type)
+
+        if blocker is not None:
+            blocker_tid, reason = blocker
+            if resource_type in ('storage_gb', 'knowledge_space_file'):
+                raise TenantStorageQuotaExceededError(
+                    msg=(
+                        f'Storage quota exceeded at tenant {blocker_tid} ({reason}) '
+                        f'for {resource_type}'
+                    ),
+                )
+            if reason == 'root_hardcap':
+                raise TenantQuotaExceededError(
+                    msg=(
+                        f'集团总量已耗尽 (Root tenant {blocker_tid} quota for '
+                        f'{resource_type} reached)'
+                    ),
+                )
+            raise TenantQuotaExceededError(
+                msg=f'Tenant {blocker_tid} quota exceeded for {resource_type}',
+            )
+
         if effective == -1:
             return True
 
         user_used = await cls.get_user_resource_count(user_id, resource_type)
         if user_used >= effective:
-            raise QuotaExceededError(
-                msg=f'Resource quota exceeded for {resource_type}',
+            raise TenantRoleQuotaExceededError(
+                msg=(
+                    f'Role quota exceeded for {resource_type} '
+                    f'(user_used={user_used}, effective={effective})'
+                ),
             )
         return True
 
