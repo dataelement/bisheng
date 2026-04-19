@@ -286,6 +286,44 @@ class QuotaService:
         """Count user-level resource usage."""
         return await cls._count_resource('user_id', user_id, resource_type)
 
+    # -----------------------------------------------------------------------
+    # F016 T03: Tenant-tree quota counting helpers.
+    # -----------------------------------------------------------------------
+
+    @classmethod
+    async def _count_usage_strict(cls, tenant_id: int, resource_type: str) -> int:
+        """Strict-equality tenant count — prevents IN-list over-counting (INV-T6).
+
+        Wraps ``get_tenant_resource_count`` in ``strict_tenant_filter()`` so Root's
+        shared resources don't inflate Child usage (AC-02, AC-09). The underlying
+        ``_count_resource`` uses raw ``text()`` SQL with explicit ``WHERE tenant_id=:id``,
+        so the current ORM event listener does not rewrite the query — but we keep
+        this defensive wrapper for semantic clarity and future ORM migration.
+        """
+        from bisheng.core.context.tenant import strict_tenant_filter
+        with strict_tenant_filter():
+            return await cls.get_tenant_resource_count(tenant_id, resource_type)
+
+    @classmethod
+    async def _aggregate_root_usage(cls, root_id: int, resource_type: str) -> int:
+        """Root usage = Root self + Σ all active Child usage (INV-T9, AC-07).
+
+        Only ``status='active'`` Children count; ``disabled / archived / orphaned``
+        are excluded because those tenants can no longer create resources and the
+        quota semantics treat them as "exited the pool" (spec §5).
+
+        Uses ``asyncio.gather`` to parallelize per-child counts and avoid N+1.
+        """
+        from bisheng.database.models.tenant import TenantDao
+        root_self = await cls._count_usage_strict(root_id, resource_type)
+        child_ids = await TenantDao.aget_children_ids_active(root_id)
+        if not child_ids:
+            return root_self
+        child_counts = await asyncio.gather(
+            *(cls._count_usage_strict(cid, resource_type) for cid in child_ids),
+        )
+        return root_self + sum(child_counts)
+
     @classmethod
     def validate_quota_config(cls, quota_config: Optional[dict]) -> None:
         """Validate quota_config values (AC-10c).

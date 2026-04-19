@@ -180,7 +180,7 @@ T09 (手工 QA + ac-verification.md)  ← T08
 
 ### 后端 Domain
 
-- [ ] **T03**: `_count_usage_strict` + `_aggregate_root_usage` + 单测
+- [x] **T03**: `_count_usage_strict` + `_aggregate_root_usage` + 单测
 
   **文件（修改）**:
   - `src/backend/bisheng/role/domain/services/quota_service.py` — 新增 2 个 `@classmethod`
