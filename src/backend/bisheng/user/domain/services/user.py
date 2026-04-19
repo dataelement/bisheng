@@ -118,6 +118,11 @@ class UserService:
         user = User(
             user_name=req_data.user_name,
             password=cls.decrypt_md5_password(req_data.password),
+            source='local',
+            # Default external_id to user_name so password login (which queries
+            # external_id only since 94323e3ec) works out of the box. SSO-synced
+            # users set their own external_id via org_sync, not through here.
+            external_id=req_data.user_name,
         )
         group_ids = []
         role_ids = []
@@ -325,9 +330,43 @@ class UserService:
                 requires_tenant_selection = True
                 tenants_list = active_tenants
 
+        # v2.5.1 F012: resolve canonical leaf tenant + bump token_version.
+        # sync_user is a no-op when the resolved leaf already matches the
+        # active user_tenant row; otherwise it swaps the row, writes the
+        # audit log and rewrites FGA tuples. Fail-open: if the service
+        # errors (unusual — typically config missing) we fall back to the
+        # tenant_id computed above so the user can still log in.
+        try:
+            from bisheng.tenant.domain.constants import UserTenantSyncTrigger
+            from bisheng.tenant.domain.services.user_tenant_sync_service import (
+                UserTenantSyncService,
+            )
+            leaf = await UserTenantSyncService.sync_user(
+                db_user.user_id, trigger=UserTenantSyncTrigger.LOGIN,
+            )
+            # Override tenant_id for JWT payload — the resolver is the
+            # authoritative source for leaf tenancy in v2.5.1.
+            if leaf is not None and getattr(leaf, 'id', None):
+                tenant_id = leaf.id
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                'F012 login-time tenant sync failed for user %d: %s — '
+                'falling back to legacy tenant resolution',
+                db_user.user_id, exc,
+            )
+
+        # Fetch fresh token_version (sync_user may have just bumped it) and
+        # embed in the JWT payload so the middleware can reject stale tokens.
+        fresh_token_version = 0
+        try:
+            fresh_token_version = await UserDao.aget_token_version(db_user.user_id)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug('aget_token_version failed for %d: %s', db_user.user_id, exc)
+
         # gen jwt token
         access_token = LoginUser.create_access_token(
             user=db_user, auth_jwt=auth_jwt, tenant_id=tenant_id,
+            token_version=fresh_token_version,
         )
 
         # set cookies

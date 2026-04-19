@@ -11,6 +11,7 @@ from pydantic import ConfigDict, BaseModel, Field, field_validator, model_valida
 
 from bisheng.core.config.multi_tenant import MultiTenantConf
 from bisheng.core.config.openfga import OpenFGAConf
+from bisheng.core.config.user_tenant_sync import UserTenantSyncConf
 
 secret_key = 'TI31VYJ-ldAq-FXo5QNPKV_lqGTFfp-MIdbK2Hm5F1E='
 
@@ -147,6 +148,7 @@ class CeleryConf(BaseModel):
                 "bisheng.worker.knowledge.*": {"queue": "knowledge_celery"},  # Knowledge Base Related Tasks
                 "bisheng.worker.workflow.*": {"queue": "workflow_celery"},  # Workflow Execution Related Tasks
                 "bisheng.worker.org_sync.*": {"queue": "knowledge_celery"},  # Org Sync Tasks (low frequency, reuse knowledge queue)
+                "bisheng.worker.tenant_reconcile.*": {"queue": "knowledge_celery"},  # v2.5.1 F012 — 6h catch-up, reuse knowledge_celery
             }
         if 'telemetry_mid_user_increment' not in self.beat_schedule:
             self.beat_schedule['telemetry_mid_user_increment'] = {
@@ -182,6 +184,12 @@ class CeleryConf(BaseModel):
             self.beat_schedule['check_org_sync_schedules'] = {
                 'task': 'bisheng.worker.org_sync.tasks.check_org_sync_schedules',
                 'schedule': 60.0,  # Every 60 seconds
+            }
+        # v2.5.1 F012: 6h user-leaf-tenant catch-up reconcile.
+        if 'reconcile_user_tenant_assignments' not in self.beat_schedule:
+            self.beat_schedule['reconcile_user_tenant_assignments'] = {
+                'task': 'bisheng.worker.tenant_reconcile.tasks.reconcile_user_tenant_assignments',
+                'schedule': crontab.from_string('0 */6 * * *'),  # every 6 hours
             }
 
         # convert str to crontab
@@ -327,6 +335,7 @@ class Settings(BaseModel):
     mcp: McpConf = McpConf()
     multi_tenant: MultiTenantConf = MultiTenantConf()
     openfga: OpenFGAConf = OpenFGAConf()
+    user_tenant_sync: UserTenantSyncConf = UserTenantSyncConf()
 
     @field_validator('database_url')
     @classmethod

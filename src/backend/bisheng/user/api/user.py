@@ -786,3 +786,21 @@ def md5_hash(string):
     md5 = hashlib.md5()
     md5.update(string.encode('utf-8'))
     return md5.hexdigest()
+
+
+# ---------------------------------------------------------------------------
+# v2.5.1 F012 — GET /api/v1/user/current-tenant (AC-10)
+# Handler lives in a sibling module so it's importable from unit tests that
+# cannot pull in the full ``user/api/user.py`` dependency chain.
+# ---------------------------------------------------------------------------
+
+from bisheng.user.api.current_tenant import (
+    get_current_tenant_handler as _get_current_tenant_handler,
+)
+
+
+@router.get('/user/current-tenant')
+async def get_current_tenant(
+    login_user: LoginUser = Depends(LoginUser.get_login_user),
+):
+    return await _get_current_tenant_handler(login_user)

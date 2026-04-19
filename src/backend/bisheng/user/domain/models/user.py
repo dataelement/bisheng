@@ -1,8 +1,8 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import ClassVar, List, Optional
 
 from pydantic import field_validator
-from sqlalchemy import Column, DateTime, String, UniqueConstraint, func, text
+from sqlalchemy import Column, DateTime, Integer, String, UniqueConstraint, func, text, update
 from sqlalchemy.orm import selectinload
 from sqlmodel import Field, select, Relationship, col
 
@@ -57,6 +57,20 @@ class User(UserBase, table=True):
     password: str = Field(index=False)
     password_update_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')), description='Password Last Modified')
+    # v2.5.1 F012: JWT invalidation counter — incremented whenever the user's
+    # leaf tenant changes (via UserTenantSyncService). The value is embedded in
+    # issued JWTs; middleware compares against the current DB value and rejects
+    # stale tokens with 401.
+    token_version: int = Field(
+        default=0,
+        sa_column=Column(
+            'token_version',
+            Integer,
+            nullable=False,
+            server_default=text('0'),
+            comment='v2.5.1 F012: JWT invalidation counter; +1 on leaf tenant change',
+        ),
+    )
 
     # DefinitiongroupsAndrolesQuery Relationships for
     groups: List["Group"] = Relationship(link_model=UserGroup)
@@ -373,6 +387,102 @@ class UserDao(UserBase):
             statement = select(User).where(User.external_id == external_id)
             result = await session.exec(statement)
             return result.first()
+
+    # ---------------------------------------------------------------
+    # v2.5.1 F012: token_version helpers
+    # ---------------------------------------------------------------
+    TOKEN_VERSION_CACHE_KEY: ClassVar[str] = 'user:{user_id}:token_version'
+    TOKEN_VERSION_CACHE_TTL: ClassVar[int] = 300  # seconds
+
+    @classmethod
+    async def aget_token_version(cls, user_id: int) -> int:
+        """Return the user's current token_version, preferring the Redis cache.
+
+        Cache miss falls back to a single DB read and repopulates the cache.
+        Redis infra failure is fail-open — we fall back to DB so login and
+        request flows are never blocked by cache infrastructure outages.
+        """
+        from bisheng.core.cache.redis_manager import get_redis_client
+
+        cache_key = cls.TOKEN_VERSION_CACHE_KEY.format(user_id=user_id)
+        try:
+            redis = await get_redis_client()
+            cached = await redis.aget(cache_key)
+            if cached is not None:
+                return int(cached)
+        except Exception:
+            # Redis unavailable — continue to DB read.
+            pass
+
+        async with get_async_db_session() as session:
+            result = await session.exec(
+                select(User.token_version).where(User.user_id == user_id)
+            )
+            row = result.first()
+            if row is None:
+                return 0
+            version = int(row)
+
+        try:
+            redis = await get_redis_client()
+            await redis.aset(cache_key, version, expiration=cls.TOKEN_VERSION_CACHE_TTL)
+        except Exception:
+            pass
+        return version
+
+    @classmethod
+    async def aincrement_token_version(cls, user_id: int) -> int:
+        """Atomically bump token_version via SQL and invalidate the Redis cache.
+
+        Returns the new token_version. We use an atomic UPDATE (token_version +
+        1) to avoid a read-modify-write race; we then re-read to return the
+        new value so callers can embed it in a freshly issued JWT.
+        """
+        from bisheng.core.cache.redis_manager import get_redis_client
+
+        async with get_async_db_session() as session:
+            await session.exec(
+                update(User)
+                .where(User.user_id == user_id)
+                .values(token_version=User.token_version + 1)
+            )
+            await session.commit()
+
+            result = await session.exec(
+                select(User.token_version).where(User.user_id == user_id)
+            )
+            row = result.first()
+            new_version = int(row) if row is not None else 0
+
+        cache_key = cls.TOKEN_VERSION_CACHE_KEY.format(user_id=user_id)
+        try:
+            redis = await get_redis_client()
+            # Refresh (not just DEL) so the immediate-next aget_token_version
+            # hits cache — saves a DB round-trip on the login critical path.
+            await redis.aset(cache_key, new_version,
+                             expiration=cls.TOKEN_VERSION_CACHE_TTL)
+        except Exception:
+            pass
+        return new_version
+
+    @classmethod
+    async def alist_users_paginated(
+        cls, offset: int = 0, limit: int = 500
+    ) -> List['User']:
+        """Page through active users ordered by user_id — used by the F012
+        Celery 6h reconcile task so it can walk the whole user table in
+        bounded batches without loading everything into memory.
+        """
+        async with get_async_db_session() as session:
+            statement = (
+                select(User)
+                .where(User.delete == 0)
+                .order_by(User.user_id.asc())
+                .offset(offset)
+                .limit(limit)
+            )
+            result = await session.exec(statement)
+            return list(result.all())
 
     @classmethod
     async def aget_by_source(cls, source: str, tenant_id: int) -> List['User']:
