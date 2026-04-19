@@ -80,6 +80,31 @@ class TenantQuotaResponse(BaseModel):
     usage: dict = {}
 
 
+# ---------------------------------------------------------------------------
+# F016 Tenant Quota Tree DTOs (AC-06).
+# ---------------------------------------------------------------------------
+
+class TenantQuotaUsageItem(BaseModel):
+    """Per-resource-type usage entry within a TenantQuotaTreeNode."""
+    resource_type: str
+    used: int
+    limit: int  # -1 = unlimited
+    utilization: float  # 0.0 ~ 1.0+ (>1.0 indicates over-quota)
+
+
+class TenantQuotaTreeNode(BaseModel):
+    tenant_id: int
+    tenant_name: str
+    parent_tenant_id: Optional[int] = None
+    quota_config: dict = Field(default_factory=dict)
+    usage: List[TenantQuotaUsageItem] = Field(default_factory=list)
+
+
+class TenantQuotaTreeResponse(BaseModel):
+    root: TenantQuotaTreeNode
+    children: List[TenantQuotaTreeNode] = Field(default_factory=list)
+
+
 class UserTenantItem(BaseModel):
     tenant_id: int
     tenant_name: str

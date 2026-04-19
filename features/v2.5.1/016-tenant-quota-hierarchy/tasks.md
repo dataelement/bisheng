@@ -439,7 +439,7 @@ T09 (手工 QA + ac-verification.md)  ← T08
 
 ### 后端 API
 
-- [ ] **T05**: TenantQuotaTree DTO + `TenantService.aget_quota_tree` + `GET /tenants/quota/tree`
+- [x] **T05**: TenantQuotaTree DTO + `TenantService.aget_quota_tree` + `GET /tenants/quota/tree`
 
   **文件（修改，3 个）**:
   - `src/backend/bisheng/tenant/domain/schemas/tenant_schema.py` — 新增 3 个 DTO
