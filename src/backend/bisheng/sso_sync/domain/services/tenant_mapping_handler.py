@@ -31,13 +31,14 @@ from bisheng.database.models.tenant import (
     Tenant,
     TenantDao,
 )
+from bisheng.sso_sync.domain.constants import SSO_SOURCE
 from bisheng.sso_sync.domain.schemas.payloads import TenantMappingItem
 from bisheng.tenant.domain.constants import TenantAuditAction
 
 
 class TenantMappingHandler:
 
-    SOURCE = 'sso'
+    SOURCE = SSO_SOURCE
 
     @classmethod
     async def process(

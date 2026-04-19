@@ -13,7 +13,7 @@ querying ``org_sync_log``.
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Dict, Optional
 
 from loguru import logger
 
@@ -22,12 +22,13 @@ from bisheng.core.context.tenant import (
     current_tenant_id,
     set_current_tenant_id,
 )
-from bisheng.database.models.department import DepartmentDao
+from bisheng.database.models.department import Department, DepartmentDao
 from bisheng.database.models.tenant import ROOT_TENANT_ID
 from bisheng.org_sync.domain.services.ts_guard import (
     GuardDecision,
     OrgSyncTsGuard,
 )
+from bisheng.sso_sync.domain.constants import SSO_SOURCE
 from bisheng.sso_sync.domain.schemas.payloads import (
     BatchResult,
     DepartmentsSyncRequest,
@@ -44,7 +45,7 @@ from bisheng.tenant.domain.services.department_deletion_handler import (
 
 class DepartmentsSyncService:
 
-    SOURCE = 'sso'
+    SOURCE = SSO_SOURCE
 
     @classmethod
     async def execute(
@@ -55,9 +56,28 @@ class DepartmentsSyncService:
         with bypass_tenant_filter():
             token = set_current_tenant_id(ROOT_TENANT_ID)
             try:
+                # Preload parent rows once per batch. For a push of N items
+                # sharing M distinct parents, this replaces O(N) parent
+                # lookups inside ``upsert_from_sync_payload`` with M
+                # lookups up front; items inserting a brand-new parent in
+                # the same batch still hit the DAO fallback inside the
+                # upsert service (cache miss → single query).
+                parent_cache = await cls._preload_parent_cache(payload.upsert)
+
                 # --- upsert round ---
                 for item in payload.upsert:
-                    await cls._apply_upsert(item, payload.source_ts, result)
+                    await cls._apply_upsert(
+                        item, payload.source_ts, result, parent_cache,
+                    )
+                    # Freshly upserted rows can become parents for later
+                    # items in the same batch — keep the cache in sync so
+                    # subsequent children don't re-query the DAO.
+                    if item.external_id not in parent_cache:
+                        fresh = await DepartmentDao.aget_by_source_external_id(
+                            cls.SOURCE, item.external_id,
+                        )
+                        if fresh is not None:
+                            parent_cache[item.external_id] = fresh
 
                 # --- remove round ---
                 for ext_id in payload.remove:
@@ -69,6 +89,29 @@ class DepartmentsSyncService:
 
         return result
 
+    @classmethod
+    async def _preload_parent_cache(
+        cls, upsert_items,
+    ) -> Dict[str, Department]:
+        """Gather every parent_external_id referenced by the upsert batch
+        and load them with a single DAO lookup per distinct parent.
+        Items whose parent is itself part of the same batch are
+        skipped — they'll be cached after their own upsert lands.
+        """
+        item_ext_ids = {it.external_id for it in upsert_items}
+        parent_ext_ids = {
+            it.parent_external_id
+            for it in upsert_items
+            if it.parent_external_id
+            and it.parent_external_id not in item_ext_ids
+        }
+        cache: Dict[str, Department] = {}
+        for ext in parent_ext_ids:
+            row = await DepartmentDao.aget_by_source_external_id(cls.SOURCE, ext)
+            if row is not None:
+                cache[ext] = row
+        return cache
+
     # -----------------------------------------------------------------------
     # Per-item handlers (each in its own try/except — per AC-11).
     # -----------------------------------------------------------------------
@@ -79,6 +122,7 @@ class DepartmentsSyncService:
         item: DepartmentUpsertItem,
         source_ts: Optional[int],
         result: BatchResult,
+        parent_cache: Optional[Dict[str, Department]] = None,
     ) -> None:
         try:
             existing = await DepartmentDao.aget_by_source_external_id(
@@ -102,9 +146,13 @@ class DepartmentsSyncService:
                 item=item,
                 source=cls.SOURCE,
                 last_sync_ts=incoming_ts,
+                parent_cache=parent_cache,
             )
             result.applied_upsert += 1
         except Exception as exc:  # noqa: BLE001 — per-item isolation
+            # AC-11: one malformed external_id, DB constraint violation or
+            # transient failure must not abort the whole batch; record and
+            # move on.
             logger.warning(
                 'F014 upsert error for %s: %s', item.external_id, exc,
             )

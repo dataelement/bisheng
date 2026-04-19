@@ -130,7 +130,8 @@ class TestUpsertBatch:
         )
 
         # First and third upserts succeed; second blows up.
-        async def fake_upsert(*, existing, item, source, last_sync_ts):
+        async def fake_upsert(*, existing, item, source, last_sync_ts,
+                              parent_cache=None):
             if item.external_id == 'BAD':
                 raise RuntimeError('parent missing')
             return _dept(item.external_id)

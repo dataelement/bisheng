@@ -69,9 +69,12 @@ def patches(monkeypatch):
     tests override the return values as needed."""
     from bisheng.sso_sync.domain.services import login_sync_service as m
 
-    # Redis lock: default acquire=True, release no-op.
+    # Redis lock: default acquire=True, release no-op. The atomic SET
+    # NX EX call lives on ``async_connection.set`` — simplify R1 swapped
+    # the two-step asetNx/expire for a single native redis-py call.
     redis_mock = MagicMock()
-    redis_mock.asetNx = AsyncMock(return_value=True)
+    redis_mock.async_connection = MagicMock()
+    redis_mock.async_connection.set = AsyncMock(return_value=True)
     redis_mock.adelete = AsyncMock(return_value=None)
     monkeypatch.setattr(m, 'get_redis_client', AsyncMock(return_value=redis_mock))
 
@@ -107,7 +110,7 @@ def patches(monkeypatch):
         m.UserDao, 'aget_token_version', AsyncMock(return_value=0),
     )
 
-    # UserDepartment DAO
+    # UserDepartment DAO (post-simplify: helpers live in the DAO now)
     monkeypatch.setattr(
         m.UserDepartmentDao, 'aget_user_primary_department',
         AsyncMock(return_value=None),
@@ -115,13 +118,16 @@ def patches(monkeypatch):
     monkeypatch.setattr(
         m.UserDepartmentDao, 'aadd_member', AsyncMock(return_value=None),
     )
-
-    # Internal membership/promote helpers
     monkeypatch.setattr(
-        m, '_find_membership', AsyncMock(return_value=None),
+        m.UserDepartmentDao, 'aget_membership', AsyncMock(return_value=None),
     )
-    monkeypatch.setattr(m, '_demote_primary', AsyncMock(return_value=None))
-    monkeypatch.setattr(m, '_promote_to_primary', AsyncMock(return_value=None))
+    monkeypatch.setattr(
+        m.UserDepartmentDao, 'aset_primary_flag', AsyncMock(return_value=None),
+    )
+    monkeypatch.setattr(
+        m.UserDepartmentDao, 'aget_memberships_in_depts',
+        AsyncMock(return_value=[]),
+    )
 
     # AuditLog for cross-source migration
     monkeypatch.setattr(
@@ -229,7 +235,7 @@ class TestUserLockBusy:
         from bisheng.sso_sync.domain.services.login_sync_service import (
             LoginSyncService,
         )
-        patches.redis.asetNx = AsyncMock(return_value=False)
+        patches.redis.async_connection.set = AsyncMock(return_value=None)
 
         with pytest.raises(Exception) as exc_info:
             await LoginSyncService.execute(_payload(), request_ip='1.2.3.4')

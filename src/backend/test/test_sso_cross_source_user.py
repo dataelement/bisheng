@@ -55,7 +55,8 @@ def patches(monkeypatch):
     from bisheng.sso_sync.domain.services import login_sync_service as m
 
     redis = MagicMock()
-    redis.asetNx = AsyncMock(return_value=True)
+    redis.async_connection = MagicMock()
+    redis.async_connection.set = AsyncMock(return_value=True)
     redis.adelete = AsyncMock()
     monkeypatch.setattr(m, 'get_redis_client', AsyncMock(return_value=redis))
 
@@ -73,9 +74,16 @@ def patches(monkeypatch):
     monkeypatch.setattr(
         m.UserDepartmentDao, 'aadd_member', AsyncMock(return_value=None),
     )
-    monkeypatch.setattr(m, '_find_membership', AsyncMock(return_value=None))
-    monkeypatch.setattr(m, '_demote_primary', AsyncMock())
-    monkeypatch.setattr(m, '_promote_to_primary', AsyncMock())
+    monkeypatch.setattr(
+        m.UserDepartmentDao, 'aget_membership', AsyncMock(return_value=None),
+    )
+    monkeypatch.setattr(
+        m.UserDepartmentDao, 'aset_primary_flag', AsyncMock(return_value=None),
+    )
+    monkeypatch.setattr(
+        m.UserDepartmentDao, 'aget_memberships_in_depts',
+        AsyncMock(return_value=[]),
+    )
     monkeypatch.setattr(
         m.UserTenantSyncService, 'sync_user', AsyncMock(return_value=_tenant()),
     )
