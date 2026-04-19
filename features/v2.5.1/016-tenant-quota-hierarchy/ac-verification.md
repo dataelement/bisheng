@@ -116,7 +116,7 @@ Execute on 114 after `uv sync` + `.venv/bin/uvicorn bisheng.main:app --port 7860
 | Item | Result | Evidence |
 |------|--------|----------|
 | pytest `test_quota_service*.py` + `test_require_quota_decorator.py` | ✅ 36/36 passed | `uv run --extra test pytest test/test_quota_service.py test/test_quota_service_tenant_tree.py test/test_quota_service_check_chain.py test/test_require_quota_decorator.py -v` ran in 0.59s (after fixing patch target in `test_count_usage_strict_returns_zero_on_missing_template`) |
-| pytest `test_e2e_tenant_quota_hierarchy.py` (5 active + 7 skip) | ✅ 5 passed / 7 skipped / 0 failed | `E2E_ADMIN_PASSWORD=Bisheng@top1 uv run --extra test pytest test/e2e/test_e2e_tenant_quota_hierarchy.py -v`; required (a) `TenantService.aset_quota` to call `QuotaService.validate_quota_config` (fix committed) and (b) env-var admin password override + unauth-401 fallback test for AC-06 |
+| pytest `test_e2e_tenant_quota_hierarchy.py` (6 active + 6 skip) | ✅ 6 passed / 6 skipped / 0 failed | `E2E_ADMIN_PASSWORD=Bisheng@top1 uv run --extra test pytest test/e2e/test_e2e_tenant_quota_hierarchy.py -v` (1.18s); required (a) `TenantService.aset_quota` to call `QuotaService.validate_quota_config`, (b) shared E2E helper fix: `helpers/auth.py` `get_admin_token` now reads `E2E_ADMIN_PASSWORD` env var + `create_test_user` RSA-encrypts the password (backend's `/user/create` expects RSA ciphertext per `UserService.decrypt_md5_password`; plain caused 10600 on follow-up login) |
 | §7-4 Root aggregate — Root=30 workflows, 0 active Children | ✅ verified | MySQL: `SELECT tenant_id, COUNT(*) FROM flow WHERE flow_type=10 AND status!=0 GROUP BY tenant_id` → `1, 30`; GET `/tenants/quota/tree` → `root.usage[workflow].used=30, children_count=0`. Orphaned tenant id=2 correctly excluded from aggregate (proves `aget_children_ids_active` filters `status='active'`, INV-T9 satisfied) |
 | AC-03 full cycle (§7-8 equivalent) | ✅ verified | E2E test + probe: `storage_gb / user_count / model_tokens_monthly` persisted in `tenant.quota_config`; unknown key → 24005; extended `VALID_QUOTA_KEYS` honored end-to-end |
 | AC-06 tree API | ✅ verified | Probe shows correct `{root: TenantQuotaTreeNode, children: []}` structure; all 11 `VALID_QUOTA_KEYS` present in `root.usage` with `used/limit/utilization` fields; unauth → 401; super-admin-only gate enforced |
@@ -134,7 +134,22 @@ Execute on 114 after `uv sync` + `.venv/bin/uvicorn bisheng.main:app --port 7860
 
 1. `tenant_service.py` `aset_quota` — added `QuotaService.validate_quota_config(data.quota_config)` before persist. **Real bug**: unknown key like `nonexistent_resource` was previously stored unchecked (F010 AC-4.2 gap, surfaced by F016 E2E).
 2. `test_quota_service_tenant_tree.py` `test_count_usage_strict_returns_zero_on_missing_template` — removed `patch('quota_service.get_async_db_session')` which never existed at module level (lazy import inside `_count_resource`); SQL template miss returns 0 before any DB call.
-3. `test_e2e_tenant_quota_hierarchy.py` — added `_resolve_admin_token` helper reading `E2E_ADMIN_PASSWORD` env var (114 uses `Bisheng@top1`, not helper's hard-coded `admin123`); `test_quota_tree_forbidden_for_non_super_admin` marked skip (child_admin fixture password flow conflicts with helper RSA encryption); new `test_quota_tree_rejects_unauthenticated_request` provides partial AC-06 auth-gate coverage.
+3. `helpers/auth.py` (shared E2E infra) — fixed two issues that had been
+   blocking every feature's E2E on non-default-password deployments:
+   * `get_admin_token` now reads `E2E_ADMIN_PASSWORD` env var, falling back
+     to `admin123` for local/CI (matches docstring promise that was never
+     implemented).
+   * `create_test_user` now RSA-encrypts the password before POSTing to
+     `/user/create` (backend expects RSA ciphertext; plain caused stored
+     md5 to disagree with later login md5). F014/F015/F017+ E2E benefit
+     without code changes.
+4. `test_e2e_tenant_quota_hierarchy.py` — after helper fix, simplified to
+   use `get_admin_token` directly; `test_quota_tree_forbidden_for_non_super_admin`
+   restored (asserts HTTP 200 + body `status_code=403` per
+   `UnifiedResponseModel` convention — global exception handler converts
+   `UnAuthorizedError.http_exception()` to 200+body); new
+   `test_quota_tree_rejects_unauthenticated_request` covers the
+   before-auth-dependency 401 path (2 AC-06 branches both covered).
 
 ---
 

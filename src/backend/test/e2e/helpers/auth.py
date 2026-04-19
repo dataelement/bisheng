@@ -4,10 +4,18 @@ Handles RSA-encrypted login, JWT token retrieval, and test user creation.
 """
 
 import base64
+import os
 
 import httpx
 
 from test.e2e.helpers.api import API_BASE, assert_resp_200
+
+
+# Default test admin password. 114 and other non-default-password deployments
+# override via the ``E2E_ADMIN_PASSWORD`` env var (e.g. ``Bisheng@top1`` on
+# 192.168.106.114). Local dev / CI leaves the helper's built-in default.
+_DEFAULT_ADMIN_PASSWORD = 'admin123'
+_DEFAULT_USER_PASSWORD = 'test_password_123'
 
 
 async def get_public_key(client: httpx.AsyncClient) -> str:
@@ -41,8 +49,15 @@ async def login(client: httpx.AsyncClient, username: str, password: str) -> str:
 
 
 async def get_admin_token(client: httpx.AsyncClient) -> str:
-    """Get admin JWT token (default: admin/admin123)."""
-    return await login(client, 'admin', 'admin123')
+    """Get admin JWT token.
+
+    Password resolution order:
+      1. ``E2E_ADMIN_PASSWORD`` env var (set this on servers with non-default
+         admin passwords, e.g. ``Bisheng@top1`` on 192.168.106.114).
+      2. Hard-coded default ``admin123`` (local dev / CI).
+    """
+    password = os.environ.get('E2E_ADMIN_PASSWORD', _DEFAULT_ADMIN_PASSWORD)
+    return await login(client, 'admin', password)
 
 
 async def get_user_token(
@@ -62,15 +77,26 @@ async def create_test_user(
     admin_token: str,
     username: str,
     role_id: int = 2,
-    password: str = 'test_password_123',
+    password: str = _DEFAULT_USER_PASSWORD,
 ) -> dict:
-    """Create a test user via admin API. Returns user data dict."""
+    """Create a test user via admin ``POST /user/create``.
+
+    The backend endpoint expects an **RSA-encrypted** password (``UserService.
+    create_user`` → ``decrypt_md5_password`` which RSA-decrypts then md5-hashes
+    before storing). This helper accepts a **plain** password, encrypts it
+    against the backend's public key, and sends the ciphertext — mirroring
+    what ``login`` does. Passing plain text directly made later ``login`` calls
+    fail with 10600 because the stored md5 hash did not match the freshly
+    RSA-encrypted+md5-decrypted login plaintext.
+    """
     headers = auth_headers(admin_token)
+    pubkey = await get_public_key(client)
+    encrypted_pwd = encrypt_password(password, pubkey)
     resp = await client.post(
         f'{API_BASE}/user/create',
         json={
             'user_name': username,
-            'password': password,
+            'password': encrypted_pwd,
             'role_id': role_id,
         },
         headers=headers,

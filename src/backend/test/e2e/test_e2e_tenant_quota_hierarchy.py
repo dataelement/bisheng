@@ -43,23 +43,12 @@ from test.e2e.helpers.auth import (
     auth_headers,
     create_test_user,
     get_user_token,
-    login as helper_login,
 )
 from test.e2e.helpers.api import API_BASE, assert_resp_200, assert_resp_error
 from test.e2e.helpers.cleanup import cleanup_test_tenants
 
 PREFIX = 'e2e-f016-'
 TEST_USER_PREFIX = 'e2e_f016_user'
-
-
-async def _resolve_admin_token(client) -> str:
-    """Prefer E2E_ADMIN_PASSWORD env var (for servers with non-default admin
-    passwords like 114's ``Bisheng@top1``), otherwise fall back to the
-    helper's hard-coded ``admin123`` default."""
-    pwd = os.environ.get('E2E_ADMIN_PASSWORD')
-    if pwd:
-        return await helper_login(client, 'admin', pwd)
-    return await get_admin_token(client)
 
 
 @pytest.mark.skipif(
@@ -75,7 +64,7 @@ class TestE2ETenantQuotaHierarchy:
     async def setup_and_teardown(self):
         """Class-scoped dual cleanup."""
         async with httpx.AsyncClient(base_url='', timeout=30.0) as client:
-            admin_token = await _resolve_admin_token(client)
+            admin_token = await get_admin_token(client)
             await cleanup_test_tenants(client, PREFIX, admin_token)
             yield
             await cleanup_test_tenants(client, PREFIX, admin_token)
@@ -87,7 +76,7 @@ class TestE2ETenantQuotaHierarchy:
 
     @pytest.fixture
     async def admin_token(self, client):
-        return await _resolve_admin_token(client)
+        return await get_admin_token(client)
 
     @pytest.fixture
     async def child_admin_token(self, client, admin_token):
@@ -166,27 +155,31 @@ class TestE2ETenantQuotaHierarchy:
         for item in data['root']['usage']:
             assert set(item.keys()) == {'resource_type', 'used', 'limit', 'utilization'}
 
-    @pytest.mark.skip(
-        reason='child_admin_token fixture password flow mismatches F010 helpers/auth '
-               '(create_test_user passes plain, get_user_token RSA-encrypts). '
-               'AC-06 non-super-admin rejection covered by unauth-401 test below + '
-               'manual QA in ac-verification.md §9.2'
-    )
     async def test_quota_tree_forbidden_for_non_super_admin(self, client, child_admin_token):
-        """AC-06: Only global super admin can access /quota/tree; Child admin → 403/401."""
+        """AC-06: Only global super admin can access /quota/tree; non-admin → 403.
+
+        Project convention: business errors return HTTP 200 with
+        ``UnifiedResponseModel.status_code`` carrying the actual error code.
+        Here ``UserPayload.get_admin_user`` calls
+        ``UnAuthorizedError.http_exception()`` which is converted by a global
+        exception handler to HTTP 200 + body status_code=403.
+        """
         resp = await client.get(
             f'{API_BASE}/tenants/quota/tree',
             headers=auth_headers(child_admin_token),
         )
-        assert resp.status_code in (401, 403)
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body['status_code'] == 403, (
+            f"Expected body status_code=403, got {body.get('status_code')}: {body}"
+        )
 
     async def test_quota_tree_rejects_unauthenticated_request(self, client):
-        """AC-06 (partial): Unauthenticated request to /quota/tree → 401.
+        """AC-06: Unauthenticated request to /quota/tree → HTTP 401.
 
-        Partial coverage for the UserPayload.get_admin_user gate — we cannot
-        fully verify the 'non-super-admin' rejection branch here because of
-        the helpers/auth fixture limitation (see skip reason above); manual
-        QA on 114 with a real Child Admin account covers the rest.
+        Without a JWT cookie the ``AuthJwt`` dependency short-circuits BEFORE
+        ``get_admin_user`` can run, so this path returns a real HTTP 401
+        (not a UnifiedResponseModel body). Complements the 403 test above.
         """
         resp = await client.get(f'{API_BASE}/tenants/quota/tree')
         assert resp.status_code == 401
