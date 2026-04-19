@@ -24,12 +24,12 @@
 |----|------|------|---------|
 | AC-01 | 用户 | 创建资源（知识库等） | 检查叶子 Tenant 配额 + Root 配额（若叶子是 Child）；任一超限则拒绝 |
 | AC-02 | 用户 | 创建 Root 共享资源（Child 不计用量） | 仅计入 Root 自身；Child quota_config.knowledge_space 不受影响（INV-T6） |
-| AC-03 | 全局超管 | PUT /tenants/{id}/quota | 直接写 quota_config JSON；无转移语义 |
-| AC-04 | 用户 | 存储达 100% | 上传新文件 HTTP 413；前端提示扩容 |
+| AC-03 | 全局超管 | `PUT /api/v1/tenants/{id}/quota` | 直接写 `quota_config` JSON；无转移语义；响应 `UnifiedResponseModel`（HTTP 200 + `status_code=0`）；详见 §9 |
+| AC-04 | 用户 | 存储达 100% | 上传新文件阻断，HTTP 200 + `status_code=19403`（`TenantStorageQuotaExceededError`）；前端识别该业务码展示扩容提示（与项目 `UnifiedResponseModel` 规范一致，非 HTTP 413） |
 | AC-05 | 用户 | 删除文件释放存储 | 配额恢复；可继续上传 |
-| AC-06 | 集团 IT | 查询本 Root 与各 Child 用量 | 返回树形结构每节点的 used/limit/utilization |
+| AC-06 | 集团 IT | `GET /api/v1/tenants/quota/tree` | 返回 `TenantQuotaTreeResponse`（`{root: TenantQuotaTreeNode, children: TenantQuotaTreeNode[]}`），每节点 `usage` 列所有配额键的 `used/limit/utilization`；详见 §9 |
 | AC-07 | 系统 | Root 用量聚合（INV-T9） | Root 用量 = Root 自身 strict 计数 + Σ 所有 Child strict 计数；场景：Child A=30G、Child B=50G、Root 自身=20G → Root 总用量=100G |
-| AC-08 | 系统 | Root 配额触发 Child 阻断 | Root 用量达 Root 配额时，所有 Child 的创建类操作也被阻断（HTTP 413 + 提示 "集团总量已耗尽"） |
+| AC-08 | 系统 | Root 配额触发 Child 阻断 | Root 用量达 Root 配额时，所有 Child 的创建类操作被阻断：HTTP 200 + `status_code=19401` + `status_message` 含 "集团总量已耗尽"（`TenantQuotaExceededError` 在聚合节点是 Root 时的 msg 变体） |
 | AC-09 | 开发 | `get_tenant_resource_count` 调用 | 必须用 `with strict_tenant_filter():` 包裹（PRD §4.1）；避免 IN 列表叠加把 Root 共享资源算进 Child 用量 |
 | AC-10 | 用户 | Child 用户读 Root 共享资源衍生数据（对话/token） | 衍生数据归属 Child 叶子 Tenant，计入 Child `model_tokens_monthly` 配额（INV-T13）。**具体写入层实现依赖 F017 §5.4（ChatMessageService / LLMTokenTracker 用 `get_current_tenant_id()` 赋值 tenant_id）**；本 feature 仅负责 `strict_tenant_filter()` 配额计数 |
 
@@ -59,6 +59,8 @@
 ---
 
 ## 5. 配额检查逻辑
+
+> **实现映射**：下列 `QuotaChecker` 为算法示意；实际落地合并入已有的 `QuotaService`（`src/backend/bisheng/role/domain/services/quota_service.py`），通过重写 `_apply_tenant_cap → _apply_tenant_chain_cap` 并新增 `_count_usage_strict` / `_aggregate_root_usage` 两个 classmethod 实现同等效果，保持 `@require_quota` 装饰器与 `check_quota` 签名不变。
 
 ```python
 class QuotaChecker:
@@ -132,7 +134,7 @@ class QuotaChecker:
 - [ ] Root 硬限 < Child 配额时，Root 限触发
 - [ ] 共享资源仅计入 Root（Child 用量不被叠加）
 - [ ] **Root 用量聚合**：Child A=30G + Child B=50G + Root 自身=20G → Root 用量=100G
-- [ ] **Root 满触发 Child 阻断**：Root 配额=100G，已用 100G 时，Child 创建新文件返回 413
+- [ ] **Root 满触发 Child 阻断**：Root 配额=100G，已用 100G 时，Child 创建新文件返回 HTTP 200 + `status_code=19401`（msg 含"集团总量已耗尽"）
 - [ ] **strict_tenant_filter 验证**：Root 创建共享资源后，Child 用量 SQL 不包含此资源（IN 列表场景下也不算）
 - [ ] **衍生数据归属**：Child 用户调 Root 共享 LLM 模型，token 计入 Child `model_tokens_monthly`，不算 Root
 - [ ] 全局超管手工调整 quota_config 立即生效
@@ -143,7 +145,115 @@ class QuotaChecker:
 
 ## 8. 错误码
 
-- **MMM=194** (tenant_quota)
-- 19401: Tenant 配额超限
-- 19402: 角色配额超限
-- 19403: 存储超限
+**MMM=194** (tenant_quota)，所有类继承 `BaseErrorCode`，沿项目规范走 `UnifiedResponseModel`（HTTP 200 + `status_code=19xxx`）。
+
+| Code | 类名 | 含义 | 关联 AC |
+|------|------|------|---------|
+| 19401 | `TenantQuotaExceededError` | 叶子 Tenant 或 Root 硬盖触发的 Tenant 级配额超限 | AC-01, AC-07, AC-08 |
+| 19402 | `TenantRoleQuotaExceededError` | 角色级配额超限（在 Tenant 检查通过后） | AC-01 |
+| 19403 | `TenantStorageQuotaExceededError` | 存储配额（`storage_gb` / `knowledge_space_file`）超限 | AC-04 |
+
+**兼容说明**：v2.5.0 `QuotaExceededError(24001)` 作为旧基类保留不删，继承链不断；新增 5 个资源创建端点的报错行为通过 `QuotaService.check_quota` 内部切换到 194xx 子类。
+
+---
+
+## 9. API 契约
+
+所有端点走 `UnifiedResponseModel`（HTTP 200 + 业务码）。
+
+### 9.1 `PUT /api/v1/tenants/{id}/quota`（AC-03）
+
+**权限**：`UserPayload.get_admin_user`（仅全局超管）
+
+**现状**：v2.5.1 F010 已实现此端点（`src/backend/bisheng/tenant/api/endpoints/tenant_crud.py:141`）；F016 **不改路径/签名**，仅扩展 `QuotaService.validate_quota_config` 校验的合法 key 集合（新增 `storage_gb / user_count / model_tokens_monthly`）。
+
+请求体（`TenantQuotaUpdate`）：
+```json
+{
+  "quota_config": {
+    "knowledge_space": 50,
+    "storage_gb": 100,
+    "model_tokens_monthly": 10000000,
+    "workflow": -1
+  }
+}
+```
+
+响应（`UnifiedResponseModel[TenantDetailResponse]`）：
+```json
+{
+  "status_code": 0,
+  "status_message": "success",
+  "data": {
+    "id": 5,
+    "tenant_name": "...",
+    "quota_config": { ... }
+  }
+}
+```
+
+错误：`QuotaConfigInvalidError(24005)`（非法 key / 非整数 / 小于 -1）；`TenantNotFoundError`；Root 修改保护由 F011 承接。
+
+### 9.2 `GET /api/v1/tenants/quota/tree`（AC-06，F016 新增）
+
+**权限**：`UserPayload.get_admin_user`（仅全局超管）
+
+**路径**：`GET /api/v1/tenants/quota/tree`（无 `{id}`，语义为"本实例整棵 Tenant 树"；MVP 锁 2 层，`children` 至多几十项）
+
+请求参数：无
+
+响应（`UnifiedResponseModel[TenantQuotaTreeResponse]`）：
+```json
+{
+  "status_code": 0,
+  "status_message": "success",
+  "data": {
+    "root": {
+      "tenant_id": 1,
+      "tenant_name": "集团总部",
+      "parent_tenant_id": null,
+      "quota_config": {"knowledge_space": 100, "storage_gb": 500, ...},
+      "usage": [
+        {"resource_type": "knowledge_space", "used": 100, "limit": 100, "utilization": 1.0},
+        {"resource_type": "storage_gb", "used": 320, "limit": 500, "utilization": 0.64}
+      ]
+    },
+    "children": [
+      {
+        "tenant_id": 5,
+        "tenant_name": "子公司 A",
+        "parent_tenant_id": 1,
+        "quota_config": {"knowledge_space": 30, ...},
+        "usage": [ ... ]
+      }
+    ]
+  }
+}
+```
+
+**语义约定**：
+- `root.usage[*].used` = `QuotaService._aggregate_root_usage`（Root 自身 + Σ active Child 累计，INV-T9）
+- `children[*].usage[*].used` = `QuotaService._count_usage_strict`（`with strict_tenant_filter():` 精确匹配，避免 IN 列表把 Root 共享叠加进 Child）
+- `utilization = used / limit`，当 `limit = -1` 时 `utilization = 0.0` 且前端显示"无限制"
+- Child Admin 仍读自己 Child 用 `GET /api/v1/tenants/{id}/quota`（现有端点，F010）；本端点**不对 Child Admin 开放**，避免 Child 看见兄弟 Child 用量
+
+### 9.3 DTO 定义（新增于 `tenant/domain/schemas/tenant_schema.py`）
+
+```python
+class TenantQuotaUsageItem(BaseModel):
+    resource_type: str
+    used: int
+    limit: int  # -1 = 无限制
+    utilization: float  # 0.0 ~ 1.0+（可超 1.0 表示已超额）
+
+class TenantQuotaTreeNode(BaseModel):
+    tenant_id: int
+    tenant_name: str
+    parent_tenant_id: Optional[int]
+    quota_config: dict
+    usage: list[TenantQuotaUsageItem]
+
+class TenantQuotaTreeResponse(BaseModel):
+    root: TenantQuotaTreeNode
+    children: list[TenantQuotaTreeNode]
+```
