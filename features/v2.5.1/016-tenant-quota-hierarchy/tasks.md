@@ -528,7 +528,7 @@ T09 (手工 QA + ac-verification.md)  ← T08
 
 ### 测试
 
-- [ ] **T06**: v2.5.0 F005/F008 旧测试回归兼容
+- [x] **T06**: v2.5.0 F005/F008 旧测试回归兼容
 
   **文件（修改）**:
   - `src/backend/test/test_require_quota_decorator.py` — 断言 `QuotaExceededError(24001)` 的地方切换或保持（取决于旧测试是否断言 `isinstance(e, QuotaExceededError)`）
