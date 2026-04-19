@@ -1,36 +1,16 @@
 """F014 SSO login-sync orchestration.
 
-End-to-end handler for ``POST /api/v1/internal/sso/login-sync``. Runs the
-11-step flow documented in ``features/v2.5.1/014-sso-org-realtime-sync/
-spec.md`` §5.1:
-
-1. HMAC (enforced by :func:`verify_hmac` dependency).
-2. Redis SETNX lock keyed on ``external_user_id`` to dedupe concurrent
-   logins of the same SSO user (AC-08 edge case).
-3. Enter ``bypass_tenant_filter`` + stamp ``current_tenant_id=ROOT`` so
-   ORM event hooks and audit writes have a coherent tenant context.
-4. Parent-chain check (strict mode per Phase-3 decision → 19312 if any
-   department referenced in the payload has not yet been pushed).
-5. Optional ``tenant_mapping`` processing via
-   :class:`TenantMappingHandler` (idempotent, PRD §5.2.3).
-6. User upsert with cross-source fallback — reuse existing records first,
-   create only as a last resort.
-7. UserDepartment upsert (primary + secondary), kicking the F012 ORM hook
-   that triggers :meth:`UserTenantSyncService.sync_user` implicitly; we
-   call it explicitly below to also cover the no-change path.
-8. :meth:`UserTenantSyncService.sync_user` — derives the leaf tenant,
-   bumps ``token_version`` if the leaf moved.
-9. Disabled / orphaned / archived leaf tenant → 403 + 19303 (AC-04
-   edge).
-10. Issue JWT via :meth:`LoginUser.create_access_token` with the derived
-    ``tenant_id`` + ``token_version``.
-11. Return ``{user_id, leaf_tenant_id, token}``.
+End-to-end handler for ``POST /api/v1/internal/sso/login-sync``. See spec
+§5.1 for the full 11-step contract: HMAC → Redis dedup lock → parent-chain
+check → tenant_mapping → user upsert (incl. cross-source adoption) →
+UserDepartment primary/secondary assignment → UserTenantSyncService leaf
+derivation → leaf status check → JWT signing.
 """
 
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from typing import AsyncIterator, Optional
+from typing import AsyncIterator
 
 from loguru import logger
 
@@ -48,12 +28,9 @@ from bisheng.core.context.tenant import (
     set_current_tenant_id,
 )
 from bisheng.database.models.audit_log import AuditLogDao
-from bisheng.database.models.department import (
-    DepartmentDao,
-    UserDepartment,
-    UserDepartmentDao,
-)
+from bisheng.database.models.department import UserDepartmentDao
 from bisheng.database.models.tenant import ROOT_TENANT_ID
+from bisheng.sso_sync.domain.constants import SSO_SOURCE
 from bisheng.sso_sync.domain.schemas.payloads import (
     LoginSyncRequest,
     LoginSyncResponse,
@@ -64,7 +41,10 @@ from bisheng.sso_sync.domain.services.dept_upsert_service import (
 from bisheng.sso_sync.domain.services.tenant_mapping_handler import (
     TenantMappingHandler,
 )
-from bisheng.tenant.domain.constants import UserTenantSyncTrigger
+from bisheng.tenant.domain.constants import (
+    TenantAuditAction,
+    UserTenantSyncTrigger,
+)
 from bisheng.tenant.domain.services.user_tenant_sync_service import (
     UserTenantSyncService,
 )
@@ -77,17 +57,12 @@ _USER_LOCK_KEY = 'user:sso_lock:{external_user_id}'
 
 class LoginSyncService:
 
-    SOURCE = 'sso'
+    SOURCE = SSO_SOURCE
 
     @classmethod
     async def execute(
         cls, payload: LoginSyncRequest, request_ip: str = '',
     ) -> LoginSyncResponse:
-        """Run the 11-step login-sync flow. See module docstring for the
-        full ordering contract. The caller has already passed HMAC via
-        :func:`verify_hmac`; here we only worry about application-level
-        correctness.
-        """
         ttl = int(
             getattr(settings.sso_sync, 'user_lock_ttl_seconds', 30) or 30
         )
@@ -110,7 +85,7 @@ class LoginSyncService:
         with bypass_tenant_filter():
             token = set_current_tenant_id(ROOT_TENANT_ID)
             try:
-                # --- ④ parent chain check ---
+                # --- parent chain check ---
                 if payload.primary_dept_external_id:
                     all_exts = [payload.primary_dept_external_id] + list(
                         payload.secondary_dept_external_ids or []
@@ -130,15 +105,15 @@ class LoginSyncService:
                     primary_dept = None
                     secondary_depts = []
 
-                # --- ⑤ tenant_mapping (auxiliary, idempotent) ---
+                # --- tenant_mapping (auxiliary, idempotent) ---
                 await TenantMappingHandler.process(
                     payload.tenant_mapping or [], request_ip=request_ip,
                 )
 
-                # --- ⑥ user upsert (w/ cross-source fallback) ---
+                # --- user upsert (w/ cross-source fallback) ---
                 user = await cls._upsert_user(payload, request_ip=request_ip)
 
-                # --- ⑦ user_department upsert ---
+                # --- user_department upsert ---
                 if primary_dept is not None:
                     await cls._ensure_primary(user.user_id, primary_dept.id)
                     await cls._ensure_secondaries(
@@ -146,12 +121,12 @@ class LoginSyncService:
                         [d.id for d in secondary_depts],
                     )
 
-                # --- ⑧ leaf tenant derivation (may bump token_version) ---
+                # --- leaf tenant derivation (may bump token_version) ---
                 leaf_tenant = await UserTenantSyncService.sync_user(
                     user.user_id, trigger=UserTenantSyncTrigger.LOGIN,
                 )
 
-                # --- ⑨ disabled / orphaned / archived → 403 ---
+                # --- disabled / orphaned / archived → 403 ---
                 if leaf_tenant.status != 'active':
                     logger.warning(
                         'F014 login blocked: user %s leaf tenant %s status=%s',
@@ -161,7 +136,7 @@ class LoginSyncService:
                         f'tenant {leaf_tenant.id} status={leaf_tenant.status}'
                     )
 
-                # --- ⑩ sign JWT ---
+                # --- sign JWT ---
                 auth_jwt = AuthJwt()
                 token_version = await UserDao.aget_token_version(user.user_id)
                 access_token = LoginUser.create_access_token(
@@ -172,7 +147,6 @@ class LoginSyncService:
             finally:
                 current_tenant_id.reset(token)
 
-        # --- ⑪ response ---
         return LoginSyncResponse(
             user_id=user.user_id,
             leaf_tenant_id=leaf_tenant.id,
@@ -180,7 +154,7 @@ class LoginSyncService:
         )
 
     # -----------------------------------------------------------------------
-    # Helper: user upsert with cross-source fallback (T9).
+    # Helper: user upsert with cross-source fallback.
     # -----------------------------------------------------------------------
 
     @classmethod
@@ -197,7 +171,8 @@ class LoginSyncService:
                     raise UserForbiddenError.http_exception()
                 old_source = legacy.source
                 if old_source == cls.SOURCE:
-                    # Race: someone just wrote the row. Adopt it anyway.
+                    # Race: another writer flipped the row between our two
+                    # lookups. Adopt it as-is, no migration audit needed.
                     user = legacy
                 else:
                     legacy.source = cls.SOURCE
@@ -206,7 +181,7 @@ class LoginSyncService:
                         tenant_id=ROOT_TENANT_ID,
                         operator_id=0,
                         operator_tenant_id=ROOT_TENANT_ID,
-                        action='user.source_migrated',
+                        action=TenantAuditAction.USER_SOURCE_MIGRATED.value,
                         target_type='user',
                         target_id=str(legacy.user_id),
                         metadata={
@@ -262,20 +237,21 @@ class LoginSyncService:
     @classmethod
     async def _ensure_primary(cls, user_id: int, dept_id: int) -> None:
         """Make (user_id, dept_id) the primary department, demoting any
-        previous primary to ``is_primary=0``. Preserves all other
-        memberships. Idempotent."""
+        previous primary to ``is_primary=0``. Idempotent."""
         current = await UserDepartmentDao.aget_user_primary_department(user_id)
         if current is not None and current.department_id == dept_id:
-            return  # no change
+            return
         if current is not None:
-            # Demote old primary in place instead of deleting, so the
-            # membership history stays intact and F012 sync_user is
-            # triggered purely by the new primary assignment.
-            await _demote_primary(user_id, current.department_id)
-        # Add new primary; membership may already exist as secondary → upgrade.
-        existing_membership = await _find_membership(user_id, dept_id)
-        if existing_membership is not None:
-            await _promote_to_primary(user_id, dept_id)
+            # Demote old primary in place instead of deleting to preserve
+            # membership history; F012 sync_user reads only the flag.
+            await UserDepartmentDao.aset_primary_flag(
+                user_id, current.department_id, is_primary=0,
+            )
+        existing = await UserDepartmentDao.aget_membership(user_id, dept_id)
+        if existing is not None:
+            await UserDepartmentDao.aset_primary_flag(
+                user_id, dept_id, is_primary=1,
+            )
         else:
             await UserDepartmentDao.aadd_member(
                 user_id, dept_id, is_primary=1, source=cls.SOURCE,
@@ -285,40 +261,52 @@ class LoginSyncService:
     async def _ensure_secondaries(
         cls, user_id: int, dept_ids: list[int],
     ) -> None:
+        """Add ``is_primary=0`` memberships for any dept_id the user does
+        not already belong to. Single IN-list lookup instead of one query
+        per dept (R2/R3 batch fix)."""
         if not dept_ids:
             return
-        for dept_id in dept_ids:
-            existing = await _find_membership(user_id, dept_id)
-            if existing is not None:
-                continue
+        existing_rows = await UserDepartmentDao.aget_memberships_in_depts(
+            user_id, dept_ids,
+        )
+        existing_ids = {row.department_id for row in existing_rows}
+        to_add = [d for d in dept_ids if d not in existing_ids]
+        for dept_id in to_add:
             await UserDepartmentDao.aadd_member(
                 user_id, dept_id, is_primary=0, source=cls.SOURCE,
             )
 
 
 # -----------------------------------------------------------------------
-# Module-level helpers (kept unnamespaced so the tests can patch them
-# without worrying about classmethod mocking).
+# Module-level helper: Redis SETNX-based per-user login lock.
 # -----------------------------------------------------------------------
 
 @asynccontextmanager
 async def _acquire_user_lock(
     lock_key: str, ttl: int = 30,
 ) -> AsyncIterator[bool]:
-    """Redis SETNX-based lock with bounded TTL. Yields True iff we acquired
-    the lock. On yield=False the caller must not run the protected flow.
-    The lock is always released on exit (best-effort)."""
+    """SETNX + TTL in a single Redis roundtrip (``SET key value NX EX ttl``).
+
+    Yields True iff we acquired the lock. On yield=False the caller must
+    not run the protected flow. The lock is always released on exit
+    (best-effort). Redis outages degrade gracefully to non-locked mode —
+    blocking login during transient Redis failures would be worse than
+    losing the dedup guarantee for the duration of the outage.
+    """
     redis = None
     acquired = False
     try:
         redis = await get_redis_client()
-        acquired = await redis.asetNx(lock_key, '1', expiration=ttl)
+        # Atomic SETNX + EX — avoids the two-step (setnx + expire) race
+        # where a crash between the two leaves a TTL-less lock.
+        result = await redis.async_connection.set(
+            lock_key, b'1', nx=True, ex=ttl,
+        )
+        acquired = bool(result)
     except Exception as e:
         logger.warning(
             'F014 Redis lock acquire failed (%s); proceeding without lock', e,
         )
-        # Degrade to non-locked: serialisation becomes best-effort. The
-        # alternative (blocking login during Redis outages) is worse.
         acquired = True
         redis = None
     try:
@@ -329,51 +317,3 @@ async def _acquire_user_lock(
                 await redis.adelete(lock_key)
             except Exception as e:  # pragma: no cover
                 logger.warning('F014 Redis lock release failed: %s', e)
-
-
-async def _find_membership(
-    user_id: int, dept_id: int,
-) -> Optional[UserDepartment]:
-    from sqlmodel import select
-    from bisheng.core.database import get_async_db_session
-
-    async with get_async_db_session() as session:
-        result = await session.exec(
-            select(UserDepartment).where(
-                UserDepartment.user_id == user_id,
-                UserDepartment.department_id == dept_id,
-            )
-        )
-        return result.first()
-
-
-async def _demote_primary(user_id: int, dept_id: int) -> None:
-    from sqlalchemy import update
-    from bisheng.core.database import get_async_db_session
-
-    async with get_async_db_session() as session:
-        await session.execute(
-            update(UserDepartment)
-            .where(
-                UserDepartment.user_id == user_id,
-                UserDepartment.department_id == dept_id,
-            )
-            .values(is_primary=0)
-        )
-        await session.commit()
-
-
-async def _promote_to_primary(user_id: int, dept_id: int) -> None:
-    from sqlalchemy import update
-    from bisheng.core.database import get_async_db_session
-
-    async with get_async_db_session() as session:
-        await session.execute(
-            update(UserDepartment)
-            .where(
-                UserDepartment.user_id == user_id,
-                UserDepartment.department_id == dept_id,
-            )
-            .values(is_primary=1)
-        )
-        await session.commit()
