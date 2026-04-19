@@ -120,8 +120,8 @@ class UserService:
             password=cls.decrypt_md5_password(req_data.password),
             source='local',
             # Default external_id to user_name so password login (which queries
-            # external_id only) works out of the box. SSO-synced users set their
-            # own external_id via org_sync; that path does not go through here.
+            # external_id only since 94323e3ec) works out of the box. SSO-synced
+            # users set their own external_id via org_sync, not through here.
             external_id=req_data.user_name,
         )
         group_ids = []

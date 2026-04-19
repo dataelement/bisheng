@@ -56,46 +56,67 @@ def deduplicate_multi_active_user_tenants(conn: Connection) -> None:
     """Demote stale actives so each user has at most one ``is_active=1`` row.
 
     Strategy: for any user with >1 is_active=1 row, keep the row with the
-    latest ``last_access_time`` (NULL treated as oldest) and demote the
-    rest to NULL. This is idempotent — running twice is a no-op.
+    latest ``last_access_time`` (NULL treated as oldest; tie-break on
+    lowest id) and demote the rest to NULL. Idempotent — running twice
+    is a no-op.
 
-    MySQL 8.0 and SQLite both honour the correlated subqueries below.
+    Implementation note (2026-04-19): the previous SQL-only form used
+    ``UPDATE ... WHERE user_id IN (SELECT ... FROM user_tenant ...)``
+    which MySQL 8 rejects with 1093 "You can't specify target table for
+    update in FROM clause" (even when the inner select returns no rows —
+    the parser rejects it). Rewriting as multi-statement with derived
+    tables is possible but noisy; we resolve the keepers in Python
+    instead since this migration runs once on a bounded table.
     """
-    # Step 1: compute, per user, the (max) last_access_time across their
-    # currently-active rows. Any row whose last_access_time is strictly
-    # less than the max gets demoted.
-    conn.execute(text("""
-        UPDATE user_tenant
-        SET is_active = NULL
-        WHERE is_active = 1
-          AND user_id IN (
-              SELECT user_id FROM user_tenant
-              WHERE is_active = 1
-              GROUP BY user_id
-              HAVING COUNT(*) > 1
-          )
-          AND (
-              last_access_time IS NULL
-              OR last_access_time < (
-                  SELECT MAX(last_access_time)
-                  FROM user_tenant ut2
-                  WHERE ut2.user_id = user_tenant.user_id
-                    AND ut2.is_active = 1
-              )
-          )
-    """))
-    # Step 2: if several rows share the same max last_access_time (or all
-    # NULL), keep the one with the smallest id and demote the rest.
-    conn.execute(text("""
-        UPDATE user_tenant
-        SET is_active = NULL
-        WHERE is_active = 1
-          AND id NOT IN (
-              SELECT keeper_id FROM (
-                  SELECT MIN(id) AS keeper_id
-                  FROM user_tenant
-                  WHERE is_active = 1
-                  GROUP BY user_id
-              ) AS keepers
-          )
-    """))
+    # Step 1: find users with multiple active rows.
+    dup_user_ids = [
+        row[0] for row in conn.execute(text(
+            'SELECT user_id FROM user_tenant '
+            'WHERE is_active = 1 '
+            'GROUP BY user_id HAVING COUNT(*) > 1'
+        )).all()
+    ]
+    if not dup_user_ids:
+        return
+
+    # Step 2: for each such user, rank active rows and pick the keeper.
+    for uid in dup_user_ids:
+        rows = conn.execute(
+            text(
+                'SELECT id, last_access_time FROM user_tenant '
+                'WHERE user_id = :uid AND is_active = 1'
+            ),
+            {'uid': uid},
+        ).all()
+        if len(rows) <= 1:
+            continue
+
+        # Prefer rows with non-NULL last_access_time; for those, keeper is
+        # the one with the latest timestamp, tie-break on lowest id. If
+        # every row has NULL, keeper is the lowest id.
+        # NOTE: ``last_access_time`` comes back as ``datetime`` under
+        # pymysql/aiomysql and as an ISO-8601 string under SQLite. Both
+        # orderings are consistent within their type, so we sort twice
+        # (once by ts descending, once by id ascending for ties) rather
+        # than doing numeric conversion that differs per driver.
+        ts_rows = [r for r in rows if r[1] is not None]
+        if ts_rows:
+            ts_rows.sort(key=lambda r: (r[1], -r[0]), reverse=True)
+            keeper_id = ts_rows[0][0]
+        else:
+            keeper_id = min(r[0] for r in rows)
+        demote_ids = [r[0] for r in rows if r[0] != keeper_id]
+        if not demote_ids:
+            continue
+
+        # Use a parameterised IN list. Build an explicit tuple for
+        # drivers (pymysql) that require a value per placeholder.
+        placeholders = ', '.join(f':id{i}' for i in range(len(demote_ids)))
+        params = {f'id{i}': did for i, did in enumerate(demote_ids)}
+        conn.execute(
+            text(
+                f'UPDATE user_tenant SET is_active = NULL '
+                f'WHERE id IN ({placeholders})'
+            ),
+            params,
+        )
