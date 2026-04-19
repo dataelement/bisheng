@@ -118,6 +118,11 @@ class UserService:
         user = User(
             user_name=req_data.user_name,
             password=cls.decrypt_md5_password(req_data.password),
+            source='local',
+            # Default external_id to user_name so password login (which queries
+            # external_id only since 94323e3ec) works out of the box. SSO-synced
+            # users set their own external_id via org_sync, not through here.
+            external_id=req_data.user_name,
         )
         group_ids = []
         role_ids = []
