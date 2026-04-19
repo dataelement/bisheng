@@ -74,7 +74,7 @@ T09 (手工 QA + ac-verification.md)  ← T08
 
 ### 基础设施
 
-- [ ] **T01**: 错误码注册（194xx）+ release-contract / CLAUDE.md 校验
+- [x] **T01**: 错误码注册（194xx）+ release-contract / CLAUDE.md 校验
 
   **文件（新建）**:
   - `src/backend/bisheng/common/errcode/tenant_quota.py` — 3 个错误码类
