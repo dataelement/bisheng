@@ -18,6 +18,7 @@ from __future__ import annotations
 import logging
 from typing import List
 
+from bisheng.common.errcode.tenant import TenantNotFoundError
 from bisheng.common.errcode.tenant_fga import (
     OpenFGAConnectionError,
     RootTenantAdminNotAllowedError,
@@ -85,16 +86,20 @@ class TenantAdminService:
 
     @classmethod
     async def _guard_not_root(cls, tenant_id: int) -> None:
-        """Reject Root-tenant admin grants. Defends in two layers:
+        """Reject Root-tenant admin grants. Error semantics split:
 
-        1. fast-path equality with the hardcoded Root id;
-        2. DB lookup of parent_tenant_id to catch any future Root rename.
+        - tenant_id == ROOT_TENANT_ID (fast path): 19204 RootTenantAdminNotAllowed
+        - tenant not found in DB: 20000 TenantNotFound (avoids leaking Root-only
+          language back to callers who mistyped an id)
+        - tenant.parent_tenant_id IS NULL (defensive, catches future Root rename
+          or multiple rows without parent): 19204 RootTenantAdminNotAllowed
         """
         if tenant_id == ROOT_TENANT_ID:
             raise RootTenantAdminNotAllowedError()
         tenant = await TenantDao.aget_by_id(tenant_id)
-        if tenant is None or tenant.parent_tenant_id is None:
-            # parent_tenant_id IS NULL → tenant is itself a root (defensive)
+        if tenant is None:
+            raise TenantNotFoundError()
+        if tenant.parent_tenant_id is None:
             raise RootTenantAdminNotAllowedError()
 
     @staticmethod

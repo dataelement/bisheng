@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from bisheng.common.errcode.tenant import TenantNotFoundError
 from bisheng.common.errcode.tenant_fga import (
     OpenFGAConnectionError,
     RootTenantAdminNotAllowedError,
@@ -44,11 +45,11 @@ async def test_grant_rejects_when_parent_tenant_id_null():
 
 
 @pytest.mark.asyncio
-async def test_grant_rejects_when_tenant_missing():
-    """Tenant not found also blocks the grant (fail-closed)."""
+async def test_grant_raises_tenant_not_found_when_missing():
+    """Missing tenant now raises TenantNotFoundError (20000) — distinct from Root (19204)."""
     with patch('bisheng.permission.domain.services.tenant_admin_service.TenantDao') as dao:
         dao.aget_by_id = AsyncMock(return_value=None)
-        with pytest.raises(RootTenantAdminNotAllowedError):
+        with pytest.raises(TenantNotFoundError):
             await TenantAdminService.grant_tenant_admin(tenant_id=99, user_id=10)
 
 
