@@ -46,7 +46,7 @@ async def test_manager_passes_legacy_when_dual_mode_true():
     )
     mgr = FGAManager(config)
 
-    with patch('bisheng.core.openfga.manager.httpx.AsyncClient') as mock_http_cls, \
+    with patch('httpx.AsyncClient') as mock_http_cls, \
             patch('bisheng.core.openfga.manager.FGAClient') as mock_client_cls:
         mock_http = AsyncMock()
         mock_http_cls.return_value = mock_http
@@ -73,7 +73,7 @@ async def test_manager_ignores_legacy_when_dual_mode_false():
     )
     mgr = FGAManager(config)
 
-    with patch('bisheng.core.openfga.manager.httpx.AsyncClient') as mock_http_cls, \
+    with patch('httpx.AsyncClient') as mock_http_cls, \
             patch('bisheng.core.openfga.manager.FGAClient') as mock_client_cls:
         mock_http = AsyncMock()
         mock_http_cls.return_value = mock_http

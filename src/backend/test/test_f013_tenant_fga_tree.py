@@ -63,13 +63,17 @@ def _patch_tenant_dao(parent_tenant_id):
 
 
 def test_ac_01_dsl_v2_structure():
-    """New authorization model carries v2.0.0 + 15 types + tenant.shared_to."""
-    assert MODEL_VERSION == 'v2.0.0'
+    """Authorization model carries v2.0.1 + 15 types + tenant.shared_to + shared_with."""
+    assert MODEL_VERSION == 'v2.0.1'
     assert len(AUTHORIZATION_MODEL['type_definitions']) == 15
 
     types_by_name = {t['type']: t for t in AUTHORIZATION_MODEL['type_definitions']}
     assert 'shared_to' in types_by_name['tenant']['relations']
     assert 'parent' not in types_by_name['tenant']['relations']
+    # Each resource carries shared_with: [tenant] — replaces the
+    # tenant#shared_to#member userset OpenFGA rejected (2026-04-19 redesign).
+    assert 'shared_with' in types_by_name['workflow']['relations']
+    assert 'shared_with' in types_by_name['llm_server']['relations']
     assert 'llm_server' in types_by_name
     assert 'llm_model' in types_by_name
 

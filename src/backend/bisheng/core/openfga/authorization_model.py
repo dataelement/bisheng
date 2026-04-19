@@ -8,19 +8,29 @@ Permission pyramid: owner > manager(can_manage) > editor(can_edit) > viewer(can_
 can_delete: owner (top-level) or owner|can_manage from parent (hierarchical)
 
 v2.5.1 F013 changes:
-- tenant type: adds shared_to relation (Root → Child explicit share); admin no longer
-  inherits via parent (two-tier admin model); tenant#parent relation removed (FGA
-  redundant — parent_tenant_id lives in MySQL)
-- Resource viewer adds tenant#shared_to#member directly_related_user_type for shared
-  resource visibility. manager/editor are NOT extended with any tenant relation —
-  resource grants stay at four sources (user + department#member + user_group#member +
-  owner). 2026-04-21 Round 3 narrowing.
+- tenant type: adds shared_to relation (Root → Child explicit share; kept as a
+  domain-level marker of the share link, consumed by F017 at share-propagation
+  time). admin no longer inherits via parent (two-tier admin model);
+  tenant#parent relation removed (FGA redundant — parent_tenant_id lives in
+  MySQL).
+- Each resource type gains shared_with: [tenant]. viewer is extended with
+  tupleToUserset(shared_with, member): users who are ``member`` of any tenant
+  listed in shared_with can view the resource. F017 expands a Root share into
+  per-Child {resource}#shared_with → tenant:{child} tuples at share time
+  (Option A of the 2026-04-19 DSL redesign — OpenFGA protobuf does not accept
+  nested relation refs like tenant#shared_to#member in
+  directly_related_user_types, forcing this explicit expansion).
+- manager/editor remain at the standard three sources (user, department#member,
+  user_group#member) — resource grants stay bounded (Round 3 narrowing).
 - New types llm_server / llm_model preallocated for F020 LLM multi-tenant.
 """
 
 import copy
 
-MODEL_VERSION = 'v2.0.0'
+# v2.0.1 — 2026-04-19 DSL redesign replacing tenant#shared_to#member userset
+# (rejected by OpenFGA protobuf regex ^[^:#@\s]{1,50}$) with resource-level
+# shared_with: [tenant] + tupleToUserset viewer extension.
+MODEL_VERSION = 'v2.0.1'
 
 
 def _user_types():
@@ -32,23 +42,17 @@ def _user_types():
     ]
 
 
-def _viewer_user_types(include_tenant_shared: bool = True):
-    """Viewer-specific user types: standard sources plus optional tenant#shared_to#member.
-
-    F013 (2026-04-21 Round 3 narrowing): only viewer carries tenant#shared_to#member;
-    manager/editor stay at the standard three sources to keep resource authorization
-    bounded to owner + user + department#member + user_group#member.
-    """
-    types = _user_types()
-    if include_tenant_shared:
-        types.append({'type': 'tenant', 'relation': 'shared_to#member'})
-    return types
-
-
 def _standard_resource_type(type_name: str, *, has_parent: bool = False,
                             parent_types: list = None,
                             viewer_includes_tenant_shared: bool = True) -> dict:
-    """Build a standard resource type with owner/manager/editor/viewer pyramid + can_delete."""
+    """Build a standard resource type with owner/manager/editor/viewer pyramid + can_delete.
+
+    When ``viewer_includes_tenant_shared=True`` the resource also gets a
+    ``shared_with: [tenant]`` relation and its ``viewer`` is extended with
+    ``tupleToUserset(shared_with, member)`` — users who are ``member`` of any
+    tenant listed in ``shared_with`` can view the resource. F017 writes the
+    shared_with tuples at share time (one per Child that the Root shares to).
+    """
     relations = {}
     metadata = {}
 
@@ -93,7 +97,16 @@ def _standard_resource_type(type_name: str, *, has_parent: bool = False,
     relations['editor'] = {'union': {'child': editor_children}}
     metadata['editor'] = {'directly_related_user_types': _user_types()}
 
-    # viewer = direct + editor [+ can_read from parent]
+    # shared_with: [tenant] — F013 resource-level share relation consumed by
+    # the viewer tupleToUserset below. Enabled by default; disable only for
+    # types that should never be shared cross-tenant.
+    if viewer_includes_tenant_shared:
+        relations['shared_with'] = {'this': {}}
+        metadata['shared_with'] = {
+            'directly_related_user_types': [{'type': 'tenant'}],
+        }
+
+    # viewer = direct + editor [+ can_read from parent] [+ member from shared_with]
     viewer_children = [
         {'this': {}},
         {'computedUserset': {'relation': 'editor'}},
@@ -105,10 +118,18 @@ def _standard_resource_type(type_name: str, *, has_parent: bool = False,
                 'computedUserset': {'relation': 'can_read'},
             }
         })
+    if viewer_includes_tenant_shared:
+        viewer_children.append({
+            'tupleToUserset': {
+                'tupleset': {'relation': 'shared_with'},
+                'computedUserset': {'relation': 'member'},
+            }
+        })
     relations['viewer'] = {'union': {'child': viewer_children}}
-    metadata['viewer'] = {
-        'directly_related_user_types': _viewer_user_types(viewer_includes_tenant_shared),
-    }
+    # viewer's directly_related_user_types stays at the three standard sources;
+    # access via shared_with is expressed by the tupleToUserset above (OpenFGA
+    # protobuf does not permit nested relation refs in this field).
+    metadata['viewer'] = {'directly_related_user_types': _user_types()}
 
     # computed: can_manage, can_edit, can_read
     relations['can_manage'] = {'computedUserset': {'relation': 'manager'}}

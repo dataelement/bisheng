@@ -1,9 +1,12 @@
 """Unit tests for OpenFGA authorization model DSL (F013 T02).
 
 Verifies:
-- v2.0.0 model version bump
+- v2.0.1 model version bump (2026-04-19 shared_with redesign)
 - tenant type carries shared_to relation; no parent relation
-- Resource viewer carries tenant#shared_to#member; manager/editor do NOT
+- Every resource gets shared_with: [tenant] + viewer tupleToUserset(shared_with, member)
+- viewer's directly_related_user_types stays at 3 canonical sources (no #-nesting,
+  which OpenFGA protobuf rejects)
+- manager/editor stay at the three standard sources
 - llm_server / llm_model types preallocated for F020
 """
 
@@ -26,8 +29,8 @@ def types_by_name() -> dict:
 
 
 def test_model_version_bumped_to_v2():
-    """F013 must bump MODEL_VERSION to v2.0.0 (DSL-breaking change)."""
-    assert MODEL_VERSION == 'v2.0.0'
+    """F013 must bump MODEL_VERSION to v2.0.1 (shared_with DSL redesign)."""
+    assert MODEL_VERSION == 'v2.0.1'
 
 
 def test_get_authorization_model_returns_deep_copy():
@@ -82,11 +85,46 @@ def test_tenant_admin_does_not_inherit(types_by_name):
     'workflow', 'assistant', 'tool', 'dashboard',
     'llm_server', 'llm_model',
 ])
-def test_resource_viewer_includes_tenant_shared(types_by_name, resource_type):
-    """Round 3: every resource viewer must carry tenant#shared_to#member."""
+def test_resource_has_shared_with_relation(types_by_name, resource_type):
+    """2026-04-19 redesign: each resource carries shared_with: [tenant]."""
+    resource = types_by_name[resource_type]
+    assert 'shared_with' in resource['relations']
+    shared_with_meta = resource['metadata']['relations']['shared_with']
+    assert shared_with_meta['directly_related_user_types'] == [{'type': 'tenant'}]
+
+
+@pytest.mark.parametrize('resource_type', [
+    'knowledge_space', 'folder', 'knowledge_file', 'channel',
+    'workflow', 'assistant', 'tool', 'dashboard',
+    'llm_server', 'llm_model',
+])
+def test_resource_viewer_chains_shared_with_member(types_by_name, resource_type):
+    """viewer relation includes tupleToUserset(shared_with, member)."""
+    resource = types_by_name[resource_type]
+    children = resource['relations']['viewer']['union']['child']
+    assert {
+        'tupleToUserset': {
+            'tupleset': {'relation': 'shared_with'},
+            'computedUserset': {'relation': 'member'},
+        }
+    } in children
+
+
+@pytest.mark.parametrize('resource_type', [
+    'knowledge_space', 'folder', 'knowledge_file', 'channel',
+    'workflow', 'assistant', 'tool', 'dashboard',
+    'llm_server', 'llm_model',
+])
+def test_resource_viewer_drut_uses_only_valid_relations(types_by_name, resource_type):
+    """directly_related_user_types must not carry nested-relation strings (e.g. 'shared_to#member'):
+    OpenFGA's protobuf rejects any ``relation`` value matching /[:#@\\s]/."""
     resource = types_by_name[resource_type]
     viewer_types = resource['metadata']['relations']['viewer']['directly_related_user_types']
-    assert {'type': 'tenant', 'relation': 'shared_to#member'} in viewer_types
+    for entry in viewer_types:
+        relation = entry.get('relation', '')
+        assert '#' not in relation, f'{resource_type}.viewer carries forbidden nested relation {relation!r}'
+        assert ':' not in relation
+        assert '@' not in relation
 
 
 @pytest.mark.parametrize('resource_type', [

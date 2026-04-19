@@ -165,17 +165,20 @@ async def test_l4_skips_when_parent_tenant_id_null(login_user_factory, patch_res
 
 
 @pytest.mark.asyncio
-async def test_l1_super_admin_still_short_circuits(login_user_factory, patch_resolver):
-    """Even if L3 would reject, super admin wins."""
+async def test_l1_super_admin_still_short_circuits(login_user_factory):
+    """Even if L3 would reject, super admin wins without touching the resolver."""
     user = login_user_factory(is_admin=True, visible=[5, 1])
-    with patch_resolver(10):  # would normally reject
+    with patch.object(
+        PermissionService, '_resolve_resource_tenant',
+        AsyncMock(return_value=10),
+    ) as resolver_mock:
         result = await PermissionService.check(
             user_id=100, relation='viewer', object_type='workflow',
             object_id='abc', login_user=user,
         )
+        # Assert inside the patch scope so resolver_mock stays valid.
+        resolver_mock.assert_not_called()
     assert result is True
-    # Resolver should not even be called when L1 short-circuits
-    PermissionService._resolve_resource_tenant.assert_not_called()
 
 
 # ── Backward compat: login_user=None preserves legacy behavior ──
