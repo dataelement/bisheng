@@ -27,6 +27,8 @@ class TenantAuditAction(str, Enum):
     # v2.5.1 F012 — primary-department change → leaf tenant relocation
     USER_TENANT_RELOCATED = 'user.tenant_relocated'
     USER_TENANT_RELOCATE_BLOCKED = 'user.tenant_relocate_blocked'
+    # v2.5.1 F014 — existing non-SSO account adopted by an SSO login sync
+    USER_SOURCE_MIGRATED = 'user.source_migrated'
 
 
 class DeletionSource(str, Enum):

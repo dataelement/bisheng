@@ -974,6 +974,61 @@ class UserDepartmentDao:
                 )
             ).all()
 
+    # -----------------------------------------------------------------------
+    # v2.5.1 F014: membership lookups + primary flag management used by
+    # ``LoginSyncService`` — kept at the DAO layer so other sync paths
+    # (F015 reconcile, admin UI) can reuse them without reaching into
+    # service-level helpers.
+    # -----------------------------------------------------------------------
+
+    @classmethod
+    async def aget_membership(
+        cls, user_id: int, department_id: int,
+    ) -> Optional[UserDepartment]:
+        """Return the exact (user_id, department_id) membership row or None."""
+        async with get_async_db_session() as session:
+            result = await session.exec(
+                select(UserDepartment).where(
+                    UserDepartment.user_id == user_id,
+                    UserDepartment.department_id == department_id,
+                )
+            )
+            return result.first()
+
+    @classmethod
+    async def aget_memberships_in_depts(
+        cls, user_id: int, department_ids: List[int],
+    ) -> List[UserDepartment]:
+        """Batch lookup — returns every existing (user_id, dept_id) row whose
+        dept_id is in the given list. Lets callers resolve the N+1 pattern
+        around secondary-department assignment in a single query."""
+        if not department_ids:
+            return []
+        async with get_async_db_session() as session:
+            result = await session.exec(
+                select(UserDepartment).where(
+                    UserDepartment.user_id == user_id,
+                    UserDepartment.department_id.in_(department_ids),
+                )
+            )
+            return result.all()
+
+    @classmethod
+    async def aset_primary_flag(
+        cls, user_id: int, department_id: int, is_primary: int,
+    ) -> None:
+        """Flip the ``is_primary`` flag on an existing membership row."""
+        async with get_async_db_session() as session:
+            await session.execute(
+                update(UserDepartment)
+                .where(
+                    UserDepartment.user_id == user_id,
+                    UserDepartment.department_id == department_id,
+                )
+                .values(is_primary=is_primary)
+            )
+            await session.commit()
+
     @classmethod
     def check_member_exists(cls, user_id: int, department_id: int) -> bool:
         with get_sync_db_session() as session:
