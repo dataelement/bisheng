@@ -22,29 +22,40 @@
 | F016 | [tenant-quota-hierarchy](./016-tenant-quota-hierarchy/) | P1 | 🔲 未开始 | F013 |
 | F017 | [tenant-shared-storage](./017-tenant-shared-storage/) | P1 | 🔲 未开始 | F013 |
 | F018 | [resource-owner-transfer](./018-resource-owner-transfer/) | P0 | 🔲 未开始 | F011, F013 |
+| F019 | [admin-tenant-scope](./019-admin-tenant-scope/) | P1 | 🔲 未开始 | F013 |
+| F020 | [llm-tenant-isolation](./020-llm-tenant-isolation/) | P1 | 🔲 未开始 | F011, F013, F019 |
+| F021 | [wecom-org-sync-provider](./021-wecom-org-sync-provider/) | P0 | 🔲 未开始 | v2.5.0/F009, F011 |
 
 ---
 
 ## 依赖图
 
 ```
-v2.5.0（全部完成）
+v2.5.0（全部完成，含 F009 OrgSyncProvider 抽象）
   │
   v
 F011-tenant-tree-model（数据模型 + 隔离策略重构）
   │
-  ├─────────────┬─────────────┐
-  v             v             v
-F012-resolver  F013-fga-tree  F018-owner-transfer
-  │             │
-  v             ├─ F016-quota-hierarchy
-F014-sso-sync   └─ F017-shared-storage
-  │
+  ├──────────────┬──────────────┬──────────────┐
+  v              v              v              v
+F012-resolver  F013-fga-tree  F018-owner-    F021-wecom-
+  │              │            transfer       org-sync
+  │              │                          (+ v2.5.0/F009)
+  │              ├─ F016-quota-hierarchy
+  │              ├─ F017-shared-storage
+  │              └─ F019-admin-tenant-scope
+  │                     │
+  v                     v
+F014-sso-sync         F020-llm-tenant-isolation
+  │                   (+ F011, F013)
   v
 F015-ldap-reconcile
 ```
 
-**关键路径**：F011 → F012/F013 → 其余 feature 可并行展开
+**关键路径**：
+- 主干：F011 → F012/F013 → F014/F015/F016/F017/F018/F019 可并行展开
+- 串行阻塞：**F019 → F020**（LLM 超管切换视图依赖 admin-scope）
+- 外挂链路：**F021**（WeCom Provider）依赖 v2.5.0/F009 + F011，与权限链路解耦可并行
 
 ---
 
@@ -62,6 +73,15 @@ F015-ldap-reconcile
 | P2-G 两层管理员 | F013（OpenFGA DSL：`tenant.admin` 不继承；Root 不写 tenant#admin） |
 | P2-H Feature spec 要求 | F011/F012/F013 spec 强制含依赖/表清单/checklist |
 | **2026-04-20 收窄** | F011 新增 AC（Root 不可删/禁、audit_log 表 DDL）+ F015（实时 vs 校对冲突规则）+ 数据模型精简（去 tenant_path/level/tenant_kind） |
+
+### 2026-04-19 LLM 多租户 + admin-scope 4 项决策映射
+
+| 决策 | INV / 约束 | 主要落地 Feature |
+|------|-----------|-----------------|
+| 决策 1 admin-scope 管理视图切换（Redis TTL 4h 滑动，非 JWT） | INV-T14 | **F019**（新增） |
+| 决策 2 Root 共享 LLM 可关闭（超管创建时勾选"仅 Root 使用"） | INV-T15 | F020 |
+| 决策 3 Child Admin 自主管理本 Child 的 LLM Server/Model | INV-T15 | F020（`get_tenant_admin_user` 依赖） |
+| 决策 4 存量 `llm_server/llm_model` 归 Root 默认分发 Child | INV-T16 | F020（升级迁移） |
 
 ---
 
@@ -84,6 +104,7 @@ F015-ldap-reconcile
 
 | 日期 | 变更 |
 |------|------|
-| 2026-04-18 | 初始化 v2.5.1；8 个 feature 骨架基于 Tenant 树 PRD Review 对齐 |
+| 2026-04-18 | 初始化 v2.5.1；8 个 feature 骨架（F011~F018）基于 Tenant 树 PRD Review 对齐 |
+| 2026-04-19 | LLM 多租户 + admin-scope 4 项决策落地：新增 **F019-admin-tenant-scope**（Redis 管理视图切换）+ **F020-llm-tenant-isolation**（Root 共享/Child 自主/存量归 Root）+ **F021-wecom-org-sync-provider**（企业微信 Provider 替换 stub）；新增 INV-T14/T15/T16；错误码 220/197/198 分配 |
 | 2026-04-20 | 收窄修订：删 SaaS 多客户场景（仅私有化）；数据模型精简（去 tenant_path/level/tenant_kind）；Root 自动创建+不可删/禁；新增 audit_log/token_version/orphaned；Gateway 实时 vs Celery 校对冲突规则 |
 | 2026-04-21 | Round 2 Review 修复：DSL 彻底收窄资源授权（移除 tenant#member）；F014 补 /departments/sync；F011 集中 DepartmentDeletionHandler；F018 删 Root→Child 路径；F017 补衍生数据写入层；audit_log action 清单集中；废弃 API AC 补全；F015 冲突计数 SQL + 索引；其他一致性修复（详见 release-contract 变更历史） |
