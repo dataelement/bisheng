@@ -107,7 +107,7 @@ T10 (手工 QA + ac-verification.md)  ← T01-T09
 
 ### DSL 层：OpenFGA 授权模型升级
 
-- [ ] **T02**: OpenFGA authorization_model 升级（tenant.shared_to + 资源 viewer 补丁 + llm_server/llm_model 新增）
+- [x] **T02**: OpenFGA authorization_model 升级（tenant.shared_to + 资源 viewer 补丁 + llm_server/llm_model 新增）
   **文件（修改）**:
   - `src/backend/bisheng/core/openfga/authorization_model.py` —
     - `MODEL_VERSION` 提升到 `v2.0.0`
@@ -174,7 +174,7 @@ T10 (手工 QA + ac-verification.md)  ← T01-T09
 
 ### 配置与启动层：双 model 灰度支持
 
-- [ ] **T03**: `OpenFGAConf` 扩展（dual_model_mode / legacy_model_id）
+- [x] **T03**: `OpenFGAConf` 扩展（dual_model_mode / legacy_model_id）
   **文件（修改）**:
   - `src/backend/bisheng/core/config/openfga.py` — `OpenFGAConf` 新增 2 字段
   **文件（修改）**:
