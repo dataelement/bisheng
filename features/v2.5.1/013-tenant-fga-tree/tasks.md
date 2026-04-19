@@ -69,7 +69,7 @@ T10 (手工 QA + ac-verification.md)  ← T01-T09
 
 ### 基础：错误码与文档对齐
 
-- [ ] **T01**: 错误码注册（192xx）+ release-contract / CLAUDE.md 同步校验
+- [x] **T01**: 错误码注册（192xx）+ release-contract / CLAUDE.md 同步校验
   **文件（新建）**:
   - `src/backend/bisheng/common/errcode/tenant_fga.py` — 4 个错误码类
   **文件（修改）**:
