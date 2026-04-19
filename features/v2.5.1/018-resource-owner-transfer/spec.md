@@ -69,8 +69,10 @@
 
 ```python
 class ResourceOwnershipService:
+    # 2026-04-21 MVP 收窄为 7 类：项目暂无 Dashboard ORM，spec 原 "dashboard" 延后至
+    # Dashboard 资源落地后追加；其余 7 类与 PRD §5.6.4.1 Body.resource_types 对齐。
     SUPPORTED_TYPES = ["knowledge_space", "folder", "knowledge_file",
-                       "workflow", "assistant", "tool", "channel", "dashboard"]
+                       "workflow", "assistant", "tool", "channel"]
     MAX_BATCH = 500
 
     @classmethod
@@ -146,18 +148,27 @@ Returns: {"list": [{"user_id": 123, "user_name": "...", "resource_count": 8, "re
 
 ---
 
-## 8. 手工 QA 清单
+## 8. 自测清单（对应 AC）
 
-- [ ] owner 本人发起交接成功
-- [ ] Admin 代发交接成功
-- [ ] 无权限调用拒绝 403
-- [ ] 批量 501 条请求拒绝
-- [ ] to_user 非 Tenant 成员拒绝
-- [ ] MySQL 成功 OpenFGA 失败时整批回滚 + failed_tuples 记录
-- [ ] audit_log 完整
-- [ ] 个人中心 UI "我的资源 → 转交给..." 可用
-- [ ] 超管"待交接"清单展示调岗 > N 天未交接用户
-- [ ] **`user_tenant_sync.enforce_transfer_before_relocate=true` 开关验证**：开启后用户名下有资源时主部门变更被 F012 阻断（返 409+19101）；关闭时允许变更但发告警 + audit_log `user.tenant_relocated`；触发本 feature 交接 API 清空资源后再尝试变更应通过
+> 开发者在完成实现后必须自行运行以下测试；不依赖用户/产品人肉点击。UI 项在前端测试框架搭建后补 E2E，不保留"手工点击"选项。
+
+| Test | AC | 类型 | 备注 |
+|------|----|------|------|
+| `test_owner_transfers_self_resources_success` | AC-01 | pytest 集成测试 | owner 本人发起 + audit_log 记录 |
+| `test_tenant_admin_transfers_subordinate_resources` | AC-02 | pytest 集成测试 | Child Admin 代发 |
+| `test_non_owner_non_admin_forbidden_403` | AC-03 | pytest 集成测试 | 返 403 + 19601 |
+| `test_resource_ids_null_transfers_all_owned` | AC-04 | pytest 集成测试 | null 转所有可转移资源 |
+| `test_resource_ids_list_transfers_subset` | AC-05 | pytest 集成测试 | 仅转交列表中的资源 |
+| `test_fga_failure_rolls_back_and_records_failed_tuple` | AC-06 | pytest 集成测试 | MySQL 成功 FGA 失败 → 事务回滚 + failed_tuples 记录 |
+| `test_batch_over_500_rejected_19602` | AC-07 | pytest 单元测试 | > 500 条返 19602 |
+| `test_to_user_outside_visibility_set_rejected_19603` | AC-08 | pytest 集成测试 | to_user 叶子 ∉ {tenant_id, Root} |
+| `test_child_to_root_transfer_allowed` | AC-08b | pytest 集成测试 | Child → Root（回总部）允许 |
+| `test_child_to_cross_child_rejected` | AC-08c | pytest 集成测试 | Child A → Child B 拒绝 |
+| `test_root_to_child_rejected_with_migrate_hint` | AC-08d | pytest 集成测试 | Root → Child 拒绝 + 响应体提示走 F011 migrate-from-root |
+| `test_enforce_transfer_before_relocate_switch` | AC-01+F012 契约 | pytest 集成测试 | 开关 ON 时主部门变更被 F012 阻断 409+19101；ON 且资源清空后可变更；OFF 时允许变更 + 告警 + audit_log `user.tenant_relocated` |
+| `test_self_transfer_rejected_19606` | 边界 | pytest 单元测试 | from_user_id == to_user_id 拒绝 |
+| `test_personal_center_my_resources_transfer_ui` | AC-09 | Playwright E2E | 前端测试框架搭建后补；在那之前由开发者本地启前端逐项手动自测并截图附入 PR |
+| `test_super_admin_pending_transfer_list` | AC-10 | Playwright E2E | 前端测试框架搭建后补；在那之前由开发者本地启前端逐项手动自测并截图附入 PR |
 
 ---
 

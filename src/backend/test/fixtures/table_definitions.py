@@ -255,6 +255,7 @@ TABLE_KNOWLEDGE_FILE = """\
 CREATE TABLE IF NOT EXISTS knowledgefile (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER,
+    tenant_id INTEGER NOT NULL DEFAULT 1,
     user_name VARCHAR(255),
     knowledge_id INTEGER NOT NULL,
     file_name VARCHAR(200) NOT NULL,
@@ -273,6 +274,7 @@ TABLE_GPTS_TOOLS = """\
 CREATE TABLE IF NOT EXISTS t_gpts_tools (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER,
+    tenant_id INTEGER NOT NULL DEFAULT 1,
     name VARCHAR(255),
     description TEXT,
     is_delete INTEGER DEFAULT 0,
@@ -284,13 +286,37 @@ CREATE TABLE IF NOT EXISTS t_gpts_tools (
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
 )"""
 
+# Channel id is CHAR(36) in production (UUID hex). Use VARCHAR here so the
+# F018 transfer flow that binds str ids into ``WHERE id IN (...)`` behaves
+# the same in SQLite as in MySQL.
 TABLE_CHANNEL = """\
 CREATE TABLE IF NOT EXISTS channel (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id VARCHAR(36) PRIMARY KEY,
     user_id INTEGER NOT NULL,
+    tenant_id INTEGER NOT NULL DEFAULT 1,
     name VARCHAR(255) NOT NULL,
     logo VARCHAR(512),
     status INTEGER DEFAULT 1,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+)"""
+
+# F018 requires the assistant table for the "assistant" transfer type.
+# Production schema (src/backend/bisheng/database/models/assistant.py) uses
+# UUID string ids.
+TABLE_ASSISTANT = """\
+CREATE TABLE IF NOT EXISTS assistant (
+    id VARCHAR(36) PRIMARY KEY,
+    user_id INTEGER NOT NULL DEFAULT 0,
+    tenant_id INTEGER NOT NULL DEFAULT 1,
+    name VARCHAR(255),
+    logo VARCHAR(512),
+    desc TEXT,
+    system_prompt TEXT,
+    prompt TEXT,
+    model_name VARCHAR(255),
+    status INTEGER DEFAULT 1,
+    is_delete INTEGER DEFAULT 0,
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
 )"""
@@ -339,6 +365,8 @@ TABLE_DEFINITIONS: dict[str, str] = {
     'knowledgefile': TABLE_KNOWLEDGE_FILE,
     't_gpts_tools': TABLE_GPTS_TOOLS,
     'channel': TABLE_CHANNEL,
+    # F018: owner transfer targets the standalone assistant table.
+    'assistant': TABLE_ASSISTANT,
 }
 
 

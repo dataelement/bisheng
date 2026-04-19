@@ -29,6 +29,8 @@ class TenantAuditAction(str, Enum):
     USER_TENANT_RELOCATE_BLOCKED = 'user.tenant_relocate_blocked'
     # v2.5.1 F014 — existing non-SSO account adopted by an SSO login sync
     USER_SOURCE_MIGRATED = 'user.source_migrated'
+    # F018 (v2.5.1) — owner transfer within a tenant's visible set.
+    RESOURCE_TRANSFER_OWNER = 'resource.transfer_owner'
 
 
 class DeletionSource(str, Enum):

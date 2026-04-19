@@ -5,6 +5,9 @@ Part of F010-tenant-management-ui.
 
 from fastapi import APIRouter
 
+from bisheng.tenant.api.endpoints.resource_owner_transfer import (
+    router as owner_transfer_router,
+)
 from bisheng.tenant.api.endpoints.tenant_admin import router as admin_router
 from bisheng.tenant.api.endpoints.tenant_crud import router as crud_router
 from bisheng.tenant.api.endpoints.tenant_mount import router as mount_router
@@ -26,3 +29,7 @@ router.include_router(user_tenant_router, prefix='/user')
 # /departments/*/mount-tenant and /tenants/*/resources/migrate-from-root
 # so include without a prefix and let the handlers own the full path.
 router.include_router(mount_router)
+
+# v2.5.1 F018: owner-transfer endpoints under /tenants/*/resources/* —
+# handlers own the full path (same convention as F011 mount_router).
+router.include_router(owner_transfer_router)
