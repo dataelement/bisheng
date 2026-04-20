@@ -44,7 +44,6 @@ export default function Root() {
     sessionStorage.setItem(todayKey(), 'true');
     setNoticeDismissed(true);
   };
-  const { isAuthenticated, logout } = useAuthContext();
   const { isAuthenticated, isUserLoading, logout } = useAuthContext();
   const assistantsMap = useAssistantsMap({ isAuthenticated });
   const agentsMap = useAgentsMap({ isAuthenticated });
