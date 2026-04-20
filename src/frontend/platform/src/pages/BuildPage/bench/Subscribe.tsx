@@ -18,6 +18,7 @@ import WebSearchForm from "../tools/builtInTool/WebSearchFrom";
 import { FormInput } from "./FormInput";
 import { IconUploadSection } from "./IconUploadSection";
 import { Model, ModelManagement } from "./ModelManagement";
+import { resolveConfigString } from "./configValue";
 import Preview from "./Preview";
 import { ToggleSection } from "./ToggleSection";
 import { WebSearchConfig } from "./WebSearchConfig";
@@ -232,10 +233,9 @@ interface UseChatConfigProps {
 const useChatConfig = (refs: UseChatConfigProps) => {
     const { t } = useTranslation()
 
-    const defaultUserPrompt = t('chatConfig.referenceAndQuestion');
     const [formData, setFormData] = useState<ChatConfigForm>({
-        systemPrompt: t('chatConfig.systemPrompt2'),
-        userPrompt: defaultUserPrompt,
+        systemPrompt: '',
+        userPrompt: '',
         maxChunkSize: 15000,
         feedbackTips: '请将您的网站爬取需求发送至邮箱：XXXX@XX',
     });
@@ -244,25 +244,17 @@ const useChatConfig = (refs: UseChatConfigProps) => {
         getSubConfigApi().then((res) => {
             // Interceptor returns response.data.data — null when no config row exists yet.
             const cfg = res != null && typeof res === 'object' ? (res as Record<string, unknown>) : null;
-            const defaultSystemPrompt = t('chatConfig.systemPrompt2');
-            const defaultUser = t('chatConfig.referenceAndQuestion');
             setFormData((prev) => {
                 const systemPromptFromRes = cfg?.systemPrompt ?? cfg?.system_prompt;
                 const userPromptFromRes = cfg?.userPrompt ?? cfg?.user_prompt;
                 const maxChunkSizeFromRes = cfg?.max_chunk_size ?? cfg?.maxTokens;
                 const feedbackTipsFromRes = cfg?.feedback_tips ?? cfg?.feedbackTips;
-                const normalizeNonEmptyString = (value: unknown): string | undefined => {
-                    if (typeof value !== 'string') return undefined;
-                    const trimmed = value.trim();
-                    // Treat empty string / whitespace-only as "API empty" and do not override defaults.
-                    return trimmed ? value : undefined;
-                };
                 return {
                     ...prev,
-                    systemPrompt: normalizeNonEmptyString(systemPromptFromRes) ?? defaultSystemPrompt,
-                    userPrompt: normalizeNonEmptyString(userPromptFromRes) ?? defaultUser,
+                    systemPrompt: resolveConfigString(systemPromptFromRes, prev.systemPrompt),
+                    userPrompt: resolveConfigString(userPromptFromRes, prev.userPrompt),
                     maxChunkSize: typeof maxChunkSizeFromRes === 'number' ? maxChunkSizeFromRes : prev.maxChunkSize,
-                    feedbackTips: normalizeNonEmptyString(feedbackTipsFromRes) ?? prev.feedbackTips,
+                    feedbackTips: resolveConfigString(feedbackTipsFromRes, prev.feedbackTips),
                 };
             });
         });
