@@ -19,7 +19,7 @@ import {
     unsubscribeSpaceApi
 } from "~/api/knowledge";
 import { cn } from "~/utils";
-import { useLocalize, useMediaQuery } from "~/hooks";
+import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 
 interface KnowledgeSpacePreviewDrawerProps {
     spaceId: string | undefined;
@@ -36,7 +36,7 @@ export function KnowledgeSpacePreviewDrawer({
     onSquareStatusChange,
 }: KnowledgeSpacePreviewDrawerProps) {
     const localize = useLocalize();
-    const isH5 = useMediaQuery("(max-width: 768px)");
+    const isH5 = usePrefersMobileLayout();
     const { showToast } = useToastContext();
     const MAX_JOINED_SPACES = 50;
 
@@ -275,7 +275,7 @@ export function KnowledgeSpacePreviewDrawer({
                 side="right"
                 className={cn(
                     "flex h-full min-h-0 flex-col overflow-hidden p-0 px-12 w-[1000px] sm:max-w-[1000px]",
-                    "max-md:inset-0 max-md:left-0 max-md:top-0 max-md:h-dvh max-md:w-screen max-md:max-w-none max-md:translate-x-0 max-md:translate-y-0 max-md:px-4"
+                    "touch-mobile:inset-0 touch-mobile:left-0 touch-mobile:top-0 touch-mobile:h-dvh touch-mobile:w-screen touch-mobile:max-w-none touch-mobile:translate-x-0 touch-mobile:translate-y-0 touch-mobile:px-4"
                 )}
                 hideClose
             >
@@ -300,8 +300,8 @@ export function KnowledgeSpacePreviewDrawer({
                 )}
                 {space && (
                     <>
-                        <SheetHeader className="gap-0 border-b border-gray-100 px-6 pb-4 pt-6 text-left max-md:px-0 max-md:pt-6">
-                            <SheetTitle className="mb-1 text-[#1d2129] leading-tight font-semibold max-md:pr-10">
+                        <SheetHeader className="gap-0 border-b border-gray-100 px-6 pb-4 pt-6 text-left touch-mobile:px-0 touch-mobile:pt-6">
+                            <SheetTitle className="mb-1 text-[#1d2129] leading-tight font-semibold touch-mobile:pr-10">
                                 {space.name}
                             </SheetTitle>
                             {space.description && (
@@ -346,7 +346,7 @@ export function KnowledgeSpacePreviewDrawer({
                         </SheetHeader>
 
                         <div
-                            className="scrollbar-on-hover flex-1 min-h-0 overflow-y-auto px-6 py-4 max-md:px-0"
+                            className="scrollbar-on-hover flex-1 min-h-0 overflow-y-auto px-6 py-4 touch-mobile:px-0"
                             onScroll={(e) => {
                                 const el = e.currentTarget;
                                 if (el.scrollTop + el.clientHeight >= el.scrollHeight - 80) {

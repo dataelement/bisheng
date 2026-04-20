@@ -238,7 +238,7 @@ export function CreateChannelDrawer({
                 <SheetContent
                     side="right"
                     hideClose
-                    className="flex w-full max-w-[900px] flex-col overflow-y-auto scrollbar-on-hover bg-white px-20 sm:max-w-[1000px] max-md:px-4"
+                    className="flex w-full max-w-[900px] flex-col overflow-y-auto scrollbar-on-hover bg-white px-20 sm:max-w-[1000px] touch-mobile:px-4"
                     onScroll={handleBodyScroll}
                     data-scrolling={isBodyScrolling ? "true" : "false"}
                 >
@@ -250,8 +250,8 @@ export function CreateChannelDrawer({
                         <XIcon className="size-4" />
                         <span className="sr-only">Close</span>
                     </button>
-                    <SheetHeader className="sticky top-0 z-10 mx-6 border-b border-[#E5E6EB] bg-white pb-4 pt-6 max-md:mx-0">
-                        <SheetTitle className="-ml-4 text-[20px] font-medium text-[#1D2129] md:text-[16px]">
+                    <SheetHeader className="sticky top-0 z-10 mx-6 border-b border-[#E5E6EB] bg-white pb-4 pt-6 touch-mobile:mx-0">
+                        <SheetTitle className="-ml-4 text-[20px] font-medium text-[#1D2129] touch-desktop:text-[16px]">
                             {isEditMode ? localize("com_subscription.channel_settings") : localize("com_subscription.create_channel")}
                         </SheetTitle>
                     </SheetHeader>
@@ -277,7 +277,7 @@ export function CreateChannelDrawer({
                     ) : (
                         <div
                             className={cn(
-                                "space-y-6 overflow-visible px-6 py-5 max-md:px-0"
+                                "space-y-6 overflow-visible px-6 py-5 touch-mobile:px-0"
                             )}
                         >
                             {/* 添加信息源 */}
@@ -670,11 +670,11 @@ export function CreateChannelDrawer({
 
                     {/* 底部操作按钮 */}
                     {(!form.showSuccess || isEditMode) && (
-                        <div className="sticky bottom-0 z-10 mt-auto flex justify-end gap-3 border-t border-[#E5E6EB] bg-white px-6 pb-5 pt-10 max-md:gap-2 max-md:px-0 max-md:pt-4">
+                        <div className="sticky bottom-0 z-10 mt-auto flex justify-end gap-3 border-t border-[#E5E6EB] bg-white px-6 pb-5 pt-10 touch-mobile:gap-2 touch-mobile:px-0 touch-mobile:pt-4">
                             <Button
                                 variant="secondary"
                                 onClick={() => handleClose(false)}
-                                className="inline-flex h-8 items-center justify-center rounded-[6px] border-none bg-[#F2F3F5] px-4 text-[14px] leading-none !font-normal text-[#4E5969] hover:bg-[#E5E6EB] max-md:flex-1"
+                                className="inline-flex h-8 items-center justify-center rounded-[6px] border-none bg-[#F2F3F5] px-4 text-[14px] leading-none !font-normal text-[#4E5969] hover:bg-[#E5E6EB] touch-mobile:flex-1"
                             >
                                 {localize("cancel")}
                             </Button>
@@ -732,7 +732,7 @@ export function CreateChannelDrawer({
                                         form.setSubmitting(false);
                                     }
                                 }}
-                                className="inline-flex h-8 items-center justify-center rounded-[6px] border-none bg-[#165DFF] px-4 text-[14px] leading-none !font-normal text-white hover:bg-[#4080FF] disabled:opacity-50 max-md:flex-1"
+                                className="inline-flex h-8 items-center justify-center rounded-[6px] border-none bg-[#165DFF] px-4 text-[14px] leading-none !font-normal text-white hover:bg-[#4080FF] disabled:opacity-50 touch-mobile:flex-1"
                             >
                                 {isEditMode
                                     ? form.submitting ? localize("com_subscription.saving") : localize("com_subscription.save")

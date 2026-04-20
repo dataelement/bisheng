@@ -13,7 +13,7 @@ import {
     SheetTitle
 } from "~/components/ui/Sheet";
 import { Textarea } from "~/components/ui/Textarea";
-import { useLocalize, useMediaQuery } from "~/hooks";
+import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import { KnowledgeSpace, VisibilityType } from "~/api/knowledge";
 import { cn, getFullWidthLength, truncateByFullWidth } from "~/utils";
 import { ChannelSuccessIcon } from "~/components/icons/channels";
@@ -62,7 +62,7 @@ export function CreateKnowledgeSpaceDrawer({
     const { showToast } = useToastContext();
     const confirm = useConfirm();
     const localize = useLocalize();
-    const isH5 = useMediaQuery("(max-width: 768px)");
+    const isH5 = usePrefersMobileLayout();
     const [name, setName] = useState("");
     const [description, setDescription] = useState("");
     const [joinPolicy, setJoinPolicy] = useState<JoinPolicy>("review");
@@ -156,8 +156,8 @@ export function CreateKnowledgeSpaceDrawer({
                     </button>
                 ) : null}
 
-                <SheetHeader className="border-b border-[#E5E6EB] px-8 pb-4 pt-7 max-md:sticky max-md:top-0 max-md:z-10 max-md:mx-0 max-md:bg-white max-md:px-0 max-md:pt-6">
-                    <SheetTitle className="text-[20px] font-medium text-[#1D2129] leading-none max-md:-ml-4">
+                <SheetHeader className="border-b border-[#E5E6EB] px-8 pb-4 pt-7 touch-mobile:sticky touch-mobile:top-0 touch-mobile:z-10 touch-mobile:mx-0 touch-mobile:bg-white touch-mobile:px-0 touch-mobile:pt-6">
+                    <SheetTitle className="text-[20px] font-medium text-[#1D2129] leading-none touch-mobile:-ml-4">
                         {mode === "edit" ? localize("com_subscription.edit_knowledge_space") || localize("com_knowledge.edit_space") : localize("com_subscription.create_konwledge_space")}
                     </SheetTitle>
                 </SheetHeader>
@@ -193,7 +193,7 @@ export function CreateKnowledgeSpaceDrawer({
                         </div>
                     </div>
                 ) : (
-                    <div className="flex-1 overflow-y-auto px-8 py-7 max-md:px-0 max-md:py-5">
+                    <div className="flex-1 overflow-y-auto px-8 py-7 touch-mobile:px-0 touch-mobile:py-5">
                         <div className="space-y-7">
                             {/* 知识空间名称 */}
                             <div className="space-y-2">
@@ -390,15 +390,15 @@ export function CreateKnowledgeSpaceDrawer({
                 )}
 
                 {!showSuccess && (
-                    <div className="flex items-center justify-end gap-2 border-t border-[#E5E6EB] bg-white px-6 py-3 max-md:sticky max-md:bottom-0 max-md:z-10 max-md:mt-auto max-md:gap-2 max-md:px-0">
+                    <div className="flex items-center justify-end gap-2 border-t border-[#E5E6EB] bg-white px-6 py-3 touch-mobile:sticky touch-mobile:bottom-0 touch-mobile:z-10 touch-mobile:mt-auto touch-mobile:gap-2 touch-mobile:px-0">
                         <Button
                             variant="secondary"
-                            className="h-8 rounded-[6px] border border-[#E5E6EB] bg-white text-[14px] font-normal text-[#4E5969] max-md:flex-1"
+                            className="h-8 rounded-[6px] border border-[#E5E6EB] bg-white text-[14px] font-normal text-[#4E5969] touch-mobile:flex-1"
                             onClick={() => onOpenChange(false)}
                         >
                             {localize("com_knowledge.cancel")}</Button>
                         <Button
-                            className="h-8 rounded-[6px] bg-[#165DFF] text-[14px] font-normal text-white hover:bg-[#4080FF] max-md:flex-1"
+                            className="h-8 rounded-[6px] bg-[#165DFF] text-[14px] font-normal text-white hover:bg-[#4080FF] touch-mobile:flex-1"
                             onClick={handleConfirm}
                         >
                             {mode === "edit" ? localize("com_knowledge.save") : localize("com_knowledge.confirm_create")}

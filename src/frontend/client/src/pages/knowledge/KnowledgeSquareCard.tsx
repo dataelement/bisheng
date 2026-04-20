@@ -99,7 +99,7 @@ export default function KnowledgeSquareCard({
                     {space.description || localize("com_knowledge.no_description")}
                 </p>
 
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] leading-[18px] text-[#86909C] md:flex-nowrap md:gap-2.5 md:text-[14px] md:leading-[20px]">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] leading-[18px] text-[#86909C] touch-desktop:flex-nowrap touch-desktop:gap-2.5 touch-desktop:text-[14px] touch-desktop:leading-[20px]">
                     <div className="flex shrink-0 items-center gap-1.5">
                         <Avatar className="border border-white h-5 w-5">
                             {creatorAvatar ? (

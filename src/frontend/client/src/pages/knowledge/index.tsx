@@ -34,12 +34,12 @@ import KnowledgeSquare from "./KnowledgeSquare";
 import { useFileManager } from "./hooks/useFileManager";
 import { useFileUpload } from "./hooks/useFileUpload";
 import { useAiSplitPane } from "./hooks/useAiSplitPane";
-import { useLocalize, useMediaQuery } from "~/hooks";
+import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import { useAuthContext } from "~/hooks/AuthContext";
 
 export default function Knowledge() {
     const localize = useLocalize();
-    const isH5 = useMediaQuery("(max-width: 768px)");
+    const isH5 = usePrefersMobileLayout();
     const MAX_USER_SPACES = 30;
     const previewNavTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [activeSpace, setActiveSpace] = useState<KnowledgeSpace | null>(null);
@@ -546,7 +546,7 @@ export default function Knowledge() {
                 </div>
             )}
 
-            <div className="hidden h-full shrink-0 md:block">
+            <div className="hidden h-full shrink-0 touch-desktop:block">
                 <KnowledgeSpaceSidebar
                     activeSpaceId={activeSpace?.id}
                     onSpaceSelect={handleSpaceSelect}

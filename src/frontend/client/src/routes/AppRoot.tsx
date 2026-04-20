@@ -5,7 +5,7 @@ import { ChevronLeft, Menu } from 'lucide-react';
 import type { ContextType } from '~/common';
 import { Banner } from '~/components/Banners';
 import NavToggle from '~/components/Nav/NavToggle';
-import { useAuthContext, useMediaQuery } from '~/hooks';
+import { useAuthContext, usePrefersMobileLayout } from '~/hooks';
 import { SideNav } from '~/pages/appChat/SideNav';
 import { sidebarVisibleState } from '~/pages/appChat/store/appSidebarAtoms';
 import { cn } from '~/utils';
@@ -21,7 +21,7 @@ export default function AppRoot() {
     const navigate = useNavigate();
     const { isAuthenticated } = useAuthContext();
     const [sidebarVisible, setSidebarVisible] = useRecoilState(sidebarVisibleState);
-    const isTabletOrMobile = useMediaQuery('(max-width: 768px)');
+    const isTabletOrMobile = usePrefersMobileLayout();
     const sidebarWidth = isTabletOrMobile ? 240 : 280;
 
     if (!isAuthenticated) {

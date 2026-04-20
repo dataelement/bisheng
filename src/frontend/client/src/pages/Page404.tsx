@@ -12,8 +12,8 @@ export default function Page404() {
                         404
                     </h1>
                     <div className="-mt-12 space-y-3">
-                        <h2 className="text-3xl md:text-4xl font-semibold tracking-tight text-balance">Page Not Found</h2>
-                        <p className="text-base md:text-lg text-muted-foreground max-w-md mx-auto text-pretty leading-relaxed">
+                        <h2 className="text-3xl touch-desktop:text-4xl font-semibold tracking-tight text-balance">Page Not Found</h2>
+                        <p className="text-base touch-desktop:text-lg text-muted-foreground max-w-md mx-auto text-pretty leading-relaxed">
                             Sorry, the page you are trying to access does not exist or has been removed
                         </p>
                     </div>

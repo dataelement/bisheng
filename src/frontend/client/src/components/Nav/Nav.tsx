@@ -10,7 +10,7 @@ import {
   useHasAccess,
   useLocalStorage,
   useLocalize,
-  useMediaQuery,
+  usePrefersMobileLayout,
   useNavScrolling,
 } from '~/hooks';
 import { cn } from '~/utils';
@@ -31,7 +31,7 @@ const Nav = ({
 
   const [navWidth, setNavWidth] = useState('260px');
   const [isHovering, setIsHovering] = useState(false);
-  const isSmallScreen = useMediaQuery('(max-width: 768px)');
+  const isSmallScreen = usePrefersMobileLayout();
   const [newUser, setNewUser] = useLocalStorage('newUser', true);
 
   const hasAccessToBookmarks = useHasAccess({
@@ -106,7 +106,7 @@ const Nav = ({
       <div
         data-testid="nav"
         className={
-          'nav active max-w-[240px] max-[575px]:max-w-none flex-shrink-0 overflow-x-hidden md:max-w-[240px] bg-white border-r border-[#ececec]'
+          'nav active max-w-[240px] touch-mobile:max-w-none flex-shrink-0 overflow-x-hidden touch-desktop:max-w-[240px] bg-white border-r border-[#ececec]'
         }
         style={{
           width: navVisible ? navWidth : '0px',
@@ -114,7 +114,7 @@ const Nav = ({
           transition: 'width 0.2s, visibility 0.2s',
         }}
       >
-        <div className="h-full w-[240px] max-[575px]:w-full md:w-[240px]">
+        <div className="h-full w-[240px] touch-mobile:w-full touch-desktop:w-[240px]">
           <div className="flex h-full min-h-0 flex-col">
             <div
               className={cn(

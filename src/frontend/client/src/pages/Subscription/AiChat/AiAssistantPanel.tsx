@@ -1,4 +1,4 @@
-import { useLocalize, useMediaQuery } from "~/hooks";
+import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 /**
  * AI Assistant Panel — complete chat interface.
  * Supports three modes:
@@ -51,7 +51,7 @@ export function AiAssistantPanel({
     fileChat,
 }: AiAssistantPanelProps) {
     const localize = useLocalize();
-    const isH5 = useMediaQuery("(max-width: 768px)");
+    const isH5 = usePrefersMobileLayout();
 
     // Determine chat mode: fileChat > channel > workstation
     const isFileChatMode = !!fileChat;
@@ -117,7 +117,7 @@ export function AiAssistantPanel({
         <div className="flex flex-col h-full bg-white relative">
             {/* Header */}
             <div className={`relative flex items-center justify-between px-3 py-[15px] shrink-0 ${noBorder ? '' : 'border-b border-gray-100'}`}>
-                <h3 className="pointer-events-none absolute left-1/2 w-[60%] -translate-x-1/2 truncate text-center text-sm leading-6 font-medium text-gray-900 md:pointer-events-auto md:static md:w-auto md:translate-x-0 md:text-left">
+                <h3 className="pointer-events-none absolute left-1/2 w-[60%] -translate-x-1/2 truncate text-center text-sm leading-6 font-medium text-gray-900 touch-desktop:pointer-events-auto touch-desktop:static touch-desktop:w-auto touch-desktop:translate-x-0 touch-desktop:text-left">
                     {localize("com_subscription.ai_assistant")}
                 </h3>
                 <div className="ml-auto flex items-center gap-3 pr-3">

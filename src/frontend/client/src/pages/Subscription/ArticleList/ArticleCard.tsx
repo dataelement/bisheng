@@ -67,7 +67,7 @@ export function ArticleCard({
         <div
             className={cn(
                 "group relative flex cursor-pointer gap-6 border-b border-dashed border-[#E0E0E0] py-5 last:border-none",
-                "max-md:gap-4 max-md:border-solid max-md:border-[#E3E3E3] max-md:py-4",
+                "touch-mobile:gap-4 touch-mobile:border-solid touch-mobile:border-[#E3E3E3] touch-mobile:py-4",
             )}
             style={{
                 transitionProperty: 'background-color',
@@ -99,7 +99,7 @@ export function ArticleCard({
                     <h3 className={cn(
                         "font-medium line-clamp-1 [&_em]:not-italic [&_em]:bg-[#FFBF00]/20 [&_em]:font-medium",
                         isSelected ? "text-primary" : "group-hover:text-primary",
-                        article.isRead ? "text-[#989898]" : "text-gray-800 max-md:text-[#212121] max-md:font-medium",
+                        article.isRead ? "text-[#989898]" : "text-gray-800 touch-mobile:text-[#212121] touch-mobile:font-medium",
                     )}
                     >
                         {highlightTitle
@@ -108,11 +108,11 @@ export function ArticleCard({
                     </h3>
 
                     {/* 正文预览 - 增加蓝色引号 */}
-                    <div className="relative pt-4 pl-3 max-md:pt-3">
+                    <div className="relative pt-4 pl-3 touch-mobile:pt-3">
                         <ChannelQuoteIcon className="absolute left-0 top-1 mt-[-2px] h-5 w-5" />
                         <p className={cn(
                             "text-sm line-clamp-1 leading-snug [&_em]:not-italic [&_em]:bg-[#FFBF00]/20 [&_em]:font-bold",
-                            "max-md:line-clamp-2 max-md:text-[#595959]",
+                            "touch-mobile:line-clamp-2 touch-mobile:text-[#595959]",
                             article.isRead ? "text-gray-400" : "text-gray-500",
                         )}
                         >
@@ -124,8 +124,8 @@ export function ArticleCard({
                 </div>
 
                 {/* 3. 底部元信息 - 来源和时间 */}
-                <div className="relative mt-4 flex items-center justify-between max-md:mt-3">
-                    <div className="flex items-center gap-2 text-xs text-[#999] max-md:text-[#999999]">
+                <div className="relative mt-4 flex items-center justify-between touch-mobile:mt-3">
+                    <div className="flex items-center gap-2 text-xs text-[#999] touch-mobile:text-[#999999]">
                         <div className="size-4 shrink-0 overflow-hidden">
                             <img
                                 src={article.sourceAvatar}
@@ -134,7 +134,7 @@ export function ArticleCard({
                             />
                         </div>
                         <span className="max-w-40 truncate">{article.sourceName}</span>
-                        <span className="mx-0.5 h-2.5 w-px shrink-0 bg-[#E0E0E0] max-md:h-3 max-md:bg-[#E5E5E5]" aria-hidden />
+                        <span className="mx-0.5 h-2.5 w-px shrink-0 bg-[#E0E0E0] touch-mobile:h-3 touch-mobile:bg-[#E5E5E5]" aria-hidden />
                         <span>{formatTime(article.publishedAt)}</span>
                     </div>
 
@@ -142,8 +142,12 @@ export function ArticleCard({
                         <div
                             className={cn(
                                 "flex items-center gap-3 transition-opacity",
-                                "max-md:static max-md:opacity-100 max-md:pointer-events-auto",
-                                "md:pointer-events-none md:absolute md:right-0 md:opacity-0 md:group-hover:pointer-events-auto md:group-hover:opacity-100",
+                                // Narrow viewport, touch, or no-hover primary input: keep actions visible (not width-only).
+                                "touch-mobile:static touch-mobile:opacity-100 touch-mobile:pointer-events-auto",
+                                "[@media(hover:none)]:static [@media(hover:none)]:opacity-100 [@media(hover:none)]:pointer-events-auto",
+                                "[@media(pointer:coarse)]:static [@media(pointer:coarse)]:opacity-100 [@media(pointer:coarse)]:pointer-events-auto",
+                                // Desktop with mouse: float on row, show when hovering the card.
+                                "touch-desktop:[@media(hover:hover)_and_(pointer:fine)]:pointer-events-none touch-desktop:[@media(hover:hover)_and_(pointer:fine)]:absolute touch-desktop:[@media(hover:hover)_and_(pointer:fine)]:right-0 touch-desktop:[@media(hover:hover)_and_(pointer:fine)]:opacity-0 touch-desktop:[@media(hover:hover)_and_(pointer:fine)]:group-hover:pointer-events-auto touch-desktop:[@media(hover:hover)_and_(pointer:fine)]:group-hover:opacity-100",
                             )}
                         >
                             {hasKnowledge && (

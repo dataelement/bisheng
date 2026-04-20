@@ -100,14 +100,14 @@ const CreatePromptForm = ({
   return (
     <FormProvider {...methods}>
       <form onSubmit={handleSubmit(onSubmit)} className="w-full px-4 py-2">
-        <div className="mb-1 flex flex-col items-center justify-between font-bold sm:text-xl md:mb-0 md:text-2xl">
+        <div className="mb-1 flex flex-col items-center justify-between font-bold sm:text-xl touch-desktop:mb-0 touch-desktop:text-2xl">
           <div className="flex w-full flex-col items-center justify-between sm:flex-row">
             <Controller
               name="name"
               control={control}
               rules={{ required: localize('com_ui_prompt_name_required') }}
               render={({ field }) => (
-                <div className="mb-1 flex items-center md:mb-0">
+                <div className="mb-1 flex items-center touch-desktop:mb-0">
                   <Input
                     {...field}
                     type="text"
@@ -129,7 +129,7 @@ const CreatePromptForm = ({
             <CategorySelector />
           </div>
         </div>
-        <div className="flex w-full flex-col gap-4 md:mt-[1.075rem]">
+        <div className="flex w-full flex-col gap-4 touch-desktop:mt-[1.075rem]">
           <div>
             <h2 className="flex items-center justify-between rounded-t-lg border border-border-medium py-2 pl-4 pr-1 text-base font-semibold dark:text-gray-200">
               {localize('com_ui_prompt_text')}*

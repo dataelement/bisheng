@@ -2,7 +2,7 @@ import React, { useState, useRef, useCallback } from "react";
 import { ChevronLeft } from "lucide-react";
 import { Article, Channel, getArticleDetailApi } from "~/api/channels";
 import NavToggle from "~/components/Nav/NavToggle";
-import { useLocalize, useMediaQuery } from "~/hooks";
+import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import { ArticleList } from "./ArticleList/ArticleList";
 import { ArticleDetail } from "./Article/ArticleDetail";
 import { useResizablePanel } from "./hooks/useResizablePanel";
@@ -28,7 +28,7 @@ export function ChannelLayout({
     onCreateChannel,
 }: ChannelLayoutProps) {
     const localize = useLocalize();
-    const isH5 = useMediaQuery("(max-width: 768px)");
+    const isH5 = usePrefersMobileLayout();
     const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
     const [detailLoading, setDetailLoading] = useState(false);
     const [isToggleHovering, setIsToggleHovering] = useState(false);
@@ -138,7 +138,7 @@ export function ChannelLayout({
             {/* H5：文章详情全屏叠在列表上 */}
             {isH5 && selectedArticle && (
                 <div
-                    className="absolute inset-0 z-[35] flex flex-col bg-white md:hidden"
+                    className="absolute inset-0 z-[35] flex flex-col bg-white"
                     role="dialog"
                     aria-modal="true"
                     aria-label={localize("com_subscription.subscribe")}

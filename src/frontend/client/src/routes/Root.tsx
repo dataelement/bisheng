@@ -14,7 +14,7 @@ import { MobileNav, Nav } from '~/components/Nav';
 import { Button } from '~/components/ui/Button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '~/components/ui/Dialog';
 import { useAgentsMap, useAssistantsMap, useAuthContext, useFileMap, useSearch } from '~/hooks';
-import useMediaQuery from '~/hooks/useMediaQuery';
+import usePrefersMobileLayout from '~/hooks/usePrefersMobileLayout';
 import { bishengConfState } from '~/pages/appChat/store/atoms';
 import store from '~/store';
 
@@ -25,7 +25,7 @@ const todayKey = () => {
 
 export default function Root() {
   const [bannerHeight, setBannerHeight] = useState(0);
-  const isSmallScreen = useMediaQuery('(max-width: 768px)');
+  const isSmallScreen = usePrefersMobileLayout();
   const [navVisible, setNavVisible] = useRecoilState(store.chatHistoryDrawerOpen);
   const { pathname } = useLocation();
 
@@ -87,7 +87,7 @@ export default function Root() {
                   <Nav navVisible={navVisible} setNavVisible={setNavVisible} />
                   {/* 会话消息面板区(路由) */}
                   <div className="relative flex h-full max-w-full flex-1 flex-col overflow-hidden">
-                    {showMobileNav ? (
+                    {showMobileNav && isSmallScreen ? (
                       <MobileNav
                         variant="chat"
                         navVisible={navVisible}

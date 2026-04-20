@@ -93,7 +93,7 @@ const BookmarkEditDialog = ({
       <OGDialogTemplate
         title="Bookmark"
         showCloseButton={false}
-        className="w-11/12 md:max-w-2xl"
+        className="w-11/12 touch-desktop:max-w-2xl"
         main={
           <BookmarkForm
             tags={tags}

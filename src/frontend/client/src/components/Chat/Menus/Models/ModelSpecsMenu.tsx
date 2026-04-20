@@ -127,7 +127,7 @@ export default function ModelSpecsMenu({ modelSpecs }: { modelSpecs?: TModelSpec
       <MenuButton
         selected={selected}
         className="min-h-11"
-        textClassName="block items-center justify-start text-xs md:text-base whitespace-nowrap max-w-64 overflow-hidden shrink-0 text-ellipsis"
+        textClassName="block items-center justify-start text-xs touch-desktop:text-base whitespace-nowrap max-w-64 overflow-hidden shrink-0 text-ellipsis"
         primaryText={selected?.label ?? ''}
         endpointsConfig={endpointsConfig}
       />

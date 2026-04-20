@@ -12,7 +12,7 @@ import { FileTable } from "./FileTable";
 import { KnowledgeSpaceHeader } from "./KnowledgeSpaceHeader";
 import { PaginationBar } from "./PaginationBar";
 import { SelectionPathBreadcrumb } from "./SelectionPathBreadcrumb";
-import { useLocalize, useMediaQuery } from "~/hooks";
+import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import { cn, getFullWidthLength } from "~/utils";
 
 interface KnowledgeSpaceContentProps {
@@ -75,7 +75,7 @@ export function KnowledgeSpaceContent({
     onGoKnowledgeSquare,
 }: KnowledgeSpaceContentProps) {
     const localize = useLocalize();
-    const isH5 = useMediaQuery("(max-width: 768px)");
+    const isH5 = usePrefersMobileLayout();
     const displayFiles = [
         ...(creatingFolder ? [creatingFolder] : []),
         ...uploadingFiles,

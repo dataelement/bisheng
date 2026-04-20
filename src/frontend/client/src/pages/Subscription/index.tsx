@@ -1,4 +1,4 @@
-import { useLocalize, useMediaQuery } from "~/hooks";
+import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
@@ -69,7 +69,7 @@ export default function Subscription() {
     const [memberDialogSpace, setMemberDialogSpace] = useState<KnowledgeSpace | null>(null);
     const [channelMemberOpen, setChannelMemberOpen] = useState(false);
     const [channelMemberChannel, setChannelMemberChannel] = useState<Channel | null>(null);
-    const isH5 = useMediaQuery("(max-width: 768px)");
+    const isH5 = usePrefersMobileLayout();
     const [channelListDrawerOpen, setChannelListDrawerOpen] = useState(false);
     const [editingChannel, setEditingChannel] = useState<Channel | null>(null);
     const { showToast } = useToastContext();
@@ -393,7 +393,7 @@ export default function Subscription() {
     }
 
     return (
-        <div className="relative flex h-full flex-col md:flex-row">
+        <div className="relative flex h-full flex-col touch-desktop:flex-row">
             {showChannelSquare ? (
                 <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                 <ChannelSquare
@@ -413,7 +413,7 @@ export default function Subscription() {
             ) : (
                 <>
                     {/* PC：左侧频道列表；H5：改抽屉叠在主内容之上（见下方 fixed） */}
-                    <div className="hidden h-full shrink-0 md:block">
+                    <div className="hidden h-full shrink-0 touch-desktop:block">
                         <ChannelSidebar
                             activeChannelId={activeChannel?.id}
                             suppressAutoSelect={!!previewChannelId}
@@ -443,7 +443,7 @@ export default function Subscription() {
 
                     {isH5 && channelListDrawerOpen ? (
                         <div
-                            className="fixed inset-0 z-[70] flex md:hidden"
+                            className="fixed inset-0 z-[70] flex"
                             role="dialog"
                             aria-modal="true"
                             aria-label={localize("com_subscription.subscribe")}
@@ -509,7 +509,7 @@ export default function Subscription() {
                                             type="button"
                                             aria-label={localize("com_nav_open_sidebar")}
                                             onClick={() => setChannelListDrawerOpen(true)}
-                                            className={cn("absolute left-2 top-2 z-10 md:hidden", mobileHeadIconBtnClassName)}
+                                            className={cn("absolute left-2 top-2 z-10", mobileHeadIconBtnClassName)}
                                         >
                                             <Menu className="size-4" />
                                         </button>
@@ -517,7 +517,7 @@ export default function Subscription() {
                                             type="button"
                                             aria-label={localize("com_subscription.create")}
                                             onClick={handleCreateChannel}
-                                            className={cn("absolute right-2 top-2 z-10 md:hidden", mobileHeadIconBtnClassName)}
+                                            className={cn("absolute right-2 top-2 z-10", mobileHeadIconBtnClassName)}
                                         >
                                             <Plus className="size-4" />
                                         </button>

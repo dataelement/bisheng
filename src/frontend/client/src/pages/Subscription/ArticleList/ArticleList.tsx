@@ -246,9 +246,9 @@ export function ArticleList({
     return (
         <div className="flex h-full w-full flex-1 flex-col">
             {/* header — 结构与知识空间页保持一致 */}
-            <div className="mx-auto w-full max-w-[1000px] px-4 pt-5 pb-4 space-y-4 max-md:space-y-3 max-md:pt-0 max-md:pb-3">
+            <div className="mx-auto w-full max-w-[1000px] px-4 pt-5 pb-4 space-y-4 touch-mobile:space-y-3 touch-mobile:pt-0 touch-mobile:pb-3">
                 {(onOpenChannelNav || onGoChannelSquare || onCreateChannel) ? (
-                    <div className="hidden max-md:flex max-md:flex-col max-md:gap-3">
+                    <div className="hidden touch-mobile:flex touch-mobile:flex-col touch-mobile:gap-3">
                         {/* H5 第一行：仅展开 / 创建，与标题区分开 */}
                         <div
                             className={cn(
@@ -302,7 +302,7 @@ export function ArticleList({
                 {/* 频道名 + 信息 + 分享 */}
                 <div className="flex items-center justify-between gap-3">
                     <div className="flex min-w-0 flex-1 items-center gap-1 text-sm">
-                        <h1 className="truncate text-base text-[#1d2129] max-md:text-[16px] max-md:leading-6">
+                        <h1 className="truncate text-base text-[#1d2129] touch-mobile:text-[16px] touch-mobile:leading-6">
                             {channelDetail?.name || channel.name}
                         </h1>
                         <Tooltip>
@@ -345,7 +345,7 @@ export function ArticleList({
                                     });
                                 }}
                                 variant="ghost"
-                                className="h-8 gap-1 px-1.5 font-normal transition-colors hover:bg-[#F7F8FA] max-md:rounded-[6px] max-md:px-2 max-md:text-[#212121] max-md:border max-md:border-[#EBECF0] max-md:bg-white"
+                                className="h-8 gap-1 px-1.5 font-normal transition-colors hover:bg-[#F7F8FA] touch-mobile:rounded-[6px] touch-mobile:px-2 touch-mobile:text-[#212121] touch-mobile:border touch-mobile:border-[#EBECF0] touch-mobile:bg-white"
                             >
                                 <ShareOutlineIcon className="size-4 shrink-0 text-gray-800" />
                                 {localize("com_subscription.share")}
@@ -355,7 +355,7 @@ export function ArticleList({
                 </div>
 
                 {/* 子频道 Tabs + 搜索/筛选 — md+ 横向；H5 纵向 */}
-                <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between md:gap-0">
+                <div className="flex flex-col gap-4 touch-desktop:flex-row touch-desktop:items-center touch-desktop:justify-between touch-desktop:gap-0">
                     <div className="flex min-w-0 items-center gap-2 overflow-x-auto no-scrollbar">
                         <button
                             type="button"
@@ -363,8 +363,8 @@ export function ArticleList({
                             className={cn(
                                 "rounded-md border px-4 py-[5px] text-sm transition-colors whitespace-nowrap",
                                 !selectedSubChannelName
-                                    ? "border-primary bg-primary/20 text-primary max-md:border-[#335CFF] max-md:bg-[rgba(51,92,255,0.2)] max-md:text-[#335CFF]"
-                                    : "border-transparent text-gray-800 hover:bg-gray-50 max-md:border-transparent max-md:text-[#212121] max-md:hover:bg-[#F7F8FA]",
+                                    ? "border-primary bg-primary/20 text-primary touch-mobile:border-[#335CFF] touch-mobile:bg-[rgba(51,92,255,0.2)] touch-mobile:text-[#335CFF]"
+                                    : "border-transparent text-gray-800 hover:bg-gray-50 touch-mobile:border-transparent touch-mobile:text-[#212121] touch-mobile:hover:bg-[#F7F8FA]",
                             )}
                         >{localize("com_subscription.all")}</button>
                         {subChannels.map(sub => (
@@ -375,8 +375,8 @@ export function ArticleList({
                                 className={cn(
                                     "rounded-md border px-4 py-[5px] text-sm transition-colors whitespace-nowrap",
                                     selectedSubChannelName === sub.name
-                                        ? "border-primary bg-primary/20 text-primary max-md:border-[#335CFF] max-md:bg-[rgba(51,92,255,0.2)] max-md:text-[#335CFF]"
-                                        : "border-transparent text-gray-800 hover:bg-gray-50 max-md:border-transparent max-md:text-[#212121] max-md:hover:bg-[#F7F8FA]",
+                                        ? "border-primary bg-primary/20 text-primary touch-mobile:border-[#335CFF] touch-mobile:bg-[rgba(51,92,255,0.2)] touch-mobile:text-[#335CFF]"
+                                        : "border-transparent text-gray-800 hover:bg-gray-50 touch-mobile:border-transparent touch-mobile:text-[#212121] touch-mobile:hover:bg-[#F7F8FA]",
                                 )}
                             >
                                 {sub.name}
@@ -384,19 +384,19 @@ export function ArticleList({
                         ))}
                     </div>
 
-                    <div className="flex w-full min-w-0 flex-col gap-2 md:ml-4 md:w-auto md:flex-row md:items-center md:gap-3">
+                    <div className="flex w-full min-w-0 flex-col gap-2 touch-desktop:ml-4 touch-desktop:w-auto touch-desktop:flex-row touch-desktop:items-center touch-desktop:gap-3">
                         <SearchInput
                             key={channel.id}
                             value={searchKey}
                             onChange={setSearchQuery}
                             placeholder={localize("com_subscription.search_articles_of_interest")}
-                            className="w-full min-w-0 md:w-auto"
+                            className="w-full min-w-0 touch-desktop:w-auto"
                         />
 
                         {/* H5：搜索下方一行，信息源 + 仅看未读靠左并排（避免整行贴右） */}
-                        <div className="flex w-full min-w-0 flex-wrap items-center justify-start gap-2 md:contents">
+                        <div className="flex w-full min-w-0 flex-wrap items-center justify-start gap-2 touch-desktop:contents">
                             <MultiSourceSelect
-                                className="h-8 min-w-[140px] max-w-full shrink-0 md:w-auto md:min-w-[140px]"
+                                className="h-8 min-w-[140px] max-w-full shrink-0 touch-desktop:w-auto touch-desktop:min-w-[140px]"
                                 options={sourceOptions}
                                 value={selectedSources}
                                 onChange={handleSourcesChange}
@@ -408,8 +408,8 @@ export function ArticleList({
                                 className={cn(
                                     "shrink-0 rounded-md border px-4 py-[5px] text-sm transition-colors whitespace-nowrap",
                                     onlyUnread
-                                        ? "border-primary bg-primary/20 text-primary max-md:border-[#335CFF] max-md:bg-[rgba(51,92,255,0.2)] max-md:text-[#335CFF]"
-                                        : "border-transparent text-gray-800 hover:bg-gray-50 max-md:border-transparent max-md:text-[#212121] max-md:hover:bg-[#F7F8FA]",
+                                        ? "border-primary bg-primary/20 text-primary touch-mobile:border-[#335CFF] touch-mobile:bg-[rgba(51,92,255,0.2)] touch-mobile:text-[#335CFF]"
+                                        : "border-transparent text-gray-800 hover:bg-gray-50 touch-mobile:border-transparent touch-mobile:text-[#212121] touch-mobile:hover:bg-[#F7F8FA]",
                                 )}
                             >{localize("com_subscription.show_unread_only")}</button>
                         </div>

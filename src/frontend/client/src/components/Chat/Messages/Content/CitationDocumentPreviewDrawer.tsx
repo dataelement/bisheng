@@ -1,7 +1,6 @@
 import { FileText, X } from 'lucide-react';
 import type { ChatCitation } from '~/api/chatApi';
-import { useMediaQuery } from '~/hooks';
-import { useLocalize } from '~/hooks';
+import { useLocalize, usePrefersMobileLayout } from '~/hooks';
 import FilePreview from '~/pages/knowledge/FilePreview';
 import {
   getCitationDocumentFileType,
@@ -49,7 +48,7 @@ export default function CitationDocumentPreviewDrawer({
   onClose,
 }: CitationDocumentPreviewDrawerProps) {
   const localize = useLocalize();
-  const isH5 = useMediaQuery('(max-width: 768px)');
+  const isH5 = usePrefersMobileLayout();
   if (!preview || !isRagCitation(preview.detail)) {
     return null;
   }

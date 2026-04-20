@@ -83,7 +83,7 @@ const AttachFile = ({ isRTL, disabled, handleFileChange }: AttachFileProps) => {
           aria-label="Attach File Options"
           className={cn(
             'absolute flex size-[35px] items-center justify-center rounded-full p-1 transition-colors hover:bg-surface-hover focus:outline-none focus:ring-2 focus:ring-primary focus:ring-opacity-50',
-            isRTL ? 'bottom-2 right-2' : 'bottom-2 left-1 md:left-2',
+            isRTL ? 'bottom-2 right-2' : 'bottom-2 left-1 touch-desktop:left-2',
           )}
         >
           <div className="flex w-full items-center justify-center gap-2">

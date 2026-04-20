@@ -3,7 +3,7 @@ import { useUserKeyQuery } from '~/hooks/queries';
 import type { TEndpointsConfig, TInterfaceConfig } from '~/types/chat';
 import type { ImperativePanelHandle } from 'react-resizable-panels';
 import { ResizableHandleAlt, ResizablePanel } from '~/components/ui/Resizable';
-import { useMediaQuery, useLocalStorage, useLocalize } from '~/hooks';
+import { usePrefersMobileLayout, useLocalStorage, useLocalize } from '~/hooks';
 import useSideNavLinks from '~/hooks/Nav/useSideNavLinks';
 import { useGetEndpointsQuery } from '~/hooks/queries/data-provider';
 import NavToggle from '~/components/Nav/NavToggle';
@@ -48,7 +48,7 @@ const SidePanel = ({
   const [newUser, setNewUser] = useLocalStorage('newUser', true);
   const { data: endpointsConfig = {} as TEndpointsConfig } = useGetEndpointsQuery();
 
-  const isSmallScreen = useMediaQuery('(max-width: 767px)');
+  const isSmallScreen = usePrefersMobileLayout();
   const { conversation } = useChatContext();
   const { endpoint } = conversation ?? {};
   const { data: keyExpiry = { expiresAt: undefined } } = useUserKeyQuery(endpoint ?? '');
