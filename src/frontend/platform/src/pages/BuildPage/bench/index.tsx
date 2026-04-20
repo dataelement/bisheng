@@ -13,6 +13,7 @@ import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { FormInput } from "./FormInput";
+import { resolveConfigString } from "./configValue";
 import { IconUploadSection } from "./IconUploadSection";
 import { Model, ModelManagement } from "./ModelManagement";
 import OrgKbConfig, { OrgKbConfig as OrgKbConfigType } from "./OrgKbConfig";
@@ -383,7 +384,7 @@ const useChatConfig = (refs: UseChatConfigProps) => {
 
     const [formData, setFormData] = useState<ChatConfigForm>({
         // menuShow: true,
-        systemPrompt: t('chatConfig.systemPrompt2'),
+        systemPrompt: '',
         sidebarIcon: { enabled: true, image: '', relative_path: '' },
         assistantIcon: { enabled: true, image: '', relative_path: '' },
         sidebarSlogan: '',
@@ -426,7 +427,6 @@ const useChatConfig = (refs: UseChatConfigProps) => {
         getDailyConfigApi().then((res) => {
             const cfg = (res && (res as any).data) || res;
             if (cfg) {
-                const defaultSystemPrompt = t('chatConfig.systemPrompt2');
                 setFormData((prev) => {
                     const mergeObj = (a: any, b: any) =>
                         b != null && typeof b === 'object' ? { ...a, ...b } : a;
@@ -450,7 +450,7 @@ const useChatConfig = (refs: UseChatConfigProps) => {
                         maxTokens:
                             typeof cfg.maxTokens === 'number' ? cfg.maxTokens : prev.maxTokens,
                         // 系统提示词
-                        systemPrompt: cfg.systemPrompt || defaultSystemPrompt,
+                        systemPrompt: resolveConfigString(cfg.systemPrompt, prev.systemPrompt),
                         // 图标与其他嵌套配置合并
                         sidebarIcon: mergeObj(prev.sidebarIcon, cfg.sidebarIcon),
                         assistantIcon: mergeObj(prev.assistantIcon, cfg.assistantIcon),
