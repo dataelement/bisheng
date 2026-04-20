@@ -345,6 +345,22 @@ class RedisClient:
         except Exception as e:
             raise e
 
+    async def attl(self, key) -> int:
+        """Return the remaining TTL of ``key`` in seconds.
+
+        Mirrors ``redis-py`` semantics:
+          - positive int: seconds until expiry
+          - -1: key exists with no TTL
+          - -2: key does not exist
+        Used by F019 ``TenantScopeService.get_scope`` to report accurate
+        ``expires_at`` to the UI.
+        """
+        try:
+            await self.acluster_nodes(key)
+            return await self.async_connection.ttl(key)
+        except Exception as e:
+            raise e
+
     def delete(self, key):
         try:
             self.cluster_nodes(key)

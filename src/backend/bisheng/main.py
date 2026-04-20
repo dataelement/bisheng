@@ -14,6 +14,7 @@ from bisheng.common.init_data import init_default_data
 from bisheng.common.services.config_service import settings
 from bisheng.core.context import initialize_app_context, close_app_context
 from bisheng.core.logger import set_logger_config
+from bisheng.common.middleware.admin_scope import AdminScopeMiddleware
 from bisheng.utils.http_middleware import CustomMiddleware, WebSocketLoggingMiddleware
 from bisheng.utils.threadpool import thread_pool
 
@@ -96,6 +97,12 @@ def create_app():
         allow_headers=['*'],
     )
 
+    # Starlette middleware uses LIFO registration — the middleware added
+    # latest is the *outermost* on inbound. We want CustomMiddleware (JWT
+    # decode + visible_tenant_ids) to run *before* AdminScopeMiddleware on
+    # the inbound path, which means AdminScopeMiddleware must be added
+    # *first* (inner). See ``common/middleware/admin_scope.py`` docstring.
+    app.add_middleware(AdminScopeMiddleware)
     app.add_middleware(CustomMiddleware)
     app.add_middleware(WebSocketLoggingMiddleware)
 

@@ -151,6 +151,7 @@ class CeleryConf(BaseModel):
                 "bisheng.worker.workflow.*": {"queue": "workflow_celery"},  # Workflow Execution Related Tasks
                 "bisheng.worker.org_sync.*": {"queue": "knowledge_celery"},  # Org Sync Tasks (low frequency, reuse knowledge queue)
                 "bisheng.worker.tenant_reconcile.*": {"queue": "knowledge_celery"},  # v2.5.1 F012 — 6h catch-up, reuse knowledge_celery
+                "bisheng.worker.admin_scope.*": {"queue": "knowledge_celery"},  # v2.5.1 F019 — 10min sweep, low-volume
             }
         if 'telemetry_mid_user_increment' not in self.beat_schedule:
             self.beat_schedule['telemetry_mid_user_increment'] = {
@@ -192,6 +193,12 @@ class CeleryConf(BaseModel):
             self.beat_schedule['reconcile_user_tenant_assignments'] = {
                 'task': 'bisheng.worker.tenant_reconcile.tasks.reconcile_user_tenant_assignments',
                 'schedule': crontab.from_string('0 */6 * * *'),  # every 6 hours
+            }
+        # v2.5.1 F019: 10min admin_scope Redis key sweep (AC-13).
+        if 'admin_scope_cleanup' not in self.beat_schedule:
+            self.beat_schedule['admin_scope_cleanup'] = {
+                'task': 'bisheng.worker.admin_scope.tasks.admin_scope_cleanup',
+                'schedule': crontab.from_string('*/10 * * * *'),  # every 10 minutes
             }
         # v2.5.1 F015: 6h forced reconcile of every OrgSyncConfig +
         # weekly/daily ts_conflict reporting. Cron strings are sourced
