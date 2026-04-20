@@ -14,7 +14,7 @@
 |------|------|------|
 | spec.md | ✅ 已定稿 | 2026-04-19 PRD 精化后定稿；24 AC + 8 AD + 完整 §5 代码骨架；经 `/sdd-review spec` 通过 |
 | tasks.md | ✅ 已拆解 | 2026-04-21 `/sdd-review tasks` 第 2 轮通过（第 1 轮修复：T02/T11/T15 三个跨文件/跨前后端任务拆分 + AC-18/19 E2E 测试补齐 + D10/D11 决策锁定） |
-| 实现 | 🟡 进行中 | 5 / 19 完成（T01, T02a, T02b, T03, T04 ✓） |
+| 实现 | 🟡 进行中 | 6 / 19 完成（T01~T04, T05 ✓） |
 
 ---
 
@@ -204,7 +204,7 @@ T04 (Alembic 迁移 + ORM 补 tenant_id)                              ──┤ 
 
 ### DAO 层改造
 
-- [ ] **T05**: `LLMDao` 写方法改造（ainsert / aupdate_server_with_models / adelete_server_by_id + aupdate_server_share 新方法）
+- [x] **T05**: `LLMDao` 写方法改造（ainsert / aupdate_server_with_models / adelete_server_by_id + aupdate_server_share 新方法）
   **文件（修改）**:
   - `src/backend/bisheng/llm/domain/models/llm_server.py` `LLMDao` 类
   **逻辑**:
