@@ -261,7 +261,14 @@ class OrgReconcileService:
                 existing=existing, item=item,
                 source=config.provider, last_sync_ts=op.incoming_ts,
             )
-            buffer.dept_upserted(op.external_id, is_new=op.is_new)
+            # OrgSyncLogBuffer exposes raw counters + warn/error only;
+            # dept_created vs dept_updated mirrors F009 batch-summary
+            # semantics so the management UI's history pane shows the
+            # expected totals.
+            if op.is_new:
+                buffer.dept_created += 1
+            else:
+                buffer.dept_updated += 1
             result.applied_upsert += 1
         except Exception as e:
             logger.exception(
@@ -366,7 +373,7 @@ class OrgReconcileService:
                 result.errors.append(
                     f'on_deleted {existing.id}: {e!s}')
 
-            buffer.dept_archived_event(op.external_id)
+            buffer.dept_archived += 1
             result.applied_archive += 1
         except Exception as e:
             logger.exception(

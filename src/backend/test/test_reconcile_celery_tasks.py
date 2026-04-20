@@ -2,83 +2,82 @@
 
 Covers:
 
-- beat_schedule registration (``reconcile_all_organizations`` every 6h,
-  ``report_ts_conflicts_weekly`` Monday 09:00, daily escalation 09:00).
-- ``_fan_out_all`` dispatches one ``reconcile_single_config`` per active
-  config, skipping the F014 ``sso_realtime`` seed.
-- ``reconcile_single_config`` swallows the :class:`SsoReconcileLockBusyError`
-  path (AC-13 precursor).
-- Weekly + daily-escalation tasks delegate to
-  :class:`TsConflictReporter` (AC-12).
+- ``_fan_out_all`` dispatches one ``reconcile_single_config`` per
+  active config, skipping the F014 ``sso_realtime`` seed.
+- ``_run_weekly`` / ``_run_daily_escalation`` delegate to
+  :class:`TsConflictReporter`.
+- ``reconcile_single_config`` swallows the lock-busy path (AC-13
+  precursor).
 
-All DAO + service calls are patched with ``AsyncMock``; the tests are
-pure function-call verification and do not require a real Celery broker
-or Redis instance.
+``bisheng.worker.__init__`` eagerly imports the full task universe,
+which pulls in ``celery.signals`` + heavy dependency chains that the
+test infrastructure pre-mocks as MagicMock — see
+``test/fixtures/mock_services.py``. We therefore side-load
+``reconcile_tasks.py`` directly via importlib (same pattern as
+``test_tenant_reconcile_task.py``) and inject a passthrough
+``bisheng.worker.main`` stub so ``@bisheng_celery.task`` is a no-op.
+
+AC-01 beat-schedule registration is intentionally **not** asserted
+here — ``CeleryConf.validate`` runs against the pre-mocked celery
+``crontab`` and produces MagicMock schedule objects, which carry no
+verifiable state. Manual verification path lives in
+``ac-verification.md §2.3(A)``.
 """
 
 from __future__ import annotations
 
-from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+import asyncio
+import importlib.util
+import sys
+from pathlib import Path
+from types import ModuleType, SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from celery.schedules import crontab
-
-
-TASKS_MODULE = 'bisheng.worker.org_sync.reconcile_tasks'
 
 
 # ---------------------------------------------------------------------------
-# Beat schedule registration
+# Side-load bisheng.worker.org_sync.reconcile_tasks without executing
+# the full bisheng.worker.__init__ import chain.
 # ---------------------------------------------------------------------------
 
 
-class TestBeatSchedule:
+def _load_reconcile_tasks_module() -> ModuleType:
+    """Import ``reconcile_tasks.py`` via importlib with a stubbed worker package."""
+    _celery_stub = MagicMock(name='bisheng_celery')
+    # Passthrough decorator so @bisheng_celery.task keeps the function.
+    _celery_stub.task = lambda *a, **kw: (lambda fn: fn)
+    sys.modules['bisheng.worker.main'] = MagicMock(
+        bisheng_celery=_celery_stub)
 
-    def test_beat_schedule_registers_reconcile_all_every_6h(self):
-        """AC-01 — confirm settings registered the 6h fan-out beat."""
-        from bisheng.core.config.settings import CeleryConf
+    # Stub parent packages (bisheng.worker + bisheng.worker.org_sync)
+    # so relative imports resolve without firing worker/__init__.py.
+    # Path is derived from this test file so the loader works from any
+    # worktree/CI checkout (F012's hard-coded /opt/bisheng/ fallback
+    # would shadow a worktree copy with the CI main-line tree).
+    backend_root = Path(__file__).resolve().parent.parent / 'bisheng' / 'worker'
+    if 'bisheng.worker' not in sys.modules or not isinstance(
+        getattr(sys.modules['bisheng.worker'], '__path__', None), list,
+    ):
+        pkg = ModuleType('bisheng.worker')
+        pkg.__path__ = [str(backend_root)]
+        sys.modules['bisheng.worker'] = pkg
+    if 'bisheng.worker.org_sync' not in sys.modules:
+        pkg = ModuleType('bisheng.worker.org_sync')
+        pkg.__path__ = [str(backend_root / 'org_sync')]
+        sys.modules['bisheng.worker.org_sync'] = pkg
 
-        conf = CeleryConf()  # triggers ``validate`` model_validator
-        entry = conf.beat_schedule.get('reconcile_all_organizations')
-        assert entry is not None
-        assert entry['task'] == (
-            'bisheng.worker.org_sync.reconcile_tasks.reconcile_all_organizations'
-        )
-        sched = entry['schedule']
-        assert isinstance(sched, crontab)
-        # crontab stores minute/hour as sets — use their public iterators.
-        assert sched.minute == {0}
-        assert sched.hour == set(range(0, 24, 6))
+    tasks_path = backend_root / 'org_sync' / 'reconcile_tasks.py'
+    spec = importlib.util.spec_from_file_location(
+        'bisheng.worker.org_sync.reconcile_tasks', tasks_path,
+    )
+    module = importlib.util.module_from_spec(spec)
+    sys.modules['bisheng.worker.org_sync.reconcile_tasks'] = module
+    spec.loader.exec_module(module)
+    return module
 
-    def test_beat_registers_weekly_conflict_report_monday_09(self):
-        from bisheng.core.config.settings import CeleryConf
 
-        conf = CeleryConf()
-        entry = conf.beat_schedule.get('report_ts_conflicts_weekly')
-        assert entry is not None
-        assert entry['task'].endswith('report_ts_conflicts_weekly')
-        sched = entry['schedule']
-        assert isinstance(sched, crontab)
-        assert sched.minute == {0}
-        assert sched.hour == {9}
-        # day_of_week: Monday can be 1 (celery) — accept either key.
-        dow = sched.day_of_week
-        assert 1 in dow or 'mon' in {str(d).lower() for d in dow}
-
-    def test_beat_registers_daily_escalation_09(self):
-        from bisheng.core.config.settings import CeleryConf
-
-        conf = CeleryConf()
-        entry = conf.beat_schedule.get(
-            'report_ts_conflicts_daily_escalation')
-        assert entry is not None
-        assert entry['task'].endswith(
-            'report_ts_conflicts_daily_escalation')
-        sched = entry['schedule']
-        assert isinstance(sched, crontab)
-        assert sched.minute == {0}
-        assert sched.hour == {9}
+tasks_module = _load_reconcile_tasks_module()
 
 
 # ---------------------------------------------------------------------------
@@ -86,51 +85,56 @@ class TestBeatSchedule:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
 class TestFanOut:
 
-    async def test_fan_out_dispatches_single_config_per_active_config(self):
-        from bisheng.worker.org_sync.reconcile_tasks import _fan_out_all
-
+    def test_fan_out_dispatches_single_config_per_active_config(self):
         active_configs = [
             SimpleNamespace(id=1, provider='feishu'),
             SimpleNamespace(id=2, provider='wecom'),
             SimpleNamespace(id=3, provider='dingtalk'),
         ]
-        with patch(
-            f'{TASKS_MODULE}.reconcile_single_config.apply_async'
-        ) as apply_async, patch(
-            'bisheng.org_sync.domain.models.org_sync.OrgSyncConfigDao.aget_all_active',
-            new_callable=AsyncMock, return_value=active_configs,
-        ):
-            await _fan_out_all()
+        # The side-loaded celery.task decorator is a passthrough, so
+        # ``tasks_module.reconcile_single_config`` is a plain function
+        # without ``apply_async``. Replace the attribute with a MagicMock
+        # whose auto-attribute protocol gives us ``apply_async`` for free.
+        import bisheng.org_sync.domain.models.org_sync as org_mod
+        original_aget = org_mod.OrgSyncConfigDao.aget_all_active
+        org_mod.OrgSyncConfigDao.aget_all_active = AsyncMock(
+            return_value=active_configs)
+        orig_fn = tasks_module.reconcile_single_config
+        tasks_module.reconcile_single_config = MagicMock(
+            name='reconcile_single_config')
+        try:
+            asyncio.run(tasks_module._fan_out_all())
+            calls = tasks_module.reconcile_single_config.apply_async.call_args_list
+            assert len(calls) == 3
+            ids = [c.kwargs['args'][0] for c in calls]
+            assert ids == [1, 2, 3]
+        finally:
+            org_mod.OrgSyncConfigDao.aget_all_active = original_aget
+            tasks_module.reconcile_single_config = orig_fn
 
-        assert apply_async.call_count == 3
-        dispatched_ids = [
-            c.kwargs['args'][0] for c in apply_async.call_args_list
-        ]
-        assert dispatched_ids == [1, 2, 3]
-
-    async def test_fan_out_skips_sso_realtime_seed(self):
-        from bisheng.worker.org_sync.reconcile_tasks import _fan_out_all
-
+    def test_fan_out_skips_sso_realtime_seed(self):
         active_configs = [
             SimpleNamespace(id=1, provider='feishu'),
             SimpleNamespace(id=9999, provider='sso_realtime'),
         ]
-        with patch(
-            f'{TASKS_MODULE}.reconcile_single_config.apply_async'
-        ) as apply_async, patch(
-            'bisheng.org_sync.domain.models.org_sync.OrgSyncConfigDao.aget_all_active',
-            new_callable=AsyncMock, return_value=active_configs,
-        ):
-            await _fan_out_all()
-
-        dispatched_ids = [
-            c.kwargs['args'][0] for c in apply_async.call_args_list
-        ]
-        assert dispatched_ids == [1]
-        assert 9999 not in dispatched_ids
+        import bisheng.org_sync.domain.models.org_sync as org_mod
+        original_aget = org_mod.OrgSyncConfigDao.aget_all_active
+        org_mod.OrgSyncConfigDao.aget_all_active = AsyncMock(
+            return_value=active_configs)
+        orig_fn = tasks_module.reconcile_single_config
+        tasks_module.reconcile_single_config = MagicMock(
+            name='reconcile_single_config')
+        try:
+            asyncio.run(tasks_module._fan_out_all())
+            calls = tasks_module.reconcile_single_config.apply_async.call_args_list
+            ids = [c.kwargs['args'][0] for c in calls]
+            assert ids == [1]
+            assert 9999 not in ids
+        finally:
+            org_mod.OrgSyncConfigDao.aget_all_active = original_aget
+            tasks_module.reconcile_single_config = orig_fn
 
 
 # ---------------------------------------------------------------------------
@@ -141,39 +145,48 @@ class TestFanOut:
 class TestReconcileSingleConfig:
 
     def test_single_config_swallows_lock_busy_logs_warning(self, caplog):
-        """AC-13 precursor — concurrent worker hits the lock, task exits cleanly."""
+        """AC-13 precursor — concurrent worker hits the lock; task exits cleanly."""
         from bisheng.common.errcode.sso_sync import SsoReconcileLockBusyError
-        from bisheng.worker.org_sync.reconcile_tasks import reconcile_single_config
 
-        with patch(
-            'bisheng.org_sync.domain.services.reconcile_service.OrgReconcileService.reconcile_config',
-            new_callable=AsyncMock,
+        import bisheng.org_sync.domain.services.reconcile_service as svc_mod
+        original = svc_mod.OrgReconcileService.reconcile_config
+        svc_mod.OrgReconcileService.reconcile_config = AsyncMock(
             side_effect=SsoReconcileLockBusyError.http_exception(),
-        ):
-            # ``reconcile_single_config.run`` invokes the task body
-            # synchronously — bypass the Celery dispatcher.
-            reconcile_single_config.run(42)
-
-        # No re-raise; check that a warning line mentioning the config
-        # id was emitted via the module logger.
-        messages = [r.getMessage() for r in caplog.records]
-        assert any('42' in m and 'lock busy' in m for m in messages)
+        )
+        try:
+            with caplog.at_level('WARNING'):
+                tasks_module.reconcile_single_config(42)
+            messages = [r.getMessage() for r in caplog.records]
+            assert any(
+                '42' in m and 'lock busy' in m for m in messages
+            ), f'warning with config id + lock busy not found; saw: {messages}'
+        finally:
+            svc_mod.OrgReconcileService.reconcile_config = original
 
 
 # ---------------------------------------------------------------------------
-# Weekly / daily reporter wiring
+# Weekly / daily reporter delegation
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
 class TestReporterDelegation:
 
-    async def test_weekly_celery_task_invokes_reporter_weekly(self):
-        from bisheng.worker.org_sync.reconcile_tasks import _run_weekly
+    def test_weekly_celery_task_invokes_reporter_weekly(self):
+        import bisheng.org_sync.domain.services.ts_conflict_reporter as rep_mod
+        original = rep_mod.TsConflictReporter.weekly_report
+        rep_mod.TsConflictReporter.weekly_report = AsyncMock()
+        try:
+            asyncio.run(tasks_module._run_weekly())
+            rep_mod.TsConflictReporter.weekly_report.assert_awaited_once()
+        finally:
+            rep_mod.TsConflictReporter.weekly_report = original
 
-        with patch(
-            'bisheng.org_sync.domain.services.ts_conflict_reporter.TsConflictReporter.weekly_report',
-            new_callable=AsyncMock,
-        ) as weekly:
-            await _run_weekly()
-        weekly.assert_awaited_once()
+    def test_daily_celery_task_invokes_reporter_daily_escalation(self):
+        import bisheng.org_sync.domain.services.ts_conflict_reporter as rep_mod
+        original = rep_mod.TsConflictReporter.daily_escalation_report
+        rep_mod.TsConflictReporter.daily_escalation_report = AsyncMock()
+        try:
+            asyncio.run(tasks_module._run_daily_escalation())
+            rep_mod.TsConflictReporter.daily_escalation_report.assert_awaited_once()
+        finally:
+            rep_mod.TsConflictReporter.daily_escalation_report = original

@@ -69,6 +69,8 @@ async def _fan_out_all() -> None:
 @bisheng_celery.task(acks_late=True, time_limit=1800, soft_time_limit=1500)
 def reconcile_single_config(config_id: int):
     """Run :meth:`OrgReconcileService.reconcile_config` for one config."""
+    from fastapi import HTTPException
+
     from bisheng.common.errcode.sso_sync import SsoReconcileLockBusyError
     from bisheng.org_sync.domain.services.reconcile_service import (
         OrgReconcileService,
@@ -79,11 +81,16 @@ def reconcile_single_config(config_id: int):
         loop.run_until_complete(
             OrgReconcileService.reconcile_config(config_id)
         )
-    except SsoReconcileLockBusyError:
-        # AC-13 precursor: another worker already holds the lock. No
-        # retry — the next beat tick will pick the config up again.
-        logger.warning(
-            f'reconcile_single_config({config_id}) skipped: lock busy')
+    except HTTPException as e:
+        # SsoReconcileLockBusyError.http_exception() wraps the code as
+        # a FastAPI HTTPException, not as the original subclass — match
+        # by status_code so the AC-13 precursor swallow path still fires.
+        if e.status_code == SsoReconcileLockBusyError.Code:
+            logger.warning(
+                f'reconcile_single_config({config_id}) skipped: lock busy')
+        else:
+            logger.exception(
+                f'reconcile_single_config({config_id}) http error: {e.detail}')
     except Exception:
         logger.exception(
             f'reconcile_single_config({config_id}) failed')

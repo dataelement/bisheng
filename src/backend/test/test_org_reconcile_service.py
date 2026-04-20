@@ -44,12 +44,17 @@ def _make_config(
 def _make_dept(
     *, id, external_id, name='Dept', last_sync_ts=0, is_deleted=0,
     is_tenant_root=0, mounted_tenant_id=None, parent_id=None,
+    path='', sort_order=0, status='active',
 ):
+    """Department stand-in carrying every field F009's reconciler + F015
+    differ read: path/sort_order/status are referenced by topological
+    sort + archive-descendant scan."""
     return SimpleNamespace(
         id=id, external_id=external_id, name=name,
         last_sync_ts=last_sync_ts, is_deleted=is_deleted,
         is_tenant_root=is_tenant_root, mounted_tenant_id=mounted_tenant_id,
         parent_id=parent_id, source='feishu',
+        path=path, sort_order=sort_order, status=status,
     )
 
 
