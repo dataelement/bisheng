@@ -1,4 +1,4 @@
-import { Circle, Download, Edit, MoreVertical, RefreshCw, Tag, Trash2, X } from "lucide-react";
+import { Circle, Download, Edit, MoreVertical, RefreshCw, Shield, Tag, Trash2, X } from "lucide-react";
 import { useState } from "react";
 import { FileStatus, FileType, KnowledgeFile, SpaceRole } from "~/api/knowledge";
 import { Button, Checkbox } from "~/components";
@@ -31,6 +31,7 @@ interface FileCardProps {
     onPreview?: (fileId: string) => void;
     onValidateName?: (newName: string) => string | null;
     onCancelCreate?: () => void;
+    onManagePermission?: () => void;
     disableClickNavigate?: boolean;
     hideSelectionCheckbox?: boolean;
     /** H5: render as list-row (not card tile). */
@@ -53,6 +54,7 @@ export function FileCard({
     onPreview,
     onValidateName,
     onCancelCreate,
+    onManagePermission,
     disableClickNavigate = false,
     hideSelectionCheckbox = false,
     mobileListMode = false,
@@ -179,7 +181,7 @@ export function FileCard({
             (isFolder && file.successFileNum !== undefined && file.fileNum !== undefined && file.successFileNum < file.fileNum)
         )
     );
-    const showMoreMenu = isAdmin;
+    const showMoreMenu = isAdmin || Boolean(onManagePermission);
     /** 有「更多」时下载只在菜单内；无更多（普通成员/预览）时单独显示下载图标 */
     const showInlineDownloadButton = !hideDownloadActions && !showMoreMenu;
     const showMenuDownloadItem = !hideDownloadActions;
@@ -458,6 +460,15 @@ export function FileCard({
                                             >
                                                 <RefreshCw className="mr-2 size-4 shrink-0" />
                                                 {localize("com_knowledge.retry")}
+                                            </DropdownMenuItem>
+                                        )}
+                                        {onManagePermission && (
+                                            <DropdownMenuItem
+                                                onClick={(e) => { e.stopPropagation(); onManagePermission(); }}
+                                                className="flex items-center"
+                                            >
+                                                <Shield className="mr-2 size-4 shrink-0" />
+                                                {localize("com_permission.manage_permission")}
                                             </DropdownMenuItem>
                                         )}
                                         <DropdownMenuItem

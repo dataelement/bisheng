@@ -12,7 +12,9 @@ import { FileTable } from "./FileTable";
 import { KnowledgeSpaceHeader } from "./KnowledgeSpaceHeader";
 import { PaginationBar } from "./PaginationBar";
 import { SelectionPathBreadcrumb } from "./SelectionPathBreadcrumb";
+import { PermissionDialog } from "~/components/permission";
 import { useLocalize, useMediaQuery } from "~/hooks";
+import { checkPermission } from "~/api/permission";
 import { cn, getFullWidthLength } from "~/utils";
 
 interface KnowledgeSpaceContentProps {
@@ -156,9 +158,35 @@ export function KnowledgeSpaceContent({
 
     const isAdmin = space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
     const isSearching = searchQuery.trim().length > 0 || searchTagIds.length > 0;
+    const [permTarget, setPermTarget] = useState<{
+        id: string;
+        name: string;
+        type: "folder" | "knowledge_file";
+    } | null>(null);
+    const [canManageSpace, setCanManageSpace] = useState(isAdmin);
 
     const { showToast } = useToastContext();
     const confirm = useConfirm();
+
+    useEffect(() => {
+        let cancelled = false;
+
+        checkPermission("knowledge_space", space.id, "can_manage")
+            .then((res) => {
+                if (!cancelled) {
+                    setCanManageSpace(res?.allowed === true || isAdmin);
+                }
+            })
+            .catch(() => {
+                if (!cancelled) {
+                    setCanManageSpace(isAdmin);
+                }
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [space.id, isAdmin]);
 
     // Read max file size from env config (MB), fallback to default 200MB
     const bishengConfig = useRecoilValue(bishengConfState);
@@ -240,6 +268,19 @@ export function KnowledgeSpaceContent({
             newSelected.delete(fileId);
         }
         setSelectedFiles(newSelected);
+    };
+
+    const handleManagePermission = (fileId: string) => {
+        const target = displayFiles.find((file) => file.id === fileId);
+        if (!target) {
+            return;
+        }
+
+        setPermTarget({
+            id: target.id,
+            name: target.name,
+            type: target.type === FileType.FOLDER ? "folder" : "knowledge_file",
+        });
     };
 
     const handleSelectAll = (isAllSelectedOnPage: boolean) => {
@@ -548,12 +589,13 @@ export function KnowledgeSpaceContent({
                                         onEditTags={() => handleOpenEditTags(file.id)}
                                         onRetry={() => handleSingleRetry(file.id)}
                                         onNavigateFolder={() => onNavigateFolder(file.id)}
-                                        onPreview={handlePreviewFile}
-                                        onValidateName={(newName) => validateFileName(newName, file.type === FileType.FOLDER, file.id, !!file.isCreating)}
-                                        onCancelCreate={onCancelCreateFolder}
-                                        mobileListMode={isH5 && viewMode === "list"}
-                                    />
-                                ))}
+                                    onPreview={handlePreviewFile}
+                                    onValidateName={(newName) => validateFileName(newName, file.type === FileType.FOLDER, file.id, !!file.isCreating)}
+                                    onCancelCreate={onCancelCreateFolder}
+                                    onManagePermission={canManageSpace ? () => handleManagePermission(file.id) : undefined}
+                                    mobileListMode={isH5 && viewMode === "list"}
+                                />
+                            ))}
                             </div>
                         </div>
                     ) : (
@@ -573,6 +615,7 @@ export function KnowledgeSpaceContent({
                                     onPreview={(id) => handlePreviewFile(id)}
                                     onValidateName={validateFileName}
                                     onCancelCreate={onCancelCreateFolder}
+                                    onManagePermission={canManageSpace ? handleManagePermission : undefined}
                                     sortBy={sortBy}
                                     sortDirection={sortDirection}
                                     onSort={handleSort}
@@ -621,6 +664,20 @@ export function KnowledgeSpaceContent({
                         : []
                 }
             />
+
+            {permTarget && (
+                <PermissionDialog
+                    open={!!permTarget}
+                    onOpenChange={(open) => {
+                        if (!open) {
+                            setPermTarget(null);
+                        }
+                    }}
+                    resourceType={permTarget.type}
+                    resourceId={permTarget.id}
+                    resourceName={permTarget.name}
+                />
+            )}
         </div>
     );
 }
