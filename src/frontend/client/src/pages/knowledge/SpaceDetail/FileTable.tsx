@@ -13,6 +13,7 @@ import {
     MoreVertical,
     PencilLineIcon,
     RefreshCw,
+    Shield,
     Tag, Trash2
 } from "lucide-react";
 import {
@@ -424,12 +425,13 @@ interface FileTableProps {
     onPreview?: (id: string) => void;
     onValidateName: (name: string, isFolder: boolean, fileId: string, isCreating: boolean) => string | null;
     onCancelCreate?: () => void;
+    onManagePermission?: (id: string) => void;
     sortBy: SortType | undefined;
     sortDirection: SortDirection | undefined;
     onSort: (sortBy: SortType) => void;
 }
 
-export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, onDownload, onEditTags, onRename, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, sortBy, sortDirection, onSort }: FileTableProps) {
+export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, onDownload, onEditTags, onRename, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, onManagePermission, sortBy, sortDirection, onSort }: FileTableProps) {
     const { columnWidths, onResizeStart, totalWidth } = useResizableColumns();
     const scrollRef = useRef<HTMLDivElement>(null);
     const { showLeftShadow, showRightShadow } = useScrollShadow(scrollRef);
@@ -474,6 +476,7 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                                 onPreview={() => onPreview?.(file.id)}
                                 onValidateName={(newName) => onValidateName?.(newName, file.type === FileType.FOLDER, file.id, !!file.isCreating)}
                                 onCancelCreate={onCancelCreate}
+                                onManagePermission={onManagePermission ? () => onManagePermission(file.id) : undefined}
                                 columnWidths={columnWidths}
                                 showLeftShadow={showLeftShadow}
                             />
@@ -512,6 +515,7 @@ function FileRow({
     onPreview,
     onValidateName,
     onCancelCreate,
+    onManagePermission,
     columnWidths,
     showLeftShadow,
 }: {
@@ -528,6 +532,7 @@ function FileRow({
     onPreview?: () => void;
     onValidateName?: (newName: string) => string | null;
     onCancelCreate?: () => void;
+    onManagePermission?: () => void;
     columnWidths: Record<ColumnKey, number>;
     showLeftShadow: boolean;
 }) {
@@ -564,13 +569,102 @@ function FileRow({
             (isFolder && file.successFileNum !== undefined && file.fileNum !== undefined && file.successFileNum < file.fileNum)
         )
     );
-    const showMoreMenu = isAdmin;
+    const showMoreMenu = isAdmin || Boolean(onManagePermission);
+    const [rowHovered, setRowHovered] = useState(false);
+    const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+    const rowActions = (
+        <div
+            className="absolute right-3 top-1/2 z-[35] flex -translate-y-1/2 items-center gap-1"
+        >
+            <button
+                type="button"
+                className={FILE_ROW_ACTION_BTN_CLASS}
+                onClick={(e) => {
+                    e.stopPropagation();
+                    onDownload();
+                }}
+                title={localize("com_knowledge.download")}
+            >
+                <Download className="size-4" />
+            </button>
+            {showMoreMenu && (
+                <DropdownMenu open={moreMenuOpen} onOpenChange={setMoreMenuOpen}>
+                    <DropdownMenuTrigger asChild>
+                        <button type="button" className={FILE_ROW_ACTION_BTN_CLASS}>
+                            <MoreVertical className="size-4" />
+                        </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent
+                        align="end"
+                        className="w-32"
+                    >
+                        {!isFolder && (
+                            <DropdownMenuItem
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onEditTags();
+                                }}
+                            >
+                                <Tag className="mr-2 size-4" />
+                                {localize("com_knowledge.edit_tags")}
+                            </DropdownMenuItem>
+                        )}
+                        <DropdownMenuItem
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                startRenaming();
+                            }}
+                        >
+                            <Edit className="mr-2 size-4" />
+                            {localize("com_knowledge.rename")}
+                        </DropdownMenuItem>
+                        {hasRetryOption && (
+                            <DropdownMenuItem
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onRetry?.();
+                                }}
+                            >
+                                <RefreshCw className="mr-2 size-4" />
+                                {localize("com_knowledge.retry")}
+                            </DropdownMenuItem>
+                        )}
+                        {onManagePermission && (
+                            <DropdownMenuItem
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onManagePermission();
+                                }}
+                            >
+                                <Shield className="mr-2 size-4" />
+                                {localize("com_permission.manage_permission")}
+                            </DropdownMenuItem>
+                        )}
+                        <DropdownMenuItem
+                            className="text-[#f53f3f] focus:bg-[#fff2f0] focus:text-[#f53f3f]"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onDelete();
+                            }}
+                        >
+                            <Trash2 className="mr-2 size-4" />
+                            {localize("com_knowledge.delete")}
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            )}
+        </div>
+    );
 
     return (
-        <TableRow className={cn(
-            "group border-b-[#e5e6eb] transition-colors",
-            isSelected ? "bg-[#E6EDFC] hover:bg-[#F8F8F8]" : "hover:bg-[#f7f7f7]"
-        )}>
+        <TableRow
+            className={cn(
+                "group border-b border-b-[#e5e6eb]",
+                "bg-transparent hover:bg-transparent"
+            )}
+            onMouseEnter={() => setRowHovered(true)}
+            onMouseLeave={() => setRowHovered(false)}
+        >
             {/* 复选框 — 左侧固定 */}
             <TableCell
                 className={cn("sticky left-0 z-10 px-0 py-3 text-center", rowBg)}

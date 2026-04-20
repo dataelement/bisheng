@@ -13,7 +13,8 @@ import {
     Download,
     Tag,
     RotateCcw,
-    Trash2
+    Trash2,
+    Shield
 } from "lucide-react";
 import { KnowledgeSpace, FileStatus, SortType, SortDirection, SpaceRole, VisibilityType } from "~/api/knowledge";
 import { cn, copyText } from "~/utils";
@@ -31,6 +32,9 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip
 import { ShareOutlineIcon, AiChatIcon } from "~/components/icons";
 import { useToastContext } from "~/Providers";
 import { useLocalize } from "~/hooks";
+import { useState, useEffect } from "react";
+import { PermissionDialog } from "~/components/permission";
+import { checkPermission } from "~/api/permission";
 
 interface KnowledgeSpaceHeaderProps {
     space: KnowledgeSpace;
@@ -97,6 +101,16 @@ export function KnowledgeSpaceHeader({
     const isAdmin = space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
     const showShare = space.visibility !== VisibilityType.PRIVATE;
     const { showToast } = useToastContext();
+    const [permDialogOpen, setPermDialogOpen] = useState(false);
+    const [canManagePermission, setCanManagePermission] = useState(isAdmin);
+
+    useEffect(() => {
+        let cancelled = false;
+        checkPermission("knowledge_space", space.id, "can_manage")
+            .then((res) => { if (!cancelled) setCanManagePermission(res?.allowed === true || isAdmin); })
+            .catch(() => { if (!cancelled) setCanManagePermission(isAdmin); });
+        return () => { cancelled = true; };
+    }, [space.id, isAdmin]);
 
     const handleShare = () => {
         try {
@@ -118,11 +132,10 @@ export function KnowledgeSpaceHeader({
     // Debug log removed during refactoring
 
     return (
-        <div className="space-y-4 pt-5">
-            {/* 面包屑 / Title */}
-            <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-                {/* 左侧：标题与信息 / 面包屑 */}
-                <div className="flex items-center gap-1 text-sm flex-wrap w-full sm:w-auto">
+        <>
+        <div className="space-y-4 pt-5 pb-4 max-md:space-y-3 max-md:pt-4 max-md:pb-3">
+            <div className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 flex-1 items-center gap-1 text-sm">
                     {currentPath.length === 0 ? (
                         <div className="flex items-center gap-1">
                             {sidebarCollapsed && (
@@ -221,6 +234,16 @@ export function KnowledgeSpaceHeader({
                     >
                         <AiChatIcon className="size-3.5" stroke={isSearching ? "#c9cdd4" : "#335CFF"} />
                         {localize("com_knowledge.ai_assistant")}</Button>
+
+                    {canManagePermission && (
+                        <Button
+                            variant="ghost"
+                            className="h-8 gap-2 rounded-[6px] border border-[#EBECF0] bg-white px-4 font-normal text-[#212121] transition-colors hover:bg-[#F7F8FA]"
+                            onClick={() => setPermDialogOpen(true)}
+                        >
+                            <Shield className="size-4 text-gray-800" />
+                            {localize("com_permission.manage_permission")}</Button>
+                    )}
 
                     {showShare && (
                         <Button
@@ -411,5 +434,14 @@ export function KnowledgeSpaceHeader({
                 )}
             </div>
         </div>
+
+        <PermissionDialog
+            open={permDialogOpen}
+            onOpenChange={setPermDialogOpen}
+            resourceType="knowledge_space"
+            resourceId={space.id}
+            resourceName={space.name}
+        />
+        </>
     );
 }

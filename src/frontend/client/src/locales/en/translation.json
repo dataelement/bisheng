@@ -1778,5 +1778,37 @@
     "total_members": "Total members",
     "website_not_indexed": "Website not in database. Do you want to crawl?",
     "create": "Create"
-  }
+  },
+  "com_permission": {
+    "action_revoke": "Revoke",
+    "action_submit": "Submit",
+    "confirm_revoke": "Are you sure you want to revoke access for this subject?",
+    "dialog_title": "Permission Management",
+    "empty_departments": "No departments found",
+    "empty_permissions": "No permission entries yet",
+    "empty_search": "No matching users",
+    "empty_user_groups": "No user groups found",
+    "error_grant_failed": "Failed to grant permissions. Please try again.",
+    "error_permission_denied": "Failed to load permission entries",
+    "error_revoke_failed": "Operation failed. Please try again.",
+    "include_children": "Include child departments",
+    "level_editor": "Editor",
+    "level_manager": "Manager",
+    "level_owner": "Owner",
+    "level_viewer": "Viewer",
+    "list_empty_for_subject": "No entries for this subject type",
+    "manage_permission": "Manage Permissions",
+    "search_department": "Search departments",
+    "search_user": "Search users",
+    "search_user_group": "Search user groups",
+    "subject_department": "Department",
+    "subject_user": "User",
+    "subject_user_group": "User Group",
+    "success_grant": "Access granted",
+    "success_modify": "Permission updated",
+    "success_revoke": "Access revoked",
+    "tab_grant": "Grant Access",
+    "tab_list": "Existing Access"
+  },
+  "com_label_operation_tip_mobile": "Operation tip: Select labels to display in the upper list, drag and drop to sort in the lower list"
 }
