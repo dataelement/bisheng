@@ -14,7 +14,7 @@
 |------|------|------|
 | spec.md | ✅ 已定稿 | 2026-04-19 PRD 精化后定稿；24 AC + 8 AD + 完整 §5 代码骨架；经 `/sdd-review spec` 通过 |
 | tasks.md | ✅ 已拆解 | 2026-04-21 `/sdd-review tasks` 第 2 轮通过（第 1 轮修复：T02/T11/T15 三个跨文件/跨前后端任务拆分 + AC-18/19 E2E 测试补齐 + D10/D11 决策锁定） |
-| 实现 | 🟡 进行中 | 11 / 19 完成（T01~T10 ✓） |
+| 实现 | 🟡 进行中 | 13 / 19 完成（T01~T11b ✓） |
 
 ---
 
@@ -482,7 +482,7 @@ T04 (Alembic 迁移 + ORM 补 tenant_id)                              ──┤ 
 
 ---
 
-- [ ] **T11a**: 知识库调用链统一走 `get_model_for_call` + PUT 选型校验
+- [x] **T11a**: 知识库调用链统一走 `get_model_for_call` + PUT 选型校验
   **文件（修改）**:
   - `src/backend/bisheng/knowledge/api/` 下 PUT 知识库 endpoint（具体文件实施首行 grep `PUT.*knowledge` 定位；spec §8 指向 `/knowledge/{id}` 配置入口）—— 接收 `model_id` 处加校验:
     ```python
@@ -500,7 +500,7 @@ T04 (Alembic 迁移 + ORM 补 tenant_id)                              ──┤ 
 
 ---
 
-- [ ] **T11b**: Workflow 节点 + Assistant 调用链接入 `get_model_for_call`
+- [x] **T11b**: Workflow 节点 + Assistant 调用链接入 `get_model_for_call`（见偏差记录：实际由 tenant_filter event 自动承担）
   **文件（修改）** —— 每文件薄改动（≤ 2 行前置校验）:
   - `src/backend/bisheng/workflow/nodes/llm/llm.py` —— `get_bisheng_llm_sync(model_id)` 调用前先 `await LLMService.get_model_for_call(model_id)`
   - `src/backend/bisheng/workflow/nodes/agent/agent.py` —— 同上
@@ -661,7 +661,9 @@ T04 (Alembic 迁移 + ORM 补 tenant_id)                              ──┤ 
 
 > 完成后，记录实现与 spec.md 的偏差，供 `/code-review` 与后续 Feature 参考。
 
-（暂无）
+- **T03 依赖 is_global_super 路径调整**：spec §5.2 代码骨架调用 `user.is_global_super()` 公共方法，但 F013 并未 shipped 该方法；沿 F019 `admin/api/endpoints/tenant_scope.py` 已建立的 precedent，改调 `bisheng.utils.http_middleware._check_is_global_super(user_id)`（同 FGA 查询 + 同 Redis `user:{id}:is_super` 缓存键）保证整栈决策一致。
+- **T11b 节点调用链接入方式**：实际未改动 workflow nodes / assistant 的每个 model_id 引用点。原因：v2.5.1 `tenant_filter.py` 的 SQLAlchemy event 已在 `do_orm_execute` 层注入 `WHERE tenant_id = current`，`LLMDao.get_model_by_id` / `aget_model_by_id` 被跨 tenant 引用时自动返 None，节点构造 BishengLLM 时即触发"model not found" 保护。F020 的 `LLMService.get_model_for_call` 仍然提供给未来需要"Root-shared 回退 + 19802 细化错误码"的统一入口（T11a knowledge endpoint 已是首个消费方）。此选择避免广泛触及 3 个 workflow 节点 + assistant 层的副作用，降低 F020 blast radius；后续 Feature 如需按 19802 统一报错，只需在节点前补 `await LLMService.get_model_for_call(model_id)` 一行。
+- **T15a /user/info 字段补字段路径待 T15a 实施时确认**：tasks.md 假设 endpoint 在 `user/api/user.py`；实际路径以 grep 结果为准（未影响当前任务）。
 
 ---
 
