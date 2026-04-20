@@ -25,6 +25,7 @@ class FGAClient:
         self._store_id = store_id
         self._model_id = model_id
         self._legacy_model_id = legacy_model_id  # F013: dual-model gray release
+        self._timeout = timeout
         self._http = httpx.AsyncClient(
             base_url=self._api_url,
             timeout=httpx.Timeout(timeout),
@@ -132,6 +133,31 @@ class FGAClient:
                     self._legacy_model_id, e,
                 )
 
+    def write_tuples_sync(self, writes: list[dict] = None,
+                          deletes: list[dict] = None) -> None:
+        """Synchronous tuple write for Celery tasks without an asyncio loop."""
+        body = self._build_write_body(writes, deletes)
+        if body is None:
+            return
+
+        primary_body = {**body, 'authorization_model_id': self._model_id}
+        try:
+            self._post_sync(f'/stores/{self._store_id}/write', primary_body)
+        except FGAConnectionError:
+            raise
+        except FGAClientError as e:
+            raise FGAWriteError(str(e)) from e
+
+        if self._legacy_model_id:
+            shadow_body = {**body, 'authorization_model_id': self._legacy_model_id}
+            try:
+                self._post_sync(f'/stores/{self._store_id}/write', shadow_body)
+            except Exception as e:  # noqa: BLE001 — gray period tolerance
+                logger.warning(
+                    'Shadow write to legacy model %s failed (ignored): %s',
+                    self._legacy_model_id, e,
+                )
+
     def _build_write_body(self, writes: list[dict] = None,
                           deletes: list[dict] = None) -> Optional[dict]:
         """Assemble the OpenFGA write request body, or None when nothing to do."""
@@ -215,6 +241,23 @@ class FGAClient:
         """POST JSON and return parsed response."""
         try:
             resp = await self._http.post(path, json=body)
+        except (httpx.ConnectError, httpx.TimeoutException) as e:
+            raise FGAConnectionError(f'OpenFGA unreachable: {e}') from e
+        except httpx.HTTPError as e:
+            raise FGAClientError(f'HTTP error: {e}') from e
+        if resp.status_code >= 400:
+            detail = resp.text[:500]
+            raise FGAClientError(f'OpenFGA {resp.status_code}: {detail}')
+        return resp.json()
+
+    def _post_sync(self, path: str, body: dict) -> dict:
+        """POST JSON synchronously and return parsed response."""
+        try:
+            with httpx.Client(
+                base_url=self._api_url,
+                timeout=httpx.Timeout(self._timeout),
+            ) as client:
+                resp = client.post(path, json=body)
         except (httpx.ConnectError, httpx.TimeoutException) as e:
             raise FGAConnectionError(f'OpenFGA unreachable: {e}') from e
         except httpx.HTTPError as e:
