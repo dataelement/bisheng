@@ -14,7 +14,7 @@
 |------|------|------|
 | spec.md | ✅ 已定稿 | 2026-04-19 PRD 精化后定稿；24 AC + 8 AD + 完整 §5 代码骨架；经 `/sdd-review spec` 通过 |
 | tasks.md | ✅ 已拆解 | 2026-04-21 `/sdd-review tasks` 第 2 轮通过（第 1 轮修复：T02/T11/T15 三个跨文件/跨前后端任务拆分 + AC-18/19 E2E 测试补齐 + D10/D11 决策锁定） |
-| 实现 | 🟡 进行中 | 13 / 19 完成（T01~T11b ✓） |
+| 实现 | 🟡 进行中 | 16 / 19 完成（T01~T14 ✓） |
 
 ---
 
@@ -517,7 +517,7 @@ T04 (Alembic 迁移 + ORM 补 tenant_id)                              ──┤ 
 
 ### 前端 Platform（手动验证）
 
-- [ ] **T12**: 前端 API 层 `controllers/API/llm.ts` 扩展
+- [x] **T12**: 前端 API 层 `controllers/API/llm.ts` 扩展
   **文件（修改）**:
   - `src/frontend/platform/src/controllers/API/llm.ts`（若不存在则创建；参考 `admin.ts` 风格）
   **改动**:
@@ -530,7 +530,7 @@ T04 (Alembic 迁移 + ORM 补 tenant_id)                              ──┤ 
 
 ---
 
-- [ ] **T13**: 前端 `hooks/useAdminScope.ts` 新建
+- [x] **T13**: 前端 `hooks/useAdminScope.ts` 新建
   **文件（新建）**:
   - `src/frontend/platform/src/hooks/useAdminScope.ts`
   ```typescript
@@ -560,7 +560,7 @@ T04 (Alembic 迁移 + ORM 补 tenant_id)                              ──┤ 
 
 ---
 
-- [ ] **T14**: 前端 `components/AdminScopeSelector.tsx` 新建（全局复用组件）
+- [x] **T14**: 前端 `components/AdminScopeSelector.tsx` 新建（全局复用组件）
   **文件（新建）**:
   - `src/frontend/platform/src/components/AdminScopeSelector.tsx`
   ```tsx
