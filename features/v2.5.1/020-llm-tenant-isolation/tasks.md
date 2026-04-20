@@ -14,7 +14,7 @@
 |------|------|------|
 | spec.md | ✅ 已定稿 | 2026-04-19 PRD 精化后定稿；24 AC + 8 AD + 完整 §5 代码骨架；经 `/sdd-review spec` 通过 |
 | tasks.md | ✅ 已拆解 | 2026-04-21 `/sdd-review tasks` 第 2 轮通过（第 1 轮修复：T02/T11/T15 三个跨文件/跨前后端任务拆分 + AC-18/19 E2E 测试补齐 + D10/D11 决策锁定） |
-| 实现 | 🟡 进行中 | 17 / 19 完成（T01~T14, T15a ✓） |
+| 实现 | 🟡 进行中 | 18 / 19 完成（T01~T15b ✓） |
 
 ---
 
@@ -623,7 +623,7 @@ T04 (Alembic 迁移 + ORM 补 tenant_id)                              ──┤ 
 
 ---
 
-- [ ] **T15b**: 前端 ModelPage 改造 + userContext 扩展 + SystemModelConfig 条件渲染
+- [x] **T15b**: 前端 ModelPage 改造 + userContext 扩展 + SystemModelConfig 条件渲染
   **文件（修改）**:
   - `src/frontend/platform/src/contexts/userContext.tsx`：`User` interface 扩展 `is_global_super?: boolean`、`is_child_admin?: boolean`、`leaf_tenant_id?: number`、`leaf_tenant_name?: string`（与 T15a 后端响应对齐）
   - `src/frontend/platform/src/pages/ModelPage/manage/index.tsx`：顶部挂 `<AdminScopeSelector>`（仅 `user.is_global_super`）；Child Admin 渲染 `管理 {leaf_tenant_name} 的模型`；模型卡片 Root 共享加 `Badge`；Child Admin 编辑按钮 disabled

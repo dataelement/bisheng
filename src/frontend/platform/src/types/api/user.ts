@@ -20,6 +20,14 @@ export type User = {
     tenant_name?: string;
     tenant_code?: string;
     tenant_logo?: string;
+    // F020 (v2.5.1) Tenant-tree admin flags — all optional / additive,
+    // populated by /user/info. Pages conditionally render the admin
+    // scope selector, Root-shared readonly badges, and hidden system-
+    // config panels based on these flags.
+    is_global_super?: boolean;
+    is_child_admin?: boolean;
+    leaf_tenant_id?: number;
+    leaf_tenant_name?: string;
 };
 
 export type ROLE = {

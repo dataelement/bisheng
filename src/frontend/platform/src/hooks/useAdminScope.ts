@@ -20,6 +20,16 @@ import {
     setTenantScope,
 } from "@/controllers/API/admin"
 
+export interface UseAdminScopeOptions {
+    /**
+     * Set to false to skip the initial GET and all network traffic.
+     * Pages hosting the hook should pass `user.is_global_super` so
+     * Child Admins and ordinary users never produce a 403 on mount.
+     * Defaults to true so existing call sites keep working.
+     */
+    enabled?: boolean
+}
+
 export interface UseAdminScopeResult {
     scope: AdminScopeResponse
     loading: boolean
@@ -32,33 +42,36 @@ const EMPTY_SCOPE: AdminScopeResponse = {
     expires_at: null,
 }
 
-export function useAdminScope(): UseAdminScopeResult {
+export function useAdminScope(options?: UseAdminScopeOptions): UseAdminScopeResult {
+    const enabled = options?.enabled ?? true
     const [scope, setScopeState] = useState<AdminScopeResponse>(EMPTY_SCOPE)
     const [loading, setLoading] = useState<boolean>(false)
 
     const refresh = useCallback(async (): Promise<void> => {
+        if (!enabled) return
         setLoading(true)
         try {
             setScopeState(await getTenantScope())
         } finally {
             setLoading(false)
         }
-    }, [])
+    }, [enabled])
 
     const setScope = useCallback(async (tenantId: number | null): Promise<void> => {
+        if (!enabled) return
         setLoading(true)
         try {
             setScopeState(await setTenantScope(tenantId))
         } finally {
             setLoading(false)
         }
-    }, [])
+    }, [enabled])
 
     useEffect(() => {
-        // Kick off the initial read on mount. Errors propagate to the
-        // global axios interceptor (non-super callers see 403).
-        void refresh()
-    }, [refresh])
+        // Kick off the initial read on mount iff enabled. Errors
+        // propagate to the global axios interceptor.
+        if (enabled) void refresh()
+    }, [enabled, refresh])
 
     return { scope, loading, setScope, refresh }
 }
