@@ -72,8 +72,8 @@ class OrgSyncConfigCreate(BaseModel):
 
     @model_validator(mode='after')
     def validate_auth_config(self) -> 'OrgSyncConfigCreate':
-        # F021: WeCom-specific auth_config checks.
-        # Create path — secret must be provided in plaintext.
+        # Create path — the secret must be supplied in plaintext, so the
+        # masked placeholder (accepted by OrgSyncConfigUpdate) is rejected.
         if self.provider == 'wecom':
             _validate_wecom_auth_config(self.auth_config or {}, allow_masked_secret=False)
         return self

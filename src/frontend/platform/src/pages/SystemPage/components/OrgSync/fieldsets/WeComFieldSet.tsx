@@ -5,6 +5,7 @@ import { Label } from "@/components/bs-ui/label"
 import { X } from "lucide-react"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
+import { MASKED_PLACEHOLDER } from "../constants"
 
 export interface WeComFormValues {
   corpid: string
@@ -19,8 +20,6 @@ interface WeComFieldSetProps {
   isEdit: boolean
   errors?: Partial<Record<keyof WeComFormValues, string>>
 }
-
-const MASKED_PLACEHOLDER = "****"
 
 export function WeComFieldSet({
   value,

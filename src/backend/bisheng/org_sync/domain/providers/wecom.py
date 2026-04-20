@@ -435,25 +435,29 @@ class WeComProvider(OrgSyncProvider):
             # Force a fresh gettoken to expose auth failures up-front.
             await self._ensure_token(client)
 
-            dept_data = await self._request(
-                client, 'GET',
-                f'{WECOM_BASE_URL}/cgi-bin/department/list',
-                params={'id': first_root},
+            # Dept and user queries are independent — run in parallel to keep
+            # the "Test Connection" button snappy.
+            dept_data, user_data = await asyncio.gather(
+                self._request(
+                    client, 'GET',
+                    f'{WECOM_BASE_URL}/cgi-bin/department/list',
+                    params={'id': first_root},
+                ),
+                self._request(
+                    client, 'GET',
+                    f'{WECOM_BASE_URL}/cgi-bin/user/simplelist',
+                    params={'department_id': first_root, 'fetch_child': 1},
+                ),
             )
+
             depts = dept_data.get('department', [])
             total_depts = len(depts)
-            # WeCom has no "enterprise name" field; use the root dept name or
-            # fall back to a neutral label. Never return a token.
+            # WeCom has no "enterprise name" field; fall back to the root dept
+            # name or a neutral label. Response must never contain a token.
             org_name = next(
                 (d.get('name') for d in depts if str(d.get('id')) == str(first_root)),
                 None,
             ) or '企业微信'
-
-            user_data = await self._request(
-                client, 'GET',
-                f'{WECOM_BASE_URL}/cgi-bin/user/simplelist',
-                params={'department_id': first_root, 'fetch_child': 1},
-            )
             total_members = len(user_data.get('userlist', []))
 
         return {

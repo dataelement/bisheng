@@ -14,22 +14,12 @@ import { useToast } from "@/components/bs-ui/toast/use-toast"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { useOrgSyncStore } from "@/store/orgSyncStore"
 import { OrgSyncConfig } from "@/types/api/orgSync"
+import { formatIsoDateTime } from "@/util/utils"
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { ProviderDialog } from "./ProviderDialog"
 import { SyncLogModal } from "./SyncLogModal"
 import { TestConnectionButton } from "./TestConnectionButton"
-
-function formatDateTime(iso: string | null): string {
-  if (!iso) return "-"
-  try {
-    const d = new Date(iso)
-    if (Number.isNaN(d.getTime())) return iso
-    return d.toLocaleString()
-  } catch {
-    return iso
-  }
-}
 
 function RunStatusBadge({ status }: { status: string | null | undefined }) {
   const { t } = useTranslation("orgSync")
@@ -169,7 +159,7 @@ export default function OrgSync() {
                       <Badge variant="secondary">{t("syncStatus.idle")}</Badge>
                     )}
                   </TableCell>
-                  <TableCell>{formatDateTime(config.last_sync_at)}</TableCell>
+                  <TableCell>{formatIsoDateTime(config.last_sync_at)}</TableCell>
                   <TableCell>
                     <RunStatusBadge status={config.last_sync_result} />
                   </TableCell>

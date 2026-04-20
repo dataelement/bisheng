@@ -125,17 +125,17 @@ async def update_config(
         if data.auth_config is not None:
             existing_auth = decrypt_auth_config(config.auth_config)
             incoming = dict(data.auth_config)
-            # F021: drop provider-internal keys if they leaked in from client
+            # Provider-internal keys must never be persisted, even if a client
+            # echoes one back from a read response.
             incoming.pop('_config_id', None)
-            # F021: '****' sentinel on secret fields means "keep stored value"
+            # '****' sentinel on a secret field means "keep stored value";
+            # dropping the key lets existing_auth.update() preserve it.
             for key, val in list(incoming.items()):
                 if val == '****':
                     lower = key.lower()
                     if 'secret' in lower or 'password' in lower or 'token' in lower:
                         incoming.pop(key)
             existing_auth.update(incoming)
-            # Never persist internal keys (defensive — _config_id is read-only
-            # at runtime via OrgSyncService / endpoints)
             existing_auth.pop('_config_id', None)
             config.auth_config = encrypt_auth_config(existing_auth)
 

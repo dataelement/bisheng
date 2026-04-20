@@ -1,6 +1,7 @@
 import { Input, PassInput } from "@/components/bs-ui/input"
 import { Label } from "@/components/bs-ui/label"
 import { useTranslation } from "react-i18next"
+import { MASKED_PLACEHOLDER } from "../constants"
 
 export interface GenericApiFormValues {
   endpoint_url: string
@@ -13,8 +14,6 @@ interface GenericApiFieldSetProps {
   isEdit: boolean
   errors?: Partial<Record<keyof GenericApiFormValues, string>>
 }
-
-const MASKED_PLACEHOLDER = "****"
 
 export function GenericApiFieldSet({
   value,

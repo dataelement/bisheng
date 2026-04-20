@@ -102,11 +102,12 @@ class OrgSyncService:
             )
             log = await OrgSyncLogDao.acreate(log)
 
-            # Step 4: Decrypt auth_config and instantiate provider
+            # Step 4: Decrypt auth_config and instantiate provider.
+            # The underscore-prefixed _config_id is a provider-internal hint
+            # (e.g. WeCom uses it to partition its Redis token cache per
+            # config). Never encrypted, never persisted — it's reattached here
+            # on each call and stripped again on update (see sync_config.py).
             auth_config = decrypt_auth_config(config.auth_config)
-            # F021: inject config_id so Provider can build tenant-safe Redis keys
-            # (e.g. WeCom access_token cache per config). The underscore prefix
-            # marks it as provider-internal; the Service layer never persists it.
             auth_config['_config_id'] = config.id
             provider = get_provider(config.provider, auth_config)
 

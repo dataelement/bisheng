@@ -16,23 +16,13 @@ import {
 } from "@/components/bs-ui/table"
 import { useOrgSyncStore } from "@/store/orgSyncStore"
 import { OrgSyncConfig } from "@/types/api/orgSync"
+import { formatIsoDateTime } from "@/util/utils"
 import { useEffect } from "react"
 import { useTranslation } from "react-i18next"
 
 interface SyncLogModalProps {
   config: OrgSyncConfig | null
   onClose: () => void
-}
-
-function formatDateTime(iso: string | null): string {
-  if (!iso) return "-"
-  try {
-    const d = new Date(iso)
-    if (Number.isNaN(d.getTime())) return iso
-    return d.toLocaleString()
-  } catch {
-    return iso
-  }
 }
 
 function statusVariant(
@@ -124,8 +114,8 @@ export function SyncLogModal({ config, onClose }: SyncLogModalProps) {
                       {log.member_disabled} / ↻{log.member_reactivated}
                     </span>
                   </TableCell>
-                  <TableCell>{formatDateTime(log.start_time)}</TableCell>
-                  <TableCell>{formatDateTime(log.end_time)}</TableCell>
+                  <TableCell>{formatIsoDateTime(log.start_time)}</TableCell>
+                  <TableCell>{formatIsoDateTime(log.end_time)}</TableCell>
                 </TableRow>
               ))
             )}

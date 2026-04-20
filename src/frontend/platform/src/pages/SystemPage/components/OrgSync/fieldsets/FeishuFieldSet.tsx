@@ -1,6 +1,7 @@
 import { Input, PassInput } from "@/components/bs-ui/input"
 import { Label } from "@/components/bs-ui/label"
 import { useTranslation } from "react-i18next"
+import { MASKED_PLACEHOLDER } from "../constants"
 
 export interface FeishuFormValues {
   app_id: string
@@ -13,8 +14,6 @@ interface FeishuFieldSetProps {
   isEdit: boolean
   errors?: Partial<Record<keyof FeishuFormValues, string>>
 }
-
-const MASKED_PLACEHOLDER = "****"
 
 export function FeishuFieldSet({
   value,
