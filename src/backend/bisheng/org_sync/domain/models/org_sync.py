@@ -40,7 +40,14 @@ def encrypt_auth_config(config_dict: dict) -> str:
 
 
 def decrypt_auth_config(encrypted: str) -> dict:
-    """Decrypt a Fernet-encrypted auth_config string back to a dict."""
+    """Decrypt a Fernet-encrypted auth_config string back to a dict.
+
+    F014's SSO seed row is inserted with an empty ``auth_config`` (its HMAC
+    secret lives in config.yaml, not the DB). Treat empty/None as ``{}`` so
+    code paths that stumble onto those rows don't 500 on Fernet InvalidToken.
+    """
+    if not encrypted:
+        return {}
     raw = decrypt_token(encrypted)
     return json.loads(raw)
 

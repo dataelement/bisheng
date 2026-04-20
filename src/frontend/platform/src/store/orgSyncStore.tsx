@@ -14,8 +14,20 @@ import {
   OrgSyncConfigCreate,
   OrgSyncConfigUpdate,
   OrgSyncLog,
+  OrgSyncProvider,
   OrgSyncTestResult,
 } from "@/types/api/orgSync"
+
+// Providers the "组织同步" UI is designed to manage end-to-end. Other rows
+// (e.g. F014's SSO HMAC seed with provider='sso_realtime' and empty
+// auth_config) live in the same org_sync_config table but are owned by
+// different subsystems and must stay out of this list.
+const USER_MANAGED_PROVIDERS: ReadonlySet<OrgSyncProvider> = new Set([
+  "wecom",
+  "feishu",
+  "dingtalk",
+  "generic_api",
+])
 
 interface OrgSyncState {
   // List state
@@ -60,7 +72,10 @@ export const useOrgSyncStore = create<OrgSyncState>((set, get) => ({
   fetchConfigs: async () => {
     set({ loading: true, lastError: null })
     try {
-      const configs = await listOrgSyncConfigsApi()
+      const all = await listOrgSyncConfigsApi()
+      const configs = all.filter((c) =>
+        USER_MANAGED_PROVIDERS.has(c.provider)
+      )
       set({ configs, loading: false })
     } catch (err: any) {
       set({ loading: false, lastError: String(err) })
