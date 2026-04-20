@@ -458,7 +458,7 @@ T04 (Alembic 迁移 + ORM 补 tenant_id)                              ──┤ 
 
 ---
 
-- [ ] **T10**: `GET /llm` 支持 `?only_shared=true` 过滤（挂载弹窗预览 - AC-17 数据侧）
+- [x] **T10**: `GET /llm` 支持 `?only_shared=true` 过滤（挂载弹窗预览 - AC-17 数据侧）
   **文件（修改）**:
   - `src/backend/bisheng/llm/api/router.py` L12-15：
     ```python
