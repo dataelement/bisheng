@@ -180,6 +180,57 @@ async def test_get_model_for_call_cross_child_raises_19802():
     assert excinfo.value.status_code == 19802
 
 
+# --- only_shared preview (T10) -----------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_mount_child_preview_shared_llm_list():
+    """AC-17: super admin + only_shared=true → list Root servers with
+    non-empty shared_with fanout."""
+    r1 = _mk_server(1, tenant_id=1, name='shared-root')
+    r2 = _mk_server(2, tenant_id=1, name='private-root')
+
+    async def _list_children(object_type, object_id):
+        return {'1': [5, 7], '2': []}[object_id]
+
+    operator = MagicMock(user_id=99)
+    with patch(f'{DAO}.aget_all_server', new=AsyncMock(return_value=[r1, r2])), \
+            patch(f'{DAO}.aget_model_by_server_ids', new=AsyncMock(return_value=[])), \
+            patch('bisheng.utils.http_middleware._check_is_global_super',
+                  new=AsyncMock(return_value=True)), \
+            patch('bisheng.tenant.domain.services.resource_share_service.'
+                  'ResourceShareService.list_sharing_children',
+                  new=AsyncMock(side_effect=_list_children)):
+        result = await LLMService.get_all_llm(only_shared=True, operator=operator)
+
+    assert [r.id for r in result] == [1]
+    assert result[0].name == 'shared-root'
+
+
+@pytest.mark.asyncio
+async def test_mount_child_preview_forbidden_for_non_super_admin():
+    """Boundary: only_shared=true + non-super → 19803."""
+    from fastapi import HTTPException
+
+    operator = MagicMock(user_id=42)
+    with patch('bisheng.utils.http_middleware._check_is_global_super',
+               new=AsyncMock(return_value=False)):
+        with pytest.raises(HTTPException) as excinfo:
+            await LLMService.get_all_llm(only_shared=True, operator=operator)
+    assert excinfo.value.status_code == 19803
+
+
+@pytest.mark.asyncio
+async def test_mount_child_preview_without_operator_forbidden():
+    """Defensive: only_shared=true must always present an operator so
+    the super-admin check can run. None → 19803 fail-closed."""
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException) as excinfo:
+        await LLMService.get_all_llm(only_shared=True, operator=None)
+    assert excinfo.value.status_code == 19803
+
+
 # --- audit_log write (T09) ---------------------------------------------
 
 

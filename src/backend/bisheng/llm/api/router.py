@@ -10,8 +10,16 @@ router = APIRouter(prefix='/llm', tags=['LLM'])
 
 
 @router.get('')
-async def get_all_llm(request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user)):
-    ret = await LLMService.get_all_llm()
+async def get_all_llm(
+        request: Request,
+        only_shared: bool = Query(
+            False,
+            description='F020 AC-17: return only Root-owned servers that '
+                        'are currently shared to at least one Child '
+                        '(mount-preview dialog). Super-admin only.',
+        ),
+        login_user: UserPayload = Depends(UserPayload.get_login_user)):
+    ret = await LLMService.get_all_llm(only_shared=only_shared, operator=login_user)
     return resp_200(data=ret)
 
 

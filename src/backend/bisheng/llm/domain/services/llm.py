@@ -86,7 +86,11 @@ async def _write_llm_audit(
 class LLMService:
 
     @classmethod
-    async def get_all_llm(cls) -> List[LLMServerInfo]:
+    async def get_all_llm(
+        cls,
+        only_shared: bool = False,
+        operator: Optional['UserPayload'] = None,
+    ) -> List[LLMServerInfo]:
         """ Get all the model data, Exclusion:keyand other sensitive information
 
         F020: the list merges (a) servers the event layer returns for the
@@ -96,8 +100,24 @@ class LLMService:
         on id. Each merged Root-shared row carries
         ``is_root_shared_readonly=True`` so the frontend can render the
         "Root 共享（只读）" Badge and disable edit affordances.
+
+        AC-17 preview path (``only_shared=True``): reserved for the mount-
+        Child dialog. Returns Root-owned servers whose ``shared_with``
+        FGA set is non-empty (i.e. already distributed to at least one
+        Child). Restricted to the global super admin — a Child Admin has
+        no reason to preview the cross-tenant distribution list.
         """
         from bisheng.core.context.tenant import bypass_tenant_filter, get_current_tenant_id
+
+        if only_shared:
+            if operator is None:
+                from bisheng.common.errcode.llm_tenant import LLMSystemConfigForbiddenError
+                raise LLMSystemConfigForbiddenError.http_exception()
+            from bisheng.utils.http_middleware import _check_is_global_super
+            if not await _check_is_global_super(operator.user_id):
+                from bisheng.common.errcode.llm_tenant import LLMSystemConfigForbiddenError
+                raise LLMSystemConfigForbiddenError.http_exception()
+            return await cls._list_shared_root_servers()
 
         leaf_id = get_current_tenant_id() or 1
 
@@ -137,6 +157,50 @@ class LLMService:
 
         for one in ret:
             one.models = server_dicts.get(one.id, [])
+        return ret
+
+    @classmethod
+    async def _list_shared_root_servers(cls) -> List[LLMServerInfo]:
+        """F020 AC-17: Root-owned servers that are already shared to at
+        least one Child. Uses ``ResourceShareService.list_sharing_children``
+        as the authoritative "is this currently shared" check, so the UI
+        preview matches post-mount distribution behaviour.
+        """
+        from bisheng.core.context.tenant import bypass_tenant_filter
+        from bisheng.tenant.domain.services.resource_share_service import (
+            ResourceShareService,
+        )
+
+        with bypass_tenant_filter():
+            all_root = [s for s in await LLMDao.aget_all_server() if s.tenant_id == 1]
+            if not all_root:
+                return []
+            shared_root = []
+            for s in all_root:
+                try:
+                    children = await ResourceShareService.list_sharing_children(
+                        'llm_server', str(s.id),
+                    )
+                except Exception:  # noqa: BLE001 — preview is best-effort
+                    logger.exception('[F020] list_sharing_children failed id=%s', s.id)
+                    continue
+                if children:
+                    shared_root.append(s)
+
+            ret = []
+            server_ids = [s.id for s in shared_root]
+            llm_models = await LLMDao.aget_model_by_server_ids(server_ids) if server_ids else []
+            by_server: Dict[int, List] = {}
+            for m in llm_models:
+                by_server.setdefault(m.server_id, []).append(
+                    LLMModelInfo(**m.model_dump(exclude={'config'}))
+                )
+            for s in shared_root:
+                info = LLMServerInfo(**s.model_dump(exclude={'config'}))
+                info.models = by_server.get(s.id, [])
+                # Not "readonly" in this view — the super admin IS the owner.
+                info.is_root_shared_readonly = False
+                ret.append(info)
         return ret
 
     @classmethod
