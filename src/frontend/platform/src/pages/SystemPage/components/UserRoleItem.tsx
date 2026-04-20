@@ -16,7 +16,7 @@ export default function UserRoleItem({ showDel, groupId, selectedRoles, onDelete
     const [userGroupSelected, setUserGroupSelected] = useState(groupId ? [groupId] : [])
     const loadGroups = () => {
         getUserGroupsApi().then((res: any) => {
-            const groups = res.records.map((ug) => {
+            const groups = res.map((ug) => {
                 return {
                     label: ug.group_name,
                     value: ug.id.toString()

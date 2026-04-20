@@ -258,6 +258,9 @@ class AssistantCreateReq(BaseModel):
     name: str = Field(max_length=50, description='The assistant name.')
     prompt: str = Field(min_length=20, max_length=1000, description='Helper Prompt')
     logo: str = Field(description='logoRelative address of the file')
+    # F017: Root→Child sharing intent; None → Root.share_default_to_children
+    share_to_children: Optional[bool] = Field(default=None,
+                                              description='F017: share with children (Root only)')
 
 
 class AssistantUpdateReq(BaseModel):
@@ -336,7 +339,10 @@ class GroupAndRoles(BaseModel):
 class CreateUserReq(BaseModel):
     user_name: str = Field(max_length=30, description='Username')
     password: str = Field(description='Passwords')
-    group_roles: List[GroupAndRoles] = Field(description='List of user groups and roles to join')
+    group_roles: List[GroupAndRoles] = Field(
+        default_factory=list,
+        description='Optional user groups and roles; roles default to normal user when empty',
+    )
 
 
 class OpenAIChatCompletionReq(BaseModel):

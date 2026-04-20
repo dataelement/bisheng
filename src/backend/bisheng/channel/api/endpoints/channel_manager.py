@@ -21,6 +21,7 @@ from bisheng.channel.domain.schemas.channel_manager_schema import (
 from bisheng.channel.domain.services.channel_service import ChannelService
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.schemas.api import resp_200, resp_500
+from bisheng.role.domain.services.quota_service import require_quota, QuotaResourceType
 from bisheng.core.external.bisheng_information_client.bisheng_information_manager import get_bisheng_information_client
 from bisheng.core.external.bisheng_information_client.client import InformationSourceAddError, BusinessType
 
@@ -30,6 +31,7 @@ router = APIRouter(prefix='/manager', tags=['Channel Management'])
 
 
 @router.post("/create")
+@require_quota(QuotaResourceType.CHANNEL)
 async def create_channel(
         request: Request,
         req_param: CreateChannelRequest,

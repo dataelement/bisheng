@@ -422,6 +422,10 @@
     "user_group_id": "User Group ID",
     "user_group_name": "User Group Name"
   },
+  "user_department_infos": {
+    "department_id": "Department ID",
+    "department_name": "Department Name"
+  },
   "total_user_count": "Total Users",
   "new_user_count": "New Users",
   "mid_active_user": "Active User Scale Statistics",

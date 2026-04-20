@@ -1,3 +1,4 @@
+import asyncio
 import json
 import math
 import os
@@ -179,16 +180,15 @@ class KnowledgeService(KnowledgeUtils):
             page: int = 1,
             limit: int = 10,
     ) -> Tuple[List[KnowledgeRead], int]:
-        if not login_user.is_admin():
-            knowledge_id_extra = []
-            user_role = await UserRoleDao.aget_user_roles(login_user.user_id)
-            if user_role:
-                role_ids = [role.role_id for role in user_role]
-                role_access = await RoleAccessDao.aget_role_access(role_ids, AccessType.KNOWLEDGE)
-                if role_access:
-                    knowledge_id_extra = [
-                        int(access.third_id) for access in role_access
-                    ]
+        # F008: 列表可见性 = OpenFGA `can_read`（与 PRD「使用知识库」/关系模型 can_read 一致）。
+        # 与「当前用户创建」的知识库 ID 取并集：避免 list_objects 滞后、缓存或计算差异导致创建者看不到自己的库。
+        accessible_ids = await login_user.rebac_list_accessible('can_read', 'knowledge_space')
+        if accessible_ids is not None:
+            creator_ids = await KnowledgeDao.aget_knowledge_ids_created_by(
+                login_user.user_id, knowledge_type,
+            )
+            merged = set(int(k) for k in accessible_ids) | set(creator_ids)
+            knowledge_id_extra = list(merged)
             res = await KnowledgeDao.aget_user_knowledge(
                 login_user.user_id,
                 knowledge_id_extra,
@@ -207,8 +207,34 @@ class KnowledgeService(KnowledgeUtils):
             )
             total = await KnowledgeDao.acount_all_knowledge(name, knowledge_type)
 
-        result = cls.convert_knowledge_read(login_user, res)
+        result = await cls.aconvert_knowledge_read(login_user, res)
         return result, total
+
+    @classmethod
+    async def aconvert_knowledge_read(
+            cls, login_user: UserPayload, knowledge_list: List[Knowledge]
+    ) -> List[KnowledgeRead]:
+        """异步组装列表项；避免在 async 路由里调用 sync access_check（_run_async_safe 易死锁/10s 超时）。"""
+        if not knowledge_list:
+            return []
+        db_user_ids = {one.user_id for one in knowledge_list}
+        db_user_info = UserDao.get_user_by_ids(list(db_user_ids))
+        db_user_dict = {one.user_id: one.user_name for one in db_user_info}
+
+        async def _row(one: Knowledge) -> KnowledgeRead:
+            if login_user.user_id == one.user_id:
+                copiable = True
+            else:
+                copiable = await login_user.async_access_check(
+                    one.user_id, str(one.id), AccessType.KNOWLEDGE_WRITE
+                )
+            return KnowledgeRead(
+                **one.model_dump(),
+                user_name=db_user_dict.get(one.user_id, str(one.user_id)),
+                copiable=copiable,
+            )
+
+        return list(await asyncio.gather(*[_row(one) for one in knowledge_list]))
 
     @classmethod
     def convert_knowledge_read(
@@ -220,13 +246,17 @@ class KnowledgeService(KnowledgeUtils):
         res = []
 
         for one in knowledge_list:
+            if login_user.user_id == one.user_id:
+                copiable = True
+            else:
+                copiable = login_user.access_check(
+                    one.user_id, str(one.id), AccessType.KNOWLEDGE_WRITE
+                )
             res.append(
                 KnowledgeRead(
                     **one.model_dump(),
                     user_name=db_user_dict.get(one.user_id, str(one.user_id)),
-                    copiable=login_user.access_check(
-                        one.user_id, str(one.id), AccessType.KNOWLEDGE_WRITE
-                    ),
+                    copiable=copiable,
                 )
             )
         return res
@@ -267,7 +297,11 @@ class KnowledgeService(KnowledgeUtils):
         # CorrectionembeddingModels
         if not db_knowledge.model:
             raise KnowledgeNoEmbeddingError.http_exception()
-        embed_info = LLMDao.get_model_by_id(int(db_knowledge.model))
+        try:
+            embedding_model_id = int(str(db_knowledge.model).strip())
+        except (TypeError, ValueError):
+            raise KnowledgeNoEmbeddingError.http_exception()
+        embed_info = LLMDao.get_model_by_id(embedding_model_id)
         if not embed_info:
             raise KnowledgeNoEmbeddingError.http_exception()
         if embed_info.model_type != LLMModelType.EMBEDDING.value:
@@ -327,20 +361,9 @@ class KnowledgeService(KnowledgeUtils):
     def create_knowledge_hook(
             cls, request: Request, login_user: UserPayload, knowledge: Knowledge
     ):
-        # Query the user group the user belongs to under
-        user_group = UserGroupDao.get_user_group(login_user.user_id)
-        if user_group:
-            # Batch Insert Knowledge Base Resources into Associated Tables
-            batch_resource = []
-            for one in user_group:
-                batch_resource.append(
-                    GroupResource(
-                        group_id=one.group_id,
-                        third_id=knowledge.id,
-                        type=ResourceTypeEnum.KNOWLEDGE.value,
-                    )
-                )
-            GroupResourceDao.insert_group_batch(batch_resource)
+        # F008: Write owner tuple to OpenFGA (INV-2)
+        from bisheng.permission.domain.services.owner_service import OwnerService
+        OwnerService.write_owner_tuple_sync(login_user.user_id, 'knowledge_space', str(knowledge.id))
 
         cls.audit_telemetry_service.audit_create_knowledge(login_user, request, knowledge)
         cls.audit_telemetry_service.telemetry_new_knowledge(login_user, knowledge)
@@ -439,10 +462,9 @@ class KnowledgeService(KnowledgeUtils):
 
         cls.audit_telemetry_service.audit_delete_knowledge(login_user, request, knowledge)
 
-        # Purge resources under user groups
-        GroupResourceDao.delete_group_resource_by_third_id(
-            str(knowledge.id), ResourceTypeEnum.KNOWLEDGE
-        )
+        # F008: Clean up all FGA tuples for this resource (AC-03)
+        from bisheng.permission.domain.services.owner_service import OwnerService
+        OwnerService.delete_resource_tuples_sync('knowledge_space', str(knowledge.id))
 
     @classmethod
     def delete_knowledge_file_in_minio(cls, knowledge_id: int):
@@ -1603,23 +1625,23 @@ class KnowledgeService(KnowledgeUtils):
         """
         if not tag_ids:
             return None
-        
+
         links = await TagDao.aget_resources_by_tags(tag_ids, ResourceTypeEnum.KNOWLEDGE_FILE)
-        
+
         # We need the resource IDs from links, but we must verify they belong to knowledge_id
         # To avoid extra DB queries, if we assume tags are already scoped to knowledge_id,
         # we can just return the resource_ids. But to be safe, let's filter valid file ids.
         if not links:
             return []
-            
+
         resource_ids = list({link.resource_id for link in links})
-        
+
         # Verify the resources actually belong to this knowledge base
         file_ids = [int(rid) for rid in resource_ids if rid.isdigit()]
         if not file_ids:
             return []
-            
+
         files = await KnowledgeFileDao.aget_file_by_ids(file_ids)
         valid_file_ids = [str(f.id) for f in files if f.knowledge_id == knowledge_id]
-        
+
         return valid_file_ids

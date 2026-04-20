@@ -26,7 +26,7 @@ from bisheng.common.services import telemetry_service
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.cache.utils import save_uploaded_file
 from bisheng.core.logger import trace_id_var
-from bisheng.database.models.role_access import AccessType
+from bisheng.database.models.role_access import AccessType, WebMenuResource
 from bisheng.knowledge.api.dependencies import get_knowledge_service, get_knowledge_file_service
 from bisheng.knowledge.domain.models.knowledge import (KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum,
                                                        KnowledgeUpdate)
@@ -40,6 +40,7 @@ from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.llm.domain import LLMService
 from bisheng.llm.domain.const import LLMModelType
 from bisheng.llm.domain.models import LLMDao
+from bisheng.role.domain.services.quota_service import require_quota, QuotaResourceType
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_uuid, calc_data_sha256
 from bisheng.worker.knowledge.qa import insert_qa_celery
@@ -71,6 +72,7 @@ async def upload_file(*, file: UploadFile = File(...)):
 
 
 @router.post('/upload/{knowledge_id}')
+@require_quota(QuotaResourceType.KNOWLEDGE_SPACE_FILE)
 async def upload_knowledge_file(*,
                                 request: Request,
                                 login_user: UserPayload = Depends(UserPayload.get_login_user),
@@ -214,11 +216,13 @@ async def rebuild_knowledge_file(*,
 
 
 @router.post('/create')
-def create_knowledge(*,
-                     request: Request,
-                     login_user: UserPayload = Depends(UserPayload.get_login_user),
-                     knowledge: KnowledgeCreate):
+async def create_knowledge(*,
+                           request: Request,
+                           login_user: UserPayload = Depends(UserPayload.get_login_user),
+                           knowledge: KnowledgeCreate):
     """ Create Knowledge Base. """
+    await UserPayload.assert_effective_web_menu_contains(
+        login_user.user_id, WebMenuResource.CREATE_KNOWLEDGE.value)
     db_knowledge = KnowledgeService.create_knowledge(request, login_user, knowledge)
     return resp_200(db_knowledge)
 
@@ -232,8 +236,13 @@ async def copy_knowledge(*,
                          knowledge_name: str = Body(default=None, embed=True)):
     """ Copy Knowledge Base. """
     knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
+    if not knowledge:
+        return KnowledgeNotExistError.return_resp()
 
-    if not login_user.is_admin and knowledge.user_id != login_user.user_id:
+    await UserPayload.assert_effective_web_menu_contains(
+        login_user.user_id, WebMenuResource.CREATE_KNOWLEDGE.value)
+    if not await login_user.async_access_check(
+            knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE):
         return UnAuthorizedError.return_resp()
 
     knowledge_count = await KnowledgeFileDao.async_count_file_by_filters(
@@ -262,7 +271,13 @@ async def copy_qa_knowledge(*,
     """
 
     qa_knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
-    if not login_user.is_admin and qa_knowledge.user_id != login_user.user_id:
+    if not qa_knowledge:
+        return KnowledgeNotExistError.return_resp()
+
+    await UserPayload.assert_effective_web_menu_contains(
+        login_user.user_id, WebMenuResource.CREATE_KNOWLEDGE.value)
+    if not await login_user.async_access_check(
+            qa_knowledge.user_id, str(qa_knowledge.id), AccessType.KNOWLEDGE):
         return UnAuthorizedError.return_resp()
 
     if qa_knowledge.type != KnowledgeTypeEnum.QA.value:

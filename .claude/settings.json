@@ -1,0 +1,21 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'FILE=\"$CLAUDE_FILE\"; if [ -n \"$FILE\" ] && echo \"$FILE\" | grep -q \"\\.py$\"; then cd /Users/lilu/Projects/bisheng/src/backend && if [ -f .venv/bin/ruff ]; then .venv/bin/ruff format \"$FILE\" 2>/dev/null; .venv/bin/ruff check --fix \"$FILE\" 2>/dev/null; fi; fi'",
+            "async": true
+          },
+          {
+            "type": "command",
+            "command": "bash /Users/lilu/Projects/bisheng/scripts/arch-guard.sh \"$CLAUDE_FILE\"",
+            "async": false
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import List, Optional, Tuple
 
-from sqlalchemy import JSON, Column, DateTime, Text, and_, func, or_, text
+from sqlalchemy import JSON, Boolean, Column, DateTime, Text, and_, func, or_, text
 from sqlmodel import Field, select, col
 
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
@@ -36,6 +36,13 @@ class AssistantBase(SQLModelSerializable):
     status: int = Field(default=AssistantStatus.OFFLINE.value, description='Whether the assistant is online')
     user_id: int = Field(default=0, description='Create UserID')
     is_delete: int = Field(default=0, description='Remove logo')
+    is_shared: bool = Field(
+        default=False,
+        sa_column=Column(
+            Boolean, nullable=False, server_default=text('0'),
+            comment='F017: Root resource shared to all children (mirrors FGA shared_with tuples)',
+        ),
+    )
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(

@@ -4,7 +4,9 @@ from fastapi import APIRouter, Depends, Body, Query
 from loguru import logger
 from starlette.responses import StreamingResponse
 
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
+from bisheng.role.domain.services.quota_service import require_quota, QuotaResourceType
 from bisheng.common.errcode.http_error import ServerError
 from bisheng.common.schemas.api import resp_200, SSEResponse
 from bisheng.knowledge.api.dependencies import get_knowledge_space_service, get_knowledge_space_chat_service
@@ -24,9 +26,11 @@ router = APIRouter(prefix='/knowledge/space', tags=['knowledge_space'])
 # ──────────────────────────── Space CRUD ──────────────────────────────────────
 
 @router.post('')
+@require_quota(QuotaResourceType.KNOWLEDGE_SPACE)
 async def create_space(
         req: KnowledgeSpaceCreateReq,
         svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+        login_user: UserPayload = Depends(UserPayload.get_login_user),
 ) -> Any:
     space = await svc.create_knowledge_space(
         name=req.name,

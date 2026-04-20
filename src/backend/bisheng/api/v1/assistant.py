@@ -15,6 +15,7 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.common.schemas.api import PageData
 from bisheng.core.cache.redis_manager import get_redis_client
+from bisheng.role.domain.services.quota_service import require_quota, QuotaResourceType
 from bisheng.database.models.assistant import Assistant
 from bisheng.share_link.api.dependencies import header_share_token_parser
 from bisheng.share_link.domain.models.share_link import ShareLink
@@ -56,13 +57,18 @@ def delete_assistant(*,
 
 
 @router.post('')
+@require_quota(QuotaResourceType.ASSISTANT)
 async def create_assistant(*,
                            request: Request,
                            req: AssistantCreateReq,
                            login_user: UserPayload = Depends(UserPayload.get_login_user)):
     # get login user
-    assistant = Assistant(**req.model_dump(), user_id=login_user.user_id)
-    res = await AssistantService.create_assistant(request, login_user, assistant)
+    req_data = req.model_dump()
+    share_to_children = req_data.pop('share_to_children', None)  # F017: not a column on Assistant
+    assistant = Assistant(**req_data, user_id=login_user.user_id)
+    res = await AssistantService.create_assistant(
+        request, login_user, assistant, share_to_children=share_to_children,
+    )
     return resp_200(data=res)
 
 

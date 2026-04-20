@@ -21,7 +21,15 @@ from bisheng.open_endpoints.api.endpoints.llm import router as llm_router_rpc
 from bisheng.open_endpoints.api.router import (assistant_router_rpc, chat_router_rpc,
                                                knowledge_router_rpc, workflow_router_rpc,
                                                filelib_router_rpc, flow_router_rpc)
+from bisheng.department.api.router import router as department_router
+from bisheng.user_group.api.router import router as user_group_router
+from bisheng.permission.api.router import router as permission_router
+from bisheng.role.api.router import router as role_router
 from bisheng.share_link.api.router import router as share_link_router
+from bisheng.org_sync.api.endpoints.relink import router as relink_router
+from bisheng.org_sync.api.router import router as org_sync_router
+from bisheng.sso_sync.api.router import router as sso_sync_router
+from bisheng.tenant.api.router import router as tenant_router
 
 router = APIRouter(prefix='/api/v1', )
 router.include_router(chat_router)
@@ -53,6 +61,14 @@ router.include_router(share_link_router)
 router.include_router(telemetry_search_router)
 router.include_router(channel_router)
 router.include_router(message_router)
+router.include_router(department_router)
+router.include_router(user_group_router)
+router.include_router(permission_router)
+router.include_router(role_router)
+router.include_router(org_sync_router)
+router.include_router(sso_sync_router)
+router.include_router(relink_router)
+router.include_router(tenant_router)
 router.include_router(citation_router)
 
 router_rpc = APIRouter(prefix='/api/v2', )

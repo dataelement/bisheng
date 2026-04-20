@@ -10,6 +10,8 @@ from bisheng.common.services.config_service import settings
 from bisheng.core.cache.redis_manager import get_redis_client_sync
 from bisheng.core.logger import set_logger_config
 
+import bisheng.worker.tenant_context  # noqa: F401 — register tenant signals
+
 
 def create_celery_app():
     """

@@ -4,6 +4,8 @@ import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Button } from "@/components/bs-ui/button";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { Input, SearchInput, Textarea } from "@/components/bs-ui/input";
+import { RelationLevel } from "@/components/bs-comp/permission/types";
+import { usePermissionLevels } from "@/components/bs-comp/permission/usePermissionLevels";
 import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/bs-ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
@@ -283,6 +285,24 @@ export default function KnowledgeQa(params) {
         { cancelLoadingWhenReload: true },
         (param) => readFileLibDatabase({ ...param, name: param.keyword, type: 1 })
     );
+    const resourceIds = datalist.map((el: any) => String(el.id));
+    const { levels: permLevels } = usePermissionLevels('knowledge_space', resourceIds);
+    const hasLevel = (level: RelationLevel | undefined, allowed: RelationLevel[]) => level ? allowed.includes(level) : false;
+    const isCreator = (el: any) => Number(el?.user_id) === Number(user?.user_id);
+    const visibleLibs = datalist;
+    const canEdit = (el: any) =>
+        user.role === 'admin' || isCreator(el) || hasLevel(permLevels[String(el.id)], ['owner', 'manager', 'editor']);
+    const canDelete = (el: any) =>
+        user.role === 'admin' || isCreator(el) || hasLevel(permLevels[String(el.id)], ['owner']);
+    const canCreateLibrary =
+        user.role === 'admin' ||
+        Boolean(user.is_department_admin) ||
+        (user.web_menu || []).includes('create_knowledge');
+    const canReadRow = (el: any) =>
+        user.role === 'admin' ||
+        isCreator(el) ||
+        hasLevel(permLevels[String(el.id)], ['owner', 'manager', 'editor', 'viewer']);
+    const canUseCopy = (el: any) => canCreateLibrary && canReadRow(el);
 
     useEffect(() => {
         const todos = datalist.filter(lib => lib.state === KnowledgeBaseStatus.Copying);
@@ -373,7 +393,7 @@ export default function KnowledgeQa(params) {
             <div className="h-[calc(100vh-128px)] overflow-y-auto pb-20">
                 <div className="flex justify-end gap-4 items-center absolute right-0 top-[-44px]">
                     <SearchInput placeholder={t('lib.searchPlaceholder', { ns: 'bs' })} onChange={(e) => search(e.target.value)} />
-                    <Button className="px-8 text-[#FFFFFF]" onClick={() => setOpen(true)}>{t('create', { ns: 'bs' })}</Button>
+                    {canCreateLibrary && <Button className="px-8 text-[#FFFFFF]" onClick={() => setOpen(true)}>{t('create', { ns: 'bs' })}</Button>}
                 </div>
                 <Table>
                     <TableHeader>
@@ -385,10 +405,11 @@ export default function KnowledgeQa(params) {
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {datalist.map((el: any) => (
+                        {visibleLibs.map((el: any) => (
                             <TableRow
                                 key={el.id}
                                 onClick={() => {
+                                    if (!canEdit(el)) return;
                                     if ([KnowledgeBaseStatus.Copying, KnowledgeBaseStatus.Unpublished].includes(el.state)) return;
                                     window.libname = [el.name, el.description];
                                     navigate(`/filelib/qalib/${el.id}`);
@@ -439,7 +460,9 @@ export default function KnowledgeQa(params) {
                                                 setSelectOpenId(null);
                                                 switch (selectedValue) {
                                                     case 'copy':
-                                                        el.state === KnowledgeBaseStatus.Published && handleCopy(el);
+                                                        canUseCopy(el) &&
+                                                            el.state === KnowledgeBaseStatus.Published &&
+                                                            handleCopy(el);
                                                         break;
                                                     case 'set':
                                                         handleOpenSettings(el);
@@ -471,11 +494,15 @@ export default function KnowledgeQa(params) {
                                                 onClick={(e) => e.stopPropagation()}
                                                 className="z-50 overflow-visible"
                                             >
-                                                <Tip content={!el.copiable && t('noPermission')} side='top'>
+                                                <Tip content={!canUseCopy(el) && t('noPermission')} side='top'>
                                                     <SelectItem
                                                         showIcon={false}
                                                         value="copy"
-                                                        disabled={!(el.copiable || user.role === 'admin') || el.state !== KnowledgeBaseStatus.Published || copyLoadingId === el.id}
+                                                        disabled={
+                                                            !canUseCopy(el) ||
+                                                            el.state !== KnowledgeBaseStatus.Published ||
+                                                            copyLoadingId === el.id
+                                                        }
                                                     >
                                                         <div className="flex gap-2 items-center">
                                                             <Copy className="w-4 h-4" />
@@ -483,10 +510,10 @@ export default function KnowledgeQa(params) {
                                                         </div>
                                                     </SelectItem>
                                                 </Tip>
-                                                <Tip content={!el.copiable && t('noPermission')} side='top'>
+                                                <Tip content={(!el.copiable || !canEdit(el)) && t('noPermission')} side='top'>
                                                     <SelectItem
                                                         value="set"
-                                                        disabled={!el.copiable}
+                                                        disabled={!canEdit(el) || !el.copiable}
                                                         showIcon={false}
                                                     >
                                                         <div className="flex gap-2 items-center">
@@ -495,11 +522,11 @@ export default function KnowledgeQa(params) {
                                                         </div>
                                                     </SelectItem>
                                                 </Tip>
-                                                <Tip content={!el.copiable && t('noPermission')} side='top'>
+                                                <Tip content={(!el.copiable || !canDelete(el)) && t('noPermission')} side='top'>
                                                     <SelectItem
                                                         value="delete"
                                                         showIcon={false}
-                                                        disabled={!(el.copiable || user.role === 'admin')}
+                                                        disabled={!canDelete(el) || !(el.copiable || user.role === 'admin')}
                                                     >
                                                         <div className="flex gap-2 items-center">
                                                             <Trash2 className="w-4 h-4" />

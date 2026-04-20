@@ -4,6 +4,7 @@ from typing import Dict, List, Optional, Tuple
 
 from loguru import logger
 from sqlalchemy.dialects.mysql import LONGTEXT
+from sqlalchemy import Integer
 from sqlmodel import (JSON, Column, DateTime, Field, String, Text, case, delete, func, not_, or_,
                       select, text, update, col)
 
@@ -30,6 +31,18 @@ class MessageBase(SQLModelSerializable):
     flow_id: str = Field(index=True, description='Corresponding Skillsid')
     chat_id: Optional[str] = Field(default=None, index=True, description='chat_id, Frontend Generation')
     user_id: Optional[int] = Field(default=None, index=True, description='Usersid')
+    # F017 INV-T13: derived data tenant_id = user leaf (not resource tenant).
+    # DB column + idx_chatmessage_tenant_id exist since v2.5.0/F001; this
+    # ORM declaration lets ChatMessageService.acreate write it explicitly
+    # (SQLAlchemy `before_flush` also fills it when implicit, but derived-
+    # data writers must fail loudly when the context is missing).
+    tenant_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(
+            Integer, nullable=False, server_default=text('1'), index=True,
+            comment='F017: user leaf tenant for INV-T13 derived-data attribution',
+        ),
+    )
     liked: Optional[int] = Field(index=False, default=0,
                                  description="Whether the user likes it or 0Not assessed/1 Love/2 don't like}")
     solved: Optional[int] = Field(index=False, default=0,

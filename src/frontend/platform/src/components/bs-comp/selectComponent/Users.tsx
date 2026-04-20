@@ -15,7 +15,7 @@ export default function UsersSelect({ multiple = false, lockedValues = [], value
         getUsersApi({ page, pageSize: 40, name }).then(res => {
             pageRef.current = page
             originOptionsRef.current = res.data
-            const opts = res.data.map(el => ({ label: el.user_name, value: el.user_id }))
+            const opts = res.data.map(el => ({ label: el.user_name, value: Number(el.user_id) }))
             setOptions(_ops => page > 1 ? [..._ops, ...opts] : opts)
         })
     }

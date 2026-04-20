@@ -3,7 +3,7 @@ from enum import Enum
 from typing import Any, List, Optional, Tuple, Union, Dict
 
 from pydantic import BaseModel, field_validator
-from sqlalchemy import JSON, String, collate
+from sqlalchemy import JSON, Boolean, String, collate
 from sqlmodel import Column, DateTime, Field, case, delete, func, or_, select, text, update
 from sqlmodel.sql.expression import Select, SelectOfScalar, col
 
@@ -66,6 +66,13 @@ class KnowledgeBase(SQLModelSerializable):
                                  description='value from KnowledgeState')
     is_released: bool = Field(default=False, description='is released to knowledge space square')
     auth_type: AuthTypeEnum = Field(default=AuthTypeEnum.PUBLIC, description='Authentication Type')
+    is_shared: bool = Field(
+        default=False,
+        sa_column=Column(
+            Boolean, nullable=False, server_default=text('0'),
+            comment='F017: Root resource shared to all children (mirrors FGA shared_with tuples)',
+        ),
+    )
 
     metadata_fields: Optional[List[Dict]] = Field(default=None, sa_column=Column(JSON, nullable=True),
                                                   description="Metadata Field Configuration for Knowledge Base")
@@ -199,6 +206,26 @@ class KnowledgeDao(KnowledgeBase):
             return result.all()
 
     @classmethod
+    async def aget_knowledge_ids_created_by(
+        cls, user_id: int, knowledge_type: KnowledgeTypeEnum,
+    ) -> List[int]:
+        """当前用户在指定类型下创建的知识库主键，用于与 OpenFGA can_read 列表取并集。"""
+        async with get_async_db_session() as session:
+            stmt = select(Knowledge.id).where(
+                Knowledge.user_id == user_id,
+                Knowledge.type == knowledge_type.value,
+            )
+            result = await session.exec(stmt)
+            rows = result.all()
+        out: List[int] = []
+        for row in rows:
+            if row is None:
+                continue
+            rid = row[0] if isinstance(row, tuple) else row
+            out.append(int(rid))
+        return out
+
+    @classmethod
     def _user_knowledge_filters(
             cls,
             statement: Any,
@@ -216,7 +243,8 @@ class KnowledgeDao(KnowledgeBase):
             statement = statement.where(Knowledge.user_id == user_id)
         if filter_knowledge:
             statement = statement.where(Knowledge.id.in_(filter_knowledge))
-        if knowledge_type:
+        # 使用 is not None：避免 NORMAL=0 被当作「未传类型」而漏掉 type 条件
+        if knowledge_type is not None:
             statement = statement.where(Knowledge.type == knowledge_type.value)
         if name:
 
@@ -420,7 +448,7 @@ class KnowledgeDao(KnowledgeBase):
                                       statement,
                                       name: str = None,
                                       knowledge_type: KnowledgeTypeEnum = None):
-        if knowledge_type:
+        if knowledge_type is not None:
             statement = statement.where(Knowledge.type == knowledge_type.value)
 
         if name:

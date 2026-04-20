@@ -1,14 +1,11 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import Dict, List, Optional, Tuple
 
-from sqlalchemy import Column, DateTime, delete, text, INT
-from sqlmodel import Field, select
+from sqlalchemy import Column, DateTime, delete, func, text, INT
+from sqlmodel import Field, col, select
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session, get_async_db_session
-from bisheng.database.models.group import DefaultGroup
-
-
 class UserGroupBase(SQLModelSerializable):
     user_id: Optional[int] = Field(
         default=None,
@@ -246,16 +243,6 @@ class UserGroupDao(UserGroupBase):
             return user_groups
 
     @classmethod
-    async def add_default_user_group(cls, user_id: int) -> None:
-        """
-        Add users to the default user group
-        """
-        async with get_async_db_session() as session:
-            user_group = UserGroup(user_id=user_id, group_id=DefaultGroup, is_group_admin=False)
-            session.add(user_group)
-            await session.commit()
-
-    @classmethod
     def delete_group_admins(cls, group_id: int, admin_ids: List[int]) -> None:
         """
         Bulk delete user groupsadmin
@@ -280,19 +267,215 @@ class UserGroupDao(UserGroupBase):
             session.exec(statement)
             session.commit()
 
+    # --- Async methods (F003) ---
+
+    @classmethod
+    async def aget_group_members(
+        cls, group_id: int, page: int = 1, limit: int = 20, keyword: str = '',
+    ) -> Tuple[List[Dict], int]:
+        """Paginated member list (non-admin) with user details."""
+        from bisheng.user.domain.models.user import User
+        async with get_async_db_session() as session:
+            base = (
+                select(UserGroup.user_id, User.user_name, UserGroup.is_group_admin,
+                       UserGroup.create_time)
+                .join(User, UserGroup.user_id == User.user_id)
+                .where(UserGroup.group_id == group_id,
+                       UserGroup.is_group_admin == 0,
+                       User.delete == 0)
+            )
+            if keyword:
+                base = base.where(User.user_name.like(f'%{keyword}%'))
+
+            count_stmt = select(func.count()).select_from(base.subquery())
+            total = (await session.exec(count_stmt)).one()
+
+            stmt = base.offset((page - 1) * limit).limit(limit)
+            rows = (await session.exec(stmt)).all()
+            members = [
+                {'user_id': r[0], 'user_name': r[1],
+                 'is_group_admin': bool(r[2]), 'create_time': r[3]}
+                for r in rows
+            ]
+            return members, total
+
+    @classmethod
+    async def aget_plain_member_user_ids(cls, group_id: int) -> List[int]:
+        """当前组内普通成员 user_id 列表（不含 is_group_admin=1，不含已删除用户）。"""
+        from bisheng.user.domain.models.user import User
+        async with get_async_db_session() as session:
+            stmt = (
+                select(UserGroup.user_id)
+                .join(User, UserGroup.user_id == User.user_id)
+                .where(
+                    UserGroup.group_id == group_id,
+                    UserGroup.is_group_admin == False,  # noqa: E712
+                    User.delete == 0,
+                )
+            )
+            rows = (await session.exec(stmt)).all()
+            out: List[int] = []
+            for r in rows:
+                if isinstance(r, (tuple, list)):
+                    out.append(int(r[0]))
+                else:
+                    out.append(int(r))
+            return out
+
+    @classmethod
+    async def adelete_plain_members_batch(
+        cls, group_id: int, user_ids: List[int],
+    ) -> None:
+        """批量删除普通成员行（仅 is_group_admin=0）。"""
+        if not user_ids:
+            return
+        async with get_async_db_session() as session:
+            await session.exec(
+                delete(UserGroup).where(
+                    UserGroup.group_id == group_id,
+                    UserGroup.user_id.in_(user_ids),
+                    UserGroup.is_group_admin == False,  # noqa: E712
+                )
+            )
+            await session.commit()
+
+    @classmethod
+    async def aget_group_member_count(cls, group_id: int) -> int:
+        """Count non-admin members of a group (excluding deleted users)."""
+        from bisheng.user.domain.models.user import User
+        async with get_async_db_session() as session:
+            stmt = (
+                select(func.count(UserGroup.id))
+                .join(User, UserGroup.user_id == User.user_id)
+                .where(
+                    UserGroup.group_id == group_id,
+                    UserGroup.is_group_admin == 0,
+                    User.delete == 0,
+                )
+            )
+            result = await session.exec(stmt)
+            return result.one()
+
+    @classmethod
+    async def aadd_members_batch(cls, group_id: int, user_ids: List[int]) -> None:
+        """Batch add members (is_group_admin=0)."""
+        async with get_async_db_session() as session:
+            for uid in user_ids:
+                session.add(UserGroup(user_id=uid, group_id=group_id, is_group_admin=False))
+            await session.commit()
+
+    @classmethod
+    async def aremove_member(cls, group_id: int, user_id: int) -> None:
+        """Remove a single non-admin member."""
+        async with get_async_db_session() as session:
+            await session.exec(
+                delete(UserGroup).where(
+                    UserGroup.group_id == group_id,
+                    UserGroup.user_id == user_id,
+                    UserGroup.is_group_admin == 0,
+                )
+            )
+            await session.commit()
+
+    @classmethod
+    async def acheck_members_exist(
+        cls, group_id: int, user_ids: List[int],
+    ) -> List[int]:
+        """Return user_ids that already exist in the group (member or admin)."""
+        async with get_async_db_session() as session:
+            stmt = select(UserGroup.user_id).where(
+                UserGroup.group_id == group_id,
+                UserGroup.user_id.in_(user_ids),
+            )
+            result = await session.exec(stmt)
+            return result.all()
+
+    @classmethod
+    async def aget_plain_member_row(
+        cls, group_id: int, user_id: int,
+    ) -> Optional[UserGroup]:
+        """Return membership row if user is a non-admin member of the group."""
+        async with get_async_db_session() as session:
+            stmt = select(UserGroup).where(
+                UserGroup.group_id == group_id,
+                UserGroup.user_id == user_id,
+                UserGroup.is_group_admin == False,  # noqa: E712
+            )
+            result = await session.exec(stmt)
+            return result.first()
+
+    @classmethod
+    async def aget_group_admins_detail(cls, group_id: int) -> List[Dict]:
+        """Get group admins with user details."""
+        from bisheng.user.domain.models.user import User
+        async with get_async_db_session() as session:
+            stmt = (
+                select(UserGroup.user_id, User.user_name)
+                .join(User, UserGroup.user_id == User.user_id)
+                .where(UserGroup.group_id == group_id,
+                       UserGroup.is_group_admin == 1,
+                       User.delete == 0)
+            )
+            rows = (await session.exec(stmt)).all()
+            return [{'user_id': r[0], 'user_name': r[1]} for r in rows]
+
+    @classmethod
+    async def aset_admins_batch(
+        cls, group_id: int, add_ids: List[int], remove_ids: List[int],
+    ) -> None:
+        """Batch set/remove admins. Upgrades plain member rows to admin when needed."""
+        async with get_async_db_session() as session:
+            if remove_ids:
+                await session.exec(
+                    delete(UserGroup).where(
+                        UserGroup.group_id == group_id,
+                        UserGroup.user_id.in_(remove_ids),
+                        UserGroup.is_group_admin == 1,
+                    )
+                )
+            for uid in add_ids:
+                result = await session.exec(
+                    select(UserGroup).where(
+                        UserGroup.group_id == group_id,
+                        UserGroup.user_id == uid,
+                    )
+                )
+                row = result.first()
+                if row:
+                    if not row.is_group_admin:
+                        row.is_group_admin = True
+                        session.add(row)
+                else:
+                    session.add(UserGroup(
+                        user_id=uid, group_id=group_id, is_group_admin=True,
+                    ))
+            await session.commit()
+
+    @classmethod
+    async def aget_user_visible_group_ids(cls, user_id: int) -> List[int]:
+        """Get all group IDs where user is member or admin."""
+        async with get_async_db_session() as session:
+            stmt = select(UserGroup.group_id).where(UserGroup.user_id == user_id)
+            result = await session.exec(stmt)
+            return result.all()
+
     @classmethod
     async def aget_user_groups_batch(cls, user_ids: List[int]) -> dict:
         """
         Async: For a list of user_ids, return a map of user_id -> List[Group].
         Only includes non-admin group memberships (is_group_admin == 0).
         """
-        from bisheng.database.models.group import Group
+        from bisheng.database.models.group import Group, LEGACY_HIDDEN_USER_GROUP_NAMES
         if not user_ids:
             return {}
         statement = (
             select(UserGroup.user_id, Group)
             .join(Group, UserGroup.group_id == Group.id)
-            .where(UserGroup.user_id.in_(user_ids), UserGroup.is_group_admin == 0)
+            .where(
+                UserGroup.user_id.in_(user_ids),
+                UserGroup.is_group_admin == 0,
+                col(Group.group_name).notin_(LEGACY_HIDDEN_USER_GROUP_NAMES),
+            )
         )
         async with get_async_db_session() as session:
             rows = (await session.exec(statement)).all()

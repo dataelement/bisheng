@@ -15,7 +15,8 @@ import {
     getJoinedSpacesApi,
     getSpaceChildrenApi,
     getSpaceInfoApi,
-    subscribeSpaceApi
+    subscribeSpaceApi,
+    unsubscribeSpaceApi
 } from "~/api/knowledge";
 import { cn } from "~/utils";
 import { useLocalize, useMediaQuery } from "~/hooks";
@@ -259,10 +260,9 @@ export function KnowledgeSpacePreviewDrawer({
     };
 
     const getButtonConfig = () => {
-        // 仅把“订阅/申请”改成“加入”；“已订阅/申请中/已驳回”保持原文案
-        if (status === "joined") return { label: localize("com_knowledge.subscribed"), variant: "secondary" as const, disabled: true };
-        if (status === "pending") return { label: localize("com_knowledge.applying"), variant: "secondary" as const, disabled: true };
-        if (status === "rejected") return { label: localize("rejected"), variant: "secondary" as const, disabled: true };
+        if (status === "joined") return { label: localize("com_knowledge.exit_space_short"), variant: "secondary" as const, disabled: subscribing };
+        if (status === "pending") return { label: localize("com_knowledge.withdraw_application"), variant: "secondary" as const, disabled: subscribing };
+        if (status === "rejected") return { label: localize("com_knowledge.reapply"), variant: "outline" as const, disabled: subscribing };
         if (isPublic) return { label: localize("com_knowledge.join"), variant: "default" as const, disabled: subscribing };
         return { label: localize("com_knowledge.join"), variant: "outline" as const, disabled: subscribing };
     };
@@ -333,7 +333,7 @@ export function KnowledgeSpacePreviewDrawer({
                                     variant={btn.variant}
                                     className={`h-8 px-5 py-1 text-sm font-normal rounded-md flex-shrink-0 ${status === "joined"
                                         ? "bg-[#F2F3F5] text-[#86909C] border-[#E5E6EB]"
-                                        : status === "pending" || status === "rejected"
+                                        : status === "pending"
                                             ? "bg-[#F2F3F5] text-[#C9CDD4] border-[#E5E6EB]"
                                             : ""
                                         }`}

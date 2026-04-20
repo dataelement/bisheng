@@ -57,6 +57,9 @@ from bisheng.common.models.space_channel_member import (
 )
 from bisheng.common.repositories.interfaces.space_channel_member_repository import SpaceChannelMemberRepository
 from bisheng.core.external.bisheng_information_client.bisheng_information_manager import get_bisheng_information_client
+from bisheng.permission.domain.services.owner_service import OwnerService, _get_scm_role_to_fga
+from bisheng.permission.domain.services.permission_service import PermissionService
+from bisheng.permission.domain.schemas.permission_schema import AuthorizeGrantItem, AuthorizeRevokeItem
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.knowledge.domain.models.knowledge_file import FileSource
 from bisheng.message.domain.services.message_service import MessageService
@@ -143,6 +146,28 @@ class ChannelService:
             user_id=login_user.user_id,
             role=UserRoleEnum.CREATOR
         )
+
+        # F008: Write owner tuple to OpenFGA (INV-2)
+        try:
+            await OwnerService.write_owner_tuple(
+                login_user.user_id, 'channel', str(channel_model.id),
+            )
+        except Exception as e:
+            logger.warning('Failed to write owner tuple for channel %s: %s', channel_model.id, e)
+
+        # F017: fan out group-sharing for Root-created channels (D6).
+        # share_on_create owns the Root-only gate + FGA + is_shared flip +
+        # audit_log; mirror the flag on the in-memory object for the response.
+        from bisheng.tenant.domain.services.resource_share_service import ResourceShareService
+        shared_children = await ResourceShareService.share_on_create(
+            'channel', str(channel_model.id),
+            creator_tenant_id=login_user.tenant_id,
+            operator_id=login_user.user_id,
+            operator_tenant_id=login_user.tenant_id,
+            explicit=getattr(channel_data, 'share_to_children', None),
+        )
+        if shared_children:
+            channel_model.is_shared = True
 
         bisheng_information_client = await get_bisheng_information_client()
         # Subscribe to the information sources associated with the channel
@@ -491,8 +516,30 @@ class ChannelService:
         )
 
         # 6. Update role
+        old_role = target_membership.user_role
         target_membership.user_role = UserRoleEnum(req.role)
         await self.space_channel_member_repository.update(target_membership)
+
+        # F008: Sync FGA tuples (revoke old relation + grant new)
+        new_role = UserRoleEnum(req.role)
+        old_fga = _get_scm_role_to_fga().get(old_role)
+        new_fga = _get_scm_role_to_fga().get(new_role)
+        if old_fga and new_fga and old_fga != new_fga:
+            try:
+                await PermissionService.authorize(
+                    object_type='channel', object_id=req.channel_id,
+                    revokes=[AuthorizeRevokeItem(
+                        subject_type='user', subject_id=req.user_id,
+                        relation=old_fga, include_children=False,
+                    )],
+                    grants=[AuthorizeGrantItem(
+                        subject_type='user', subject_id=req.user_id,
+                        relation=new_fga, include_children=False,
+                    )],
+                )
+            except Exception as e:
+                logger.warning('Failed to sync FGA tuples for channel %s member %s: %s',
+                               req.channel_id, req.user_id, e)
 
         if should_notify_admin_assignment and self.message_service:
             await self._send_admin_assignment_notification(
@@ -592,6 +639,21 @@ class ChannelService:
 
         # 6. Hard delete: remove from database
         await self.space_channel_member_repository.delete(target_membership.id)
+
+        # F008: Delete FGA tuple for the removed member
+        removed_fga = _get_scm_role_to_fga().get(target_membership.user_role)
+        if removed_fga:
+            try:
+                await PermissionService.authorize(
+                    object_type='channel', object_id=req.channel_id,
+                    revokes=[AuthorizeRevokeItem(
+                        subject_type='user', subject_id=req.user_id,
+                        relation=removed_fga, include_children=False,
+                    )],
+                )
+            except Exception as e:
+                logger.warning('Failed to delete FGA tuple for channel %s member %s: %s',
+                               req.channel_id, req.user_id, e)
 
         return True
 
@@ -750,6 +812,20 @@ class ChannelService:
                 status=status
             )
 
+        # F008: Write FGA viewer tuple for directly activated members (PUBLIC channels)
+        if status == MembershipStatusEnum.ACTIVE:
+            try:
+                await PermissionService.authorize(
+                    object_type='channel', object_id=req.channel_id,
+                    grants=[AuthorizeGrantItem(
+                        subject_type='user', subject_id=login_user.user_id,
+                        relation='viewer', include_children=False,
+                    )],
+                )
+            except Exception as e:
+                logger.warning('Failed to write FGA viewer tuple for channel %s subscriber %s: %s',
+                               req.channel_id, login_user.user_id, e)
+
         # 6. Send approval notification for review channels
         if (
                 channel.visibility == ChannelVisibilityEnum.REVIEW
@@ -850,6 +926,13 @@ class ChannelService:
                 # When changing to PRIVATE, remove all non-creator members
                 if new_visibility == ChannelVisibilityEnum.PRIVATE:
                     await self.space_channel_member_repository.remove_non_creator_members(channel_id)
+                    # F008: Clear all FGA tuples and re-write owner only
+                    try:
+                        await OwnerService.delete_resource_tuples('channel', channel_id)
+                        await OwnerService.write_owner_tuple(login_user.user_id, 'channel', channel_id)
+                    except Exception as e:
+                        logger.warning('Failed to sync FGA tuples after PRIVATE switch for channel %s: %s',
+                                       channel_id, e)
                 # When changing from REVIEW to PUBLIC, activate pending members and approve their messages
                 elif old_visibility == ChannelVisibilityEnum.REVIEW and new_visibility == ChannelVisibilityEnum.PUBLIC:
                     activated_count = await self.space_channel_member_repository.activate_pending_members(channel_id)
@@ -858,6 +941,24 @@ class ChannelService:
                             "Activated %d pending members for channel_id=%s after visibility change from REVIEW to PUBLIC",
                             activated_count, channel_id
                         )
+                        # F008: Write FGA viewer tuples for newly activated members
+                        try:
+                            active_members = await self.space_channel_member_repository.find_all(
+                                business_id=channel_id, business_type=BusinessTypeEnum.CHANNEL,
+                            )
+                            for m in active_members:
+                                if m.status == MembershipStatusEnum.ACTIVE and m.user_role == UserRoleEnum.MEMBER:
+                                    fga_rel = _get_scm_role_to_fga().get(m.user_role, 'viewer')
+                                    await PermissionService.authorize(
+                                        object_type='channel', object_id=channel_id,
+                                        grants=[AuthorizeGrantItem(
+                                            subject_type='user', subject_id=m.user_id,
+                                            relation=fga_rel, include_children=False,
+                                        )],
+                                    )
+                        except Exception as e:
+                            logger.warning('Failed to write FGA tuples for activated members channel %s: %s',
+                                           channel_id, e)
                     await self.space_channel_member_repository.remove_rejected_members(channel_id)
                     if self.message_service:
                         await self.message_service.batch_approve_channel_subscription_messages(
@@ -1182,6 +1283,12 @@ class ChannelService:
         for member in members:
             await self.space_channel_member_repository.delete(member.id)
 
+        # F008: Delete all FGA tuples for this channel
+        try:
+            await OwnerService.delete_resource_tuples('channel', channel_id)
+        except Exception as e:
+            logger.warning('Failed to delete FGA tuples for channel %s: %s', channel_id, e)
+
         # 4. Delete channel
         await self.channel_repository.delete(channel_id)
 
@@ -1215,6 +1322,20 @@ class ChannelService:
 
         # 2. Remove relationship
         await self.space_channel_member_repository.delete(current_membership.id)
+
+        # F008: Delete FGA tuple for the unsubscribed user
+        removed_fga = _get_scm_role_to_fga().get(current_membership.user_role, 'viewer')
+        try:
+            await PermissionService.authorize(
+                object_type='channel', object_id=channel_id,
+                revokes=[AuthorizeRevokeItem(
+                    subject_type='user', subject_id=login_user.user_id,
+                    relation=removed_fga, include_children=False,
+                )],
+            )
+        except Exception as e:
+            logger.warning('Failed to delete FGA tuple for channel %s unsubscribe %s: %s',
+                           channel_id, login_user.user_id, e)
 
         return True
 

@@ -63,6 +63,11 @@ export function FileCard({
     const isCreating = !!file.isCreating;
     const [hovered, setHovered] = useState(false);
     const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+    const failureMessage = (
+        file.status === FileStatus.FAILED || file.status === FileStatus.TIMEOUT
+    ) && file.errorMessage?.trim()
+        ? file.errorMessage.trim()
+        : null;
 
     const isAdmin = userRole === SpaceRole.CREATOR || userRole === SpaceRole.ADMIN;
     const isFolder = file.type === FileType.FOLDER;
@@ -355,6 +360,14 @@ export function FileCard({
                     <div className="flex items-center text-sm font-medium min-w-0">
                         {getStatusText()}
                     </div>
+                    {failureMessage && (
+                        <p
+                            className="mt-1 text-xs leading-[16px] text-[#f53f3f] line-clamp-2 break-words"
+                            title={failureMessage}
+                        >
+                            {localize("com_knowledge.failure_reason")}: {failureMessage}
+                        </p>
+                    )}
 
                     {/* 底部信息 (标签、数量和时间) */}
                     <div className="flex items-center justify-between mt-1 min-w-0 gap-2">

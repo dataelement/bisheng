@@ -45,6 +45,8 @@ const Report = lazy(() => import("@/pages/Report"));
 const SystemPage = lazy(() => import("@/pages/SystemPage"));
 const ResoucePage = lazy(() => import("@/pages/resoucePage"));
 const Dashboard = lazy(() => import("@/pages/Dashboard"));
+const TenantPage = lazy(() => import("@/pages/TenantPage"));
+const TenantSelect = lazy(() => import("@/pages/LoginPage/TenantSelect"));
 
 const baseConfig = {
   //@ts-ignore
@@ -76,6 +78,8 @@ const privateRouter = [
     element: <MainLayout />,
     errorElement: <RouteErrorBoundary />,
     children: [
+      // 开发环境登录后曾跳转 /admin，但业务路由无该 path，会落入 * → 404；统一进管理端后再由 userContext 纠偏
+      { path: "admin", element: <Navigate to="/label" replace /> },
       // { path: "", element: <SkillChatPage />, },
       { path: "filelib", element: <KnowledgePage />, permission: 'knowledge', },
       { path: "filelib/:id", element: <FilesPage />, permission: 'knowledge', },
@@ -91,7 +95,7 @@ const privateRouter = [
       { path: "build", element: <Navigate to="apps" replace /> },
       { path: "build/skill", element: <L2Edit />, permission: 'build', },
       { path: "build/skill/:id/:vid", element: <L2Edit />, permission: 'build', },
-      { path: "build/temps/:type", element: <Templates />, permission: 'build', },
+      { path: "build/temps/:type", element: <Templates />, permission: 'create_app', },
       { path: "model/management", element: <Management /> },
       { path: "model/finetune", element: <Finetune /> },
       { path: "model", element: <Navigate to="management" replace /> },
@@ -106,6 +110,8 @@ const privateRouter = [
       { path: "label/:id", element: <TaskApps /> },
       { path: "label/chat/:id/:fid/:cid/:type", element: <TaskAppChats /> },
       { path: "dashboard", element: <Dashboard /> },
+      { path: "tenant", element: <TenantPage />, permission: 'sys' },
+      { path: "department", element: <Navigate to="/sys" replace /> },
     ],
   },
   { path: "dashboard/:id", element: <EditorPage />, errorElement: <RouteErrorBoundary />, permission: 'board', },
@@ -151,6 +157,14 @@ const privateRouter = [
   { path: "*", element: <Navigate to="/404" replace /> }
 ]
 
+/** 与角色菜单 third_id 对齐：/sys 路由使用 permission `sys`，角色侧存为 system_config */
+function hasRoutePermission(permissions: string[], key: string) {
+  if (key === "sys") {
+    return permissions.includes("sys") || permissions.includes("system_config")
+  }
+  return permissions.includes(key)
+}
+
 export const getPrivateRouter = (permissions) => {
   const filterMenuItem = (_privateRouter) => {
     const result = _privateRouter.reduce((res, cur) => {
@@ -160,7 +174,7 @@ export const getPrivateRouter = (permissions) => {
       }
 
       const { permission, ...other } = cur
-      if (permission && !permissions.includes(permission)) {
+      if (permission && !hasRoutePermission(permissions, permission)) {
         return res
       }
 
@@ -187,6 +201,7 @@ export const publicRouter = createBrowserRouter([
   { path: "/chat/flow/:id/", element: <RedirectToClient />, errorElement: <RouteErrorBoundary /> },
   { path: "/chat/assistant/:id/", element: <RedirectToClient />, errorElement: <RouteErrorBoundary /> },
   { path: "/resouce/:cid/:mid", element: <ResoucePage />, errorElement: <RouteErrorBoundary /> },
+  { path: "/tenant-select", element: <TenantSelect />, errorElement: <RouteErrorBoundary /> },
   { path: "/403", element: <Page403 /> },
   { path: "*", element: <LoginPage /> }
 ],

@@ -580,6 +580,12 @@ function FileRow({
     const rowBg = isSelected
         ? "bg-[#E6EDFC] transition-colors duration-150 group-hover:bg-[#F8F8F8]"
         : "bg-white transition-colors duration-150 group-hover:bg-[#f7f7f7]";
+    const rowBg = isSelected ? "bg-[#E6EDFC] group-hover:bg-[#F8F8F8]" : "bg-white group-hover:bg-[#f7f7f7]";
+    const failureMessage = (
+        file.status === FileStatus.FAILED || file.status === FileStatus.TIMEOUT
+    ) && file.errorMessage?.trim()
+        ? file.errorMessage.trim()
+        : null;
 
     const {
         isRenaming,
@@ -759,10 +765,18 @@ function FileRow({
                                 onPreview?.();
                             }}
                         >
-                            {file.name}
+                            <span className="block truncate">{file.name}</span>
                         </span>
                     )}
                 </div>
+                {failureMessage && !isRenaming && (
+                    <p
+                        className="mt-1 truncate text-xs leading-5 text-[#f53f3f]"
+                        title={failureMessage}
+                    >
+                        {localize("com_knowledge.failure_reason")}: {failureMessage}
+                    </p>
+                )}
                 {/* 固定列右侧阴影 */}
                 <StickyColumnShadow show={showLeftShadow} />
             </TableCell>

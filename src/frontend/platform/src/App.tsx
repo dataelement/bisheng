@@ -170,11 +170,16 @@ export default function App() {
   const noAuthPages = ['chat', 'resouce']
   const path = location.pathname.replace(__APP_ENV__.BASE_URL, '').split('/')?.[1] || ''
 
-  // 动态路由根据权限
+  // 动态路由根据权限（部门管理员与超管类似需能访问「创建应用」等全量菜单路由；若后端 web_menu 未及时含 create_app，此处兜底合并）
   const router = useMemo(() => {
-    // return getAdminRouter()
-    if (user && ['admin', 'group_admin'].includes(user.role)) return getAdminRouter()
-    return user?.user_id ? getPrivateRouter(user.web_menu) : null
+    if (user && user.role === 'admin') return getAdminRouter()
+    if (!user?.user_id) return null
+    const wm = user.web_menu || []
+    const perms =
+      user.is_department_admin && !wm.includes('create_app')
+        ? [...wm, 'create_app']
+        : wm
+    return getPrivateRouter(perms)
   }, [user])
 
   // url error toast

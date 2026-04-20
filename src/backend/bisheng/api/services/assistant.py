@@ -22,17 +22,15 @@ from bisheng.core.logger import trace_id_var
 from bisheng.database.models.assistant import (Assistant, AssistantDao, AssistantLinkDao,
                                                AssistantStatus)
 from bisheng.database.models.flow import Flow, FlowDao, FlowType
-from bisheng.database.models.group_resource import GroupResourceDao, GroupResource, ResourceTypeEnum
-from bisheng.database.models.role_access import AccessType, RoleAccessDao
+from bisheng.database.models.group_resource import ResourceTypeEnum
+from bisheng.database.models.role_access import AccessType
 from bisheng.database.models.session import MessageSessionDao
 from bisheng.database.models.tag import TagDao
-from bisheng.database.models.user_group import UserGroupDao
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 from bisheng.llm.domain.services import LLMService
 from bisheng.share_link.domain.models.share_link import ShareLink
 from bisheng.tool.domain.models.gpts_tools import GptsToolsDao, GptsTools
 from bisheng.user.domain.models.user import UserDao
-from bisheng.user.domain.models.user_role import UserRoleDao
 from bisheng.utils import get_request_ip
 
 
@@ -61,35 +59,22 @@ class AssistantService(BaseService, AssistantUtils):
         if user.is_admin():
             res, total = AssistantDao.get_all_assistants(name, page, limit, assistant_ids, status)
         else:
-            # Permission management visible assistant information
-            assistant_ids_extra = []
-            user_role = UserRoleDao.get_user_roles(user.user_id)
-            if user_role:
-                role_ids = [role.role_id for role in user_role]
-                role_access = RoleAccessDao.get_role_access(role_ids, AccessType.ASSISTANT_READ)
-                if role_access:
-                    assistant_ids_extra = [access.third_id for access in role_access]
+            # F008: Use ReBAC to filter accessible assistants (AC-04)
+            assistant_ids_extra = user.get_user_access_resource_ids([AccessType.ASSISTANT_READ])
             res, total = AssistantDao.get_assistants(user.user_id, name, assistant_ids_extra, status, page, limit,
                                                      assistant_ids)
 
         assistant_ids = [one.id for one in res]
-        # Query groups to which the assistant belongs
-        assistant_groups = GroupResourceDao.get_resources_group(ResourceTypeEnum.ASSISTANT, assistant_ids)
-        assistant_group_dict = {}
-        for one in assistant_groups:
-            if one.third_id not in assistant_group_dict:
-                assistant_group_dict[one.third_id] = []
-            assistant_group_dict[one.third_id].append(one.group_id)
 
         # Get assistant-associatedtag
         flow_tags = TagDao.get_tags_by_resource(ResourceTypeEnum.ASSISTANT, assistant_ids)
 
+        # F008: removed group_ids (AC-08)
         for one in res:
             one.logo = cls.get_logo_share_link(one.logo)
             simple_assistant = cls.return_simple_assistant_info(one)
             if one.user_id == user.user_id or user.is_admin():
                 simple_assistant.write = True
-            simple_assistant.group_ids = assistant_group_dict.get(one.id, [])
             simple_assistant.tags = flow_tags.get(one.id, [])
             data.append(simple_assistant)
         return data, total
@@ -144,8 +129,13 @@ class AssistantService(BaseService, AssistantUtils):
 
     # Create Assistant
     @classmethod
-    async def create_assistant(cls, request: Request, login_user: UserPayload, assistant: Assistant) \
-            -> AssistantInfo:
+    async def create_assistant(
+        cls, request: Request, login_user: UserPayload, assistant: Assistant,
+        share_to_children: Optional[bool] = None,
+    ) -> AssistantInfo:
+        """F017: ``share_to_children`` controls Root→Child sharing of the new
+        assistant. ``None`` → fall back to ``Root.share_default_to_children``.
+        Child creators never share (parameter ignored)."""
 
         # Check if there are any duplicate names under
         if cls.judge_name_repeat(assistant.name, assistant.user_id):
@@ -176,6 +166,21 @@ class AssistantService(BaseService, AssistantUtils):
                                           ))
 
         cls.create_assistant_hook(request, assistant, login_user)
+
+        # F017: fan out group-sharing for Root-created assistants (D6).
+        # share_on_create owns the Root-only gate + FGA + is_shared flip +
+        # audit_log; we reload assistant.is_shared from the orchestrator flag.
+        from bisheng.tenant.domain.services.resource_share_service import ResourceShareService
+        shared_children = await ResourceShareService.share_on_create(
+            'assistant', str(assistant.id),
+            creator_tenant_id=login_user.tenant_id,
+            operator_id=login_user.user_id,
+            operator_tenant_id=login_user.tenant_id,
+            explicit=share_to_children,
+        )
+        if shared_children:
+            assistant.is_shared = True
+
         return AssistantInfo(**assistant.model_dump(),
                              tool_list=[],
                              flow_list=[],
@@ -186,17 +191,9 @@ class AssistantService(BaseService, AssistantUtils):
         """
         After successful creation of the assistanthook, perform some other business logic
         """
-        # Query the user group the user belongs to under
-        user_group = UserGroupDao.get_user_group(user_payload.user_id)
-        if user_group:
-            # Batch Insert Assistant Resources into Correlation Table
-            batch_resource = []
-            for one in user_group:
-                batch_resource.append(GroupResource(
-                    group_id=one.group_id,
-                    third_id=assistant.id,
-                    type=ResourceTypeEnum.ASSISTANT.value))
-            GroupResourceDao.insert_group_batch(batch_resource)
+        # F008: Write owner tuple to OpenFGA (INV-2)
+        from bisheng.permission.domain.services.owner_service import OwnerService
+        OwnerService.write_owner_tuple_sync(user_payload.user_id, 'assistant', str(assistant.id))
 
         # Write Audit Log
         AuditLogService.create_build_assistant(user_payload, get_request_ip(request), assistant.id)
@@ -230,8 +227,9 @@ class AssistantService(BaseService, AssistantUtils):
         # Write Audit Log
         AuditLogService.delete_build_assistant(login_user, get_request_ip(request), assistant.id)
 
-        # Clean up associations with user groups
-        GroupResourceDao.delete_group_resource_by_third_id(assistant.id, ResourceTypeEnum.ASSISTANT)
+        # F008: Clean up all FGA tuples (AC-03)
+        from bisheng.permission.domain.services.owner_service import OwnerService
+        OwnerService.delete_resource_tuples_sync('assistant', str(assistant.id))
 
         # Update session information
         MessageSessionDao.update_session_info_by_flow(assistant.name, assistant.desc, assistant.logo,

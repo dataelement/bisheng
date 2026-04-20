@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional, List
 
-from sqlalchemy import JSON
+from sqlalchemy import Integer, JSON
 from sqlmodel import Field, Column, DateTime, text, select, func, update, col
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -25,6 +25,15 @@ class MessageSessionBase(SQLModelSerializable):
     flow_description: Optional[str] = Field(default=None, description='App Description')
     flow_logo: Optional[str] = Field(default=None, description='Applicationslogo')
     user_id: int = Field(index=True, description='User who created the sessionID')
+    # F017 INV-T13: session tenant_id = user leaf (not resource tenant).
+    # DB column + idx_message_session_tenant_id exist since v2.5.0/F001.
+    tenant_id: Optional[int] = Field(
+        default=None,
+        sa_column=Column(
+            Integer, nullable=False, server_default=text('1'), index=True,
+            comment='F017: user leaf tenant for INV-T13 derived-data attribution',
+        ),
+    )
     group_ids: Optional[List[int]] = Field(default=None, sa_column=Column(JSON),
                                            description="Belongs to a user groupIDVertical")
     is_delete: Optional[bool] = Field(default=False,

@@ -9,6 +9,12 @@ from cryptography.fernet import Fernet
 from loguru import logger
 from pydantic import ConfigDict, BaseModel, Field, field_validator, model_validator
 
+from bisheng.core.config.multi_tenant import MultiTenantConf
+from bisheng.core.config.openfga import OpenFGAConf
+from bisheng.core.config.reconcile import ReconcileConf
+from bisheng.core.config.sso_sync import SSOSyncConf
+from bisheng.core.config.user_tenant_sync import UserTenantSyncConf
+
 secret_key = 'TI31VYJ-ldAq-FXo5QNPKV_lqGTFfp-MIdbK2Hm5F1E='
 
 
@@ -143,6 +149,8 @@ class CeleryConf(BaseModel):
             self.task_routers = {
                 "bisheng.worker.knowledge.*": {"queue": "knowledge_celery"},  # Knowledge Base Related Tasks
                 "bisheng.worker.workflow.*": {"queue": "workflow_celery"},  # Workflow Execution Related Tasks
+                "bisheng.worker.org_sync.*": {"queue": "knowledge_celery"},  # Org Sync Tasks (low frequency, reuse knowledge queue)
+                "bisheng.worker.tenant_reconcile.*": {"queue": "knowledge_celery"},  # v2.5.1 F012 — 6h catch-up, reuse knowledge_celery
             }
         if 'telemetry_mid_user_increment' not in self.beat_schedule:
             self.beat_schedule['telemetry_mid_user_increment'] = {
@@ -168,6 +176,41 @@ class CeleryConf(BaseModel):
             self.beat_schedule['sync_information_article'] = {
                 'task': 'bisheng.worker.information.article.sync_information_article',
                 'schedule': crontab.from_string('30 5 * * *'),  # 05:30 exec every day
+            }
+        if 'retry_failed_tuples' not in self.beat_schedule:
+            self.beat_schedule['retry_failed_tuples'] = {
+                'task': 'bisheng.worker.permission.retry_failed_tuples.retry_failed_tuples',
+                'schedule': 30.0,  # Every 30 seconds
+            }
+        if 'check_org_sync_schedules' not in self.beat_schedule:
+            self.beat_schedule['check_org_sync_schedules'] = {
+                'task': 'bisheng.worker.org_sync.tasks.check_org_sync_schedules',
+                'schedule': 60.0,  # Every 60 seconds
+            }
+        # v2.5.1 F012: 6h user-leaf-tenant catch-up reconcile.
+        if 'reconcile_user_tenant_assignments' not in self.beat_schedule:
+            self.beat_schedule['reconcile_user_tenant_assignments'] = {
+                'task': 'bisheng.worker.tenant_reconcile.tasks.reconcile_user_tenant_assignments',
+                'schedule': crontab.from_string('0 */6 * * *'),  # every 6 hours
+            }
+        # v2.5.1 F015: 6h forced reconcile of every OrgSyncConfig +
+        # weekly/daily ts_conflict reporting. Cron strings are sourced
+        # from ``settings.reconcile`` so operators can override via env
+        # without touching the code path.
+        if 'reconcile_all_organizations' not in self.beat_schedule:
+            self.beat_schedule['reconcile_all_organizations'] = {
+                'task': 'bisheng.worker.org_sync.reconcile_tasks.reconcile_all_organizations',
+                'schedule': crontab.from_string('0 */6 * * *'),  # every 6h
+            }
+        if 'report_ts_conflicts_weekly' not in self.beat_schedule:
+            self.beat_schedule['report_ts_conflicts_weekly'] = {
+                'task': 'bisheng.worker.org_sync.reconcile_tasks.report_ts_conflicts_weekly',
+                'schedule': crontab.from_string('0 9 * * MON'),  # Mon 09:00
+            }
+        if 'report_ts_conflicts_daily_escalation' not in self.beat_schedule:
+            self.beat_schedule['report_ts_conflicts_daily_escalation'] = {
+                'task': 'bisheng.worker.org_sync.reconcile_tasks.report_ts_conflicts_daily_escalation',
+                'schedule': crontab.from_string('0 9 * * *'),  # every 09:00
             }
 
         # convert str to crontab
@@ -333,6 +376,11 @@ class Settings(BaseModel):
 
     information_conf: IntelligenceCenterConf = IntelligenceCenterConf()
     mcp: McpConf = McpConf()
+    multi_tenant: MultiTenantConf = MultiTenantConf()
+    openfga: OpenFGAConf = OpenFGAConf()
+    user_tenant_sync: UserTenantSyncConf = UserTenantSyncConf()
+    sso_sync: SSOSyncConf = SSOSyncConf()
+    reconcile: ReconcileConf = ReconcileConf()
 
     @field_validator('database_url')
     @classmethod

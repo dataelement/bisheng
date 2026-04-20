@@ -1,6 +1,8 @@
 import TipPng from "@/assets/tip.jpg";
 import AppAvator from "@/components/bs-comp/cardComponent/avatar";
 import { DelIcon, LoadIcon } from "@/components/bs-icons";
+import { usePermissionLevels } from "@/components/bs-comp/permission/usePermissionLevels";
+import { RelationLevel } from "@/components/bs-comp/permission/types";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Badge } from "@/components/bs-ui/badge";
 import { Button } from "@/components/bs-ui/button";
@@ -39,6 +41,11 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
     const navigate = useNavigate()
     const { state } = useLocation();
     const loca = state?.flow; // 获取传递的 flow 数据
+    const flowId = flow?.id ? String(flow.id) : '';
+    const { levels: permLevels } = usePermissionLevels('workflow', flowId ? [flowId] : []);
+    const level = flowId ? permLevels[flowId] : undefined;
+    const hasLevel = (current: RelationLevel | undefined, allowed: RelationLevel[]) => current ? allowed.includes(current) : false;
+    const canEdit = hasLevel(level, ['owner', 'manager', 'editor']);
 
     // console.log('flow :>> ', flow);
 
@@ -283,6 +290,7 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
                                 size="icon"
                                 variant="ghost"
                                 className="size-6"
+                                disabled={!canEdit}
                                 onClick={() => updateAppModalRef.current?.edit(AppType.FLOW, flow)}>
                                 <PencilLineIcon className="size-4 text-gray-500"></PencilLineIcon>
                             </Button>
@@ -299,14 +307,14 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
                 >
                     {t('processOrchestration')}
                 </Button>
-                <Button variant="secondary" className={`${tabType === 'api' ? 'bg-[#fff] dark:bg-gray-950 hover:bg-[#fff]/70 text-primary h-8"' : ''} h-8`}
+                {canEdit && <Button variant="secondary" className={`${tabType === 'api' ? 'bg-[#fff] dark:bg-gray-950 hover:bg-[#fff]/70 text-primary h-8"' : ''} h-8`}
                     onClick={() => {
                         setTabType('api');
                         onTabChange('api');
                         testRef.current.close()
                     }}>
                     {t('externalRelease')}
-                </Button>
+                </Button>}
             </div>
             {/* Right Section with Options */}
             <div className="flex items-center gap-3">
@@ -315,7 +323,7 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
                     <Play className="size-3.5 mr-1" />
                     {t('run')}
                 </Button>
-                <Button variant="outline" size="sm" className={`${!dark && 'bg-[#fff]'} h-8 px-6`} onClick={async () => {
+                <Button variant="outline" size="sm" className={`${!dark && 'bg-[#fff]'} h-8 px-6`} disabled={!canEdit} onClick={async () => {
                     window.flow_version = Number(version.id)
                     await handleSaveClick()
                     forceUpdateFlow({ ...flow }) // 更新flow状态, 用于保存时对比差异
@@ -325,6 +333,7 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
                 {
                     version && <ActionButton
                         size="sm"
+                        disabled={!canEdit}
                         className={`px-6 flex gap-2 ${!dark && 'bg-[#fff]'}`}
                         iconClassName={`${!dark && 'bg-[#fff]'}`}
                         align="end"
@@ -380,14 +389,14 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
                         )}
                     >{t('skills.saveVersion', { ns: 'bs' })}</ActionButton>
                 }
-                {isOnlineVersion ? <Button size="sm" className={`h-8 px-6`} onClick={handleOfflineClick}>
+                {isOnlineVersion ? <Button size="sm" className={`h-8 px-6`} disabled={!canEdit} onClick={handleOfflineClick}>
                     {t('takeOffline')}
-                </Button> : <Button size="sm" className={`h-8 px-6`} onClick={handleOnlineClick}>
+                </Button> : <Button size="sm" className={`h-8 px-6`} disabled={!canEdit} onClick={handleOnlineClick}>
                     {t('goOnline')}
                 </Button>}
-                <Popover open={open} onOpenChange={setOpen}>
+                <Popover open={open && canEdit} onOpenChange={(next) => canEdit && setOpen(next)}>
                     <PopoverTrigger asChild >
-                        <Button size="icon" variant="outline" className={`${!dark && 'bg-[#fff]'} size-8`}>
+                        <Button size="icon" variant="outline" disabled={!canEdit} className={`${!dark && 'bg-[#fff]'} size-8`}>
                             <EllipsisVertical size={16} />
                         </Button>
                     </PopoverTrigger>

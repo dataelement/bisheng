@@ -11,7 +11,7 @@ export default function HeaderMenu({ }) {
     const { user } = useContext(userContext);
     // 系统管理员(超管、组超管)
     const isAdmin = useMemo(() => {
-        return ['admin', 'group_admin'].includes(user.role)
+        return user.role === 'admin'
     }, [user])
 
     if (['/build/apps', '/build/tools', '/build/client'].includes(location.pathname.replace(__APP_ENV__.BASE_URL, ''))) {

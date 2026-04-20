@@ -24,6 +24,7 @@ from bisheng.database.models.flow import Flow, FlowCreate, FlowDao, FlowRead, Fl
     FlowStatus
 from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.role_access import AccessType
+from bisheng.role.domain.services.quota_service import require_quota, QuotaResourceType
 from bisheng.share_link.api.dependencies import header_share_token_parser
 from bisheng.share_link.domain.models.share_link import ShareLink
 from bisheng.utils import generate_uuid
@@ -159,6 +160,7 @@ async def workflow_ws(*,
 
 
 @router.post('/create', status_code=201)
+@require_quota(QuotaResourceType.WORKFLOW)
 def create_flow(*, request: Request, flow: FlowCreate, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """Create a new flow."""
     # Determine if the user repeats the skill name
@@ -168,6 +170,8 @@ def create_flow(*, request: Request, flow: FlowCreate, login_user: UserPayload =
                                    Flow.user_id == login_user.user_id)).first():
             raise WorkflowNameExistsError.http_exception()
     flow.user_id = login_user.user_id
+    # F017: capture share intent before model_validate drops unknown fields
+    share_to_children = flow.share_to_children
     db_flow = Flow.model_validate(flow)
     db_flow.create_time = None
     db_flow.update_time = None
@@ -179,6 +183,20 @@ def create_flow(*, request: Request, flow: FlowCreate, login_user: UserPayload =
     ret = FlowRead.model_validate(db_flow)
     ret.version_id = current_version.id
     FlowService.create_flow_hook(request, login_user, db_flow)
+
+    # F017: fan out group-sharing for Root-created workflows (D6).
+    # share_on_create_sync owns the Root-only gate + FGA + is_shared flip
+    # + audit_log; we just need to reflect is_shared in the response.
+    from bisheng.tenant.domain.services.resource_share_service import ResourceShareService
+    shared_children = ResourceShareService.share_on_create_sync(
+        'workflow', str(db_flow.id),
+        creator_tenant_id=login_user.tenant_id,
+        operator_id=login_user.user_id,
+        operator_tenant_id=login_user.tenant_id,
+        explicit=share_to_children,
+    )
+    if shared_children:
+        ret.is_shared = True
     return resp_200(data=ret)
 
 
@@ -295,20 +313,19 @@ async def update_flow_status(request: Request, login_user: UserPayload = Depends
 
 
 @router.get('/list', status_code=200)
-def read_flows(*,
-               login_user: UserPayload = Depends(UserPayload.get_login_user),
-               name: str = Query(default=None,
-                                 description='accordingnameFind databases with fuzzy searches for descriptions'),
-               tag_id: int = Query(default=None, description='labelID'),
-               flow_type: int = Query(default=None, description='Type 5 assistant 10 workflow'),
-               page_size: int = Query(default=10, description='Items per page'),
-               page_num: int = Query(default=1, description='Page'),
-               status: int = None,
-               managed: bool = Query(default=False,
-                                     description='Whether to query the list of apps with administrative permissions')):
+async def read_flows(*,
+                     login_user: UserPayload = Depends(UserPayload.get_login_user),
+                     name: str = Query(default=None, description='accordingnameFind databases with fuzzy searches for descriptions'),
+                     tag_id: int = Query(default=None, description='labelID'),
+                     flow_type: int = Query(default=None, description='Type 5 assistant 10 workflow'),
+                     page_size: int = Query(default=10, description='Items per page'),
+                     page_num: int = Query(default=1, description='Page'),
+                     status: int = None,
+                     managed: bool = Query(default=False, description='Whether to query the list of apps with administrative permissions')):
     """Read all flows."""
-    data, total = WorkFlowService.get_all_flows(login_user, name, status, tag_id, flow_type, page_num, page_size,
-                                                managed)
+    data, total = await WorkFlowService.get_all_flows(
+        login_user, name, status, tag_id, flow_type, page_num, page_size, managed,
+    )
     return resp_200(data={
         'data': data,
         'total': total

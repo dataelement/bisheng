@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import re
 from abc import ABC
 from datetime import timedelta
 from io import BytesIO
@@ -10,11 +11,51 @@ from typing import BinaryIO, Union, Optional
 import minio
 from loguru import logger
 from minio.commonconfig import Filter
+from minio.error import S3Error
 from minio.lifecycleconfig import LifecycleConfig, Rule, Expiration
 from urllib3 import BaseHTTPResponse
 
+from bisheng.common.services.config_service import settings as _bisheng_settings
 from bisheng.core.config.settings import MinioConf
+from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.core.storage.base import BaseStorage
+
+# F017 AC-06: prefix pattern installed by multi_tenant layout —
+#   Root       → no prefix (e.g. ``knowledge/<file>``)
+#   Child N    → ``tenant_{code}/knowledge/<file>``
+# The regex is deliberately permissive (tenant_* then a slash) because
+# Tenant codes are deployment-specific (e.g. 'subA', 'legal-co', '01').
+_TENANT_PREFIX_RE = re.compile(r'^tenant_[^/]+/')
+
+
+def _is_no_such_key_error(exc: Exception) -> bool:
+    """True only for the minio-py S3 NoSuchKey response (S3Error.code)."""
+    return isinstance(exc, S3Error) and getattr(exc, 'code', None) == 'NoSuchKey'
+
+
+def _translate_to_root_prefix(object_name: str) -> Optional[str]:
+    """Strip a leading ``tenant_{code}/`` prefix so the key falls back to
+    the Root layout. Returns None when there's no tenant prefix to remove
+    (i.e. caller is already reading a Root-shaped path and fallback would
+    be a no-op).
+    """
+    if not object_name:
+        return None
+    new_name, replaced = _TENANT_PREFIX_RE.subn('', object_name, count=1)
+    if replaced == 0 or new_name == object_name:
+        return None
+    return new_name
+
+
+def _should_fallback_to_root() -> bool:
+    """F017 AC-06: fall back to Root prefix only when
+      1. multi_tenant is enabled in this deployment;
+      2. the caller's leaf tenant is a Child (tenant_id != 1 and not None).
+    """
+    if not getattr(getattr(_bisheng_settings, 'multi_tenant', None), 'enabled', False):
+        return False
+    tid = get_current_tenant_id()
+    return tid is not None and tid != 1
 
 
 class MinioStorage(BaseStorage, ABC):
@@ -204,7 +245,31 @@ class MinioStorage(BaseStorage, ABC):
         if object_name is None:
             raise ValueError("get_object_sync: object_name must be provided")
 
-        response = self.minio_client_sync.get_object(bucket_name, object_name)
+        try:
+            response = self.minio_client_sync.get_object(bucket_name, object_name)
+        except Exception as e:
+            # F017 AC-06: Child user reading a Root-shared file may hit a
+            # NoSuchKey for their own tenant prefix — retry with the Root
+            # prefix (shared resources live under default/ without the
+            # tenant_{code}/ segment). Only fall back in multi-tenant mode
+            # and only for Child callers (see _should_fallback_to_root).
+            if not _is_no_such_key_error(e) or not _should_fallback_to_root():
+                raise
+            root_name = _translate_to_root_prefix(object_name)
+            if root_name is None:
+                raise
+            logger.info(
+                '[F017] MinIO fallback: %s not found, retry at Root path %s',
+                object_name, root_name,
+            )
+            try:
+                response = self.minio_client_sync.get_object(bucket_name, root_name)
+            except Exception as e2:
+                # Genuine miss — surface as 19503 so the caller / UI knows
+                # it was a cross-tenant fallback attempt that failed
+                # rather than a plain 404.
+                from bisheng.common.errcode.tenant_sharing import StorageSharingFallbackError
+                raise StorageSharingFallbackError() from e2
 
         try:
             data = response.read()
@@ -224,8 +289,26 @@ class MinioStorage(BaseStorage, ABC):
 
         if object_name is None:
             raise ValueError("download_object_sync: object_name must be provided")
-        response = self.minio_client_sync.get_object(bucket_name, object_name)
-        return response
+        try:
+            return self.minio_client_sync.get_object(bucket_name, object_name)
+        except Exception as e:
+            # F017 AC-06: mirror get_object_sync's Root-prefix fallback so
+            # streaming downloads of Root-shared files also succeed for
+            # Child users.
+            if not _is_no_such_key_error(e) or not _should_fallback_to_root():
+                raise
+            root_name = _translate_to_root_prefix(object_name)
+            if root_name is None:
+                raise
+            logger.info(
+                '[F017] MinIO download fallback: %s not found, retry at Root path %s',
+                object_name, root_name,
+            )
+            try:
+                return self.minio_client_sync.get_object(bucket_name, root_name)
+            except Exception as e2:
+                from bisheng.common.errcode.tenant_sharing import StorageSharingFallbackError
+                raise StorageSharingFallbackError() from e2
 
     async def object_exists(self, bucket_name: Optional[str] = None, object_name: str = None) -> bool:
 
@@ -244,7 +327,19 @@ class MinioStorage(BaseStorage, ABC):
             self.minio_client_sync.stat_object(bucket_name, object_name)
             return True
         except Exception as e:
-            if 'code: NoSuchKey' in str(e):
+            if _is_no_such_key_error(e):
+                # F017 AC-06: treat an existing Root-shared file as present
+                # for Child callers. No exception here — existence check
+                # is advisory and pre-existing callers expect False/True,
+                # not ``StorageSharingFallbackError``.
+                if _should_fallback_to_root():
+                    root_name = _translate_to_root_prefix(object_name)
+                    if root_name is not None:
+                        try:
+                            self.minio_client_sync.stat_object(bucket_name, root_name)
+                            return True
+                        except Exception:
+                            return False
                 return False
             raise e
 

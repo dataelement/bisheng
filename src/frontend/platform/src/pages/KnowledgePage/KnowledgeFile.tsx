@@ -13,13 +13,17 @@ import {
 import { BookIcon } from "@/components/bs-icons/knowledge";
 import { LoadIcon, LoadingIcon } from "@/components/bs-icons/loading";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
+import { PermissionBadge } from "@/components/bs-comp/permission/PermissionBadge";
+import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
+import { canManageResource, usePermissionLevels } from "@/components/bs-comp/permission/usePermissionLevels";
+import { RelationLevel } from "@/components/bs-comp/permission/types";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/bs-ui/select";
 import { toast, useToast } from "@/components/bs-ui/toast/use-toast";
 import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 import Tip from "@/components/bs-ui/tooltip/tip";
 import { getKnowledgeModelConfig } from "@/controllers/API/finetune";
-import { CircleAlert, Copy, Ellipsis, LoaderCircle, Settings, Trash2 } from "lucide-react";
+import { CircleAlert, Copy, Ellipsis, LoaderCircle, Settings, Shield, Trash2 } from "lucide-react";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Textarea } from "../../components/bs-ui/input";
@@ -144,6 +148,11 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
 
         if (descRef.current.value && desc.length > 200) {
             handleError(t('lib.descriptionLimit', { ns: 'bs' }));
+            return;
+        }
+
+        if (mode === 'create' && !modelId) {
+            handleError(t('modelRequired', { ns: 'bs' }));
             return;
         }
 
@@ -322,10 +331,36 @@ export default function KnowledgeFile() {
     // New: Control Select dropdown state to avoid occasional popup issues
     const [selectOpenId, setSelectOpenId] = useState<string | null>(null);
     const [modalKey, setModalKey] = useState(0); // New: Used to force re-render of modal
+    // Permission management state
+    const [permDialogOpen, setPermDialogOpen] = useState(false);
+    const [permTarget, setPermTarget] = useState<{ id: string; name: string } | null>(null);
 
     const { page, pageSize, data: datalist, total, loading, setPage, search, reload } = useTable({ cancelLoadingWhenReload: true }, (param) =>
         readFileLibDatabase({ ...param, name: param.keyword })
     )
+
+    // Permission levels for badge display
+    const resourceIds = datalist.map((el: any) => String(el.id));
+    const { levels: permLevels } = usePermissionLevels('knowledge_space', resourceIds);
+    const hasLevel = (level: RelationLevel | undefined, allowed: RelationLevel[]) => level ? allowed.includes(level) : false;
+    const isCreator = (el: any) => Number(el?.user_id) === Number(user?.user_id);
+    // 列表已由后端 get_knowledge 按 ReBAC 过滤；勿再用批量 check 二次过滤，否则与 FGA/缓存短暂不同步时会出现「接口有数据但表格空白」。
+    const visibleLibs = datalist;
+    const canEdit = (el: any) =>
+        user.role === 'admin' || isCreator(el) || hasLevel(permLevels[String(el.id)], ['owner', 'manager', 'editor']);
+    const canDelete = (el: any) =>
+        user.role === 'admin' || isCreator(el) || hasLevel(permLevels[String(el.id)], ['owner']);
+    // PRD 3.3.3：「创建」「复制」与 ReBAC 编辑权解耦，由 WEB_MENU `create_knowledge` 控制（对齐「创建应用」+ 列表「复制」）
+    const canCreateLibrary =
+        user.role === 'admin' ||
+        Boolean(user.is_department_admin) ||
+        (user.web_menu || []).includes('create_knowledge');
+    const canReadRow = (el: any) =>
+        user.role === 'admin' ||
+        isCreator(el) ||
+        hasLevel(permLevels[String(el.id)], ['owner', 'manager', 'editor', 'viewer']);
+    /** 与 apps.tsx 一致：create_knowledge 菜单 + 对目标库具备使用/可见（can_read） */
+    const canUseCopy = (el: any) => canCreateLibrary && canReadRow(el);
 
     // Enable polling during copying
     useEffect(() => {
@@ -470,7 +505,7 @@ export default function KnowledgeFile() {
             <div className="h-[calc(100vh-128px)] overflow-y-auto pb-20">
                 <div className="flex justify-end gap-4 items-center absolute right-0 top-[-44px]">
                     <SearchInput placeholder={t('lib.searchPlaceholder', { ns: 'bs' })} onChange={(e) => search(e.target.value)} />
-                    <Button className="px-8 text-[#FFFFFF]" onClick={() => setOpen(true)}>{t('create', { ns: 'bs' })}</Button>
+                    {canCreateLibrary && <Button className="px-8 text-[#FFFFFF]" onClick={() => setOpen(true)}>{t('create', { ns: 'bs' })}</Button>}
                 </div>
                 <Table noScroll>
                     <TableHeader>
@@ -482,11 +517,12 @@ export default function KnowledgeFile() {
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {datalist.map((el: any) => (
+                        {visibleLibs.map((el: any) => (
                             <TableRow
                                 key={el.id}
                                 className=""
                                 onClick={() => {
+                                    if (!canEdit(el)) return;
                                     if ([KnowledgeBaseStatus.Copying, KnowledgeBaseStatus.Unpublished].includes(el.state)) return;
                                     window.libname = [el.name, el.description];
                                     navigate(`/filelib/${el.id}`);
@@ -503,6 +539,7 @@ export default function KnowledgeFile() {
                                         <div>
                                             <div className="truncate max-w-[500px] w-[264px] text-[14px] font-medium pt-2 flex items-center gap-2">
                                                 {el.name}
+                                                <PermissionBadge level={permLevels[String(el.id)]} />
                                             </div>
                                             <Tip
                                                 side="top"
@@ -547,8 +584,14 @@ export default function KnowledgeFile() {
                                                 console.log("Selected value:", selectedValue, "for lib:", el.id);
 
                                                 switch (selectedValue) {
+                                                    case 'permission':
+                                                        setPermTarget({ id: String(el.id), name: el.name });
+                                                        setPermDialogOpen(true);
+                                                        break;
                                                     case 'copy':
-                                                        el.state === KnowledgeBaseStatus.Published && handleCopy(el);
+                                                        canUseCopy(el) &&
+                                                            el.state === KnowledgeBaseStatus.Published &&
+                                                            handleCopy(el);
                                                         break;
                                                     case 'set':
                                                         handleOpenSettings(el);
@@ -584,12 +627,24 @@ export default function KnowledgeFile() {
                                                 }}
                                                 className="z-50 overflow-visible"
                                             >
-                                                <Tip content={!el.copiable && t('noOperationPermission')} side='top'>
+                                                {canManageResource(permLevels, el.id) && (
+                                                    <SelectItem showIcon={false} value="permission">
+                                                        <div className="flex gap-2 items-center">
+                                                            <Shield className="w-4 h-4" />
+                                                            {t('managePermission', { ns: 'permission' })}
+                                                        </div>
+                                                    </SelectItem>
+                                                )}
+                                                <Tip content={!canUseCopy(el) && t('noOperationPermission')} side='top'>
                                                     <SelectItem
                                                         showIcon={false}
                                                         value="copy"
                                                         className="data-[disabled]:pointer-events-auto"
-                                                        disabled={!(el.copiable || user.role === 'admin') || el.state !== KnowledgeBaseStatus.Published || copyLoadingId === el.id}
+                                                        disabled={
+                                                            !canUseCopy(el) ||
+                                                            el.state !== KnowledgeBaseStatus.Published ||
+                                                            copyLoadingId === el.id
+                                                        }
                                                     >
                                                         <div className="flex gap-2 items-center" >
                                                             <Copy className="w-4 h-4" />
@@ -597,10 +652,10 @@ export default function KnowledgeFile() {
                                                         </div>
                                                     </SelectItem>
                                                 </Tip>
-                                                <Tip content={!el.copiable && t('noOperationPermission')} side='top'>
+                                                <Tip content={(!el.copiable || !canEdit(el)) && t('noOperationPermission')} side='top'>
                                                     <SelectItem
                                                         value="set"
-                                                        disabled={!el.copiable}
+                                                        disabled={!canEdit(el) || !el.copiable}
                                                         className="data-[disabled]:pointer-events-auto"
                                                         showIcon={false}
                                                     >
@@ -610,12 +665,12 @@ export default function KnowledgeFile() {
                                                         </div>
                                                     </SelectItem>
                                                 </Tip>
-                                                <Tip content={!el.copiable && t('noOperationPermission')} side='top'>
+                                                <Tip content={(!el.copiable || !canDelete(el)) && t('noOperationPermission')} side='top'>
                                                     <SelectItem
                                                         value="delete"
                                                         showIcon={false}
                                                         className="data-[disabled]:pointer-events-auto"
-                                                        disabled={!el.copiable}
+                                                        disabled={!canDelete(el) || !el.copiable}
                                                     >
                                                         <div className="flex gap-2 items-center">
                                                             <Trash2 className="w-4 h-4" />
@@ -666,6 +721,17 @@ export default function KnowledgeFile() {
                     onLoadEnd={reload}
                     mode="edit"
                     currentLib={currentSettingLib}
+                />
+            )}
+
+            {/* Permission management dialog */}
+            {permTarget && (
+                <PermissionDialog
+                    open={permDialogOpen}
+                    onOpenChange={setPermDialogOpen}
+                    resourceType="knowledge_space"
+                    resourceId={permTarget.id}
+                    resourceName={permTarget.name}
                 />
             )}
         </div>

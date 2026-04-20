@@ -4,7 +4,14 @@ import { Input } from "~/components/ui/Input";
 import { Button } from "~/components/ui/Button";
 import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
-import { getJoinedSpacesApi, getSquareSpacesApi, subscribeSpaceApi, type KnowledgeSpace, VisibilityType } from "~/api/knowledge";
+import {
+    getJoinedSpacesApi,
+    getSquareSpacesApi,
+    subscribeSpaceApi,
+    unsubscribeSpaceApi,
+    type KnowledgeSpace,
+    VisibilityType
+} from "~/api/knowledge";
 import { useLocalize } from "~/hooks";
 import KnowledgeSquareCard from "./KnowledgeSquareCard";
 

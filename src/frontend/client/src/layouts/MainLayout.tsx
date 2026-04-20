@@ -17,6 +17,7 @@ import { useAuthContext, useLocalize } from '~/hooks';
 import { Tooltip, TooltipContent, TooltipTrigger } from '~/components/ui/Tooltip2';
 import store from '~/store';
 import { cn } from '~/utils';
+import { getPlatformAdminPanelUrl } from '~/utils/platformAdminUrl';
 import { UserPopMenu } from './UserPopMenu';
 import { appsSectionLinkTarget, lastSectionPaths } from './appModuleNavPaths';
 
@@ -179,9 +180,9 @@ function Sidebar({
         </div>
       </div>
 
-        <div className={cn('flex flex-col gap-4', showExpandedHubSidebar ? 'items-stretch px-2' : 'items-center')}>
-        {user?.plugins?.includes('backend') && (
-          <a href={__APP_ENV__.BISHENG_HOST} target='_blank' rel="noreferrer">
+      <div className="flex flex-col gap-4 items-center">
+        {(user?.plugins?.includes('backend') || user?.plugins?.includes('admin')) && (
+          <a href={getPlatformAdminPanelUrl()} target='_blank' rel="noreferrer">
             <div title={localize('com_nav_admin_panel')} className="p-3 rounded-lg hover:bg-[#e6edfc] transition-colors">
               <MonitorIcon className="size-5 text-[#818181]" />
             </div>

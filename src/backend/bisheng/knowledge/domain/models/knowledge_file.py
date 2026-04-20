@@ -1,7 +1,7 @@
 import json
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional, Dict, Any, Literal
+from typing import ClassVar, List, Optional, Dict, Any, Literal
 
 # if TYPE_CHECKING:
 from pydantic import field_validator
@@ -146,6 +146,14 @@ class QAKnowledgeUpsert(QAKnowledgeBase):
 
 
 class KnowledgeFileDao(KnowledgeFileBase):
+    _DUPLICATE_EXCLUDED_STATUSES: ClassVar[tuple[int, ...]] = (
+        KnowledgeFileStatus.FAILED.value,
+        KnowledgeFileStatus.TIMEOUT.value,
+    )
+
+    @classmethod
+    def _apply_duplicate_filters(cls, statement):
+        return statement.where(~KnowledgeFile.status.in_(cls._DUPLICATE_EXCLUDED_STATUSES))
 
     @classmethod
     async def query_by_id(cls, file_id: int) -> Optional[KnowledgeFile]:
@@ -280,7 +288,9 @@ class KnowledgeFileDao(KnowledgeFileBase):
     @classmethod
     def get_file_by_condition(cls, knowledge_id: int, md5_: str = None, file_name: str = None):
         with get_sync_db_session() as session:
-            sql = select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id)
+            sql = cls._apply_duplicate_filters(
+                select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id)
+            )
             if md5_:
                 sql = sql.where(KnowledgeFile.md5 == md5_)
             if file_name:
@@ -289,7 +299,9 @@ class KnowledgeFileDao(KnowledgeFileBase):
 
     @classmethod
     async def get_repeat_file(cls, knowledge_id: int, md5_: str = None, file_name: str = None):
-        sql = select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id)
+        sql = cls._apply_duplicate_filters(
+            select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id)
+        )
         if md5_ and file_name:
             sql = sql.where(
                 or_(
