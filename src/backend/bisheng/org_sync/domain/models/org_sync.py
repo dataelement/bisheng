@@ -4,7 +4,7 @@ Part of F009-org-sync.
 """
 
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Optional, Tuple
 
 from sqlalchemy import (
@@ -240,6 +240,40 @@ class OrgSyncLog(SQLModelSerializable, table=True):
             comment='Error list: [{entity_type, external_id, error_msg}]',
         ),
     )
+    # F015: event-scoped columns. Legacy batch-summary rows (F009/F014) keep
+    # event_type='' and rely on the counter columns above; F015 event rows set
+    # event_type to one of {ts_conflict, stale_ts, conflict_weekly_sent,
+    # conflict_daily_escalation_sent}.
+    event_type: str = Field(
+        default='',
+        sa_column=Column(
+            String(32), nullable=False, server_default=text("''"),
+            comment=(
+                "F015 event type; empty for F009 batch-summary rows"
+            ),
+        ),
+    )
+    level: str = Field(
+        default='info',
+        sa_column=Column(
+            String(16), nullable=False, server_default=text("'info'"),
+            comment='F015 log severity: info / warn / error',
+        ),
+    )
+    external_id: Optional[str] = Field(
+        default=None,
+        sa_column=Column(
+            String(128), nullable=True,
+            comment='F015: department external_id for event rows',
+        ),
+    )
+    source_ts: Optional[int] = Field(
+        default=None,
+        sa_column=Column(
+            BigInteger, nullable=True,
+            comment='F015: incoming ts captured for INV-T12 audit',
+        ),
+    )
     start_time: Optional[datetime] = Field(
         default=None,
         sa_column=Column(DateTime, nullable=True),
@@ -334,6 +368,22 @@ class OrgSyncConfigDao:
             result = await session.exec(statement)
             return result.all()
 
+    @classmethod
+    async def aget_all_active(cls) -> List[OrgSyncConfig]:
+        """F015: return every active OrgSyncConfig regardless of schedule_type.
+
+        The 6h forced reconcile beat (``reconcile_all_organizations``) uses
+        this DAO entry to fan out across every active config. Callers must
+        filter ``provider='sso_realtime'`` (the F014 seed id=9999) since the
+        seed is not a real provider.
+        """
+        async with get_async_db_session() as session:
+            statement = select(OrgSyncConfig).where(
+                OrgSyncConfig.status == 'active',
+            )
+            result = await session.exec(statement)
+            return result.all()
+
 
 class OrgSyncLogDao:
 
@@ -372,3 +422,112 @@ class OrgSyncLogDao:
                 data_stmt = data_stmt.offset((page - 1) * limit).limit(limit)
             result = await session.exec(data_stmt)
             return result.all(), total
+
+    # ------------------------------------------------------------------
+    # F015 event-row helpers
+    # ------------------------------------------------------------------
+
+    @classmethod
+    async def acreate_event(
+        cls,
+        *,
+        event_type: str,
+        level: str,
+        external_id: Optional[str],
+        source_ts: Optional[int],
+        config_id: int,
+        tenant_id: int = 1,
+        error_details: Optional[dict] = None,
+    ) -> OrgSyncLog:
+        """F015: persist an event-scoped log row.
+
+        Counter columns (``dept_created``, ``member_*``) stay at 0 so the
+        F009 batch-summary reader continues to treat these rows as "no-op
+        batches" — inspection paths that filter by ``event_type='' `` are
+        unaffected.
+
+        ``error_details`` is persisted verbatim. Callers should keep the
+        payload flat enough for JSON serialisation; the DDL column is
+        ``JSON`` on MySQL and ``TEXT`` under SQLite, so nested dicts are
+        fine.
+        """
+        log = OrgSyncLog(
+            tenant_id=tenant_id,
+            config_id=config_id,
+            trigger_type='event',
+            status='success',
+            event_type=event_type,
+            level=level,
+            external_id=external_id,
+            source_ts=source_ts,
+            error_details=error_details,
+        )
+        return await cls.acreate(log)
+
+    @classmethod
+    async def acount_recent_conflicts(
+        cls, external_id: str, days: int = 7,
+    ) -> int:
+        """F015: count ts_conflict warn events for one external_id.
+
+        Backs the weekly report threshold (AC-12). Uses the
+        ``idx_conflict_lookup`` composite index.
+        """
+        threshold = datetime.utcnow() - timedelta(days=days)
+        async with get_async_db_session() as session:
+            stmt = (
+                select(func.count())
+                .select_from(OrgSyncLog)
+                .where(
+                    OrgSyncLog.level == 'warn',
+                    OrgSyncLog.event_type == 'ts_conflict',
+                    OrgSyncLog.external_id == external_id,
+                    OrgSyncLog.create_time > threshold,
+                )
+            )
+            count = await session.scalar(stmt)
+            return int(count or 0)
+
+    @classmethod
+    async def aget_conflicts_since(
+        cls,
+        since: datetime,
+        event_type: str = 'ts_conflict',
+        level: str = 'warn',
+    ) -> List[OrgSyncLog]:
+        """F015: fetch event rows for the weekly aggregation window.
+
+        ``since`` is interpreted inclusively so the caller can align with
+        the cron job's ``datetime.utcnow() - timedelta(days=7)`` window.
+        """
+        async with get_async_db_session() as session:
+            stmt = (
+                select(OrgSyncLog)
+                .where(
+                    OrgSyncLog.level == level,
+                    OrgSyncLog.event_type == event_type,
+                    OrgSyncLog.create_time >= since,
+                )
+                .order_by(OrgSyncLog.create_time.asc())
+            )
+            result = await session.exec(stmt)
+            return result.all()
+
+    @classmethod
+    async def aget_latest_event(
+        cls, event_type: str,
+    ) -> Optional[OrgSyncLog]:
+        """F015: last event row of the given type (used by daily escalation).
+
+        Returns ``None`` when no such row exists — callers treat this as
+        "weekly report never ran yet" and skip escalation.
+        """
+        async with get_async_db_session() as session:
+            stmt = (
+                select(OrgSyncLog)
+                .where(OrgSyncLog.event_type == event_type)
+                .order_by(OrgSyncLog.create_time.desc())
+                .limit(1)
+            )
+            result = await session.exec(stmt)
+            return result.first()

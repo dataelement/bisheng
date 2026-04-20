@@ -50,3 +50,45 @@ class SsoDeptParentMissingError(BaseErrorCode):
 class SsoPrimaryDeptMissingError(BaseErrorCode):
     Code: int = 19313
     Msg: str = 'primary_dept_external_id is required for SSO login-sync'
+
+
+# ---------------------------------------------------------------------------
+# F015-ldap-reconcile-celery (shared module MMM=193)
+# ---------------------------------------------------------------------------
+
+
+class SsoReconcileLockBusyError(BaseErrorCode):
+    Code: int = 19314
+    Msg: str = (
+        'Another reconcile run for the same org_sync_config is in progress; '
+        'skip this trigger (Redis SETNX lock busy)'
+    )
+
+
+class SsoRelinkStrategyUnsupportedError(BaseErrorCode):
+    Code: int = 19315
+    Msg: str = (
+        'Unknown relink matching_strategy; expected external_id_map or '
+        'path_plus_name'
+    )
+
+
+class SsoRelinkConflictUnresolvedError(BaseErrorCode):
+    Code: int = 19316
+    Msg: str = (
+        'relink conflict candidate list is empty or the chosen '
+        'new_external_id is not among stored candidates'
+    )
+
+
+class SsoSameTsRemoveAppliedWarnError(BaseErrorCode):
+    Code: int = 19317
+    Msg: str = (
+        'Same-ts upsert/remove collision resolved by applying remove '
+        '(INV-T12 AC-11); audit_log written, admin notified'
+    )
+
+
+class SsoReconcileReservedError(BaseErrorCode):
+    Code: int = 19318
+    Msg: str = 'Reserved for future reconcile error paths'

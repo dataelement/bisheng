@@ -530,13 +530,21 @@ class TestPermission:
         assert _is_admin(admin) is True
         assert _is_admin(non_admin) is False
 
-    def test_check_permission_raises(self):
-        """_check_permission raises DepartmentPermissionDeniedError for non-admin."""
+    async def test_check_permission_raises(self):
+        """_check_permission raises DepartmentPermissionDeniedError for non-admin.
+
+        ``_check_permission`` is an ``async def`` — the original sync
+        call produced a coroutine that was never awaited, so
+        ``pytest.raises`` saw no exception and the test silently
+        passed/failed as DID NOT RAISE. ``asyncio_mode='auto'`` (see
+        pyproject.toml) lets an ``async def test_*`` method run under
+        the asyncio runner transparently.
+        """
         from bisheng.common.errcode.department import DepartmentPermissionDeniedError
         from bisheng.department.domain.services.department_service import _check_permission
 
         with pytest.raises(DepartmentPermissionDeniedError):
-            _check_permission(_NonAdminUser())
+            await _check_permission(_NonAdminUser())
 
 
 class TestRootDepartment:

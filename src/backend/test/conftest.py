@@ -114,10 +114,15 @@ async def async_db_engine():
     )
     # Create tables using sync connection (aiosqlite supports run_sync)
     async with engine.begin() as conn:
-        from test.fixtures.table_definitions import TABLE_DEFINITIONS
+        from test.fixtures.table_definitions import (
+            TABLE_DEFINITIONS,
+            INDEX_DEFINITIONS,
+        )
         from sqlalchemy import text
         for ddl in TABLE_DEFINITIONS.values():
             await conn.execute(text(ddl))
+        for idx in INDEX_DEFINITIONS:
+            await conn.execute(text(idx))
     yield engine
     await engine.dispose()
 
