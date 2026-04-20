@@ -93,6 +93,16 @@ def upgrade() -> None:
             'uk_tenant_provider_name', 'org_sync_config',
             ['tenant_id', 'provider', 'config_name'],
         )
+    else:
+        if not _index_exists('org_sync_config', 'idx_osc_tenant'):
+            op.create_index('idx_osc_tenant', 'org_sync_config', ['tenant_id'])
+        if not _index_exists('org_sync_config', 'idx_osc_status'):
+            op.create_index('idx_osc_status', 'org_sync_config', ['status'])
+        if not _index_exists('org_sync_config', 'uk_tenant_provider_name'):
+            op.create_unique_constraint(
+                'uk_tenant_provider_name', 'org_sync_config',
+                ['tenant_id', 'provider', 'config_name'],
+            )
 
     # -- org_sync_log --
     if not _table_exists('org_sync_log'):
@@ -125,6 +135,11 @@ def upgrade() -> None:
         )
         op.create_index('idx_osl_tenant', 'org_sync_log', ['tenant_id'])
         op.create_index('idx_osl_config', 'org_sync_log', ['config_id'])
+    else:
+        if not _index_exists('org_sync_log', 'idx_osl_tenant'):
+            op.create_index('idx_osl_tenant', 'org_sync_log', ['tenant_id'])
+        if not _index_exists('org_sync_log', 'idx_osl_config'):
+            op.create_index('idx_osl_config', 'org_sync_log', ['config_id'])
 
     # -- user table extension --
     if not _column_exists('user', 'source'):
@@ -147,17 +162,27 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     # -- user table rollback --
-    op.drop_constraint('uk_user_source_external_id', 'user', type_='unique')
-    op.drop_column('user', 'external_id')
-    op.drop_column('user', 'source')
+    if _index_exists('user', 'uk_user_source_external_id'):
+        op.drop_constraint('uk_user_source_external_id', 'user', type_='unique')
+    if _column_exists('user', 'external_id'):
+        op.drop_column('user', 'external_id')
+    if _column_exists('user', 'source'):
+        op.drop_column('user', 'source')
 
     # -- org_sync_log --
-    op.drop_index('idx_osl_config', table_name='org_sync_log')
-    op.drop_index('idx_osl_tenant', table_name='org_sync_log')
-    op.drop_table('org_sync_log')
+    if _index_exists('org_sync_log', 'idx_osl_config'):
+        op.drop_index('idx_osl_config', table_name='org_sync_log')
+    if _index_exists('org_sync_log', 'idx_osl_tenant'):
+        op.drop_index('idx_osl_tenant', table_name='org_sync_log')
+    if _table_exists('org_sync_log'):
+        op.drop_table('org_sync_log')
 
     # -- org_sync_config --
-    op.drop_constraint('uk_tenant_provider_name', 'org_sync_config', type_='unique')
-    op.drop_index('idx_osc_status', table_name='org_sync_config')
-    op.drop_index('idx_osc_tenant', table_name='org_sync_config')
-    op.drop_table('org_sync_config')
+    if _index_exists('org_sync_config', 'uk_tenant_provider_name'):
+        op.drop_constraint('uk_tenant_provider_name', 'org_sync_config', type_='unique')
+    if _index_exists('org_sync_config', 'idx_osc_status'):
+        op.drop_index('idx_osc_status', table_name='org_sync_config')
+    if _index_exists('org_sync_config', 'idx_osc_tenant'):
+        op.drop_index('idx_osc_tenant', table_name='org_sync_config')
+    if _table_exists('org_sync_config'):
+        op.drop_table('org_sync_config')

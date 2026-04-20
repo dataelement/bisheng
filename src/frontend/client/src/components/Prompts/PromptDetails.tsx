@@ -32,8 +32,8 @@ const PromptDetails = ({ group }: { group?: TPromptGroup }) => {
   return (
     <div>
       <div className="flex flex-col items-center justify-between p-4 text-text-primary sm:flex-row">
-        <div className="mb-1 flex flex-row items-center font-bold sm:text-xl md:mb-0 md:text-2xl">
-          <div className="mb-1 flex items-center md:mb-0">
+        <div className="mb-1 flex flex-row items-center font-bold sm:text-xl touch-desktop:mb-0 touch-desktop:text-2xl">
+          <div className="mb-1 flex items-center touch-desktop:mb-0">
             <div className="rounded pr-2">
               {(group.category?.length ?? 0) > 0 ? (
                 <CategoryIcon category={group.category ?? ''} />
@@ -43,8 +43,8 @@ const PromptDetails = ({ group }: { group?: TPromptGroup }) => {
           </div>
         </div>
       </div>
-      <div className="flex h-full max-h-screen flex-col overflow-y-auto md:flex-row">
-        <div className="flex flex-1 flex-col gap-4 p-0 md:max-h-[calc(100vh-150px)] md:p-2">
+      <div className="flex h-full max-h-screen flex-col overflow-y-auto touch-desktop:flex-row">
+        <div className="flex flex-1 flex-col gap-4 p-0 touch-desktop:max-h-[calc(100vh-150px)] touch-desktop:p-2">
           <div>
             <h2 className="flex items-center justify-between rounded-t-lg border border-border-light py-2 pl-4 text-base font-semibold text-text-primary ">
               {localize('com_ui_prompt_text')}

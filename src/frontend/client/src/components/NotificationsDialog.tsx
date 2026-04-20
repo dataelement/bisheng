@@ -562,7 +562,7 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                 key={id}
                 data-message-id={id}
                 data-message-type={notification.message_type}
-                className="flex flex-col gap-2 px-3 py-6 hover:bg-[#f7f8fa] max-md:gap-2 max-md:py-3 max-md:hover:bg-transparent"
+                className="flex flex-col gap-2 px-3 py-6 hover:bg-[#f7f8fa] touch-mobile:gap-2 touch-mobile:py-3 touch-mobile:hover:bg-transparent"
                 style={{
                     transitionProperty: 'background-color',
                     transitionDuration: '350ms',
@@ -604,7 +604,7 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                 }}
             >
                 {/* Row 1: Avatar + message text + right slot（H5：时间下沉到文案下，对齐 Figma） */}
-                <div className="flex items-start gap-2 md:items-center md:gap-3">
+                <div className="flex items-start gap-2 touch-desktop:items-center touch-desktop:gap-3">
                     <TooltipAnchor
                         side="left"
                         hideArrow
@@ -623,7 +623,7 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                             </div>
                         }
                     >
-                        <Avatar className="size-10 shrink-0 md:size-9">
+                        <Avatar className="size-10 shrink-0 touch-desktop:size-9">
                             {userAvatar ? (
                                 <AvatarImage src={userAvatar} alt={userName} />
                             ) : (
@@ -633,9 +633,9 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                     </TooltipAnchor>
 
                     {/* Message text */}
-                    <div className={cn("flex min-w-0 flex-1 flex-col gap-1 text-[14px] md:flex-row md:items-center md:gap-1 md:flex-wrap", textColor)}>
+                    <div className={cn("flex min-w-0 flex-1 flex-col gap-1 text-[14px] touch-desktop:flex-row touch-desktop:items-center touch-desktop:gap-1 touch-desktop:flex-wrap", textColor)}>
                         <span className="shrink-0 font-medium hover:text-[#165dff]">@{userName}</span>
-                        <span className="min-w-0 md:inline">
+                        <span className="min-w-0 touch-desktop:inline">
                             {textPrefix}
                             {canNavigateTarget && (
                                 <span
@@ -690,13 +690,13 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                             )}
                             {textSuffix}
                         </span>
-                        <span className="text-[14px] tabular-nums text-[#999999] md:hidden">
+                        <span className="inline touch-desktop:hidden text-[14px] tabular-nums text-[#999999]">
                             {formatMessageTime(createdAt)}
                         </span>
                     </div>
 
                     {/* Right slot: fixed width so hover swap (时间 ↔ 删除) does not shrink flex-1 文案区导致 @名 换行/抖动 */}
-                    <div className="relative hidden h-7 w-[184px] shrink-0 items-center justify-end whitespace-nowrap md:flex">
+                    <div className="relative hidden h-7 w-[184px] shrink-0 items-center justify-end whitespace-nowrap touch-desktop:flex">
                         <span
                             className={cn(
                                 "text-[14px] tabular-nums text-[#999999]",
@@ -722,14 +722,14 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
 
                 {/* Row 2: approval buttons (pending) / completed status (已同意/已拒绝) */}
                 {showApproval ? (
-                    <div className="flex items-center justify-end gap-3 max-md:gap-3">
+                    <div className="flex items-center justify-end gap-3 touch-mobile:gap-3">
                         <button
                             type="button"
                             onClick={() => {
                                 if (!notification.is_read) markOneAsRead(id);
                                 handleApproval(id, "rejected");
                             }}
-                            className="inline-flex h-8 items-center gap-1 rounded-[6px] border border-[#EBECF0] bg-white/50 px-3 py-[3px] text-[14px] text-[#FF3939] [backdrop-filter:blur(8px)] transition-colors hover:bg-[#fff2f0] active:translate-y-0 md:h-7 md:border-[#F2F3F5] md:bg-white md:px-3 md:py-0 md:text-[#f53f3f] md:[backdrop-filter:none]"
+                            className="inline-flex h-8 items-center gap-1 rounded-[6px] border border-[#EBECF0] bg-white/50 px-3 py-[3px] text-[14px] text-[#FF3939] [backdrop-filter:blur(8px)] transition-colors hover:bg-[#fff2f0] active:translate-y-0 touch-desktop:h-7 touch-desktop:border-[#F2F3F5] touch-desktop:bg-white touch-desktop:px-3 touch-desktop:py-0 touch-desktop:text-[#f53f3f] touch-desktop:[backdrop-filter:none]"
                         >
                             <XIcon className="size-4" />
                             {localize("com_notifications_reject")}
@@ -740,7 +740,7 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                                 if (!notification.is_read) markOneAsRead(id);
                                 handleApproval(id, "approved");
                             }}
-                            className="inline-flex h-8 items-center gap-1 rounded-[6px] border border-[#EBECF0] bg-white/50 px-3 py-[3px] text-[14px] text-[#06B770] [backdrop-filter:blur(8px)] transition-colors hover:bg-[#e8ffea] active:translate-y-0 md:h-7 md:border-[#F2F3F5] md:bg-white md:px-3 md:py-0 md:text-[#00b42a] md:[backdrop-filter:none]"
+                            className="inline-flex h-8 items-center gap-1 rounded-[6px] border border-[#EBECF0] bg-white/50 px-3 py-[3px] text-[14px] text-[#06B770] [backdrop-filter:blur(8px)] transition-colors hover:bg-[#e8ffea] active:translate-y-0 touch-desktop:h-7 touch-desktop:border-[#F2F3F5] touch-desktop:bg-white touch-desktop:px-3 touch-desktop:py-0 touch-desktop:text-[#00b42a] touch-desktop:[backdrop-filter:none]"
                         >
                             <Check className="size-4" />
                             {localize("com_notifications_accept")}
@@ -798,49 +798,49 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
             <DialogContent
                 className={cn(
                     "w-[calc(100vw-80px)] max-w-[800px] h-[80vh] max-h-[800px] p-0 gap-0 rounded-2xl shadow-[0_8px_24px_rgba(0,0,0,0.12)] duration-500 ease-out [animation-duration:450ms] data-[state=closed]:[animation-duration:320ms]",
-                    "max-md:fixed max-md:inset-0 max-md:left-0 max-md:top-0 max-md:h-[100dvh] max-md:max-h-[100dvh] max-md:w-full max-md:max-w-none max-md:translate-x-0 max-md:translate-y-0 max-md:rounded-none",
+                    "touch-mobile:fixed touch-mobile:inset-0 touch-mobile:left-0 touch-mobile:top-0 touch-mobile:h-[100dvh] touch-mobile:max-h-[100dvh] touch-mobile:w-full touch-mobile:max-w-none touch-mobile:translate-x-0 touch-mobile:translate-y-0 touch-mobile:rounded-none",
                 )}
             >
-                <div className="flex flex-col h-full overflow-hidden rounded-2xl max-md:rounded-none">
+                <div className="flex flex-col h-full overflow-hidden rounded-2xl touch-mobile:rounded-none">
                     <Tabs
                         value={activeTab}
                         onValueChange={(v) => setActiveTab(v as "all" | "request")}
                         className="flex min-h-0 flex-1 flex-col"
                     >
                         <div className="flex min-h-0 flex-1 flex-col">
-                            <div className="flex-shrink-0 space-y-3 px-6 py-3 max-md:space-y-3 max-md:px-4 max-md:pb-4 max-md:pt-4 max-md:pr-12">
+                            <div className="flex-shrink-0 space-y-3 px-6 py-3 touch-mobile:space-y-3 touch-mobile:px-4 touch-mobile:pb-4 touch-mobile:pt-4 touch-mobile:pr-12">
                                 {/* 标题 + Tab：移动端 Tab 紧挨在「消息提醒」下方并左对齐（覆盖 TabsList 默认 justify-center） */}
-                                <div className="flex flex-col gap-3 md:gap-4">
-                                    <h2 className="text-[16px] font-semibold text-[#1d2129] max-md:text-[20px] max-md:font-medium max-md:text-[#212121] max-md:leading-[1.4] md:min-h-8 md:leading-8">
+                                <div className="flex flex-col gap-3 touch-desktop:gap-4">
+                                    <h2 className="text-[16px] font-semibold text-[#1d2129] touch-mobile:text-[20px] touch-mobile:font-medium touch-mobile:text-[#212121] touch-mobile:leading-[1.4] touch-desktop:min-h-8 touch-desktop:leading-8">
                                         {localize("com_notifications_title")}
                                     </h2>
-                                    <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                                    <TabsList className="h-auto w-full justify-start gap-2 bg-transparent p-0 max-md:gap-6 md:inline-flex md:w-auto md:justify-center">
+                                    <div className="flex flex-col gap-4 touch-desktop:flex-row touch-desktop:items-center touch-desktop:justify-between">
+                                    <TabsList className="h-auto w-full justify-start gap-2 bg-transparent p-0 touch-mobile:gap-6 touch-desktop:inline-flex touch-desktop:w-auto touch-desktop:justify-center">
                                         <TabsTrigger
                                             value="all"
-                                            className="relative min-h-0 min-w-0 appearance-none rounded-lg border border-transparent px-4 py-[5px] text-[14px] leading-none shadow-none transition-colors active:translate-y-0 data-[state=active]:gap-2 data-[state=active]:border-[#024DE3] data-[state=active]:bg-[#E6EDFC] data-[state=active]:font-medium data-[state=active]:text-[#024DE3] data-[state=active]:[backdrop-filter:blur(8px)] data-[state=active]:shadow-none data-[state=inactive]:gap-1 data-[state=inactive]:font-normal data-[state=inactive]:text-[#212121] max-md:data-[state=inactive]:text-[#212121] md:h-8 md:data-[state=inactive]:text-[#4E5969]"
+                                            className="relative min-h-0 min-w-0 appearance-none rounded-lg border border-transparent px-4 py-[5px] text-[14px] leading-none shadow-none transition-colors active:translate-y-0 data-[state=active]:gap-2 data-[state=active]:border-[#024DE3] data-[state=active]:bg-[#E6EDFC] data-[state=active]:font-medium data-[state=active]:text-[#024DE3] data-[state=active]:[backdrop-filter:blur(8px)] data-[state=active]:shadow-none data-[state=inactive]:gap-1 data-[state=inactive]:font-normal data-[state=inactive]:text-[#212121] touch-mobile:data-[state=inactive]:text-[#212121] touch-desktop:h-8 touch-desktop:data-[state=inactive]:text-[#4E5969]"
                                         >
                                             {localize("com_notifications_tab_all")}
                                             {unreadCounts.all > 0 && (
-                                                <span className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[#f53f3f] px-1 text-[11px] text-white ring-2 ring-white max-md:-right-2 max-md:-top-2.5">
+                                                <span className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[#f53f3f] px-1 text-[11px] text-white ring-2 ring-white touch-mobile:-right-2 touch-mobile:-top-2.5">
                                                     {formatBadge(unreadCounts.all)}
                                                 </span>
                                             )}
                                         </TabsTrigger>
                                         <TabsTrigger
                                             value="request"
-                                            className="relative min-h-0 min-w-0 appearance-none rounded-lg border border-transparent px-4 py-[5px] text-[14px] leading-none shadow-none transition-colors active:translate-y-0 data-[state=active]:gap-2 data-[state=active]:border-[#024DE3] data-[state=active]:bg-[#E6EDFC] data-[state=active]:font-medium data-[state=active]:text-[#024DE3] data-[state=active]:[backdrop-filter:blur(8px)] data-[state=active]:shadow-none data-[state=inactive]:gap-1 data-[state=inactive]:font-normal data-[state=inactive]:text-[#212121] max-md:data-[state=inactive]:text-[#212121] md:h-8 md:data-[state=inactive]:text-[#4E5969]"
+                                            className="relative min-h-0 min-w-0 appearance-none rounded-lg border border-transparent px-4 py-[5px] text-[14px] leading-none shadow-none transition-colors active:translate-y-0 data-[state=active]:gap-2 data-[state=active]:border-[#024DE3] data-[state=active]:bg-[#E6EDFC] data-[state=active]:font-medium data-[state=active]:text-[#024DE3] data-[state=active]:[backdrop-filter:blur(8px)] data-[state=active]:shadow-none data-[state=inactive]:gap-1 data-[state=inactive]:font-normal data-[state=inactive]:text-[#212121] touch-mobile:data-[state=inactive]:text-[#212121] touch-desktop:h-8 touch-desktop:data-[state=inactive]:text-[#4E5969]"
                                         >
                                             {localize("com_notifications_tab_request")}
                                             {unreadCounts.request > 0 && (
-                                                <span className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[#f53f3f] px-1 text-[11px] text-white ring-2 ring-white max-md:-right-2 max-md:-top-2.5">
+                                                <span className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[#f53f3f] px-1 text-[11px] text-white ring-2 ring-white touch-mobile:-right-2 touch-mobile:-top-2.5">
                                                     {formatBadge(unreadCounts.request)}
                                                 </span>
                                             )}
                                         </TabsTrigger>
                                     </TabsList>
 
-                                    <div className="hidden items-center gap-3 md:flex">
+                                    <div className="hidden touch-desktop:flex items-center gap-3">
                                         <ExpandableSearchField
                                             value={searchQuery}
                                             onChange={setSearchQuery}
@@ -876,7 +876,7 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                                 </div>
 
                                 {/* H5：与稿一致 — 搜索与「仅看未读」「已读全部」同一行，gap 12px */}
-                                <div className="flex min-w-0 flex-nowrap items-center gap-3 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] md:hidden [&::-webkit-scrollbar]:hidden">
+                                <div className="hidden min-w-0 touch-mobile:flex flex-nowrap items-center gap-3 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                                     <div className="flex min-w-0 flex-1 items-center gap-2 rounded-md border border-[#EBECF0] bg-white px-3 py-[5px]">
                                         <Search className="size-4 shrink-0 text-[#8B8FA8]" aria-hidden />
                                         <input
@@ -919,7 +919,7 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                                     <div
                                         data-message-scroll-root="true"
                                         data-active={activeTab === "all" ? "true" : "false"}
-                                        className="h-full overflow-y-auto scroll-on-scroll px-6 py-3 max-md:px-4 max-md:py-3"
+                                        className="h-full overflow-y-auto scroll-on-scroll px-6 py-3 touch-mobile:px-4 touch-mobile:py-3"
                                         onScroll={(e) => handleListScroll(e.currentTarget)}
                                     >
                                         {loading ? (
@@ -946,7 +946,7 @@ export function NotificationsDialog({ open = false, onOpenChange }: Notification
                                     <div
                                         data-message-scroll-root="true"
                                         data-active={activeTab === "request" ? "true" : "false"}
-                                        className="h-full overflow-y-auto scroll-on-scroll px-6 py-3 max-md:px-4 max-md:py-3"
+                                        className="h-full overflow-y-auto scroll-on-scroll px-6 py-3 touch-mobile:px-4 touch-mobile:py-3"
                                         onScroll={(e) => handleListScroll(e.currentTarget)}
                                     >
                                         {loading ? (

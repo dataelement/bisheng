@@ -163,7 +163,7 @@ function MultiSelectDropDown({
                 <ListboxOptions
                   ref={menuRef}
                   className={cn(
-                    'absolute z-50 mt-2 max-h-60 w-full overflow-auto rounded bg-white text-base text-xs ring-1 ring-black/10 focus:outline-none dark:bg-gray-800 dark:ring-white/20 dark:last:border-0 md:w-[100%]',
+                    'absolute z-50 mt-2 max-h-60 w-full overflow-auto rounded bg-white text-base text-xs ring-1 ring-black/10 focus:outline-none dark:bg-gray-800 dark:ring-white/20 dark:last:border-0 touch-desktop:w-[100%]',
                     optionsClassName,
                   )}
                 >

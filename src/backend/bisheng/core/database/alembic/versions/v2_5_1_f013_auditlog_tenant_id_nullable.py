@@ -55,7 +55,25 @@ def _is_nullable(table: str, column: str) -> bool:
     return row is not None and row[0] == 'YES'
 
 
+def _column_exists(table: str, column: str) -> bool:
+    conn = op.get_bind()
+    result = conn.execute(
+        sa.text(
+            """
+            SELECT COUNT(*) FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = :t
+              AND COLUMN_NAME = :c
+            """
+        ),
+        {'t': table, 'c': column},
+    )
+    return result.scalar() > 0
+
+
 def upgrade() -> None:
+    if not _column_exists('auditlog', 'tenant_id'):
+        return
     if _is_nullable('auditlog', 'tenant_id'):
         return
     op.execute(
@@ -64,6 +82,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    if not _column_exists('auditlog', 'tenant_id'):
+        return
     # Downgrade would require the column to be NOT NULL with a default.
     # Backfill NULL rows to 1 first, then re-add the constraint.
     op.execute(

@@ -48,7 +48,7 @@ export default function MobileNav({
   };
 
   return (
-    <div className="bg-token-main-surface-primary sticky top-0 z-10 flex h-10 w-full flex-row items-center justify-between bg-white px-2 dark:bg-gray-800 dark:text-white md:hidden max-[575px]:border-b max-[575px]:border-[#f0f1f3]">
+    <div className="bg-token-main-surface-primary sticky top-0 z-10 flex h-10 w-full flex-row items-center justify-between bg-white px-2 dark:bg-gray-800 dark:text-white touch-mobile:border-b touch-mobile:border-[#f0f1f3]">
       <button
         type="button"
         data-testid="mobile-header-toggle-sidebar"

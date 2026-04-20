@@ -176,11 +176,11 @@ const LinsightChatInput = memo(
         );
 
         return (
-            <div className={cn("px-4 pb-4 max-[575px]:px-0 max-[575px]:pb-3 shrink-0 relative", !isLingsi && "overflow-hidden")}>
+            <div className={cn("px-4 pb-4 touch-mobile:px-0 touch-mobile:pb-3 shrink-0 relative", !isLingsi && "overflow-hidden")}>
                 {/* Drag-drop overlay */}
                 {isDragging && <DragDropOverlay />}
 
-                <div className={`relative pb-3 z-10 flex w-full flex-col bg-surface-tertiary overflow-hidden border border-blue-400 bg-gradient-to-b from-[#F2F5FF] to-white max-[575px]:bg-[#f4f5f7] ${size === 'mini' ? 'rounded-xl' : 'rounded-3xl max-[575px]:rounded-2xl'}`}>
+                <div className={`relative pb-3 z-10 flex w-full flex-col bg-surface-tertiary overflow-hidden border border-blue-400 bg-gradient-to-b from-[#F2F5FF] to-white touch-mobile:bg-[#f4f5f7] ${size === 'mini' ? 'rounded-xl' : 'rounded-3xl touch-mobile:rounded-2xl'}`}>
                     {/* 做同款 label */}
                     {isLingsi && <SameSopSpan />}
                     {/* File upload area: file list + attachment button */}

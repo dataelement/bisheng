@@ -26,7 +26,7 @@ services:
     command: migrate
     environment:
       OPENFGA_DATASTORE_ENGINE: mysql
-      OPENFGA_DATASTORE_URI: "root:1234@tcp(bisheng-mysql:3306)/openfga?parseTime=true"
+      OPENFGA_DATASTORE_URI: "root:1234@tcp(mysql:3306)/openfga?parseTime=true"
     depends_on:
       mysql:
         condition: service_healthy
@@ -37,7 +37,7 @@ services:
     command: run
     environment:
       OPENFGA_DATASTORE_ENGINE: mysql
-      OPENFGA_DATASTORE_URI: "root:1234@tcp(bisheng-mysql:3306)/openfga?parseTime=true"
+      OPENFGA_DATASTORE_URI: "root:1234@tcp(mysql:3306)/openfga?parseTime=true"
       OPENFGA_LOG_FORMAT: json
       OPENFGA_PLAYGROUND_ENABLED: "true"
     ports:

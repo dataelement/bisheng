@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
-import { useLocalize, useMediaQuery } from "~/hooks";
+import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 
 const AI_MIN_LEFT = 480;
 const AI_MIN_RIGHT = 360;
@@ -12,7 +12,7 @@ const AI_MIN_RIGHT = 360;
  */
 export function useAiSplitPane() {
     const localize = useLocalize();
-    const isH5 = useMediaQuery("(max-width: 768px)");
+    const isH5 = usePrefersMobileLayout();
     const [showAiAssistant, setShowAiAssistant] = useState(false);
     const [aiSplitWidth, setAiSplitWidth] = useState<number>(() => {
         const saved = localStorage.getItem("knowledge-ai-split-ratio");

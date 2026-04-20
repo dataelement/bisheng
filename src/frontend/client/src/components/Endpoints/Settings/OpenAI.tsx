@@ -52,11 +52,11 @@ export default function OpenAISettings({
 
   return (
     <div className="h-auto max-w-full overflow-x-hidden p-3">
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-5">
-        <div className="flex flex-col gap-6 md:col-span-3">
+      <div className="grid grid-cols-1 gap-6 touch-desktop:grid-cols-5">
+        <div className="flex flex-col gap-6 touch-desktop:col-span-3">
           {parameters.col1.map(renderComponent)}
         </div>
-        <div className="flex flex-col gap-6 md:col-span-2">
+        <div className="flex flex-col gap-6 touch-desktop:col-span-2">
           {parameters.col2.map(renderComponent)}
         </div>
       </div>

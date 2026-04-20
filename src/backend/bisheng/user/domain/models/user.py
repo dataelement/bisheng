@@ -9,8 +9,10 @@ from sqlmodel import Field, select, Relationship, col
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.database.constants import AdminRole, DefaultRole
+from bisheng.database.models.department import Department, UserDepartment
 from bisheng.database.models.group import DefaultGroup, Group
 from bisheng.database.models.role import Role
+from bisheng.database.models.tenant import UserTenant
 from bisheng.database.models.user_group import UserGroup
 from bisheng.user.domain.models.user_role import UserRole
 
@@ -75,6 +77,8 @@ class User(UserBase, table=True):
     # DefinitiongroupsAndrolesQuery Relationships for
     groups: List["Group"] = Relationship(link_model=UserGroup)
     roles: List["Role"] = Relationship(link_model=UserRole)
+
+    departments: List["Department"] = Relationship(link_model=UserDepartment)
 
     __tablename__ = "user"
     __table_args__ = (
@@ -288,10 +292,10 @@ class UserDao(UserBase):
 
     @classmethod
     async def add_user_and_configured_default_auth(
-            cls,
-            user: User,
-            default_groupid: Optional[int] = None,
-            default_roleid: Optional[int] = None) -> User:
+        cls,
+        user: User,
+        default_groupid: Optional[int] = None,
+        default_roleid: Optional[int] = None) -> User:
         """
         Add SSO users with configured default group and role.
         """
@@ -386,21 +390,21 @@ class UserDao(UserBase):
             users = session.exec(statement).all()
 
         # Load department info (UserDepartment lacks FK annotations, so query explicitly)
-        if users:
-            from collections import defaultdict
-            from bisheng.database.models.department import (
-                Department, DepartmentDao, UserDepartmentDao,
-            )
-            all_user_ids = [u.user_id for u in users]
-            ud_rows = UserDepartmentDao.get_by_user_ids(all_user_ids)
-            dept_ids = list({ud.department_id for ud in ud_rows})
-            dept_map = {d.id: d for d in DepartmentDao.get_by_ids(dept_ids)}
-            user_dept_map = defaultdict(list)
-            for ud in ud_rows:
-                if ud.department_id in dept_map:
-                    user_dept_map[ud.user_id].append(dept_map[ud.department_id])
-            for user in users:
-                user.departments = user_dept_map.get(user.user_id, [])
+        # if users:
+        #     from collections import defaultdict
+        #     from bisheng.database.models.department import (
+        #         Department, DepartmentDao, UserDepartmentDao,
+        #     )
+        #     all_user_ids = [u.user_id for u in users]
+        #     ud_rows = UserDepartmentDao.get_by_user_ids(all_user_ids)
+        #     dept_ids = list({ud.department_id for ud in ud_rows})
+        #     dept_map = {d.id: d for d in DepartmentDao.get_by_ids(dept_ids)}
+        #     user_dept_map = defaultdict(list)
+        #     for ud in ud_rows:
+        #         if ud.department_id in dept_map:
+        #             user_dept_map[ud.user_id].append(dept_map[ud.department_id])
+        #     for user in users:
+        #         user.departments = user_dept_map.get(user.user_id, [])
 
         return users
 
@@ -528,7 +532,6 @@ class UserDao(UserBase):
     @classmethod
     async def aget_by_source(cls, source: str, tenant_id: int) -> List['User']:
         """Get all users from a given source within a tenant (for reconcile)."""
-        from bisheng.database.models.user_tenant import UserTenant
         async with get_async_db_session() as session:
             statement = select(User).join(
                 UserTenant, User.user_id == UserTenant.user_id,

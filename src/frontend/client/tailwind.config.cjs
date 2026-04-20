@@ -1,4 +1,5 @@
 // const { fontFamily } = require('tailwindcss/defaultTheme');
+const plugin = require('tailwindcss/plugin');
 
 /** @type {import('tailwindcss').Config} */
 module.exports = {
@@ -135,6 +136,17 @@ module.exports = {
   plugins: [
     require('tailwindcss-animate'),
     require('tailwindcss-radix')(),
+    plugin(({ addVariant }) => {
+      // Match usePrefersMobileLayout inverse: primary input is mouse-like (no width).
+      addVariant(
+        'touch-desktop',
+        '@media (hover: hover) and (pointer: fine)',
+      );
+      addVariant(
+        'touch-mobile',
+        '@media not ((hover: hover) and (pointer: fine))',
+      );
+    }),
     // require('@tailwindcss/typography'),
   ],
 };

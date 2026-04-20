@@ -6,7 +6,7 @@ import type { ImperativePanelHandle } from 'react-resizable-panels';
 import { ResizableHandleAlt, ResizablePanel, ResizablePanelGroup } from '~/components/ui/Resizable';
 import { useGetStartupConfig } from '~/hooks/queries/data-provider';
 import { normalizeLayout } from '~/utils';
-import { useMediaQuery } from '~/hooks';
+import { usePrefersMobileLayout } from '~/hooks';
 import SidePanel from './SidePanel';
 import store from '~/store';
 
@@ -42,7 +42,7 @@ const SidePanelGroup = ({
   const [fullCollapse, setFullCollapse] = useState(fullPanelCollapse);
   const [collapsedSize, setCollapsedSize] = useState(navCollapsedSize);
 
-  const isSmallScreen = useMediaQuery('(max-width: 767px)');
+  const isSmallScreen = usePrefersMobileLayout();
   const hideSidePanel = useRecoilValue(store.hideSidePanel);
 
   const calculateLayout = useCallback(() => {

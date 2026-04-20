@@ -24,6 +24,7 @@ export { default as useNewConvo } from './useNewConvo';
 export { default as useLocalize } from './useLocalize';
 export type { TranslationKeys } from './useLocalize';
 export { default as useMediaQuery } from './useMediaQuery';
+export { default as usePrefersMobileLayout } from './usePrefersMobileLayout';
 export { default as useScrollToRef } from './useScrollToRef';
 export { default as useLocalStorage } from './useLocalStorage';
 export { default as useDelayedRender } from './useDelayedRender';

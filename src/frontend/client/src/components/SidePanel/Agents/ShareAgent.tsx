@@ -146,7 +146,7 @@ export default function ShareAgent({
           </div>
         </button>
       </OGDialogTrigger>
-      <OGDialogContent className="w-11/12 md:max-w-xl">
+      <OGDialogContent className="w-11/12 touch-desktop:max-w-xl">
         <OGDialogTitle>
           {localize(
             'com_ui_share_var',

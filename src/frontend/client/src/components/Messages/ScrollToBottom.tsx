@@ -6,7 +6,7 @@ type Props = {
 
 export default function ScrollToBottom({ scrollHandler }: Props) {
   return (
-    <div className='final-completion group mx-auto flex flex-1 gap-3 transition-all duration-300 transform-gpu md:max-w-3xl md:px-5 lg:max-w-[40rem] lg:px-1 xl:max-w-[48rem] xl:px-5 message-render focus:outline-none focus:ring-2 focus:ring-border-xheavy'>
+    <div className='final-completion group mx-auto flex flex-1 gap-3 transition-all duration-300 transform-gpu touch-desktop:max-w-3xl touch-desktop:px-5 lg:max-w-[40rem] lg:px-1 xl:max-w-[48rem] xl:px-5 message-render focus:outline-none focus:ring-2 focus:ring-border-xheavy'>
       <button
         onClick={scrollHandler}
         className="absolute bottom-5 right-2 cursor-pointer rounded-full border border-gray-200 bg-white bg-clip-padding text-gray-600 dark:border-white/10 dark:bg-gray-850/90 dark:text-gray-200"

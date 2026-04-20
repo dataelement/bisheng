@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronRight, Loader2, X } from 'lucide-react';
 import { getCitationDetail, resolveCitationDetails, type ChatCitation } from '~/api/chatApi';
-import { useMediaQuery } from '~/hooks';
+import { usePrefersMobileLayout } from '~/hooks';
 import { cn } from '~/utils';
 import {
   buildCitationDocumentPreview,
@@ -175,7 +175,7 @@ export default function CitationReferencesDrawer({
   citations,
   buttonClassName,
 }: CitationReferencesDrawerProps) {
-  const isH5 = useMediaQuery('(max-width: 768px)');
+  const isH5 = usePrefersMobileLayout();
   const [open, setOpen] = useState(false);
   const [detailMap, setDetailMap] = useState<Record<string, ChatCitation>>(() => createCitationDetailMap(citations));
   const [loadingMap, setLoadingMap] = useState<Record<string, boolean>>({});

@@ -255,7 +255,7 @@ const AiChatInput = memo(
         );
 
         return (
-            <div className="px-4 sm:px-0 pb-4 max-[575px]:px-0 max-[575px]:pb-3 shrink-0 relative">
+            <div className="px-4 sm:px-0 pb-4 touch-mobile:px-0 touch-mobile:pb-3 shrink-0 relative">
                 {/* Drag-drop overlay */}
                 {isDragging && <DragDropOverlay />}
 
@@ -272,7 +272,7 @@ const AiChatInput = memo(
                     </div>
                 </div>}
 
-                <div className={`relative pb-3 flex w-full flex-col bg-surface-tertiary overflow-hidden max-[575px]:bg-[#f4f5f7] ${size === 'mini' ? 'rounded-xl' : 'rounded-3xl max-[575px]:rounded-2xl'}`}>
+                <div className={`relative pb-3 flex w-full flex-col bg-surface-tertiary overflow-hidden touch-mobile:bg-[#f4f5f7] ${size === 'mini' ? 'rounded-xl' : 'rounded-3xl touch-mobile:rounded-2xl'}`}>
                     {/* File upload area: file list only. Trigger moves to "+" menu
                         when we're in v2.5 agent mode; legacy flow keeps built-in icon. */}
                     {showUpload && (() => {

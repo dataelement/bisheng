@@ -12,7 +12,7 @@ import { useAuthContext } from '~/hooks/AuthContext';
 import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import useAiChat from '~/hooks/useAiChat';
 import useLocalize from '~/hooks/useLocalize';
-import useMediaQuery from '~/hooks/useMediaQuery';
+import usePrefersMobileLayout from '~/hooks/usePrefersMobileLayout';
 import store from '~/store';
 import { addConversation, cn, generateUUID } from '~/utils';
 import { Button } from '../ui';
@@ -219,7 +219,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
             return (
           <div className={cn(
             showCode ? 'hidden' : 'flex flex-col relative',
-            useMessagesLayout ? 'h-full' : 'h-[calc(100vh-200px)] max-[575px]:min-h-[calc(100dvh-240px)] max-[575px]:h-auto justify-center'
+            useMessagesLayout ? 'h-full' : 'h-[calc(100vh-200px)] touch-mobile:min-h-[calc(100dvh-240px)] touch-mobile:h-auto justify-center'
           )}>
             {/* Content area */}
             {isLoading && conversationId !== 'new' ? (
@@ -251,7 +251,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
             )}
 
             {/* Input area — using new AiChatInput */}
-            {!shareToken && <div className="w-full max-w-[800px] mx-auto max-[575px]:max-w-full max-[575px]:px-3 shrink-0">
+            {!shareToken && <div className="w-full max-w-[800px] mx-auto touch-mobile:max-w-full touch-mobile:px-3 shrink-0">
               {isLingsi ?
                 <LinsightChatInput
                   disabled={!!shareToken}
@@ -323,7 +323,7 @@ const DailyFeaturedApps = ({ t, isLingsi }: { t: (k: string) => string; isLingsi
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { setConversation } = store.useCreateConversationAtom(0)
-  const isH5 = useMediaQuery('(max-width: 768px)')
+  const isH5 = usePrefersMobileLayout()
 
   // H5: 2 cols × 2 rows default (4), expand adds 2 rows → 8 total.
   // PC: 4 cols × 2 rows default (8), expand adds 2 rows → 16 total.
@@ -368,11 +368,11 @@ const DailyFeaturedApps = ({ t, isLingsi }: { t: (k: string) => string; isLingsi
   const canExpand = !expanded && dailyApps.length > defaultCount
 
   return (
-    <div className="relative w-full -mt-2 md:-mt-40 pb-24 z-10">
+    <div className="relative w-full -mt-2 touch-desktop:-mt-40 pb-24 z-10">
       <div className="flex justify-between items-center mb-3 text-sm text-gray-500 max-w-[800px] mx-auto px-4 sm:px-0">
         <h2 className="text-sm text-gray-400">平台推荐应用</h2>
       </div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3 max-w-[800px] mx-auto px-4 sm:px-0">
+      <div className="grid grid-cols-2 touch-desktop:grid-cols-4 gap-3 mb-3 max-w-[800px] mx-auto px-4 sm:px-0">
         {displayApps.map((appItem) => (
           <Card
             key={appItem.id}
