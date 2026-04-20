@@ -14,7 +14,7 @@
 |------|------|------|
 | spec.md | ✅ 已定稿 | 2026-04-19 PRD 精化后定稿；24 AC + 8 AD + 完整 §5 代码骨架；经 `/sdd-review spec` 通过 |
 | tasks.md | ✅ 已拆解 | 2026-04-21 `/sdd-review tasks` 第 2 轮通过（第 1 轮修复：T02/T11/T15 三个跨文件/跨前后端任务拆分 + AC-18/19 E2E 测试补齐 + D10/D11 决策锁定） |
-| 实现 | 🟡 进行中 | 16 / 19 完成（T01~T14 ✓） |
+| 实现 | 🟡 进行中 | 17 / 19 完成（T01~T14, T15a ✓） |
 
 ---
 
@@ -594,7 +594,7 @@ T04 (Alembic 迁移 + ORM 补 tenant_id)                              ──┤ 
 
 ---
 
-- [ ] **T15a**: 后端 `/user/info` 响应扩展（4 个字段 pure-additive）
+- [x] **T15a**: 后端 `/user/info` 响应扩展（4 个字段 pure-additive）
   **文件（修改）**:
   - `src/backend/bisheng/user/api/user.py`（具体 endpoint 位置实施首行 grep `/user/info` 或 `/user/me` 定位；沿 F012 既有响应 DTO 扩展）—— 响应体内补 4 字段:
     ```python
