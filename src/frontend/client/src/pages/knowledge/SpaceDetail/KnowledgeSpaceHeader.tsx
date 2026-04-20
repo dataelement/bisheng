@@ -34,7 +34,7 @@ import { useToastContext } from "~/Providers";
 import { useLocalize } from "~/hooks";
 import { useState, useEffect } from "react";
 import { PermissionDialog } from "~/components/permission";
-import { checkPermission } from "~/api/permission";
+import { canOpenPermissionDialog } from "~/api/permission";
 
 interface KnowledgeSpaceHeaderProps {
     space: KnowledgeSpace;
@@ -106,10 +106,15 @@ export function KnowledgeSpaceHeader({
 
     useEffect(() => {
         let cancelled = false;
-        checkPermission("knowledge_space", space.id, "can_manage")
-            .then((res) => { if (!cancelled) setCanManagePermission(res?.allowed === true || isAdmin); })
+        const controller = new AbortController();
+
+        canOpenPermissionDialog("knowledge_space", space.id, { signal: controller.signal })
+            .then((allowed) => { if (!cancelled) setCanManagePermission(allowed || isAdmin); })
             .catch(() => { if (!cancelled) setCanManagePermission(isAdmin); });
-        return () => { cancelled = true; };
+        return () => {
+            cancelled = true;
+            controller.abort();
+        };
     }, [space.id, isAdmin]);
 
     const handleShare = () => {

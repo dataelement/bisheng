@@ -14,8 +14,8 @@ import { PaginationBar } from "./PaginationBar";
 import { SelectionPathBreadcrumb } from "./SelectionPathBreadcrumb";
 import { PermissionDialog } from "~/components/permission";
 import { useLocalize, useMediaQuery } from "~/hooks";
-import { checkPermission } from "~/api/permission";
 import { cn } from "~/utils";
+import { canOpenPermissionDialog } from "~/api/permission";
 
 interface KnowledgeSpaceContentProps {
     space: KnowledgeSpace;
@@ -179,30 +179,60 @@ export function KnowledgeSpaceContent({
         name: string;
         type: "folder" | "knowledge_file";
     } | null>(null);
-    const [canManageSpace, setCanManageSpace] = useState(isAdmin);
+    const [permissionEntryIds, setPermissionEntryIds] = useState<Set<string>>(new Set());
+    const permissionEntryProbeKey = displayFiles
+        .filter((file) => !file.isCreating && /^\d+$/.test(String(file.id)))
+        .map((file) => `${file.id}:${file.type}`)
+        .join("|");
 
     const { showToast } = useToastContext();
     const confirm = useConfirm();
 
     useEffect(() => {
         let cancelled = false;
+        const controller = new AbortController();
+        const candidates = displayFiles.filter(
+            (file) => !file.isCreating && /^\d+$/.test(String(file.id))
+        );
 
-        checkPermission("knowledge_space", space.id, "can_manage")
-            .then((res) => {
-                if (!cancelled) {
-                    setCanManageSpace(res?.allowed === true || isAdmin);
-                }
+        if (isAdmin) {
+            setPermissionEntryIds(new Set(candidates.map((file) => file.id)));
+            return () => {
+                cancelled = true;
+                controller.abort();
+            };
+        }
+
+        if (candidates.length === 0) {
+            setPermissionEntryIds(new Set());
+            return () => {
+                cancelled = true;
+                controller.abort();
+            };
+        }
+
+        Promise.all(
+            candidates.map(async (file) => {
+                const resourceType = file.type === FileType.FOLDER ? "folder" : "knowledge_file";
+                const allowed = await canOpenPermissionDialog(resourceType, file.id, {
+                    signal: controller.signal,
+                }).catch(() => false);
+                return allowed ? file.id : null;
             })
-            .catch(() => {
-                if (!cancelled) {
-                    setCanManageSpace(isAdmin);
-                }
-            });
+        ).then((ids) => {
+            if (!cancelled) {
+                setPermissionEntryIds(new Set(ids.filter((id): id is string => Boolean(id))));
+            }
+        });
 
         return () => {
             cancelled = true;
+            controller.abort();
         };
-    }, [space.id, isAdmin]);
+    }, [
+        isAdmin,
+        permissionEntryProbeKey,
+    ]);
 
     // Read max file size from env config (MB), fallback to default 200MB
     const bishengConfig = useRecoilValue(bishengConfState);
@@ -623,7 +653,7 @@ export function KnowledgeSpaceContent({
                                     onPreview={handlePreviewFile}
                                     onValidateName={(newName) => validateFileName(newName, file.type === FileType.FOLDER, file.id, !!file.isCreating)}
                                     onCancelCreate={onCancelCreateFolder}
-                                    onManagePermission={canManageSpace ? () => handleManagePermission(file.id) : undefined}
+                                    onManagePermission={permissionEntryIds.has(file.id) ? () => handleManagePermission(file.id) : undefined}
                                     mobileListMode={isH5 && viewMode === "list"}
                                 />
                             ))}
@@ -646,7 +676,8 @@ export function KnowledgeSpaceContent({
                                     onPreview={(id) => handlePreviewFile(id)}
                                     onValidateName={validateFileName}
                                     onCancelCreate={onCancelCreateFolder}
-                                    onManagePermission={canManageSpace ? handleManagePermission : undefined}
+                                    permissionEntryIds={permissionEntryIds}
+                                    onManagePermission={handleManagePermission}
                                     sortBy={sortBy}
                                     sortDirection={sortDirection}
                                     onSort={handleSort}

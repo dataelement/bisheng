@@ -231,35 +231,69 @@ export function FileCard({
                                 </DropdownMenuTrigger>
 
                                 <DropdownMenuContent align="end" className="min-w-[120px]" onClick={(e) => e.stopPropagation()}>
-
-                                    {/* 当有更多菜单时，下载按钮收起在下拉列表内展示（可按需隐藏） */}
                                     {showMenuDownloadItem && (
-                                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDownload(); }}>
+                                        <DropdownMenuItem
+                                            onClick={(e) => { e.stopPropagation(); onDownload(); }}
+                                            className="flex items-center"
+                                        >
+                                            <Download className="mr-2 size-4 shrink-0" />
                                             {localize("com_knowledge.download")}
                                         </DropdownMenuItem>
                                     )}
+                                        {onManagePermission && (
+                                            <DropdownMenuItem
+                                                onClick={(e) => { e.stopPropagation(); onManagePermission(); }}
+                                                className="flex items-center"
+                                            >
+                                                <Shield className="mr-2 size-4 shrink-0" />
+                                                {localize("com_permission.manage_permission")}
+                                            </DropdownMenuItem>
+                                        )}
 
-                                    {/* 如果是管理员，显示后续管理操作 */}
-                                    {isAdmin && (
-                                        <>
-                                            {!isFolder && <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEditTags(); }}>{localize("com_knowledge.edit_tags")}</DropdownMenuItem>}
-                                            <DropdownMenuItem onClick={(e) => {
-                                                e.stopPropagation();
-                                                startRenaming();
-                                            }}>{localize("com_knowledge.rename")}</DropdownMenuItem>
-                                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDelete(); }} className="text-[#f53f3f] focus:text-[#f53f3f]">
-                                                {localize("com_knowledge.delete")}</DropdownMenuItem>
-                                        </>
-                                    )}
-
-                                    {/* Retry for failed files or folders with partial failures */}
-                                    {hasRetryOption && (
-                                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onRetry?.(); }}>{localize("com_knowledge.retry")}</DropdownMenuItem>
-                                    )}
-                                </DropdownMenuContent>
-                            </DropdownMenu>
-                        )}
-                    </div>
+                                        {isAdmin && (
+                                            <>
+                                                {!isFolder && (
+                                                    <DropdownMenuItem
+                                                        onClick={(e) => { e.stopPropagation(); onEditTags(); }}
+                                                        className="flex items-center"
+                                                    >
+                                                        <Tag className="mr-2 size-4 shrink-0" />
+                                                        {localize("com_knowledge.edit_tags")}
+                                                    </DropdownMenuItem>
+                                                )}
+                                                <DropdownMenuItem
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        startRenaming();
+                                                    }}
+                                                    className="flex items-center"
+                                                >
+                                                    <Edit className="mr-2 size-4 shrink-0" />
+                                                    {localize("com_knowledge.rename")}
+                                                </DropdownMenuItem>
+                                                {hasRetryOption && (
+                                                    <DropdownMenuItem
+                                                        onClick={(e) => { e.stopPropagation(); onRetry?.(); }}
+                                                        className="flex items-center"
+                                                    >
+                                                        <RefreshCw className="mr-2 size-4 shrink-0" />
+                                                        {localize("com_knowledge.retry")}
+                                                    </DropdownMenuItem>
+                                                )}
+                                                <DropdownMenuItem
+                                                    onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                                                    className="flex items-center text-[#f53f3f] focus:text-[#f53f3f]"
+                                                >
+                                                    <Trash2 className="mr-2 size-4 shrink-0" />
+                                                    {localize("com_knowledge.delete")}
+                                                </DropdownMenuItem>
+                                            </>
+                                        )}
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 {/* 底部内容区域 */}
@@ -328,13 +362,23 @@ export function FileCard({
                                 className="min-w-[120px]"
                                 onClick={(e) => e.stopPropagation()}
                             >
-                                {showMenuDownloadItem && (
+                                        {showMenuDownloadItem && (
+                                            <DropdownMenuItem
+                                                onClick={(e) => { e.stopPropagation(); onDownload(); }}
+                                                className="flex items-center"
+                                            >
+                                        <Download className="mr-2 size-4 shrink-0" />
+                                                {localize("com_knowledge.download")}
+                                            </DropdownMenuItem>
+                                        )}
+
+                                {onManagePermission && (
                                     <DropdownMenuItem
-                                        onClick={(e) => { e.stopPropagation(); onDownload(); }}
+                                        onClick={(e) => { e.stopPropagation(); onManagePermission(); }}
                                         className="flex items-center"
                                     >
-                                        <Download className="mr-2 size-4 shrink-0" />
-                                        {localize("com_knowledge.download")}
+                                        <Shield className="mr-2 size-4 shrink-0" />
+                                        {localize("com_permission.manage_permission")}
                                     </DropdownMenuItem>
                                 )}
 
@@ -366,15 +410,6 @@ export function FileCard({
                                             >
                                                 <RefreshCw className="mr-2 size-4 shrink-0" />
                                                 {localize("com_knowledge.retry")}
-                                            </DropdownMenuItem>
-                                        )}
-                                        {onManagePermission && (
-                                            <DropdownMenuItem
-                                                onClick={(e) => { e.stopPropagation(); onManagePermission(); }}
-                                                className="flex items-center"
-                                            >
-                                                <Shield className="mr-2 size-4 shrink-0" />
-                                                {localize("com_permission.manage_permission")}
                                             </DropdownMenuItem>
                                         )}
                                         <DropdownMenuItem

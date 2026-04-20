@@ -42,6 +42,16 @@ export function PermissionGrantTab({
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
+    setSelected((prev) =>
+      prev.map((subject) =>
+        subject.type === "department"
+          ? { ...subject, include_children: includeChildren }
+          : subject
+      )
+    );
+  }, [includeChildren]);
+
+  useEffect(() => {
     getGrantableRelationModels(resourceType, resourceId)
       .then((res) => {
         const options: RelationModelOption[] = (res || []).map((m) => ({
@@ -81,7 +91,9 @@ export function PermissionGrantTab({
       subject_id: s.id,
       relation,
       model_id: selectedModelId,
-      ...(s.type === "department" ? { include_children: includeChildren } : {}),
+      ...(s.type === "department"
+        ? { include_children: Boolean(s.include_children) }
+        : {}),
     }));
 
     setSubmitting(true);

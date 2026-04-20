@@ -48,6 +48,10 @@ export interface SelectedSubject {
   include_children?: boolean;
 }
 
+interface PermissionRequestConfig {
+  signal?: AbortSignal;
+}
+
 // ── Helpers ──────────────────────────────────────────
 // Client request layer returns the full backend envelope {status_code, status_message, data}.
 // All functions below unwrap .data so callers get the payload directly.
@@ -56,14 +60,23 @@ function unwrap<T>(res: any): T {
   return res?.data ?? res;
 }
 
+function withPermissionRequestOptions(config?: PermissionRequestConfig) {
+  return {
+    skip403Redirect: true,
+    ...config,
+  };
+}
+
 // ── Permission APIs ──────────────────────────────────
 
 export async function getResourcePermissions(
   resourceType: string,
-  resourceId: string
+  resourceId: string,
+  config?: PermissionRequestConfig
 ): Promise<PermissionEntry[]> {
   const res = await request.get(
-    `/api/v1/permissions/resources/${resourceType}/${resourceId}/permissions`
+    `/api/v1/permissions/resources/${resourceType}/${resourceId}/permissions`,
+    withPermissionRequestOptions(config)
   );
   return unwrap(res);
 }
@@ -72,11 +85,13 @@ export async function authorizeResource(
   resourceType: string,
   resourceId: string,
   grants: GrantItem[],
-  revokes: RevokeItem[]
+  revokes: RevokeItem[],
+  config?: PermissionRequestConfig
 ): Promise<null> {
   const res = await request.post(
     `/api/v1/permissions/resources/${resourceType}/${resourceId}/authorize`,
-    { grants, revokes }
+    { grants, revokes },
+    withPermissionRequestOptions(config)
   );
   return unwrap(res);
 }
@@ -84,24 +99,40 @@ export async function authorizeResource(
 export async function checkPermission(
   objectType: string,
   objectId: string,
-  relation: string
+  relation: string,
+  config?: PermissionRequestConfig
 ): Promise<{ allowed: boolean }> {
   const res = await request.post(`/api/v1/permissions/check`, {
     object_type: objectType,
     object_id: objectId,
     relation,
-  });
+  }, withPermissionRequestOptions(config));
   return unwrap(res);
 }
 
 export async function getGrantableRelationModels(
   objectType: string,
-  objectId: string
+  objectId: string,
+  config?: PermissionRequestConfig
 ): Promise<RelationModel[]> {
   const res = await request.get(`/api/v1/permissions/relation-models/grantable`, {
     params: { object_type: objectType, object_id: objectId },
+    ...withPermissionRequestOptions(config),
   });
   return unwrap(res);
+}
+
+export async function canOpenPermissionDialog(
+  objectType: ResourceType,
+  objectId: string,
+  config?: PermissionRequestConfig
+): Promise<boolean> {
+  const models = await getGrantableRelationModels(
+    objectType,
+    objectId,
+    config
+  );
+  return Array.isArray(models) && models.length > 0;
 }
 
 // ── Subject search APIs ──────────────────────────────
@@ -112,7 +143,7 @@ export async function searchUsers(
 ): Promise<{ data: { user_id: number; user_name: string }[]; total: number }> {
   const res = await request.get(`/api/v1/user/list`, {
     params: { name, page_num: 1, page_size: 200 },
-    ...config,
+    ...withPermissionRequestOptions(config),
   });
   return unwrap(res);
 }
@@ -120,14 +151,20 @@ export async function searchUsers(
 export async function getDepartmentTree(
   config?: { signal?: AbortSignal }
 ): Promise<any[]> {
-  const res = await request.get(`/api/v1/departments/tree`, config);
+  const res = await request.get(
+    `/api/v1/departments/tree`,
+    withPermissionRequestOptions(config)
+  );
   return unwrap(res);
 }
 
 export async function getUserGroups(
   config?: { signal?: AbortSignal }
 ): Promise<any[]> {
-  const res = await request.get(`/api/v1/group/list`, config);
+  const res = await request.get(
+    `/api/v1/group/list`,
+    withPermissionRequestOptions(config)
+  );
   const data = unwrap<any>(res);
   const rows = data?.records ?? data;
   return Array.isArray(rows) ? rows : [];
