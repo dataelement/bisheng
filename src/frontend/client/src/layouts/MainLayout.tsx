@@ -15,7 +15,14 @@ import { bishengConfState } from '~/pages/appChat/store/atoms';
 import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import { useAuthContext, useLocalize } from '~/hooks';
 import { Tooltip, TooltipContent, TooltipTrigger } from '~/components/ui/Tooltip2';
+import { Button } from '~/components/ui/Button';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '~/components/ui/Dialog';
 import store from '~/store';
+
+const systemNoticeTodayKey = () => {
+  const d = new Date();
+  return `system_notice_shown_${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+};
 import { cn } from '~/utils';
 import { getPlatformAdminPanelUrl } from '~/utils/platformAdminUrl';
 import { UserPopMenu } from './UserPopMenu';
@@ -232,12 +239,27 @@ export default function MainLayout() {
   }, [isUserLoading, user, logout]);
 
   // Load env config once on mount — makes bishengConfState available to all pages
-  const [, setConfig] = useRecoilState(bishengConfState);
+  const [config, setConfig] = useRecoilState(bishengConfState);
   useEffect(() => {
     getBysConfigApi().then((res: any) => {
       setConfig(res.data);
     });
   }, []);
+
+  // System notice popup — single instance above KeepAlive so dismissal is global.
+  const remoteNotice = (config as { system_notification?: string } | undefined)?.system_notification ?? '';
+  const [noticeDismissed, setNoticeDismissed] = useState(false);
+  const hideNotice = noticeDismissed
+    || (typeof window !== 'undefined' && !!sessionStorage.getItem(systemNoticeTodayKey()));
+  const systemNotice = !hideNotice && remoteNotice ? remoteNotice : '';
+  const closeSystemNotice = () => {
+    try {
+      sessionStorage.setItem(systemNoticeTodayKey(), 'true');
+    } catch {
+      // ignore storage failures
+    }
+    setNoticeDismissed(true);
+  };
 
   // Don't render any page content until the user is authenticated.
   // This prevents the flash of empty-state pages for unauthenticated visitors.
@@ -326,6 +348,28 @@ export default function MainLayout() {
           </div>
         </KeepAlive>
       </main>
+      <Dialog
+        open={!!systemNotice}
+        onOpenChange={(open) => {
+          if (!open) closeSystemNotice();
+        }}
+      >
+        <DialogContent className="sm:max-w-md w-[calc(100%-40px)] rounded-2xl mx-auto top-[50%] -translate-y-[50%]">
+          <DialogHeader>
+            <DialogTitle className="text-center text-lg font-medium">系统通知</DialogTitle>
+          </DialogHeader>
+          <div className="py-6 px-2">
+            <div className="text-sm text-gray-700 leading-relaxed text-center whitespace-pre-wrap">
+              {systemNotice}
+            </div>
+          </div>
+          <DialogFooter className="sm:justify-center flex-row justify-center pb-2">
+            <Button onClick={closeSystemNotice} className="w-[120px] rounded-full">
+              我知道了
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
