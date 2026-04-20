@@ -35,12 +35,13 @@ def _load_tasks_module() -> ModuleType:
     if 'bisheng.worker' not in sys.modules or not isinstance(
         getattr(sys.modules['bisheng.worker'], '__path__', None), list,
     ):
+        # Derive the worker path from this test file's location so the
+        # test works under any checkout root (main repo, worktrees,
+        # /opt/bisheng, /opt/bisheng-f019, etc.). A hard-coded /opt path
+        # would break the moment we run inside a worktree.
+        worker_path = Path(__file__).resolve().parent.parent / 'bisheng' / 'worker'
         stub_pkg = ModuleType('bisheng.worker')
-        stub_pkg.__path__ = [str(
-            Path('/opt/bisheng/src/backend/bisheng/worker')
-            if Path('/opt/bisheng/src/backend/bisheng/worker').exists()
-            else Path(__file__).parent.parent / 'bisheng' / 'worker'
-        )]
+        stub_pkg.__path__ = [str(worker_path)]
         sys.modules['bisheng.worker'] = stub_pkg
     if 'bisheng.worker.admin_scope' not in sys.modules:
         sub_pkg = ModuleType('bisheng.worker.admin_scope')
