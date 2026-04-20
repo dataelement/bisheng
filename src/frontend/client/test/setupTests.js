@@ -17,6 +17,10 @@ import '@testing-library/jest-dom/extend-expect';
 // 'react-lottie' uses canvas
 import 'jest-canvas-mock';
 
+global.__APP_ENV__ = global.__APP_ENV__ || {
+  BASE_URL: '',
+};
+
 beforeEach(() => {
   jest.clearAllMocks();
 });

@@ -4,7 +4,6 @@ import {
     FileType,
     KnowledgeFile,
     KnowledgeSpace,
-    SpaceRole,
     createFolderApi,
     renameFolderApi,
     deleteFolderApi,
@@ -25,6 +24,30 @@ export interface DuplicateFileEntry {
     filePath: string;
     repeatFileName: string;
     repeatUpdateTime: string;
+}
+
+const PENDING_REGISTERED_FILE_STATUSES = new Set<FileStatus>([
+    FileStatus.UPLOADING,
+    FileStatus.WAITING,
+    FileStatus.PROCESSING,
+    FileStatus.REBUILDING,
+]);
+
+export function mergeVisibleRegisteredFiles(
+    existingFiles: KnowledgeFile[],
+    registeredFiles: KnowledgeFile[],
+): { files: KnowledgeFile[]; addedCount: number } {
+    if (registeredFiles.length === 0) {
+        return { files: existingFiles, addedCount: 0 };
+    }
+
+    const existingIds = new Set(existingFiles.map((file) => file.id));
+    const uniqueRegisteredFiles = registeredFiles.filter((file) => !existingIds.has(file.id));
+
+    return {
+        files: [...uniqueRegisteredFiles, ...existingFiles],
+        addedCount: uniqueRegisteredFiles.length,
+    };
 }
 
 interface UseFileUploadOptions {
@@ -122,11 +145,25 @@ export function useFileUpload({
             // Register non-duplicate files immediately
             if (normalPaths.length > 0) {
                 try {
-                    await addFilesApi(activeSpace.id, {
+                    const registeredFiles = await addFilesApi(activeSpace.id, {
                         file_path: normalPaths,
                         parent_id: currentFolderId ? Number(currentFolderId) : null,
                     });
-                    await loadFiles(currentPage);
+                    const { files: mergedFiles, addedCount } = mergeVisibleRegisteredFiles(files, registeredFiles);
+
+                    if (registeredFiles.length > 0) {
+                        setFiles(mergedFiles);
+                        if (addedCount > 0) {
+                            setTotal((prev) => prev + addedCount);
+                        }
+                    }
+
+                    const hasPendingRegisteredFiles = registeredFiles.some((file) =>
+                        file.status && PENDING_REGISTERED_FILE_STATUSES.has(file.status)
+                    );
+                    if (!hasPendingRegisteredFiles) {
+                        await loadFiles(currentPage);
+                    }
                 } catch {
                     showToast({ message: localize("com_knowledge.file_register_failed"), severity: NotificationSeverity.ERROR });
                 }
@@ -142,7 +179,7 @@ export function useFileUpload({
                 setDuplicateFiles(duplicates);
             }
         },
-        [activeSpace, currentFolderId, currentPage, loadFiles, showToast]
+        [activeSpace, currentFolderId, currentPage, files, loadFiles, localize, setFiles, setTotal, showToast]
     );
 
     /** User chose to overwrite duplicate files */

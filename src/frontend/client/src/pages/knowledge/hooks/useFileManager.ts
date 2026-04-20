@@ -92,7 +92,7 @@ export function useFileManager({ activeSpace, initialFolderId }: UseFileManagerO
                 setLoading(false);
             }
         },
-        [activeSpace?.id, searchQuery, searchTagIds, searchScope, statusFilter, sortBy, sortDirection, currentFolderId, pageSize, showToast]
+        [activeSpace?.id, activeSpace?.role, searchQuery, searchTagIds, searchScope, statusFilter, sortBy, sortDirection, currentFolderId, pageSize, showToast]
     );
 
     // Track whether the initial folder deep link has been consumed
@@ -148,7 +148,7 @@ export function useFileManager({ activeSpace, initialFolderId }: UseFileManagerO
             loadFiles(1);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps -- loadFiles is stable via useCallback
-    }, [searchQuery, searchTagIds, searchScope, statusFilter, sortBy, sortDirection, currentFolderId]);
+    }, [activeSpace?.role, searchQuery, searchTagIds, searchScope, statusFilter, sortBy, sortDirection, currentFolderId]);
 
     // ─── Auto-polling for pending files ─────────────────────────────────
     // Refresh the file list every 5s while any file on the current page
