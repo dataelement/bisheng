@@ -25,38 +25,51 @@ def _table_exists(table_name: str) -> bool:
     return result.scalar() > 0
 
 
+def _index_exists(table_name: str, index_name: str) -> bool:
+    conn = op.get_bind()
+    result = conn.execute(sa.text(
+        "SELECT COUNT(*) FROM information_schema.STATISTICS "
+        "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t AND INDEX_NAME = :i"
+    ), {'t': table_name, 'i': index_name})
+    return result.scalar() > 0
+
+
 def upgrade() -> None:
     """Create failed_tuple table."""
-    if _table_exists('failed_tuple'):
-        return
-    op.create_table(
-        'failed_tuple',
-        sa.Column('id', sa.BigInteger, primary_key=True, autoincrement=True),
-        sa.Column('action', sa.String(8), nullable=False, server_default='write',
-                  comment='write | delete'),
-        sa.Column('fga_user', sa.String(256), nullable=False,
-                  comment='OpenFGA user, e.g. user:7, department:5#member'),
-        sa.Column('relation', sa.String(64), nullable=False,
-                  comment='OpenFGA relation, e.g. owner, viewer'),
-        sa.Column('object', sa.String(256), nullable=False,
-                  comment='OpenFGA object, e.g. workflow:abc-123'),
-        sa.Column('retry_count', sa.Integer, nullable=False, server_default='0'),
-        sa.Column('max_retries', sa.Integer, nullable=False, server_default='3'),
-        sa.Column('status', sa.String(16), nullable=False, server_default='pending',
-                  comment='pending | succeeded | dead'),
-        sa.Column('error_message', sa.Text, nullable=True),
-        sa.Column('tenant_id', sa.Integer, nullable=False, server_default='1'),
-        sa.Column('create_time', sa.DateTime, nullable=False,
-                  server_default=sa.text('CURRENT_TIMESTAMP')),
-        sa.Column('update_time', sa.DateTime, nullable=False,
-                  server_default=sa.text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')),
-    )
-    op.create_index('idx_status_retry', 'failed_tuple', ['status', 'retry_count'])
-    op.create_index('idx_tenant', 'failed_tuple', ['tenant_id'])
+    if not _table_exists('failed_tuple'):
+        op.create_table(
+            'failed_tuple',
+            sa.Column('id', sa.BigInteger, primary_key=True, autoincrement=True),
+            sa.Column('action', sa.String(8), nullable=False, server_default='write',
+                      comment='write | delete'),
+            sa.Column('fga_user', sa.String(256), nullable=False,
+                      comment='OpenFGA user, e.g. user:7, department:5#member'),
+            sa.Column('relation', sa.String(64), nullable=False,
+                      comment='OpenFGA relation, e.g. owner, viewer'),
+            sa.Column('object', sa.String(256), nullable=False,
+                      comment='OpenFGA object, e.g. workflow:abc-123'),
+            sa.Column('retry_count', sa.Integer, nullable=False, server_default='0'),
+            sa.Column('max_retries', sa.Integer, nullable=False, server_default='3'),
+            sa.Column('status', sa.String(16), nullable=False, server_default='pending',
+                      comment='pending | succeeded | dead'),
+            sa.Column('error_message', sa.Text, nullable=True),
+            sa.Column('tenant_id', sa.Integer, nullable=False, server_default='1'),
+            sa.Column('create_time', sa.DateTime, nullable=False,
+                      server_default=sa.text('CURRENT_TIMESTAMP')),
+            sa.Column('update_time', sa.DateTime, nullable=False,
+                      server_default=sa.text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')),
+        )
+    if not _index_exists('failed_tuple', 'idx_status_retry'):
+        op.create_index('idx_status_retry', 'failed_tuple', ['status', 'retry_count'])
+    if not _index_exists('failed_tuple', 'idx_tenant'):
+        op.create_index('idx_tenant', 'failed_tuple', ['tenant_id'])
 
 
 def downgrade() -> None:
     """Drop failed_tuple table."""
-    op.drop_index('idx_tenant', table_name='failed_tuple')
-    op.drop_index('idx_status_retry', table_name='failed_tuple')
-    op.drop_table('failed_tuple')
+    if _index_exists('failed_tuple', 'idx_tenant'):
+        op.drop_index('idx_tenant', table_name='failed_tuple')
+    if _index_exists('failed_tuple', 'idx_status_retry'):
+        op.drop_index('idx_status_retry', table_name='failed_tuple')
+    if _table_exists('failed_tuple'):
+        op.drop_table('failed_tuple')
