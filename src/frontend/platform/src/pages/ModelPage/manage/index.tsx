@@ -1,9 +1,11 @@
 import { SettingIcon } from "@/components/bs-icons"
+import { AdminScopeSelector, type TenantOption } from "@/components/AdminScopeSelector"
+import { Badge } from "@/components/bs-ui/badge"
 import { Button } from "@/components/bs-ui/button"
 import { Switch } from "@/components/bs-ui/switch"
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table"
 import { userContext } from "@/contexts/userContext"
-import { useContext, useEffect, useState } from "react"
+import { useContext, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 // import { transformModule, transformEvent, transformObjectType } from "../LogPage/utils"
 import { LoadingIcon } from "@/components/bs-icons/loading"
@@ -11,6 +13,7 @@ import { useToast } from "@/components/bs-ui/toast/use-toast"
 import { QuestionTooltip } from "@/components/bs-ui/tooltip"
 import { changeLLmServerStatus, getAssistantModelList, getModelListApi } from "@/controllers/API/finetune"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
+import { useAdminScope } from "@/hooks/useAdminScope"
 import { CircleMinus, CirclePlus } from "lucide-react"
 import { useQuery } from "react-query"
 import ModelConfig from "./ModelConfig"
@@ -20,6 +23,13 @@ function CustomTableRow({ data, index, user, onModel, onCheck }) {
     const { t } = useTranslation()
     const [expand, setExpand] = useState(false)
 
+    // Root-shared rows are read-only for the current caller; the backend
+    // sets `is_root_shared_readonly` on the list API so Child Admins do
+    // not hit the 403 + 19801 write path.
+    const isRootShared = !!data.is_root_shared_readonly
+    const isAdmin = !!(user?.is_global_super || user?.is_child_admin)
+    const canEdit = !isRootShared && isAdmin
+
     return <div className="text-sm bs-table-row">
         <div className={`grid grid-cols-2 transition-colors hover:bg-muted/50 items-center mt-1 mx-2 h-[52px] rounded-sm`}>
             <div className="bs-table-td h-full p-2 flex items-center gap-x-3 first:rounded-l-md last:rounded-r-md font-medium">
@@ -28,11 +38,16 @@ function CustomTableRow({ data, index, user, onModel, onCheck }) {
                         <CircleMinus className="cursor-pointer min-w-4 w-4 h-4" onClick={() => setExpand(false)} />
                         : <CirclePlus onClick={() => setExpand(true)} className="cursor-pointer min-w-4 w-4 h-4" />
                 }
-                {data.name}
+                <span>{data.name}</span>
+                {isRootShared && (
+                    <Badge variant="secondary" className="ml-2">
+                        {t('model.rootSharedReadonly', 'Root 共享 · 只读')}
+                    </Badge>
+                )}
             </div>
             <div className="bs-table-td h-full p-2 flex justify-end items-center gap-x-3 first:rounded-l-md last:rounded-r-md font-medium">
                 <Button variant="link" onClick={() => onModel(data.id)}
-                    disabled={user.role !== 'admin'}
+                    disabled={!canEdit}
                     className={`link px-0 pl-6`}>
                     {t('model.modelConfiguration')}
                 </Button>
@@ -61,7 +76,11 @@ function CustomTableRow({ data, index, user, onModel, onCheck }) {
                                     {m.status === 1 && <QuestionTooltip className=" align-middle" content={m.remark} />}
                                 </TableCell>
                                 <TableCell>
-                                    <Switch disabled={user.role !== 'admin'} checked={m.online} onCheckedChange={(bool) => onCheck(index, bool, m.id)} />
+                                    <Switch
+                                        disabled={!canEdit}
+                                        checked={m.online}
+                                        onCheckedChange={(bool) => onCheck(index, bool, m.id)}
+                                    />
                                 </TableCell>
                             </TableRow>
                         ))}
@@ -89,6 +108,27 @@ export default function Management() {
     const [systemModel, setSystemModel] = useState(false)
     const [loading, setLoading] = useState(false)
     const { refetch } = useModel()
+
+    const isSuper = !!user?.is_global_super
+    // Hook is always called; `enabled` gates network traffic so non-super
+    // callers never produce a spurious 403 on the initial GET.
+    const scopeHook = useAdminScope({ enabled: isSuper })
+    // MVP: two fixed tabs (Root + caller leaf). A fuller tenant tree
+    // requires a list API from TenantDao and is a separate iteration.
+    const tenantOptions = useMemo<TenantOption[]>(() => {
+        if (!isSuper) return []
+        const opts: TenantOption[] = [
+            { value: 'global', label: t('model.scopeGlobal', '全部') },
+            { value: 1, label: t('model.scopeRoot', 'Root') },
+        ]
+        if (user?.tenant_id && user.tenant_id !== 1) {
+            opts.push({
+                value: user.tenant_id,
+                label: user.tenant_name || `Tenant ${user.tenant_id}`,
+            })
+        }
+        return opts
+    }, [isSuper, user?.tenant_id, user?.tenant_name, t])
 
     const reload = async () => {
         setLoading(true)
@@ -143,12 +183,30 @@ export default function Management() {
             </div>
         )}
         <div className="h-full overflow-y-auto">
+            {isSuper && tenantOptions.length > 0 && (
+                <div className="flex items-center justify-start gap-2 pb-2">
+                    <span className="text-sm text-muted-foreground">
+                        {t('model.scopeLabel', '管理视图：')}
+                    </span>
+                    <AdminScopeSelector
+                        value={scopeHook.scope.scope_tenant_id ?? 'global'}
+                        tenants={tenantOptions}
+                        disabled={scopeHook.loading}
+                        onChange={async (v) => {
+                            await scopeHook.setScope(v === 'global' ? null : v)
+                            reload()
+                        }}
+                    />
+                </div>
+            )}
+            {/* System-level config stays super-admin only regardless of
+                active scope; Child Admins never see the button. */}
             <div className="flex justify-end gap-4">
-                {user.role === 'admin' && <Button className="text-red-500" onClick={() => setSystemModel(true)} variant="secondary">
+                {isSuper && <Button className="text-red-500" onClick={() => setSystemModel(true)} variant="secondary">
                     <SettingIcon className="text-red-500" />
                     {t('model.systemModelSettings')}
                 </Button>}
-                {user.role === 'admin' && <Button onClick={() => setModelId(-1)}>{t('model.addModel')}</Button>}
+                {(isSuper || user?.is_child_admin) && <Button onClick={() => setModelId(-1)}>{t('model.addModel')}</Button>}
                 <Button className="bg-black-button" onClick={reload}>{t('model.refresh')}</Button>
             </div>
             <div className="h-[85%]">

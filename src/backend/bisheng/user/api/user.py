@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import random
 from base64 import b64encode
@@ -143,6 +144,40 @@ async def get_info(login_user: LoginUser = Depends(LoginUser.get_login_user)):
         is_department_admin=is_department_admin,
     )
     can_manage_user_groups = bool(login_user.is_admin() or is_department_admin)
+
+    # Tenant-tree admin flags for the frontend. Any failure here degrades
+    # to defaults so a transient FGA outage never blocks login.
+    is_global_super = False
+    is_child_admin = False
+    leaf_tenant_id: Optional[int] = None
+    leaf_tenant_name: Optional[str] = None
+    try:
+        from bisheng.core.openfga.manager import aget_fga_client
+        from bisheng.database.models.tenant import (
+            ROOT_TENANT_ID,
+            TenantDao,
+            UserTenantDao,
+        )
+        from bisheng.utils.http_middleware import _check_is_global_super
+
+        is_global_super, active = await asyncio.gather(
+            _check_is_global_super(user_id),
+            UserTenantDao.aget_active_user_tenant(user_id),
+        )
+        leaf_tenant_id = active.tenant_id if active else ROOT_TENANT_ID
+        leaf_tenant = await TenantDao.aget_by_id(leaf_tenant_id)
+        leaf_tenant_name = leaf_tenant.tenant_name if leaf_tenant else ''
+        if leaf_tenant_id != ROOT_TENANT_ID and not is_global_super:
+            fga = await aget_fga_client()
+            if fga is not None:
+                is_child_admin = await fga.check(
+                    user=f'user:{user_id}',
+                    relation='admin',
+                    object=f'tenant:{leaf_tenant_id}',
+                )
+    except Exception as exc:  # noqa: BLE001 — never block /user/info
+        logger.debug('admin-flag detection failed: %s', exc)
+
     return resp_200(await UserService.build_user_read(
         db_user,
         role=str(role),
@@ -150,6 +185,10 @@ async def get_info(login_user: LoginUser = Depends(LoginUser.get_login_user)):
         admin_groups=admin_group,
         can_manage_user_groups=can_manage_user_groups,
         is_department_admin=is_department_admin,
+        is_global_super=is_global_super,
+        is_child_admin=is_child_admin,
+        leaf_tenant_id=leaf_tenant_id,
+        leaf_tenant_name=leaf_tenant_name,
     ))
 
 

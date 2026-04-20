@@ -20,6 +20,13 @@ export type User = {
     tenant_name?: string;
     tenant_code?: string;
     tenant_logo?: string;
+    // Tenant-tree admin flags, populated by /user/info. Drive
+    // conditional rendering of the admin scope selector, readonly
+    // badges, and system-config panels.
+    is_global_super?: boolean;
+    is_child_admin?: boolean;
+    leaf_tenant_id?: number;
+    leaf_tenant_name?: string;
 };
 
 export type ROLE = {

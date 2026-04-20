@@ -9,6 +9,7 @@ from cryptography.fernet import Fernet
 from loguru import logger
 from pydantic import ConfigDict, BaseModel, Field, field_validator, model_validator
 
+from bisheng.core.config.llm import LLMConf
 from bisheng.core.config.multi_tenant import MultiTenantConf
 from bisheng.core.config.openfga import OpenFGAConf
 from bisheng.core.config.reconcile import ReconcileConf
@@ -366,6 +367,7 @@ class Settings(BaseModel):
     user_tenant_sync: UserTenantSyncConf = UserTenantSyncConf()
     sso_sync: SSOSyncConf = SSOSyncConf()
     reconcile: ReconcileConf = ReconcileConf()
+    llm: LLMConf = LLMConf()
 
     @field_validator('database_url')
     @classmethod

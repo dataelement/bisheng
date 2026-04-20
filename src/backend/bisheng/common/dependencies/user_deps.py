@@ -2,15 +2,13 @@ from __future__ import annotations
 
 from typing import List
 
-from bisheng.user.domain.services.auth import LoginUser
+from fastapi import Depends, HTTPException
+
+from bisheng.user.domain.services.auth import AuthJwt, LoginUser
 
 
 class UserPayload(LoginUser):
-    """Auth-injected user identity used by FastAPI endpoints.
-
-    F013 (v2.5.1) extension: tenant visibility helpers used by
-    PermissionService.check L2 (IN-list) and L3 (Child Admin shortcut).
-    """
+    """Auth-injected user identity used by FastAPI endpoints."""
 
     async def get_visible_tenants(self) -> List[int]:
         """Return the user's visible tenant ids in MVP 2-layer rule.
@@ -74,4 +72,37 @@ class UserPayload(LoginUser):
             user=f'user:{self.user_id}',
             relation='admin',
             object=f'tenant:{tenant_id}',
+        )
+
+    @classmethod
+    async def get_tenant_admin_user(cls, auth_jwt: AuthJwt = Depends()) -> 'UserPayload':
+        """Admit global super admin or the current tenant's Child Admin;
+        reject with 403 + 19801 otherwise. Admin-scope override is
+        honoured via ``get_current_tenant_id()``, so a super admin
+        switched to Child 5 passes the super branch; an ordinary Child
+        Admin for tenant 5 passes via ``has_tenant_admin(5)``.
+        """
+        from bisheng.common.errcode.llm_tenant import LLMModelSharedReadonlyError
+        from bisheng.core.context.tenant import (
+            DEFAULT_TENANT_ID,
+            get_current_tenant_id,
+        )
+        from bisheng.utils.http_middleware import _check_is_global_super
+
+        user: 'UserPayload' = await cls.get_login_user(auth_jwt)
+        if await _check_is_global_super(user.user_id):
+            return user
+
+        tid = get_current_tenant_id()
+        if (tid is not None
+                and tid != DEFAULT_TENANT_ID
+                and await user.has_tenant_admin(tid)):
+            return user
+
+        raise HTTPException(
+            status_code=403,
+            detail={
+                'status_code': LLMModelSharedReadonlyError.Code,
+                'status_message': LLMModelSharedReadonlyError.Msg,
+            },
         )
