@@ -5,7 +5,7 @@ from enum import Enum
 from typing import Dict, List, Optional, Tuple, Union
 
 from pydantic import field_validator
-from sqlalchemy import Column, DateTime, String, and_, func, or_, text
+from sqlalchemy import Boolean, Column, DateTime, String, and_, func, or_, text
 from sqlmodel import JSON, Field, select, update, col
 
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
@@ -55,6 +55,13 @@ class FlowBase(SQLModelSerializable):
     logo: Optional[str] = Field(default=None, index=False)
     status: Optional[int] = Field(index=False, default=1)
     flow_type: Optional[int] = Field(index=False, default=FlowType.WORKFLOW.value)
+    is_shared: bool = Field(
+        default=False,
+        sa_column=Column(
+            Boolean, nullable=False, server_default=text('0'),
+            comment='F017: Root resource shared to all children (mirrors FGA shared_with tuples)',
+        ),
+    )
     guide_word: Optional[str] = Field(default=None, sa_column=Column(String(length=1000)))
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
@@ -85,6 +92,10 @@ class Flow(FlowBase, table=True):
 
 class FlowCreate(FlowBase):
     flow_id: Optional[str] = None
+    # F017: whether the new workflow should be shared with all active Child
+    # Tenants. ``None`` → fall back to ``Root.share_default_to_children``.
+    # Ignored when creator's leaf tenant is not Root.
+    share_to_children: Optional[bool] = None
 
 
 class FlowRead(FlowBase):

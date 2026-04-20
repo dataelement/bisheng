@@ -1875,5 +1875,18 @@
   "department.deleteLocalMemberConfirm": "Delete this local account? This removes organization memberships, user groups and non-admin roles, and disables login.",
   "department.deleteLocalMemberBlocked": "This user still owns data assets and cannot be deleted: {{k}} knowledge space(s), {{f}} workflow(s), {{a}} assistant(s).",
   "department.deleteLocalMemberDone": "Member account removed",
-  "department.memberEditAffiliateSection": "Affiliated departments (part-time)"
+  "department.memberEditAffiliateSection": "Affiliated departments (part-time)",
+  "share": {
+    "toChildrenLabel": "Share with group subsidiaries",
+    "toChildrenHint": "When enabled, all Child Tenants of this group can read this resource.",
+    "cancelConfirmTitle": "Stop sharing with subsidiaries?",
+    "cancelConfirmDescription": "Child Tenants will no longer see this resource. Existing conversations and derived data remain attributed to each Child.",
+    "badge": "Group-shared",
+    "badgeTitle": "This Root resource is shared with Child Tenants (read-only)"
+  },
+  "mount": {
+    "autoDistributeLabel": "Auto-distribute Root-shared resources",
+    "autoDistributeHint": "When OFF, this Child starts with NO Root-shared resources visible; super admin must open each share individually.",
+    "previewTitle": "Resources that will become visible"
+  }
 }

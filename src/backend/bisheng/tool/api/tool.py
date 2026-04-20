@@ -31,10 +31,14 @@ async def get_tool_list(*,
 async def add_tool_type(request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user),
                         req: Dict = Body(default={})):
     """ Add customizationtool """
+    # F017: share_to_children is API intent (not a DB column on base); pop it
+    # before building the ORM-backed read model so it doesn't survive as stale
+    # state on the persisted row.
+    share_to_children = req.pop('share_to_children', None)
     req = GptsToolsTypeRead(**req)
     services = ToolServices(request=request, login_user=login_user)
 
-    return resp_200(data=await services.add_tools(req))
+    return resp_200(data=await services.add_tools(req, share_to_children=share_to_children))
 
 
 @router.put('')

@@ -1832,5 +1832,18 @@
   "department.deleteLocalMemberConfirm": "确定删除该本地人员账号？将移除其组织关系、用户组与普通角色，并禁用登录。",
   "department.deleteLocalMemberBlocked": "该用户仍挂载数据资产，无法删除：知识空间 {{k}} 个、工作流 {{f}} 个、助手 {{a}} 个。",
   "department.deleteLocalMemberDone": "已删除该人员账号",
-  "department.memberEditAffiliateSection": "附属部门（兼职）"
+  "department.memberEditAffiliateSection": "附属部门（兼职）",
+  "share": {
+    "toChildrenLabel": "共享给集团子公司",
+    "toChildrenHint": "开启后，所有挂载在本集团下的子公司成员可只读访问此资源",
+    "cancelConfirmTitle": "确认取消共享？",
+    "cancelConfirmDescription": "子公司成员将不再能看到此资源。已有对话和衍生数据仍归属各自子公司，不会清理。",
+    "badge": "集团共享",
+    "badgeTitle": "Root 创建的资源已共享给子公司（只读）"
+  },
+  "mount": {
+    "autoDistributeLabel": "自动分发 Root 共享资源",
+    "autoDistributeHint": "关闭后，本子公司初始无法看到任何 Root 共享资源；全局超管需逐个资源手工开启共享。",
+    "previewTitle": "将自动共享的资源"
+  }
 }

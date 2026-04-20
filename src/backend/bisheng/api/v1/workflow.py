@@ -170,6 +170,8 @@ def create_flow(*, request: Request, flow: FlowCreate, login_user: UserPayload =
                                    Flow.user_id == login_user.user_id)).first():
             raise WorkflowNameExistsError.http_exception()
     flow.user_id = login_user.user_id
+    # F017: capture share intent before model_validate drops unknown fields
+    share_to_children = flow.share_to_children
     db_flow = Flow.model_validate(flow)
     db_flow.create_time = None
     db_flow.update_time = None
@@ -181,6 +183,20 @@ def create_flow(*, request: Request, flow: FlowCreate, login_user: UserPayload =
     ret = FlowRead.model_validate(db_flow)
     ret.version_id = current_version.id
     FlowService.create_flow_hook(request, login_user, db_flow)
+
+    # F017: fan out group-sharing for Root-created workflows (D6).
+    # share_on_create_sync owns the Root-only gate + FGA + is_shared flip
+    # + audit_log; we just need to reflect is_shared in the response.
+    from bisheng.tenant.domain.services.resource_share_service import ResourceShareService
+    shared_children = ResourceShareService.share_on_create_sync(
+        'workflow', str(db_flow.id),
+        creator_tenant_id=login_user.tenant_id,
+        operator_id=login_user.user_id,
+        operator_tenant_id=login_user.tenant_id,
+        explicit=share_to_children,
+    )
+    if shared_children:
+        ret.is_shared = True
     return resp_200(data=ret)
 
 

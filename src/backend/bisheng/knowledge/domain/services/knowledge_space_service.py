@@ -686,8 +686,15 @@ class KnowledgeSpaceService(KnowledgeUtils):
             icon: Optional[str] = None,
             auth_type: AuthTypeEnum = AuthTypeEnum.PUBLIC,
             is_released: bool = False,
+            share_to_children: Optional[bool] = None,
     ) -> Knowledge:
-        """ Create a new knowledge space (max 30 per user). """
+        """ Create a new knowledge space (max 30 per user).
+
+        F017: when the creator's leaf tenant is Root, ``share_to_children``
+        controls whether the new space is shared with all active Child Tenants.
+        ``None`` means "use ``Root.share_default_to_children``"; ``True`` / ``False``
+        override. Child-tenant creators never share (caller value ignored).
+        """
 
         count = await KnowledgeDao.async_count_spaces_by_user(self.login_user.user_id)
         if count >= _MAX_SPACE_PER_USER:
@@ -726,6 +733,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
         except Exception as e:
             _logger.warning('Failed to write owner tuple for knowledge_space %s: %s', knowledge_space.id, e)
+
+        # F017: fan out group-sharing for Root-created resources.
+        # share_on_create handles the Root-only gate, FGA writes, is_shared
+        # DB flip, and audit_log in one shot.
+        from bisheng.tenant.domain.services.resource_share_service import ResourceShareService
+        await ResourceShareService.share_on_create(
+            'knowledge_space', str(knowledge_space.id),
+            creator_tenant_id=self.login_user.tenant_id,
+            operator_id=self.login_user.user_id,
+            operator_tenant_id=self.login_user.tenant_id,
+            explicit=share_to_children,
+        )
 
         # Audit log for knowledge space creation
         await KnowledgeAuditTelemetryService.audit_create_knowledge_space(self.login_user, self.request,

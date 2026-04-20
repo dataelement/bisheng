@@ -86,8 +86,16 @@ class ToolServices(BaseModel):
 
         return res
 
-    async def add_tools(self, req: GptsToolsTypeRead) -> GptsToolsTypeRead:
-        """ Add custom tool """
+    async def add_tools(
+        self, req: GptsToolsTypeRead,
+        share_to_children: Optional[bool] = None,
+    ) -> GptsToolsTypeRead:
+        """ Add custom tool.
+
+        F017: ``share_to_children`` controls Root→Child sharing of the new
+        tool type. ``None`` → fall back to ``Root.share_default_to_children``.
+        Child creators never share (parameter ignored).
+        """
         # Try to parse theopenapi schemaSee if it can be parsed normally, Save if not possible Do not allow to save
         if req.is_preset == ToolPresetType.API.value:
             await self.parse_openapi_schema('', req.openapi_schema)
@@ -115,6 +123,21 @@ class ToolServices(BaseModel):
         res = await GptsToolsDao.insert_tool_type(req)
 
         self.add_gpts_tools_hook(self.request, self.login_user, res)
+
+        # F017: fan out group-sharing for Root-created tool types (D6).
+        # share_on_create owns the Root-only gate + FGA + is_shared flip +
+        # audit_log; mirror the flag on the in-memory response object.
+        from bisheng.tenant.domain.services.resource_share_service import ResourceShareService
+        shared_children = await ResourceShareService.share_on_create(
+            'tool', str(res.id),
+            creator_tenant_id=self.login_user.tenant_id,
+            operator_id=self.login_user.user_id,
+            operator_tenant_id=self.login_user.tenant_id,
+            explicit=share_to_children,
+        )
+        if shared_children:
+            res.is_shared = True
+
         return res
 
     @classmethod

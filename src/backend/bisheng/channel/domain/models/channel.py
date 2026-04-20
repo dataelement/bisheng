@@ -81,6 +81,12 @@ class Channel(SQLModelSerializable, table=True):
     is_released: bool = Field(default=False, description='Whether the channel is released',
                               sa_column=Column(Boolean, nullable=False))
 
+    is_shared: bool = Field(
+        default=False,
+        description='F017: Root channel shared to all children (mirrors FGA shared_with tuples)',
+        sa_column=Column(Boolean, nullable=False, server_default=text('0')),
+    )
+
     create_time: datetime = Field(default_factory=datetime.now, description='Creation Time',
                                   sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
 
