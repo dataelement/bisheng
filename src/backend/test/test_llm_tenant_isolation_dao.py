@@ -316,6 +316,61 @@ async def test_child_admin_cannot_update_root_shared_llm():
 # --- AC-18 / AC-19 mount-time fanout contract (F017) -----------------------
 
 
+# --- aget_shared_server_ids_for_leaf (T06) --------------------------------
+
+
+@pytest.mark.asyncio
+async def test_aget_shared_server_ids_for_leaf_returns_root_shared():
+    """AC-03 source: FGA list_objects response → int id list."""
+    fga = MagicMock()
+    fga.list_objects = AsyncMock(return_value=[
+        'llm_server:123', 'llm_server:456',
+    ])
+    with patch('bisheng.core.openfga.manager.aget_fga_client',
+               new=AsyncMock(return_value=fga)):
+        ids = await LLMDao.aget_shared_server_ids_for_leaf(5)
+
+    assert sorted(ids) == [123, 456]
+    fga.list_objects.assert_awaited_once_with(
+        user='tenant:5', relation='shared_with', type='llm_server',
+    )
+
+
+@pytest.mark.asyncio
+async def test_aget_shared_server_ids_for_leaf_root_returns_empty():
+    """AC-03 edge: leaf=1 (Root) never has shares pointing at itself."""
+    fga = MagicMock()
+    fga.list_objects = AsyncMock()
+    with patch('bisheng.core.openfga.manager.aget_fga_client',
+               new=AsyncMock(return_value=fga)):
+        ids = await LLMDao.aget_shared_server_ids_for_leaf(1)
+
+    assert ids == []
+    fga.list_objects.assert_not_awaited()  # short-circuit before FGA call
+
+
+@pytest.mark.asyncio
+async def test_aget_shared_server_ids_for_leaf_fga_disabled_returns_empty():
+    """AC-03 edge: OpenFGA disabled → empty list, no exception."""
+    with patch('bisheng.core.openfga.manager.aget_fga_client',
+               new=AsyncMock(return_value=None)):
+        ids = await LLMDao.aget_shared_server_ids_for_leaf(5)
+
+    assert ids == []
+
+
+@pytest.mark.asyncio
+async def test_aget_shared_server_ids_for_leaf_fga_failure_degrades_to_empty():
+    """Boundary: FGA raise on list_objects → log + empty list (fail-closed)."""
+    fga = MagicMock()
+    fga.list_objects = AsyncMock(side_effect=RuntimeError('FGA down'))
+    with patch('bisheng.core.openfga.manager.aget_fga_client',
+               new=AsyncMock(return_value=fga)):
+        ids = await LLMDao.aget_shared_server_ids_for_leaf(5)
+
+    assert ids == []
+
+
 def test_llm_server_registered_in_shareable_types():
     """AC-18 / AC-19: F017 uses SUPPORTED_SHAREABLE_TYPES to decide which
     resource types fan out when ``TenantMountService.mount_child(...,

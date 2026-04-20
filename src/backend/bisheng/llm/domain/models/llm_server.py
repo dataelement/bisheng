@@ -500,3 +500,50 @@ class LLMDao:
         async with get_async_db_session() as session:
             await session.exec(delete(LLMModel).where(col(LLMModel.id).in_(model_ids)))
             await session.commit()
+
+    @classmethod
+    async def aget_shared_server_ids_for_leaf(cls, leaf_id: int) -> List[int]:
+        """F020 T06: return Root llm_server ids shared to the given leaf tenant.
+
+        Reads ``{llm_server}#shared_with → tenant:{leaf}`` tuples via
+        OpenFGA ``list_objects`` — this is the read side of the F017
+        ``ResourceShareService.enable_sharing`` fanout. Used by T07's
+        merged-list query to surface Root-owned, share-enabled models to
+        Child users without relying on the SQLAlchemy event layer (which
+        still does strict ``tenant_id = current`` filtering and would
+        hide Root rows from a Child-scoped session).
+
+        Returns an empty list when:
+          - leaf equals Root (no tenant shares to itself);
+          - OpenFGA is disabled / unreachable (fail-closed).
+        """
+        from bisheng.database.models.tenant import ROOT_TENANT_ID
+        from bisheng.core.openfga.manager import aget_fga_client
+
+        if leaf_id == ROOT_TENANT_ID:
+            return []
+        fga = await aget_fga_client()
+        if fga is None:
+            return []
+        try:
+            objects = await fga.list_objects(
+                user=f'tenant:{leaf_id}',
+                relation='shared_with',
+                type='llm_server',
+            )
+        except Exception:  # noqa: BLE001 — read-path: degrade to empty list on FGA failure
+            import logging
+            logging.getLogger(__name__).exception(
+                '[F020] list_objects for leaf=%s failed', leaf_id,
+            )
+            return []
+
+        result: List[int] = []
+        for obj in objects:
+            # ``list_objects`` returns ``["llm_server:123", ...]``; tolerate
+            # either the prefixed or bare form to be robust against future
+            # FGAClient format changes.
+            _, _, tail = obj.rpartition(':')
+            if tail.isdigit():
+                result.append(int(tail))
+        return result

@@ -14,7 +14,7 @@
 |------|------|------|
 | spec.md | ✅ 已定稿 | 2026-04-19 PRD 精化后定稿；24 AC + 8 AD + 完整 §5 代码骨架；经 `/sdd-review spec` 通过 |
 | tasks.md | ✅ 已拆解 | 2026-04-21 `/sdd-review tasks` 第 2 轮通过（第 1 轮修复：T02/T11/T15 三个跨文件/跨前后端任务拆分 + AC-18/19 E2E 测试补齐 + D10/D11 决策锁定） |
-| 实现 | 🟡 进行中 | 6 / 19 完成（T01~T04, T05 ✓） |
+| 实现 | 🟡 进行中 | 7 / 19 完成（T01~T06 ✓） |
 
 ---
 
@@ -292,7 +292,7 @@ T04 (Alembic 迁移 + ORM 补 tenant_id)                              ──┤ 
 
 ---
 
-- [ ] **T06**: `LLMDao.aget_shared_server_ids_for_leaf(leaf_id)` 新方法（Root→Child 共享 id 查询）
+- [x] **T06**: `LLMDao.aget_shared_server_ids_for_leaf(leaf_id)` 新方法（Root→Child 共享 id 查询）
   **文件（修改）**:
   - `src/backend/bisheng/llm/domain/models/llm_server.py` LLMDao 类末尾新增:
   ```python
