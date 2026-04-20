@@ -48,6 +48,8 @@ SUPPORTED_SHAREABLE_TYPES: set[str] = {
     'assistant',
     'channel',
     'tool',
+    # llm_model follows its parent llm_server and is not shared directly.
+    'llm_server',
 }
 
 

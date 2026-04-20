@@ -20,6 +20,7 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import UnAuthorizedError, NotFoundError, ServerError
 from bisheng.common.errcode.knowledge import KnowledgeCPError, KnowledgeQAError, KnowledgeRebuildingError, \
     KnowledgePreviewError, KnowledgeNotQAError, KnowledgeNoEmbeddingError, KnowledgeNotExistError, KnowledgeCPEmptyError
+from bisheng.common.errcode.llm_tenant import LLMModelNotAccessibleError
 from bisheng.common.errcode.server import NoLlmModelConfigError
 from bisheng.common.schemas.api import resp_200, resp_500, UnifiedResponseModel
 from bisheng.common.services import telemetry_service
@@ -858,9 +859,12 @@ def update_knowledge_model(*,
     3. everyknowledge_idBoth initiate asynchronous tasks to rebuild the knowledge base
     """
     # 1. Verify that isembeddingModels
+    # Cross-tenant references surface as "not found" via the tenant_filter
+    # event layer; raise the dedicated 19802 so the UI renders the
+    # "model not accessible" toast instead of "model config missing".
     model_info = LLMDao.get_model_by_id(req_data.model_id)
     if not model_info:
-        return NoLlmModelConfigError.return_resp()
+        return LLMModelNotAccessibleError.return_resp()
 
     # If the front-end does not passmodel_type, using themodel_type
     model_type = req_data.model_type if req_data.model_type else model_info.model_type

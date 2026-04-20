@@ -100,6 +100,11 @@ class UserRead(UserBase):
     tenants: Optional[List[dict]] = None
     tenant_id: Optional[int] = None
     tenant_name: Optional[str] = None
+    # Tenant-tree admin UI flags. Optional so older clients ignore them.
+    is_global_super: Optional[bool] = None
+    is_child_admin: Optional[bool] = None
+    leaf_tenant_id: Optional[int] = None
+    leaf_tenant_name: Optional[str] = None
 
 
 class UserQuery(UserBase):

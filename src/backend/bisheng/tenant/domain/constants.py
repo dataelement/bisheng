@@ -36,6 +36,13 @@ class TenantAuditAction(str, Enum):
     RESOURCE_SHARE_DISABLE = 'resource.share_disable'
     # F019 (v2.5.1) — admin tenant-scope switch (Redis, non-JWT); AC-14.
     ADMIN_SCOPE_SWITCH = 'admin.scope_switch'
+    # F020 (v2.5.1) — LLM server/model lifecycle under Tenant-tree (AC-12).
+    LLM_SERVER_CREATE = 'llm.server.create'
+    LLM_SERVER_UPDATE = 'llm.server.update'
+    LLM_SERVER_DELETE = 'llm.server.delete'
+    LLM_SERVER_TOGGLE_SHARE = 'llm.server.toggle_share'
+    LLM_MODEL_UPDATE_ONLINE = 'llm.model.update_online'
+    LLM_MODEL_UPDATE_STATUS = 'llm.model.update_status'
 
 
 class DeletionSource(str, Enum):
