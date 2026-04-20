@@ -14,7 +14,7 @@
 |------|------|------|
 | spec.md | ✅ 已定稿 | 2026-04-19 PRD 精化后定稿；24 AC + 8 AD + 完整 §5 代码骨架；经 `/sdd-review spec` 通过 |
 | tasks.md | ✅ 已拆解 | 2026-04-21 `/sdd-review tasks` 第 2 轮通过（第 1 轮修复：T02/T11/T15 三个跨文件/跨前后端任务拆分 + AC-18/19 E2E 测试补齐 + D10/D11 决策锁定） |
-| 实现 | 🟡 进行中 | 3 / 19 完成（T01, T02a, T02b ✓） |
+| 实现 | 🟡 进行中 | 4 / 19 完成（T01, T02a, T02b, T03 ✓） |
 
 ---
 
@@ -145,7 +145,7 @@ T04 (Alembic 迁移 + ORM 补 tenant_id)                              ──┤ 
 
 ---
 
-- [ ] **T03**: `UserPayload.get_tenant_admin_user` classmethod 新增
+- [x] **T03**: `UserPayload.get_tenant_admin_user` classmethod 新增
   **文件（修改）**:
   - `src/backend/bisheng/common/dependencies/user_deps.py` —— 在 `UserPayload` 类末尾追加（风格参照 `get_admin_user` / `get_login_user`）:
     ```python
