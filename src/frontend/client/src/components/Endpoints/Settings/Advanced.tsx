@@ -311,7 +311,7 @@ export default function Settings({
               </HoverCardTrigger>
             </HoverCard>
             <HoverCard openDelay={500}>
-              <HoverCardTrigger className="flex w-[52%] md:w-[125px]">
+              <HoverCardTrigger className="flex w-[52%] touch-desktop:w-[125px]">
                 <Slider
                   id="image-detail-slider"
                   disabled={readonly}

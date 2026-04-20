@@ -118,17 +118,19 @@ export default function ChannelItem({
             <div
                 className={cn(
                     "relative flex flex-shrink-0 items-center justify-end",
-                    "max-md:min-w-0 max-md:gap-1.5 max-md:pl-1",
-                    "md:h-5 md:w-8",
+                    "touch-mobile:min-w-0 touch-mobile:gap-1.5 touch-mobile:pl-1",
+                    "touch-desktop:h-5 touch-desktop:w-8",
                 )}
             >
                 {channel.unreadCount > 0 && (
                     <span
                         className={cn(
                             "flex items-center justify-center rounded-md bg-[#335CFF33]/20 px-1.5 py-[1px] text-[10px] font-medium text-primary",
-                            "max-md:relative max-md:shrink-0 max-md:opacity-100",
-                            "md:absolute md:right-0",
-                            menuOpen ? "opacity-0" : "max-md:opacity-100 md:group-hover:opacity-0",
+                            "touch-mobile:relative touch-mobile:shrink-0 touch-mobile:opacity-100",
+                            "touch-desktop:absolute touch-desktop:right-0",
+                            menuOpen
+                                ? "opacity-0"
+                                : "touch-mobile:opacity-100 [@media(hover:none)]:opacity-100 [@media(pointer:coarse)]:opacity-100 touch-desktop:[@media(hover:hover)_and_(pointer:fine)]:group-hover:opacity-0",
                         )}
                         style={{
                             transitionProperty: "opacity, background-color",
@@ -147,7 +149,8 @@ export default function ChannelItem({
                             className={cn(
                                 "z-10 flex size-7 shrink-0 items-center justify-center rounded-md outline-none hover:bg-black/5",
                                 menuOpen && "opacity-100",
-                                !menuOpen && "max-md:opacity-100 md:opacity-0 md:group-hover:opacity-100",
+                                !menuOpen &&
+                                    "touch-mobile:opacity-100 [@media(hover:none)]:opacity-100 [@media(pointer:coarse)]:opacity-100 touch-desktop:[@media(hover:hover)_and_(pointer:fine)]:opacity-0 touch-desktop:[@media(hover:hover)_and_(pointer:fine)]:group-hover:opacity-100",
                             )}
                             onClick={(e) => e.stopPropagation()}
                         >

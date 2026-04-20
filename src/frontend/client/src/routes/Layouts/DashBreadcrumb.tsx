@@ -68,8 +68,8 @@ export default function DashBreadcrumb() {
               onClick={chatLinkHandler}
             >
               <ArrowLeft className="icon-xs" aria-hidden="true" />
-              <span className="hidden md:flex">{localize('com_ui_back_to_chat')}</span>
-              <span className="flex md:hidden">{localize('com_ui_chat')}</span>
+              <span className="hidden touch-desktop:flex">{localize('com_ui_back_to_chat')}</span>
+              <span className="flex touch-desktop:hidden">{localize('com_ui_chat')}</span>
             </BreadcrumbLink>
           </BreadcrumbItem>
           <BreadcrumbSeparator />

@@ -26,7 +26,7 @@ export default function SiblingSwitch({
     <div className="visible flex items-center justify-center gap-1 self-center pt-0 text-xs">
       <button
         className={cn(
-          'hover-button rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-500 dark:text-gray-400/70 dark:hover:bg-gray-700 dark:hover:text-gray-200 disabled:dark:hover:text-gray-400 md:group-hover:visible md:group-[.final-completion]:visible',
+          'hover-button rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-500 dark:text-gray-400/70 dark:hover:bg-gray-700 dark:hover:text-gray-200 disabled:dark:hover:text-gray-400 touch-desktop:group-hover:visible touch-desktop:group-[.final-completion]:visible',
         )}
         type="button"
         onClick={previous}
@@ -52,7 +52,7 @@ export default function SiblingSwitch({
       </span>
       <button
         className={cn(
-          'hover-button rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-500 dark:text-gray-400/70 dark:hover:bg-gray-700 dark:hover:text-gray-200 disabled:dark:hover:text-gray-400 md:group-hover:visible md:group-[.final-completion]:visible',
+          'hover-button rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-500 dark:text-gray-400/70 dark:hover:bg-gray-700 dark:hover:text-gray-200 disabled:dark:hover:text-gray-400 touch-desktop:group-hover:visible touch-desktop:group-[.final-completion]:visible',
         )}
         type="button"
         onClick={next}

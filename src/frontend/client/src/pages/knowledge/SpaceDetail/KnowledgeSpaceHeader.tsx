@@ -29,7 +29,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip
 import { ShareOutlineIcon, AiChatIcon } from "~/components/icons";
 import { SingleIconButtonSortGlyph } from "~/components/icons/channels";
 import { useToastContext } from "~/Providers";
-import { useLocalize, useMediaQuery } from "~/hooks";
+import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import { useLayoutEffect, useRef, useState } from "react";
 import { ChannelBlocksArrowsIcon } from "~/components/icons/channels";
 
@@ -96,7 +96,7 @@ export function KnowledgeSpaceHeader({
     isAiAssistantOpen
 }: KnowledgeSpaceHeaderProps) {
     const localize = useLocalize();
-    const isH5 = useMediaQuery("(max-width: 768px)");
+    const isH5 = usePrefersMobileLayout();
     const toolbarMeasureRef = useRef<HTMLDivElement>(null);
     const [toolbarCompact, setToolbarCompact] = useState(false);
 
@@ -338,9 +338,9 @@ export function KnowledgeSpaceHeader({
         );
 
     return (
-        <div className="space-y-4 pt-5 pb-4 max-md:space-y-3 max-md:pt-4 max-md:pb-3">
+        <div className="space-y-4 pt-5 pb-4 touch-mobile:space-y-3 touch-mobile:pt-4 touch-mobile:pb-3">
             {currentPath.length === 0 ? (
-                <div className="flex items-end gap-3 md:hidden">
+                <div className="hidden touch-mobile:flex items-end gap-3">
                     <h1 className="text-[24px] font-semibold leading-8 text-[#335CFF]">
                         {localize("com_knowledge.knowledge_space")}
                     </h1>
@@ -364,7 +364,7 @@ export function KnowledgeSpaceHeader({
                 <div className="flex min-w-0 flex-1 items-center gap-1 text-sm">
                     {currentPath.length === 0 ? (
                         <div className="flex items-center gap-1">
-                            <h1 className="text-base text-[#1d2129] max-md:text-[16px] max-md:leading-6">{space.name}</h1>
+                            <h1 className="text-base text-[#1d2129] touch-mobile:text-[16px] touch-mobile:leading-6">{space.name}</h1>
                             <Tooltip>
                                 <TooltipTrigger className="cursor-pointer">
                                     <Info className="size-4 text-[#86909c] outline-none hover:text-[#165dff]" />

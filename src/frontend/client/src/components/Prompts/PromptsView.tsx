@@ -45,7 +45,7 @@ export default function PromptsView() {
         <div
           className={cn(
             'scrollbar-gutter-stable w-full overflow-y-auto lg:w-3/4 xl:w-3/4',
-            isDetailView ? 'block' : 'hidden md:block',
+            isDetailView ? 'block' : 'hidden touch-desktop:block',
           )}
         >
           <Outlet context={groupsNav} />

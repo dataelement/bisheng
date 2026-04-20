@@ -6,11 +6,11 @@ import type { TDialogProps } from '~/common';
 import { Dialog, DialogPanel, DialogTitle, Transition, TransitionChild } from '@headlessui/react';
 import { GearIcon, DataIcon, SpeechIcon, UserIcon, ExperimentIcon } from '~/components/svg';
 import { General, Chat, Speech, Beta, Commands, Data, Account } from './SettingsTabs';
-import { useMediaQuery, useLocalize, TranslationKeys } from '~/hooks';
+import { usePrefersMobileLayout, useLocalize, TranslationKeys } from '~/hooks';
 import { cn } from '~/utils';
 
 export default function Settings({ open, onOpenChange }: TDialogProps) {
-  const isSmallScreen = useMediaQuery('(max-width: 767px)');
+  const isSmallScreen = usePrefersMobileLayout();
   const localize = useLocalize();
   const [activeTab, setActiveTab] = useState(SettingsTabValues.GENERAL);
   const tabRefs = useRef({});
@@ -114,7 +114,7 @@ export default function Settings({ open, onOpenChange }: TDialogProps) {
           <div className={cn('fixed inset-0 flex w-screen items-center justify-center p-4')}>
             <DialogPanel
               className={cn(
-                'min-h-[600px] overflow-hidden rounded-xl rounded-b-lg bg-background pb-6 shadow-2xl backdrop-blur-2xl animate-in sm:rounded-2xl md:min-h-[373px] md:w-[680px]',
+                'min-h-[600px] overflow-hidden rounded-xl rounded-b-lg bg-background pb-6 shadow-2xl backdrop-blur-2xl animate-in sm:rounded-2xl touch-desktop:min-h-[373px] touch-desktop:w-[680px]',
               )}
             >
               <DialogTitle
@@ -147,11 +147,11 @@ export default function Settings({ open, onOpenChange }: TDialogProps) {
                   <span className="sr-only">Close</span>
                 </button>
               </DialogTitle>
-              <div className="max-h-[550px] overflow-auto px-6 md:max-h-[400px] md:min-h-[400px] md:w-[680px]">
+              <div className="max-h-[550px] overflow-auto px-6 touch-desktop:max-h-[400px] touch-desktop:min-h-[400px] touch-desktop:w-[680px]">
                 <Tabs.Root
                   value={activeTab}
                   onValueChange={handleTabChange}
-                  className="flex flex-col gap-10 md:flex-row"
+                  className="flex flex-col gap-10 touch-desktop:flex-row"
                   orientation="vertical"
                 >
                   <Tabs.List
@@ -181,7 +181,7 @@ export default function Settings({ open, onOpenChange }: TDialogProps) {
                       </Tabs.Trigger>
                     ))}
                   </Tabs.List>
-                  <div className="overflow-auto sm:w-full sm:max-w-none md:pr-0.5 md:pt-0.5">
+                  <div className="overflow-auto sm:w-full sm:max-w-none touch-desktop:pr-0.5 touch-desktop:pt-0.5">
                     <Tabs.Content value={SettingsTabValues.GENERAL}>
                       <General />
                     </Tabs.Content>

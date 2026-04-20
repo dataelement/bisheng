@@ -334,7 +334,7 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
   const isUploadDisabled: boolean = endpointFileConfig?.disabled ?? false;
 
   const baseClasses = cn(
-    "md:py-3.5 m-0 w-full resize-none py-[13px] bg-surface-tertiary placeholder-black/50 dark:placeholder-white/50 [&:has(textarea:focus)]:shadow-[0_2px_6px_rgba(0,0,0,.5)]",
+    "touch-desktop:py-3.5 m-0 w-full resize-none py-[13px] bg-surface-tertiary placeholder-black/50 dark:placeholder-white/50 [&:has(textarea:focus)]:shadow-[0_2px_6px_rgba(0,0,0,.5)]",
     isCollapsed ? "max-h-[52px]" : "max-h-96",
     isLingsi && "bg-transparent"
   );
@@ -396,11 +396,11 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
       })}
       className={cn(
         "mx-auto flex flex-row gap-3 transition-all duration-200 last:mb-2",
-        maximizeChatSpace ? "w-full max-w-full" : "md:max-w-2xl xl:max-w-3xl"
+        maximizeChatSpace ? "w-full max-w-full" : "touch-desktop:max-w-2xl xl:max-w-3xl"
       )}
     >
       <div
-        className={`relative flex h-full flex-1 items-stretch md:flex-col ${!isLingsi && "overflow-hidden"
+        className={`relative flex h-full flex-1 items-stretch touch-desktop:flex-col ${!isLingsi && "overflow-hidden"
           }`}
       >
 
@@ -676,10 +676,10 @@ const ModelSelect = ({
       disabled={disabled}
       onValueChange={onChange}
     >
-      <SelectTrigger className="h-7 rounded-full px-2 bg-white dark:bg-transparent max-[575px]:px-1.5">
+      <SelectTrigger className="h-7 rounded-full px-2 bg-white dark:bg-transparent touch-mobile:px-1.5">
         <div className="flex gap-2">
           <Rotate3DIcon size="16" />
-          <span className="text-xs font-normal max-[575px]:sr-only">{label}</span>
+          <span className="text-xs font-normal touch-mobile:sr-only">{label}</span>
         </div>
       </SelectTrigger>
       <SelectContent className="bg-white">

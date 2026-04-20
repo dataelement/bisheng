@@ -21,14 +21,14 @@ import {
   DecibelSelector,
 } from './STT';
 import ConversationModeSwitch from './ConversationModeSwitch';
-import { useOnClickOutside, useMediaQuery } from '~/hooks';
+import { useOnClickOutside, usePrefersMobileLayout } from '~/hooks';
 import { cn, logger } from '~/utils';
 import store from '~/store';
 
 function Speech() {
   const [confirmClear, setConfirmClear] = useState(false);
   const { data } = useGetCustomConfigSpeechQuery();
-  const isSmallScreen = useMediaQuery('(max-width: 767px)');
+  const isSmallScreen = usePrefersMobileLayout();
 
   const [sttExternal, setSttExternal] = useState(false);
   const [ttsExternal, setTtsExternal] = useState(false);

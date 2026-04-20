@@ -97,14 +97,14 @@ export function SideNav() {
             <button
                 type="button"
                 onClick={() => setSidebarVisible(false)}
-                className="absolute right-2 top-2 z-20 flex shrink-0 items-center justify-center size-[28px] rounded-[6px] hover:bg-[#f7f8fa] transition-colors md:hidden"
+                className="absolute right-2 top-2 z-20 hidden shrink-0 touch-mobile:flex items-center justify-center size-[28px] rounded-[6px] hover:bg-[#f7f8fa] transition-colors"
                 aria-label={localize('com_nav_close_sidebar')}
             >
                 <X size={16} className="text-[#4E5969]" />
             </button>
 
             {/* PC: back + title — original desktop sidebar chrome */}
-            <div className="hidden md:flex shrink-0 items-center gap-2 pt-1">
+            <div className="hidden touch-desktop:flex shrink-0 items-center gap-2 pt-1">
                 <button
                     type="button"
                     onClick={() => navigate('/apps')}
@@ -119,7 +119,7 @@ export function SideNav() {
             </div>
 
             {/* Top module tabs — H5 only (MainLayout hub nav handles PC) */}
-            <div className="pt-8 md:hidden">
+            <div className="hidden touch-mobile:block pt-8">
                 <SideNavModuleTabs />
             </div>
 
@@ -158,7 +158,7 @@ export function SideNav() {
                         <button
                             onClick={shareApp}
                             type="button"
-                            className="flex-1 min-w-0 h-[28px] flex items-center justify-center gap-1 bg-white border border-[#ececec] rounded-[6px] text-[14px] leading-[22px] hover:bg-gray-50 transition-colors max-[575px]:px-2"
+                            className="flex-1 min-w-0 h-[28px] flex items-center justify-center gap-1 bg-white border border-[#ececec] rounded-[6px] text-[14px] leading-[22px] hover:bg-gray-50 transition-colors touch-mobile:px-2"
                         >
                             {localize('com_app_share_app')}
                         </button>

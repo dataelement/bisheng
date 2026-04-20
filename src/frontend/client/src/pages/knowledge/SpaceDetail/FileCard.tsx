@@ -59,7 +59,10 @@ export function FileCard({
     hideDownloadActions = false,
 }: FileCardProps) {
     const localize = useLocalize();
-    const isH5 = useMediaQuery("(max-width: 768px)");
+    /** True only for desktop + mouse: actions reveal on card hover. Otherwise keep actions visible (touch / narrow / no-hover). */
+    const revealCardActionsOnHoverOnly = useMediaQuery(
+        "(min-width: 768px) and (hover: hover) and (pointer: fine)",
+    );
     const isCreating = !!file.isCreating;
     const [hovered, setHovered] = useState(false);
     const [moreMenuOpen, setMoreMenuOpen] = useState(false);
@@ -187,7 +190,7 @@ export function FileCard({
     return (
         <Card
             className={cn(
-                "group rounded-md overflow-hidden border-[0.5px] p-0 gap-0 py-0 shadow-none max-md:rounded-[6px]",
+                "group rounded-md overflow-hidden border-[0.5px] p-0 gap-0 py-0 shadow-none touch-mobile:rounded-[6px]",
                 cardOpensPreviewOrFolder ? "cursor-pointer" : "cursor-default",
                 isSelected
                     ? "border-primary shadow-sm"
@@ -205,10 +208,10 @@ export function FileCard({
         >
             <CardContent className={cn(
                 "flex flex-col p-0",
-                mobileListMode && "max-md:flex-row max-md:items-center max-md:gap-2 max-md:p-1"
+                mobileListMode && "touch-mobile:flex-row touch-mobile:items-center touch-mobile:gap-2 touch-mobile:p-1"
             )}>
                 {!hideSelectionCheckbox && mobileListMode && (
-                    <div className="hidden max-md:flex max-md:shrink-0 max-md:items-center max-md:justify-center max-md:pl-1 max-md:pr-0.5">
+                    <div className="hidden touch-mobile:flex touch-mobile:shrink-0 touch-mobile:items-center touch-mobile:justify-center touch-mobile:pl-1 touch-mobile:pr-0.5">
                         <Checkbox
                             className={isSelected ? "border-primary" : "border-gray-400"}
                             checked={isSelected}
@@ -222,7 +225,7 @@ export function FileCard({
                 {/* 缩略图或图标区域 */}
                 <div className={cn(
                     "relative flex h-[106px] shrink-0 items-center justify-center",
-                    mobileListMode && "max-md:h-12 max-md:w-12 max-md:rounded-[4px]",
+                    mobileListMode && "touch-mobile:h-12 touch-mobile:w-12 touch-mobile:rounded-[4px]",
                     isFolder ? "bg-[#FAFCFF]" : "bg-gray-50"
                 )}>
                     <FileIconRenderer file={file} isFolder={isFolder} />
@@ -231,8 +234,8 @@ export function FileCard({
                         <div
                             className={cn(
                                 "absolute left-2 top-2 z-10 transition-opacity",
-                                mobileListMode && "max-md:hidden",
-                                isH5
+                                mobileListMode && "touch-mobile:hidden",
+                                !revealCardActionsOnHoverOnly
                                     ? "opacity-100"
                                     : isSelected
                                     ? "opacity-100"
@@ -254,7 +257,7 @@ export function FileCard({
                         <div
                             className={cn(
                                 "absolute right-2 top-2 z-20 flex items-center gap-1 transition-opacity",
-                                isH5
+                                !revealCardActionsOnHoverOnly
                                     ? "pointer-events-auto opacity-100"
                                     : showCardActions
                                     ? "pointer-events-auto opacity-100"
@@ -349,7 +352,7 @@ export function FileCard({
                 {/* 底部内容区域 */}
                 <div className={cn(
                     "p-1",
-                    mobileListMode && "max-md:min-w-0 max-md:flex-1 max-md:pr-1"
+                    mobileListMode && "touch-mobile:min-w-0 touch-mobile:flex-1 touch-mobile:pr-1"
                 )}>
                     {/* 文件名和状态 */}
                     <div className="flex items-center text-sm font-medium min-w-0">
@@ -378,7 +381,7 @@ export function FileCard({
                 </div>
 
                 {mobileListMode && (
-                    <div className="max-md:flex max-md:shrink-0 max-md:items-center max-md:gap-1 max-md:pr-1">
+                    <div className="touch-mobile:flex touch-mobile:shrink-0 touch-mobile:items-center touch-mobile:gap-1 touch-mobile:pr-1">
                     {showMenuDownloadItem && (
                         <Button
                             variant="outline"

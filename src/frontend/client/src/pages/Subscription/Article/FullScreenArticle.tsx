@@ -1,7 +1,7 @@
 import { ArrowLeftIcon } from "lucide-react";
 import React, { useEffect, useRef } from "react";
 import { Button } from "~/components";
-import { useMediaQuery } from "~/hooks";
+import { usePrefersMobileLayout } from "~/hooks";
 import { ArticleDetail } from "./ArticleDetail";
 import { AiAssistantPanel } from "../AiChat/AiAssistantPanel";
 import { useResizablePanel } from "../hooks/useResizablePanel";
@@ -11,7 +11,7 @@ const MIN_RIGHT_WIDTH = 360;
 
 export default function FullScreenArticle({ article, onExit, showFullScreenBtn = true, onSwitchToFullScreen, showAiAssistant, setShowAiAssistant, onCloseAiAssistant }) {
     const containerRef = useRef<HTMLDivElement>(null);
-    const isH5 = useMediaQuery("(max-width: 768px)");
+    const isH5 = usePrefersMobileLayout();
 
     const { leftWidth, isResizing, startResizing } = useResizablePanel({
         storageKey: "ai-assistant-split-ratio",

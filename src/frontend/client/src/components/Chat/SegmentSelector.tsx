@@ -8,7 +8,7 @@ const SegmentSelector = ({ lingsi, onChange, bsConfig }) => {
             <div className="p-1 rounded-full border border-[#e5e6eb] bg-white/80 flex shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
                 <button
                     type="button"
-                    className={`flex-1 py-2 max-[575px]:py-2 px-3 max-[575px]:px-3 md:px-8 rounded-full text-sm max-[575px]:text-[13px] break-keep transition-all font-medium ${!lingsi
+                    className={`flex-1 py-2 touch-mobile:py-2 px-3 touch-mobile:px-3 touch-desktop:px-8 rounded-full text-sm touch-mobile:text-[13px] break-keep transition-all font-medium ${!lingsi
                         ? 'bg-[#E6EDFC] text-[#165DFF] shadow-sm'
                         : 'text-[#1d2129] bg-transparent'
                         }`}
@@ -18,7 +18,7 @@ const SegmentSelector = ({ lingsi, onChange, bsConfig }) => {
                 </button>
                 <button
                     type="button"
-                    className={`flex-1 py-2 max-[575px]:py-2 px-3 max-[575px]:px-3 md:px-8 rounded-full text-sm max-[575px]:text-[13px] break-keep transition-all font-medium ${lingsi
+                    className={`flex-1 py-2 touch-mobile:py-2 px-3 touch-mobile:px-3 touch-desktop:px-8 rounded-full text-sm touch-mobile:text-[13px] break-keep transition-all font-medium ${lingsi
                         ? 'bg-[#E6EDFC] text-[#165DFF] shadow-sm'
                         : 'text-[#1d2129] bg-transparent'
                         }`}

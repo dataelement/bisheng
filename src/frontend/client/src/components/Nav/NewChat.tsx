@@ -117,7 +117,7 @@ export default function NewChat({
         <div className="mb-4 flex items-center justify-between">
           <p className="font-medium text-[#212121] text-[16px] ml-2">{localize('com_nav_home')}</p>
         </div>
-        <div className="mb-2 flex w-full flex-nowrap items-stretch justify-center gap-2 overflow-x-auto pb-1 md:hidden scrollbar-hide">
+        <div className="mb-2 hidden w-full touch-mobile:flex flex-nowrap items-stretch justify-center gap-2 overflow-x-auto pb-1 scrollbar-hide">
           {[
             {
               section: 'home',

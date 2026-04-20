@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useRecoilState } from 'recoil';
 import { Menu } from 'lucide-react';
-import { useAuthContext, useMediaQuery } from '~/hooks';
+import { useAuthContext, usePrefersMobileLayout } from '~/hooks';
 import { AuthContext } from '~/hooks/AuthContext';
 import NavToggle from '~/components/Nav/NavToggle';
 import { sidebarVisibleState } from '~/pages/appChat/store/appSidebarAtoms';
@@ -75,7 +75,7 @@ function StandaloneChatInner({ mode, flowType }: StandaloneChatPageProps) {
   const { flowId } = useParams<{ flowId: string }>();
   const [sidebarVisible, setSidebarVisible] = useRecoilState(sidebarVisibleState);
   const [isHovering, setIsHovering] = useState(false);
-  const isTabletOrMobile = useMediaQuery('(max-width: 768px)');
+  const isTabletOrMobile = usePrefersMobileLayout();
   const sidebarWidth = isTabletOrMobile ? 240 : 280;
 
   const apiVersion = mode === 'guest' ? 'v2' : 'v1';

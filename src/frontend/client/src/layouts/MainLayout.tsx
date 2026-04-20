@@ -10,7 +10,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import KeepAlive from 'react-activation';
 import { matchPath, NavLink, useLocation, useOutlet } from 'react-router-dom';
 import { useRecoilState } from 'recoil';
-import { useMediaQuery } from '~/hooks';
+import { usePrefersMobileLayout } from '~/hooks';
 import { bishengConfState } from '~/pages/appChat/store/atoms';
 import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import { useAuthContext, useLocalize } from '~/hooks';
@@ -76,7 +76,7 @@ function Sidebar({
   const { user, logout } = useAuthContext();
   const localize = useLocalize();
   const [langcode, setLangcode] = useRecoilState(store.lang);
-  const isMobile = useMediaQuery('(max-width: 768px)');
+  const isMobile = usePrefersMobileLayout();
   const isChatSection = /^\/(c|linsight)(\/|$)/.test(pathname);
   // Use includes() to tolerate possible basename prefix (e.g. "/xxx/apps")
   const isAppSection = pathname.includes('/apps') || pathname.includes('/app/');
@@ -141,7 +141,7 @@ function Sidebar({
         !overlay && 'border-r border-[#ececec]',
         // 主站会话移动端：不展示左侧窄栏，入口在会话区顶栏与历史抽屉内
         // 应用会话 /app/* 仍显示左侧模块栏，与 PC 一致，便于切换首页 / 应用 / 频道 / 知识
-        isChatSection && isMobile && 'hidden md:flex',
+        isChatSection && isMobile && 'hidden',
       )}
     >
       <div className={cn('flex flex-col', showExpandedHubSidebar ? 'gap-4 items-stretch' : 'gap-10 items-center')}>
@@ -201,7 +201,7 @@ export default function MainLayout() {
   const outlet = useOutlet();
   const { user, logout, isUserLoading } = useAuthContext();
   const localize = useLocalize();
-  const isMobile = useMediaQuery('(max-width: 768px)');
+  const isMobile = usePrefersMobileLayout();
   const isAppSection = pathname.includes('/apps') || pathname.includes('/app/');
   const isAppsArea = pathname.includes('/apps');
   const isAppChatRoute = /^\/app(\/|$)/.test(pathname);
@@ -274,7 +274,7 @@ export default function MainLayout() {
       )}
       {isMobile && isAppsArea && !isAppChatRoute && mobileSidebarOpen ? (
         <div
-          className="fixed inset-0 z-[55] flex md:hidden"
+          className="fixed inset-0 z-[55] flex"
           role="dialog"
           aria-modal="true"
           aria-label={localize('com_nav_app_center')}

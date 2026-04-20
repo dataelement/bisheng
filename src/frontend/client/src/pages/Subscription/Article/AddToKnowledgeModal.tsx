@@ -594,17 +594,17 @@ export function AddToKnowledgeModal({
             <Dialog open={open} onOpenChange={handleOpenChange}>
                 <DialogContent
                     close={false}
-                    className="w-[576px] max-w-[92vw] p-0 gap-0 overflow-hidden rounded-xl max-md:inset-0 max-md:left-0 max-md:top-0 max-md:h-dvh max-md:w-screen max-md:max-w-none max-md:translate-x-0 max-md:translate-y-0 max-md:rounded-none"
+                    className="w-[576px] max-w-[92vw] p-0 gap-0 overflow-hidden rounded-xl touch-mobile:inset-0 touch-mobile:left-0 touch-mobile:top-0 touch-mobile:h-dvh touch-mobile:w-screen touch-mobile:max-w-none touch-mobile:translate-x-0 touch-mobile:translate-y-0 touch-mobile:rounded-none"
                 >
                     {/* Header */}
-                    <DialogHeader className="px-6 pt-4 pb-4 border-b border-[#ECECEC] max-md:px-4">
+                    <DialogHeader className="px-6 pt-4 pb-4 border-b border-[#ECECEC] touch-mobile:px-4">
                         <DialogTitle className="text-[20px] font-medium leading-7 text-[#212121]">
                             {localize("com_subscription.add_to_knowledge_space")}
                         </DialogTitle>
                     </DialogHeader>
 
                     {/* Search */}
-                    <div className="px-6 pt-4 max-md:px-4">
+                    <div className="px-6 pt-4 touch-mobile:px-4">
                         <div className="relative">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#818181] pointer-events-none" />
                             <Input
@@ -625,9 +625,9 @@ export function AddToKnowledgeModal({
                     </div>
 
                     {/* Tree / Empty state */}
-                    <div className="px-6 pt-4 max-md:px-4">
+                    <div className="px-6 pt-4 touch-mobile:px-4">
                         <div
-                            className="h-[340px] max-h-full w-full overflow-y-auto overflow-x-hidden rounded-[6px] border border-[#ECECEC] p-3 scrollbar-on-hover max-md:h-[calc(100dvh-260px)]"
+                            className="h-[340px] max-h-full w-full overflow-y-auto overflow-x-hidden rounded-[6px] border border-[#ECECEC] p-3 scrollbar-on-hover touch-mobile:h-[calc(100dvh-260px)]"
                         >
                             {spacesLoading ? (
                                 <div className="flex items-center justify-center h-full text-[#86909c]">
@@ -675,18 +675,18 @@ export function AddToKnowledgeModal({
                     </div>
 
                     {/* Footer */}
-                    <DialogFooter className="mt-3 flex flex-row justify-end gap-2 px-5 py-3.5 max-md:mt-auto max-md:border-t max-md:border-[#ECECEC] max-md:px-4 max-md:py-3">
+                    <DialogFooter className="mt-3 flex flex-row justify-end gap-2 px-5 py-3.5 touch-mobile:mt-auto touch-mobile:border-t touch-mobile:border-[#ECECEC] touch-mobile:px-4 touch-mobile:py-3">
                         <Button
                             variant="outline"
                             size="sm"
                             onClick={() => handleOpenChange(false)}
-                            className="h-8 px-4 text-sm rounded-md font-normal max-md:flex-1"
+                            className="h-8 px-4 text-sm rounded-md font-normal touch-mobile:flex-1"
                         >{localize("com_subscription.cancel")}</Button>
                         <Button
                             size="sm"
                             onClick={() => void handleConfirm()}
                             disabled={!selectedId || isConfirming}
-                            className="h-8 px-4 text-sm rounded-md font-normal max-md:flex-1"
+                            className="h-8 px-4 text-sm rounded-md font-normal touch-mobile:flex-1"
                         >
                             {isConfirming && <Loader2 className="size-3.5 mr-1.5 animate-spin" />}{localize("com_subscription.add")}
                         </Button>

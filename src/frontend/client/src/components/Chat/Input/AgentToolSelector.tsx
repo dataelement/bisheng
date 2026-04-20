@@ -120,7 +120,7 @@ export default function AgentToolSelector({ availableTools, disabled }: Props) {
       >
         <div className="flex gap-1.5 items-center">
           <ApiAppIcon size="15" className={cn("text-[#165DFF]", isActive && "text-blue-600")} strokeWidth={1.5} />
-          <span className="text-[14px] font-normal max-[575px]:sr-only">
+          <span className="text-[14px] font-normal touch-mobile:sr-only">
             {localize("com_tools_title")}
             {/* {isActive ? ` (${activeCount})` : ""} */}
           </span>
