@@ -14,7 +14,7 @@
 |------|------|------|
 | spec.md | ✅ 已定稿 | 2026-04-19 PRD 精化后定稿；24 AC + 8 AD + 完整 §5 代码骨架；经 `/sdd-review spec` 通过 |
 | tasks.md | ✅ 已拆解 | 2026-04-21 `/sdd-review tasks` 第 2 轮通过（第 1 轮修复：T02/T11/T15 三个跨文件/跨前后端任务拆分 + AC-18/19 E2E 测试补齐 + D10/D11 决策锁定） |
-| 实现 | 🟡 进行中 | 18 / 19 完成（T01~T15b ✓） |
+| 实现 | 🟢 代码就绪，待 114 回归 | 19 / 19 完成；ac-verification.md 产出，pytest + 手工 QA 待 114 |
 
 ---
 
@@ -640,7 +640,7 @@ T04 (Alembic 迁移 + ORM 补 tenant_id)                              ──┤ 
 
 ### 回归 + AC 对照
 
-- [ ] **T16**: 本地回归 + AC 对照表 + 114 pytest + UI 手动验证
+- [x] **T16**: 本地回归 + AC 对照表 + 114 pytest + UI 手动验证（本地仅产出 ac-verification.md；真 pytest + UI 验证待 114）
   **执行**:
   - 本地 `cd /Users/lilu/Projects/bisheng-worktrees/020-llm-tenant-isolation/src/backend && .venv/bin/pytest test/test_llm_tenant_isolation_*.py test/test_llm_cross_ref_*.py test/test_user_info_tenant_fields.py test/test_f020_migration.py -v`
   - F012/F013/F017/F019 回归（防止 F020 改 DAO/Service 造成破坏）:
