@@ -7,7 +7,7 @@ from sqlalchemy import Column, DateTime, Integer, String, Text, text, BigInteger
 from sqlmodel import Field, select
 
 from bisheng.common.models.base import SQLModelSerializable
-from bisheng.core.database import get_async_db_session
+from bisheng.core.database import get_async_db_session, get_sync_db_session
 
 
 class FailedTupleBase(SQLModelSerializable):
@@ -58,6 +58,51 @@ class FailedTuple(FailedTupleBase, table=True):
 
 
 class FailedTupleDao:
+    @classmethod
+    def get_pending(cls, limit: int = 100) -> List[FailedTuple]:
+        """Get pending tuples that haven't exceeded max retries."""
+        with get_sync_db_session() as session:
+            stmt = (
+                select(FailedTuple)
+                .where(FailedTuple.status == 'pending')
+                .where(FailedTuple.retry_count < FailedTuple.max_retries)
+                .order_by(FailedTuple.create_time.asc())
+                .limit(limit)
+            )
+            result = session.exec(stmt)
+            return list(result.all())
+
+    @classmethod
+    def update_succeeded(cls, tuple_id: int) -> None:
+        """Mark a tuple as succeeded."""
+        with get_sync_db_session() as session:
+            item = session.get(FailedTuple, tuple_id)
+            if item:
+                item.status = 'succeeded'
+                session.add(item)
+                session.commit()
+
+    @classmethod
+    def update_retry(cls, tuple_id: int, error: str) -> None:
+        """Increment retry count and record error."""
+        with get_sync_db_session() as session:
+            item = session.get(FailedTuple, tuple_id)
+            if item:
+                item.retry_count += 1
+                item.error_message = error
+                session.add(item)
+                session.commit()
+
+    @classmethod
+    def mark_dead(cls, tuple_id: int, error: str) -> None:
+        """Mark a tuple as dead (exceeded max retries)."""
+        with get_sync_db_session() as session:
+            item = session.get(FailedTuple, tuple_id)
+            if item:
+                item.status = 'dead'
+                item.error_message = error
+                session.add(item)
+                session.commit()
 
     @classmethod
     async def acreate_batch(cls, tuples: List[FailedTuple]) -> None:
