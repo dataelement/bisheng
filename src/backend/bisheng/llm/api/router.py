@@ -16,35 +16,48 @@ async def get_all_llm(request: Request, login_user: UserPayload = Depends(UserPa
 
 
 @router.post('')
-async def add_llm_server(request: Request, login_user: UserPayload = Depends(UserPayload.get_admin_user),
+async def add_llm_server(request: Request,
+                         login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
                          server: LLMServerCreateReq = Body(..., description="Service Provider All Data")):
+    # F020 T08: get_tenant_admin_user admits the global super admin or the
+    # current tenant's Child Admin (via get_current_tenant_id which honours
+    # F019 admin-scope). Ordinary users receive 403 + 19801 from the
+    # dependency itself before Service code runs.
     ret = await LLMService.add_llm_server(request, login_user, server)
     return resp_200(data=ret)
 
 
 @router.delete('')
-async def delete_llm_server(request: Request, login_user: UserPayload = Depends(UserPayload.get_admin_user),
+async def delete_llm_server(request: Request,
+                            login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
                             server_id: int = Body(..., embed=True, description="Service Provider UniqueID")):
+    # F020 T08: DAO further enforces the Root-only read-only rule (19801);
+    # endpoint just needs tenant-scoped admin to reach the DAO.
     await LLMService.delete_llm_server(request, login_user, server_id)
     return resp_200()
 
 
 @router.put('')
-async def update_llm_server(request: Request, login_user: UserPayload = Depends(UserPayload.get_admin_user),
+async def update_llm_server(request: Request,
+                            login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
                             server: LLMServerCreateReq = Body(..., description="Service Provider All Data")):
+    # F020 T08: same admission rule as POST. LLMServerCreateReq.share_to_children
+    # routes to aupdate_server_share in Service when the target is Root.
     ret = await LLMService.update_llm_server(request, login_user, server)
     return resp_200(data=ret)
 
 
 @router.get('/info')
-async def get_one_llm(request: Request, login_user: UserPayload = Depends(UserPayload.get_admin_user),
+async def get_one_llm(request: Request,
+                      login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
                       server_id: int = Query(..., description="Service Provider UniqueID")):
     ret = await LLMService.get_one_llm(server_id)
     return resp_200(data=ret)
 
 
 @router.post('/online')
-async def update_model_online(request: Request, login_user: UserPayload = Depends(UserPayload.get_admin_user),
+async def update_model_online(request: Request,
+                              login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
                               model_id: int = Body(..., embed=True, description="Model UniqueID"),
                               online: bool = Body(..., embed=True, description="Online or not")):
     ret = await LLMService.update_model_online(model_id, online)

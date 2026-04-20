@@ -14,7 +14,7 @@
 |------|------|------|
 | spec.md | ✅ 已定稿 | 2026-04-19 PRD 精化后定稿；24 AC + 8 AD + 完整 §5 代码骨架；经 `/sdd-review spec` 通过 |
 | tasks.md | ✅ 已拆解 | 2026-04-21 `/sdd-review tasks` 第 2 轮通过（第 1 轮修复：T02/T11/T15 三个跨文件/跨前后端任务拆分 + AC-18/19 E2E 测试补齐 + D10/D11 决策锁定） |
-| 实现 | 🟡 进行中 | 8 / 19 完成（T01~T07 ✓） |
+| 实现 | 🟡 进行中 | 9 / 19 完成（T01~T08 ✓） |
 
 ---
 
@@ -391,7 +391,7 @@ T04 (Alembic 迁移 + ORM 补 tenant_id)                              ──┤ 
 
 ### API 路由
 
-- [ ] **T08**: Router 权限降级（CRUD → `get_tenant_admin_user`；workbench 等保留 `get_admin_user`）
+- [x] **T08**: Router 权限降级（CRUD → `get_tenant_admin_user`；workbench 等保留 `get_admin_user`）
   **文件（修改）**:
   - `src/backend/bisheng/llm/api/router.py`
   **改动清单**（逐行替换 `UserPayload.get_admin_user` → `UserPayload.get_tenant_admin_user`）:
