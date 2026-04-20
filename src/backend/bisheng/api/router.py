@@ -29,6 +29,7 @@ from bisheng.org_sync.api.endpoints.relink import router as relink_router
 from bisheng.org_sync.api.router import router as org_sync_router
 from bisheng.sso_sync.api.router import router as sso_sync_router
 from bisheng.tenant.api.router import router as tenant_router
+from bisheng.admin.api.router import router as admin_router
 
 router = APIRouter(prefix='/api/v1', )
 router.include_router(chat_router)
@@ -68,6 +69,7 @@ router.include_router(org_sync_router)
 router.include_router(sso_sync_router)
 router.include_router(relink_router)
 router.include_router(tenant_router)
+router.include_router(admin_router)
 
 router_rpc = APIRouter(prefix='/api/v2', )
 router_rpc.include_router(knowledge_router_rpc)
