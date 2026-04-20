@@ -93,7 +93,7 @@ async def test_root_llm_default_shared_writes_viewer_tuple():
                _session_context(session)), \
          patch('bisheng.llm.domain.models.llm_server.get_current_tenant_id',
                return_value=1), \
-         patch('bisheng.database.models.tenant.TenantDao.aget',
+         patch('bisheng.database.models.tenant.TenantDao.aget_by_id',
                new=AsyncMock(return_value=_mk_root_tenant(share_default=True))), \
          patch('bisheng.tenant.domain.services.resource_share_service.'
                'ResourceShareService.enable_sharing', new=enable_mock), \
@@ -118,7 +118,7 @@ async def test_root_llm_share_off_skips_viewer_tuple():
                _session_context(session)), \
          patch('bisheng.llm.domain.models.llm_server.get_current_tenant_id',
                return_value=1), \
-         patch('bisheng.database.models.tenant.TenantDao.aget',
+         patch('bisheng.database.models.tenant.TenantDao.aget_by_id',
                new=AsyncMock(return_value=_mk_root_tenant(share_default=True))), \
          patch('bisheng.tenant.domain.services.resource_share_service.'
                'ResourceShareService.enable_sharing', new=enable_mock), \
@@ -138,10 +138,16 @@ async def test_child_admin_creates_own_llm_not_shared():
     server = LLMServer(name='s3', type='openai', config={})
 
     enable_mock = AsyncMock()
+
+    class _NoWhitelist:
+        class llm:
+            endpoint_whitelist: list = []
+
     with patch('bisheng.llm.domain.models.llm_server.get_async_db_session',
                _session_context(session)), \
          patch('bisheng.llm.domain.models.llm_server.get_current_tenant_id',
                return_value=5), \
+         patch('bisheng.llm.domain.models.llm_server.settings', _NoWhitelist()), \
          patch('bisheng.tenant.domain.services.resource_share_service.'
                'ResourceShareService.enable_sharing', new=enable_mock), \
          patch('bisheng.utils.http_middleware._check_is_global_super',
@@ -168,7 +174,7 @@ async def test_endpoint_whitelist_enforced_for_child_admin():
     class _FakeSettings:
         llm = _FakeLLMConf()
 
-    with patch('bisheng.common.services.config_service.settings', _FakeSettings()), \
+    with patch('bisheng.llm.domain.models.llm_server.settings', _FakeSettings()), \
          patch('bisheng.llm.domain.models.llm_server.get_current_tenant_id',
                return_value=5), \
          patch('bisheng.utils.http_middleware._check_is_global_super',

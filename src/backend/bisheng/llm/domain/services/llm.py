@@ -16,6 +16,7 @@ from bisheng.common.errcode.server import NoAsrModelConfigError, AsrModelConfigD
     TtsModelConfigDeletedError
 from bisheng.common.models.config import ConfigDao, ConfigKeyEnum, Config
 from bisheng.core.cache.redis_manager import get_redis_client
+from bisheng.core.context.tenant import bypass_tenant_filter, get_current_tenant_id
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge import KnowledgeState
@@ -60,7 +61,6 @@ async def _write_llm_audit(
     DB failures here must not roll back the already-committed server
     write — the audit write happens out-of-band.
     """
-    from bisheng.core.context.tenant import get_current_tenant_id
     from bisheng.database.models.audit_log import AuditLogDao
     from bisheng.tenant.domain.constants import TenantAuditAction
     try:
@@ -107,8 +107,7 @@ class LLMService:
         Child). Restricted to the global super admin — a Child Admin has
         no reason to preview the cross-tenant distribution list.
         """
-        from bisheng.core.context.tenant import bypass_tenant_filter, get_current_tenant_id
-
+    
         if only_shared:
             if operator is None:
                 from bisheng.common.errcode.llm_tenant import LLMSystemConfigForbiddenError
@@ -166,7 +165,6 @@ class LLMService:
         as the authoritative "is this currently shared" check, so the UI
         preview matches post-mount distribution behaviour.
         """
-        from bisheng.core.context.tenant import bypass_tenant_filter
         from bisheng.tenant.domain.services.resource_share_service import (
             ResourceShareService,
         )
@@ -213,7 +211,6 @@ class LLMService:
         so Child users still resolve models that were shared to them via
         F017, without requiring a DAO-level bypass at every call site.
         """
-        from bisheng.core.context.tenant import bypass_tenant_filter, get_current_tenant_id
         from bisheng.common.errcode.llm_tenant import LLMModelNotAccessibleError
 
         model = await LLMDao.aget_model_by_id(model_id)
@@ -328,7 +325,6 @@ class LLMService:
         """ Delete a service provider """
         # F020 T09: capture the server row *before* delete so the audit
         # entry has a meaningful name/endpoint (post-delete the row is gone).
-        from bisheng.core.context.tenant import bypass_tenant_filter
         with bypass_tenant_filter():
             pre = await LLMDao.aget_server_by_id(server_id)
 

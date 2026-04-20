@@ -5,6 +5,8 @@ from sqlalchemy import CHAR, JSON, Column, DateTime, Text, UniqueConstraint, del
 from sqlmodel import Field, select, col
 
 from bisheng.common.models.base import SQLModelSerializable
+from bisheng.common.services.config_service import settings
+from bisheng.core.context.tenant import bypass_tenant_filter, get_current_tenant_id
 from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.llm.domain.const import LLMModelType
 from bisheng.llm.domain.utils import wrapper_bisheng_llm_info, wrapper_bisheng_llm_info_async
@@ -135,8 +137,6 @@ class LLMDao:
         tests and legacy callers: no whitelist check, no FGA fanout —
         same behaviour as before F020.
         """
-        from bisheng.core.context.tenant import get_current_tenant_id
-
         tid = get_current_tenant_id() or 1
         server.tenant_id = tid
         for model in models:
@@ -144,7 +144,6 @@ class LLMDao:
 
         # F020 D6: endpoint whitelist guard.
         if operator is not None:
-            from bisheng.common.services.config_service import settings
             from bisheng.common.errcode.llm_tenant import LLMEndpointNotWhitelistedError
             from bisheng.utils.http_middleware import _check_is_global_super
 
@@ -172,7 +171,7 @@ class LLMDao:
                 ResourceShareService,
             )
 
-            tenant = await TenantDao.aget(server.tenant_id)
+            tenant = await TenantDao.aget_by_id(server.tenant_id)
             if tenant is not None and getattr(tenant, 'share_default_to_children', False):
                 try:
                     await ResourceShareService.enable_sharing(
@@ -200,7 +199,6 @@ class LLMDao:
         super admin operating from a Child scope (F019); the event-layer
         IN-list filter would otherwise hide Root servers.
         """
-        from bisheng.core.context.tenant import bypass_tenant_filter
         from bisheng.utils.http_middleware import _check_is_global_super
         from bisheng.common.errcode.llm_tenant import (
             LLMModelNotAccessibleError,
@@ -241,7 +239,6 @@ class LLMDao:
         a Child-scoped super admin (F019) would otherwise not see it.
         """
         if operator is not None and getattr(server, 'id', None):
-            from bisheng.core.context.tenant import bypass_tenant_filter
             from bisheng.utils.http_middleware import _check_is_global_super
             from bisheng.common.errcode.llm_tenant import LLMModelSharedReadonlyError
 
@@ -455,7 +452,6 @@ class LLMDao:
         local delete (aligning with ainsert_server_with_models).
         """
         if operator is not None:
-            from bisheng.core.context.tenant import bypass_tenant_filter
             from bisheng.utils.http_middleware import _check_is_global_super
             from bisheng.common.errcode.llm_tenant import (
                 LLMModelNotAccessibleError,
