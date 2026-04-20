@@ -48,6 +48,9 @@ SUPPORTED_SHAREABLE_TYPES: set[str] = {
     'assistant',
     'channel',
     'tool',
+    # v2.5.1 F020 — LLM server sharing (Root creates → optional Child
+    # fanout). llm_model follows its llm_server and is not shared directly.
+    'llm_server',
 }
 
 

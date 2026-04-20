@@ -14,7 +14,7 @@
 |------|------|------|
 | spec.md | ✅ 已定稿 | 2026-04-19 PRD 精化后定稿；24 AC + 8 AD + 完整 §5 代码骨架；经 `/sdd-review spec` 通过 |
 | tasks.md | ✅ 已拆解 | 2026-04-21 `/sdd-review tasks` 第 2 轮通过（第 1 轮修复：T02/T11/T15 三个跨文件/跨前后端任务拆分 + AC-18/19 E2E 测试补齐 + D10/D11 决策锁定） |
-| 实现 | 🟡 进行中 | 2 / 19 完成（T01, T02a ✓） |
+| 实现 | 🟡 进行中 | 3 / 19 完成（T01, T02a, T02b ✓） |
 
 ---
 
@@ -124,7 +124,7 @@ T04 (Alembic 迁移 + ORM 补 tenant_id)                              ──┤ 
 
 ---
 
-- [ ] **T02b**: `TenantAuditAction` 扩展 + `SUPPORTED_SHAREABLE_TYPES` 加 `llm_server` + CLAUDE.md 模块编码核对
+- [x] **T02b**: `TenantAuditAction` 扩展 + `SUPPORTED_SHAREABLE_TYPES` 加 `llm_server` + CLAUDE.md 模块编码核对
   **文件（修改）**:
   - `src/backend/bisheng/tenant/domain/constants.py` `TenantAuditAction` enum 追加 6 行（放在 ADMIN_SCOPE_SWITCH 之后，沿 F019 T02 pure-additive 扩展模式）:
     ```python
