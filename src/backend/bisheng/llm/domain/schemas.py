@@ -14,6 +14,14 @@ class LLMModelInfo(LLMModelBase):
 class LLMServerInfo(LLMServerBase):
     id: Optional[int] = None
     models: List[LLMModelInfo] = Field(default_factory=list, description='Model List')
+    # F020: set by the Service layer when surfacing a Root-owned server to
+    # a Child caller (either directly via FGA share tuple, or via super
+    # admin under an F019 Child scope). The frontend uses this flag to
+    # render the "Root 共享（只读）" Badge and disable the edit button.
+    is_root_shared_readonly: bool = Field(
+        default=False,
+        description='True when the caller sees this server via Root→Child share',
+    )
 
     # Sensitive Data Desensitization
     @model_validator(mode='after')
@@ -67,6 +75,14 @@ class LLMServerCreateReq(BaseModel):
     limit_flag: Optional[bool] = Field(default=False, description='Whether to turn on the daily call limit')
     limit: Optional[int] = Field(default=0, description='Daily call limit')
     config: Optional[dict] = Field(default=None, description='Service Provider Configuration')
+    # F020 AC-01/AC-02/AC-04: Root-only switch. Defaults to True so Root
+    # creates are group-shared unless the super admin explicitly opts
+    # out; ignored by the Service layer when the caller is writing under
+    # a non-Root tenant (Child Admin).
+    share_to_children: bool = Field(
+        default=True,
+        description='Fan out this server to all Children via FGA shared_with tuples',
+    )
     models: Optional[List[LLMModelCreateReq]] = Field(default_factory=list,
                                                       description='List of models under Service Provider')
 

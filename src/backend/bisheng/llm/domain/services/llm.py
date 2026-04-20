@@ -33,15 +33,48 @@ class LLMService:
 
     @classmethod
     async def get_all_llm(cls) -> List[LLMServerInfo]:
-        """ Get all the model data, Exclusion:keyand other sensitive information """
+        """ Get all the model data, Exclusion:keyand other sensitive information
+
+        F020: the list merges (a) servers the event layer returns for the
+        current tenant/scope and (b) Root-owned servers shared to the
+        caller's leaf via F017's ``{llm_server}#shared_with → tenant:{leaf}``
+        tuples. Duplicates (Root self-viewing its own rows) are filtered
+        on id. Each merged Root-shared row carries
+        ``is_root_shared_readonly=True`` so the frontend can render the
+        "Root 共享（只读）" Badge and disable edit affordances.
+        """
+        from bisheng.core.context.tenant import bypass_tenant_filter, get_current_tenant_id
+
+        leaf_id = get_current_tenant_id() or 1
+
         llm_servers = await LLMDao.aget_all_server()
+        existing_ids = {s.id for s in llm_servers}
+
+        # F020 AC-03: merge Root shares for non-Root callers.
+        if leaf_id != 1:
+            shared_ids = await LLMDao.aget_shared_server_ids_for_leaf(leaf_id)
+            shared_ids = [sid for sid in shared_ids if sid not in existing_ids]
+            if shared_ids:
+                with bypass_tenant_filter():
+                    shared_servers = await LLMDao.aget_server_by_ids(shared_ids)
+                llm_servers = list(llm_servers) + list(shared_servers)
+
         ret = []
         server_ids = []
         for one in llm_servers:
             server_ids.append(one.id)
-            ret.append(LLMServerInfo(**one.model_dump(exclude={'config'})))
+            info = LLMServerInfo(**one.model_dump(exclude={'config'}))
+            # F020: flag Root-shared rows visible to a non-Root caller.
+            info.is_root_shared_readonly = (
+                one.tenant_id == 1 and leaf_id != 1
+            )
+            ret.append(info)
 
-        llm_models = await LLMDao.aget_model_by_server_ids(server_ids)
+        # Models query may span across tenants for the shared case; use
+        # bypass so Child callers can see the models under a Root server
+        # they've been granted via share_with.
+        with bypass_tenant_filter():
+            llm_models = await LLMDao.aget_model_by_server_ids(server_ids)
         server_dicts = {}
         for one in llm_models:
             if one.server_id not in server_dicts:
@@ -51,6 +84,36 @@ class LLMService:
         for one in ret:
             one.models = server_dicts.get(one.id, [])
         return ret
+
+    @classmethod
+    async def get_model_for_call(cls, model_id: int) -> LLMModel:
+        """F020 §5.4 / T11a+T11b entrypoint: fetch a model for cross-module call.
+
+        Raises 19802 if the model is not visible to the current caller
+        (deleted, cross-tenant reference, or a former Root-share that was
+        revoked). The Root-share branch uses ``aget_shared_server_ids_for_leaf``
+        so Child users still resolve models that were shared to them via
+        F017, without requiring a DAO-level bypass at every call site.
+        """
+        from bisheng.core.context.tenant import bypass_tenant_filter, get_current_tenant_id
+        from bisheng.common.errcode.llm_tenant import LLMModelNotAccessibleError
+
+        model = await LLMDao.aget_model_by_id(model_id)
+        if model is not None:
+            return model
+
+        # Either the id is unknown or the model belongs to a tenant the
+        # current context cannot see. Distinguish by bypass-reading and
+        # then checking if the owning server is Root-shared to us.
+        with bypass_tenant_filter():
+            raw = await LLMDao.aget_model_by_id(model_id)
+        if raw is not None and raw.server_id:
+            leaf_id = get_current_tenant_id() or 1
+            shared_ids = await LLMDao.aget_shared_server_ids_for_leaf(leaf_id)
+            if raw.server_id in shared_ids:
+                return raw
+
+        raise LLMModelNotAccessibleError.http_exception()
 
     @classmethod
     async def get_one_llm(cls, server_id: int) -> LLMServerInfo:
@@ -78,10 +141,18 @@ class LLMService:
             else:
                 raise ModelNameRepeatError.http_exception()
 
-        db_server = LLMServer(**server.model_dump(exclude={'models'}))
+        db_server = LLMServer(**server.model_dump(exclude={'models', 'share_to_children'}))
         db_server.user_id = login_user.user_id
 
-        db_server = await LLMDao.ainsert_server_with_models(db_server, list(model_dict.values()))
+        # F020: pass operator so DAO can apply endpoint-whitelist guard
+        # and Root→Children fanout. share_to_children from the request
+        # controls the opt-out when the target is Root.
+        db_server = await LLMDao.ainsert_server_with_models(
+            db_server,
+            list(model_dict.values()),
+            share_to_children=server.share_to_children,
+            operator=login_user,
+        )
 
         ret = await cls.get_one_llm(db_server.id)
         success_models = []
@@ -131,7 +202,9 @@ class LLMService:
     @classmethod
     async def delete_llm_server(cls, request: Request, login_user: UserPayload, server_id: int) -> bool:
         """ Delete a service provider """
-        await LLMDao.adelete_server_by_id(server_id)
+        # F020: pass operator so DAO enforces the Root-only / super-admin
+        # rule (19801) and cascades the FGA shared_with fanout cleanup.
+        await LLMDao.adelete_server_by_id(server_id, operator=login_user)
         return True
 
     @classmethod
@@ -287,7 +360,17 @@ class LLMService:
         mask_maker = JsonFieldMasker()
         exist_server.config = mask_maker.update_json_with_masked(exist_server.config, server.config)
 
-        db_server = await LLMDao.update_server_with_models(exist_server, list(model_dict.values()))
+        # F020 AC-04: detect share_to_children toggle on Root-owned servers
+        # and route it to the dedicated DAO helper (which enforces the
+        # super-admin / Root-only invariants via FGA).
+        if exist_server.tenant_id == 1 and hasattr(server, 'share_to_children'):
+            await LLMDao.aupdate_server_share(
+                exist_server.id, server.share_to_children, login_user,
+            )
+
+        db_server = await LLMDao.update_server_with_models(
+            exist_server, list(model_dict.values()), operator=login_user,
+        )
         new_server_info = await cls.get_one_llm(db_server.id)
 
         # Determine if the model status needs to be re-determined
