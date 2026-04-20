@@ -78,8 +78,24 @@ class TenantMountService:
         tenant_code: str,
         tenant_name: str,
         operator,
+        auto_distribute: bool = True,
     ) -> Tenant:
-        """Mark ``dept_id`` as a Child Tenant root (AC-02)."""
+        """Mark ``dept_id`` as a Child Tenant root (AC-02).
+
+        F017 extension (AC-13): ``auto_distribute`` controls whether Root
+        group-shared resources become visible to the new Child immediately.
+        - True (default, matches pre-F017 behavior): write
+          ``tenant:{new_child}#shared_to → tenant:{root}`` so every resource
+          already tagged shared_with Root becomes viewer-reachable for
+          members of the new Child.
+        - False: skip the shared_to write; super admin must later open share
+          per-resource in the UI. Used for "sensitive model" Children where
+          auto-fan-out would leak legal-review or similar Root resources.
+
+        The audit_log metadata always records the ``auto_distribute`` flag
+        (and, on True, the list of distributed resource ids). F011 callers
+        that do not care keep the default and observe the pre-F017 shape.
+        """
         _require_super(operator)
         dept = await DepartmentDao.aget_by_id(dept_id)
         if dept is None:
@@ -102,6 +118,15 @@ class TenantMountService:
         )
         new_tenant = await TenantDao.acreate_tenant(new_tenant)
         await DepartmentDao.aset_mount(dept_id, new_tenant.id)
+
+        # F017 hook: fan out the Root ``shared_to`` relation + snapshot the
+        # resources that are now reachable. Failures are swallowed to keep
+        # mount idempotent — the FGA write is retryable via failed_tuples
+        # (F013 compensator) and the DB row is already committed.
+        distributed_resources = await cls._on_child_mounted(
+            new_tenant.id, auto_distribute=auto_distribute,
+        )
+
         await _safe_audit(
             tenant_id=new_tenant.id,
             operator_id=getattr(operator, 'user_id', 0),
@@ -113,9 +138,150 @@ class TenantMountService:
                 'dept_id': dept_id,
                 'dept_path': getattr(dept, 'path', None),
                 'tenant_code': tenant_code,
+                # F017 AC-13: always record the auto_distribute flag + the
+                # snapshot of distributed resource ids (empty when False).
+                'auto_distribute': auto_distribute,
+                'distributed_resources': distributed_resources,
             },
         )
         return new_tenant
+
+    @classmethod
+    async def _on_child_mounted(
+        cls, new_child_id: int, auto_distribute: bool,
+    ) -> List[Dict[str, Any]]:
+        """F017 AC-02 / AC-13: on new Child mount, write the Tenant-level
+        ``shared_to`` tuple and return a snapshot of shared Root resources.
+
+        When ``auto_distribute=False`` we skip the FGA write and return an
+        empty snapshot — the Child will see no Root-shared resources until
+        the super admin opens each one from the UI.
+        """
+        if not auto_distribute:
+            return []
+        try:
+            from bisheng.tenant.domain.services.resource_share_service import ResourceShareService
+            await ResourceShareService.distribute_to_child(
+                new_child_id, root_tenant_id=ROOT_TENANT_ID,
+            )
+        except Exception as e:  # pragma: no cover — compensator handles retry
+            logger.warning(
+                '[F017] distribute_to_child failed for child %s: %s',
+                new_child_id, e,
+            )
+        try:
+            return await cls._list_root_shared_resources()
+        except Exception as e:  # pragma: no cover
+            logger.warning('[F017] _list_root_shared_resources failed: %s', e)
+            return []
+
+    @classmethod
+    async def _on_child_unmounted(cls, child_tenant_id: int) -> None:
+        """F017 AC-07: tear down every Tenant-level tuple attached to the
+        unmounted Child — both directions — so no dangling relation survives.
+
+        Specifically clears:
+
+        - ``tenant:{child}#shared_to → tenant:{root}``  (written by
+          ``ResourceShareService.distribute_to_child`` on mount)
+        - any ``tenant:{child}#admin`` / ``tenant:{child}#member`` tuples
+          where the Child appears as object
+        - any tuples where the Child appears as user (e.g. shared_to rows)
+
+        Resource-level ``shared_with → tenant:{child}`` tuples are not
+        deleted here: those are tied to individual Root resources, and the
+        F017 share-toggle API owns per-resource cleanup. Leaving them in
+        FGA is harmless once the Child no longer exists — the viewer chain
+        dead-ends at the missing ``tenant:{child}#member`` userset.
+        """
+        try:
+            from bisheng.tenant.domain.services.resource_share_service import ResourceShareService
+            await ResourceShareService.revoke_from_child(
+                child_tenant_id, root_tenant_id=ROOT_TENANT_ID,
+            )
+        except Exception as e:  # pragma: no cover — compensator handles retry
+            logger.warning(
+                '[F017] revoke_from_child failed for child %s: %s',
+                child_tenant_id, e,
+            )
+
+        try:
+            from bisheng.core.openfga.manager import get_fga_client
+            fga = get_fga_client()
+            if fga is None:
+                return
+
+            # Collect tuples where the Child appears as either side of a
+            # tenant-level relation, then batch-delete them. We restrict to
+            # ``object=tenant:{child}`` / ``user=tenant:{child}`` shapes so
+            # we never touch resource-level rows by mistake.
+            obj_tuples = await fga.read_tuples(object=f'tenant:{child_tenant_id}')
+            user_tuples = await fga.read_tuples(user=f'tenant:{child_tenant_id}')
+            seen: set = set()
+            deletes: List[Dict[str, str]] = []
+            for t in list(obj_tuples) + list(user_tuples):
+                key = (t.get('user'), t.get('relation'), t.get('object'))
+                if None in key or key in seen:
+                    continue
+                seen.add(key)
+                deletes.append({'user': key[0], 'relation': key[1], 'object': key[2]})
+            if deletes:
+                await fga.write_tuples(deletes=deletes)
+        except Exception as e:  # pragma: no cover
+            logger.warning(
+                '[F017] tenant-level tuple cleanup failed for child %s: %s',
+                child_tenant_id, e,
+            )
+
+    # Cap on audit_log.metadata.distributed_resources — bounds both the
+    # mount-time query payload and the JSON column size on audit rows.
+    # A fleet with >500 shared Root resources gets a truncation marker;
+    # the full list is recoverable by joining audit_log.create_time against
+    # the shared resource tables if needed.
+    _SHARED_RESOURCES_SNAPSHOT_CAP: int = 500
+
+    @classmethod
+    async def _list_root_shared_resources(cls) -> List[Dict[str, Any]]:
+        """Return a capped snapshot ``[{'type': <5-type>, 'id': <str>}]`` of
+        every Root row currently carrying ``is_shared=True``. Used as
+        audit_log metadata on Child mount.
+
+        Single UNION ALL query hits MySQL once instead of five sequential
+        round-trips; each branch tags its rows with a type literal so we
+        don't need N-way zipping in Python.
+        """
+        from sqlalchemy import text as sa_text
+
+        from bisheng.core.database import get_async_db_session
+
+        sql = sa_text(
+            'SELECT * FROM ('
+            "    SELECT 'knowledge_space' AS type, CAST(id AS CHAR) AS id FROM knowledge WHERE tenant_id = :t AND is_shared = 1"
+            "    UNION ALL SELECT 'workflow',    CAST(id AS CHAR) FROM flow              WHERE tenant_id = :t AND is_shared = 1"
+            "    UNION ALL SELECT 'assistant',   CAST(id AS CHAR) FROM assistant         WHERE tenant_id = :t AND is_shared = 1"
+            "    UNION ALL SELECT 'channel',     CAST(id AS CHAR) FROM channel           WHERE tenant_id = :t AND is_shared = 1"
+            "    UNION ALL SELECT 'tool',        CAST(id AS CHAR) FROM t_gpts_tools_type WHERE tenant_id = :t AND is_shared = 1"
+            ') u LIMIT :lim'
+        )
+
+        snapshot: List[Dict[str, Any]] = []
+        try:
+            async with get_async_db_session() as session:
+                res = await session.exec(sql.bindparams(
+                    t=ROOT_TENANT_ID,
+                    lim=cls._SHARED_RESOURCES_SNAPSHOT_CAP + 1,
+                ))
+                for row in res.all():
+                    snapshot.append({'type': row[0], 'id': row[1]})
+        except Exception as e:
+            logger.warning('[F017] _list_root_shared_resources query failed: %s', e)
+            return []
+
+        # Truncation marker so operators know more rows exist beyond the cap.
+        if len(snapshot) > cls._SHARED_RESOURCES_SNAPSHOT_CAP:
+            snapshot = snapshot[:cls._SHARED_RESOURCES_SNAPSHOT_CAP]
+            snapshot.append({'type': '_truncated', 'id': 'see shared resource tables'})
+        return snapshot
 
     # -----------------------------------------------------------------------
     # unmount_child
@@ -158,6 +324,12 @@ class TenantMountService:
             await DepartmentDao.aunset_mount(dept_id)
         else:
             raise TenantTreeMountConflictError()
+
+        # F017 hook: revoke the ``tenant:{child}#shared_to → tenant:{root}``
+        # tuple + the Child-scoped tenant-level tuples before we write the
+        # audit row. Failures are swallowed — a dangling tuple is observable
+        # later via the F013 compensator / housekeeping.
+        await cls._on_child_unmounted(child_tenant_id)
 
         meta: Dict[str, Any] = {'policy': policy, 'dept_id': dept_id}
         if migrated_counts is not None:

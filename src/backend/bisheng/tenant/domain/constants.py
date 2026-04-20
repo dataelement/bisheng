@@ -31,6 +31,9 @@ class TenantAuditAction(str, Enum):
     USER_SOURCE_MIGRATED = 'user.source_migrated'
     # F018 (v2.5.1) — owner transfer within a tenant's visible set.
     RESOURCE_TRANSFER_OWNER = 'resource.transfer_owner'
+    # F017 (v2.5.1) — Root resource share toggle (AC-01 / AC-05).
+    RESOURCE_SHARE_ENABLE = 'resource.share_enable'
+    RESOURCE_SHARE_DISABLE = 'resource.share_disable'
 
 
 class DeletionSource(str, Enum):

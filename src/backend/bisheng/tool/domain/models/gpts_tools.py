@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Dict, List, Optional
 
 from pydantic import model_validator
-from sqlalchemy import JSON, Column, DateTime, String, text, func
+from sqlalchemy import JSON, Boolean, Column, DateTime, String, text, func
 from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlmodel import Field, or_, select, Text, update, col
 
@@ -51,6 +51,13 @@ class GptsToolsTypeBase(SQLModelSerializable):
                                      description="The category of the tool, the historical reason field is not renamed")
     user_id: Optional[int] = Field(default=None, index=True, description='Create UserID， nullIndicates system creation')
     is_delete: int = Field(default=0, description='1 Indicates logical deletion')
+    is_shared: bool = Field(
+        default=False,
+        sa_column=Column(
+            Boolean, nullable=False, server_default=text('0'),
+            comment='F017: Root tool type shared to all children (mirrors FGA shared_with tuples)',
+        ),
+    )
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
@@ -422,6 +429,17 @@ class GptsToolsDao(GptsToolsBase):
                 finally_children.append(one)
             await session.commit()
             await session.refresh(data)
+
+    @classmethod
+    async def aset_tool_type_is_shared(cls, tool_type_id: int, is_shared: bool) -> None:
+        """F017: flip the is_shared flag on a tool type row. Small helper so the
+        share-on-create path does not depend on ``update_tool_type``'s 4-arg
+        contract when we only need to toggle one column.
+        """
+        async with get_async_db_session() as session:
+            stmt = update(GptsToolsType).where(GptsToolsType.id == tool_type_id).values(is_shared=is_shared)
+            await session.exec(stmt)
+            await session.commit()
 
     @classmethod
     async def delete_tool_type(cls, tool_type_id: int) -> None:

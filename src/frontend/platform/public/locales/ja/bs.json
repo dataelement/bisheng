@@ -1838,5 +1838,18 @@
   "department.deleteLocalMemberConfirm": "このローカルアカウントを削除しますか？組織所属・ユーザーグループ・一般ロールを解除し、ログインを無効化します。",
   "department.deleteLocalMemberBlocked": "データ資産が残っているため削除できません：ナレッジスペース {{k}}、ワークフロー {{f}}、アシスタント {{a}}。",
   "department.deleteLocalMemberDone": "メンバーアカウントを削除しました",
-  "department.memberEditAffiliateSection": "兼務先部門"
+  "department.memberEditAffiliateSection": "兼務先部門",
+  "share": {
+    "toChildrenLabel": "グループ子会社に共有",
+    "toChildrenHint": "有効にすると、本グループのすべての子会社メンバーが本リソースを閲覧できます",
+    "cancelConfirmTitle": "共有を停止しますか？",
+    "cancelConfirmDescription": "子会社メンバーは本リソースを閲覧できなくなります。既存の会話および派生データは各子会社に帰属したまま残ります。",
+    "badge": "グループ共有",
+    "badgeTitle": "Root が作成したリソースを子会社に共有中（読み取り専用）"
+  },
+  "mount": {
+    "autoDistributeLabel": "Root 共有リソースを自動配布",
+    "autoDistributeHint": "無効にすると、この子会社は Root の共有リソースを初期状態で閲覧できません。スーパー管理者が各リソースを個別に開く必要があります。",
+    "previewTitle": "自動共有されるリソース"
+  }
 }

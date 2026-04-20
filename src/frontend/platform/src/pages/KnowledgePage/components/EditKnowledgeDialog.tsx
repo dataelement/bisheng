@@ -1,19 +1,42 @@
 import { Button } from "@/components/bs-ui/button";
 import { DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { Input, Textarea } from "@/components/bs-ui/input";
+import { ShareToChildrenSwitch } from "@/components/bs-ui/shareToChildrenSwitch";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-export default function KnowledgeBaseSettingsDialog({ initialName, initialDesc, onSave }) {
+// F017: form shape accepted by the knowledge-base create/edit dialog.
+// `shareToChildren` is ignored on non-Root creators at the backend, but
+// the frontend still collects it so the super admin can toggle the
+// default (`Root.share_default_to_children`) for this specific space.
+export default function KnowledgeBaseSettingsDialog({
+    initialName,
+    initialDesc,
+    initialShareToChildren,
+    onSave,
+}: {
+    initialName: string;
+    initialDesc: string;
+    initialShareToChildren?: boolean;
+    onSave: (data: { name: string; desc: string; shareToChildren: boolean }) => void;
+}) {
     const { t } = useTranslation('knowledge');
 
     // State for form fields
-    const [formData, setFormData] = useState({ name: '', desc: '' });
-    const [errors, setErrors] = useState({});
+    const [formData, setFormData] = useState({
+        name: '',
+        desc: '',
+        shareToChildren: Boolean(initialShareToChildren),
+    });
+    const [errors, setErrors] = useState<Record<string, string>>({});
 
     useEffect(() => {
-        setFormData({ name: initialName, desc: initialDesc });
-    }, [initialName, initialDesc]);
+        setFormData({
+            name: initialName,
+            desc: initialDesc,
+            shareToChildren: Boolean(initialShareToChildren),
+        });
+    }, [initialName, initialDesc, initialShareToChildren]);
 
     // Handle field change
     const handleChange = (e) => {
@@ -79,6 +102,13 @@ export default function KnowledgeBaseSettingsDialog({ initialName, initialDesc, 
                         />
                     </div>
                 </div>
+                {/* F017: Root-only toggle; hidden for Child creators. */}
+                <ShareToChildrenSwitch
+                    checked={formData.shareToChildren}
+                    onCheckedChange={(checked) =>
+                        setFormData((prev) => ({ ...prev, shareToChildren: checked }))
+                    }
+                />
             </div>
             <DialogFooter>
                 <DialogClose>

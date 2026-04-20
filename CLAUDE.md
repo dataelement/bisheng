@@ -482,7 +482,7 @@ OpenFGA (ReBAC)                     role 表 (策略角色 RBAC，保留)
 - Celery 6h 定时校对兜底；`OrgSyncTsGuard` 守卫 ts 冲突（按最大 ts，同 ts 下 upsert+remove 以 remove 优先，INV-T12）
 - SSO 换型 `POST /api/v1/internal/departments/relink` 按 path+name 回落重建映射
 
-**审计日志**：新增 `audit_log` 表；action 清单集中在 F011 §5.4.2（`tenant.mount / tenant.unmount / tenant.disable / tenant.orphaned / quota.update / resource.transfer_owner / resource.migrate_tenant / user.tenant_relocated / user.tenant_relocate_blocked / dept.sync_conflict`）。
+**审计日志**：新增 `audit_log` 表；action 清单集中在 F011 §5.4.2（`tenant.mount / tenant.unmount / tenant.disable / tenant.orphaned / quota.update / resource.transfer_owner / resource.migrate_tenant / resource.share_enable / resource.share_disable / user.tenant_relocated / user.tenant_relocate_blocked / dept.sync_conflict`）。
 
 **配置开关**：`multi_tenant.enabled`（默认 false，关闭时仅 Root，行为与单租户一致）、`multi_tenant.group_shared_by_default`、`user_tenant_sync.enforce_transfer_before_relocate`、`sso_sync.gateway_hmac_secret`。
 

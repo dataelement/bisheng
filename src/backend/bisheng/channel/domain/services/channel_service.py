@@ -147,6 +147,20 @@ class ChannelService:
         except Exception as e:
             logger.warning('Failed to write owner tuple for channel %s: %s', channel_model.id, e)
 
+        # F017: fan out group-sharing for Root-created channels (D6).
+        # share_on_create owns the Root-only gate + FGA + is_shared flip +
+        # audit_log; mirror the flag on the in-memory object for the response.
+        from bisheng.tenant.domain.services.resource_share_service import ResourceShareService
+        shared_children = await ResourceShareService.share_on_create(
+            'channel', str(channel_model.id),
+            creator_tenant_id=login_user.tenant_id,
+            operator_id=login_user.user_id,
+            operator_tenant_id=login_user.tenant_id,
+            explicit=getattr(channel_data, 'share_to_children', None),
+        )
+        if shared_children:
+            channel_model.is_shared = True
+
         bisheng_information_client = await get_bisheng_information_client()
         # Subscribe to the information sources associated with the channel
         if channel_data.source_list:

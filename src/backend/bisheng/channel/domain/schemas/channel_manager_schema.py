@@ -27,6 +27,9 @@ class CreateChannelRequest(BaseModel):
     description: Optional[str] = Field(None, description='Channel Description/Brief')
     filter_rules: Optional[List[ChannelFilterRules]] = Field(default_factory=list, description='Filter Conditions')
     is_released: bool = Field(default=False, description='Whether the channel is released')
+    # F017: Root→Child sharing intent; None → Root.share_default_to_children
+    share_to_children: Optional[bool] = Field(default=None,
+                                              description='F017: share with children (Root only)')
 
 
 class UpdateChannelRequest(BaseModel):
