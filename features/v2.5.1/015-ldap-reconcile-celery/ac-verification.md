@@ -197,7 +197,20 @@ print(summary)
 
 | 日期 | 执行人 | 通过/失败 | 说明 |
 |------|--------|----------|------|
-| _TBD_ | _TBD_ | _TBD_ | _TBD_ |
+| 2026-04-20 | Claude Opus 4.7 + lilu | 6/6 passed | 114 独立 7861 uvicorn，HMAC secret=test-114-hmac-secret-v1；暴露并修复 2 个真实 bug：(1) `relink_service` / `reconcile_service` 未 wrap `bypass_tenant_filter + ROOT_TENANT_ID` → 所有无 JWT 的内部调用 20004 "Missing tenant context"；(2) `reconcile_tasks.reconcile_single_config` 的 `except SsoReconcileLockBusyError` 永不 match（http_exception 返回 FastAPI HTTPException）。 |
+
+### E2E 覆盖矩阵（本次运行）
+
+| 测试方法 | AC | 结果 |
+|---------|----|------|
+| `TestHmacGate::test_relink_without_signature_rejected` | HMAC gate | ✅ |
+| `TestHmacGate::test_relink_with_invalid_signature_rejected` | HMAC gate | ✅ |
+| `TestHmacGate::test_resolve_conflict_without_signature_rejected` | HMAC gate | ✅ |
+| `TestRelinkDelegation::test_ac05_external_id_map_strategy_round_trip` | AC-05 | ✅ |
+| `TestRelinkDelegation::test_ac06_path_plus_name_strategy_round_trip` | AC-06 | ✅ |
+| `TestRelinkDelegation::test_ac07_dry_run_never_writes` | AC-07 | ✅ |
+
+**E2E 范围说明**：聚焦 HTTP 层 wiring（HMAC dep + router + service delegation 契约）。深度行为（same-ts 冲突、path+name 候选评分、UserTenantSyncService fan-out）由 64 单元/集成测覆盖。AC-01（6h Beat）与 AC-12（周报）由 skill 规则 §2 归为"UI 交互类 / 时间窗口类"手工验证，不在 E2E 自动化范围。
 
 ---
 

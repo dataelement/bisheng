@@ -38,6 +38,11 @@ from bisheng.common.errcode.sso_sync import (
 )
 from bisheng.common.services.config_service import settings
 from bisheng.core.cache.redis_manager import get_redis_client
+from bisheng.core.context.tenant import (
+    bypass_tenant_filter,
+    current_tenant_id,
+    set_current_tenant_id,
+)
 from bisheng.database.models.audit_log import AuditLogDao
 from bisheng.database.models.department import (
     DepartmentDao,
@@ -128,8 +133,18 @@ class OrgReconcileService:
             return ReconcileResult(
                 skipped=True, skip_reason=f'status={config.status}')
 
+        # Celery task entrypoint has no HTTP middleware, so set the
+        # tenant context ourselves — F011/F014 pattern: do the DB-touching
+        # work under ROOT_TENANT_ID + bypass_tenant_filter so SQLAlchemy's
+        # tenant_filter event treats this as a cross-tenant maintenance
+        # scan (INV-T12 reconcile inspects every dept regardless of leaf).
         async with cls._acquire_lock(config.id):
-            return await cls._run(config)
+            with bypass_tenant_filter():
+                tok = set_current_tenant_id(config.tenant_id or 1)
+                try:
+                    return await cls._run(config)
+                finally:
+                    current_tenant_id.reset(tok)
 
     # ------------------------------------------------------------------
     # Inner run (lock already held)

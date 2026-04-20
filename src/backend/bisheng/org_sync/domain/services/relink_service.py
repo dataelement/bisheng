@@ -24,8 +24,14 @@ from bisheng.common.errcode.sso_sync import (
     SsoRelinkConflictUnresolvedError,
     SsoRelinkStrategyUnsupportedError,
 )
+from bisheng.core.context.tenant import (
+    bypass_tenant_filter,
+    current_tenant_id,
+    set_current_tenant_id,
+)
 from bisheng.database.models.audit_log import AuditLogDao
 from bisheng.database.models.department import DepartmentDao
+from bisheng.database.models.tenant import ROOT_TENANT_ID
 from bisheng.org_sync.domain.schemas.relink import (
     RelinkAppliedItem,
     RelinkCandidate,
@@ -46,46 +52,61 @@ class DepartmentRelinkService:
 
     @classmethod
     async def relink(cls, req: RelinkRequest) -> RelinkResponse:
+        # The HMAC-signed endpoint has no JWT → no tenant context from
+        # the middleware. Mirror F014's LoginSyncService: install
+        # ROOT_TENANT_ID + bypass_tenant_filter so SQLAlchemy's
+        # tenant_filter event does not trip on ``current_tenant_id.get()
+        # is None`` (which surfaces as 20004 "Missing tenant context").
         strategy = req.matching_strategy
-        if strategy == 'external_id_map':
-            return await cls._relink_external_id_map(req)
-        if strategy == 'path_plus_name':
-            return await cls._relink_path_plus_name(req)
-        raise SsoRelinkStrategyUnsupportedError.http_exception()
+        with bypass_tenant_filter():
+            token = set_current_tenant_id(ROOT_TENANT_ID)
+            try:
+                if strategy == 'external_id_map':
+                    return await cls._relink_external_id_map(req)
+                if strategy == 'path_plus_name':
+                    return await cls._relink_path_plus_name(req)
+                raise SsoRelinkStrategyUnsupportedError.http_exception()
+            finally:
+                current_tenant_id.reset(token)
 
     @classmethod
     async def resolve_conflict(
         cls, dept_id: int, chosen_new_external_id: str,
     ) -> RelinkAppliedItem:
-        candidates = await cls.store.get(dept_id)
-        if not candidates:
-            raise SsoRelinkConflictUnresolvedError.http_exception(
-                f'no stored candidates for dept {dept_id}')
-        valid = {c.get('new_external_id') for c in candidates}
-        if chosen_new_external_id not in valid:
-            raise SsoRelinkConflictUnresolvedError.http_exception(
-                f'{chosen_new_external_id} not among {sorted(valid)}')
+        with bypass_tenant_filter():
+            token = set_current_tenant_id(ROOT_TENANT_ID)
+            try:
+                candidates = await cls.store.get(dept_id)
+                if not candidates:
+                    raise SsoRelinkConflictUnresolvedError.http_exception(
+                        f'no stored candidates for dept {dept_id}')
+                valid = {c.get('new_external_id') for c in candidates}
+                if chosen_new_external_id not in valid:
+                    raise SsoRelinkConflictUnresolvedError.http_exception(
+                        f'{chosen_new_external_id} not among {sorted(valid)}')
 
-        dept = await DepartmentDao.aget_by_id(dept_id)
-        if dept is None:
-            raise SsoRelinkConflictUnresolvedError.http_exception(
-                f'dept {dept_id} no longer exists')
-        old_external_id = dept.external_id
-        await DepartmentDao.aupdate_external_id(
-            dept_id, chosen_new_external_id)
-        await cls._audit_rewrite(
-            dept_id=dept_id, tenant_id=dept.tenant_id,
-            old_ext=old_external_id or '',
-            new_ext=chosen_new_external_id,
-            action='dept.relink_resolved',
-            strategy='manual_resolve',
-        )
-        await cls.store.delete(dept_id)
-        return RelinkAppliedItem(
-            dept_id=dept_id,
-            old_external_id=old_external_id or '',
-            new_external_id=chosen_new_external_id,
-        )
+                dept = await DepartmentDao.aget_by_id(dept_id)
+                if dept is None:
+                    raise SsoRelinkConflictUnresolvedError.http_exception(
+                        f'dept {dept_id} no longer exists')
+                old_external_id = dept.external_id
+                await DepartmentDao.aupdate_external_id(
+                    dept_id, chosen_new_external_id)
+                await cls._audit_rewrite(
+                    dept_id=dept_id, tenant_id=dept.tenant_id,
+                    old_ext=old_external_id or '',
+                    new_ext=chosen_new_external_id,
+                    action='dept.relink_resolved',
+                    strategy='manual_resolve',
+                )
+                await cls.store.delete(dept_id)
+                return RelinkAppliedItem(
+                    dept_id=dept_id,
+                    old_external_id=old_external_id or '',
+                    new_external_id=chosen_new_external_id,
+                )
+            finally:
+                current_tenant_id.reset(token)
 
     # ------------------------------------------------------------------
     # Strategy: external_id_map
