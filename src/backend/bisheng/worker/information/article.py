@@ -1,8 +1,8 @@
 from datetime import datetime
+from typing import List
 
 from loguru import logger
-from sqlalchemy import func
-from sqlmodel import select
+from sqlmodel import select, func
 
 from bisheng.channel.domain.models.channel import Channel
 from bisheng.channel.domain.models.channel_info_source import ChannelInfoSource
@@ -25,6 +25,7 @@ def sync_information_article(information_id: str = None):
     logger.debug(f"Starting to sync information articles for {information_id}.")
     article_service = ArticleEsService()
     article_service.ensure_index_sync()
+    need_update_informations = []
     with get_sync_db_session() as session:
         channel_info_repository = ChannelInfoSourceRepositoryImpl(session)
         page, page_size = 1, 1000
@@ -35,36 +36,42 @@ def sync_information_article(information_id: str = None):
             for one in information_list:
                 try:
                     logger.debug(f"Syncing information for {one.id} - {one.source_name}")
+                    if one.update_time.strftime("%Y-%m-%d") == datetime.now().strftime(
+                            "%Y-%m-%d") and one.update_time != one.create_time:
+                        logger.debug(
+                            f"Skip information for {one.id} - {one.source_name}, because it has already been updated today.")
+                        continue
                     _sync_one_information_article(one, article_service)
+                    need_update_informations.append(one.id)
                 except Exception as e:
                     logger.exception(f"Failed to sync information article for source {one.id}: {e}")
+                finally:
+                    one.update_time = datetime.now()
+                    channel_info_repository.update_sync(one)
             page += 1
     logger.debug("Finished syncing information articles")
 
     # Update latest_article_update_time for channels
-    if information_id is None:
-        # Update all channels
-        logger.debug("Updating latest_article_update_time")
-        _update_channel_latest_article_update_time()
-    else:
+    if need_update_informations:
         # Update only channels that use this information source
         logger.debug(f"Updating latest_article_update_time for channels using information_id={information_id}.")
-        _update_channels_by_source_id(information_id)
+        _update_channels_by_source_id(need_update_informations)
 
 
-def _update_channels_by_source_id(source_id: str):
+def _update_channels_by_source_id(source_ids: List[str]):
     """Update latest_article_update_time for channels that use the specified source_id."""
     with get_sync_db_session() as session:
         # Query channels whose source_list contains the source_id
-        channels = session.exec(
-            select(Channel).where(func.json_contains(Channel.source_list, f'"{source_id}"'))
-        ).all()
+        or_list = []
+        for source_id in source_ids:
+            or_list.append(func.json_contains(Channel.source_list, f'"{source_id}"'))
+        channels = session.exec(select(Channel).where(*or_list)).all()
 
         if not channels:
-            logger.debug(f"No channels found using source_id={source_id}.")
+            logger.debug(f"No channels found using source_ids={source_ids}.")
             return
 
-        logger.debug(f"Found {len(channels)} channels using source_id={source_id}.")
+        logger.debug(f"Found {len(channels)} channels using source_ids={source_ids}.")
         updated_count = ChannelService.update_channels_latest_article_time_sync(list(channels))
         logger.debug(f"Updated latest_article_update_time for {updated_count} channels.")
 
@@ -98,25 +105,23 @@ def _sync_one_information_article(information: ChannelInfoSource, article_servic
                 update_time=datetime.fromisoformat(article.update_time),
             ))
             doc_ids.append(article.id)
-        article_service.bulk_index_articles_sync(articles, doc_ids)
+        try:
+            article_service.bulk_index_articles_sync(articles, doc_ids)
+        except Exception as e:
+            # if es timeout or over memory change to one by one
+            for tmp_index, tmp_one in enumerate(articles):
+                article_service.index_article(tmp_one, doc_ids[tmp_index])
 
         current += len(resp.articles)
         # get all articles
         if current >= resp.total or not resp.articles:
+            logger.debug(f"sync all articles {information.id}.")
             break
         if not latest_create_time and current >= 36:
+            logger.debug(f"sync more than 36 articles {information.id}.")
+            break
+        if latest_create_time and latest_create_time > articles[-1].create_time.timestamp():
+            logger.debug(f"already get some articles {information.id}.")
             break
         page += 1
     logger.debug(f"Finished syncing information for {information.id}. article nums: {current}")
-
-
-def _update_channel_latest_article_update_time():
-    """Update latest_article_update_time for all channels."""
-    logger.debug("Starting to update latest_article_update_time for all channels.")
-    with get_sync_db_session() as session:
-        channels = session.exec(select(Channel)).all()
-        updated_count = ChannelService.update_channels_latest_article_time_sync(list(channels))
-        logger.debug(
-            f"Finished updating latest_article_update_time for all channels. "
-            f"updated_channel_count={updated_count}"
-        )

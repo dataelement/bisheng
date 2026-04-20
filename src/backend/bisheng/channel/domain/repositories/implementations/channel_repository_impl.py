@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import List, Optional, Tuple, Any
 
 from sqlalchemy import case, func, or_
-from sqlmodel import select, col
+from sqlmodel import select, col, update
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.channel.domain.models.channel import Channel, ChannelVisibilityEnum
@@ -142,3 +142,13 @@ class ChannelRepositoryImpl(BaseRepositoryImpl[Channel, str], ChannelRepository)
         query = select(Channel).where(func.json_contains(Channel.source_list, f'"{source_id}"'))
         result = await self.session.exec(query)
         return list(result.all())
+
+    def update_channel_latest_article_update_time(self, channles: List[Channel]) -> List[Channel]:
+        for channel in channles:
+            stmt = (
+                update(Channel)
+                .where(Channel.id == channel.id)
+                .values(latest_article_update_time=channel.latest_article_update_time)
+            )
+            self.session.exec(stmt)
+            self.session.commit()
