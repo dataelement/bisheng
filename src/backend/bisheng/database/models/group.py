@@ -7,9 +7,13 @@ from sqlmodel import Field, col, select
 
 from bisheng.common.models.base import SQLModelSerializable
 
+# Default User GroupID
+DefaultGroup = 2
+
 # 历史默认用户组名称，列表 API 中隐藏（数据可由 scripts/remove_default_user_group.py 清理）
 LEGACY_HIDDEN_USER_GROUP_NAMES = ('Default user group', '默认用户组')
 from bisheng.core.database import get_sync_db_session, get_async_db_session
+
 
 class GroupBase(SQLModelSerializable):
     group_name: str = Field(index=False, description='用户组名称')
