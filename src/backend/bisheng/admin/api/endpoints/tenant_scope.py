@@ -54,11 +54,6 @@ class SetScopeRequest(BaseModel):
     tenant_id: Optional[int] = None
 
 
-class ScopeResponse(BaseModel):
-    scope_tenant_id: Optional[int] = None
-    expires_at: Optional[str] = None
-
-
 def _errcode_to_response(exc: BaseErrorCode) -> JSONResponse:
     status_code = _ERRCODE_HTTP_STATUS.get(type(exc), 500)
     body = exc.return_resp_instance()
