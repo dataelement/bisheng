@@ -858,12 +858,9 @@ def update_knowledge_model(*,
     3. everyknowledge_idBoth initiate asynchronous tasks to rebuild the knowledge base
     """
     # 1. Verify that isembeddingModels
-    # F020 T11a / AC-24: LLMDao.get_model_by_id is tenant-filtered via the
-    # SQLAlchemy event layer, so cross-tenant references automatically
-    # surface as "not found" here. The error code is upgraded to 19802
-    # (LLMModelNotAccessibleError) so the frontend can render the exact
-    # "model not accessible" toast specified in spec §5.4 instead of the
-    # generic "model config missing" message.
+    # Cross-tenant references surface as "not found" via the tenant_filter
+    # event layer; raise the dedicated 19802 so the UI renders the
+    # "model not accessible" toast instead of "model config missing".
     model_info = LLMDao.get_model_by_id(req_data.model_id)
     if not model_info:
         return LLMModelNotAccessibleError.return_resp()

@@ -1,3 +1,5 @@
+import asyncio
+import hashlib
 import json
 import os
 from typing import List, Optional, Dict
@@ -12,37 +14,41 @@ from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import NotFoundError, ServerError
 from bisheng.common.errcode.llm import ServerExistError, ModelNameRepeatError, ServerAddError, ServerAddAllError
+from bisheng.common.errcode.llm_tenant import (
+    LLMModelNotAccessibleError,
+    LLMSystemConfigForbiddenError,
+)
 from bisheng.common.errcode.server import NoAsrModelConfigError, AsrModelConfigDeletedError, NoTtsModelConfigError, \
     TtsModelConfigDeletedError
 from bisheng.common.models.config import ConfigDao, ConfigKeyEnum, Config
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.context.tenant import bypass_tenant_filter, get_current_tenant_id
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
+from bisheng.database.models.audit_log import AuditLogDao
+from bisheng.database.models.tenant import ROOT_TENANT_ID
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge import KnowledgeState
 from bisheng.llm.domain.const import LLMModelType
 from bisheng.llm.domain.models import LLMDao, LLMServer, LLMModel
 from bisheng.llm.domain.schemas import LLMServerInfo, LLMModelInfo, KnowledgeLLMConfig, AssistantLLMConfig, \
     EvaluationLLMConfig, AssistantLLMItem, LLMServerCreateReq, WorkbenchModelConfig, WSModel
+from bisheng.tenant.domain.constants import TenantAuditAction
+from bisheng.tenant.domain.services.resource_share_service import ResourceShareService
 from bisheng.utils import generate_uuid, md5_hash
+from bisheng.utils.http_middleware import _check_is_global_super
 from bisheng.utils.mask_data import JsonFieldMasker
 from ..llm import BishengASR, BishengLLM, BishengTTS, BishengEmbedding
 from ..llm.rerank import BishengRerank
 
 
 def _llm_api_key_hash(config: Optional[dict]) -> Optional[str]:
-    """F020 T09 audit helper: sha256 of the API key, first 16 hex chars.
-
-    Only a fingerprint — never the plaintext — ends up in audit_log.
-    Returns None when no key-like field is present so the audit row can
-    distinguish "no key configured" from "key rotated / masked".
-    """
+    """sha256 of the API key, first 16 hex chars — only the fingerprint
+    ever lands in audit_log. Returns None when no key is configured."""
     if not config:
         return None
     key = config.get('openai_api_key') or config.get('api_key')
     if not key or not isinstance(key, str):
         return None
-    import hashlib
     return hashlib.sha256(key.encode()).hexdigest()[:16]
 
 
@@ -53,21 +59,13 @@ async def _write_llm_audit(
     *,
     extra: Optional[Dict] = None,
 ) -> None:
-    """F020 T09: persist an llm.* audit row.
-
-    ``tenant_id`` is the server's tenant (authoritative: where the
-    resource lives), ``operator_tenant_id`` is the caller's effective
-    view (F019 admin-scope honoured via get_current_tenant_id). FGA or
-    DB failures here must not roll back the already-committed server
-    write — the audit write happens out-of-band.
-    """
-    from bisheng.database.models.audit_log import AuditLogDao
-    from bisheng.tenant.domain.constants import TenantAuditAction
+    # tenant_id = resource-owning tenant; operator_tenant_id = caller's
+    # effective scope (admin-scope override respected).
     try:
         await AuditLogDao.ainsert_v2(
-            tenant_id=getattr(server, 'tenant_id', None) or 1,
+            tenant_id=getattr(server, 'tenant_id', None) or ROOT_TENANT_ID,
             operator_id=login_user.user_id,
-            operator_tenant_id=get_current_tenant_id() or 1,
+            operator_tenant_id=get_current_tenant_id() or ROOT_TENANT_ID,
             action=action,
             target_type='llm_server',
             target_id=str(getattr(server, 'id', '') or ''),
@@ -78,8 +76,8 @@ async def _write_llm_audit(
                 **(extra or {}),
             },
         )
-    except Exception:  # noqa: BLE001 — audit failure must not block user action
-        logger.exception('[F020] audit_log write failed action=%s target_id=%s',
+    except Exception:  # noqa: BLE001 — audit must never block user action
+        logger.exception('audit_log write failed action=%s target_id=%s',
                          action, getattr(server, 'id', None))
 
 
@@ -93,66 +91,57 @@ class LLMService:
     ) -> List[LLMServerInfo]:
         """ Get all the model data, Exclusion:keyand other sensitive information
 
-        F020: the list merges (a) servers the event layer returns for the
-        current tenant/scope and (b) Root-owned servers shared to the
-        caller's leaf via F017's ``{llm_server}#shared_with → tenant:{leaf}``
-        tuples. Duplicates (Root self-viewing its own rows) are filtered
-        on id. Each merged Root-shared row carries
-        ``is_root_shared_readonly=True`` so the frontend can render the
-        "Root 共享（只读）" Badge and disable edit affordances.
+        Non-super callers see their own tenant plus any Root server shared
+        to their leaf (``{llm_server}#shared_with → tenant:{leaf}``). Root
+        self-rows are deduped; merged Root-shared rows carry
+        ``is_root_shared_readonly=True`` so the frontend disables edit.
 
-        AC-17 preview path (``only_shared=True``): reserved for the mount-
-        Child dialog. Returns Root-owned servers whose ``shared_with``
-        FGA set is non-empty (i.e. already distributed to at least one
-        Child). Restricted to the global super admin — a Child Admin has
-        no reason to preview the cross-tenant distribution list.
+        ``only_shared=True`` (super-admin only) previews the set of Root
+        servers currently distributed to ≥1 Child — backing the mount-
+        Child dialog.
         """
-    
         if only_shared:
-            if operator is None:
-                from bisheng.common.errcode.llm_tenant import LLMSystemConfigForbiddenError
-                raise LLMSystemConfigForbiddenError.http_exception()
-            from bisheng.utils.http_middleware import _check_is_global_super
-            if not await _check_is_global_super(operator.user_id):
-                from bisheng.common.errcode.llm_tenant import LLMSystemConfigForbiddenError
+            if operator is None or not await _check_is_global_super(operator.user_id):
                 raise LLMSystemConfigForbiddenError.http_exception()
             return await cls._list_shared_root_servers()
 
-        leaf_id = get_current_tenant_id() or 1
+        leaf_id = get_current_tenant_id() or ROOT_TENANT_ID
 
-        llm_servers = await LLMDao.aget_all_server()
-        existing_ids = {s.id for s in llm_servers}
-
-        # F020 AC-03: merge Root shares for non-Root callers.
-        if leaf_id != 1:
-            shared_ids = await LLMDao.aget_shared_server_ids_for_leaf(leaf_id)
-            shared_ids = [sid for sid in shared_ids if sid not in existing_ids]
-            if shared_ids:
+        if leaf_id == ROOT_TENANT_ID:
+            llm_servers = await LLMDao.aget_all_server()
+        else:
+            own, shared_ids = await asyncio.gather(
+                LLMDao.aget_all_server(),
+                LLMDao.aget_shared_server_ids_for_leaf(leaf_id),
+            )
+            existing_ids = {s.id for s in own}
+            extra_ids = [sid for sid in shared_ids if sid not in existing_ids]
+            if extra_ids:
                 with bypass_tenant_filter():
-                    shared_servers = await LLMDao.aget_server_by_ids(shared_ids)
-                llm_servers = list(llm_servers) + list(shared_servers)
+                    shared_servers = await LLMDao.aget_server_by_ids(extra_ids)
+                llm_servers = list(own) + list(shared_servers)
+            else:
+                llm_servers = list(own)
 
         ret = []
         server_ids = []
         for one in llm_servers:
             server_ids.append(one.id)
             info = LLMServerInfo(**one.model_dump(exclude={'config'}))
-            # F020: flag Root-shared rows visible to a non-Root caller.
             info.is_root_shared_readonly = (
-                one.tenant_id == 1 and leaf_id != 1
+                one.tenant_id == ROOT_TENANT_ID and leaf_id != ROOT_TENANT_ID
             )
             ret.append(info)
 
-        # Models query may span across tenants for the shared case; use
-        # bypass so Child callers can see the models under a Root server
-        # they've been granted via share_with.
+        # Bypass so Child callers see models under Root servers granted
+        # via shared_with — the event layer would strip them out.
         with bypass_tenant_filter():
             llm_models = await LLMDao.aget_model_by_server_ids(server_ids)
-        server_dicts = {}
+        server_dicts: Dict[int, List] = {}
         for one in llm_models:
-            if one.server_id not in server_dicts:
-                server_dicts[one.server_id] = []
-            server_dicts[one.server_id].append(LLMModelInfo(**one.model_dump(exclude={'config'})))
+            server_dicts.setdefault(one.server_id, []).append(
+                LLMModelInfo(**one.model_dump(exclude={'config'}))
+            )
 
         for one in ret:
             one.models = server_dicts.get(one.id, [])
@@ -160,70 +149,65 @@ class LLMService:
 
     @classmethod
     async def _list_shared_root_servers(cls) -> List[LLMServerInfo]:
-        """F020 AC-17: Root-owned servers that are already shared to at
-        least one Child. Uses ``ResourceShareService.list_sharing_children``
-        as the authoritative "is this currently shared" check, so the UI
-        preview matches post-mount distribution behaviour.
-        """
-        from bisheng.tenant.domain.services.resource_share_service import (
-            ResourceShareService,
-        )
+        """Root servers currently shared to ≥1 Child. Single FGA read
+        (``read_tuples(relation=shared_with)``) filtered for the
+        llm_server type, then one DB round-trip to hydrate."""
+        from bisheng.core.openfga.manager import aget_fga_client
+
+        fga = await aget_fga_client()
+        if fga is None:
+            return []
+        try:
+            tuples = await fga.read_tuples(relation='shared_with')
+        except Exception:  # noqa: BLE001 — preview is best-effort
+            logger.exception('read_tuples(shared_with) failed')
+            return []
+
+        shared_ids = set()
+        for t in tuples:
+            obj = t.get('object', '')
+            if obj.startswith('llm_server:'):
+                tail = obj.split(':', 1)[1]
+                if tail.isdigit():
+                    shared_ids.add(int(tail))
+        if not shared_ids:
+            return []
 
         with bypass_tenant_filter():
-            all_root = [s for s in await LLMDao.aget_all_server() if s.tenant_id == 1]
-            if not all_root:
+            servers = [
+                s for s in await LLMDao.aget_server_by_ids(list(shared_ids))
+                if s.tenant_id == ROOT_TENANT_ID
+            ]
+            if not servers:
                 return []
-            shared_root = []
-            for s in all_root:
-                try:
-                    children = await ResourceShareService.list_sharing_children(
-                        'llm_server', str(s.id),
-                    )
-                except Exception:  # noqa: BLE001 — preview is best-effort
-                    logger.exception('[F020] list_sharing_children failed id=%s', s.id)
-                    continue
-                if children:
-                    shared_root.append(s)
+            llm_models = await LLMDao.aget_model_by_server_ids([s.id for s in servers])
 
-            ret = []
-            server_ids = [s.id for s in shared_root]
-            llm_models = await LLMDao.aget_model_by_server_ids(server_ids) if server_ids else []
-            by_server: Dict[int, List] = {}
-            for m in llm_models:
-                by_server.setdefault(m.server_id, []).append(
-                    LLMModelInfo(**m.model_dump(exclude={'config'}))
-                )
-            for s in shared_root:
-                info = LLMServerInfo(**s.model_dump(exclude={'config'}))
-                info.models = by_server.get(s.id, [])
-                # Not "readonly" in this view — the super admin IS the owner.
-                info.is_root_shared_readonly = False
-                ret.append(info)
+        by_server: Dict[int, List] = {}
+        for m in llm_models:
+            by_server.setdefault(m.server_id, []).append(
+                LLMModelInfo(**m.model_dump(exclude={'config'}))
+            )
+        ret = []
+        for s in servers:
+            info = LLMServerInfo(**s.model_dump(exclude={'config'}))
+            info.models = by_server.get(s.id, [])
+            info.is_root_shared_readonly = False
+            ret.append(info)
         return ret
 
     @classmethod
     async def get_model_for_call(cls, model_id: int) -> LLMModel:
-        """F020 §5.4 / T11a+T11b entrypoint: fetch a model for cross-module call.
-
-        Raises 19802 if the model is not visible to the current caller
-        (deleted, cross-tenant reference, or a former Root-share that was
-        revoked). The Root-share branch uses ``aget_shared_server_ids_for_leaf``
-        so Child users still resolve models that were shared to them via
-        F017, without requiring a DAO-level bypass at every call site.
-        """
-        from bisheng.common.errcode.llm_tenant import LLMModelNotAccessibleError
-
+        """Fetch a model for cross-module invocation. Raises 19802 when
+        the model is invisible under the current tenant scope and also
+        not Root-shared to the caller's leaf."""
         model = await LLMDao.aget_model_by_id(model_id)
         if model is not None:
             return model
 
-        # Either the id is unknown or the model belongs to a tenant the
-        # current context cannot see. Distinguish by bypass-reading and
-        # then checking if the owning server is Root-shared to us.
         with bypass_tenant_filter():
             raw = await LLMDao.aget_model_by_id(model_id)
         if raw is not None and raw.server_id:
-            leaf_id = get_current_tenant_id() or 1
+            leaf_id = get_current_tenant_id() or ROOT_TENANT_ID
             shared_ids = await LLMDao.aget_shared_server_ids_for_leaf(leaf_id)
             if raw.server_id in shared_ids:
                 return raw
@@ -259,9 +243,6 @@ class LLMService:
         db_server = LLMServer(**server.model_dump(exclude={'models', 'share_to_children'}))
         db_server.user_id = login_user.user_id
 
-        # F020: pass operator so DAO can apply endpoint-whitelist guard
-        # and Root→Children fanout. share_to_children from the request
-        # controls the opt-out when the target is Root.
         db_server = await LLMDao.ainsert_server_with_models(
             db_server,
             list(model_dict.values()),
@@ -312,8 +293,6 @@ class LLMService:
             raise ServerAddError.http_exception(f"<{success_msg.rstrip(',')}>Added{failed_msg}")
 
         await cls.add_llm_server_hook(request, login_user, ret)
-        # F020 T09: emit llm.server.create audit row with api_key_hash.
-        from bisheng.tenant.domain.constants import TenantAuditAction
         await _write_llm_audit(
             login_user, TenantAuditAction.LLM_SERVER_CREATE.value, ret,
             extra={'share_to_children': getattr(server, 'share_to_children', True)},
@@ -323,17 +302,13 @@ class LLMService:
     @classmethod
     async def delete_llm_server(cls, request: Request, login_user: UserPayload, server_id: int) -> bool:
         """ Delete a service provider """
-        # F020 T09: capture the server row *before* delete so the audit
-        # entry has a meaningful name/endpoint (post-delete the row is gone).
+        # Snapshot before delete so the audit row preserves name/endpoint.
         with bypass_tenant_filter():
             pre = await LLMDao.aget_server_by_id(server_id)
 
-        # F020: pass operator so DAO enforces the Root-only / super-admin
-        # rule (19801) and cascades the FGA shared_with fanout cleanup.
         await LLMDao.adelete_server_by_id(server_id, operator=login_user)
 
         if pre is not None:
-            from bisheng.tenant.domain.constants import TenantAuditAction
             await _write_llm_audit(
                 login_user, TenantAuditAction.LLM_SERVER_DELETE.value, pre,
             )
@@ -492,10 +467,9 @@ class LLMService:
         mask_maker = JsonFieldMasker()
         exist_server.config = mask_maker.update_json_with_masked(exist_server.config, server.config)
 
-        # F020 AC-04: detect share_to_children toggle on Root-owned servers
-        # and route it to the dedicated DAO helper (which enforces the
-        # super-admin / Root-only invariants via FGA).
-        if exist_server.tenant_id == 1 and hasattr(server, 'share_to_children'):
+        # Route share_to_children flips through the dedicated DAO helper
+        # so super-admin / Root-only invariants are enforced via FGA.
+        if exist_server.tenant_id == ROOT_TENANT_ID and hasattr(server, 'share_to_children'):
             await LLMDao.aupdate_server_share(
                 exist_server.id, server.share_to_children, login_user,
             )
@@ -504,9 +478,7 @@ class LLMService:
             exist_server, list(model_dict.values()), operator=login_user,
         )
         new_server_info = await cls.get_one_llm(db_server.id)
-        # F020 T09: emit llm.server.update (share toggle emits separately).
-        from bisheng.tenant.domain.constants import TenantAuditAction
-        if hasattr(server, 'share_to_children') and exist_server.tenant_id == 1:
+        if hasattr(server, 'share_to_children') and exist_server.tenant_id == ROOT_TENANT_ID:
             await _write_llm_audit(
                 login_user, TenantAuditAction.LLM_SERVER_TOGGLE_SHARE.value, db_server,
                 extra={'share_to_children': server.share_to_children},

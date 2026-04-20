@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import random
 from base64 import b64encode
@@ -144,12 +145,8 @@ async def get_info(login_user: LoginUser = Depends(LoginUser.get_login_user)):
     )
     can_manage_user_groups = bool(login_user.is_admin() or is_department_admin)
 
-    # F020 T15a — surface Tenant-tree admin flags to the frontend so
-    # ModelPage / RolesPage / AuditLogPage can conditionally render the
-    # scope selector, readonly badges, and hidden system-config panels.
-    # Fields are optional on UserRead (D10 pure-additive extension);
-    # failures during detection degrade to defaults so /user/info never
-    # breaks login when FGA is momentarily unreachable.
+    # Tenant-tree admin flags for the frontend. Any failure here degrades
+    # to defaults so a transient FGA outage never blocks login.
     is_global_super = False
     is_child_admin = False
     leaf_tenant_id: Optional[int] = None
@@ -163,8 +160,10 @@ async def get_info(login_user: LoginUser = Depends(LoginUser.get_login_user)):
         )
         from bisheng.utils.http_middleware import _check_is_global_super
 
-        is_global_super = await _check_is_global_super(user_id)
-        active = await UserTenantDao.aget_active_user_tenant(user_id)
+        is_global_super, active = await asyncio.gather(
+            _check_is_global_super(user_id),
+            UserTenantDao.aget_active_user_tenant(user_id),
+        )
         leaf_tenant_id = active.tenant_id if active else ROOT_TENANT_ID
         leaf_tenant = await TenantDao.aget_by_id(leaf_tenant_id)
         leaf_tenant_name = leaf_tenant.tenant_name if leaf_tenant else ''
@@ -177,7 +176,7 @@ async def get_info(login_user: LoginUser = Depends(LoginUser.get_login_user)):
                     object=f'tenant:{leaf_tenant_id}',
                 )
     except Exception as exc:  # noqa: BLE001 — never block /user/info
-        logger.debug('F020 /user/info admin-flag detection failed: %s', exc)
+        logger.debug('admin-flag detection failed: %s', exc)
 
     return resp_200(await UserService.build_user_read(
         db_user,

@@ -1,22 +1,35 @@
+import logging
 from datetime import datetime
 from typing import Dict, List, Optional
 
 from sqlalchemy import CHAR, JSON, Column, DateTime, Text, UniqueConstraint, delete, text, update
 from sqlmodel import Field, select, col
 
+from bisheng.common.errcode.llm_tenant import (
+    LLMEndpointNotWhitelistedError,
+    LLMModelNotAccessibleError,
+    LLMModelSharedReadonlyError,
+)
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.common.services.config_service import settings
 from bisheng.core.context.tenant import bypass_tenant_filter, get_current_tenant_id
 from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.llm.domain.const import LLMModelType
 from bisheng.llm.domain.utils import wrapper_bisheng_llm_info, wrapper_bisheng_llm_info_async
+from bisheng.utils.http_middleware import _check_is_global_super
+
+_LOG = logging.getLogger(__name__)
+# Root tenant constant is declared in database.models.tenant; inline here
+# to avoid an import cycle (tenant.py depends on models.base which
+# bootstraps before ORM table registration).
+_ROOT_TENANT_ID = 1
 
 
 class LLMServerBase(SQLModelSerializable):
-    # F020: name uniqueness scoped to tenant via the composite
-    # ``uk_llm_server_tenant_name`` UniqueConstraint on the concrete
-    # LLMServer class below; the per-column ``unique=True`` flag was
-    # removed so different Children may reuse names like "Azure-GPT-4".
+    # Uniqueness is scoped to tenant via the composite ``uk_llm_server_
+    # tenant_name`` constraint on the concrete LLMServer class — the
+    # per-column ``unique=True`` flag was removed so different Children
+    # may reuse names like "Azure-GPT-4".
     name: str = Field(default='', index=True, description='Service name')
     description: Optional[str] = Field(default='', sa_column=Column(Text), description='Service Description')
     type: str = Field(sa_column=Column(CHAR(20)), description='Service Provider Type')
@@ -25,12 +38,8 @@ class LLMServerBase(SQLModelSerializable):
     config: Optional[Dict] = Field(default=None, sa_column=Column(JSON),
                                    description='Service Provider Public Configuration')
     user_id: int = Field(default=0, description='creatorID')
-    # F001 (v2.5.0) added this column at the DB level with server_default=1;
-    # the ORM field was never declared, causing the tenant_filter event to
-    # skip llm_server writes. F020 surfaces it so auto-fill (get_current_
-    # tenant_id) and the composite unique key can function.
-    tenant_id: int = Field(default=1, index=True, nullable=False,
-                           description='F001: Tenant isolation (default Root=1)')
+    tenant_id: int = Field(default=_ROOT_TENANT_ID, index=True, nullable=False,
+                           description='Tenant isolation (default Root=1)')
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
@@ -49,10 +58,8 @@ class LLMModelBase(SQLModelSerializable):
     remark: Optional[str] = Field(default='', sa_column=Column(Text), description='Abnormal reason')
     online: bool = Field(default=True, description='Online')
     user_id: int = Field(default=0, description='creatorID')
-    # F001 (v2.5.0) added the column; F020 surfaces it on the ORM. Kept
-    # aligned with the parent llm_server so cascading ORM inserts fill both.
-    tenant_id: int = Field(default=1, index=True, nullable=False,
-                           description='F001: Tenant isolation (mirrors parent llm_server)')
+    tenant_id: int = Field(default=_ROOT_TENANT_ID, index=True, nullable=False,
+                           description='Tenant isolation (mirrors parent llm_server)')
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
@@ -62,7 +69,6 @@ class LLMModelBase(SQLModelSerializable):
 class LLMServer(LLMServerBase, table=True):
     __tablename__ = 'llm_server'
     __table_args__ = (
-        # F020: replaces the v2.4 UNIQUE(name) global constraint.
         UniqueConstraint('tenant_id', 'name', name='uk_llm_server_tenant_name'),
     )
 
@@ -107,6 +113,22 @@ class LLMDao:
             return server
 
     @classmethod
+    async def _assert_root_writable(cls, server_id: int, operator) -> Optional[LLMServer]:
+        """Read server under bypass (so Child-scoped super admins see
+        Root rows) and forbid non-super callers from writing to Root-
+        owned servers. Returns the existing row or None when absent.
+
+        Non-Root rows pass through unchanged; caller uses the returned
+        row to distinguish "absent" from "forbidden" in the delete path.
+        """
+        with bypass_tenant_filter():
+            existing = await cls.aget_server_by_id(server_id)
+        if existing is not None and existing.tenant_id == _ROOT_TENANT_ID:
+            if not await _check_is_global_super(operator.user_id):
+                raise LLMModelSharedReadonlyError.http_exception()
+        return existing
+
+    @classmethod
     async def ainsert_server_with_models(
         cls,
         server: LLMServer,
@@ -115,38 +137,21 @@ class LLMDao:
         share_to_children: bool = True,
         operator=None,
     ):
-        """Insert service providers and models asynchronously.
-
-        F020 extensions (active when Service layer (T07) passes ``operator``):
-
-        1. Fill ``tenant_id`` on ``server`` and each model from
-           ``get_current_tenant_id()`` — honours the F019 admin-scope override
-           so a super admin switched to Child 5 writes new LLMs under
-           ``tenant_id=5``.
-        2. If ``llm.endpoint_whitelist`` is configured and the caller is
-           not a global super admin, ``config.openai_api_base`` /
-           ``config.endpoint`` must match one of the whitelisted prefixes
-           (19804). Empty whitelist means no restriction.
-        3. When the resulting server lands on Root (tenant_id=1),
-           ``share_to_children`` is true, and ``Tenant.share_default_to_children``
-           is enabled, fan out ``{llm_server:id}#shared_with → tenant:{child}``
-           tuples to every active Child via F017 ResourceShareService
-           (AC-01, INV-T15).
+        """Insert a server + its models. When ``operator`` is set the
+        tenant-tree guards apply: tenant_id auto-fill from the current
+        scope, endpoint-whitelist enforcement for non-super callers, and
+        Root→Children FGA fanout when ``share_to_children`` is true and
+        the owning tenant opts in via ``share_default_to_children``.
 
         ``operator=None`` keeps the v2.5.0 call signature functional for
-        tests and legacy callers: no whitelist check, no FGA fanout —
-        same behaviour as before F020.
+        tests and legacy callers (no whitelist, no fanout).
         """
-        tid = get_current_tenant_id() or 1
+        tid = get_current_tenant_id() or _ROOT_TENANT_ID
         server.tenant_id = tid
         for model in models:
             model.tenant_id = tid
 
-        # F020 D6: endpoint whitelist guard.
         if operator is not None:
-            from bisheng.common.errcode.llm_tenant import LLMEndpointNotWhitelistedError
-            from bisheng.utils.http_middleware import _check_is_global_super
-
             whitelist = getattr(settings.llm, 'endpoint_whitelist', []) or []
             if whitelist and not await _check_is_global_super(operator.user_id):
                 cfg = server.config or {}
@@ -163,9 +168,7 @@ class LLMDao:
             await session.commit()
             await session.refresh(server)
 
-        # F020 D2: Root → Children fanout (AC-01). Non-Root tenants and the
-        # share_to_children=False branch (AC-02) skip this unconditionally.
-        if operator is not None and share_to_children and server.tenant_id == 1:
+        if operator is not None and share_to_children and server.tenant_id == _ROOT_TENANT_ID:
             from bisheng.database.models.tenant import TenantDao
             from bisheng.tenant.domain.services.resource_share_service import (
                 ResourceShareService,
@@ -178,43 +181,27 @@ class LLMDao:
                         'llm_server', str(server.id),
                     )
                 except Exception:  # noqa: BLE001 — FGA failure must not block local write
-                    import logging
-                    logging.getLogger(__name__).exception(
-                        '[F020] enable_sharing llm_server=%s failed', server.id,
-                    )
+                    _LOG.exception('enable_sharing llm_server=%s failed', server.id)
 
         return server
 
     @classmethod
     async def aupdate_server_share(cls, server_id: int, share_to_children: bool, operator):
-        """F020 AC-04: toggle Root→Child sharing on an existing llm_server.
-
-        Only Root (tenant_id=1) servers participate in group sharing, and
-        only the global super admin may flip the switch — enforcement
-        mirrors the Router-layer check. Uses F017 ResourceShareService so
-        the DSL v2.0.1 tuple shape (``shared_with`` per-Child fanout)
-        stays in one place.
-
-        Reads under ``bypass_tenant_filter`` because the caller may be a
-        super admin operating from a Child scope (F019); the event-layer
-        IN-list filter would otherwise hide Root servers.
+        """Toggle Root→Child sharing. Only super admins may flip, only
+        Root-owned servers participate. Mirrors the Router-layer guard
+        so DAO stays safe even if called directly.
         """
-        from bisheng.utils.http_middleware import _check_is_global_super
-        from bisheng.common.errcode.llm_tenant import (
-            LLMModelNotAccessibleError,
-            LLMModelSharedReadonlyError,
+        from bisheng.tenant.domain.services.resource_share_service import (
+            ResourceShareService,
         )
 
         with bypass_tenant_filter():
             server = await cls.aget_server_by_id(server_id)
-        if server is None or server.tenant_id != 1:
+        if server is None or server.tenant_id != _ROOT_TENANT_ID:
             raise LLMModelNotAccessibleError.http_exception()
         if not await _check_is_global_super(operator.user_id):
             raise LLMModelSharedReadonlyError.http_exception()
 
-        from bisheng.tenant.domain.services.resource_share_service import (
-            ResourceShareService,
-        )
         if share_to_children:
             await ResourceShareService.enable_sharing('llm_server', str(server_id))
         else:
@@ -228,25 +215,10 @@ class LLMDao:
         *,
         operator=None,
     ):
-        """Update service providers and models.
-
-        F020: when ``operator`` is supplied (T07 Service onwards), a
-        server already owned by Root (tenant_id=1) is read-only for
-        non-super callers (19801). Same-tenant edits and super admin
-        edits proceed unchanged.
-
-        The existing row is read under ``bypass_tenant_filter`` because
-        a Child-scoped super admin (F019) would otherwise not see it.
-        """
+        """Update service providers and models. With ``operator`` supplied,
+        Root-owned rows are read-only for non-super callers (19801)."""
         if operator is not None and getattr(server, 'id', None):
-            from bisheng.utils.http_middleware import _check_is_global_super
-            from bisheng.common.errcode.llm_tenant import LLMModelSharedReadonlyError
-
-            with bypass_tenant_filter():
-                existing = await cls.aget_server_by_id(server.id)
-            if existing is not None and existing.tenant_id == 1:
-                if not await _check_is_global_super(operator.user_id):
-                    raise LLMModelSharedReadonlyError.http_exception()
+            await cls._assert_root_writable(server.id, operator)
 
         async with get_async_db_session() as session:
             session.add(server)
@@ -441,42 +413,27 @@ class LLMDao:
 
     @classmethod
     async def adelete_server_by_id(cls, server_id: int, *, operator=None):
-        """Delete a server and cascade its models.
-
-        F020: when ``operator`` is supplied, the Root read-only rule
-        (19801) is enforced before any row is touched; a missing server
-        raises 19802 so callers can distinguish "unknown id" from
-        "forbidden". The FGA ``shared_with`` fanout (if any) is revoked
-        unconditionally and idempotently — safe even for servers that
-        were never shared. FGA failure is logged but does not abort the
-        local delete (aligning with ainsert_server_with_models).
+        """Delete a server and cascade its models. When ``operator`` is
+        supplied, Root rows are super-admin-only (19801) and a missing
+        row raises 19802 so callers can distinguish absent from
+        forbidden. FGA sharing is revoked idempotently for Root rows
+        only — non-Root servers never had shares.
         """
+        root_row = False
         if operator is not None:
-            from bisheng.utils.http_middleware import _check_is_global_super
-            from bisheng.common.errcode.llm_tenant import (
-                LLMModelNotAccessibleError,
-                LLMModelSharedReadonlyError,
-            )
-
-            with bypass_tenant_filter():
-                existing = await cls.aget_server_by_id(server_id)
+            existing = await cls._assert_root_writable(server_id, operator)
             if existing is None:
                 raise LLMModelNotAccessibleError.http_exception()
-            if existing.tenant_id == 1 and not await _check_is_global_super(operator.user_id):
-                raise LLMModelSharedReadonlyError.http_exception()
+            root_row = existing.tenant_id == _ROOT_TENANT_ID
 
-        # F020: idempotent FGA cleanup. Skipped only when ResourceShareService
-        # unavailable during early boot (OpenFGA disabled); errors are logged.
-        try:
+        if root_row:
             from bisheng.tenant.domain.services.resource_share_service import (
                 ResourceShareService,
             )
-            await ResourceShareService.disable_sharing('llm_server', str(server_id))
-        except Exception:  # noqa: BLE001 — FGA failure must not block delete
-            import logging
-            logging.getLogger(__name__).exception(
-                '[F020] disable_sharing on delete llm_server=%s failed', server_id,
-            )
+            try:
+                await ResourceShareService.disable_sharing('llm_server', str(server_id))
+            except Exception:  # noqa: BLE001 — FGA failure must not block delete
+                _LOG.exception('disable_sharing on delete llm_server=%s failed', server_id)
 
         async with get_async_db_session() as session:
             await session.exec(delete(LLMServer).where(col(LLMServer.id) == server_id))
@@ -499,24 +456,12 @@ class LLMDao:
 
     @classmethod
     async def aget_shared_server_ids_for_leaf(cls, leaf_id: int) -> List[int]:
-        """F020 T06: return Root llm_server ids shared to the given leaf tenant.
-
-        Reads ``{llm_server}#shared_with → tenant:{leaf}`` tuples via
-        OpenFGA ``list_objects`` — this is the read side of the F017
-        ``ResourceShareService.enable_sharing`` fanout. Used by T07's
-        merged-list query to surface Root-owned, share-enabled models to
-        Child users without relying on the SQLAlchemy event layer (which
-        still does strict ``tenant_id = current`` filtering and would
-        hide Root rows from a Child-scoped session).
-
-        Returns an empty list when:
-          - leaf equals Root (no tenant shares to itself);
-          - OpenFGA is disabled / unreachable (fail-closed).
-        """
-        from bisheng.database.models.tenant import ROOT_TENANT_ID
+        """Root llm_server ids shared to the given leaf. Reads
+        ``shared_with → tenant:{leaf}`` tuples; returns [] when the
+        caller is Root or OpenFGA is unavailable (fail-closed)."""
         from bisheng.core.openfga.manager import aget_fga_client
 
-        if leaf_id == ROOT_TENANT_ID:
+        if leaf_id == _ROOT_TENANT_ID:
             return []
         fga = await aget_fga_client()
         if fga is None:
@@ -527,18 +472,12 @@ class LLMDao:
                 relation='shared_with',
                 type='llm_server',
             )
-        except Exception:  # noqa: BLE001 — read-path: degrade to empty list on FGA failure
-            import logging
-            logging.getLogger(__name__).exception(
-                '[F020] list_objects for leaf=%s failed', leaf_id,
-            )
+        except Exception:  # noqa: BLE001 — read-path: degrade to empty list
+            _LOG.exception('list_objects for leaf=%s failed', leaf_id)
             return []
 
         result: List[int] = []
         for obj in objects:
-            # ``list_objects`` returns ``["llm_server:123", ...]``; tolerate
-            # either the prefixed or bare form to be robust against future
-            # FGAClient format changes.
             _, _, tail = obj.rpartition(':')
             if tail.isdigit():
                 result.append(int(tail))

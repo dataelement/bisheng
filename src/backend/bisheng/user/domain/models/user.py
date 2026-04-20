@@ -96,8 +96,7 @@ class UserRead(UserBase):
     tenants: Optional[List[dict]] = None
     tenant_id: Optional[int] = None
     tenant_name: Optional[str] = None
-    # F020 (v2.5.1) pure-additive fields for Tenant-tree admin UI. All
-    # optional so v2.4 / v2.5.0 clients that ignore them keep working.
+    # Tenant-tree admin UI flags. Optional so older clients ignore them.
     is_global_super: Optional[bool] = None
     is_child_admin: Optional[bool] = None
     leaf_tenant_id: Optional[int] = None

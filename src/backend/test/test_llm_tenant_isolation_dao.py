@@ -97,7 +97,7 @@ async def test_root_llm_default_shared_writes_viewer_tuple():
                new=AsyncMock(return_value=_mk_root_tenant(share_default=True))), \
          patch('bisheng.tenant.domain.services.resource_share_service.'
                'ResourceShareService.enable_sharing', new=enable_mock), \
-         patch('bisheng.utils.http_middleware._check_is_global_super',
+         patch('bisheng.llm.domain.models.llm_server._check_is_global_super',
                new=AsyncMock(return_value=True)):
         await LLMDao.ainsert_server_with_models(
             server, models=[], share_to_children=True, operator=_mk_user(),
@@ -122,7 +122,7 @@ async def test_root_llm_share_off_skips_viewer_tuple():
                new=AsyncMock(return_value=_mk_root_tenant(share_default=True))), \
          patch('bisheng.tenant.domain.services.resource_share_service.'
                'ResourceShareService.enable_sharing', new=enable_mock), \
-         patch('bisheng.utils.http_middleware._check_is_global_super',
+         patch('bisheng.llm.domain.models.llm_server._check_is_global_super',
                new=AsyncMock(return_value=True)):
         await LLMDao.ainsert_server_with_models(
             server, models=[], share_to_children=False, operator=_mk_user(),
@@ -150,7 +150,7 @@ async def test_child_admin_creates_own_llm_not_shared():
          patch('bisheng.llm.domain.models.llm_server.settings', _NoWhitelist()), \
          patch('bisheng.tenant.domain.services.resource_share_service.'
                'ResourceShareService.enable_sharing', new=enable_mock), \
-         patch('bisheng.utils.http_middleware._check_is_global_super',
+         patch('bisheng.llm.domain.models.llm_server._check_is_global_super',
                new=AsyncMock(return_value=False)):
         await LLMDao.ainsert_server_with_models(
             server, models=[], share_to_children=True, operator=_mk_user(),
@@ -177,7 +177,7 @@ async def test_endpoint_whitelist_enforced_for_child_admin():
     with patch('bisheng.llm.domain.models.llm_server.settings', _FakeSettings()), \
          patch('bisheng.llm.domain.models.llm_server.get_current_tenant_id',
                return_value=5), \
-         patch('bisheng.utils.http_middleware._check_is_global_super',
+         patch('bisheng.llm.domain.models.llm_server._check_is_global_super',
                new=AsyncMock(return_value=False)):
         with pytest.raises(HTTPException) as excinfo:
             await LLMDao.ainsert_server_with_models(
@@ -203,7 +203,7 @@ async def test_toggle_root_llm_share_enables_fga_tuple():
                'ResourceShareService.enable_sharing', new=enable_mock), \
          patch('bisheng.tenant.domain.services.resource_share_service.'
                'ResourceShareService.disable_sharing', new=disable_mock), \
-         patch('bisheng.utils.http_middleware._check_is_global_super',
+         patch('bisheng.llm.domain.models.llm_server._check_is_global_super',
                new=AsyncMock(return_value=True)):
         await LLMDao.aupdate_server_share(200, True, _mk_user())
 
@@ -224,7 +224,7 @@ async def test_toggle_root_llm_share_off_removes_fga_tuple():
                'ResourceShareService.enable_sharing', new=enable_mock), \
          patch('bisheng.tenant.domain.services.resource_share_service.'
                'ResourceShareService.disable_sharing', new=disable_mock), \
-         patch('bisheng.utils.http_middleware._check_is_global_super',
+         patch('bisheng.llm.domain.models.llm_server._check_is_global_super',
                new=AsyncMock(return_value=True)):
         await LLMDao.aupdate_server_share(200, False, _mk_user())
 
@@ -240,7 +240,7 @@ async def test_toggle_share_on_non_root_raises_19802():
     child_server = MagicMock(id=301, tenant_id=5)
     with patch.object(LLMDao, 'aget_server_by_id',
                       new=AsyncMock(return_value=child_server)), \
-         patch('bisheng.utils.http_middleware._check_is_global_super',
+         patch('bisheng.llm.domain.models.llm_server._check_is_global_super',
                new=AsyncMock(return_value=True)):
         with pytest.raises(HTTPException) as excinfo:
             await LLMDao.aupdate_server_share(301, True, _mk_user())
@@ -256,7 +256,7 @@ async def test_toggle_share_by_non_super_raises_19801():
     root_server = MagicMock(id=200, tenant_id=1)
     with patch.object(LLMDao, 'aget_server_by_id',
                       new=AsyncMock(return_value=root_server)), \
-         patch('bisheng.utils.http_middleware._check_is_global_super',
+         patch('bisheng.llm.domain.models.llm_server._check_is_global_super',
                new=AsyncMock(return_value=False)):
         with pytest.raises(HTTPException) as excinfo:
             await LLMDao.aupdate_server_share(200, True, _mk_user())
@@ -275,7 +275,7 @@ async def test_child_admin_cannot_delete_root_shared_llm():
     root_server = MagicMock(id=200, tenant_id=1)
     with patch.object(LLMDao, 'aget_server_by_id',
                       new=AsyncMock(return_value=root_server)), \
-         patch('bisheng.utils.http_middleware._check_is_global_super',
+         patch('bisheng.llm.domain.models.llm_server._check_is_global_super',
                new=AsyncMock(return_value=False)):
         with pytest.raises(HTTPException) as excinfo:
             await LLMDao.adelete_server_by_id(200, operator=_mk_user())
@@ -309,7 +309,7 @@ async def test_child_admin_cannot_update_root_shared_llm():
 
     with patch.object(LLMDao, 'aget_server_by_id',
                       new=AsyncMock(return_value=existing)), \
-         patch('bisheng.utils.http_middleware._check_is_global_super',
+         patch('bisheng.llm.domain.models.llm_server._check_is_global_super',
                new=AsyncMock(return_value=False)):
         with pytest.raises(HTTPException) as excinfo:
             await LLMDao.update_server_with_models(

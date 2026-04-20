@@ -185,22 +185,24 @@ async def test_get_model_for_call_cross_child_raises_19802():
 
 @pytest.mark.asyncio
 async def test_mount_child_preview_shared_llm_list():
-    """AC-17: super admin + only_shared=true → list Root servers with
-    non-empty shared_with fanout."""
+    """AC-17: super admin + only_shared=true → list Root servers whose
+    shared_with tuples appear in a single FGA read."""
     r1 = _mk_server(1, tenant_id=1, name='shared-root')
-    r2 = _mk_server(2, tenant_id=1, name='private-root')
 
-    async def _list_children(object_type, object_id):
-        return {'1': [5, 7], '2': []}[object_id]
+    fake_fga = MagicMock()
+    fake_fga.read_tuples = AsyncMock(return_value=[
+        {'user': 'tenant:5', 'relation': 'shared_with', 'object': 'llm_server:1'},
+        {'user': 'tenant:7', 'relation': 'shared_with', 'object': 'llm_server:1'},
+        {'user': 'tenant:5', 'relation': 'shared_with', 'object': 'knowledge_space:42'},
+    ])
 
     operator = MagicMock(user_id=99)
-    with patch(f'{DAO}.aget_all_server', new=AsyncMock(return_value=[r1, r2])), \
+    with patch('bisheng.core.openfga.manager.aget_fga_client',
+               new=AsyncMock(return_value=fake_fga)), \
+            patch(f'{DAO}.aget_server_by_ids', new=AsyncMock(return_value=[r1])), \
             patch(f'{DAO}.aget_model_by_server_ids', new=AsyncMock(return_value=[])), \
-            patch('bisheng.utils.http_middleware._check_is_global_super',
-                  new=AsyncMock(return_value=True)), \
-            patch('bisheng.tenant.domain.services.resource_share_service.'
-                  'ResourceShareService.list_sharing_children',
-                  new=AsyncMock(side_effect=_list_children)):
+            patch('bisheng.llm.domain.services.llm._check_is_global_super',
+                  new=AsyncMock(return_value=True)):
         result = await LLMService.get_all_llm(only_shared=True, operator=operator)
 
     assert [r.id for r in result] == [1]
@@ -213,7 +215,7 @@ async def test_mount_child_preview_forbidden_for_non_super_admin():
     from fastapi import HTTPException
 
     operator = MagicMock(user_id=42)
-    with patch('bisheng.utils.http_middleware._check_is_global_super',
+    with patch('bisheng.llm.domain.services.llm._check_is_global_super',
                new=AsyncMock(return_value=False)):
         with pytest.raises(HTTPException) as excinfo:
             await LLMService.get_all_llm(only_shared=True, operator=operator)

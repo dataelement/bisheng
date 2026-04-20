@@ -14,9 +14,8 @@ async def get_all_llm(
         request: Request,
         only_shared: bool = Query(
             False,
-            description='F020 AC-17: return only Root-owned servers that '
-                        'are currently shared to at least one Child '
-                        '(mount-preview dialog). Super-admin only.',
+            description='Return only Root-owned servers currently shared '
+                        'to ≥1 Child (mount-preview dialog). Super-admin only.',
         ),
         login_user: UserPayload = Depends(UserPayload.get_login_user)):
     ret = await LLMService.get_all_llm(only_shared=only_shared, operator=login_user)
@@ -27,10 +26,6 @@ async def get_all_llm(
 async def add_llm_server(request: Request,
                          login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
                          server: LLMServerCreateReq = Body(..., description="Service Provider All Data")):
-    # F020 T08: get_tenant_admin_user admits the global super admin or the
-    # current tenant's Child Admin (via get_current_tenant_id which honours
-    # F019 admin-scope). Ordinary users receive 403 + 19801 from the
-    # dependency itself before Service code runs.
     ret = await LLMService.add_llm_server(request, login_user, server)
     return resp_200(data=ret)
 
@@ -39,8 +34,6 @@ async def add_llm_server(request: Request,
 async def delete_llm_server(request: Request,
                             login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
                             server_id: int = Body(..., embed=True, description="Service Provider UniqueID")):
-    # F020 T08: DAO further enforces the Root-only read-only rule (19801);
-    # endpoint just needs tenant-scoped admin to reach the DAO.
     await LLMService.delete_llm_server(request, login_user, server_id)
     return resp_200()
 
@@ -49,8 +42,6 @@ async def delete_llm_server(request: Request,
 async def update_llm_server(request: Request,
                             login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
                             server: LLMServerCreateReq = Body(..., description="Service Provider All Data")):
-    # F020 T08: same admission rule as POST. LLMServerCreateReq.share_to_children
-    # routes to aupdate_server_share in Service when the target is Root.
     ret = await LLMService.update_llm_server(request, login_user, server)
     return resp_200(data=ret)
 

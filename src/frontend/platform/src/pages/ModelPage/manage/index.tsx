@@ -23,13 +23,12 @@ function CustomTableRow({ data, index, user, onModel, onCheck }) {
     const { t } = useTranslation()
     const [expand, setExpand] = useState(false)
 
-    // F020: Root-shared rows visible to a non-Root caller are read-only.
-    // The backend already sets `is_root_shared_readonly` on the list API;
-    // the frontend uses it to render the Badge and disable affordances so
-    // Child Admins cannot accidentally drive into the forbidden endpoint
-    // (which would 403 + 19801).
+    // Root-shared rows are read-only for the current caller; the backend
+    // sets `is_root_shared_readonly` on the list API so Child Admins do
+    // not hit the 403 + 19801 write path.
     const isRootShared = !!data.is_root_shared_readonly
-    const canEdit = !isRootShared && (user.role === 'admin' || user.is_child_admin)
+    const isAdmin = !!(user?.is_global_super || user?.is_child_admin)
+    const canEdit = !isRootShared && isAdmin
 
     return <div className="text-sm bs-table-row">
         <div className={`grid grid-cols-2 transition-colors hover:bg-muted/50 items-center mt-1 mx-2 h-[52px] rounded-sm`}>
@@ -110,17 +109,12 @@ export default function Management() {
     const [loading, setLoading] = useState(false)
     const { refetch } = useModel()
 
-    // F020 T15b: admin-scope switch for global super admins only. We
-    // always call `useAdminScope` (React rules of hooks — no conditional
-    // invocation) but pass `enabled` so non-super callers skip the
-    // initial GET / POST entirely, avoiding a spurious 403.
     const isSuper = !!user?.is_global_super
+    // Hook is always called; `enabled` gates network traffic so non-super
+    // callers never produce a spurious 403 on the initial GET.
     const scopeHook = useAdminScope({ enabled: isSuper })
-    // Tenant option set: "Global" + Root + active Children. For MVP we
-    // only know the caller's leaf (`user.tenant_id`) and Root; richer
-    // tenant tree data requires the TenantDao list API, which the spec
-    // leaves to a future iteration. Two fixed tabs is enough to exercise
-    // AC-13 / AC-14 on 114.
+    // MVP: two fixed tabs (Root + caller leaf). A fuller tenant tree
+    // requires a list API from TenantDao and is a separate iteration.
     const tenantOptions = useMemo<TenantOption[]>(() => {
         if (!isSuper) return []
         const opts: TenantOption[] = [
@@ -189,10 +183,6 @@ export default function Management() {
             </div>
         )}
         <div className="h-full overflow-y-auto">
-            {/* F020 T15b: super-admin-only scope selector. The tabs flip
-                the backend's admin-scope Redis key; subsequent LLM list
-                reads return the Child's view (AC-13) and writes land on
-                that Child (AC-14). Child Admins never see this. */}
             {isSuper && tenantOptions.length > 0 && (
                 <div className="flex items-center justify-start gap-2 pb-2">
                     <span className="text-sm text-muted-foreground">
@@ -209,15 +199,14 @@ export default function Management() {
                     />
                 </div>
             )}
-            {/* F020 D11: workbench / system-level config stays super-admin
-                only, regardless of active scope. Child Admins never see
-                the button; super admins see it even when scope=Child. */}
+            {/* System-level config stays super-admin only regardless of
+                active scope; Child Admins never see the button. */}
             <div className="flex justify-end gap-4">
-                {user.role === 'admin' && <Button className="text-red-500" onClick={() => setSystemModel(true)} variant="secondary">
+                {isSuper && <Button className="text-red-500" onClick={() => setSystemModel(true)} variant="secondary">
                     <SettingIcon className="text-red-500" />
                     {t('model.systemModelSettings')}
                 </Button>}
-                {(user.role === 'admin' || user.is_child_admin) && <Button onClick={() => setModelId(-1)}>{t('model.addModel')}</Button>}
+                {(isSuper || user?.is_child_admin) && <Button onClick={() => setModelId(-1)}>{t('model.addModel')}</Button>}
                 <Button className="bg-black-button" onClick={reload}>{t('model.refresh')}</Button>
             </div>
             <div className="h-[85%]">

@@ -1,16 +1,5 @@
-// F020-llm-tenant-isolation — reusable tenant-scope selector for admin pages.
-//
-// The component is a thin wrapper around the bs-ui Tabs primitive. It is
-// intentionally dumb: it displays a list of tenant options, fires
-// `onChange` with the chosen value, and respects a `disabled` state.
-// Owning state (current scope, tenant options, admin identity) lives in
-// the hosting page so the selector can be reused across ModelPage (F020),
-// RolesPage, QuotaPage, and AuditLogPage without coupling to a specific
-// data shape.
-//
-// Callers typically pair this with `useAdminScope` (F020 T13) and a
-// `useUser` hook; pages render the selector only when
-// `user.is_global_super` so Child Admins never see the switcher.
+// Reusable tenant-scope selector for admin pages. Pair with
+// `useAdminScope` and render only for the global super admin.
 
 import * as React from "react"
 import {
@@ -19,8 +8,7 @@ import {
     TabsTrigger,
 } from "@/components/bs-ui/tabs"
 
-// `'global'` represents "no scope" — the super admin sees the whole tree.
-// All other values are numeric tenant ids (Root = 1, Child = N).
+// `'global'` represents no scope (full tree); numbers are tenant ids.
 export type AdminScopeValue = number | "global"
 
 export interface TenantOption {
