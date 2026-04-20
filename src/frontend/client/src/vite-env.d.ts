@@ -15,3 +15,5 @@ declare const __APP_ENV__: {
   BISHENG_HOST?: string;
   [key: string]: any;
 };
+
+declare const __VCONSOLE_ENABLED__: boolean;

@@ -6,6 +6,8 @@ declare global {
         errorAlerts: (errorList: string[]) => void
         _flow: any
     }
+
+    const __VCONSOLE_ENABLED__: boolean;
 }
 
 declare module "*.png" {

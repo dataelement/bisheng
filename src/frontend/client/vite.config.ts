@@ -2,7 +2,7 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 import { visualizer } from "rollup-plugin-visualizer";
 import type { Plugin } from 'vite';
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import { compression } from 'vite-plugin-compression2';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import { VitePWA } from 'vite-plugin-pwa';
@@ -14,315 +14,319 @@ const app_env = {
   BISHENG_HOST: '/admin'
 }
 // https://vitejs.dev/config/
-export default defineConfig(({ command }) => ({
-  base: app_env.BASE_URL || '/',
-  define: {
-    __APP_ENV__: JSON.stringify(app_env)
-  },
-  server: {
-    host: '0.0.0.0',
-    port: 4001,
-    strictPort: false,
-    proxy: {
-      // '^/api/': {
-      //   target: 'http://192.168.106.116:7861',
-      //   // target: 'http://localhost:3080',
-      //   changeOrigin: true,
-      // },
-      '^(/workspace)?/bisheng': {
-        target: 'http://127.0.0.1:7860',
-        changeOrigin: true,
-        secure: false,
-        rewrite: (path) => {
-          return path.replace(/^\/workspace/, '');
+export default defineConfig(({ command, mode }) => {
+  const env = loadEnv(mode, path.resolve(__dirname, '../'), ['VITE_']);
+  return {
+    base: app_env.BASE_URL || '/',
+    define: {
+      __APP_ENV__: JSON.stringify(app_env),
+      __VCONSOLE_ENABLED__: JSON.stringify(env.VITE_ENABLE_VCONSOLE === 'true'),
+    },
+    server: {
+      host: '0.0.0.0',
+      port: 4001,
+      strictPort: false,
+      proxy: {
+        // '^/api/': {
+        //   target: 'http://192.168.106.116:7861',
+        //   // target: 'http://localhost:3080',
+        //   changeOrigin: true,
+        // },
+        '^(/workspace)?/bisheng': {
+          target: 'http://192.168.106.120:3002',
+          changeOrigin: true,
+          secure: false,
+          rewrite: (path) => {
+            return path.replace(/^\/workspace/, '');
+          },
         },
-      },
-      '/workspace/api': {
-        target: 'http://127.0.0.1:7860',
-        changeOrigin: true,
-        secure: false,
-        ws: true,
-        configure: (proxy, options) => {
-          proxy.on('proxyReq', (proxyReq, req, res) => {
-            console.log('Proxying request to:', proxyReq.path);
-          });
+        '/workspace/api': {
+          target: 'http://192.168.106.120:3002',
+          changeOrigin: true,
+          secure: false,
+          ws: true,
+          configure: (proxy, options) => {
+            proxy.on('proxyReq', (proxyReq, req, res) => {
+              console.log('Proxying request to:', proxyReq.path);
+            });
+          },
+          rewrite: (path) => {
+            return path.replace(/^\/workspace/, '');
+          },
         },
-        rewrite: (path) => {
-          return path.replace(/^\/workspace/, '');
-        },
-      },
-      '/workspace/tmp-dir': {
-        target: 'http://192.168.106.120:3002',
-        changeOrigin: true,
-        secure: false,
-        rewrite: (path) => {
-          return path.replace(/^\/workspace/, '');
+        '/workspace/tmp-dir': {
+          target: 'http://192.168.106.120:3002',
+          changeOrigin: true,
+          secure: false,
+          rewrite: (path) => {
+            return path.replace(/^\/workspace/, '');
+          },
         },
       },
     },
-  },
-  // Set the directory where environment variables are loaded from and restrict prefixes
-  envDir: '../',
-  envPrefix: ['VITE_', 'SCRIPT_', 'DOMAIN_', 'ALLOW_'],
-  plugins: [
-    react(),
-    nodePolyfills(),
-    VitePWA({
-      injectRegister: 'auto', // 'auto' | 'manual' | 'disabled'
-      registerType: 'autoUpdate', // 'prompt' | 'autoUpdate'
-      devOptions: {
-        enabled: false, // disable service worker registration in development mode
-      },
-      useCredentials: true,
-      includeManifestIcons: false,
-      workbox: {
-        globPatterns: [
-          '**/*.{js,css,html}',
-          'assets/favicon*.png',
-          'assets/icon-*.png',
-          'assets/apple-touch-icon*.png',
-          'assets/maskable-icon.png',
-          'manifest.webmanifest',
-        ],
-        globIgnores: ['images/**/*', '**/*.map', 'index.html'],
-        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
-        navigateFallbackDenylist: [/^\/oauth/],
-      },
-      includeAssets: [],
-      // manifest: {
-      //   name: 'Deepseek',
-      //   short_name: 'Deepseek',
-      //   display: 'standalone',
-      //   background_color: '#000000',
-      //   theme_color: '#009688',
-      //   icons: [
-      //     {
-      //       src: 'assets/favicon-32x32.png',
-      //       sizes: '32x32',
-      //       type: 'image/png',
-      //     },
-      //     {
-      //       src: 'assets/favicon-16x16.png',
-      //       sizes: '16x16',
-      //       type: 'image/png',
-      //     },
-      //     {
-      //       src: 'assets/apple-touch-icon-180x180.png',
-      //       sizes: '180x180',
-      //       type: 'image/png',
-      //     },
-      //     {
-      //       src: 'assets/icon-192x192.png',
-      //       sizes: '192x192',
-      //       type: 'image/png',
-      //     },
-      //     {
-      //       src: 'assets/maskable-icon.png',
-      //       sizes: '512x512',
-      //       type: 'image/png',
-      //       purpose: 'maskable',
-      //     },
-      //   ],
-      // },
-    }),
-    sourcemapExclude({ excludeNodeModules: true }),
-    compression({
-      threshold: 10240,
-    }),
-    createHtmlPlugin({}),
-    {
-      name: 'clear-placeholder',
-      transformIndexHtml(html) {
-        return html.replace('PROTOCAL_IGNORE/', '/');
-      }
-    },
-    viteStaticCopy({
-      targets: [
-        {
-          src: 'node_modules/pdfjs-dist/build/pdf.worker.min.js',
-          dest: './'
+    // Set the directory where environment variables are loaded from and restrict prefixes
+    envDir: '../',
+    envPrefix: ['VITE_', 'SCRIPT_', 'DOMAIN_', 'ALLOW_'],
+    plugins: [
+      react(),
+      nodePolyfills(),
+      VitePWA({
+        injectRegister: 'auto', // 'auto' | 'manual' | 'disabled'
+        registerType: 'autoUpdate', // 'prompt' | 'autoUpdate'
+        devOptions: {
+          enabled: false, // disable service worker registration in development mode
+        },
+        useCredentials: true,
+        includeManifestIcons: false,
+        workbox: {
+          globPatterns: [
+            '**/*.{js,css,html}',
+            'assets/favicon*.png',
+            'assets/icon-*.png',
+            'assets/apple-touch-icon*.png',
+            'assets/maskable-icon.png',
+            'manifest.webmanifest',
+          ],
+          globIgnores: ['images/**/*', '**/*.map', 'index.html'],
+          maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
+          navigateFallbackDenylist: [/^\/oauth/],
+        },
+        includeAssets: [],
+        // manifest: {
+        //   name: 'Deepseek',
+        //   short_name: 'Deepseek',
+        //   display: 'standalone',
+        //   background_color: '#000000',
+        //   theme_color: '#009688',
+        //   icons: [
+        //     {
+        //       src: 'assets/favicon-32x32.png',
+        //       sizes: '32x32',
+        //       type: 'image/png',
+        //     },
+        //     {
+        //       src: 'assets/favicon-16x16.png',
+        //       sizes: '16x16',
+        //       type: 'image/png',
+        //     },
+        //     {
+        //       src: 'assets/apple-touch-icon-180x180.png',
+        //       sizes: '180x180',
+        //       type: 'image/png',
+        //     },
+        //     {
+        //       src: 'assets/icon-192x192.png',
+        //       sizes: '192x192',
+        //       type: 'image/png',
+        //     },
+        //     {
+        //       src: 'assets/maskable-icon.png',
+        //       sizes: '512x512',
+        //       type: 'image/png',
+        //       purpose: 'maskable',
+        //     },
+        //   ],
+        // },
+      }),
+      sourcemapExclude({ excludeNodeModules: true }),
+      compression({
+        threshold: 10240,
+      }),
+      createHtmlPlugin({}),
+      {
+        name: 'clear-placeholder',
+        transformIndexHtml(html) {
+          return html.replace('PROTOCAL_IGNORE/', '/');
         }
-      ]
-    }),
-    // visualizer({
-    //   open: true, // 打包后自动打开分析页面
-    //   filename: "stats.html",
-    // })
-  ],
-  publicDir: './public',
-  build: {
-    sourcemap: process.env.NODE_ENV === 'development',
-    outDir: './build',
-    minify: 'terser',
-    rollupOptions: {
-      preserveEntrySignatures: 'strict',
-      output: {
-        manualChunks(id: string) {
-          const normalizedId = id.replace(/\\/g, '/');
-          if (normalizedId.includes('node_modules')) {
-            // High-impact chunking for large libraries
-            if (normalizedId.includes('@codesandbox/sandpack')) {
-              return 'sandpack';
-            }
-            if (normalizedId.includes('react-virtualized')) {
-              return 'virtualization';
-            }
-            if (normalizedId.includes('i18next') || normalizedId.includes('react-i18next')) {
-              return 'i18n';
-            }
-            if (normalizedId.includes('lodash')) {
-              return 'utilities';
-            }
-            if (normalizedId.includes('date-fns')) {
-              return 'date-utils';
-            }
-            if (normalizedId.includes('@dicebear')) {
-              return 'avatars';
-            }
-            // if (normalizedId.includes('react-dnd') || normalizedId.includes('react-flip-toolkit')) {
-            //   return 'react-interactions';
-            // }
-            if (normalizedId.includes('react-hook-form')) {
-              return 'forms';
-            }
-            if (normalizedId.includes('react-router-dom')) {
-              return 'routing';
-            }
-            if (
-              normalizedId.includes('qrcode.react') ||
-              normalizedId.includes('@marsidev/react-turnstile')
-            ) {
-              return 'security-ui';
-            }
-
-            if (normalizedId.includes('@codemirror/view')) {
-              return 'codemirror-view';
-            }
-            if (normalizedId.includes('@codemirror/state')) {
-              return 'codemirror-state';
-            }
-            if (normalizedId.includes('@codemirror/language')) {
-              return 'codemirror-language';
-            }
-            if (normalizedId.includes('@codemirror')) {
-              return 'codemirror-core';
-            }
-
-            if (
-              normalizedId.includes('react-markdown') ||
-              normalizedId.includes('remark-') ||
-              normalizedId.includes('rehype-')
-            ) {
-              return 'markdown-processing';
-            }
-            if (normalizedId.includes('monaco-editor') || normalizedId.includes('@monaco-editor')) {
-              return 'code-editor';
-            }
-            if (normalizedId.includes('react-window') || normalizedId.includes('react-virtual')) {
-              return 'virtualization';
-            }
-            if (
-              normalizedId.includes('zod') ||
-              normalizedId.includes('yup') ||
-              normalizedId.includes('joi')
-            ) {
-              return 'validation';
-            }
-            if (
-              normalizedId.includes('axios') ||
-              normalizedId.includes('ky') ||
-              normalizedId.includes('fetch')
-            ) {
-              return 'http-client';
-            }
-            if (
-              normalizedId.includes('react-spring') ||
-              normalizedId.includes('react-transition-group')
-            ) {
-              return 'animations';
-            }
-            if (normalizedId.includes('react-select') || normalizedId.includes('downshift')) {
-              return 'advanced-inputs';
-            }
-            if (normalizedId.includes('heic-to')) {
-              return 'heic-converter';
-            }
-
-            // Existing chunks
-            if (normalizedId.includes('@radix-ui')) {
-              return 'radix-ui';
-            }
-            if (normalizedId.includes('framer-motion')) {
-              return 'framer-motion';
-            }
-            if (normalizedId.includes('node_modules/highlight.js')) {
-              return 'markdown_highlight';
-            }
-            if (normalizedId.includes('katex') || normalizedId.includes('node_modules/katex')) {
-              return 'math-katex';
-            }
-            if (normalizedId.includes('node_modules/hast-util-raw')) {
-              return 'markdown_large';
-            }
-            if (normalizedId.includes('@tanstack')) {
-              return 'tanstack-vendor';
-            }
-            if (normalizedId.includes('@headlessui')) {
-              return 'headlessui';
-            }
-            // xlsx-populate: Excel file handling
-            if (normalizedId.includes('xlsx-populate')) {
-              return 'xlsx-populate';
-            }
-            // mammoth: DOCX rendering
-            if (normalizedId.includes('mammoth')) {
-              return 'docx-viewer';
-            }
-            // pako: zlib compression
-            if (normalizedId.includes('pako') || normalizedId.includes('node_modules/zlib')) {
-              return 'compression';
-            }
-
-            // Everything else falls into a generic vendor chunk.
-            return 'vendor';
+      },
+      viteStaticCopy({
+        targets: [
+          {
+            src: 'node_modules/pdfjs-dist/build/pdf.worker.min.js',
+            dest: './'
           }
-          // Create a separate chunk for all locale files under src/locales.
-          if (normalizedId.includes('/src/locales/')) {
-            return 'locales';
-          }
-          // Let Rollup decide automatically for any other files.
-          return null;
+        ]
+      }),
+      // visualizer({
+      //   open: true, // 打包后自动打开分析页面
+      //   filename: "stats.html",
+      // })
+    ],
+    publicDir: './public',
+    build: {
+      sourcemap: process.env.NODE_ENV === 'development',
+      outDir: './build',
+      minify: 'terser',
+      rollupOptions: {
+        preserveEntrySignatures: 'strict',
+        output: {
+          manualChunks(id: string) {
+            const normalizedId = id.replace(/\\/g, '/');
+            if (normalizedId.includes('node_modules')) {
+              // High-impact chunking for large libraries
+              if (normalizedId.includes('@codesandbox/sandpack')) {
+                return 'sandpack';
+              }
+              if (normalizedId.includes('react-virtualized')) {
+                return 'virtualization';
+              }
+              if (normalizedId.includes('i18next') || normalizedId.includes('react-i18next')) {
+                return 'i18n';
+              }
+              if (normalizedId.includes('lodash')) {
+                return 'utilities';
+              }
+              if (normalizedId.includes('date-fns')) {
+                return 'date-utils';
+              }
+              if (normalizedId.includes('@dicebear')) {
+                return 'avatars';
+              }
+              // if (normalizedId.includes('react-dnd') || normalizedId.includes('react-flip-toolkit')) {
+              //   return 'react-interactions';
+              // }
+              if (normalizedId.includes('react-hook-form')) {
+                return 'forms';
+              }
+              if (normalizedId.includes('react-router-dom')) {
+                return 'routing';
+              }
+              if (
+                normalizedId.includes('qrcode.react') ||
+                normalizedId.includes('@marsidev/react-turnstile')
+              ) {
+                return 'security-ui';
+              }
+
+              if (normalizedId.includes('@codemirror/view')) {
+                return 'codemirror-view';
+              }
+              if (normalizedId.includes('@codemirror/state')) {
+                return 'codemirror-state';
+              }
+              if (normalizedId.includes('@codemirror/language')) {
+                return 'codemirror-language';
+              }
+              if (normalizedId.includes('@codemirror')) {
+                return 'codemirror-core';
+              }
+
+              if (
+                normalizedId.includes('react-markdown') ||
+                normalizedId.includes('remark-') ||
+                normalizedId.includes('rehype-')
+              ) {
+                return 'markdown-processing';
+              }
+              if (normalizedId.includes('monaco-editor') || normalizedId.includes('@monaco-editor')) {
+                return 'code-editor';
+              }
+              if (normalizedId.includes('react-window') || normalizedId.includes('react-virtual')) {
+                return 'virtualization';
+              }
+              if (
+                normalizedId.includes('zod') ||
+                normalizedId.includes('yup') ||
+                normalizedId.includes('joi')
+              ) {
+                return 'validation';
+              }
+              if (
+                normalizedId.includes('axios') ||
+                normalizedId.includes('ky') ||
+                normalizedId.includes('fetch')
+              ) {
+                return 'http-client';
+              }
+              if (
+                normalizedId.includes('react-spring') ||
+                normalizedId.includes('react-transition-group')
+              ) {
+                return 'animations';
+              }
+              if (normalizedId.includes('react-select') || normalizedId.includes('downshift')) {
+                return 'advanced-inputs';
+              }
+              if (normalizedId.includes('heic-to')) {
+                return 'heic-converter';
+              }
+
+              // Existing chunks
+              if (normalizedId.includes('@radix-ui')) {
+                return 'radix-ui';
+              }
+              if (normalizedId.includes('framer-motion')) {
+                return 'framer-motion';
+              }
+              if (normalizedId.includes('node_modules/highlight.js')) {
+                return 'markdown_highlight';
+              }
+              if (normalizedId.includes('katex') || normalizedId.includes('node_modules/katex')) {
+                return 'math-katex';
+              }
+              if (normalizedId.includes('node_modules/hast-util-raw')) {
+                return 'markdown_large';
+              }
+              if (normalizedId.includes('@tanstack')) {
+                return 'tanstack-vendor';
+              }
+              if (normalizedId.includes('@headlessui')) {
+                return 'headlessui';
+              }
+              // xlsx-populate: Excel file handling
+              if (normalizedId.includes('xlsx-populate')) {
+                return 'xlsx-populate';
+              }
+              // mammoth: DOCX rendering
+              if (normalizedId.includes('mammoth')) {
+                return 'docx-viewer';
+              }
+              // pako: zlib compression
+              if (normalizedId.includes('pako') || normalizedId.includes('node_modules/zlib')) {
+                return 'compression';
+              }
+
+              // Everything else falls into a generic vendor chunk.
+              return 'vendor';
+            }
+            // Create a separate chunk for all locale files under src/locales.
+            if (normalizedId.includes('/src/locales/')) {
+              return 'locales';
+            }
+            // Let Rollup decide automatically for any other files.
+            return null;
+          },
+          entryFileNames: 'assets/[name].[hash].js',
+          chunkFileNames: 'assets/[name].[hash].js',
+          assetFileNames: (assetInfo) => {
+            if (assetInfo.names?.[0] && /\.(woff|woff2|eot|ttf|otf)$/.test(assetInfo.names[0])) {
+              return 'assets/fonts/[name][extname]';
+            }
+            return 'assets/[name].[hash][extname]';
+          },
         },
-        entryFileNames: 'assets/[name].[hash].js',
-        chunkFileNames: 'assets/[name].[hash].js',
-        assetFileNames: (assetInfo) => {
-          if (assetInfo.names?.[0] && /\.(woff|woff2|eot|ttf|otf)$/.test(assetInfo.names[0])) {
-            return 'assets/fonts/[name][extname]';
+        /**
+         * Ignore "use client" warning since we are not using SSR
+         * @see {@link https://github.com/TanStack/query/pull/5161#issuecomment-1477389761 Preserve 'use client' directives TanStack/query#5161}
+         */
+        onwarn(warning, warn) {
+          if (warning.message.includes('Error when using sourcemap')) {
+            return;
           }
-          return 'assets/[name].[hash][extname]';
+          warn(warning);
         },
       },
-      /**
-       * Ignore "use client" warning since we are not using SSR
-       * @see {@link https://github.com/TanStack/query/pull/5161#issuecomment-1477389761 Preserve 'use client' directives TanStack/query#5161}
-       */
-      onwarn(warning, warn) {
-        if (warning.message.includes('Error when using sourcemap')) {
-          return;
-        }
-        warn(warning);
+      chunkSizeWarningLimit: 1500,
+    },
+    resolve: {
+      alias: {
+        '~': path.join(__dirname, 'src/'),
+        '@': path.join(__dirname, 'src/'),
+        $fonts: path.resolve(__dirname, 'public/fonts'),
       },
     },
-    chunkSizeWarningLimit: 1500,
-  },
-  resolve: {
-    alias: {
-      '~': path.join(__dirname, 'src/'),
-      '@': path.join(__dirname, 'src/'),
-      $fonts: path.resolve(__dirname, 'public/fonts'),
-    },
-  },
-}));
+  };
+});
 
 interface SourcemapExclude {
   excludeNodeModules?: boolean;

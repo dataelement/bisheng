@@ -158,7 +158,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
               /* Landing page — preserved for welcome + Lingsi mode switch */
               <Landing
                 lingsi={isLingsi}
-                lingsiEntry={(bsConfig as any)?.linsightConfig?.linsight_entry || true}
+                lingsiEntry={(bsConfig as any)?.linsightConfig?.linsight_entry ?? true}
                 setLingsi={setIsLingsi}
                 isNew={isNew}
               />
