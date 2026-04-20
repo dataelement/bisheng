@@ -166,8 +166,8 @@ async def get_info(login_user: LoginUser = Depends(LoginUser.get_login_user)):
         is_global_super = await _check_is_global_super(user_id)
         active = await UserTenantDao.aget_active_user_tenant(user_id)
         leaf_tenant_id = active.tenant_id if active else ROOT_TENANT_ID
-        leaf_tenant = await TenantDao.aget(leaf_tenant_id)
-        leaf_tenant_name = leaf_tenant.name if leaf_tenant else ''
+        leaf_tenant = await TenantDao.aget_by_id(leaf_tenant_id)
+        leaf_tenant_name = leaf_tenant.tenant_name if leaf_tenant else ''
         if leaf_tenant_id != ROOT_TENANT_ID and not is_global_super:
             fga = await aget_fga_client()
             if fga is not None:
