@@ -21,7 +21,6 @@ from bisheng.common.errcode.http_error import UnAuthorizedError, NotFoundError, 
 from bisheng.common.errcode.knowledge import KnowledgeCPError, KnowledgeQAError, KnowledgeRebuildingError, \
     KnowledgePreviewError, KnowledgeNotQAError, KnowledgeNoEmbeddingError, KnowledgeNotExistError, KnowledgeCPEmptyError
 from bisheng.common.errcode.llm_tenant import LLMModelNotAccessibleError
-from bisheng.common.errcode.server import NoLlmModelConfigError
 from bisheng.common.schemas.api import resp_200, resp_500, UnifiedResponseModel
 from bisheng.common.services import telemetry_service
 from bisheng.core.cache.redis_manager import get_redis_client
