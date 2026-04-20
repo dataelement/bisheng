@@ -5,6 +5,7 @@ menu permissions, permission checks.
 """
 
 import pytest
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 
@@ -222,9 +223,15 @@ class TestListRoles:
             _make_role(5, 'Custom', role_type='tenant'),
         ]
 
-        with patch.object(RoleService, '_check_list_permission', new_callable=AsyncMock,
-                          return_value='tenant_admin'), \
-             patch('bisheng.role.domain.services.role_service.RoleDao') as mock_dao:
+        with patch(
+            'bisheng.database.models.department.DepartmentDao.aget_user_admin_departments',
+            new_callable=AsyncMock,
+            return_value=[],
+        ), patch(
+            'bisheng.permission.domain.services.permission_service.PermissionService.check',
+            new_callable=AsyncMock,
+            return_value=True,
+        ), patch('bisheng.role.domain.services.role_service.RoleDao') as mock_dao:
             mock_dao.aget_visible_roles = AsyncMock(return_value=roles)
             mock_dao.acount_visible_roles = AsyncMock(return_value=2)
             mock_dao.aget_user_count_by_role_ids = AsyncMock(return_value={2: 45, 5: 3})
@@ -238,6 +245,61 @@ class TestListRoles:
         tenant_items = [i for i in result['data'] if i.role_type == 'tenant']
         assert all(i.is_readonly for i in global_items)
         assert all(not i.is_readonly for i in tenant_items)
+
+    @pytest.mark.asyncio
+    async def test_dept_admin_sees_global_scope_role_but_only_creator_can_edit(self, mock_dept_admin):
+        from bisheng.role.domain.services.role_service import RoleService
+
+        roles = [
+            _make_role(5, 'Tenant Global Scope', role_type='tenant', department_id=None),
+            _make_role(6, 'Scoped Tenant Role', role_type='tenant', department_id=8),
+        ]
+
+        admin_dept = MagicMock()
+        admin_dept.id = 8
+        admin_dept.path = '/8'
+
+        with patch(
+            'bisheng.database.models.department.DepartmentDao.aget_user_admin_departments',
+            new_callable=AsyncMock,
+            return_value=[admin_dept],
+        ), patch(
+            'bisheng.database.models.department.DepartmentDao.aget_subtree_ids',
+            new_callable=AsyncMock,
+            return_value=[8, 9],
+        ), patch('bisheng.role.domain.services.role_service.RoleDao') as mock_dao, \
+             patch.object(RoleService, '_get_department_names', new_callable=AsyncMock, return_value={}), \
+             patch.object(RoleService, '_department_scope_paths_for_roles', new_callable=AsyncMock, return_value={}), \
+             patch.object(RoleService, '_get_role_creator_ids', new_callable=AsyncMock,
+                          return_value={5: 99, 6: mock_dept_admin.user_id}), \
+             patch.object(RoleService, '_get_creator_names', new_callable=AsyncMock,
+                          return_value={5: 'other', 6: 'dept-admin'}):
+            mock_dao.aget_visible_roles = AsyncMock(return_value=roles)
+            mock_dao.acount_visible_roles = AsyncMock(return_value=2)
+            mock_dao.aget_user_count_by_role_ids = AsyncMock(return_value={5: 1, 6: 2})
+
+            result = await RoleService.list_roles(
+                keyword=None, page=1, limit=10,
+                login_user=mock_dept_admin,
+            )
+
+        readonly = {item.id: item.is_readonly for item in result['data']}
+        assert readonly[5] is True
+        assert readonly[6] is False
+
+
+class TestRoleDaoVisibility:
+    def test_dept_admin_query_includes_unscoped_tenant_roles(self):
+        source = (
+            Path(__file__).resolve().parents[1]
+            / 'bisheng'
+            / 'database'
+            / 'models'
+            / 'role.py'
+        ).read_text(encoding='utf-8')
+
+        assert "Role.department_id.is_(None)" in source
+        assert "Role.department_id.in_(department_ids)" in source
 
 
 class TestDeleteRole:
@@ -275,6 +337,24 @@ class TestDeleteRole:
             await RoleService.delete_role(role_id=15, login_user=mock_admin_user)
 
         mock_dao.adelete_role.assert_called_once_with(15)
+
+    @pytest.mark.asyncio
+    async def test_delete_role_requires_creator(self, mock_tenant_admin):
+        from bisheng.common.errcode.role import RolePermissionDeniedError
+        from bisheng.role.domain.services.role_service import RoleService
+
+        role = _make_role(15, 'Owned By Another User')
+
+        with patch('bisheng.role.domain.services.role_service.RoleDao') as mock_dao, \
+             patch.object(RoleService, '_check_role_permission', new_callable=AsyncMock), \
+             patch.object(RoleService, '_get_permission_level', new_callable=AsyncMock,
+                          return_value='tenant_admin'), \
+             patch.object(RoleService, '_get_role_creator_ids', new_callable=AsyncMock,
+                          return_value={15: 999}):
+            mock_dao.aget_role_by_id = AsyncMock(return_value=role)
+
+            with pytest.raises(RolePermissionDeniedError):
+                await RoleService.delete_role(role_id=15, login_user=mock_tenant_admin)
 
 
 class TestUpdateRole:
@@ -340,6 +420,28 @@ class TestUpdateRole:
             with pytest.raises(RolePermissionDeniedError):
                 await RoleService.update_role(
                     role_id=18, req=req, login_user=mock_dept_admin,
+                )
+
+    @pytest.mark.asyncio
+    async def test_update_role_requires_creator(self, mock_tenant_admin):
+        from bisheng.common.errcode.role import RolePermissionDeniedError
+        from bisheng.role.domain.schemas.role_schema import RoleUpdateRequest
+        from bisheng.role.domain.services.role_service import RoleService
+
+        role = _make_role(16, 'Editable?', role_type='tenant')
+        req = RoleUpdateRequest(remark='attempt')
+
+        with patch('bisheng.role.domain.services.role_service.RoleDao') as mock_dao, \
+             patch.object(RoleService, '_check_role_permission', new_callable=AsyncMock), \
+             patch.object(RoleService, '_get_permission_level', new_callable=AsyncMock,
+                          return_value='tenant_admin'), \
+             patch.object(RoleService, '_get_role_creator_ids', new_callable=AsyncMock,
+                          return_value={16: 998}):
+            mock_dao.aget_role_by_id = AsyncMock(return_value=role)
+
+            with pytest.raises(RolePermissionDeniedError):
+                await RoleService.update_role(
+                    role_id=16, req=req, login_user=mock_tenant_admin,
                 )
 
 

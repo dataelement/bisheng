@@ -184,8 +184,8 @@ class RoleDao(RoleBase):
         Args:
             tenant_id: Current tenant ID.
             keyword: Optional keyword filter on role_name.
-            department_ids: When set (department admin): **global** preset roles (read-only in
-                UI) plus **tenant** roles whose ``department_id`` is in this subtree.
+            department_ids: When set (department admin): **global** preset roles plus
+                **tenant** roles whose ``department_id`` is NULL (global scope) or in this subtree.
             tenant_custom_roles_only: When True and ``department_ids`` is None (tenant admin),
                 exclude ``global`` roles so the list only contains editable tenant roles.
         """
@@ -201,15 +201,25 @@ class RoleDao(RoleBase):
             stmt = stmt.where(Role.role_name.like(f'%{keyword}%'))
         if department_ids is not None:
             if not department_ids:
-                stmt = stmt.where(Role.role_type == 'global')
+                stmt = stmt.where(
+                    or_(
+                        Role.role_type == 'global',
+                        and_(
+                            Role.role_type == 'tenant',
+                            Role.department_id.is_(None),
+                        ),
+                    ),
+                )
             else:
                 stmt = stmt.where(
                     or_(
                         Role.role_type == 'global',
                         and_(
                             Role.role_type == 'tenant',
-                            Role.department_id.isnot(None),
-                            Role.department_id.in_(department_ids),
+                            or_(
+                                Role.department_id.is_(None),
+                                Role.department_id.in_(department_ids),
+                            ),
                         ),
                     ),
                 )
