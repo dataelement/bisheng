@@ -32,6 +32,7 @@ from bisheng.core.context.tenant import (
 from bisheng.database.models.audit_log import AuditLogDao
 from bisheng.database.models.department import DepartmentDao
 from bisheng.database.models.tenant import ROOT_TENANT_ID
+from bisheng.org_sync.domain.constants import AuditAction
 from bisheng.org_sync.domain.schemas.relink import (
     RelinkAppliedItem,
     RelinkCandidate,
@@ -96,7 +97,7 @@ class DepartmentRelinkService:
                     dept_id=dept_id, tenant_id=dept.tenant_id,
                     old_ext=old_external_id or '',
                     new_ext=chosen_new_external_id,
-                    action='dept.relink_resolved',
+                    action=AuditAction.DEPT_RELINK_RESOLVED,
                     strategy='manual_resolve',
                 )
                 await cls.store.delete(dept_id)
@@ -126,22 +127,11 @@ class DepartmentRelinkService:
                 req.source, old_ext)
             if dept is None:
                 continue
-            item = RelinkAppliedItem(
-                dept_id=dept.id,
-                old_external_id=old_ext,
-                new_external_id=new_ext,
+            await cls._apply_or_defer(
+                dept=dept, old_ext=old_ext, new_ext=new_ext,
+                dry_run=req.dry_run, strategy='external_id_map',
+                response=response,
             )
-            if req.dry_run:
-                response.would_apply.append(item)
-                continue
-            await DepartmentDao.aupdate_external_id(dept.id, new_ext)
-            await cls._audit_rewrite(
-                dept_id=dept.id, tenant_id=dept.tenant_id,
-                old_ext=old_ext, new_ext=new_ext,
-                action='dept.relink_applied',
-                strategy='external_id_map',
-            )
-            response.applied.append(item)
         return response
 
     # ------------------------------------------------------------------
@@ -162,23 +152,12 @@ class DepartmentRelinkService:
             if not candidates:
                 continue
             if len(candidates) == 1:
-                new_ext = candidates[0]['new_external_id']
-                item = RelinkAppliedItem(
-                    dept_id=dept.id,
-                    old_external_id=old_ext,
-                    new_external_id=new_ext,
+                await cls._apply_or_defer(
+                    dept=dept, old_ext=old_ext,
+                    new_ext=candidates[0]['new_external_id'],
+                    dry_run=req.dry_run, strategy='path_plus_name',
+                    response=response,
                 )
-                if req.dry_run:
-                    response.would_apply.append(item)
-                    continue
-                await DepartmentDao.aupdate_external_id(dept.id, new_ext)
-                await cls._audit_rewrite(
-                    dept_id=dept.id, tenant_id=dept.tenant_id,
-                    old_ext=old_ext, new_ext=new_ext,
-                    action='dept.relink_applied',
-                    strategy='path_plus_name',
-                )
-                response.applied.append(item)
             else:
                 # Multi-candidate: persist + surface conflict.
                 if not req.dry_run:
@@ -193,6 +172,40 @@ class DepartmentRelinkService:
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    @classmethod
+    async def _apply_or_defer(
+        cls,
+        *,
+        dept,
+        old_ext: str,
+        new_ext: str,
+        dry_run: bool,
+        strategy: str,
+        response: RelinkResponse,
+    ) -> None:
+        """Single-candidate apply path shared by both strategies.
+
+        Appends to ``response.would_apply`` in dry_run mode, otherwise
+        rewrites ``dept.external_id`` + writes the audit row and
+        appends to ``response.applied``.
+        """
+        item = RelinkAppliedItem(
+            dept_id=dept.id,
+            old_external_id=old_ext,
+            new_external_id=new_ext,
+        )
+        if dry_run:
+            response.would_apply.append(item)
+            return
+        await DepartmentDao.aupdate_external_id(dept.id, new_ext)
+        await cls._audit_rewrite(
+            dept_id=dept.id, tenant_id=dept.tenant_id,
+            old_ext=old_ext, new_ext=new_ext,
+            action=AuditAction.DEPT_RELINK_APPLIED,
+            strategy=strategy,
+        )
+        response.applied.append(item)
 
     @classmethod
     async def _find_candidates(cls, source: str, dept) -> List[dict]:

@@ -48,6 +48,12 @@ from bisheng.database.models.department import (
     DepartmentDao,
     UserDepartmentDao,
 )
+from bisheng.org_sync.domain.constants import (
+    AuditAction,
+    EventLevel,
+    EventType,
+    ReconcileAction,
+)
 from bisheng.org_sync.domain.models.org_sync import (
     OrgSyncConfigDao,
     OrgSyncLogDao,
@@ -232,6 +238,36 @@ class OrgReconcileService:
     # ------------------------------------------------------------------
 
     @classmethod
+    def _record_stale_ts(
+        cls,
+        *,
+        op,
+        existing,
+        action: str,
+        buffer: OrgSyncLogBuffer,
+        event_rows: list[dict],
+        result: ReconcileResult,
+    ) -> None:
+        """Emit the ``stale_ts`` event row + buffer warning shared by
+        upsert and archive SKIP_TS branches."""
+        last_ts = int(existing.last_sync_ts or 0) if existing else 0
+        event_rows.append({
+            'event_type': EventType.STALE_TS,
+            'level': EventLevel.WARN,
+            'external_id': op.external_id,
+            'source_ts': op.incoming_ts,
+            'error_details': {
+                'action': action,
+                'last_sync_ts': last_ts,
+            },
+        })
+        buffer.warn(
+            EventType.STALE_TS, op.external_id,
+            incoming_ts=op.incoming_ts, last_ts=last_ts,
+        )
+        result.skipped_ts += 1
+
+    @classmethod
     async def _apply_upsert(
         cls,
         op: UpsertOp,
@@ -246,23 +282,14 @@ class OrgReconcileService:
                 source=config.provider, external_id=op.external_id,
             )
             decision = await OrgSyncTsGuard.check_and_update(
-                existing, op.incoming_ts, 'upsert',
+                existing, op.incoming_ts, ReconcileAction.UPSERT,
             )
             if decision == GuardDecision.SKIP_TS:
-                event_rows.append(dict(
-                    event_type='stale_ts', level='warn',
-                    external_id=op.external_id, source_ts=op.incoming_ts,
-                    error_details={
-                        'action': 'upsert',
-                        'last_sync_ts': int(getattr(existing, 'last_sync_ts', 0) or 0) if existing else 0,
-                    },
-                ))
-                buffer.warn(
-                    'stale_ts', op.external_id,
-                    incoming_ts=op.incoming_ts,
-                    last_ts=int(getattr(existing, 'last_sync_ts', 0) or 0) if existing else 0,
+                cls._record_stale_ts(
+                    op=op, existing=existing,
+                    action=ReconcileAction.UPSERT,
+                    buffer=buffer, event_rows=event_rows, result=result,
                 )
-                result.skipped_ts += 1
                 return
 
             item = DepartmentUpsertItem(
@@ -276,7 +303,6 @@ class OrgReconcileService:
                 existing=existing, item=item,
                 source=config.provider, last_sync_ts=op.incoming_ts,
             )
-            # OrgSyncLogBuffer exposes raw counters + warn/error only;
             # dept_created vs dept_updated mirrors F009 batch-summary
             # semantics so the management UI's history pane shows the
             # expected totals.
@@ -309,23 +335,14 @@ class OrgReconcileService:
                 return
 
             decision = await OrgSyncTsGuard.check_and_update(
-                existing, op.incoming_ts, 'remove',
+                existing, op.incoming_ts, ReconcileAction.REMOVE,
             )
             if decision == GuardDecision.SKIP_TS:
-                event_rows.append(dict(
-                    event_type='stale_ts', level='warn',
-                    external_id=op.external_id, source_ts=op.incoming_ts,
-                    error_details={
-                        'action': 'remove',
-                        'last_sync_ts': int(getattr(existing, 'last_sync_ts', 0) or 0),
-                    },
-                ))
-                buffer.warn(
-                    'stale_ts', op.external_id,
-                    incoming_ts=op.incoming_ts,
-                    last_ts=int(getattr(existing, 'last_sync_ts', 0) or 0),
+                cls._record_stale_ts(
+                    op=op, existing=existing,
+                    action=ReconcileAction.REMOVE,
+                    buffer=buffer, event_rows=event_rows, result=result,
                 )
-                result.skipped_ts += 1
                 return
 
             # AC-11: detect Gateway-upsert-followed-by-Celery-remove at
@@ -333,24 +350,26 @@ class OrgReconcileService:
             # mark it as a conflict + write audit + event row so admins
             # can investigate.
             is_same_ts_conflict = (
-                int(getattr(existing, 'last_sync_ts', 0) or 0) == op.incoming_ts
-                and int(getattr(existing, 'is_deleted', 0) or 0) == 0
+                int(existing.last_sync_ts or 0) == op.incoming_ts
+                and int(existing.is_deleted or 0) == 0
             )
 
             if is_same_ts_conflict:
-                event_rows.append(dict(
-                    event_type='ts_conflict', level='warn',
-                    external_id=op.external_id, source_ts=op.incoming_ts,
-                    error_details={
+                event_rows.append({
+                    'event_type': EventType.TS_CONFLICT,
+                    'level': EventLevel.WARN,
+                    'external_id': op.external_id,
+                    'source_ts': op.incoming_ts,
+                    'error_details': {
                         'resolution': 'remove_wins',
                         'via': 'celery_reconcile',
                     },
-                ))
+                })
                 try:
                     await AuditLogDao.ainsert_v2(
                         tenant_id=config.tenant_id, operator_id=0,
                         operator_tenant_id=config.tenant_id,
-                        action='dept.sync_conflict',
+                        action=AuditAction.DEPT_SYNC_CONFLICT,
                         target_type='department',
                         target_id=str(existing.id),
                         metadata={

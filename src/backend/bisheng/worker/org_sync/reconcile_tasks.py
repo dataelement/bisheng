@@ -15,14 +15,11 @@ Three scheduled entries:
   persist.
 
 Beat registration lives in ``bisheng.core.config.settings.CeleryConf.validate``.
-
-Each task opens its own asyncio loop so Celery's threaded worker pool
-doesn't collide with the one currently running inside the dispatcher.
 """
 
-import asyncio
 import logging
 
+from bisheng.worker._asyncio_utils import run_async_task
 from bisheng.worker.main import bisheng_celery
 
 logger = logging.getLogger(__name__)
@@ -36,11 +33,7 @@ logger = logging.getLogger(__name__)
 @bisheng_celery.task(acks_late=True)
 def reconcile_all_organizations():
     """Fan out ``reconcile_single_config`` for every active config."""
-    loop = asyncio.new_event_loop()
-    try:
-        loop.run_until_complete(_fan_out_all())
-    finally:
-        loop.close()
+    run_async_task(_fan_out_all)
 
 
 async def _fan_out_all() -> None:
@@ -76,11 +69,8 @@ def reconcile_single_config(config_id: int):
         OrgReconcileService,
     )
 
-    loop = asyncio.new_event_loop()
     try:
-        loop.run_until_complete(
-            OrgReconcileService.reconcile_config(config_id)
-        )
+        run_async_task(lambda: OrgReconcileService.reconcile_config(config_id))
     except HTTPException as e:
         # SsoReconcileLockBusyError.http_exception() wraps the code as
         # a FastAPI HTTPException, not as the original subclass — match
@@ -94,8 +84,6 @@ def reconcile_single_config(config_id: int):
     except Exception:
         logger.exception(
             f'reconcile_single_config({config_id}) failed')
-    finally:
-        loop.close()
 
 
 # ---------------------------------------------------------------------------
@@ -106,11 +94,7 @@ def reconcile_single_config(config_id: int):
 @bisheng_celery.task(acks_late=True)
 def report_ts_conflicts_weekly():
     """Monday 09:00 — aggregate last-7d ts_conflicts, notify admins."""
-    loop = asyncio.new_event_loop()
-    try:
-        loop.run_until_complete(_run_weekly())
-    finally:
-        loop.close()
+    run_async_task(_run_weekly)
 
 
 async def _run_weekly() -> None:
@@ -127,11 +111,7 @@ async def _run_weekly() -> None:
 @bisheng_celery.task(acks_late=True)
 def report_ts_conflicts_daily_escalation():
     """Daily 09:00 — escalate to daily notices when conflicts persist."""
-    loop = asyncio.new_event_loop()
-    try:
-        loop.run_until_complete(_run_daily_escalation())
-    finally:
-        loop.close()
+    run_async_task(_run_daily_escalation)
 
 
 async def _run_daily_escalation() -> None:

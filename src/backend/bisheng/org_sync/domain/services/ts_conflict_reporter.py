@@ -29,6 +29,7 @@ from typing import Dict, List, Optional
 from loguru import logger
 
 from bisheng.common.services.config_service import settings
+from bisheng.org_sync.domain.constants import EventLevel, EventType
 from bisheng.org_sync.domain.models.org_sync import OrgSyncLogDao
 from bisheng.tenant.domain.services.inbox_helper import (
     list_global_super_admin_ids,
@@ -37,6 +38,15 @@ from bisheng.tenant.domain.services.inbox_helper import (
 
 
 class TsConflictReporter:
+
+    @staticmethod
+    def _count_by_external_id(rows) -> Dict[str, int]:
+        """Group rows by ``external_id`` → count. Null ids are dropped."""
+        counts: Dict[str, int] = {}
+        for r in rows:
+            if r.external_id:
+                counts[r.external_id] = counts.get(r.external_id, 0) + 1
+        return counts
 
     @classmethod
     async def weekly_report(cls) -> dict:
@@ -48,12 +58,10 @@ class TsConflictReporter:
         """
         since = datetime.utcnow() - timedelta(days=7)
         rows = await OrgSyncLogDao.aget_conflicts_since(
-            since=since, event_type='ts_conflict', level='warn',
+            since=since,
+            event_type=EventType.TS_CONFLICT, level=EventLevel.WARN,
         )
-        counts: Dict[str, int] = {}
-        for r in rows:
-            if r.external_id:
-                counts[r.external_id] = counts.get(r.external_id, 0) + 1
+        counts = cls._count_by_external_id(rows)
 
         threshold = settings.reconcile.weekly_conflict_threshold
         flagged = {ext: cnt for ext, cnt in counts.items() if cnt >= threshold}
@@ -87,7 +95,8 @@ class TsConflictReporter:
         # Marker row powers the daily-escalation logic.
         try:
             await OrgSyncLogDao.acreate_event(
-                event_type='conflict_weekly_sent', level='info',
+                event_type=EventType.CONFLICT_WEEKLY_SENT,
+                level=EventLevel.INFO,
                 external_id=None, source_ts=None,
                 config_id=0, tenant_id=1,
                 error_details={'payload': payload,
@@ -104,7 +113,7 @@ class TsConflictReporter:
         """Fire a daily notice only when the weekly report is stale and
         conflicts persist."""
         marker = await OrgSyncLogDao.aget_latest_event(
-            event_type='conflict_weekly_sent')
+            event_type=EventType.CONFLICT_WEEKLY_SENT)
         if marker is None:
             return {'escalated': False, 'reason': 'no_weekly_marker'}
         marker_time = marker.create_time
@@ -118,16 +127,13 @@ class TsConflictReporter:
 
         since = datetime.utcnow() - grace
         rows = await OrgSyncLogDao.aget_conflicts_since(
-            since=since, event_type='ts_conflict', level='warn',
+            since=since,
+            event_type=EventType.TS_CONFLICT, level=EventLevel.WARN,
         )
         if not rows:
             return {'escalated': False, 'reason': 'resolved'}
 
-        counts: Dict[str, int] = {}
-        for r in rows:
-            if r.external_id:
-                counts[r.external_id] = counts.get(r.external_id, 0) + 1
-
+        counts = cls._count_by_external_id(rows)
         admins = await list_global_super_admin_ids()
         body = json.dumps({
             'window_days': settings.reconcile.daily_escalation_days,
@@ -145,7 +151,8 @@ class TsConflictReporter:
 
         try:
             await OrgSyncLogDao.acreate_event(
-                event_type='conflict_daily_escalation_sent', level='warn',
+                event_type=EventType.CONFLICT_DAILY_ESCALATION_SENT,
+                level=EventLevel.WARN,
                 external_id=None, source_ts=None,
                 config_id=0, tenant_id=1,
                 error_details={'unresolved_externals': counts,
