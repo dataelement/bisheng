@@ -24,7 +24,7 @@ i18n.use(Backend)
     .use(initReactI18next)
     .init({
         partialBundledLanguages: true,
-        ns: ['bs', 'flow', 'permission'],
+        ns: ['bs', 'flow', 'permission', 'orgSync'],
         defaultNS: 'bs',
         lng: userLanguage,
         fallbackLng: 'en-US',

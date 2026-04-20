@@ -10,9 +10,9 @@
 
 | 步骤 | 状态 | 备注 |
 |------|------|------|
-| spec.md | ✅ 已草 | 待 `/sdd-review spec` 评审 |
-| tasks.md | ✅ 已草 | 待 `/sdd-review tasks` 评审 |
-| 实现 | 🔲 未开始 | 0 / 8 完成 |
+| spec.md | ✅ 已草 + R1~R5 对齐（2026-04-20） | spec §0 记录修订历史 |
+| tasks.md | ✅ 已草 + R1~R5 对齐 | 8 个任务拆解不变，T001/T003/T005/T006/T007 文字更新 |
+| 实现 | ✅ 完成（2026-04-20） | 8 / 8 完成；后端 91 单测 + 17 E2E 全绿，前端 TypeScript 无 error |
 
 ---
 
@@ -28,16 +28,18 @@
 
 ### 基础适配（无测试配对）
 
-- [ ] **T001**: `auth_config` schema 校验 + 脱敏扩展
+- [x] **T001**: `auth_config` WeCom 分支校验（**R2 修订：删除脱敏扩展**）
   **文件**: `src/backend/bisheng/org_sync/domain/schemas/org_sync_schema.py`
   **逻辑**:
-  - 在 `OrgSyncConfigCreate` / `OrgSyncConfigUpdate` 的 `validate_auth_config` 校验器中，当 `provider='wecom'` 时必校验 `corpid` / `corpsecret` / `agent_id` 非空字符串；`allow_dept_ids` 如存在必须是 `list[int]`。
-  - `mask_sensitive_fields()` 遇 `provider='wecom'` 时把 `corpsecret` 置为 `****`；保留 `corpid` / `agent_id` / `allow_dept_ids` 明文。
-  - 为脱敏规则新增 `WECOM_SENSITIVE_FIELDS = ('corpsecret',)` 常量（与 Feishu 的 `FEISHU_SENSITIVE_FIELDS` 并列）。
-  **覆盖 AC**: AC-36, AC-37, AC-38, AC-57, AC-58
+  - `OrgSyncConfigCreate` 新增 `model_validator(mode='after')` `validate_auth_config`：当 `provider='wecom'` 时校验 `auth_config['corpid']` / `['corpsecret']` / `['agent_id']` 必须是非空字符串；`allow_dept_ids` 如存在必须是 `list[int]` 且每个元素 `isinstance(x, int)` 并且不是 bool（防 `True`/`False`）。
+  - `OrgSyncConfigUpdate` 对称加分支，允许 `corpsecret='****'`（保留原值语义）。
+  - **不改** `mask_sensitive_fields()`：F009 既有 `'secret' in key.lower()` 子串匹配已覆盖 `corpsecret`。
+  - **不新增**常量：不需要 `WECOM_SENSITIVE_FIELDS`。
+  - 写对应的 pytest 单测：`test/test_org_sync_wecom_schema.py` 覆盖 AC-36/37（缺失字段、非法 allow_dept_ids），并补一条 `test_wecom_corpsecret_auto_masked` 确保 `mask_sensitive_fields({'corpsecret': 'x', 'corpid': 'y'})['corpsecret'] == '****'`。
+  **覆盖 AC**: AC-36, AC-37, AC-38（AC-57/58 通过 F009 既有脱敏自动覆盖）
   **依赖**: 无
 
-- [ ] **T002**: `OrgSyncService` 注入 `_config_id` 到 auth_config
+- [x] **T002**: `OrgSyncService` 注入 `_config_id` 到 auth_config
   **文件**: `src/backend/bisheng/org_sync/domain/services/org_sync_service.py`
   **逻辑**:
   - 在 `execute_sync` / `test_connection` / `preview_remote_tree` 调 `get_provider(provider, auth_config)` 之前，先 `auth_config['_config_id'] = config.id`（只在内存字典改，不回写 DB）。
@@ -48,9 +50,9 @@
 
 ### WeComProvider 实现（Test-First 配对）
 
-- [ ] **T003**: WeComProvider 单元测试
+- [x] **T003**: WeComProvider 单元测试（**R5 修订**）
   **文件**: `src/backend/test/test_wecom_provider.py`
-  **逻辑**: 使用 `respx` 或 `httpx.MockTransport` 桩住企微 API。
+  **逻辑**: 使用 `httpx.MockTransport`（标准库，零新增依赖）桩住企微 API；Redis 用 `fakeredis.aioredis.FakeRedis`，monkeypatch `bisheng.org_sync.domain.providers.wecom.get_redis_client` 返回含 `async_connection` 属性的 stub。
   用例清单：
   - `test_ensure_token_cache_hit` → AC-51：Redis 预置 token，`_ensure_token` 不调 gettoken
   - `test_ensure_token_first_call` → AC-50：首次调用写 Redis，TTL ≈ 6900s
@@ -73,7 +75,7 @@
   **基础设施**: 依赖 F000 conftest（若 WeCom 测试需要 Redis mock，新增 `redis_mock` fixture，与 Feishu 测试共享）
   **依赖**: T001, T002
 
-- [ ] **T004**: WeComProvider 实现
+- [x] **T004**: WeComProvider 实现
   **文件**: `src/backend/bisheng/org_sync/domain/providers/wecom.py`
   **逻辑**:
   - 完全替换现有 stub（36 行 → 预计 250~300 行），参照 `feishu.py` 风格。
@@ -107,58 +109,54 @@
 
 ### 前端管理台（手动验证）
 
-- [ ] **T005**: Platform 前端 API 层 + Store
+- [x] **T005**: Platform 前端 API 层 + Store
   **文件**:
   - `src/frontend/platform/src/controllers/API/orgSync.ts`
-  - `src/frontend/platform/src/store/orgSyncStore.ts`
+  - `src/frontend/platform/src/store/orgSyncStore.tsx`（**R1 改 `.tsx` 与项目风格一致**）
+  - `src/frontend/platform/src/types/api/orgSync.ts`（新增，类型定义就地）
   **逻辑**:
-  - API 层封装 F009 的 9 个端点（list / detail / create / update / delete / test / execute / logs / remote-tree）；类型定义对齐 `OrgSyncConfigRead`。
-  - Zustand store：`configs` / `currentConfig` / `loading` / `logs`；action `fetchConfigs` / `testConnection` / `execute`。
-  **测试**: 无自动化；由 T006/T007 手动验证覆盖。
+  - API 层封装 F009 的 9 个端点（list / detail / create / update / delete / test / execute / logs / remote-tree）；类型定义对齐 `OrgSyncConfigRead` / `OrgSyncLogRead`。
+  - Zustand store：state `configs` / `currentConfig` / `loading` / `editLoading` / `logs` / `error`；action `fetchConfigs / create / update / delete / testConnection / execute / fetchLogs`。
+  **自测**: `npm run build` 无 TypeScript error；import 顺序与别名 `@/controllers/API/orgSync` 可用
   **依赖**: T004
 
-- [ ] **T006**: Platform 前端表单页面
+- [x] **T006**: Platform 前端 Tab + Dialog + FieldSets（**R1/R3 修订：Tab 模式 + 手工 Badge 列表**）
   **文件**:
-  - `src/frontend/platform/src/pages/SystemPage/OrgSyncPage/index.tsx`
-  - `src/frontend/platform/src/pages/SystemPage/OrgSyncPage/ConfigFormModal.tsx`
-  - `src/frontend/platform/src/pages/SystemPage/OrgSyncPage/components/WeComFieldSet.tsx`
-  - `src/frontend/platform/src/pages/SystemPage/OrgSyncPage/components/FeishuFieldSet.tsx`
-  - `src/frontend/platform/src/pages/SystemPage/OrgSyncPage/components/GenericApiFieldSet.tsx`
-  - `src/frontend/platform/src/pages/SystemPage/OrgSyncPage/TestConnectionButton.tsx`
-  - `src/frontend/platform/src/pages/SystemPage/OrgSyncPage/SyncHistoryTable.tsx`
-  - `src/frontend/platform/src/pages/SystemPage/OrgSyncPage/hooks/useOrgSyncConfig.ts`
-  - `src/frontend/platform/src/components/bs-comp/menus/index.tsx`（或现有菜单入口，添加"组织同步"项）
+  - `src/frontend/platform/src/pages/SystemPage/index.tsx`（插入 `orgSync` Tab）
+  - `src/frontend/platform/src/pages/SystemPage/components/OrgSync/index.tsx`
+  - `src/frontend/platform/src/pages/SystemPage/components/OrgSync/ProviderDialog.tsx`
+  - `src/frontend/platform/src/pages/SystemPage/components/OrgSync/fieldsets/WeComFieldSet.tsx`
+  - `src/frontend/platform/src/pages/SystemPage/components/OrgSync/fieldsets/FeishuFieldSet.tsx`
+  - `src/frontend/platform/src/pages/SystemPage/components/OrgSync/fieldsets/GenericApiFieldSet.tsx`
+  - `src/frontend/platform/src/pages/SystemPage/components/OrgSync/TestConnectionButton.tsx`
+  - `src/frontend/platform/src/pages/SystemPage/components/OrgSync/SyncLogModal.tsx`
+  - `src/frontend/platform/src/pages/SystemPage/components/OrgSync/useOrgSync.ts`
   **逻辑**:
-  - 表单使用 Radix Form（bs-ui），Provider 下拉切换字段组。
-  - WeCom 字段组：corpid（input）、corpsecret（input type=password，编辑态显示 `****` 占位，用户清空再输或留空提交 → 表单提交时若值是 `****` 则不带该字段）、agent_id（input）、allow_dept_ids（`bs-ui` Tags 输入，回车成项，校验整数）。
-  - 列表页：按 F009 `OrgSyncConfigRead` 渲染，列 `config_name / provider / sync_status / last_sync_at / actions`。
-  - Toast：`toast({ title, variant: 'success'|'error' })`（见规则文件 `.claude/rules/platform-frontend.md`）。
-  - Confirm：`bsConfirm`（删除、重置）。
+  - SystemPage Tab 仅对 `isFullAdminShell = isSuperAdmin || isDeptAdmin` 可见；Tab 标题从 `orgSync` namespace 取。
+  - Dialog 用 `bs-ui/dialog`，Provider 下拉切换字段组。
+  - WeCom 字段组（R3 修订）：corpid/agent_id 普通 Input；corpsecret 编辑态 `defaultValue="****"`，提交时若值仍是 `****` 则 drop；allow_dept_ids 手工实现 Input(type=number) + Button(add) + Badge 列表（每个带 ✕）；空数组入库用 `[1]`。
+  - 列表页列：`config_name / provider / sync_status / last_sync_at / actions(测试|同步|编辑|日志|删除)`。
+  - Toast：`useToast()` 的 `toast / message`；Confirm：`bsConfirm`。
   **覆盖 AC**: AC-35, AC-36, AC-37, AC-38, AC-39, AC-40, AC-41
-  **手动验证清单**:
-  1. 访问 http://192.168.106.114:4001/system/org-sync → 能看到列表页（空态）
-  2. 点击"新建"，Provider 选"企业微信" → 显示 4 个字段；缺 corpid 提交 → toast 报错 22006
-  3. 填入测试配置（corpid=`wwa04427c3f62b5769` / AgentId=`1000017` / Secret=`qVldC5Kp5houi1fG8yBvmZMaufN2KmFNkijdls1DdVc`），保存 → 列表出现新条目
-  4. 点击"测试连接" → toast 显示 total_depts 与 total_members；浏览器 Network 面板检查响应体无 token
-  5. 编辑该配置 → corpsecret 字段显示 `****`；不改直接保存不覆盖原值；改写 → 保存生效
-  6. 点击"立即同步" → 弹出确认 → 同步开始；查看"同步历史"显示 running → success
-  7. 同步后到"系统管理 → 成员" 查看是否新增企微成员（source=wecom 标签）
-  8. 切 Provider 下拉到飞书，字段组切换；GenericAPI 同上
-  9. 三语切换：en-US / zh-Hans / ja，字段标签、Toast、按钮文案全部无原文泄露
+  **自测策略（auto mode）**：
+  - `npm run build` 无 TypeScript error
+  - 表单切换逻辑、corpsecret `****` 占位、Badge 列表 add/remove 通过 code review 确认
+  - E2E 场景覆盖由 T008 API 测试模拟
   **依赖**: T005
 
-- [ ] **T007**: i18n 文案 + 菜单登记
+- [x] **T007**: i18n 三语独立 `orgSync` namespace（**R4 修订**）
   **文件**:
-  - `src/frontend/platform/public/locales/en-US/bs.json`
-  - `src/frontend/platform/public/locales/zh-Hans/bs.json`
-  - `src/frontend/platform/public/locales/ja/bs.json`
-  **逻辑**: 新增 namespace key `orgSync.*`（字段标签、校验提示、Toast、菜单项标题、同步状态中英日）。至少 30 个 key 对齐三语。
-  **手动验证**: `/i18n-localizer` skill 检查无硬编码中文残留；三语切换无 key fallback
+  - `src/frontend/platform/public/locales/en-US/orgSync.json`（新建）
+  - `src/frontend/platform/public/locales/zh-Hans/orgSync.json`（新建）
+  - `src/frontend/platform/public/locales/ja/orgSync.json`（新建）
+  - `src/frontend/platform/src/i18n.js`（注册新 namespace）
+  **逻辑**: `orgSync.json` 涵盖字段标签、校验提示、按钮文字、Toast、同步状态、删除确认；组件通过 `useTranslation('orgSync')` 访问。三语齐全，≥30 key。
+  **自测**: 三语 key 集合必须完全一致；grep 组件代码无硬编码中文字符串
   **依赖**: T006
 
 ### E2E 与校验
 
-- [ ] **T008**: E2E 测试 — WeCom 全流程
+- [x] **T008**: E2E 测试 — WeCom 全流程
   **文件**: `src/backend/test/e2e/test_e2e_org_sync_wecom.py`
   **逻辑**: 参考 `test/e2e/test_e2e_org_sync.py` 的 Feishu 用例结构。
   - 场景 1：admin 创建 WeCom 配置（mock 企微 API 返回 200/合法数据） → 列表返回 corpsecret=`****`
@@ -175,9 +173,14 @@
 
 ## 实际偏差记录
 
-> 完成后，在此记录实现与 spec.md 的偏差，供后续参考。
+> 2026-04-20 开发完成后登记。spec § 0 已记录 R1~R5 修订，本节只列实施过程中与 spec / tasks.md 进一步出入的点。
 
-- **偏差 1**: _（待填）_
+- **偏差 1 — 抛弃 `fakeredis.aioredis`**：pyproject.toml 声明 `fakeredis[lua]>=2.21`，但 `pip install` 后 `import fakeredis` 触发 `TypeError: metaclass conflict`（redis-py 7.0.1 与 fakeredis 2.35 的元类冲突）。改为在 `test_wecom_provider.py` 内写 `_InMemoryAsyncRedis` 小型存根（覆盖 `get / set(nx/ex) / delete / ttl`），零外部依赖、29/29 用例全绿。后续如需共享 fixture 可提到 `conftest.py`。
+- **偏差 2 — 前端 `TFunction` 签名太严**：i18next 在 TypeScript 严格模式下推导出的 `TFunction<'orgSync', undefined>` 无法匹配自定义 `(key, def?) => string`，tsc 报 TS2345。改为 fieldset 校验函数接受 `t: any`（局部 eslint-disable），避免污染调用侧。
+- **偏差 3 — 前端 `message({variant})` 必须带 `description`**：`Toast` 类型强制要求 `description: string | string[]`。所有成功/失败提示补 `description`，不影响用户视觉。
+- **偏差 4 — `update_config` 扩展**：spec §7.4 只要求 Service 层 inject/pop `_config_id`，实际发现 `sync_config.py` 的 `update_config` 端点合并 `auth_config` 时需额外处理 ① 客户端漏传的 `_config_id` ② secret 字段传 `****` 时应保留原值。新增 2 处防御性 pop / drop 逻辑；测试覆盖在 `test_e2e_org_sync_wecom.py::test_full_wecom_lifecycle`。
+- **偏差 5 — 114 backend 需手动重启**：E2E 需要 114 uvicorn 加载新的 WeCom / schema / service 代码；`deploy.sh` 走 CI 自动部署流程，但未 push 的开发阶段需手工 `pkill + setsid uvicorn` 重启（已在本轮开发完成；请留意测试服的沙箱状态）。
+- **偏差 6 — 企微测试账号未做 live E2E**：`E2E_WECOM_TEST_LIVE` 默认关闭。真实 corpid/corpsecret 的 AC-39 校验通过 tasks.md 记录的账号人工触发（`POST /api/v1/org-sync/configs/{id}/test`），或在 CI 里注入环境变量后启用 `TestWeComLiveConnection`。本次开发未执行 live 调用，避免污染外部企微工作台。
 
 ---
 

@@ -37,6 +37,8 @@ async def test_connection(
             return OrgSyncConfigNotFoundError.return_resp()
 
         auth_config = decrypt_auth_config(config.auth_config)
+        # Provider-internal hint; see org_sync_service.execute_sync for rationale.
+        auth_config['_config_id'] = config.id
         provider = get_provider(config.provider, auth_config)
         result = await provider.test_connection()
         return resp_200(result)
@@ -111,6 +113,8 @@ async def get_remote_tree(
             return OrgSyncConfigNotFoundError.return_resp()
 
         auth_config = decrypt_auth_config(config.auth_config)
+        # Provider-internal hint; see org_sync_service.execute_sync for rationale.
+        auth_config['_config_id'] = config.id
         provider = get_provider(config.provider, auth_config)
         await provider.authenticate()
 
