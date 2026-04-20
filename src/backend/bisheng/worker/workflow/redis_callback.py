@@ -10,7 +10,7 @@ from loguru import logger
 
 from bisheng.api.v1.schema.workflow import WorkflowEventType
 from bisheng.api.v1.schemas import ChatResponse
-from bisheng.chat.utils import sync_judge_source, sync_process_source_document
+from bisheng.common.chat.utils import sync_judge_source, sync_process_source_document
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
 from bisheng.common.errcode.flow import WorkFlowNodeRunMaxTimesError, WorkFlowWaitUserTimeoutError, \
     WorkFlowNodeUpdateError, WorkFlowVersionUpdateError, WorkFlowTaskBusyError, WorkFlowTaskOtherError
@@ -18,11 +18,13 @@ from bisheng.common.errcode.http_error import ServerError
 from bisheng.common.schemas.telemetry.event_data_schema import NewMessageSessionEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
+from bisheng.common.utils.title_generator import generate_conversation_title_sync
 from bisheng.core.cache.redis_manager import get_redis_client_sync
 from bisheng.core.logger import trace_id_var
 from bisheng.database.models.flow import FlowDao, FlowType
 from bisheng.database.models.message import ChatMessageDao, ChatMessage
 from bisheng.database.models.session import MessageSessionDao, MessageSession
+from bisheng.llm.domain import LLMService
 from bisheng.utils.threadpool import thread_pool
 from bisheng.workflow.callback.base_callback import BaseCallback
 from bisheng.workflow.callback.event import NodeStartData, NodeEndData, UserInputData, GuideWordData, GuideQuestionData, \
@@ -42,6 +44,8 @@ class RedisCallback(BaseCallback):
         self.workflow = None
         self.create_session = False
         self.source = kwargs.get('source', 'platform')  # only platform or api
+
+        self.new_session = None
 
         self.redis_client = get_redis_client_sync()
         self.workflow_data_key = f'workflow:{unique_id}:data'
@@ -453,13 +457,16 @@ class RedisCallback(BaseCallback):
             # Insert a new session without session data
             if not MessageSessionDao.get_one(self.chat_id):
                 db_workflow = FlowDao.get_flow_by_id(self.workflow_id)
-                MessageSessionDao.insert_one(MessageSession(
+                self.new_session = MessageSessionDao.insert_one(MessageSession(
                     chat_id=self.chat_id,
                     flow_id=self.workflow_id,
                     flow_name=db_workflow.name,
                     flow_type=FlowType.WORKFLOW.value,
                     user_id=self.user_id,
                 ))
+                thread_pool.submit(f"workflow_generate_title_{self.chat_id}",
+                                   self.generate_session_title,
+                                   message.message)
 
                 # RecordTelemetryJournal
                 telemetry_service.log_event_sync(user_id=self.user_id,
@@ -471,12 +478,37 @@ class RedisCallback(BaseCallback):
                                                      source=self.source,
                                                      app_name=db_workflow.name,
                                                      app_type=ApplicationTypeEnum.WORKFLOW
-                                                 )
-                                                 )
+                                                 ))
 
             self.create_session = True
 
         return message.id
+
+    def generate_session_title(self, answer: str):
+        if not self.new_session:
+            return
+        if self.new_session.name:
+            return
+        self.new_session.name = "New Chat"
+
+        question = ""
+        input_message = ChatMessageDao.get_messages_by_chat_id(self.chat_id, [WorkflowEventType.UserInput.value], 1)
+        if input_message:
+            question = input_message[0].message
+
+        llm_conf = LLMService.get_workbench_llm_sync()
+        if not llm_conf or not llm_conf.chat_title_llm or not llm_conf.chat_title_llm.id:
+            return
+        llm = LLMService.get_bisheng_llm_sync(
+            model_id=llm_conf.chat_title_llm.id,
+            app_id=ApplicationTypeEnum.DAILY_CHAT.value,
+            app_name='workflow_chat_title',
+            app_type=ApplicationTypeEnum.DAILY_CHAT,
+            user_id=self.user_id
+        )
+        title = generate_conversation_title_sync(question=question, llm=llm, answer=answer)
+        MessageSessionDao.update_session_name_sync(self.new_session.chat_id, title)
+        self.new_session.name = title
 
     def on_node_start(self, data: NodeStartData):
         """ node start event """

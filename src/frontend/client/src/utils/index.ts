@@ -204,40 +204,67 @@ export function formatStrTime(time: string, notSameDayFormat: string): string {
     date1.getDate() === date2.getDate() ? formatDate(date1, 'HH:mm') : formatDate(date1, notSameDayFormat)
 }
 
-const copyTextInDom = (dom) => {
+const copyTextInDom = (dom: HTMLElement): Promise<string> => {
   const range = document.createRange();
-
   range.selectNode(dom);
-  window.getSelection().removeAllRanges();
-  window.getSelection().addRange(range);
-
-  return new Promise((res) => {
-    document.execCommand('copy');
-    window.getSelection().removeAllRanges();
-    res(dom.innerText);
-  })
-}
-
-// 复制到剪切板
-export const copyText = (text: string | HTMLElement) => {
-  // 复制 dom 内文本
-  if (typeof text !== 'string') return copyTextInDom(text)
-  // 高级 API直接复制文本（需要 https 环境）
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    return navigator.clipboard.writeText(text)
+  const selection = window.getSelection();
+  if (selection) {
+    selection.removeAllRanges();
+    selection.addRange(range);
   }
-  // 通过把文本写入 dom, 间接通过选中 dom 复制文本
-  const areaDom = document.createElement("textarea");
-  // 设置样式使其不在屏幕上显示
-  areaDom.style.position = 'absolute';
-  areaDom.style.left = '-9999px';
-  areaDom.value = text;
-  document.body.appendChild(areaDom);
-
-  return copyTextInDom(areaDom).then((str) => {
-    document.body.removeChild(areaDom);
-  })
+  return new Promise((resolve) => {
+    document.execCommand('copy');
+    window.getSelection()?.removeAllRanges();
+    resolve(dom.innerText);
+  });
 };
+
+// Copy text to clipboard with Firefox-compatible fallback
+export const copyText = (text: string | HTMLElement): Promise<string | void> => {
+  // Copy DOM element content
+  if (typeof text !== 'string') return copyTextInDom(text);
+
+  // Always run the legacy fallback first — it is synchronous and works reliably
+  // inside focus-trapped dialogs (Radix Dialog portals) where the async Clipboard
+  // API may silently resolve without actually writing in Firefox.
+  // If the fallback succeeds we are done; otherwise try the Clipboard API.
+  const fallbackOk = copyTextFallbackSync(text);
+  if (fallbackOk) return Promise.resolve();
+
+  if (navigator.clipboard?.writeText) {
+    return navigator.clipboard.writeText(text);
+  }
+  return Promise.reject(new Error('copy failed'));
+};
+
+/**
+ * Synchronous copy via a hidden textarea + execCommand.
+ * Appends inside the active dialog (if any) so that Radix focus-trap does not
+ * steal focus away from the textarea in Firefox.
+ * Returns true if execCommand reported success.
+ */
+function copyTextFallbackSync(text: string): boolean {
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.style.position = 'fixed';
+  textarea.style.left = '-9999px';
+  textarea.style.top = '-9999px';
+  textarea.style.opacity = '0';
+  // Append inside the active dialog to avoid focus-trap interference
+  const container = document.activeElement?.closest('[role="dialog"]') || document.body;
+  container.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+  let ok = false;
+  try {
+    ok = document.execCommand('copy');
+  } catch {
+    // execCommand can throw in rare cases
+  } finally {
+    container.removeChild(textarea);
+  }
+  return ok;
+}
 
 
 export function downloadFile(url, label) {
@@ -265,6 +292,39 @@ export const generateUUID = (length: number) => {
   return uuid
 }
 
+
+/**
+ * Calculate the full-width length of a string.
+ * Full-width characters (e.g. CJK) count as 1, half-width characters (e.g. letters, digits) count as 0.5.
+ * Example: "你好world" => 2 + 5*0.5 = 4.5
+ */
+export function getFullWidthLength(str: string): number {
+  let len = 0;
+  for (let i = 0; i < str.length; i++) {
+    const code = str.charCodeAt(i);
+    if (code <= 0x7F) {
+      len += 0.5;
+    } else {
+      len += 1;
+    }
+  }
+  return len;
+}
+
+/**
+ * Truncate a string so that its full-width length does not exceed maxLen.
+ */
+export function truncateByFullWidth(str: string, maxLen: number): string {
+  let len = 0;
+  for (let i = 0; i < str.length; i++) {
+    const code = str.charCodeAt(i);
+    len += code <= 0x7F ? 0.5 : 1;
+    if (len > maxLen) {
+      return str.slice(0, i);
+    }
+  }
+  return str;
+}
 
 // 取后缀名
 export function getFileExtension(filename) {

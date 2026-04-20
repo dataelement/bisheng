@@ -111,6 +111,8 @@
     "knowledge": "Knowledge",
     "evaluation": "Evaluation",
     "board": "Dashboard",
+    "workbench1": "Subscribe",
+    "workbench2": "Knowledge Space",
     "annotation": "Annotation",
     "models": "Models",
     "system": "System",
@@ -165,6 +167,12 @@
     "spaceName": "Space Name",
     "workspace": "Workspace",
     "adminSpace": "Admin Console",
+    "knowledgeSpaceFileUploadLimit": "Knowledge Space File Upload Limit",
+    "knowledgeSpaceFileLimitDesc": "Limit the maximum file capacity that users can upload in the knowledge space",
+    "maxTotalUpload": "Maximum total upload",
+    "workbenchMenuAuthorization": "Workbench Menu",
+    "adminMenuAuthorization": "Admin Menu",
+    "workbenchMenu": "Workbench menu item",
     "roleNameExists": "Role name already exists",
     "groupNameExists": "UserGroup name already exists",
     "groupNamePrompt": "UserGroup name cannot exceed 30 characters",
@@ -480,7 +488,9 @@
     "functionDescription": "Function Description",
     "functionDescriptionPlaceholder": "I can help you write code, read files, create various creative content, please give me your tasks～",
     "inputPlaceholder": "Input Placeholder",
+    "modelDisplayName":"LingSi Mode Display Name",
     "inputPlaceholderPlaceholder": "Send message to XX",
+    "dailyModeName":"Name of Daily Mode",
     "appCenterWelcome": "App Center Welcome Message",
     "appCenterWelcomePlaceholder": "Explore $t(bisheng) Agents",
     "appCenterDescription": "App Center Description",
@@ -512,6 +522,18 @@
     "deleteSuccess": "SOP deleted successfully",
     "deleteFailed": "Delete failed",
     "batchDeleteSuccess": "Successfully deleted {{count}} SOP(s)",
+    "prompts":"AI conversation prompts",
+    "sysPrompts":"System prompts",
+    "userPrompts":"User prompts",
+    "articleMax":"Maximum length for single-article Q&A",
+    "knowledgeArticleMaxLengthTooltip": "Used to limit the maximum length of a single article that can be used as full-text input to the model in subscription article Q&A scenarios.",
+    "character": "characters",
+    "feedbackPrompt": "Feedback Request",
+    "manualCrawlRequestTooltip": "Used to guide users to submit requests for manual website crawling",
+    "aiPrompt": "# Role\nYou are a rigorous AI assistant. Your task is to answer user questions based on the user's question and the provided reference materials.\nWhen answering, please note the following:\n1. Please respond in the language used by the user.\n2. Only answer when there is clear information related to the question in the [Reference Materials]. Keep answers rigorous and professional, do not speculate on your own, and cite the source of the reference materials in your answers. If different reference sources have differences or even conflicts, list them all.\n3. If the [Reference Materials] are not related to the user's question, reply with \"没有找到相关内容\" or \"no content found\".\n4. If the article content contains image references (e.g., ![image](path/IMAGE_1.png)), please still render the images using Markdown format, do not modify or delete them.\n5. The current time is {cur_date}.",
+    "referenceAndQuestion": "# Reference Materials\n```\n{article_content}\n```\n# User Question\n{question}",
+    "knowledgeSpaceMaxChars": "Maximum characters for knowledge space search results",
+    "retrievedAndQuestion": "# Reference Materials\n```\n{retrieved_file_content}\n```\n# User Question\n{question}",
     "webSearch": {
       "engine": "Web Search Engine",
       "config": "Web Search Tool Configuration",
@@ -526,6 +548,8 @@
       "serverUrlPlaceholder": "Enter the searXNG access URL you deployed, e.g., http://localhost:8080"
     },
     "errors": {
+      "dailyModeNameRequired": "Daily mode display name cannot be empty",
+      "lingsiModeNameRequired": "Lingsi mode display name cannot be empty",
       "maxCharacters": "Maximum {{count}} characters",
       "atLeastOneModel": "Add at least one model",
       "modelNameRequired": "Model display name cannot be empty",
@@ -919,6 +943,8 @@
   "bench": {
     "daily": "Daily",
     "lingsi": "$t(linsight)",
+    "subscribe": "Subscribe",
+    "knowledgeSpace": "KnowledgeSpace",
     "model": "Model",
     "displayName": "Display Name",
     "vision": "Vision",
@@ -1050,7 +1076,11 @@
       "build": "Build",
       "knowledge": "Knowledge Base",
       "dashboard": "Dashboard",
-      "system": "System"
+      "system": "System",
+      "subscribe": "Subscription",
+      "subscription": "Subscription",
+      "knowledgeSpace": "Knowledge Space",
+      "knowledge_space": "Knowledge Space"
     },
     "eventTypeEnum": {
       "createChat": "Create Session",
@@ -1099,7 +1129,11 @@
       "user_login": "User Login",
       "addTool": "Create Tool",
       "updateTool": "Edit Tool",
-      "deleteTool": "Delete Tool"
+      "deleteTool": "Delete Tool",
+      "create_channel": "Create Channel",
+      "delete_channel": "Delete Channel",
+      "create_knowledge_space": "Create Knowledge Space",
+      "delete_knowledge_space": "Delete Knowledge Space"
     },
     "objectTypeEnum": {
       "none": "None",
@@ -1113,7 +1147,9 @@
       "tool": "Tool",
       "dashboard": "Dashboard",
       "knowledge": "Knowledge Base",
-      "workstation": "Workbench (Daily Mode)"
+      "workstation": "Workbench (Daily Mode)",
+      "channel": "Channel",
+      "knowledge_space": "Knowledge Space"
     },
     "appUsage": "App Usage",
     "systemOperations": "System Operations",
@@ -1555,6 +1591,7 @@
     "15022": "OpenAPI schema parse error: {{exception}}",
     "15023": "Server URLs must start with http or https: {{url}}",
     "15024": "MCP config parse error: {{exception}}",
+    "15025": "System does not allow adding stdio mode MCP tools",
     "16000": "Dataset name already exists",
     "17000": "A maximum of 20 dashboards can be created",
     "17005": "Your current role does not have permission to access this dashboard. Please contact the administrator if needed.",

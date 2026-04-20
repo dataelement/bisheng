@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { useForm, FormProvider } from 'react-hook-form';
-import { EModelEndpoint, alternateName, isAssistantsEndpoint } from '~/data-provider/data-provider/src';
+import { EModelEndpoint, alternateName, isAssistantsEndpoint } from '~/types/chat';
 import type { TDialogProps } from '~/common';
 import OGDialogTemplate from '~/components/ui/OGDialogTemplate';
-import { useGetEndpointsQuery } from '~/data-provider';
+import { useGetEndpointsQuery } from '~/hooks/queries/data-provider';
 import { OGDialog, Dropdown } from '~/components/ui';
 import { RevokeKeysButton } from '~/components/Nav';
 import { useUserKey, useLocalize } from '~/hooks';

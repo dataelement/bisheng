@@ -33,19 +33,21 @@ class KnowledgeRag:
 
     @classmethod
     async def init_knowledge_milvus_vectorstore(cls, invoke_user_id: int, knowledge: Knowledge = None,
-                                                knowledge_id: int = None, **kwargs) -> Milvus:
+                                                knowledge_id: int = None, embeddings=None, **kwargs) -> Milvus:
         knowledge = await cls._get_knowledge(knowledge, knowledge_id)
-        embedding = await LLMService.get_bisheng_knowledge_embedding(model_id=int(knowledge.model),
-                                                                     invoke_user_id=invoke_user_id)
-        return cls.init_milvus_vectorstore(knowledge.collection_name, embedding, **kwargs)
+        if embeddings is None:
+            embeddings = await LLMService.get_bisheng_knowledge_embedding(model_id=int(knowledge.model),
+                                                                          invoke_user_id=invoke_user_id)
+        return cls.init_milvus_vectorstore(knowledge.collection_name, embeddings, **kwargs)
 
     @classmethod
     def init_knowledge_milvus_vectorstore_sync(cls, invoke_user_id: int, knowledge: Knowledge = None,
-                                               knowledge_id: int = None, **kwargs) -> Milvus:
+                                               knowledge_id: int = None, embeddings=None, **kwargs) -> Milvus:
         knowledge = cls._get_knowledge_sync(knowledge, knowledge_id)
-        embedding = LLMService.get_bisheng_knowledge_embedding_sync(model_id=int(knowledge.model),
-                                                                    invoke_user_id=invoke_user_id)
-        return cls.init_milvus_vectorstore(knowledge.collection_name, embedding, **kwargs)
+        if embeddings is None:
+            embeddings = LLMService.get_bisheng_knowledge_embedding_sync(model_id=int(knowledge.model),
+                                                                         invoke_user_id=invoke_user_id)
+        return cls.init_milvus_vectorstore(knowledge.collection_name, embeddings, **kwargs)
 
     @classmethod
     async def init_knowledge_es_vectorstore(cls, knowledge: Knowledge = None, knowledge_id: int = None,

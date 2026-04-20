@@ -1,5 +1,5 @@
 import { useRecoilCallback } from 'recoil';
-import type { TMessage } from '~/data-provider/data-provider/src';
+import type { TMessage } from '~/types/chat';
 import store from '~/store';
 
 export default function useBuildMessageTree() {

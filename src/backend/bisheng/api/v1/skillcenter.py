@@ -3,11 +3,9 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Depends
 from sqlmodel import select
 
-from bisheng.api.utils import remove_api_keys
 from bisheng.api.v1.schemas import resp_200
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.flow import FlowTemplateNameError
-from bisheng.common.services.config_service import settings
 from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.flow import Flow
 from bisheng.database.models.template import Template, TemplateCreate, TemplateUpdate
@@ -85,8 +83,6 @@ def update_template(*, id: int, template: TemplateUpdate):
     if not db_template:
         raise HTTPException(status_code=404, detail='Template not found')
     template_data = template.model_dump(exclude_unset=True)
-    if settings.remove_api_keys:
-        template_data = remove_api_keys(template_data)
     for key, value in template_data.items():
         setattr(db_template, key, value)
     with get_sync_db_session() as session:

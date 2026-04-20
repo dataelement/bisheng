@@ -1,13 +1,13 @@
 import React, { useMemo, useEffect } from 'react';
 import { ChevronLeft, RotateCcw } from 'lucide-react';
 import { useFormContext, useWatch, Controller } from 'react-hook-form';
-import { getSettingsKeys, alternateName } from '~/data-provider/data-provider/src';
-import type * as t from '~/data-provider/data-provider/src';
+import { getSettingsKeys, alternateName } from '~/types/chat';
+import type * as t from '~/types/chat';
 import type { AgentForm, AgentModelPanelProps, StringOption } from '~/common';
 import { componentMapping } from '~/components/SidePanel/Parameters/components';
 import { agentSettings } from '~/components/SidePanel/Parameters/settings';
 import ControlCombobox from '~/components/ui/ControlCombobox';
-import { useGetEndpointsQuery } from '~/data-provider';
+import { useGetEndpointsQuery } from '~/hooks/queries/data-provider';
 import { getEndpointField, cn } from '~/utils';
 import { useLocalize } from '~/hooks';
 import { Panel } from '~/common';

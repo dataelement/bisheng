@@ -3,7 +3,7 @@ import type {
   TConversation,
   EModelEndpoint,
   TEndpointsConfig,
-} from '~/data-provider/data-provider/src';
+} from '~/types/chat';
 import { getLocalStorageItems } from './localStorage';
 import { mapEndpoints } from './endpoints';
 
@@ -48,7 +48,7 @@ const getEndpointFromLocalStorage = (endpointsConfig: TEndpointsConfig) => {
 
 const getDefinedEndpoint = (endpointsConfig: TEndpointsConfig) => {
   const endpoints = mapEndpoints(endpointsConfig);
-  return endpoints.find((e) => Object.hasOwn(endpointsConfig ?? {}, e));
+  return endpoints.find((e) => Object.prototype.hasOwnProperty.call(endpointsConfig ?? {}, e));
 };
 
 const getDefaultEndpoint = ({

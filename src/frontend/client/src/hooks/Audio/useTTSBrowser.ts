@@ -1,8 +1,8 @@
 // client/src/hooks/Audio/useTTSBrowser.ts
 import { useRef, useEffect, useState } from 'react';
 import { useRecoilState, useRecoilValue } from 'recoil';
-import { parseTextParts } from '~/data-provider/data-provider/src';
-import type { TMessageContentParts } from '~/data-provider/data-provider/src';
+import { parseTextParts } from '~/types/chat';
+import type { TMessageContentParts } from '~/types/chat';
 import useTextToSpeechBrowser from '~/hooks/Input/useTextToSpeechBrowser';
 import usePauseGlobalAudio from '~/hooks/Audio/usePauseGlobalAudio';
 import useAudioRef from '~/hooks/Audio/useAudioRef';

@@ -1,8 +1,8 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { QueryKeys } from '~/data-provider/data-provider/src';
-import type { ConversationListResponse } from '~/data-provider/data-provider/src';
+import { QueryKeys } from '~/types/chat';
+import type { ConversationListResponse } from '~/types/chat';
 import type { InfiniteData } from '@tanstack/react-query';
-import type t from '~/data-provider/data-provider/src';
+import type * as t from '~/types/chat';
 import { updateConvoFields } from '~/utils/convos';
 
 const useUpdateTagsInConvo = () => {

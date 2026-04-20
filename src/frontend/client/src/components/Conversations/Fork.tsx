@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { useRecoilState } from 'recoil';
 import { GitFork, InfoIcon } from 'lucide-react';
 import * as Popover from '@radix-ui/react-popover';
-import { ForkOptions } from '~/data-provider/data-provider/src';
+import { ForkOptions } from '~/types/chat';
 import { GitCommit, GitBranchPlus, ListTree } from 'lucide-react';
 import {
   Checkbox,
@@ -13,7 +13,7 @@ import {
 } from '~/components/ui';
 import OptionHover from '~/components/SidePanel/Parameters/OptionHover';
 import { TranslationKeys, useLocalize, useNavigateToConvo } from '~/hooks';
-import { useForkConvoMutation } from '~/data-provider';
+import { useForkConvoMutation } from '~/hooks/queries/data-provider';
 import { useToastContext } from '~/Providers';
 import { ESide } from '~/common';
 import { cn } from '~/utils';

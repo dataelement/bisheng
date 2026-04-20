@@ -10,10 +10,10 @@ import {
   isAssistantsEndpoint,
   defaultAssistantsVersion,
   fileConfig as defaultFileConfig,
-} from '~/data-provider/data-provider/src';
-import type { TEndpointsConfig, TError } from '~/data-provider/data-provider/src';
+} from '~/types/chat';
+import type { TEndpointsConfig, TError } from '~/types/chat';
 import type { ExtendedFile, FileSetter } from '~/common';
-import { useUploadFileMutation, useGetFileConfig } from '~/data-provider';
+import { useUploadFileMutation, useGetFileConfig } from '~/hooks/queries/data-provider';
 import useLocalize, { TranslationKeys } from '~/hooks/useLocalize';
 import { useDelayedUploadToast } from './useDelayedUploadToast';
 import { useToastContext } from '~/Providers/ToastContext';
@@ -28,6 +28,7 @@ type UseFileHandling = {
   fileSetter?: FileSetter;
   fileFilter?: (file: File) => boolean;
   additionalMetadata?: Record<string, string | undefined>;
+  isLinsight?: boolean;
 };
 
 const useFileHandling = (params?: UseFileHandling) => {
@@ -173,6 +174,10 @@ const useFileHandling = (params?: UseFileHandling) => {
           formData.append(key, value);
         }
       }
+    }
+
+    if (params?.isLinsight) {
+      formData.append('isLinsight', 'true');
     }
 
     if (isAgentsEndpoint(endpoint)) {

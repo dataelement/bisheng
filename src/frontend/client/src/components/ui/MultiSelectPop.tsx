@@ -1,6 +1,6 @@
 import { Wrench } from 'lucide-react';
 import { Root, Trigger, Content, Portal } from '@radix-ui/react-popover';
-import type { TPlugin } from '~/data-provider/data-provider/src';
+import type { TPlugin } from '~/types/chat';
 import MenuItem from '~/components/Chat/Menus/UI/MenuItem';
 import { useMultiSearch } from './MultiSearch';
 import { cn } from '~/utils/';

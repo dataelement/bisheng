@@ -1,10 +1,10 @@
-import type { ConversationListResponse } from '~/data-provider/data-provider/src';
-import { PermissionTypes, Permissions } from '~/data-provider/data-provider/src';
+import type { ConversationListResponse } from '~/types/chat';
+import { PermissionTypes, Permissions } from '~/types/chat';
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchContext } from '~/Providers';
 import { Conversations } from '~/components/Conversations';
 import { Spinner } from '~/components/svg';
-import { useConversationsInfiniteQuery } from '~/data-provider';
+import { useConversationsInfiniteQuery } from '~/hooks/queries/data-provider';
 import {
   useAuthContext,
   useHasAccess,
@@ -32,7 +32,6 @@ const Nav = ({
   const [isHovering, setIsHovering] = useState(false);
   const isSmallScreen = useMediaQuery('(max-width: 768px)');
   const [newUser, setNewUser] = useLocalStorage('newUser', true);
-  const [isToggleHovering, setIsToggleHovering] = useState(false);
 
   const hasAccessToBookmarks = useHasAccess({
     permissionType: PermissionTypes.BOOKMARKS,
@@ -55,7 +54,7 @@ const Nav = ({
       }
       setNavWidth('320px');
     } else {
-      setNavWidth('260px');
+      setNavWidth('240px');
     }
   }, [isSmallScreen]);
 
@@ -116,7 +115,7 @@ const Nav = ({
       <div
         data-testid="nav"
         className={
-          'nav active max-w-[320px] flex-shrink-0 overflow-x-hidden md:max-w-[260px] bg-[#F9FBFF]'
+          'nav active max-w-[240px] flex-shrink-0 overflow-x-hidden md:max-w-[240px] bg-white border-r border-[#ececec]'
         }
         style={{
           width: navVisible ? navWidth : '0px',
@@ -124,12 +123,12 @@ const Nav = ({
           transition: 'width 0.2s, visibility 0.2s',
         }}
       >
-        <div className="h-full w-[320px] md:w-[260px]">
+        <div className="h-full w-[240px] md:w-[240px]">
           <div className="flex h-full min-h-0 flex-col">
             <div
               className={cn(
                 'flex h-full min-h-0 flex-col transition-opacity',
-                isToggleHovering && !isSmallScreen ? 'opacity-50' : 'opacity-100',
+                'opacity-100',
               )}
             >
               <div
@@ -140,12 +139,13 @@ const Nav = ({
                 <nav
                   id="chat-history-nav"
                   aria-label={localize('com_ui_chat_history')}
-                  className="flex h-full w-full flex-col px-3 pb-3.5"
+                  className="flex h-full w-full flex-col px-3 py-5"
                 >
                   {/* 新建 */}
                   <NewChat
-                    toggleNav={itemToggleNav}
+                    toggleNav={toggleNavVisible}
                     isSmallScreen={isSmallScreen}
+                    showToggleButton
                   />
                   <div
                     className={cn(
@@ -167,21 +167,23 @@ const Nav = ({
                     )}
                   </div>
                   {/* 左下角设置 */}
-                  <AccountSettings />
+                  {/* <AccountSettings /> */}
                 </nav>
               </div>
             </div>
           </div>
         </div>
       </div>
-      {/* 展开 */}
-      <NavToggle
-        isHovering={isToggleHovering}
-        setIsHovering={setIsToggleHovering}
-        onToggle={toggleNavVisible}
-        navVisible={navVisible}
-        className="fixed left-0 top-1/2 z-40 hidden md:flex"
-      />
+      {!isSmallScreen && (
+        <NavToggle
+          navVisible={navVisible}
+          onToggle={toggleNavVisible}
+          isHovering={isHovering}
+          setIsHovering={setIsHovering}
+          className="fixed top-1/2 z-[50]"
+          translateX={236}
+        />
+      )}
       {isSmallScreen && (
         <div
           id="mobile-nav-mask-toggle"

@@ -3,7 +3,7 @@ from enum import Enum
 from typing import Optional, List
 
 from sqlalchemy import JSON
-from sqlmodel import Field, Column, DateTime, text, select, func, update
+from sqlmodel import Field, Column, DateTime, text, select, func, update, col
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session, get_async_db_session
@@ -18,9 +18,10 @@ class SensitiveStatus(Enum):
 class MessageSessionBase(SQLModelSerializable):
     """ Conversation table """
     chat_id: str = Field(default=None, primary_key=True, description='Session UniqueID')
-    flow_id: str = Field(index=True, description='Apply UniqueID')
+    name: Optional[str] = Field(default="", description='SessionName')
+    flow_id: str = Field(default="", index=True, description='Apply UniqueID')
     flow_type: int = Field(description='App type. Skills, assistants, workflows')
-    flow_name: str = Field(index=True, description='Application name')
+    flow_name: str = Field(default="", index=True, description='Application name')
     flow_description: Optional[str] = Field(default=None, description='App Description')
     flow_logo: Optional[str] = Field(default=None, description='Applicationslogo')
     user_id: int = Field(index=True, description='User who created the sessionID')
@@ -144,7 +145,8 @@ class MessageSessionDao(MessageSessionBase):
                        exclude_chats: List[str] = None,
                        page: int = 0,
                        limit: int = 0,
-                       flow_type: List[int] = None) -> List[MessageSession]:
+                       flow_type: List[int] = None,
+                       order_by_update_time: bool = False) -> List[MessageSession]:
         statement = select(MessageSession)
         statement = cls.generate_filter_session_statement(statement,
                                                           chat_ids,
@@ -159,7 +161,11 @@ class MessageSessionDao(MessageSessionBase):
                                                           flow_type=flow_type)
         if page and limit:
             statement = statement.offset((page - 1) * limit).limit(limit)
-        statement = statement.order_by(MessageSession.create_time.desc())
+        # Order by update_time or create_time
+        if order_by_update_time:
+            statement = statement.order_by(MessageSession.update_time.desc())
+        else:
+            statement = statement.order_by(MessageSession.create_time.desc())
         with get_sync_db_session() as session:
             return session.exec(statement).all()
 
@@ -285,3 +291,75 @@ class MessageSessionDao(MessageSessionBase):
         with get_sync_db_session() as session:
             session.exec(statement)
             session.commit()
+
+    @classmethod
+    async def update_session_name(cls, chat_id: str, name: str):
+        statement = update(MessageSession).where(col(MessageSession.chat_id) == chat_id).values(
+            name=name,
+            update_time=datetime.now()
+        )
+        async with get_async_db_session() as session:
+            await session.exec(statement)
+            await session.commit()
+
+    @classmethod
+    async def touch_session(cls, chat_id: str):
+        statement = update(MessageSession).where(col(MessageSession.chat_id) == chat_id).values(
+            update_time=datetime.now()
+        )
+        async with get_async_db_session() as session:
+            await session.exec(statement)
+            await session.commit()
+
+    @classmethod
+    def update_session_name_sync(cls, chat_id: str, name: str):
+        statement = update(MessageSession).where(col(MessageSession.chat_id) == chat_id).values(
+            name=name,
+            update_time=datetime.now()
+        )
+        with get_sync_db_session() as session:
+            session.exec(statement)
+            session.commit()
+
+    @classmethod
+    async def get_user_used_apps(cls, user_id: int = None, flow_types: List[int] = None,
+                                 use_create_time: bool = False) -> List[tuple]:
+        """
+        Query the list of apps used by the user (or all users if user_id is None).
+        Deduplicate by flow_id, keeping the record with the latest time.
+
+        Args:
+            user_id: User ID, or None to query across all users
+            flow_types: List of flow types to filter (e.g., [FlowType.ASSISTANT.value, FlowType.WORKFLOW.value])
+            use_create_time: If True, use create_time instead of update_time
+
+        Returns:
+            List of tuples: [(flow_id, last_used_time, flow_type), ...]
+        """
+        # Subquery: get the max time for each flow_id
+        time_col = MessageSession.create_time if use_create_time else MessageSession.update_time
+        conditions = [MessageSession.is_delete == False]  # noqa
+        if user_id is not None:
+            conditions.append(MessageSession.user_id == user_id)
+
+        subquery = select(
+            MessageSession.flow_id,
+            func.max(time_col).label('last_used_time'),
+            MessageSession.flow_type
+        ).where(*conditions)
+
+        if flow_types:
+            subquery = subquery.where(MessageSession.flow_type.in_(flow_types))
+
+        subquery = subquery.group_by(MessageSession.flow_id, MessageSession.flow_type).subquery()
+
+        # Main query: order by last_used_time desc
+        statement = select(
+            subquery.c.flow_id,
+            subquery.c.last_used_time,
+            subquery.c.flow_type
+        ).order_by(subquery.c.last_used_time.desc())
+
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return result.all()

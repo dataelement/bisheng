@@ -1,5 +1,5 @@
 import { useRecoilState } from 'recoil';
-import { EModelEndpoint, SettingsViews } from '~/data-provider/data-provider/src';
+import { EModelEndpoint, SettingsViews } from '~/types/chat';
 import type { ReactNode } from 'react';
 import { MessagesSquared, GPTIcon, AssistantIcon, DataIcon } from '~/components/svg';
 import { useChatContext } from '~/Providers';

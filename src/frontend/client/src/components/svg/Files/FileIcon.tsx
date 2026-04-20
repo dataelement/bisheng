@@ -1,4 +1,4 @@
-import type { TFile } from '~/data-provider/data-provider/src';
+import type { TFile } from '~/types/chat';
 import type { ExtendedFile } from '~/common';
 
 export default function FileIcon({

@@ -1,7 +1,7 @@
 import { Plus, X } from 'lucide-react';
 import React, { useRef, useState } from 'react';
 import { Transition } from 'react-transition-group';
-import { Constants } from '~/data-provider/data-provider/src';
+import { Constants } from '~/types/chat';
 import { cn, defaultTextProps, removeFocusOutlines } from '~/utils';
 import { TooltipAnchor } from '~/components/ui';
 import HideSequential from './HideSequential';

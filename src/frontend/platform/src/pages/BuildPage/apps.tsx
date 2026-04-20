@@ -37,7 +37,7 @@ export const SelectType = ({ all = false, defaultValue = 'all', onChange }) => {
     const options: any = [
         { label: t('build.workflow'), value: AppType.FLOW },
         { label: t('build.assistant'), value: AppType.ASSISTANT },
-        { label: t('build.skill'), value: AppType.SKILL },
+        // { label: t('build.skill'), value: AppType.SKILL },
     ];
 
     if (all) {

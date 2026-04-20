@@ -1,7 +1,6 @@
-import asyncio
 import json
 import os
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 from fastapi import (APIRouter, BackgroundTasks, Body, File, Form, HTTPException, Query, Request,
                      UploadFile)
@@ -9,22 +8,19 @@ from loguru import logger
 from starlette.responses import FileResponse
 
 from bisheng.api.services import knowledge_imp
-from bisheng.api.services.knowledge import KnowledgeService
-from bisheng.api.services.knowledge_imp import (decide_vectorstores, delete_es, delete_vector,
-                                                text_knowledge)
+from bisheng.api.services.knowledge_imp import (text_knowledge)
 from bisheng.api.v1.schemas import (ChunkInput, KnowledgeFileOne, KnowledgeFileProcess,
                                     resp_200, resp_500, ExcelRule)
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.errcode.http_error import ServerError
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
-from bisheng.core.cache.utils import file_download, save_download_file, async_file_download
+from bisheng.core.cache.utils import save_download_file, async_file_download
 from bisheng.core.logger import trace_id_var
-from bisheng.database.models.message import ChatMessageDao
-from bisheng.interface.embeddings.custom import FakeEmbedding
 from bisheng.knowledge.domain.models.knowledge import (KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum,
                                                        KnowledgeUpdate)
 from bisheng.knowledge.domain.models.knowledge_file import (QAKnoweldgeDao, QAKnowledgeUpsert)
+from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.open_endpoints.domain.schemas.filelib import APIAddQAParam, APIAppendQAParam, QueryQAParam
 from bisheng.open_endpoints.domain.utils import get_default_operator, get_default_operator_async
 from bisheng.utils.util import sync_func_to_async
@@ -108,7 +104,7 @@ async def upload_file(
         if not file_name:
             return resp_500(message='file name must be not empty')
         # Cache Local
-        file_path = await sync_func_to_async(save_download_file)(save_download_file, file.file, 'bisheng', file_name)
+        file_path = await sync_func_to_async(save_download_file)(file.file, 'bisheng', file_name)
     else:
         file_path, file_name = await async_file_download(file_url)
 
@@ -184,8 +180,7 @@ async def post_chunks(request: Request,
                                     separator_rule=separator_rule,
                                     chunk_size=chunk_size,
                                     chunk_overlap=chunk_overlap,
-                                    file_list=[KnowledgeFileOne(file_path=file_path)],
-                                    extra=metadata)
+                                    file_list=[KnowledgeFileOne(file_path=file_path)])
 
     res = await sync_func_to_async(KnowledgeService.sync_process_knowledge_file)(request, login_user, req_data)
     return resp_200(data=res[0])
@@ -218,46 +213,6 @@ async def post_string_chunks(request: Request, document: ChunkInput):
     res = await sync_func_to_async(text_knowledge)(knowledge, process_files[0], document.documents)
 
     return resp_200(data=res)
-
-
-@router.post('/chunk_clear', status_code=200)
-async def clear_tmp_chunks_data(body: Dict):
-    # Delete via Interfacemilvus、es DATA
-    flow_id = body.get('flow_id')
-    chat_id = body.get('chat_id')
-
-    if flow_id and not chat_id:
-        # Clean temporary files under the skill
-        flow_id = flow_id.replace('-', '')
-        collection_name = f'tmp_{flow_id}_1'
-        delete_es(collection_name)
-        delete_vector(collection_name, None)
-    if chat_id:
-        #  Query auto-generated
-        message = ChatMessageDao.get_latest_message_by_chatid(chat_id)
-        if message:
-            collection_name = f'tmp_{message.flow_id}_{chat_id}'
-            delete_es(collection_name)
-            delete_vector(collection_name, None)
-
-    return resp_200()
-
-
-@router.get('/dump_vector', status_code=200)
-def dump_vector_knowledge(collection_name: str, expr: str = None, store: str = 'Milvus'):
-    # dump vector db
-    embedding_tmp = FakeEmbedding()
-    vector_store = decide_vectorstores(collection_name, store, embedding_tmp)
-
-    if vector_store and vector_store.col:
-        fields = [
-            s.name for s in vector_store.col.schema.fields
-            if s.name not in ['pk', 'bbox', 'vector']
-        ]
-        res_list = vector_store.col.query('file_id>1', output_fields=fields)
-        return resp_200(res_list)
-    else:
-        return resp_500('Parameter salah')
 
 
 @router.get('/download_statistic')

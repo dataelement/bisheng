@@ -1,19 +1,20 @@
 import { useRecoilValue } from 'recoil';
 import { useCallback, useRef, useEffect } from 'react';
-import { useGetModelsQuery } from '~/data-provider/data-provider/src/react-query';
-import { LocalStorageKeys, isAssistantsEndpoint } from '~/data-provider/data-provider/src';
+import { useGetModelsQuery } from '~/hooks/queries';
+import useLocalize from '~/hooks/useLocalize';
+import { LocalStorageKeys, isAssistantsEndpoint } from '~/types/chat';
 import type {
   TPreset,
   TModelsConfig,
   TConversation,
   TEndpointsConfig,
   EModelEndpoint,
-} from '~/data-provider/data-provider/src';
+} from '~/types/chat';
 import type { SetterOrUpdater } from 'recoil';
 import type { AssistantListItem } from '~/common';
 import { getEndpointField, buildDefaultConvo, getDefaultEndpoint } from '~/utils';
 import useAssistantListMap from '~/hooks/Assistants/useAssistantListMap';
-import { useGetEndpointsQuery } from '~/data-provider';
+import { useGetEndpointsQuery } from '~/hooks/queries/data-provider';
 import { mainTextareaId } from '~/common';
 import store from '~/store';
 
@@ -26,6 +27,7 @@ const useGenerateConvo = ({
   rootIndex: number;
   setConversation?: SetterOrUpdater<TConversation | null>;
 }) => {
+  const localize = useLocalize();
   const modelsQuery = useGetModelsQuery();
   const assistantsListMap = useAssistantListMap();
   const { data: endpointsConfig = {} as TEndpointsConfig } = useGetEndpointsQuery();
@@ -61,7 +63,7 @@ const useGenerateConvo = ({
     } = {}) => {
       let conversation = {
         conversationId: 'new',
-        title: 'New Chat',
+        title: localize('com_ui_new_chat'),
         endpoint: null,
         ...template,
         createdAt: '',

@@ -1,5 +1,5 @@
 import { useMemo, memo } from 'react';
-import type { TFile, TMessage } from '~/data-provider/data-provider/src';
+import type { TFile, TMessage } from '~/types/chat';
 import FileContainer from '~/components/Chat/Input/Files/FileContainer';
 import Image from './Image';
 

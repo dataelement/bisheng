@@ -2,7 +2,7 @@ import { FileText, MessageCircleMoreIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '~/components/ui/Select';
-import { useConversationsInfiniteQuery } from '~/data-provider';
+import { useConversationsInfiniteQuery } from '~/hooks/queries/data-provider';
 import { useLocalize } from '~/hooks';
 import { useLinsightManager } from '~/hooks/useLinsightManager';
 import { getFileExtension } from '~/utils';
@@ -34,7 +34,13 @@ export const Header = ({ isLoading, chatId, isSharePage, setVersionId, versionId
             }
 
             <div className="flex items-center gap-3">
-                {!isSharePage && <ShareChat type='linsight_session' chatId={linsight?.session_id} versionId={versionId} />}
+                {!isSharePage && (
+                    <ShareChat
+                        type="linsight_session"
+                        chatId={linsight?.session_id}
+                        versionId={versionId}
+                    />
+                )}
 
                 <Popover>
                     <PopoverTrigger asChild>

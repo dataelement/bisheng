@@ -3,7 +3,7 @@ import { useRecoilState, useRecoilValue, useSetRecoilState } from 'recoil';
 import { v4 } from 'uuid';
 import { useAddedChatContext, useChatContext, useChatFormContext } from '~/Providers';
 import { sameSopLabelState } from '~/components/Chat/Input/SameSopSpan';
-import { Constants } from '~/data-provider/data-provider/src';
+import { Constants } from '~/types/chat';
 import { useAuthContext } from '~/hooks/AuthContext';
 import store from '~/store';
 import { replaceSpecialVars } from '~/utils';
@@ -31,10 +31,12 @@ export default function useSubmitMessage(helpers?: { clearDraft?: () => void }) 
   const [sameSopLabel, setSameSopLabel] = useRecoilState(sameSopLabelState)
 
   const submitMessage = useCallback(
-    (data?: { text: string, linsight?: boolean, tools?: any[],knowledge?: {
-    personal?: boolean;
-    orgKbIds?: string[];
-  }; }) => {
+    (data?: {
+      text: string, linsight?: boolean, tools?: any[], knowledge?: {
+        personal?: boolean;
+        orgKbIds?: string[];
+      };
+    }) => {
       if (!data) {
         return console.warn('No data provided to submitMessage');
       }
@@ -43,9 +45,9 @@ export default function useSubmitMessage(helpers?: { clearDraft?: () => void }) 
         setLinsightSubmission('new', {
           sameSopId: sameSopLabel?.id || undefined,
           isNew: true,
-          files: Array.from(files.values()).map(item => ({
+          files: Array.from(data.files?.values() || []).map(item => ({
             file_id: item.file_id,
-            file_name: item.filename,
+            file_name: item.name,
             parsing_status: 'completed'
           })),
           question: data?.text,
@@ -58,7 +60,7 @@ export default function useSubmitMessage(helpers?: { clearDraft?: () => void }) 
         });
         // 重置表单和清理草稿
         methods.reset();
-        setFiles(new Map())
+        setFiles?.(new Map())
         setFilesToDelete({});
         helpers?.clearDraft && helpers.clearDraft();
         return setSameSopLabel(null);

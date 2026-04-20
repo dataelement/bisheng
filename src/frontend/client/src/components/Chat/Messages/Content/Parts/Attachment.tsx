@@ -1,5 +1,5 @@
-import { imageExtRegex } from '~/data-provider/data-provider/src';
-import type { TAttachment, TFile, TAttachmentMetadata } from '~/data-provider/data-provider/src';
+import { imageExtRegex } from '~/types/chat';
+import type { TAttachment, TFile, TAttachmentMetadata } from '~/types/chat';
 import Image from '~/components/Chat/Messages/Content/Image';
 
 export default function Attachment({ attachment }: { attachment?: TAttachment }) {

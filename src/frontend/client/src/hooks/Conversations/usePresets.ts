@@ -1,16 +1,16 @@
 import filenamify from 'filenamify';
 import exportFromJSON from 'export-from-json';
-import { QueryKeys } from '~/data-provider/data-provider/src';
+import { QueryKeys } from '~/types/chat';
 import { useCallback, useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRecoilState, useSetRecoilState, useRecoilValue } from 'recoil';
-import { useCreatePresetMutation, useGetModelsQuery } from '~/data-provider/data-provider/src/react-query';
-import type { TPreset, TEndpointsConfig } from '~/data-provider/data-provider/src';
+import { useCreatePresetMutation, useGetModelsQuery } from '~/hooks/queries';
+import type { TPreset, TEndpointsConfig } from '~/types/chat';
 import {
   useUpdatePresetMutation,
   useDeletePresetMutation,
   useGetPresetsQuery,
-} from '~/data-provider';
+} from '~/hooks/queries/data-provider';
 import { cleanupPreset, removeUnavailableTools, getConvoSwitchLogic } from '~/utils';
 import useDefaultConvo from '~/hooks/Conversations/useDefaultConvo';
 import { useChatContext, useToastContext } from '~/Providers';

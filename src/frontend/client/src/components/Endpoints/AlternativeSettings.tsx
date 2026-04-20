@@ -1,5 +1,5 @@
 import { useRecoilValue } from 'recoil';
-import { SettingsViews } from '~/data-provider/data-provider/src';
+import { SettingsViews } from '~/types/chat';
 import type { TSettingsProps } from '~/common';
 import { Advanced } from './Settings';
 import { cn } from '~/utils';

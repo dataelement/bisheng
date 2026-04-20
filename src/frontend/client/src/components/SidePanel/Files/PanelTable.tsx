@@ -20,7 +20,7 @@ import {
   megabyte,
   isAssistantsEndpoint,
   type TFile,
-} from '~/data-provider/data-provider/src';
+} from '~/types/chat';
 
 import {
   Button,
@@ -34,7 +34,7 @@ import {
 } from '~/components/ui';
 import { useFileMapContext, useChatContext, useToastContext } from '~/Providers';
 import { useLocalize, useUpdateFiles } from '~/hooks';
-import { useGetFileConfig } from '~/data-provider';
+import { useGetFileConfig } from '~/hooks/queries/data-provider';
 import store from '~/store';
 
 interface DataTableProps<TData, TValue> {

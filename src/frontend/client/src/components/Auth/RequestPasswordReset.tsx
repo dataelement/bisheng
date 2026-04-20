@@ -1,8 +1,8 @@
 import { useForm } from 'react-hook-form';
 import { useState, ReactNode } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { useRequestPasswordResetMutation } from '~/data-provider/data-provider/src/react-query';
-import type { TRequestPasswordReset, TRequestPasswordResetResponse } from '~/data-provider/data-provider/src';
+import { useRequestPasswordResetMutation } from '~/hooks/queries';
+import type { TRequestPasswordReset, TRequestPasswordResetResponse } from '~/types/chat';
 import type { FC } from 'react';
 import type { TLoginLayoutContext } from '~/common';
 import { useLocalize } from '~/hooks';

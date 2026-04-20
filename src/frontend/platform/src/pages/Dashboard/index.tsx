@@ -133,7 +133,7 @@ export default function DashboardPage() {
 
     return (
         <div className="h-full flex">
-            {appConfig.isPro && <DashboardSidebar
+            {appConfig.isDashboardPro && <DashboardSidebar
                 isCollapsed={isCollapsed}
                 setIsCollapsed={setIsCollapsed}
                 dashboards={dashboards}

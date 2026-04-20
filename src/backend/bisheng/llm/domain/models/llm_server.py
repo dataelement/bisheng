@@ -7,6 +7,7 @@ from sqlmodel import Field, select, col
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.llm.domain.const import LLMModelType
+from bisheng.llm.domain.utils import wrapper_bisheng_llm_info, wrapper_bisheng_llm_info_async
 
 
 class LLMServerBase(SQLModelSerializable):
@@ -15,7 +16,8 @@ class LLMServerBase(SQLModelSerializable):
     type: str = Field(sa_column=Column(CHAR(20)), description='Service Provider Type')
     limit_flag: bool = Field(default=False, description='Whether to turn on the daily call limit')
     limit: int = Field(default=0, description='Daily call limit')
-    config: Optional[Dict] = Field(default=None, sa_column=Column(JSON), description='Service Provider Public Configuration')
+    config: Optional[Dict] = Field(default=None, sa_column=Column(JSON),
+                                   description='Service Provider Public Configuration')
     user_id: int = Field(default=0, description='creatorID')
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
@@ -29,7 +31,8 @@ class LLMModelBase(SQLModelSerializable):
     description: Optional[str] = Field(default='', sa_column=Column(Text), description='Model Description')
     model_name: str = Field(default='', description='Model name, parameters used when instantiating components')
     model_type: str = Field(sa_column=Column(CHAR(20)), description='model type')
-    config: Optional[Dict] = Field(default=None, sa_column=Column(JSON), description='Service Provider Public Configuration')
+    config: Optional[Dict] = Field(default=None, sa_column=Column(JSON),
+                                   description='Service Provider Public Configuration')
     status: int = Field(default=2, description='Model status.0Normal1abnormal:, 2: Unknown')
     remark: Optional[str] = Field(default='', sa_column=Column(Text), description='Abnormal reason')
     online: bool = Field(default=True, description='Online')
@@ -137,14 +140,16 @@ class LLMDao:
             return session.exec(statement).all()
 
     @classmethod
-    def get_server_by_id(cls, server_id: int) -> Optional[LLMServer]:
+    @wrapper_bisheng_llm_info(key_prefix="llm:server:")
+    def get_server_by_id(cls, server_id: int, *, cache: bool = False) -> Optional[LLMServer]:
         """ According to serviceIDGet Service Providers """
         statement = select(LLMServer).where(LLMServer.id == server_id)
         with get_sync_db_session() as session:
             return session.exec(statement).first()
 
     @classmethod
-    async def aget_server_by_id(cls, server_id: int) -> Optional[LLMServer]:
+    @wrapper_bisheng_llm_info_async(key_prefix="llm:server:")
+    async def aget_server_by_id(cls, server_id: int, *, cache: bool = False) -> Optional[LLMServer]:
         """ According to serviceIDGet Service Providers """
         statement = select(LLMServer).where(LLMServer.id == server_id)
         async with get_async_db_session() as session:
@@ -182,14 +187,17 @@ class LLMDao:
             return result.first()
 
     @classmethod
-    def get_model_by_id(cls, model_id: int) -> Optional[LLMModel]:
+    @wrapper_bisheng_llm_info(key_prefix="llm:model:")
+    def get_model_by_id(cls, model_id: int, *, cache: bool = False) -> Optional[LLMModel]:
         """ According to the modelIDGrabbed Objects """
+        # get from cache
         statement = select(LLMModel).where(LLMModel.id == model_id)
         with get_sync_db_session() as session:
             return session.exec(statement).first()
 
     @classmethod
-    async def aget_model_by_id(cls, model_id: int) -> Optional[LLMModel]:
+    @wrapper_bisheng_llm_info_async(key_prefix="llm:model:")
+    async def aget_model_by_id(cls, model_id: int, *, cache: bool = False) -> Optional[LLMModel]:
         """ According to the modelIDGrabbed Objects """
         statement = select(LLMModel).where(LLMModel.id == model_id)
         async with get_async_db_session() as session:

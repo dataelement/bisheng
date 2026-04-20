@@ -1,10 +1,15 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import axios, { AxiosError, AxiosRequestConfig } from 'axios';
 import i18next from "i18next";
+import { setTokenHeader } from '~/api/chat/headers-helpers';
+import * as endpoints from '~/api/chat/api-endpoints';
+import type * as t from '~/types/chat/types';
 
 // 报错的时候是否弹窗
 type ErrorOptions = {
   showError?: boolean;
+  /** When true, the interceptor will NOT auto-redirect on 403. The caller handles it. */
+  skip403Redirect?: boolean;
 };
 
 const customAxios = axios.create({
@@ -75,13 +80,13 @@ async function _patch(url: string, data?: any, options?: AxiosRequestConfig) {
 let isRefreshing = false;
 let failedQueue: { resolve: (value?: any) => void; reject: (reason?: any) => void }[] = [];
 
-// const refreshToken = (retry?: boolean): Promise<t.TRefreshTokenResponse | undefined> =>
-//   _post(endpoints.refreshToken(retry));
+const refreshToken = (retry?: boolean): Promise<t.TRefreshTokenResponse | undefined> =>
+  _post(endpoints.refreshToken(retry));
 
-// const dispatchTokenUpdatedEvent = (token: string) => {
-//   setTokenHeader(token);
-//   window.dispatchEvent(new CustomEvent('tokenUpdated', { detail: token }));
-// };
+const dispatchTokenUpdatedEvent = (token: string) => {
+  setTokenHeader(token);
+  window.dispatchEvent(new CustomEvent('tokenUpdated', { detail: token }));
+};
 
 const processQueue = (error: AxiosError | null, token: string | null = null) => {
   failedQueue.forEach((prom) => {
@@ -97,9 +102,11 @@ const processQueue = (error: AxiosError | null, token: string | null = null) => 
 customAxios.interceptors.response.use(
   (response) => {
     if (response.data.status_code === 403) {
-      // console.log('response :>> ', response);
-      localStorage.setItem('ERROR_REQUEST_PATH', response.config.url || '')
-      location.href = `${__APP_ENV__.BASE_URL}/c/new?error=11403`;
+      // Allow business code to handle 403 when skip403Redirect is set
+      if (!response.config.skip403Redirect) {
+        localStorage.setItem('ERROR_REQUEST_PATH', response.config.url || '')
+        location.href = `${__APP_ENV__.BASE_URL}/c/new?error=11403`;
+      }
       return response
     }
 
@@ -183,6 +190,22 @@ customAxios.interceptors.response.use(
   },
 );
 
+const paramsSerializer = (params) => {
+  return Object.keys(params)
+    .map(key => {
+      const value = params[key];
+      if (value === undefined) {
+        return null; // 只返回非undefined的值
+      }
+      if (Array.isArray(value)) {
+        return value.map(val => `${key}=${val}`).join('&');
+      }
+      return `${key}=${value}`;
+    })
+    .filter(item => item !== null) // 过滤掉值为null的项
+    .join('&');
+}
+
 export default {
   get: _get,
   getResponse: _getResponse,
@@ -193,4 +216,7 @@ export default {
   delete: _delete,
   deleteWithOptions: _deleteWithOptions,
   patch: _patch,
+  refreshToken,
+  dispatchTokenUpdatedEvent,
+  paramsSerializer
 };

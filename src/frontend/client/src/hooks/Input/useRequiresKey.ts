@@ -1,5 +1,5 @@
 import { useChatContext } from '~/Providers/ChatContext';
-import { useGetEndpointsQuery } from '~/data-provider';
+import { useGetEndpointsQuery } from '~/hooks/queries/data-provider';
 import { getEndpointField } from '~/utils';
 import useUserKey from './useUserKey';
 

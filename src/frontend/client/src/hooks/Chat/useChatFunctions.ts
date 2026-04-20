@@ -1,31 +1,19 @@
+import type { SetterOrUpdater } from 'recoil';
+import { useRecoilValue, useResetRecoilState, useSetRecoilState } from 'recoil';
 import { v4 } from 'uuid';
-import { useQueryClient } from '@tanstack/react-query';
+import type { ExtendedFile, TAskFunction } from '~/common';
+import type {
+  TConversation,
+  TMessage,
+  TSubmission
+} from '~/types/chat';
 import {
   Constants,
-  QueryKeys,
-  ContentTypes,
-  EModelEndpoint,
-  parseCompactConvo,
-  isAssistantsEndpoint,
-} from '~/data-provider/data-provider/src';
-import { useSetRecoilState, useResetRecoilState, useRecoilValue } from 'recoil';
-import { useGetModelsQuery } from '~/data-provider/data-provider/src/react-query';
-import type {
-  TMessage,
-  TSubmission,
-  TConversation,
-  TEndpointOption,
-  TEndpointsConfig,
-} from '~/data-provider/data-provider/src';
-import type { SetterOrUpdater } from 'recoil';
-import type { TAskFunction, ExtendedFile } from '~/common';
+  EModelEndpoint
+} from '~/types/chat';
 import useSetFilesToDelete from '~/hooks/Files/useSetFilesToDelete';
-import useGetSender from '~/hooks/Conversations/useGetSender';
-import { getArtifactsMode } from '~/utils/artifacts';
-import { getEndpointField, logger } from '~/utils';
-import useUserKey from '~/hooks/Input/useUserKey';
 import store from '~/store';
-import { useEffect, useState } from 'react';
+import { logger } from '~/utils';
 
 const logChatRequest = (request: Record<string, unknown>) => {
   logger.log('=====================================\nAsk function called with:');
@@ -66,22 +54,15 @@ export default function useChatFunctions({
   setSubmission: SetterOrUpdater<TSubmission | null>;
   setLatestMessage?: SetterOrUpdater<TMessage | null>;
 }) {
-  const codeArtifacts = useRecoilValue(store.codeArtifacts);
-  const includeShadcnui = useRecoilValue(store.includeShadcnui);
-  const customPromptMode = useRecoilValue(store.customPromptMode);
   const resetLatestMultiMessage = useResetRecoilState(store.latestMessageFamily(index + 1));
   const setShowStopButton = useSetRecoilState(store.showStopButtonByIndex(index));
   const setFilesToDelete = useSetFilesToDelete();
-  const getSender = useGetSender();
   const isTemporary = useRecoilValue(store.isTemporary);
   const modelType = useRecoilValue(store.modelType);
   const chatModel = useRecoilValue(store.chatModel);
   const searchType = useRecoilValue(store.searchType);
   // const netSearch = useRecoilValue(store.netSearch);
   const selectedOrgKbs = useRecoilValue(store.selectedOrgKbs);
-  const enableOrgKb = useRecoilValue(store.enableOrgKb);
-  const queryClient = useQueryClient();
-  const { getExpiry } = useUserKey(conversation?.endpoint ?? '');
   // const model = useShouGangModel()
 
   const ask: TAskFunction = (
@@ -112,17 +93,15 @@ export default function useChatFunctions({
     const endpoint = 'Deepseek';
     const custom_model = modelType || 'deepseek-chat';
     const search_enabled = searchType && searchType === 'netSearch' || false;
-    const knowledge_enabled = searchType && searchType === 'knowledgeSearch' || false;
 
     const use_knowledge_base = {
-      personal_knowledge_enabled: knowledge_enabled,
-
+      knowledges: selectedOrgKbs,
       // 是否用组织知识库
       // enableOrgKb: enableOrgKb,
-      organization_knowledge_ids:
-        enableOrgKb
-          ? selectedOrgKbs.map(kb => kb.id).filter(kb => kb !== 'personal_knowledge_base')
-          : [],
+      // organization_knowledge_ids:
+      //   enableOrgKb
+      //     ? selectedOrgKbs.map(kb => kb.id).filter(kb => kb !== 'personal_knowledge_base')
+      //     : [],
     };
 
     // const endpoint = conversation?.endpoint;
@@ -268,43 +247,6 @@ export default function useChatFunctions({
       error: false,
     };
 
-    // if (isAssistantsEndpoint(endpoint)) {
-    //   initialResponse.model = conversation?.assistant_id ?? '';
-    //   initialResponse.text = '';
-    //   initialResponse.content = [
-    //     {
-    //       type: ContentTypes.TEXT,
-    //       [ContentTypes.TEXT]: {
-    //         value: responseText,
-    //       },
-    //     },
-    //   ];
-    // } else if (endpoint === EModelEndpoint.agents) {
-    //   initialResponse.model = conversation?.agent_id ?? '';
-    //   initialResponse.text = '';
-    //   initialResponse.content = [
-    //     {
-    //       type: ContentTypes.TEXT,
-    //       [ContentTypes.TEXT]: {
-    //         value: responseText,
-    //       },
-    //     },
-    //   ];
-    //   setShowStopButton(true);
-    // } else if (usesContentStream(endpoint, endpointType)) {
-    //   initialResponse.text = '';
-    //   initialResponse.content = [
-    //     {
-    //       type: ContentTypes.TEXT,
-    //       [ContentTypes.TEXT]: {
-    //         value: responseText,
-    //       },
-    //     },
-    //   ];
-    //   setShowStopButton(true);
-    // } else {
-    //   setShowStopButton(true);
-    // }
     setShowStopButton(true);
 
     if (isContinued) {

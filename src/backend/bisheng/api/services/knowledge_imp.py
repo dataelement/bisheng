@@ -4,14 +4,12 @@ import os
 import re
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 import aiofiles
 import requests
-from langchain.embeddings.base import Embeddings
 from langchain.schema.document import Document
 from langchain.text_splitter import CharacterTextSplitter
-from langchain.vectorstores.base import VectorStore
 from langchain_community.document_loaders import (
     BSHTMLLoader,
     PyPDFLoader,
@@ -20,23 +18,17 @@ from langchain_community.document_loaders import (
     UnstructuredWordDocumentLoader,
 )
 from loguru import logger
-from pymilvus import Collection
 from sqlalchemy import func, or_
 from sqlmodel import select
 
 from bisheng.api.services.etl4lm_loader import Etl4lmLoader
-from bisheng.api.services.libreoffice_converter import (
-    convert_doc_to_docx,
-    convert_ppt_to_pdf, convert_ppt_to_pptx,
-)
-from bisheng.api.services.md_from_pdf import is_pdf_damaged
 from bisheng.api.services.patch_130 import (
     convert_file_to_md,
     combine_multiple_md_files_to_raw_texts,
 )
 from bisheng.api.v1.schemas import ExcelRule
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
-from bisheng.common.constants.vectorstore_metadata import KNOWLEDGE_RAG_METADATA_SCHEMA
+from bisheng.common.constants.vectorstore_metadata import KNOWLEDGE_RAG_METADATA_SCHEMA, QA_KNOWLELDGE_METADATA_SCHEMA
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.knowledge import KnowledgeSimilarError, KnowledgeFileDeleteError, KnowledgeFileEmptyError, \
     KnowledgeFileChunkMaxError, KnowledgeLLMError, KnowledgeFileDamagedError, KnowledgeFileNotSupportedError, \
@@ -44,16 +36,13 @@ from bisheng.common.errcode.knowledge import KnowledgeSimilarError, KnowledgeFil
 from bisheng.common.schemas.telemetry.event_data_schema import FileParseEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
-from bisheng.core.cache.redis_manager import get_redis_client_sync, get_redis_client
+from bisheng.core.ai import FakeEmbeddings
 from bisheng.core.cache.utils import file_download
 from bisheng.core.database import get_sync_db_session
 from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync, get_minio_storage
-from bisheng.interface.embeddings.custom import FakeEmbedding
-from bisheng.interface.importing.utils import import_vectorstore
-from bisheng.interface.initialize.loading import instantiate_vectorstore
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
-from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao
+from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFile,
     KnowledgeFileDao,
@@ -64,10 +53,17 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     QAKnowledgeUpsert,
     QAStatus,
 )
-from bisheng.knowledge.domain.schemas.knowledge_rag_schema import Metadata
+from bisheng.knowledge.domain.schemas.knowledge_rag_schema import Metadata, QAKnowledgeMetadata
+from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
+from bisheng.knowledge.domain.utils import is_pdf_damaged
+from bisheng.knowledge.rag.knowledge_file_pipeline import KnowledgeFilePipeline
+from bisheng.knowledge.rag.pipeline.loader.utils.libreoffice_converter import (
+    convert_doc_to_docx,
+    convert_ppt_to_pdf, convert_ppt_to_pptx,
+)
 from bisheng.llm.domain.services import LLMService
 from bisheng.user.domain.models.user import UserDao
-from bisheng.utils import md5_hash, util
+from bisheng.utils import util
 from bisheng.utils.exceptions import EtlException, FileParseException
 from bisheng_langchain.rag.extract_info import extract_title, async_extract_title
 from bisheng_langchain.text_splitter import ElemCharacterTextSplitter
@@ -80,141 +76,6 @@ filetype_load_map = {
     "docx": UnstructuredWordDocumentLoader,
     "pptx": UnstructuredPowerPointLoader,
 }
-
-
-class KnowledgeUtils:
-    # Used to distinguishchunkand automated production summary content  Format e.g. Filename\nDocument Summary\n--------\n chunkContents
-    chunk_split = "\n----------\n"
-
-    @classmethod
-    def get_preview_cache_key(cls, knowledge_id: int, file_path: str, md5_value=None) -> str:
-        if not md5_value:
-            md5_value = md5_hash(file_path)
-        return f"preview_file_chunk:{knowledge_id}:{md5_value}"
-
-    @classmethod
-    def aggregate_chunk_metadata(cls, chunk: str, metadata: dict) -> str:
-        # Video Wall ProcessingchunkAndmetadatadata in to get a newchunk
-        res = f"{{<file_title>{metadata.get('document_name', '')}</file_title>\n"
-        if metadata.get("abstract", ""):
-            res += f"<file_abstract>{metadata.get('abstract', '')}</file_abstract>\n"
-        res += f"<paragraph_content>{chunk}</paragraph_content>}}"
-        return res
-
-    @classmethod
-    def chunk2promt(cls, chunk: str, metadata: dict) -> str:
-        # Video Wall ProcessingchunkAndmetadatadata in to get a newchunk
-        res = f"[file name]:{metadata.get('source', '')}\n[file content begin]\n{chunk}[file content end]\n"
-        return res
-
-    @classmethod
-    def split_chunk_metadata(cls, chunk: str) -> str:
-        # After stitching fromchunkis isolated from the originalchunk
-
-        # Instructions are old stitching rules
-        if not chunk.startswith("{<file_title>"):
-            return chunk.split(cls.chunk_split)[-1]
-
-        chunk = chunk.split("<paragraph_content>")[-1]
-        chunk = chunk.split("</paragraph_content>")[0]
-        return chunk
-
-    @classmethod
-    async def async_save_preview_cache(
-            cls, cache_key, mapping: dict = None, chunk_index: int = 0, value: dict = None
-    ):
-        redis_client = await get_redis_client()
-        if mapping:
-            for key, val in mapping.items():
-                mapping[key] = json.dumps(val, ensure_ascii=False)
-            await redis_client.ahset(cache_key, mapping=mapping)
-        else:
-            await redis_client.ahset(
-                cache_key, key=chunk_index, value=json.dumps(value, ensure_ascii=False)
-            )
-
-    @classmethod
-    def delete_preview_cache(cls, cache_key, chunk_index: int = None):
-        redis_client = get_redis_client_sync()
-        if chunk_index is None:
-            redis_client.delete(cache_key)
-            redis_client.delete(f"{cache_key}_parse_type")
-            redis_client.delete(f"{cache_key}_file_path")
-            redis_client.delete(f"{cache_key}_partitions")
-        else:
-            redis_client.hdel(cache_key, chunk_index)
-
-    @classmethod
-    def get_preview_cache(cls, cache_key, chunk_index: int = None) -> dict:
-        redis_client = get_redis_client_sync()
-        if chunk_index is None:
-            all_chunk_info = redis_client.hgetall(cache_key)
-            for key, value in all_chunk_info.items():
-                all_chunk_info[key] = json.loads(value)
-            return all_chunk_info
-        else:
-            chunk_info = redis_client.hget(cache_key, chunk_index)
-            if chunk_info:
-                chunk_info = json.loads(chunk_info)
-            return chunk_info
-
-    @classmethod
-    async def async_get_preview_cache(cls, cache_key, chunk_index: int = None) -> dict:
-        redis_client = await get_redis_client()
-        if chunk_index is None:
-            all_chunk_info = await redis_client.ahgetall(cache_key)
-            for key, value in all_chunk_info.items():
-                all_chunk_info[key] = json.loads(value)
-            return all_chunk_info
-        else:
-            chunk_info = await redis_client.ahget(cache_key, chunk_index)
-            if chunk_info:
-                chunk_info = json.loads(chunk_info)
-            return chunk_info
-
-    @classmethod
-    def get_knowledge_file_image_dir(cls, doc_id: str, knowledge_id: int = None) -> str:
-        """Get file image atminioStorage directory for"""
-        if knowledge_id:
-            return f"knowledge/images/{knowledge_id}/{doc_id}"
-        else:
-            return f"tmp/images/{doc_id}"
-
-    @classmethod
-    def get_knowledge_file_object_name(cls, file_id: int, file_name: str) -> str:
-        """Get Knowledge Base Source Files atminioStorage Path for"""
-        file_ext = file_name.split(".")[-1]
-        return f"original/{file_id}.{file_ext}"
-
-    @classmethod
-    def get_knowledge_bbox_file_object_name(cls, file_id: int) -> str:
-        """Get the corresponding knowledge base filebboxFiles inminioStorage Path for"""
-        return f"partitions/{file_id}.json"
-
-    @classmethod
-    def get_knowledge_preview_file_object_name(
-            cls, file_id: int, file_name: str
-    ) -> Optional[str]:
-        """Get the preview file corresponding to the knowledge base file atminioStorage Path for This path is stored in the officialbucketand within"""
-        file_ext = file_name.split(".")[-1]
-        if file_ext == "doc":
-            return f"preview/{file_id}.docx"
-        elif file_ext in ["ppt", "pptx"]:
-            return f"preview/{file_id}.pdf"
-        # No preview required for other file types
-        return None
-
-    @classmethod
-    def get_tmp_preview_file_object_name(cls, file_path: str) -> Optional[str]:
-        """Get a temporary preview file atminioStorage Path for This path is stored in a temporarybucket"""
-        file_name = os.path.basename(file_path)
-        file_name_no_ext, file_ext = file_name.rsplit(".", 1)
-        if file_ext == "doc":
-            return f"preview/{file_name_no_ext}.docx"
-        elif file_ext in ["ppt", "pptx"]:
-            return f"preview/{file_name_no_ext}.pdf"
-        # No preview required for other file types
-        return None
 
 
 def put_images_to_minio(local_image_dir, knowledge_id, doc_id):
@@ -252,38 +113,16 @@ async def async_images_to_minio(local_image_dir, knowledge_id, doc_id):
 def process_file_task(
         knowledge: Knowledge,
         db_files: List[KnowledgeFile],
-        separator: List[str],
-        separator_rule: List[str],
-        chunk_size: int,
-        chunk_overlap: int,
-        callback_url: str = None,
-        extra_metadata: Dict = None,
         preview_cache_keys: List[str] = None,
-        retain_images: int = 1,
-        enable_formula: int = 1,
-        force_ocr: int = 0,
-        filter_page_header_footer: int = 0,
+        callback_url: str = None,
 ):
     """Working with Knowledge Files Tasks"""
     try:
-        index_name = knowledge.index_name or knowledge.collection_name
         addEmbedding(
-            knowledge.collection_name,
-            index_name,
             knowledge.id,
-            knowledge.model,
-            separator,
-            separator_rule,
-            chunk_size,
-            chunk_overlap,
             db_files,
-            callback_url,
-            extra_metadata,
+            callback=callback_url,
             preview_cache_keys=preview_cache_keys,
-            retain_images=retain_images,
-            enable_formula=enable_formula,
-            force_ocr=force_ocr,
-            filter_page_header_footer=filter_page_header_footer,
         )
     except Exception as e:
         logger.exception("process_file_task error")
@@ -305,10 +144,9 @@ def delete_vector_files(file_ids: List[int], knowledge: Knowledge) -> bool:
     logger.info(f"delete_files file_ids={file_ids} knowledge_id={knowledge.id}")
     logger.info("start init Milvus")
     vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(0, knowledge=knowledge,
-                                                                        metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
+                                                                        embeddings=FakeEmbeddings())
     logger.info("start init ES")
-    es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=knowledge,
-                                                                metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
+    es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=knowledge)
     # Automatically close purchase order aftercollectionIf it does not exist, it will not
     if vector_client.col:
         vector_client.col.delete(expr=f"document_id in {file_ids}", timeout=10)
@@ -366,39 +204,6 @@ def delete_knowledge_file_vectors(file_ids: List[int], clear_minio: bool = True)
     return True
 
 
-def decide_vectorstores(
-        collection_name: str, vector_store: str, embedding: Embeddings, knowledge_id: int = None
-) -> Union[VectorStore, Any]:
-    """ vector db if used by query, must have knowledge_id"""
-    param: dict = {"embedding": embedding}
-
-    if vector_store == "ElasticKeywordsSearch":
-        vector_config = settings.get_vectors_conf().elasticsearch.model_dump()
-        if not vector_config:
-            # No related configurations
-            raise RuntimeError("vector_stores.elasticsearch not find in config.yaml")
-        param["index_name"] = collection_name
-        if isinstance(vector_config["ssl_verify"], str):
-            vector_config["ssl_verify"] = eval(vector_config["ssl_verify"])
-
-    elif vector_store == "Milvus":
-        if knowledge_id and collection_name.startswith("partition"):
-            param["partition_key"] = knowledge_id
-        vector_config = settings.get_vectors_conf().milvus.model_dump()
-        if not vector_config:
-            # No related configurations
-            raise RuntimeError("vector_stores.milvus not find in config.yaml")
-        param["collection_name"] = collection_name
-        vector_config.pop("partition_suffix", "")
-        vector_config.pop("is_partition", "")
-    else:
-        raise RuntimeError("unknown vector store type")
-
-    param.update(vector_config)
-    class_obj = import_vectorstore(vector_store)
-    return instantiate_vectorstore(vector_store, class_object=class_obj, params=param)
-
-
 def decide_knowledge_llm(invoke_user_id: int) -> Any:
     """Get a summary of the knowledge basechunkright of privacy llmObjects"""
     # DapatkanllmConfigure
@@ -436,35 +241,24 @@ async def async_decide_knowledge_llm(invoke_user_id: int) -> Any:
 
 
 def addEmbedding(
-        collection_name: str,
-        index_name: str,
         knowledge_id: int,
-        model: str,
-        separator: List[str],
-        separator_rule: List[str],
-        chunk_size: int,
-        chunk_overlap: int,
         knowledge_files: List[KnowledgeFile],
         callback: str = None,
-        extra_meta: Dict = None,
         preview_cache_keys: List[str] = None,
-        retain_images: int = 1,
-        enable_formula: int = 1,
-        force_ocr: int = 0,
-        filter_page_header_footer: int = 0,
 ):
     """Adding Files to Vector SumsesCunene"""
 
+    knowledge_info = KnowledgeDao.query_by_id(knowledge_id)
     logger.info("start init Milvus")
     vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(knowledge_files[0].updater_id,
-                                                                        knowledge_id=knowledge_id,
+                                                                        knowledge=knowledge_info,
                                                                         metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
     logger.info("start init ES")
-    es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge_id=knowledge_id,
+    es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=knowledge_info,
                                                                 metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA)
-    minio_client = get_minio_storage_sync()
     for index, db_file in enumerate(knowledge_files):
         # Try to get chunks of a file from the cache
+        db_file.parse_type = ParseType.UN_ETL4LM.value
         preview_cache_key = None
         if preview_cache_keys:
             preview_cache_key = (
@@ -472,33 +266,25 @@ def addEmbedding(
             )
         status = 'failed'
         try:
+
             logger.info(
                 f"process_file_begin file_id={db_file.id} file_name={db_file.file_name}"
             )
-            add_file_embedding(
-                vector_client,
-                es_client,
-                minio_client,
-                db_file,
-                separator,
-                separator_rule,
-                chunk_size,
-                chunk_overlap,
-                extra_meta=extra_meta,
+            knowledge_file_pipeline = KnowledgeFilePipeline(
+                invoke_user_id=db_file.user_id,
+                db_file=db_file,
                 preview_cache_key=preview_cache_key,
-                # Added parameters
-                retain_images=retain_images,
-                knowledge_id=knowledge_id,
-                enable_formula=enable_formula,
-                force_ocr=force_ocr,
-                filter_page_header_footer=filter_page_header_footer,
+                need_thumbnail=knowledge_info.type == KnowledgeTypeEnum.SPACE.value,
+                vector_store=[vector_client, es_client],
             )
+            _ = knowledge_file_pipeline.run()
             db_file.status = KnowledgeFileStatus.SUCCESS.value
             status = 'success'
-        except FileParseException as e:
+        except EtlException as e:
             logger.exception(
                 f"process_file_fail file_id={db_file.id} file_name={db_file.file_name}"
             )
+            db_file.parse_type = ParseType.ETL4LM.value
             db_file.status = KnowledgeFileStatus.FAILED.value
             if str(e).find("etl4lm server timeout") != -1:
                 db_file.remark = KnowledgeEtl4lmTimeoutError(exception=e).to_json_str()
@@ -812,8 +598,7 @@ def read_chunk_text(
     llm = None
     if not no_summary:
         try:
-            llm = decide_knowledge_llm(invoke_user_id)
-            knowledge_llm = LLMService.get_knowledge_llm()
+            llm, knowledge_llm = KnowledgeUtils.get_knowledge_abstract_llm(invoke_user_id)
         except Exception as e:
             logger.exception("knowledge_llm_error:")
             raise KnowledgeLLMError()
@@ -1204,14 +989,10 @@ def text_knowledge(
         db_knowledge: Knowledge, db_file: KnowledgeFile, documents: List[Document]
 ):
     """Usetext Importknowledge"""
-    embeddings = LLMService.get_bisheng_knowledge_embedding_sync(model_id=int(db_knowledge.model),
-                                                                 invoke_user_id=db_file.user_id)
-    vectore_client = decide_vectorstores(
-        db_knowledge.collection_name, "Milvus", embeddings
-    )
+    vectore_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(invoke_user_id=db_file.user_id,
+                                                                         knowledge=db_knowledge)
     logger.info("vector_init_conn_done milvus={}", db_knowledge.collection_name)
-    index_name = db_knowledge.index_name or db_knowledge.collection_name
-    es_client = decide_vectorstores(index_name, "ElasticKeywordsSearch", embeddings)
+    es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=db_knowledge)
 
     separator = "\n\n"
     chunk_size = 1000
@@ -1276,36 +1057,6 @@ def text_knowledge(
     return result
 
 
-def delete_vector(collection_name: str, partition_key: str):
-    try:
-        embeddings = FakeEmbedding()
-        vectore_client = decide_vectorstores(collection_name, 'Milvus', embeddings)
-        if isinstance(vectore_client.col, Collection):
-            if partition_key:
-                pass
-            else:
-                res = vectore_client.col.drop(timeout=1)
-                logger.info('act=delete_milvus col={} res={}', collection_name, res)
-    except Exception as e:
-        # Handle situations where a collection does not exist or where there are other errors
-        logger.warning(f'act=delete_milvus_failed col={collection_name} error={str(e)}')
-        # Even an error is considered a successful deletion as the goal is to ensure that there is no dirty data
-
-
-def delete_es(index_name: str):
-    try:
-        embeddings = FakeEmbedding()
-        esvectore_client = decide_vectorstores(index_name, 'ElasticKeywordsSearch', embeddings)
-
-        if esvectore_client:
-            res = esvectore_client.client.indices.delete(index=index_name, ignore=[400, 404])
-            logger.info(f'act=delete_es index={index_name} res={res}')
-    except Exception as e:
-        # Dealing with non-existent indexes or other errors
-        logger.warning(f'act=delete_es_failed index={index_name} error={str(e)}')
-        # Even an error is considered a successful deletion as the goal is to ensure that there is no dirty data
-
-
 def QA_save_knowledge(db_knowledge: Knowledge, QA: QAKnowledge):
     """Usetext Importknowledge"""
 
@@ -1317,29 +1068,25 @@ def QA_save_knowledge(db_knowledge: Knowledge, QA: QAKnowledge):
     extra.update({"answer": answer, "main_question": questions[0]})
     docs = [Document(page_content=question, metadata=extra) for question in questions]
     try:
-        embeddings = LLMService.get_bisheng_knowledge_embedding_sync(invoke_user_id=QA.user_id,
-                                                                     model_id=int(db_knowledge.model))
-        vector_client = decide_vectorstores(
-            db_knowledge.collection_name, "Milvus", embeddings
-        )
-        es_client = decide_vectorstores(
-            db_knowledge.index_name, "ElasticKeywordsSearch", embeddings
-        )
+        vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(invoke_user_id=QA.user_id,
+                                                                            knowledge=db_knowledge,
+                                                                            metadata_schemas=QA_KNOWLELDGE_METADATA_SCHEMA)
+        es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=db_knowledge)
         logger.info(
             f"vector_init_conn_done col={db_knowledge.collection_name} index={db_knowledge.index_name}"
         )
         # Unificationdocument
         metadata = [
-            {
-                "file_id": QA.id,
-                "knowledge_id": f"{db_knowledge.id}",
-                "page": doc.metadata.pop("page", 1),
-                "source": doc.metadata.pop("source", ""),
-                "bbox": doc.metadata.pop("bbox", ""),
-                "title": doc.metadata.pop("title", ""),
-                "chunk_index": index,
-                "extra": json.dumps(doc.metadata, ensure_ascii=False),
-            }
+            QAKnowledgeMetadata(
+                file_id=QA.id,
+                knowledge_id=f"{db_knowledge.id}",
+                page=doc.metadata.pop("page", 1),
+                source=doc.metadata.pop("source", ""),
+                bbox=doc.metadata.pop("bbox", ""),
+                title=doc.metadata.pop("title", ""),
+                chunk_index=index,
+                extra=json.dumps(doc.metadata, ensure_ascii=False),
+            ).model_dump()
             for index, doc in enumerate(docs)
         ]
         vector_client.add_texts(
@@ -1465,55 +1212,20 @@ async def list_qa_by_knowledge_id(
 
 def delete_vector_data(knowledge: Knowledge, file_ids: List[int]):
     """Delete vector data, Want to make a general purpose that can be dockedlangchainright of privacyvectorDB"""
-    # embeddings = FakeEmbedding()
-    # vectore_config_dict: dict = settings.get_knowledge().get('vectorstores')
-    # if not vectore_config_dict:
-    #     raise Exception('Vector database must be configured')
-    # elastic_index = knowledge.index_name or knowledge.collection_name
-    # vectore_client_list = [
-    #     decide_vectorstores(elastic_index, db, embeddings) if db == 'ElasticKeywordsSearch' else
-    #     decide_vectorstores(knowledge.collection_name, db, embeddings)
-    #     for db in vectore_config_dict.keys()
-    # ]
-    # logger.info('vector_init_conn_done col={} dbs={}', knowledge.collection_name,
-    #             vectore_config_dict.keys())
-
-    # for vectore_client in vectore_client_list:
-    # Inquiryvector primary key
-    embeddings = FakeEmbedding()
+    # for qa knowledge!!!
+    embeddings = FakeEmbeddings()
     collection_name = knowledge.collection_name
     # <g id="Bold">Medical Treatment:</g>vectordb
-    vectore_client = decide_vectorstores(collection_name, "Milvus", embeddings)
-    try:
-        if isinstance(vectore_client.col, Collection):
-            pk = vectore_client.col.query(
-                expr=f"file_id in {file_ids}", output_fields=["pk"], timeout=10
-            )
-        else:
-            pk = []
-    except Exception:
-        # Want to try that again?
-        logger.error("timeout_except")
-        vectore_client.close_connection(vectore_client.alias)
-        vectore_client = decide_vectorstores(collection_name, "Milvus", embeddings)
-        pk = vectore_client.col.query(
-            expr=f"file_id in {file_ids}", output_fields=["pk"], timeout=10
-        )
-    logger.info("query_milvus pk={}", pk)
-    if pk:
-        res = vectore_client.col.delete(f"pk in {[p['pk'] for p in pk]}", timeout=10)
-        logger.info(f"act=delete_vector file_id={file_ids} res={res}")
-    vectore_client.close_connection(vectore_client.alias)
+    vectore_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(0, knowledge=knowledge, embeddings=embeddings)
+    res = vectore_client.col.delete(f"file_id in {file_ids}", timeout=10)
+    logger.info(f"act=delete_vector file_id={file_ids} res={res}")
 
     # elastic
-    index_name = knowledge.index_name or collection_name
-    esvectore_client = decide_vectorstores(
-        index_name, "ElasticKeywordsSearch", embeddings
-    )
+    esvectore_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=knowledge)
 
     if esvectore_client:
         res = esvectore_client.client.delete_by_query(
-            index=index_name, body={"query": {"terms": {"metadata.file_id": file_ids}}}
+            index=knowledge.index_name, body={"query": {"terms": {"metadata.file_id": file_ids}}}
         )
     logger.info(f"act=delete_es  res={res}")
     return True

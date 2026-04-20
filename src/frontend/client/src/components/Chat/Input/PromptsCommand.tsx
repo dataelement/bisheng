@@ -1,14 +1,14 @@
 import { useState, useRef, useEffect, useMemo, memo, useCallback } from 'react';
 import { AutoSizer, List } from 'react-virtualized';
 import { useSetRecoilState, useRecoilValue } from 'recoil';
-import { PermissionTypes, Permissions } from '~/data-provider/data-provider/src';
-import type { TPromptGroup } from '~/data-provider/data-provider/src';
+import { PermissionTypes, Permissions } from '~/types/chat';
+import type { TPromptGroup } from '~/types/chat';
 import type { PromptOption } from '~/common';
 import { removeCharIfLast, mapPromptGroups, detectVariables } from '~/utils';
 import VariableDialog from '~/components/Prompts/Groups/VariableDialog';
 import CategoryIcon from '~/components/Prompts/Groups/CategoryIcon';
 import { useLocalize, useCombobox, useHasAccess } from '~/hooks';
-import { useGetAllPromptGroups } from '~/data-provider';
+import { useGetAllPromptGroups } from '~/hooks/queries/data-provider';
 import { Spinner } from '~/components/svg';
 import MentionItem from './MentionItem';
 import store from '~/store';

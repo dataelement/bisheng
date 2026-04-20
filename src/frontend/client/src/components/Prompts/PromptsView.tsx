@@ -1,6 +1,6 @@
 import { useMemo, useEffect } from 'react';
 import { Outlet, useParams, useNavigate } from 'react-router-dom';
-import { PermissionTypes, Permissions } from '~/data-provider/data-provider/src';
+import { PermissionTypes, Permissions } from '~/types/chat';
 import FilterPrompts from '~/components/Prompts/Groups/FilterPrompts';
 import DashBreadcrumb from '~/routes/Layouts/DashBreadcrumb';
 import { usePromptGroupsNav, useHasAccess } from '~/hooks';

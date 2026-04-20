@@ -1,45 +1,88 @@
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { useRecoilState, useRecoilValue } from "recoil";
 import AppAvator from "~/components/Avator";
 import HeaderTitle from "~/components/Chat/HeaderTitle";
-import { useAuthContext } from "~/hooks";
+import { useAuthContext, useLocalize } from "~/hooks";
 import ChatInput from "./ChatInput";
 import ChatMessages from "./ChatMessages";
+import { ChatEmptyState } from "./components/ChatEmptyState";
+import { appConversationsState } from "./store/appSidebarAtoms";
+import { currentChatState, currentRunningState } from "./store/atoms";
 import useChatHelpers from "./useChatHelpers";
 import { useWebSocket } from "./useWebsocket";
+import { generateUUID } from "~/utils";
 
 export default function ChatView({ data, cid, v, readOnly }) {
     const { user } = useAuthContext();
     const help = useChatHelpers()
     useWebSocket(help)
 
+    const localize = useLocalize();
+    const navigate = useNavigate();
+    const location = useLocation();
+    const { fid: flowId, type: flowType } = useParams();
+    const chatState = useRecoilValue(currentChatState);
+    const running = useRecoilValue(currentRunningState);
+    const conversations = useRecoilValue(appConversationsState);
+    const [, setConversations] = useRecoilState(appConversationsState);
+
+    // Lightweight createNewChat — avoids importing useAppSidebar which would
+    // spin up a second auto-fetch/auto-select effect and overwrite placeholders.
+    const createNewChat = useCallback(() => {
+        if (!flowId || !flowType) return;
+        const chatId = generateUUID(32);
+        setConversations((prev) => [{
+            id: chatId,
+            title: localize('com_ui_new_chat'),
+            flowId: flowId,
+            flowType: Number(flowType),
+            updatedAt: new Date().toISOString(),
+            createdAt: new Date().toISOString(),
+        }, ...prev]);
+        const from = new URLSearchParams(location.search).get('from');
+        const nextPath = from
+            ? `/app/${chatId}/${flowId}/${flowType}?from=${from}`
+            : `/app/${chatId}/${flowId}/${flowType}`;
+        navigate(nextPath);
+    }, [flowId, flowType, location.search, navigate, setConversations]);
+
+    const messages = chatState?.messages || [];
+
+    /** 无消息且无需展示开场白 / 引导问题 / 工作流表单时显示主区域空状态 */
+    const showChatEmptyState =
+        conversations.length === 0 &&
+        messages.length === 0 &&
+        !data?.guide_word &&
+        !running?.inputForm &&
+        !(running?.guideWord?.length);
+
     const Logo = useMemo(() => {
         return <AppAvator className="size-6 min-w-6" url={data.logo} id={data.name} flowType={data.flow_type} />
     }, [data]);
 
     return <div className="relative h-full flex flex-col">
-        {/* <div className="absolute flex top-2 gap-2 items-center z-10 bg-[rgba(255,255,255,0.8)] px-6 py-1 dark:bg-[#1B1B1B]">
-            {Logo}
-            <span className="text-sm">{data.name}</span>
-        </div> */}
         <HeaderTitle
             readOnly={readOnly}
             conversation={{ title: data.name, flowId: data.id, conversationId: cid, flowType: data.flow_type }}
-            logo={Logo}
         />
-        <div className="min-h-0 flex-1 bg-[position:0_100%] bg-repeat-x bg-[length:10px_432px]"
-        // style={{ backgroundImage: `url(${__APP_ENV__.BASE_URL}/assets/points.png)` }}
-        >
-            <div className="relative h-full max-w-[860px] mx-auto">
-                <ChatMessages
-                    useName={user?.username}
-                    title={data.name}
-                    logo={Logo}
-                    readOnly={readOnly}
-                    disabledSearch={data.flow_type === 10}
-                />
-                <ChatInput v={v} readOnly={readOnly} />
-            </div>
+        <div className="min-h-0 flex-1 flex flex-col bg-[position:0_100%] bg-repeat-x bg-[length:10px_432px]">
+            {showChatEmptyState ? (
+                <div className="flex min-h-0 flex-1 flex-col">
+                    <ChatEmptyState onNewChat={createNewChat} />
+                </div>
+            ) : (
+                <div className="relative mx-auto h-full min-h-0 w-full max-w-[860px] flex-1">
+                    <ChatMessages
+                        useName={user?.username}
+                        title={data.name}
+                        logo={Logo}
+                        readOnly={readOnly}
+                        disabledSearch={data.flow_type === 10}
+                    />
+                </div>
+            )}
+            {!readOnly && <ChatInput v={v} readOnly={readOnly} />}
         </div>
     </div>
 };
-

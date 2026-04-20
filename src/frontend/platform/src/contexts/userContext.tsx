@@ -89,7 +89,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
         })
     }
 
-    
+
     useLayoutEffect(() => {
         // 链接ar参数存cookie（免登录接口）
         const cookie = location.search.match(/(?<=token=)[^&]+/g)?.[0]
@@ -125,7 +125,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
             const { user_id, web_menu = [] } = res;
 
             localStorage.setItem('UUR_INFO', user_id ? String(user_id) : '');
-            if (user_id) loadComponents();
+            // if (user_id) loadComponents();
             // 是否有访问后台权限
             if (/^(\/\w+)?\/chat/.test(location.pathname)) return // 排除免登陆
 

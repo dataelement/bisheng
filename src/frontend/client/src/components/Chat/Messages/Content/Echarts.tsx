@@ -148,7 +148,7 @@ export default function ECharts({ option }: { option: string }) {
                     )}
                     <div ref={domRef} style={{ height: 400 }} className={mode === "chart" && echartsLib ? "block" : "hidden"} />
                     <div className={mode === "code" ? "block relative" : "hidden"}>
-                        <pre className="p-4 overflow-x-auto text-sm leading-relaxed max-h-[500px] overflow-y-auto mt-0 bg-transparent">
+                        <pre className="p-4 overflow-x-auto text-sm leading-relaxed max-h-[500px] overflow-y-auto scrollbar-on-hover mt-0 bg-transparent">
                             <code ref={codeRef} className="text-slate-500 font-mono whitespace-pre-wrap break-words">{codeStr}</code>
                         </pre>
                     </div>

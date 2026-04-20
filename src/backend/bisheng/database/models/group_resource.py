@@ -11,17 +11,18 @@ from bisheng.core.database import get_sync_db_session, get_async_db_session
 
 class ResourceTypeEnum(Enum):
     KNOWLEDGE = 1
-    FLOW = 2
     ASSISTANT = 3
     GPTS_TOOL = 4
     WORK_FLOW = 5
     DASHBOARD = 6  # KANBAN
     WORKSTATION = 7  # Workstation
+    SPACE_FILE = 8  # Knowledge Space File
+
 
 class GroupResourceBase(SQLModelSerializable):
     group_id: str = Field(index=True)
     third_id: str = Field(index=False)
-    type: int = Field(index=False, description='Resource Categories 1:The knowledge base upon 2:Skill 3:assistant 4:Tools 5:The Workflow')
+    type: int = Field(index=False, description='Resource categories for knowledge, assistant, tools, workflow, dashboard and workstation')
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
@@ -98,11 +99,11 @@ class GroupResourceDao(GroupResourceBase):
 
     @classmethod
     async def get_groups_resource(cls,
-                            group_ids: List[int],
-                            resource_types: List[ResourceTypeEnum] = None,
-                            name: str = None,
-                            page_size: int = None,
-                            page_num: int = None) -> list[GroupResource]:
+                                  group_ids: List[int],
+                                  resource_types: List[ResourceTypeEnum] = None,
+                                  name: str = None,
+                                  page_size: int = None,
+                                  page_num: int = None) -> list[GroupResource]:
         async with get_async_db_session() as session:
             statement = select(GroupResource).where(GroupResource.group_id.in_(group_ids))
             if resource_types:

@@ -1,9 +1,11 @@
-from fastapi import APIRouter, HTTPException
+import jwt
+from fastapi import APIRouter, Body, HTTPException
 from loguru import logger
 from sqlalchemy import or_
 from sqlmodel import select
 
 from bisheng.api.v1.schemas import resp_200
+from bisheng.common.services.config_service import settings as bisheng_settings
 from bisheng.core.database import get_sync_db_session
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.report import Report
@@ -13,6 +15,16 @@ from bisheng_langchain.utils.requests import Requests
 # build router
 router = APIRouter(prefix='/report', tags=['report'])
 mino_prefix = 'report/'
+
+
+@router.post('/office_token')
+async def get_office_token(payload: dict = Body(...)):
+    """Sign the OnlyOffice editorConfig with JWT secret and return the token."""
+    secret = bisheng_settings.get_from_db('office_jwt_secret') or ''
+    if not secret:
+        return resp_200({'token': ''})
+    token = jwt.encode(payload, secret, algorithm='HS256')
+    return resp_200({'token': token})
 
 
 @router.post('/callback')

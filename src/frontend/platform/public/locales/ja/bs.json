@@ -113,6 +113,8 @@
     "evaluation": "評  価",
     "annotation": "注  釈",
     "board": "統  計",
+    "workbench1": "購読",
+    "workbench2": "知識空間",
     "models": "モデ ル",
     "system": "システム",
     "log": "監査ログ",
@@ -173,6 +175,12 @@
     "spaceName": "スペース名",
     "workspace": "ワークスペース",
     "adminSpace": "管理コンソール",
+    "knowledgeSpaceFileUploadLimit": "ナレッジスペースのファイルアップロード上限",
+    "knowledgeSpaceFileLimitDesc": "ユーザーがナレッジスペースにアップロードできる最大ファイル容量を制限します",
+    "maxTotalUpload": "最大累計アップロード",
+    "workbenchMenuAuthorization": "ワークベンチメニュー",
+    "adminMenuAuthorization": "管理メニュー",
+    "workbenchMenu": "ワークベンチメニュー項目",
     "assistantAuthorization": "アシスタント権限付与",
     "assistantName": "アシスタント名",
     "userList": "ユーザー一覧",
@@ -711,7 +719,9 @@
     "welcomeMessagePlaceholder": "私は $t(bisheng) です。お会いできてうれしいです！",
     "functionDescription": "機能説明",
     "functionDescriptionPlaceholder": "コード作成、ファイル読込、さまざまなクリエイティブな文章作成などをお手伝いできます。タスクを私に任せてください～",
+    "modelDisplayName":"リングスモード表示名",
     "inputPlaceholder": "入力欄のヒント",
+    "dailyModeName":"日常モードの名前",
     "inputPlaceholderPlaceholder": "xx にメッセージを送る",
     "appCenterWelcome": "アプリセンターのウェルカムメッセージ",
     "appCenterWelcomePlaceholder": "$t(bisheng) のエージェントを探索しましょう",
@@ -743,6 +753,18 @@
     "deleteSuccess": "SOP の削除に成功しました",
     "deleteFailed": "削除に失敗しました",
     "batchDeleteSuccess": "{{count}} 個の SOP を削除しました",
+    "prompts":"AI対話プロンプト",
+    "sysPrompts":"システムプロンプト",
+    "userPrompts":"ユーザープロンプト",
+    "articleMax":"単一記事のQ&A時の最大長さ",
+    "knowledgeArticleMaxLengthTooltip": "購読記事のQ&Aシナリオにおいて、1つの記事をモデルへの全文入力として使用できる最大長を制限するために使用します。",
+    "character": "字",
+    "feedbackPrompt": "フィードバックのお願い",
+    "manualCrawlRequestTooltip": "ユーザーが手動でのWebサイトクローリングリクエストを送信するためのガイドとして使用します",
+    "aiPrompt": "# Role\nYou are a rigorous AI assistant. Your task is to answer user questions based on the user's question and the provided reference materials.\nWhen answering, please note the following:\n1. Please respond in the language used by the user.\n2. Only answer when there is clear information related to the question in the [Reference Materials]. Keep answers rigorous and professional, do not speculate on your own, and cite the source of the reference materials in your answers. If different reference sources have differences or even conflicts, list them all.\n3. If the [Reference Materials] are not related to the user's question, reply with \"没有找到相关内容\" or \"no content found\".\n4. If the article content contains image references (e.g., ![image](path/IMAGE_1.png)), please still render the images using Markdown format, do not modify or delete them.\n5. The current time is {cur_date}.",
+    "referenceAndQuestion": "# Reference Materials\n```\n{article_content}\n```\n# User Question\n{question}",
+    "knowledgeSpaceMaxChars": "ナレッジスペースの検索結果の最大文字数",
+    "retrievedAndQuestion": "# Reference Materials\n```\n{retrieved_file_content}\n```\n# User Question\n{question}",
     "webSearch": {
       "engine": "Web 検索エンジン",
       "config": "Web 検索ツール設定",
@@ -757,6 +779,8 @@
       "serverUrlPlaceholder": "searXNG をデプロイしたアクセスアドレスを入力してください。例：http://localhost:8080"
     },
     "errors": {
+      "dailyModeNameRequired": "日常モードの表示名は空にできません",
+      "lingsiModeNameRequired": "霊思モードの表示名は空にできません",
       "maxCharacters": "最大 {{count}} 文字までです",
       "atLeastOneModel": "少なくとも1つのモデルを追加してください",
       "modelNameRequired": "モデルの表示名は空にできません",
@@ -910,6 +934,8 @@
   "bench": {
     "daily": "日常",
     "lingsi": "$t(linsight)",
+    "subscribe": "購読",
+    "knowledgeSpace": "知識空間",
     "model": "モデル",
     "displayName": "表示名",
     "vision":"画像",
@@ -1041,7 +1067,11 @@
       "build": "ビルド",
       "knowledge": "ナレッジベース",
       "dashboard": "ダッシュボード",
-      "system": "システム"
+      "system": "システム",
+      "subscribe": "サブスクリプション",
+      "subscription": "サブスクリプション",
+      "knowledgeSpace": "ナレッジスペース",
+      "knowledge_space": "ナレッジスペース"
     },
     "eventTypeEnum": {
       "createChat": "新規チャット作成",
@@ -1090,7 +1120,11 @@
       "user_login": "ユーザーログイン",
       "addTool": "ツール作成",
       "updateTool": "ツール編集",
-      "deleteTool": "ツール削除"
+      "deleteTool": "ツール削除",
+      "create_channel": "チャンネル作成",
+      "delete_channel": "チャンネル削除",
+      "create_knowledge_space": "ナレッジスペース作成",
+      "delete_knowledge_space": "ナレッジスペース削除"
     },
     "objectTypeEnum": {
       "none": "なし",
@@ -1104,7 +1138,9 @@
       "tool": "ツール",
       "dashboard": "ダッシュボード",
       "knowledge": "ナレッジベース",
-      "workstation": "ワークステーション（日常モード）"
+      "workstation": "ワークステーション（日常モード）",
+      "channel": "チャンネル",
+      "knowledge_space": "ナレッジスペース"
     },
     "appUsage": "アプリ利用状況",
     "systemOperations": "システム操作",
@@ -1512,6 +1548,7 @@
     "15022": "OpenAPI Schemaの解析に失敗しました：{{exception}}",
     "15023": "URLはhttp/httpsで始まる必要があります：{{url}}",
     "15024": "MCP設定解析に失敗しました：{{exception}}",
+    "15025": "システムはstdioモードのMCPツール追加を許可していません",
     "16000": "データセット名がすでに存在します",
     "17000": "ダッシュボードは最大20個まで作成可能です",
     "17005": "現在のロールにはこのダッシュボードへのアクセス権限がありません。必要な場合は管理者に連絡してください。",

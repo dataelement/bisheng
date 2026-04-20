@@ -7,7 +7,7 @@ from typing import Annotated, Dict, List, Optional
 
 import rsa
 from captcha.image import ImageCaptcha
-from fastapi import APIRouter, Depends, HTTPException, Query, Body, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Body, Request, UploadFile, File
 from fastapi.security import OAuth2PasswordBearer
 from loguru import logger
 from sqlmodel import select
@@ -122,7 +122,7 @@ async def get_admins(login_user: LoginUser = Depends(LoginUser.get_login_user)):
         admins = UserRoleDao.get_admins_user()
         admins_ids = [admin.user_id for admin in admins]
         admin_users = UserDao.get_user_by_ids(admins_ids)
-        res = [UserRead(**one.__dict__) for one in admin_users]
+        res = [UserService.build_user_read_sync(one) for one in admin_users]
         return resp_200(res)
     except Exception:
         raise HTTPException(status_code=500, detail='User information failed')
@@ -138,7 +138,12 @@ async def get_info(login_user: LoginUser = Depends(LoginUser.get_login_user)):
 
     admin_group = await UserGroupDao.aget_user_admin_group(user_id)
     admin_group = [one.group_id for one in admin_group]
-    return resp_200(UserRead(role=str(role), web_menu=web_menu, admin_groups=admin_group, **db_user.__dict__))
+    return resp_200(await UserService.build_user_read(
+        db_user,
+        role=str(role),
+        web_menu=web_menu,
+        admin_groups=admin_group,
+    ))
 
 
 @router.post('/user/logout', status_code=201)
@@ -204,6 +209,7 @@ async def list_user(*,
     group_dict = {}
     for one in users:
         one_data = one.model_dump()
+        one_data["avatar"] = UserService.get_avatar_share_link_sync(one_data.get("avatar"))
         user_roles = get_user_roles(one, role_dict)
         user_groups = get_user_groups(one, group_dict)
         # If not hyper-managed, data needs to be filtered, Cannot see the list of roles and user groups within a user group not managed by him
@@ -346,27 +352,22 @@ async def update_role(*,
                       role_id: int,
                       role: RoleUpdate,
                       login_user: LoginUser = Depends(LoginUser.get_login_user)):
-    db_role = RoleDao.get_role_by_id(role_id)
+    db_role = await RoleDao.aget_role_by_id(role_id)
     if not db_role:
-        raise HTTPException(status_code=404, detail='This character does not exist')
+        raise NotFoundError()
 
-    if not login_user.check_group_admin(db_role.group_id):
-        return UnAuthorizedError.return_resp()
+    if not await login_user.async_check_group_admin(db_role.group_id):
+        return UnAuthorizedError()
 
-    try:
-        if role.role_name:
-            db_role.role_name = role.role_name
-        if role.remark:
-            db_role.remark = role.remark
-        with get_sync_db_session() as session:
-            session.add(db_role)
-            session.commit()
-            session.refresh(db_role)
-        update_role_hook(request, login_user, db_role)
-        return resp_200(db_role)
-    except Exception:
-        logger.exception(f'update_role')
-        raise HTTPException(status_code=500, detail='Update failed, server side exception')
+    if role.role_name:
+        db_role.role_name = role.role_name
+    if role.remark:
+        db_role.remark = role.remark
+    if role.knowledge_space_file_limit:
+        db_role.knowledge_space_file_limit = role.knowledge_space_file_limit
+    await RoleDao.update_role(db_role)
+    update_role_hook(request, login_user, db_role)
+    return resp_200(db_role)
 
 
 def update_role_hook(request: Request, login_user: LoginUser, db_role: Role) -> bool:
@@ -418,12 +419,8 @@ async def delete_role(*,
     if db_role.id == AdminRole or db_role.id == DefaultRole:
         raise HTTPException(status_code=500, detail='Built-in roles cannot be deleted')
 
-    # DeleteroleRelated data
-    try:
-        RoleDao.delete_role(role_id)
-    except Exception as e:
-        logger.exception(e)
-        raise HTTPException(status_code=500, detail='Failed to delete role')
+    # Delete role Related data
+    RoleDao.delete_role(role_id)
     AuditLogService.delete_role(login_user, get_request_ip(request), db_role)
     return resp_200()
 
@@ -703,6 +700,19 @@ async def create_user(*,
     logger.info(f'create_user username={admin_user.user_name}, username={req.user_name}')
     data = UserService.create_user(request, admin_user, req)
     return resp_200(data=data)
+
+
+@router.post('/user/avatar', status_code=200)
+async def upload_avatar(*,
+                        file: UploadFile = File(..., description="Avatar image file (jpg/png/webp/gif, max 10MB)"),
+                        login_user: LoginUser = Depends(LoginUser.get_login_user)):
+    """
+    Upload user avatar
+    Supported formats: jpg, png, webp, gif
+    Maximum file size: 10 MB
+    """
+    avatar_url = await UserService.update_avatar(login_user.user_id, file)
+    return resp_200(data={'avatar': avatar_url})
 
 
 def md5_hash(string):

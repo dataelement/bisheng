@@ -65,7 +65,7 @@ export default function AppTempSheet({ children, onCustomCreate, onSelect }) {
                             className={`flex items-center gap-2 px-4 py-2 rounded-md cursor-pointer hover:bg-muted-foreground/10 transition-all duration-200 mb-2 ${type === AppType.FLOW && 'bg-muted-foreground/10'}`}
                             onClick={() => setType(AppType.FLOW)}
                         >
-                            <FlowIcon/>
+                            <FlowIcon />
                             <span>{t('workflow')}</span>
                         </div>
                         <div
@@ -75,13 +75,13 @@ export default function AppTempSheet({ children, onCustomCreate, onSelect }) {
                             <HelperIcon />
                             <span>{t('assistant')}</span>
                         </div>
-                        <div
+                        {/* <div
                             className={`flex items-center gap-2 px-4 py-2 rounded-md cursor-pointer hover:bg-muted-foreground/10 transition-all duration-200 mb-2 ${type === AppType.SKILL && 'bg-muted-foreground/10'}`}
                             onClick={() => setType(AppType.SKILL)}
                         >
                             <AbilitiesIcon />
                             <span>{t('skill')}</span>
-                        </div>
+                        </div> */}
                     </div>
                 </div>
                 <div className="flex-1 min-w-[696px] bg-[#fff] dark:bg-[#030712] p-5 pt-12 h-full flex flex-wrap gap-1.5 overflow-y-auto scrollbar-hide content-start">

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import type { TStartupConfig } from '~/data-provider/data-provider/src';
-import { useGetStartupConfig } from '~/data-provider';
+import type { TStartupConfig } from '~/types/chat';
+import { useGetStartupConfig } from '~/hooks/queries/data-provider';
 import AuthLayout from '~/components/Auth/AuthLayout';
 import { TranslationKeys, useLocalize } from '~/hooks';
 

@@ -5,11 +5,41 @@ import { NotificationSeverity } from "~/common"
 import { useLocalize, useToast } from "~/hooks"
 import { SkillMethod } from "./appUtils/skillMethod"
 import { submitDataState } from "./store/atoms"
+import { appConversationsState } from "./store/appSidebarAtoms"
+import { genTitle } from "~/api/chat/data-service"
 
 export const AppLostMessage = '11111'
 const wsMap = new Map<string, WebSocket>()
 // 会话运行时信息
 const sessionInfoMap = new Map<string, any>()
+
+/**
+ * Force-close the websocket and forget any session info for the given chatId.
+ * Used when a conversation is deleted while streaming — without this, the
+ * background websocket keeps running and writing messages into Recoil state
+ * for a conversation that no longer exists, which causes the "ghost" output
+ * the user sees after deleting an in-flight chat.
+ */
+export const closeAppChatWebSocket = (chatId: string) => {
+    const ws = wsMap.get(chatId)
+    if (ws) {
+        try {
+            // Best-effort: tell backend to stop processing before yanking the socket.
+            if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ action: 'stop' }))
+            }
+            // Detach handlers so the close event doesn't bubble error toasts.
+            ws.onmessage = null
+            ws.onerror = null
+            ws.onclose = null
+            ws.close()
+        } catch {
+            // ignore — the socket may already be in a teardown state
+        }
+    }
+    wsMap.delete(chatId)
+    sessionInfoMap.delete(chatId)
+}
 
 export const enum ActionType {
     INIT_DATA = 'init_data',
@@ -28,10 +58,37 @@ const restartCallBack: any = { current: null } // 用于存储重启回调函数
 export const useWebSocket = (helpers) => {
     const { showToast } = useToast();
     const [submitData, setSubmitData] = useRecoilState(submitDataState)
+    const [, setAppConversations] = useRecoilState(appConversationsState)
     const localize = useLocalize()
 
     const websocket = wsMap.get(helpers.chatId)
     const currentChatId = useCurrentChatId(helpers.chatId)
+
+    // Track whether genTitle has been called for this chatId to avoid duplicates
+    const hasGeneratedTitleRef = useRef<Record<string, boolean>>({})
+
+    /**
+     * Generate an AI title for a new conversation after the first AI response.
+     * Mirrors the logic in useAiChat.ts onFinal for daily-mode conversations.
+     */
+    const triggerGenTitle = () => {
+        const chatId = helpers.chatId
+        if (!helpers.flow?.isNew) return
+        if (hasGeneratedTitleRef.current[chatId]) return
+        hasGeneratedTitleRef.current[chatId] = true
+
+        genTitle({ conversationId: chatId })
+            .then((res: { title?: string }) => {
+                if (!res?.title) return
+                // Update the sidebar conversation list with the new title
+                setAppConversations((prev) =>
+                    prev.map((c) => (c.id === chatId ? { ...c, title: res.title! } : c))
+                )
+            })
+            .catch(() => {
+                // genTitle failure is non-critical
+            })
+    }
 
     // 连接WebSocket
     const connect = (callBack) => {
@@ -127,6 +184,8 @@ export const useWebSocket = (helpers) => {
         } else if (data.type === 'close' && data.category === 'processing') {
             helpers.stopShow(false)
             helpers.message.closeAllLogMsg(helpers.chatId);
+            // Generate title for new conversations after first round completes
+            // triggerGenTitle()
         }
 
         // messages
@@ -165,6 +224,7 @@ export const useWebSocket = (helpers) => {
         } else if (data.category === 'stream_msg') {
             // helpers.flow.flow_type === 10 && helpers.reRunShow(true) // 成环的工作流不展示重跑按钮
             helpers.message.streamMsg(helpers.chatId, data)
+            if (data.type === 'end') triggerGenTitle()
         } else if (data.category === 'end_cover' && data.type === 'end_cover') {
             _ws.send(JSON.stringify({ action: 'stop' }))
             return helpers.message.endMsg(helpers.chatId, data)
@@ -187,6 +247,8 @@ export const useWebSocket = (helpers) => {
                 helpers.message.skillStreamMsg(helpers.chatId, data)
             } else if (data.type === 'close') {
                 helpers.message.skillCloseMsg()
+                // Generate title for new conversations after first round completes
+                // triggerGenTitle()
             }
 
             return

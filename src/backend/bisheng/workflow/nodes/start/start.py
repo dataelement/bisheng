@@ -4,7 +4,7 @@ from typing import Any, Dict
 
 from langchain.memory import ConversationBufferWindowMemory
 
-from bisheng.chat.types import IgnoreException
+from bisheng.common.chat.types import IgnoreException
 from bisheng.database.models.group import GroupDao
 from bisheng.database.models.role import RoleDao
 from bisheng.database.models.user_group import UserGroupDao

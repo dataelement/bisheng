@@ -17,14 +17,14 @@ import {
   useGetFileConfig,
   useGetUserLinsightCountQuery,
   useGetWorkbenchModelsQuery,
-} from "~/data-provider";
+} from "~/hooks/queries/data-provider";
 import {
   BsConfig,
   fileConfig as defaultFileConfig,
   isAssistantsEndpoint,
   mergeFileConfig,
   supportsFiles,
-} from "~/data-provider/data-provider/src";
+} from "~/types/chat";
 import {
   useAutoSave,
   useHandleKeyUp,
@@ -49,10 +49,8 @@ import SameSopSpan, { sameSopLabelState } from "./SameSopSpan";
 import SendButton from "./SendButton";
 import StopButton from "./StopButton";
 import { ChatKnowledge } from "./ChatKnowledge";
-type SelectedOrgKb = {
-  id: string;
-  name: string;
-};
+
+// 废弃
 const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
   const submitButtonRef = useRef<HTMLButtonElement>(null);
   const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -72,7 +70,6 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
   const [selectedOrgKbs, setSelectedOrgKbs] = useRecoilState(
     store.selectedOrgKbs
   );
-  const [enableOrgKb, setEnableOrgKb] = useRecoilState(store.enableOrgKb);
 
   const [chatStatesMap, setChatStatesMap] = useRecoilState(store.chatStatesMap);
   const isSearching = useRecoilValue(store.isSearching);
@@ -157,8 +154,6 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
     endpoint: null,
   };
   const endpoint = endpointType ?? _endpoint;
-  // 知识库是否开启
-  const isKnowledgeOn = enableOrgKb || searchType === "knowledgeSearch";
 
   // 联网搜索是否开启
   const isNetSearchOn = searchType === "netSearch";
@@ -221,8 +216,8 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
   }, [files]);
 
   useEffect(() => {
-    searchType || enableOrgKb ? setIsSearch(true) : setIsSearch(false);
-  }, [searchType, enableOrgKb]);
+    searchType ? setIsSearch(true) : setIsSearch(false);
+  }, [searchType]);
   const prevChatId = useRef("");
   useEffect(() => {
     if (conversation?.conversationId === prevChatId.current) {
@@ -235,7 +230,6 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
 
       // 清空状态
       setSelectedOrgKbs([]);
-      setEnableOrgKb(false);
       setSearchType("");
       setChatId("new");
       prevChatId.current = "new";
@@ -254,14 +248,13 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
         // 如果已经有保存的状态，恢复它
         console.log("恢复已保存的状态", savedState);
         setSelectedOrgKbs(savedState.selectedOrgKbs || []);
-        setEnableOrgKb(savedState.enableOrgKb ?? false);
         setSearchType(savedState.searchType ?? "");
       } else {
         // 如果没有保存的状态，保存当前状态
         console.log("保存当前状态到新ID");
         const newChatState = {
           selectedOrgKbs: selectedOrgKbs,
-          enableOrgKb: enableOrgKb,
+          enableOrgKb: true,
           searchType: searchType,
         };
 
@@ -290,7 +283,7 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
           ...prev,
           [prevChatId.current]: {
             selectedOrgKbs,
-            enableOrgKb,
+            enableOrgKb: true,
             searchType,
           },
         }));
@@ -301,12 +294,10 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
       if (savedState) {
         console.log("恢复新会话的状态", savedState);
         setSelectedOrgKbs(savedState.selectedOrgKbs || []);
-        setEnableOrgKb(savedState.enableOrgKb || false);
         setSearchType(savedState.searchType || "");
       } else {
         console.log("新会话没有保存的状态，清空");
         setSelectedOrgKbs([]);
-        setEnableOrgKb(false);
         setSearchType("");
       }
 
@@ -322,12 +313,10 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
       if (savedState) {
         console.log("恢复保存的状态", savedState);
         setSelectedOrgKbs(savedState.selectedOrgKbs || []);
-        setEnableOrgKb(savedState.enableOrgKb || false);
         setSearchType(savedState.searchType || "");
       } else {
         console.log("没有保存的状态，清空");
         setSelectedOrgKbs([]);
-        setEnableOrgKb(false);
         setSearchType("");
       }
 
@@ -414,26 +403,7 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
         className={`relative flex h-full flex-1 items-stretch md:flex-col ${!isLingsi && "overflow-hidden"
           }`}
       >
-        {/* 切换模型 */}
-        {/* {showPlusPopover && !isAssistantsEndpoint(endpoint) && (
-          <Mention
-            setShowMentionPopover={setShowPlusPopover}
-            newConversation={generateConversation}
-            textAreaRef={textAreaRef}
-            commandChar="+"
-            placeholder="com_ui_add_model_preset"
-            includeAssistants={false}
-          />
-        )}
-        {showMentionPopover && (
-          <Mention
-            setShowMentionPopover={setShowMentionPopover}
-            newConversation={newConversation}
-            textAreaRef={textAreaRef}
-          />
-        )} */}
-        {/* 快捷提示词选择 */}
-        {/* <PromptsCommand index={index} textAreaRef={textAreaRef} submitPrompt={submitPrompt} /> */}
+
         <div
           className={cn(
             "transitional-all relative flex w-full flex-grow flex-col overflow-hidden rounded-3xl bg-surface-tertiary pb-8 z-10 text-text-primary duration-200 border border-transparent",
@@ -441,82 +411,70 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
             "border-blue-400 bg-gradient-to-b from-[#F2F5FF] to-white"
           )}
         >
-          {/* 临时对话 */}
-          {/* <TemporaryChat
-            isTemporaryChat={isTemporaryChat}
-            setIsTemporaryChat={setIsTemporaryChat}
-          /> */}
-          {/* 操作已添加的对话 */}
-          {/* <TextareaHeader addedConvo={addedConvo} setAddedConvo={setAddedConvo} /> */}
-          {/* {bsConfig?.fileUpload.enabled && */}
           {/* 做同款 */}
           {isLingsi && <SameSopSpan></SameSopSpan>}
-          {(enableOrgKb || searchType === "knowledgeSearch") &&
-            selectedOrgKbs.length > 0 &&
-            !isLingsi && (
-              <div className="mx-2 mt-2 max-h-[100px] overflow-y-auto">
-                <div className="flex flex-wrap gap-2">
-                  {selectedOrgKbs.map((kb) => (
-                    <div
-                      key={kb.id}
-                      className="group relative flex items-center gap-1
+          {selectedOrgKbs.length > 0 && !isLingsi && (
+            <div className="mx-2 mt-2 max-h-[100px] overflow-y-auto">
+              <div className="flex flex-wrap gap-2">
+                {selectedOrgKbs.map((kb) => (
+                  <div
+                    key={kb.id}
+                    className="group relative flex items-center gap-1
               px-2 py-1 pr-6
               rounded-full bg-white border border-slate-200
               text-xs text-slate-700
               max-w-[200px]
               hover:bg-slate-50 transition-all duration-200"
-                    >
-                      {kb.id === "personal_knowledge_base" ? (
-                        <BookOpen
-                          size={14}
-                          className="text-slate-500 shrink-0"
-                        />
-                      ) : (
-                        <img
-                          className="size-[14px] text-slate-500 shrink-0"
-                          src={__APP_ENV__.BASE_URL + "/assets/books.svg"}
-                          alt=""
-                        />
-                      )}
+                  >
+                    {kb.type === 'space' ? (
+                      <BookOpen
+                        size={14}
+                        className="text-slate-500 shrink-0"
+                      />
+                    ) : (
+                      <img
+                        className="size-[14px] text-slate-500 shrink-0"
+                        src={__APP_ENV__.BASE_URL + "/assets/books.svg"}
+                        alt=""
+                      />
+                    )}
 
-                      <span className="truncate flex-1 min-w-0 transition-all duration-200 group-hover:text-[11px]">
-                        {kb.name}
-                      </span>
+                    <span className="min-w-0 flex-1 truncate">
+                      {kb.name}
+                    </span>
 
-                      {setSelectedOrgKbs && (
-                        <button
-                          onClick={() => {
-                            setSelectedOrgKbs((prev) =>
-                              prev.filter((i) => i.id !== kb.id)
-                            );
-                            if (kb.id === "personal_knowledge_base") {
-                              setSearchType("");
-                            }
-                          }}
-                          className="absolute right-1 top-1/2 -translate-y-1/2
+                    {setSelectedOrgKbs && (
+                      <button
+                        onClick={() => {
+                          setSelectedOrgKbs((prev) =>
+                            prev.filter((i) => i.id !== kb.id)
+                          );
+                          if (kb.id === "personal_knowledge_base") {
+                            setSearchType("");
+                          }
+                        }}
+                        className="absolute right-1 top-1/2 -translate-y-1/2
                   opacity-0 group-hover:opacity-100
                   w-4 h-4 flex items-center justify-center
                   rounded-full hover:bg-slate-200
                   text-slate-400 transition-opacity duration-200"
-                        >
-                          ✕
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                ))}
               </div>
-            )}
+            </div>
+          )}
           <FileFormWrapper
             accept={accept}
             showVoice={showVoice}
             fileTip={!isLingsi && !isVisual}
+            isLinsight={isLingsi}
             noUpload={!bsConfig?.fileUpload.enabled}
             disableInputs={disableInputs || audioOpening}
             disabledSearch={isSearch && !isLingsi}
-            selectedOrgKbs={selectedOrgKbs}
-            setSelectedOrgKbs={setSelectedOrgKbs}
-            enableOrgKb={enableOrgKb}
           >
             <>
               <CollapseChat
@@ -613,13 +571,9 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
             {!isLingsi && bsConfig?.knowledgeBase.enabled && (
               <ChatKnowledge
                 config={bsConfig}
-                searchType={searchType}
-                setSearchType={setSearchType}
                 disabled={!!files.size || readOnly || isNetSearchOn}
-                selectedOrgKbs={selectedOrgKbs}
-                setSelectedOrgKbs={setSelectedOrgKbs}
-                enableOrgKb={enableOrgKb}
-                setEnableOrgKb={setEnableOrgKb}
+                value={selectedOrgKbs}
+                onChange={setSelectedOrgKbs}
               />
             )}
             <ChatToolDown
@@ -629,7 +583,7 @@ const ChatForm = ({ isLingsi, setShowCode, readOnly, index = 0 }) => {
               config={bsConfig}
               searchType={searchType}
               setSearchType={setSearchType}
-              disabled={!!files.size || readOnly || isKnowledgeOn}
+              disabled={!!files.size || readOnly}
             />
           </div>
         </div>

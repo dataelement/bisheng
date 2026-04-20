@@ -28,3 +28,14 @@ prompts:
       user: |
         问题原因:
         ${USER_GOAL}
+
+  conversation_title:
+    description: "会话标题生成"
+    type: prompt
+    prompt: |
+      Please generate a concise, 5-word-or-less title for the conversation, using its same language, with no punctuation. Apply title case conventions appropriate for the language. Never directly mention the language name or the word "title" 
+      ||>User:
+      "${human}"
+      ||>Response:
+      "${assistant}"
+      ||>Title:

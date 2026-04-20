@@ -6,17 +6,34 @@ const types = {
   5: 'assistant',
   10: 'workflow',
   15: 'workbench_chat'
-}
-export default function HeaderTitle({ conversation, logo, readOnly }) {
+};
+
+export default function HeaderTitle({ conversation, readOnly, hideShare = false }) {
   const localize = useLocalize();
 
   return (
-    <div className="sticky top-0 z-10 flex h-14 w-full items-center justify-center bg-white p-2 gap-2 font-semibold dark:bg-gray-800 dark:text-white ">
-      {logo}
-      <div id="app-title" className="overflow max-w-2xl truncate">{conversation?.title || localize('com_ui_new_chat')}</div>
-      <div className='absolute right-2'>
-        {!readOnly && <ShareChat type={types[conversation?.flowType]} flowId={conversation?.flowId} chatId={conversation?.conversationId || ''} />}
+    <div className="sticky top-0 z-10 flex h-[56px] w-full items-center justify-between bg-white px-4 border-b border-[#ebecf0] text-[#212121]">
+      {/* Left placeholder to balance the center layout */}
+      <div className="flex-1"></div>
+
+      {/* Center Title */}
+      <div className="flex-[2] flex justify-center text-[14px] font-medium leading-[22px]">
+        <div id="app-title" className="truncate max-w-full text-center">
+          {conversation?.title || localize('com_ui_new_chat')}
+        </div>
+      </div>
+
+      {/* Right actions */}
+      <div className="flex-1 flex justify-end items-center">
+        {!readOnly && !hideShare && (
+          <ShareChat 
+            type={types[conversation?.flowType as keyof typeof types]} 
+            flowId={conversation?.flowId} 
+            chatId={conversation?.conversationId || ''} 
+          />
+        )}
       </div>
     </div>
   );
 }
+

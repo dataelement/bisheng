@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { AuthType, Tools, QueryKeys } from '~/data-provider/data-provider/src';
-import { useUpdateUserPluginsMutation } from '~/data-provider/data-provider/src/react-query';
+import { AuthType, Tools, QueryKeys } from '~/types/chat';
+import { useUpdateUserPluginsMutation } from '~/hooks/queries';
 // import { useToastContext } from '~/Providers';
 
 const useAuthCodeTool = (options?: { isEntityTool: boolean }) => {

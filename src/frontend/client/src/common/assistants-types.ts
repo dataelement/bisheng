@@ -1,5 +1,5 @@
-import { Capabilities, EModelEndpoint } from '~/data-provider/data-provider/src';
-import type { Assistant, AssistantsEndpoint } from '~/data-provider/data-provider/src';
+import { Capabilities, EModelEndpoint } from '~/types/chat';
+import type { Assistant, AssistantsEndpoint } from '~/types/chat';
 import type { Option, ExtendedFile } from './types';
 
 export type ActionsEndpoint = AssistantsEndpoint | EModelEndpoint.agents;

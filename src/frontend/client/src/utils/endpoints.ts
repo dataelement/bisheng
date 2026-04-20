@@ -5,8 +5,8 @@ import {
   LocalStorageKeys,
   isAgentsEndpoint,
   isAssistantsEndpoint,
-} from '~/data-provider/data-provider/src';
-import type * as t from '~/data-provider/data-provider/src';
+} from '~/types/chat';
+import type * as t from '~/types/chat';
 import type { LocalizeFunction, IconsRecord } from '~/common';
 
 export const getEntityName = ({

@@ -1,6 +1,6 @@
 import React from 'react';
 import FileList from './FileList';
-import { TFile } from '~/data-provider/data-provider/src/dist/types';
+import { TFile } from '~/types/chat/files';
 import FilesSectionSelector from '../FilesSectionSelector';
 import { Button, Input } from '~/components/ui';
 import { ListFilter } from 'lucide-react';

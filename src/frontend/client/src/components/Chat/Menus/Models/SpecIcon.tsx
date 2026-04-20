@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import type { TModelSpec, TEndpointsConfig } from '~/data-provider/data-provider/src';
+import type { TModelSpec, TEndpointsConfig } from '~/types/chat';
 import type { IconMapProps } from '~/common';
 import { getModelSpecIconURL, getIconKey, getEndpointField } from '~/utils';
 import { icons } from '~/components/Chat/Menus/Endpoints/Icons';

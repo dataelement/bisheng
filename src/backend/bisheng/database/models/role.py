@@ -15,6 +15,8 @@ class RoleBase(SQLModelSerializable):
     role_name: str = Field(index=False, description='Frontend Display Name')
     group_id: Optional[int] = Field(default=None, index=True)
     remark: Optional[str] = Field(default=None, index=False)
+    knowledge_space_file_limit: Optional[int] = Field(default=0, index=False,
+                                                      description='Knowledge Space total file size limit')
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
@@ -33,6 +35,7 @@ class RoleRead(RoleBase):
 class RoleUpdate(RoleBase):
     role_name: Optional[str] = None
     remark: Optional[str] = None
+    knowledge_space_file_limit: Optional[int] = None
 
 
 class RoleCreate(RoleBase):
@@ -84,6 +87,16 @@ class RoleDao(RoleBase):
             return role
 
     @classmethod
+    async def update_role(cls, role: Role):
+        if not role.id:
+            raise ValueError("Role ID is required for update")
+        async with get_async_db_session() as session:
+            session.add(role)
+            await session.commit()
+            await session.refresh(role)
+            return role
+
+    @classmethod
     def delete_role(cls, role_id: int):
         with get_sync_db_session() as session:
             session.exec(delete(Role).where(Role.id == role_id))
@@ -95,6 +108,12 @@ class RoleDao(RoleBase):
     def get_role_by_ids(cls, role_ids: List[int]) -> List[Role]:
         with get_sync_db_session() as session:
             return session.query(Role).filter(Role.id.in_(role_ids)).all()
+
+    @classmethod
+    async def aget_role_by_ids(cls, role_ids: List[int]) -> List[Role]:
+        statement = select(Role).where(Role.id.in_(role_ids))
+        async with get_async_db_session() as session:
+            return (await session.exec(statement)).all()
 
     @classmethod
     def get_role_by_id(cls, role_id: int) -> Role:

@@ -1,20 +1,20 @@
 import { Plus } from 'lucide-react';
 import React, { useMemo, useCallback } from 'react';
 import { useWatch, useForm, FormProvider } from 'react-hook-form';
-import { useGetModelsQuery } from '~/data-provider/data-provider/src/react-query';
+import { useGetModelsQuery } from '~/hooks/queries';
 import {
   Tools,
   SystemRoles,
   EModelEndpoint,
   isAssistantsEndpoint,
   defaultAgentFormValues,
-} from '~/data-provider/data-provider/src';
+} from '~/types/chat';
 import type { AgentForm, AgentPanelProps, StringOption } from '~/common';
 import {
   useCreateAgentMutation,
   useUpdateAgentMutation,
   useGetAgentByIdQuery,
-} from '~/data-provider';
+} from '~/hooks/queries/data-provider';
 import { useSelectAgent, useLocalize, useAuthContext } from '~/hooks';
 import AgentPanelSkeleton from './AgentPanelSkeleton';
 import { createProviderOption } from '~/utils';

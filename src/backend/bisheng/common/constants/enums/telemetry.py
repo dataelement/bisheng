@@ -12,8 +12,6 @@ class ApplicationTypeEnum(str, Enum):
 
     # Workflow Apps
     WORKFLOW = "workflow"
-    # Skill application
-    SKILL = "skill"
     # Assistant App
     ASSISTANT = "assistant"
     # Inspiration App
@@ -22,6 +20,7 @@ class ApplicationTypeEnum(str, Enum):
     DAILY_CHAT = "daily_chat"
     # Knowledge Base Application
     KNOWLEDGE_BASE = "knowledge_base"
+    KNOWLEDGE_SPACE = "knowledge_space"
     # RAGBack
     RAG_TRACEABILITY = "rag_traceability"
     # Review Apps

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import type { DynamicSettingProps, TPreset } from '~/data-provider/data-provider/src';
+import type { DynamicSettingProps, TPreset } from '~/types/chat';
 import { defaultDebouncedDelay } from '~/common';
 
 function useParameterEffects<T = unknown>({

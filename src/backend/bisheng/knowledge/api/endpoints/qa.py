@@ -5,12 +5,12 @@ from typing import Annotated
 from fastapi import APIRouter, Body
 from sqlmodel import select
 
-from bisheng.api.services.knowledge import KnowledgeService
 from bisheng.api.v1.schemas import resp_200
-from bisheng.common.errcode.qa import BackendProcessingError
+from bisheng.common.errcode.knowledge import BackendProcessingError
 from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.recall_chunk import RecallChunk
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
+from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 
 # build router
 router = APIRouter(prefix='/qa', tags=['QA'])
@@ -58,9 +58,10 @@ def get_original_file(message_id: Annotated[int, Body(embed=True)],
     result = []
     for index, chunk in enumerate(chunks):
         file = id2file.get(chunk.file_id)
+        chunk_metadata = json.loads(chunk.meta_data) if chunk.meta_data else {}
 
-        chunk_res = json.loads(json.loads(chunk.meta_data).get('bbox'))
-        file_access = json.loads(chunk.meta_data).get('right', True)
+        chunk_res = json.loads(chunk_metadata.get('bbox')) if chunk_metadata and chunk_metadata.get("bbox") else {}
+        file_access = chunk_metadata.get('right', True)
         chunk_res['right'] = file_access
         if file_access and file:
             # Preview filesurl

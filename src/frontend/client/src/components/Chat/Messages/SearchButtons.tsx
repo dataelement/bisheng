@@ -1,5 +1,5 @@
 import { Link } from 'lucide-react';
-import type { TMessage } from '~/data-provider/data-provider/src';
+import type { TMessage } from '~/types/chat';
 import { useLocalize, useNavigateToConvo } from '~/hooks';
 import { useSearchContext } from '~/Providers';
 import { getConversationById } from '~/utils';

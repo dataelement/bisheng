@@ -4,6 +4,7 @@ export * from './Button';
 export * from './Checkbox';
 export * from './DataTableColumnHeader';
 export * from './Dialog';
+export * from './ExpandableSearchField';
 export * from './DropdownMenu';
 export * from './HoverCard';
 export * from './Input';

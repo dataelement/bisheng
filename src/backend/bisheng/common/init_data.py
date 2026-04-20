@@ -12,7 +12,6 @@ from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.database import get_async_db_session, get_database_connection
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.database.constants import AdminRole, DefaultRole
-from bisheng.database.models.component import Component
 from bisheng.database.models.group import Group, DefaultGroup
 from bisheng.database.models.role import Role
 from bisheng.database.models.role_access import RoleAccess, AccessType, WebMenuResource
@@ -53,6 +52,8 @@ async def init_default_data():
                                    third_id=WebMenuResource.BACKEND.value),
                         RoleAccess(role_id=DefaultRole, type=AccessType.WEB_MENU.value,
                                    third_id=WebMenuResource.FRONTEND.value),
+                        RoleAccess(role_id=DefaultRole, type=AccessType.WEB_MENU.value,
+                                   third_id=WebMenuResource.KNOWLEDGE_SPACE.value),
                     ])
                     await session.commit()
                 # Add Default User Group
@@ -79,19 +80,7 @@ async def init_default_data():
                     await session.refresh(user)
                     await UserRoleDao.set_admin_user(user.user_id)
 
-                component_db = await session.exec(select(Component).limit(1))
-                component_db = component_db.all()
-                if not component_db:
-                    db_components = []
-                    json_items = json.loads(read_from_conf('../database/data/component.json'))
-                    for item in json_items:
-                        for k, v in item.items():
-                            db_component = Component(name=k, user_id=1, user_name='admin', data=v)
-                            db_components.append(db_component)
-                    session.add_all(db_components)
-                    await session.commit()
-
-                # Initialize Preset Skill Template
+                # Initialize preset application templates
                 templates = await session.exec(select(Template).limit(1))
                 templates = templates.all()
                 if not templates:

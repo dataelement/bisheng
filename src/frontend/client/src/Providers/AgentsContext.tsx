@@ -1,6 +1,6 @@
 import { useForm, FormProvider } from 'react-hook-form';
 import { createContext, useContext } from 'react';
-import { defaultAgentFormValues } from '~/data-provider/data-provider/src';
+import { defaultAgentFormValues } from '~/types/chat';
 import type { UseFormReturn } from 'react-hook-form';
 import type { AgentForm } from '~/common';
 

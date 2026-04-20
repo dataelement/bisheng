@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
-import { Capabilities } from '~/data-provider/data-provider/src';
+import { Capabilities } from '~/types/chat';
 import { useFormContext, useWatch } from 'react-hook-form';
-import type { TConfig, AssistantsEndpoint } from '~/data-provider/data-provider/src';
+import type { TConfig, AssistantsEndpoint } from '~/types/chat';
 import type { AssistantForm } from '~/common';
 import ImageVision from './ImageVision';
 import { useLocalize } from '~/hooks';

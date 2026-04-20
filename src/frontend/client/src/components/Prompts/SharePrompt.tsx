@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo } from 'react';
-import { Share2Icon } from 'lucide-react';
 import { useForm, Controller } from 'react-hook-form';
-import { Permissions } from '~/data-provider/data-provider/src';
+import { Permissions } from '~/types/chat';
 import type {
   TPromptGroup,
   TStartupConfig,
   TUpdatePromptGroupPayload,
-} from '~/data-provider/data-provider/src';
+} from '~/types/chat';
+import { ShareOutlineIcon } from '~/components/icons';
 import {
   Button,
   Switch,
@@ -16,7 +16,7 @@ import {
   OGDialogContent,
   OGDialogTrigger,
 } from '~/components/ui';
-import { useUpdatePromptGroup, useGetStartupConfig } from '~/data-provider';
+import { useUpdatePromptGroup, useGetStartupConfig } from '~/hooks/queries/data-provider';
 import { useToastContext } from '~/Providers';
 import { useLocalize } from '~/hooks';
 
@@ -92,7 +92,7 @@ const SharePrompt = ({ group, disabled }: { group?: TPromptGroup; disabled: bool
           className="h-10 w-10 border border-transparent bg-blue-500/90 p-0.5 transition-all hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-800"
           disabled={disabled}
         >
-          <Share2Icon className="size-5 cursor-pointer text-white" />
+          <ShareOutlineIcon className="size-5 cursor-pointer text-white" />
         </Button>
       </OGDialogTrigger>
       <OGDialogContent className="w-11/12 max-w-lg" role="dialog" aria-labelledby="dialog-title">

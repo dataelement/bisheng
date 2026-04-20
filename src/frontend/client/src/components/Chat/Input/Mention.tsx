@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { AutoSizer, List } from 'react-virtualized';
-import { EModelEndpoint } from '~/data-provider/data-provider/src';
+import { EModelEndpoint } from '~/types/chat';
 import type { SetterOrUpdater } from 'recoil';
 import type { MentionOption, ConvoGenerator } from '~/common';
 import useSelectMention from '~/hooks/Input/useSelectMention';

@@ -1,5 +1,5 @@
-import { parseConvo } from '~/data-provider/data-provider/src';
-import type { TPreset } from '~/data-provider/data-provider/src';
+import { parseConvo } from '~/types/chat';
+import type { TPreset } from '~/types/chat';
 
 type UIPreset = Partial<TPreset> & { presetOverride?: Partial<TPreset> };
 type TCleanupPreset = {

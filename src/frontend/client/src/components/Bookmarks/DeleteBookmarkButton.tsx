@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import type { FC } from 'react';
 import { Label, OGDialog, OGDialogTrigger, TooltipAnchor } from '~/components/ui';
-import { useDeleteConversationTagMutation } from '~/data-provider';
+import { useDeleteConversationTagMutation } from '~/hooks/queries/data-provider';
 import OGDialogTemplate from '~/components/ui/OGDialogTemplate';
 import { NotificationSeverity } from '~/common';
 import { useToastContext } from '~/Providers';

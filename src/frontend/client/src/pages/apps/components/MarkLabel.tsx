@@ -85,16 +85,16 @@ export default function MarkLabel({ open, home, onClose }) {
     const [flag, setFlag] = useState(false) // 解决拖拽映射位置错位
 
     return <Dialog open={open} onOpenChange={onClose}>
-        <DialogContent className='max-w-[70%] overflow-hidden'>
-            <DialogHeader className='h-20'>
+        <DialogContent className='max-w-[85%] md:max-w-[70%] max-h-[90vh] flex flex-col overflow-hidden'>
+            <DialogHeader className='shrink-0'>
                 <DialogTitle className='flex items-center space-x-2'>
                     <LightbulbIcon />
                     <span className='text-sm text-gray-500'>{localize('com_label_operation_tip')}</span>
                 </DialogTitle>
             </DialogHeader>
-            <div className='h-[600px] w-full grid grid-cols-[70%_30%]'>
-                <div className='ml-10'>
-                    <div className='w-full relative'>
+            <div className='flex-1 h-[60vh] max-h-[600px] min-h-[300px] w-full grid grid-cols-[70%_30%] overflow-hidden'>
+                <div className='ml-2 sm:ml-10 overflow-y-auto pr-2'>
+                    <div className='w-full relative pb-4'>
                         {
                             labels.map(l =>
                                 <Button onClick={() => handleSelect(l.value)}
@@ -105,8 +105,8 @@ export default function MarkLabel({ open, home, onClose }) {
                         }
                     </div>
                 </div>
-                <div className='border-l text-gray-500'>
-                    <div className='ml-4'>
+                <div className='border-l text-gray-500 overflow-y-auto'>
+                    <div className='ml-4 pb-4'>
                         <span className='text-md font-bold'>{localize('com_label_selected', { 0: selected.length })}</span>
                         <DragDropContext onDragEnd={handleDragEnd} onDragStart={() => setFlag(true)} onDragUpdate={() => setFlag(true)}>
                             <Droppable droppableId={'list'}>
@@ -132,9 +132,9 @@ export default function MarkLabel({ open, home, onClose }) {
                     </div>
                 </div>
             </div>
-            <DialogFooter className='absolute bottom-6 right-6'>
-                <Button variant="outline" className="h-10 w-[120px] px-16" onClick={handleCancel}>{localize('com_label_cancel')}</Button>
-                <Button className="px-16 h-10 w-[120px]" onClick={handleConfirm}>{localize('com_label_save')}</Button>
+            <DialogFooter className='shrink-0 pt-2'>
+                <Button variant="outline" className="h-10 w-[120px]" onClick={handleCancel}>{localize('com_label_cancel')}</Button>
+                <Button className="h-10 w-[120px]" onClick={handleConfirm}>{localize('com_label_save')}</Button>
             </DialogFooter>
         </DialogContent>
     </Dialog>

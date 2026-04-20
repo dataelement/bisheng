@@ -1,5 +1,5 @@
 import { atom } from 'recoil';
-import type { TUser, TPlugin } from '~/data-provider/data-provider/src';
+import type { TUser, TPlugin } from '~/types/chat';
 
 const user = atom<TUser | undefined>({
   key: 'user',

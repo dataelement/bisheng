@@ -26,6 +26,7 @@ from bisheng.telemetry_search.domain.services.dashboard import DashboardService
 from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
 from bisheng.user.domain.models.user import User, UserDao
 from bisheng.user.domain.models.user_role import UserRoleDao
+from bisheng.user.domain.services.user import UserService
 from bisheng.utils import get_request_ip
 
 
@@ -50,7 +51,7 @@ class RoleGroupService():
         groupReads = [GroupRead.validate(group) for group in groups]
         for group in groupReads:
             group.group_admins = [
-                users_dict.get(user.user_id).model_dump() for user in user_admin
+                self._dump_user_with_avatar_share_link(users_dict.get(user.user_id)) for user in user_admin
                 if user.group_id == group.id
             ]
         return groupReads
@@ -138,16 +139,25 @@ class RoleGroupService():
         redis_client.rpush('delete_group', delete_message, expiration=86400)
         redis_client.publish('delete_group', delete_message)
 
-    def get_group_user_list(self, group_id: int, page_size: int, page_num: int) -> List[User]:
+    def get_group_user_list(self, group_id: int, page_size: int, page_num: int) -> Optional[List[Dict]]:
         """Get the full amountgroupVertical"""
 
         # Inquiryuser
         user_group_list = UserGroupDao.get_group_user(group_id, page_size, page_num)
         if user_group_list:
             user_ids = [user.user_id for user in user_group_list]
-            return UserDao.get_user_by_ids(user_ids)
+            users = UserDao.get_user_by_ids(user_ids)
+            return [self._dump_user_with_avatar_share_link(user) for user in users]
 
         return None
+
+    @staticmethod
+    def _dump_user_with_avatar_share_link(user: User | None) -> Dict:
+        if not user:
+            return {}
+        user_data = user.model_dump()
+        user_data['avatar'] = UserService.get_avatar_share_link_sync(user_data.get('avatar'))
+        return user_data
 
     def insert_user_group(self, user_group: UserGroupCreate) -> UserGroupRead:
         """Insert User Group"""
@@ -249,9 +259,7 @@ class RoleGroupService():
     async def get_group_resources(self, group_id: int, resource_type: ResourceTypeEnum, name: str,
                                   page_size: int, page_num: int) -> (List[Any], int):
         """ Get resources under user """
-        if resource_type.value == ResourceTypeEnum.FLOW.value:
-            return await asyncio.to_thread(self.get_group_flow, group_id, name, page_size, page_num)
-        elif resource_type.value == ResourceTypeEnum.KNOWLEDGE.value:
+        if resource_type.value == ResourceTypeEnum.KNOWLEDGE.value:
             return await asyncio.to_thread(self.get_group_knowledge, group_id, name, page_size, page_num)
         elif resource_type.value == ResourceTypeEnum.WORK_FLOW.value:
             return await asyncio.to_thread(self.get_group_flow, group_id, name, page_size, page_num, FlowType.WORKFLOW)
@@ -275,19 +283,14 @@ class RoleGroupService():
         return user_map
 
     def get_group_flow(self, group_id: int, keyword: str, page_size: int, page_num: int,
-                       flow_type: Optional[FlowType] = None) -> (List[Any], int):
+                       flow_type: FlowType = FlowType.WORKFLOW) -> (List[Any], int):
         """ Get a list of knowledge bases under user groups """
-        # Query skills under user groupsIDVertical
-        rs_type = ResourceTypeEnum.FLOW
-        if flow_type == FlowType.WORKFLOW:
-            rs_type = ResourceTypeEnum.WORK_FLOW
-        resource_list = GroupResourceDao.get_group_resource(group_id, rs_type)
+        resource_list = GroupResourceDao.get_group_resource(group_id, ResourceTypeEnum.WORK_FLOW)
         if not resource_list:
             return [], 0
         res = []
         flow_ids = [resource.third_id for resource in resource_list]
-        flow_type_value = flow_type.value if flow_type else FlowType.FLOW.value
-        data, total = FlowDao.filter_flows_by_ids(flow_ids, keyword, page_num, page_size, flow_type_value)
+        data, total = FlowDao.filter_flows_by_ids(flow_ids, keyword, page_num, page_size, flow_type.value)
         db_user_ids = {one.user_id for one in data}
         user_map = self.get_user_map(db_user_ids)
         for one in data:
@@ -385,9 +388,10 @@ class RoleGroupService():
         resource_ids = []
         # Description is a user group administrator, need to filter to get the resources under the corresponding group
         if groups:
-            group_resources = await GroupResourceDao.get_groups_resource(groups, resource_types=[ResourceTypeEnum.FLOW,
-                                                                                           ResourceTypeEnum.ASSISTANT,
-                                                                                           ResourceTypeEnum.WORK_FLOW])
+            group_resources = await GroupResourceDao.get_groups_resource(groups, resource_types=[
+                ResourceTypeEnum.ASSISTANT,
+                ResourceTypeEnum.WORK_FLOW,
+            ])
             if not group_resources:
                 return [], 0
             resource_ids = [one.third_id for one in group_resources]

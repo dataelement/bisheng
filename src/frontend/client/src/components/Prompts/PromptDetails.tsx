@@ -5,7 +5,7 @@ import rehypeKatex from 'rehype-katex';
 import remarkMath from 'remark-math';
 import supersub from 'remark-supersub';
 import rehypeHighlight from 'rehype-highlight';
-import type { TPromptGroup } from '~/data-provider/data-provider/src';
+import type { TPromptGroup } from '~/types/chat';
 import { codeNoExecution } from '~/components/Chat/Messages/Content/Markdown';
 import { useLocalize, useAuthContext } from '~/hooks';
 import CategoryIcon from './Groups/CategoryIcon';

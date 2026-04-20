@@ -5,7 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import { useLocalize } from "~/hooks";
 import { Input, Button, Label } from '~/components';
 import FileIcon from "../ui/icon/File"
-import { getLinsightFileDownloadApi } from "~/data-provider/data-provider/src/data-service";
+import { getLinsightFileDownloadApi } from "~/api/chat/data-service";
 
 
 

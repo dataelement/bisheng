@@ -1,5 +1,5 @@
 import { format } from 'date-fns';
-import type { TUser, TPromptGroup } from '~/data-provider/data-provider/src';
+import type { TUser, TPromptGroup } from '~/types/chat';
 
 export function replaceSpecialVars({ text, user }: { text: string; user?: TUser }) {
   if (!text) {

@@ -13,7 +13,7 @@ from bisheng.api.services.workflow import WorkFlowService
 from bisheng.api.v1.chat import chat_manager
 from bisheng.api.v1.schema.workflow import WorkflowStream, WorkflowEvent, WorkflowEventType
 from bisheng.api.v1.schemas import resp_200
-from bisheng.chat.types import WorkType
+from bisheng.common.chat.types import WorkType
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
 from bisheng.common.errcode.http_error import NotFoundError, ServerError
 from bisheng.common.schemas.telemetry.event_data_schema import ApplicationAliveEventData

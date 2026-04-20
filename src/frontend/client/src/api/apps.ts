@@ -23,12 +23,18 @@ export async function updateHomeLabelApi(tag_ids) {
 }
 
 /**
- * 技能 工作流详情
+ * Fetch skill / workflow detail.
+ * Set skip403Redirect to let the caller handle 403 instead of the global interceptor.
  */
-export async function getFlowApi(flowId: string, version: string = 'v1', shareToken?: string): Promise<any> {
+export async function getFlowApi(
+    flowId: string,
+    version: string = 'v1',
+    shareToken?: string,
+    skip403Redirect?: boolean,
+): Promise<any> {
     const headers = shareToken ? { 'share-token': shareToken } : {}
 
-    return await request.get(`/api/${version}/flows/${flowId}`, { headers })
+    return await request.get(`/api/${version}/flows/${flowId}`, { headers, skip403Redirect } as any)
 }
 
 /**
@@ -41,13 +47,21 @@ export async function getDeleteFlowApi(chatId: string): Promise<any> {
     })
 }
 
-// 获取助手详情
-export const getAssistantDetailApi = async (id: string, shareToken?: string): Promise<any> => {
+/**
+ * Fetch assistant detail.
+ * Set skip403Redirect to let the caller handle 403 instead of the global interceptor.
+ */
+export const getAssistantDetailApi = async (
+    id: string,
+    shareToken?: string,
+    skip403Redirect?: boolean,
+): Promise<any> => {
     const headers = shareToken ? { 'share-token': shareToken } : {}
 
     return await request.get(`/api/v1/assistant/info/${id}`, {
-        headers
-    })
+        headers,
+        skip403Redirect,
+    } as any)
 };
 
 export const baseMsgItem = {
@@ -216,10 +230,20 @@ export async function getSourceChunksApi(chatId: string, messageId: number, keys
 /**
  * 聊天窗上传文件
  */
-export async function uploadChatFile(v, file: File, onProgress): Promise<any> {
+export async function uploadChatFile(v, file: File, onProgress, uploadMode?: 'linsight' | 'workstation'): Promise<any> {
     const formData = new FormData();
     formData.append("file", file);
-    return await request.post(`/api/v1/knowledge/upload`, formData, {
+    if (uploadMode) {
+        formData.append("endpoint", "custom");
+        formData.append("file_id", crypto.randomUUID());
+        formData.append("file_name", file.name);
+    }
+    const urlMap = {
+        linsight: '/api/v1/linsight/workbench/upload-file',
+        workstation: '/api/v1/workstation/files',
+    };
+    const url = uploadMode ? urlMap[uploadMode] : '/api/v1/knowledge/upload';
+    return await request.post(url, formData, {
         headers: {
             "Content-Type": "multipart/form-data"
         },
@@ -329,7 +353,7 @@ export function getVariablesApi(params) {
     });
 }
 export async function getFrequently(page, limit) {
-    return await request.get('/api/v1/workstation/app/frequently_used', {
+    return await request.get('/api/v1/workstation/app/used', {
         params: {
             page,
             limit
@@ -337,23 +361,23 @@ export async function getFrequently(page, limit) {
     })
 }
 
-export async function addToFrequentlyUsed(user_link_type, type_detail) {
-    return await request.post('/api/v1/workstation/app/frequently_used', {
-        user_link_type, type_detail
-    }, { showError: true });
+/** Pin an app to the top of the used apps list */
+export async function pinUsedAppApi(flowId: string) {
+    return await request.post('/api/v1/workstation/app/used/pin', { flow_id: flowId });
 }
 
-// 从常用列表移除
-export async function removeFromFrequentlyUsed(user_id, type, type_detail) {
-
-    const url = `/api/v1/workstation/app/frequently_used?user_id=${user_id}&user_link_type=${type}&type_detail=${type_detail}`;
-    return await request.delete(url);
+/** Unpin an app from the used apps list */
+export async function unpinUsedAppApi(flowId: string) {
+    return await request.delete('/api/v1/workstation/app/used/pin', {
+        data: { flow_id: flowId }
+    });
 }
-export async function getUncategorized(page: number = 1, pageSize: number = 8) {
+export async function getUncategorized(page: number = 1, pageSize: number = 8, keyword?: string) {
     return await request.get('/api/v1/workstation/app/uncategorized', {
         params: {
             page,
-            limit: pageSize
+            limit: pageSize,
+            keyword
         }
     })
 }
@@ -385,4 +409,37 @@ export const getChatOnlineApi = async (page, keyword, tag_id, disableLimit = 8) 
     }
 
     return await request.get(`/api/v1/chat/online`, { params })
+}
+
+/**
+ * Pin/unpin an app in the used apps list.
+ */
+export async function pinAppApi(appId: string, pinned: boolean) {
+    if (pinned) {
+        return await pinUsedAppApi(appId)
+    } else {
+        return await unpinUsedAppApi(appId)
+    }
+}
+
+/**
+ * Get conversations for a specific app.
+ * Returns sessions sorted by update_time descending, with latest message preview.
+ */
+export async function getAppConversationsApi(flowId: string, page: number = 1, limit: number = 100) {
+    return await request.get('/api/v1/workstation/app/conversations', {
+        params: { flow_id: flowId, page, limit }
+    })
+}
+
+/**
+ * Get all accessible apps for the current user (app switcher).
+ * Reuses chat/online — backend returns sorted by last_chat_time desc.
+ */
+export async function getAllAccessibleAppsApi(params: {
+    keyword?: string;
+    page?: number;
+    limit?: number;
+}) {
+    return await request.get('/api/v1/chat/online', { params })
 }

@@ -23,7 +23,7 @@ const checkFileType = (file, accepts) => {
 };
 
 // @accepts '.png,.jpg'
-const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, onChange }, ref) => {
+const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, onChange, uploadMode }, ref) => {
     const t = useLocalize()
     const [files, setFiles] = useState([]);
     const filesRef = useRef([]);
@@ -103,11 +103,14 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
                     filesRef.current = updatedFiles;
                     return updatedFiles;
                 });
-            }).then(response => {
-                const filePath = response.data.file_path; // Assuming the response contains the file ID
+            }, uploadMode).then(response => {
+                // Upload API returns `filepath` (no underscore). Keep `file_path` fallback
+                // for any caller/endpoint that still uses the snake-case form.
+                const filePath = response.data.filepath ?? response.data.file_path;
+                const fileId = response.data.file_id; // Server-returned file_id
                 filesRef.current = filesRef.current.map(f => {
                     if (f.id === id) {
-                        return { ...f, isUploading: false, filePath, progress: 100 }; // Set progress to 100 when uploaded
+                        return { ...f, isUploading: false, filePath, fileId, progress: 100 }; // Set progress to 100 when uploaded
                     }
                     return f;
                 });
@@ -116,7 +119,7 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
                 remainingUploadsRef.current -= 1; // Decrease the remaining uploads count
                 if (remainingUploadsRef.current === 0) {
                     // Once all files are uploaded, trigger onChange with the file IDs
-                    const uploadedFileIds = filesRef.current.filter(f => f.id).map(f => ({ path: f.filePath, name: f.name }));
+                    const uploadedFileIds = filesRef.current.filter(f => f.id).map(f => ({ file_id: f.fileId || f.id, filepath: f.filePath, type: f.type, name: f.name }));
                     onChange(uploadedFileIds); // Pass the file IDs to onChange
                 }
             }).catch((e) => {
@@ -126,7 +129,7 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
                 remainingUploadsRef.current -= 1; // Decrease the remaining uploads count
                 if (remainingUploadsRef.current === 0) {
                     // If no files remain, trigger onChange immediately
-                    const uploadedFileIds = filesRef.current.filter(f => f.id).map(f => ({ path: f.filePath, name: f.name }));
+                    const uploadedFileIds = filesRef.current.filter(f => f.id).map(f => ({ file_id: f.fileId || f.id, filepath: f.filePath, type: f.type, name: f.name }));
                     onChange(uploadedFileIds);
                 }
             });
@@ -135,7 +138,7 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
         // Wait for all files to finish uploading
         Promise.all(uploadPromises).then(() => {
             // Once all files are uploaded, trigger onChange with the file IDs
-            const uploadedFileIds = filesRef.current.filter(f => f.id).map(f => ({ path: f.filePath, name: f.name }));
+            const uploadedFileIds = filesRef.current.filter(f => f.id).map(f => ({ file_id: f.fileId || f.id, filepath: f.filePath, type: f.type, name: f.name }));
             onChange(uploadedFileIds); // Pass the file IDs to onChange
         });
     };
@@ -144,6 +147,11 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
         upload: (fileList) => {
             if (disabled) return;
             handleFileChange(Array.from(fileList));
+        },
+        clear: () => {
+            setFiles([]);
+            filesRef.current = [];
+            onChange([]);
         }
     }));
 
@@ -157,7 +165,7 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
 
         if (remainingUploadsRef.current === 0) {
             // If no files remain, trigger onChange immediately
-            const uploadedFileIds = filesRef.current.filter(f => f.id).map(f => ({ id: f.id, name: f.name }));
+            const uploadedFileIds = filesRef.current.filter(f => f.id).map(f => ({ file_id: f.fileId || f.id, filepath: f.filePath, type: f.type, name: f.name }));
             onChange(uploadedFileIds); // Trigger onChange with uploaded file IDs
         }
     };
@@ -209,7 +217,7 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
             {/* File Upload Button disabled */}
             <div
                 className={cn(
-                    'absolute bottom-3 cursor-pointer p-1 hover:bg-gray-200 rounded-full',
+                    'absolute z-10 bottom-3 cursor-pointer p-1 hover:bg-gray-200 rounded-full',
                     showVoice ? 'right-[92px]' : 'right-14',
                     disabled ? 'pointer-events-none opacity-40' : ''
                 )}

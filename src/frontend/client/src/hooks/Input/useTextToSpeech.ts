@@ -1,7 +1,7 @@
 import { useRecoilState, useRecoilValue } from 'recoil';
 import { useRef, useMemo, useEffect, useState } from 'react';
-import { parseTextParts } from '~/data-provider/data-provider/src';
-import type { TMessageContentParts } from '~/data-provider/data-provider/src';
+import { parseTextParts } from '~/types/chat';
+import type { TMessageContentParts } from '~/types/chat';
 import type { Option } from '~/common';
 import useTextToSpeechExternal from '~/hooks/Input/useTextToSpeechExternal';
 import useTextToSpeechBrowser from '~/hooks/Input/useTextToSpeechBrowser';

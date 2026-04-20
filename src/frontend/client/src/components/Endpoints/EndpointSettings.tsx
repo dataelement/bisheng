@@ -1,8 +1,8 @@
 import { useRecoilValue } from 'recoil';
-import { SettingsViews, TConversation } from '~/data-provider/data-provider/src';
-import { useGetModelsQuery } from '~/data-provider/data-provider/src/react-query';
+import { SettingsViews, TConversation } from '~/types/chat';
+import { useGetModelsQuery } from '~/hooks/queries';
 import type { TSettingsProps } from '~/common';
-import { useGetEndpointsQuery } from '~/data-provider';
+import { useGetEndpointsQuery } from '~/hooks/queries/data-provider';
 import { cn, getEndpointField } from '~/utils';
 import { getSettings } from './Settings';
 import store from '~/store';

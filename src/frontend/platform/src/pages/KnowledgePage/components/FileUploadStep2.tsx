@@ -74,8 +74,8 @@ const FileUploadStep2 = forwardRef(({
     const displayStep = isAdjustMode ? step + 1 : step;
     const initialStrategies = useMemo(() => {
         return [
-            { id: '1', regex: '\\n\\n', position: 'after', rule: t('predefinedRules.singleNewlineRule.desc') },
-            { id: '2', regex: '\\n', position: 'after', rule: t('predefinedRules.doubleNewlineRule.desc') }
+            { id: '1', regex: '\\n\\n', position: 'after', rule: t('predefinedRules.doubleNewlineRule.desc') },
+            { id: '2', regex: '\\n', position: 'after', rule: t('predefinedRules.singleNewlineRule.desc') }
         ]
     }, [t]);
     const displayMode: DisplayModeType | null = useMemo(() => {

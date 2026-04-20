@@ -53,7 +53,7 @@ class KnowledgeFileService:
                                                                           'update_user': update_user.user_name if update_user else create_user.user_name
                                                                       })
 
-        if not knowledge_file_info_res.user_metadata:
+        if knowledge_file_info_res.user_metadata:
             metadata_field_dict = {item['field_name']: MetadataField(**item) for item in
                                    knowledge_model.metadata_fields or []}
 
