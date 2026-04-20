@@ -76,8 +76,10 @@ def test_logout_source_imports_service_locally_not_at_module_top():
     body = _extract_logout_source()
     # The import should appear inside the function body, not at file top.
     full = USER_PY.read_text(encoding='utf-8')
-    # No top-level ``from bisheng.admin`` or ``import bisheng.admin``.
-    assert not re.search(r'^\s*(from|import)\s+bisheng\.admin', full, re.MULTILINE), (
+    # No top-level ``from bisheng.admin`` or ``import bisheng.admin`` — a
+    # top-level import would sit at column 0. Indented imports (inside
+    # function bodies) are fine and expected.
+    assert not re.search(r'^(from|import)\s+bisheng\.admin', full, re.MULTILINE), (
         'bisheng.admin must not be imported at the top of user/api/user.py'
     )
     # But the local import inside logout is required.
