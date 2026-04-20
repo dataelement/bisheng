@@ -11,6 +11,7 @@ from sqlalchemy import (
     BigInteger,
     Column,
     DateTime,
+    ForeignKey,
     Integer,
     JSON,
     SmallInteger,
@@ -195,11 +196,20 @@ class UserDepartment(SQLModelSerializable, table=True):
         sa_column=Column(BigInteger, primary_key=True, autoincrement=True),
     )
     user_id: int = Field(
-        sa_column=Column(Integer, nullable=False, index=True, comment='User ID'),
+        sa_column=Column(
+            Integer,
+            ForeignKey('user.user_id', ondelete='CASCADE'),
+            nullable=False,
+            index=True,
+            comment='User ID',
+        ),
     )
     department_id: int = Field(
         sa_column=Column(
-            Integer, nullable=False, index=True,
+            Integer,
+            ForeignKey('department.id', ondelete='CASCADE'),
+            nullable=False,
+            index=True,
             comment='Department ID',
         ),
     )

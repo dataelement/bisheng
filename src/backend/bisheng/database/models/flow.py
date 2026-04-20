@@ -341,7 +341,7 @@ class FlowDao(FlowBase):
     @classmethod
     def filter_flows_by_ids(cls, flow_ids: List[str], keyword: str = None,
                             page: int = 0, limit: int = 0, flow_type: int = FlowType.WORKFLOW.value) \
-            -> (List[Flow], int):
+        -> (List[Flow], int):
         """
         Filter flow records by ids and return brief information without graph data.
         """
@@ -466,7 +466,9 @@ class FlowDao(FlowBase):
                             id_extra: list = None,
                             id_list_not_in: list = None,
                             page: int = 0,
-                            limit: int = 0) -> (List[Dict], int):
+                            limit: int = 0,
+                            search_description=False,
+                            ) -> (List[Dict], int):
         """
         Get all flow-based apps and assistants.
         Args:
@@ -497,6 +499,13 @@ class FlowDao(FlowBase):
         if name:
             statement = statement.where(sub_query.c.name.like(f'%{name}%'))
             count_statement = count_statement.where(sub_query.c.name.like(f'%{name}%'))
+
+        if search_description and name:
+            statement = statement.where(
+                or_(sub_query.c.name.like(f'%{name}%'), sub_query.c.description.like(f'%{name}%')))
+            count_statement = count_statement.where(
+                or_(sub_query.c.name.like(f'%{name}%'), sub_query.c.description.like(f'%{name}%')))
+
         if status is not None:
             statement = statement.where(sub_query.c.status == status)
             count_statement = count_statement.where(sub_query.c.status == status)
