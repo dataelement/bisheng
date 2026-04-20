@@ -34,6 +34,8 @@ class TenantAuditAction(str, Enum):
     # F017 (v2.5.1) — Root resource share toggle (AC-01 / AC-05).
     RESOURCE_SHARE_ENABLE = 'resource.share_enable'
     RESOURCE_SHARE_DISABLE = 'resource.share_disable'
+    # F019 (v2.5.1) — admin tenant-scope switch (Redis, non-JWT); AC-14.
+    ADMIN_SCOPE_SWITCH = 'admin.scope_switch'
 
 
 class DeletionSource(str, Enum):

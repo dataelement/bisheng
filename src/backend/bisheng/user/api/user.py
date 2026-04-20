@@ -159,6 +159,18 @@ async def get_info(login_user: LoginUser = Depends(LoginUser.get_login_user)):
 
 @router.post('/user/logout', status_code=201)
 async def logout(auth_jwt: AuthJwt = Depends()):
+    # F019 AC-10: clear any Redis admin-scope for this user before the JWT
+    # disappears. Best-effort — a decode failure or Redis outage must not
+    # prevent the cookie from being unset. Local import avoids a cross-
+    # module top-level dependency from user → admin.
+    try:
+        subject = auth_jwt.get_subject()
+        user_id = subject.get('user_id') if isinstance(subject, dict) else None
+        if user_id:
+            from bisheng.admin.domain.services.tenant_scope import TenantScopeService
+            await TenantScopeService.clear_on_logout(int(user_id))
+    except Exception as exc:  # noqa: BLE001
+        logger.debug('logout scope clear skipped: %s', exc)
     auth_jwt.unset_access_token()
     return resp_200()
 

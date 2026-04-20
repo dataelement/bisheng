@@ -118,6 +118,16 @@ class UserTenantSyncService:
             user_id, old_tenant_id, new_leaf.id,
         )
         await cls._invalidate_redis_caches(user_id)
+        # F019 AC-11: once ``token_version`` has been bumped the old JWT is
+        # dead, so any admin-scope the user had set under that JWT must die
+        # with it. Best-effort — a scope DEL failure does not block the
+        # relocation (audit_log already records the swap). Local import
+        # keeps tenant → admin module dependency off the top-level graph.
+        try:
+            from bisheng.admin.domain.services.tenant_scope import TenantScopeService
+            await TenantScopeService.clear_on_token_version_bump(user_id)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug('admin_scope clear on relocate failed: %s', exc)
 
         relocate_reason = (
             'no_primary_department'
