@@ -455,13 +455,14 @@ interface FileTableProps {
     onPreview?: (id: string) => void;
     onValidateName: (name: string, isFolder: boolean, fileId: string, isCreating: boolean) => string | null;
     onCancelCreate?: () => void;
+    permissionEntryIds?: Set<string>;
     onManagePermission?: (id: string) => void;
     sortBy: SortType | undefined;
     sortDirection: SortDirection | undefined;
     onSort: (sortBy: SortType) => void;
 }
 
-export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, onDownload, onEditTags, onRename, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, onManagePermission, sortBy, sortDirection, onSort }: FileTableProps) {
+export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, onDownload, onEditTags, onRename, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, permissionEntryIds, onManagePermission, sortBy, sortDirection, onSort }: FileTableProps) {
     const { columnWidths, onResizeStart, totalWidth } = useResizableColumns();
     const scrollRef = useRef<HTMLDivElement>(null);
     const { showLeftShadow, showRightShadow } = useScrollShadow(scrollRef);
@@ -514,7 +515,11 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                                 onPreview={() => onPreview?.(file.id)}
                                 onValidateName={(newName) => onValidateName?.(newName, file.type === FileType.FOLDER, file.id, !!file.isCreating)}
                                 onCancelCreate={onCancelCreate}
-                                onManagePermission={onManagePermission ? () => onManagePermission(file.id) : undefined}
+                                onManagePermission={
+                                    onManagePermission && permissionEntryIds?.has(file.id)
+                                        ? () => onManagePermission(file.id)
+                                        : undefined
+                                }
                                 columnWidths={columnWidths}
                                 showLeftShadow={showLeftShadow}
                                 showRightShadow={showRightShadow}

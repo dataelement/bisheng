@@ -34,7 +34,7 @@ import { useLocalize, useMediaQuery } from "~/hooks";
 import { useLayoutEffect, useRef, useState, useEffect } from "react";
 import { ChannelBlocksArrowsIcon } from "~/components/icons/channels";
 import { PermissionDialog } from "~/components/permission";
-import { checkPermission } from "~/api/permission";
+import { canOpenPermissionDialog } from "~/api/permission";
 
 /** 工具栏实际宽度小于此值时：搜索独占一行，第二行为视图/筛选（左）与新增/批量（右）。阈值偏大以免中等宽度仍挤在一行。 */
 const TOOLBAR_COMPACT_MAX_WIDTH = 1040;
@@ -124,10 +124,15 @@ export function KnowledgeSpaceHeader({
 
     useEffect(() => {
         let cancelled = false;
-        checkPermission("knowledge_space", space.id, "can_manage")
-            .then((res) => { if (!cancelled) setCanManagePermission(res?.allowed === true || isAdmin); })
+        const controller = new AbortController();
+
+        canOpenPermissionDialog("knowledge_space", space.id, { signal: controller.signal })
+            .then((allowed) => { if (!cancelled) setCanManagePermission(allowed || isAdmin); })
             .catch(() => { if (!cancelled) setCanManagePermission(isAdmin); });
-        return () => { cancelled = true; };
+        return () => {
+            cancelled = true;
+            controller.abort();
+        };
     }, [space.id, isAdmin]);
 
     const handleShare = () => {

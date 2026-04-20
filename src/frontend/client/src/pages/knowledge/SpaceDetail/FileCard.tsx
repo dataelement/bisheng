@@ -307,6 +307,16 @@ export function FileCard({
                                             </DropdownMenuItem>
                                         )}
 
+                                        {onManagePermission && (
+                                            <DropdownMenuItem
+                                                onClick={(e) => { e.stopPropagation(); onManagePermission(); }}
+                                                className="flex items-center"
+                                            >
+                                                <Shield className="mr-2 size-4 shrink-0" />
+                                                {localize("com_permission.manage_permission")}
+                                            </DropdownMenuItem>
+                                        )}
+
                                         {isAdmin && (
                                             <>
                                                 {!isFolder && (
@@ -422,13 +432,23 @@ export function FileCard({
                                 className={cn("min-w-[120px]", knowledgeSpaceDropdownSurfaceClassName)}
                                 onClick={(e) => e.stopPropagation()}
                             >
-                                {showMenuDownloadItem && (
+                                        {showMenuDownloadItem && (
+                                            <DropdownMenuItem
+                                                onClick={(e) => { e.stopPropagation(); onDownload(); }}
+                                                className="flex items-center"
+                                            >
+                                        <Download className="mr-2 size-4 shrink-0" />
+                                                {localize("com_knowledge.download")}
+                                            </DropdownMenuItem>
+                                        )}
+
+                                {onManagePermission && (
                                     <DropdownMenuItem
-                                        onClick={(e) => { e.stopPropagation(); onDownload(); }}
+                                        onClick={(e) => { e.stopPropagation(); onManagePermission(); }}
                                         className="flex items-center"
                                     >
-                                        <Download className="mr-2 size-4 shrink-0" />
-                                        {localize("com_knowledge.download")}
+                                        <Shield className="mr-2 size-4 shrink-0" />
+                                        {localize("com_permission.manage_permission")}
                                     </DropdownMenuItem>
                                 )}
 
@@ -460,15 +480,6 @@ export function FileCard({
                                             >
                                                 <RefreshCw className="mr-2 size-4 shrink-0" />
                                                 {localize("com_knowledge.retry")}
-                                            </DropdownMenuItem>
-                                        )}
-                                        {onManagePermission && (
-                                            <DropdownMenuItem
-                                                onClick={(e) => { e.stopPropagation(); onManagePermission(); }}
-                                                className="flex items-center"
-                                            >
-                                                <Shield className="mr-2 size-4 shrink-0" />
-                                                {localize("com_permission.manage_permission")}
                                             </DropdownMenuItem>
                                         )}
                                         <DropdownMenuItem
