@@ -180,6 +180,42 @@ async def test_get_model_for_call_cross_child_raises_19802():
     assert excinfo.value.status_code == 19802
 
 
+# --- audit_log write (T09) ---------------------------------------------
+
+
+def test_api_key_hash_is_16_char_sha256_prefix():
+    """AC-12: audit payload stores only sha256[:16] of the key; plaintext
+    never appears in the hash or in a round-tripped form."""
+    import hashlib
+    from bisheng.llm.domain.services.llm import _llm_api_key_hash
+
+    key = 'sk-supersecret-abc-1234567890'
+    config = {'openai_api_key': key}
+
+    h = _llm_api_key_hash(config)
+    assert h is not None
+    assert len(h) == 16
+    assert h == hashlib.sha256(key.encode()).hexdigest()[:16]
+    # Plaintext must not be discoverable from the hash body.
+    assert 'supersecret' not in h
+
+
+def test_api_key_hash_returns_none_when_no_key_field():
+    """Missing key → None so the audit row can distinguish 'no key' from
+    'rotated / empty string'."""
+    from bisheng.llm.domain.services.llm import _llm_api_key_hash
+    assert _llm_api_key_hash(None) is None
+    assert _llm_api_key_hash({}) is None
+    assert _llm_api_key_hash({'openai_api_key': ''}) is None
+    assert _llm_api_key_hash({'openai_api_key': None}) is None
+
+
+def test_api_key_hash_accepts_alternative_field_name():
+    """``config.api_key`` is the generic alias — also fingerprint it."""
+    from bisheng.llm.domain.services.llm import _llm_api_key_hash
+    assert _llm_api_key_hash({'api_key': 'abc123'}) is not None
+
+
 @pytest.mark.asyncio
 async def test_get_model_for_call_unknown_id_raises_19802():
     """Boundary: model id is simply unknown (no row at all) → 19802."""

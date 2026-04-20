@@ -29,6 +29,60 @@ from ..llm import BishengASR, BishengLLM, BishengTTS, BishengEmbedding
 from ..llm.rerank import BishengRerank
 
 
+def _llm_api_key_hash(config: Optional[dict]) -> Optional[str]:
+    """F020 T09 audit helper: sha256 of the API key, first 16 hex chars.
+
+    Only a fingerprint — never the plaintext — ends up in audit_log.
+    Returns None when no key-like field is present so the audit row can
+    distinguish "no key configured" from "key rotated / masked".
+    """
+    if not config:
+        return None
+    key = config.get('openai_api_key') or config.get('api_key')
+    if not key or not isinstance(key, str):
+        return None
+    import hashlib
+    return hashlib.sha256(key.encode()).hexdigest()[:16]
+
+
+async def _write_llm_audit(
+    login_user: 'UserPayload',
+    action: str,
+    server: 'LLMServer',
+    *,
+    extra: Optional[Dict] = None,
+) -> None:
+    """F020 T09: persist an llm.* audit row.
+
+    ``tenant_id`` is the server's tenant (authoritative: where the
+    resource lives), ``operator_tenant_id`` is the caller's effective
+    view (F019 admin-scope honoured via get_current_tenant_id). FGA or
+    DB failures here must not roll back the already-committed server
+    write — the audit write happens out-of-band.
+    """
+    from bisheng.core.context.tenant import get_current_tenant_id
+    from bisheng.database.models.audit_log import AuditLogDao
+    from bisheng.tenant.domain.constants import TenantAuditAction
+    try:
+        await AuditLogDao.ainsert_v2(
+            tenant_id=getattr(server, 'tenant_id', None) or 1,
+            operator_id=login_user.user_id,
+            operator_tenant_id=get_current_tenant_id() or 1,
+            action=action,
+            target_type='llm_server',
+            target_id=str(getattr(server, 'id', '') or ''),
+            metadata={
+                'server_name': getattr(server, 'name', None),
+                'endpoint': (getattr(server, 'config', None) or {}).get('openai_api_base'),
+                'api_key_hash': _llm_api_key_hash(getattr(server, 'config', None)),
+                **(extra or {}),
+            },
+        )
+    except Exception:  # noqa: BLE001 — audit failure must not block user action
+        logger.exception('[F020] audit_log write failed action=%s target_id=%s',
+                         action, getattr(server, 'id', None))
+
+
 class LLMService:
 
     @classmethod
@@ -197,14 +251,32 @@ class LLMService:
             raise ServerAddError.http_exception(f"<{success_msg.rstrip(',')}>Added{failed_msg}")
 
         await cls.add_llm_server_hook(request, login_user, ret)
+        # F020 T09: emit llm.server.create audit row with api_key_hash.
+        from bisheng.tenant.domain.constants import TenantAuditAction
+        await _write_llm_audit(
+            login_user, TenantAuditAction.LLM_SERVER_CREATE.value, ret,
+            extra={'share_to_children': getattr(server, 'share_to_children', True)},
+        )
         return ret
 
     @classmethod
     async def delete_llm_server(cls, request: Request, login_user: UserPayload, server_id: int) -> bool:
         """ Delete a service provider """
+        # F020 T09: capture the server row *before* delete so the audit
+        # entry has a meaningful name/endpoint (post-delete the row is gone).
+        from bisheng.core.context.tenant import bypass_tenant_filter
+        with bypass_tenant_filter():
+            pre = await LLMDao.aget_server_by_id(server_id)
+
         # F020: pass operator so DAO enforces the Root-only / super-admin
         # rule (19801) and cascades the FGA shared_with fanout cleanup.
         await LLMDao.adelete_server_by_id(server_id, operator=login_user)
+
+        if pre is not None:
+            from bisheng.tenant.domain.constants import TenantAuditAction
+            await _write_llm_audit(
+                login_user, TenantAuditAction.LLM_SERVER_DELETE.value, pre,
+            )
         return True
 
     @classmethod
@@ -372,6 +444,16 @@ class LLMService:
             exist_server, list(model_dict.values()), operator=login_user,
         )
         new_server_info = await cls.get_one_llm(db_server.id)
+        # F020 T09: emit llm.server.update (share toggle emits separately).
+        from bisheng.tenant.domain.constants import TenantAuditAction
+        if hasattr(server, 'share_to_children') and exist_server.tenant_id == 1:
+            await _write_llm_audit(
+                login_user, TenantAuditAction.LLM_SERVER_TOGGLE_SHARE.value, db_server,
+                extra={'share_to_children': server.share_to_children},
+            )
+        await _write_llm_audit(
+            login_user, TenantAuditAction.LLM_SERVER_UPDATE.value, db_server,
+        )
 
         # Determine if the model status needs to be re-determined
         for one in new_server_info.models:
