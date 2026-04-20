@@ -3,8 +3,8 @@
 Four-level permission check for role management:
   1. System admin → full access
   2. Tenant admin → tenant roles read/write; role list hides global (non-manageable) rows
-  3. Department admin → list shows global presets (read-only) + tenant roles in managed subtree;
-     update/delete only where ``_is_readonly`` is false
+  3. Department admin → list shows global presets (read-only) + tenant roles in managed subtree
+     or global scope; update/delete are restricted to the role creator
   4. Regular user → denied (24003)
 """
 
@@ -241,13 +241,18 @@ class RoleService:
         # Get department names + full scope path (root → leaf)
         dept_names = await cls._get_department_names(roles)
         scope_paths = await cls._department_scope_paths_for_roles(roles)
-        creator_names = await cls._get_creator_names(roles)
+        creator_ids = await cls._get_role_creator_ids(roles)
+        creator_names = await cls._get_creator_names(creator_ids)
 
         # Build response
         items = []
         for role in roles:
             is_readonly = cls._is_readonly(
-                role, login_user, permission_level, dept_subtree_ids,
+                role,
+                login_user,
+                permission_level,
+                dept_subtree_ids,
+                creator_user_id=creator_ids.get(role.id),
             )
             items.append(RoleListResponse(
                 id=role.id,
@@ -289,14 +294,19 @@ class RoleService:
         user_counts = await RoleDao.aget_user_count_by_role_ids([role_id])
         dept_names = await cls._get_department_names([role])
         scope_paths = await cls._department_scope_paths_for_roles([role])
-        creator_names = await cls._get_creator_names([role])
+        creator_ids = await cls._get_role_creator_ids([role])
+        creator_names = await cls._get_creator_names(creator_ids)
 
         permission_level = await cls._get_permission_level(login_user)
         dept_subtree_ids = None
         if permission_level == 'dept_admin':
             dept_subtree_ids = set(await cls._get_dept_subtree_ids(login_user) or [])
         is_readonly = cls._is_readonly(
-            role, login_user, permission_level, dept_subtree_ids,
+            role,
+            login_user,
+            permission_level,
+            dept_subtree_ids,
+            creator_user_id=creator_ids.get(role.id),
         )
 
         return RoleListResponse(
@@ -334,7 +344,7 @@ class RoleService:
             raise RolePermissionDeniedError(msg='Cannot modify global role')
 
         await cls._check_role_permission(login_user)
-        await cls._ensure_role_scope_access(role, login_user, for_mutation=True)
+        await cls._ensure_role_mutation_access(role, login_user)
 
         # Validate quota_config (AC-10c)
         if req.quota_config is not None:
@@ -382,7 +392,7 @@ class RoleService:
             raise RolePermissionDeniedError(msg='Cannot modify global role')
 
         await cls._check_role_permission(login_user)
-        await cls._ensure_role_scope_access(role, login_user, for_mutation=True)
+        await cls._ensure_role_mutation_access(role, login_user)
 
         if req.quota_config is not None:
             QuotaService.validate_quota_config(req.quota_config)
@@ -444,7 +454,7 @@ class RoleService:
             raise RolePermissionDeniedError(msg='Cannot delete global role')
 
         await cls._check_role_permission(login_user)
-        await cls._ensure_role_scope_access(role, login_user, for_mutation=True)
+        await cls._ensure_role_mutation_access(role, login_user)
 
         # AC-08: Cascade delete (UserRole + RoleAccess handled in DAO)
         await RoleDao.adelete_role(role_id)
@@ -467,7 +477,7 @@ class RoleService:
             raise RolePermissionDeniedError(msg='Cannot modify global role menu')
 
         await cls._check_role_permission(login_user)
-        await cls._ensure_role_scope_access(role, login_user, for_mutation=True)
+        await cls._ensure_role_mutation_access(role, login_user)
 
         normalized = cls._normalize_menu_ids(menu_ids)
         await RoleAccessDao.update_role_access_all(
@@ -556,17 +566,61 @@ class RoleService:
         login_user,
         permission_level: str,
         dept_subtree_ids: Optional[set[int]] = None,
+        creator_user_id: Optional[int] = None,
     ) -> bool:
         """Determine if role is read-only for current user."""
-        if permission_level == 'admin':
-            return False
-        if role.role_type == 'global':
-            return True
-        if permission_level == 'dept_admin':
-            return role.department_id is None or (
-                dept_subtree_ids is not None and role.department_id not in dept_subtree_ids
-            )
         if permission_level == 'regular':
+            return True
+        return not cls._can_mutate_role(
+            role,
+            login_user,
+            permission_level,
+            dept_subtree_ids=dept_subtree_ids,
+            creator_user_id=creator_user_id,
+        )
+
+    @classmethod
+    def _can_mutate_role(
+        cls,
+        role,
+        login_user,
+        permission_level: str,
+        dept_subtree_ids: Optional[set[int]] = None,
+        creator_user_id: Optional[int] = None,
+    ) -> bool:
+        if permission_level == 'regular':
+            return False
+        if role.role_type == 'global' and not login_user.is_admin():
+            return False
+        if permission_level == 'dept_admin' and role.department_id is not None:
+            if dept_subtree_ids is None or role.department_id not in dept_subtree_ids:
+                return False
+        if creator_user_id is None:
+            return cls._can_mutate_role_without_creator(
+                role,
+                permission_level,
+                dept_subtree_ids=dept_subtree_ids,
+            )
+        return int(creator_user_id) == int(login_user.user_id)
+
+    @classmethod
+    def _can_mutate_role_without_creator(
+        cls,
+        role,
+        permission_level: str,
+        dept_subtree_ids: Optional[set[int]] = None,
+    ) -> bool:
+        if permission_level == 'admin':
+            return True
+        if role.role_type == 'global':
+            return False
+        if permission_level == 'dept_admin':
+            return (
+                role.department_id is not None
+                and dept_subtree_ids is not None
+                and role.department_id in dept_subtree_ids
+            )
+        if permission_level == 'tenant_admin':
             return True
         return False
 
@@ -723,17 +777,45 @@ class RoleService:
     async def _ensure_role_scope_access(
         cls, role, login_user, for_mutation: bool,
     ) -> None:
-        """Department admins may only access roles inside their managed subtree."""
+        """Department admins may only view global/global-scope roles or subtree roles."""
         permission_level = await cls._get_permission_level(login_user)
         if permission_level != 'dept_admin':
             return
 
         subtree_ids = set(await cls._get_dept_subtree_ids(login_user) or [])
-        if role.department_id is None or role.department_id not in subtree_ids:
-            action = 'modify' if for_mutation else 'view'
-            raise RolePermissionDeniedError(
-                msg=f'Department admin cannot {action} roles outside managed departments',
-            )
+        if for_mutation:
+            if role.department_id is not None and role.department_id in subtree_ids:
+                return
+        else:
+            if role.role_type == 'global' or role.department_id is None or role.department_id in subtree_ids:
+                return
+
+        action = 'modify' if for_mutation else 'view'
+        raise RolePermissionDeniedError(
+            msg=f'Department admin cannot {action} roles outside managed departments',
+        )
+
+    @classmethod
+    async def _ensure_role_mutation_access(cls, role, login_user) -> None:
+        permission_level = await cls._get_permission_level(login_user)
+        dept_subtree_ids = None
+        if permission_level == 'dept_admin':
+            dept_subtree_ids = set(await cls._get_dept_subtree_ids(login_user) or [])
+
+        creator_ids = await cls._get_role_creator_ids([role])
+        creator_user_id = creator_ids.get(role.id)
+        if cls._can_mutate_role(
+            role,
+            login_user,
+            permission_level,
+            dept_subtree_ids=dept_subtree_ids,
+            creator_user_id=creator_user_id,
+        ):
+            return
+
+        if creator_user_id is not None and int(creator_user_id) != int(login_user.user_id):
+            raise RolePermissionDeniedError(msg='Only the role creator can edit or delete this role')
+        raise RolePermissionDeniedError()
 
     @classmethod
     async def _try_set_role_creator(cls, role_id: Optional[int], user_id: Optional[int]) -> None:
@@ -754,8 +836,8 @@ class RoleService:
             logger.debug('Skip setting role.create_user for role %s: %s', role_id, e)
 
     @classmethod
-    async def _get_creator_names(cls, roles) -> dict:
-        """Resolve creator_name for roles from role.create_user -> user.user_name."""
+    async def _get_role_creator_ids(cls, roles) -> dict[int, int]:
+        """Resolve role_id -> create_user if the column exists in the current schema."""
         role_ids = [r.id for r in roles if getattr(r, 'id', None)]
         if not role_ids:
             return {}
@@ -774,17 +856,24 @@ class RoleService:
             return {}
 
         role_to_uid = {}
-        user_ids = set()
         for row in rows:
             rid = row[0]
             uid = row[1]
             if uid:
-                role_to_uid[rid] = uid
-                user_ids.add(uid)
+                role_to_uid[rid] = int(uid)
+        return role_to_uid
 
+    @classmethod
+    async def _get_creator_names(cls, creator_ids: dict[int, int]) -> dict[int, str]:
+        """Resolve creator_name for roles from role.create_user -> user.user_name."""
+        user_ids = sorted({uid for uid in creator_ids.values() if uid})
         if not user_ids:
             return {}
 
-        users = await UserDao.aget_user_by_ids(list(user_ids)) or []
+        users = await UserDao.aget_user_by_ids(user_ids) or []
         user_name_map = {u.user_id: u.user_name for u in users}
-        return {rid: user_name_map.get(uid) for rid, uid in role_to_uid.items() if user_name_map.get(uid)}
+        return {
+            rid: user_name_map.get(uid)
+            for rid, uid in creator_ids.items()
+            if user_name_map.get(uid)
+        }
