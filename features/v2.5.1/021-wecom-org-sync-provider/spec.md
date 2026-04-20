@@ -15,6 +15,20 @@
 
 ---
 
+## 0. 实施对齐修订（2026-04-20 开工时更新）
+
+原稿 2026-04-19，开工前针对 v2.5.0 / v2.5.1 代码库现状做了 5 处对齐，**行为契约（AC-35~AC-58、错误码、`auth_config` Schema、AD-01~AD-08）不变**：
+
+| # | 原稿位置 | 变更 | 原因 |
+|---|---------|------|------|
+| R1 | §8 "页面路由 `/system/org-sync`" | 改为在 `SystemPage` 内新增 `orgSync` Tab；组件挂在 `pages/SystemPage/components/OrgSync/` | Platform 系统管理是 Tabs 结构（`pages/SystemPage/index.tsx`），无独立 `/system/*` 子路由 |
+| R2 | §7.1 / T004 "扩展 `mask_sensitive_fields` 脱敏 `corpsecret`" | 删除，仅保留 `validate_auth_config` 对 WeCom 字段的校验 | F009 现有 `SENSITIVE_KEYS` 含 `'secret'` 子串匹配，`corpsecret` 已被自动脱敏 |
+| R3 | §8 "`allow_dept_ids` 用 `bs-ui` Tags 输入" | 改用 Input(type=number) + Badge 列表，支持 add/remove | Platform `bs-ui` 无成熟 Tags 组件；手工实现更直接 |
+| R4 | §8 "i18n 放 `bs.json` 的 `orgSync.*` 前缀" | 新建独立 `orgSync.json` 命名空间 | 与 `permission.json / dashboard.json / tool.json` 保持 namespace 独立风格 |
+| R5 | §8.5 "用 `respx` 或 `httpx.MockTransport`" | 统一用 `httpx.MockTransport` + `fakeredis.aioredis` | 项目未引入 `respx`；F009 现有测试用 `MagicMock`，MockTransport 零新增依赖 |
+
+---
+
 ## 1. 概述与用户故事
 
 作为 **系统管理员（集团总部 IT/运营）**，
@@ -127,12 +141,11 @@
 }
 ```
 
-### 脱敏规则扩展
+### 脱敏规则（**R2 修订**）
 
-修改 `src/backend/bisheng/org_sync/domain/schemas/org_sync_schema.py` 的 `mask_sensitive_fields()`：
+`mask_sensitive_fields()` **无需修改** —— F009 既有 `SENSITIVE_KEYS = {'app_secret', 'api_key', 'password', 'secret', 'token'}` 加上 `'secret' in key.lower()` 子串匹配已自动覆盖 `corpsecret`。保留明文字段：`corpid`、`agent_id`、`allow_dept_ids`。
 
-- 当 `provider='wecom'` 时，需要脱敏字段：`corpsecret`
-- 保留明文字段：`corpid`、`agent_id`、`allow_dept_ids`
+本 Feature 仅在 `OrgSyncConfigCreate.validate_auth_config`（需新增，详见 T001）对 WeCom 分支补校验：`corpid / corpsecret / agent_id` 非空字符串；`allow_dept_ids` 存在则必为 `list[int]`。
 
 ---
 
@@ -226,32 +239,36 @@ WeComProvider(OrgSyncProvider):
 > 路径：`src/frontend/platform/src/`
 > 当前项目**未实现** F009 前端页面（F009 只完成后端 + E2E 测试）；本 Feature 首次落地"组织同步"入口。
 
-**页面路由**: `/system/org-sync` → `pages/SystemPage/OrgSyncPage/`（建议放在系统管理二级菜单下）
+**页面挂载（R1 修订）**: 不新增路由；在 `pages/SystemPage/index.tsx`（现有 Tabs 结构）新增 `orgSync` Tab，仅对 `isFullAdminShell = isSuperAdmin || isDeptAdmin` 显示。路由仍沿用 `/sys`，通过 Tabs 切换进入。
 
-**组件**:
+**组件目录**:
 
 ```
-OrgSyncPage/
-├── index.tsx                      # 列表 + 新建入口
-├── ConfigFormModal.tsx            # 新建/编辑表单（Provider 下拉 + 动态字段）
-├── components/
+pages/SystemPage/components/OrgSync/
+├── index.tsx                      # Tab 内容：列表 + 新建入口
+├── ProviderDialog.tsx             # 新建/编辑 Dialog（Provider 下拉 + 动态字段组）
+├── fieldsets/
 │   ├── WeComFieldSet.tsx          # 企微字段组（本 Feature 实现）
 │   ├── FeishuFieldSet.tsx         # 飞书字段组（本 Feature 实现，便于验收 F009 已有能力）
 │   └── GenericApiFieldSet.tsx     # Generic API 字段组（本 Feature 实现）
 ├── TestConnectionButton.tsx       # 测试连接按钮（调 POST /org-sync/configs/{id}/test）
-├── SyncHistoryTable.tsx           # 同步历史（分页）
-└── hooks/
-    └── useOrgSyncConfig.ts        # 数据请求 + Zustand 集成
+├── SyncLogModal.tsx               # 同步历史（分页）
+└── useOrgSync.ts                  # Hook：整合 store + API
 ```
 
-**状态管理**: 新建 Zustand store `src/store/orgSyncStore.ts`（列表状态、当前配置、loading）
+**状态管理**: 新建 Zustand store `src/store/orgSyncStore.tsx`（列表状态、当前配置、loading、logs）。
 
-**API 层**: 新建 `src/controllers/API/orgSync.ts`，封装 F009 的 9 个端点；严格走 `@/controllers/request`
+**API 层**: 新建 `src/controllers/API/orgSync.ts`，封装 F009 的 9 个端点；严格走 `@/controllers/request`。
 
-**i18n**:
-- 新增 namespace key 前缀 `orgSync.*`
-- 至少需要文案：Provider 选项标签（`企业微信` / `飞书` / `通用 REST API`）、字段标签（corpid / corpsecret / agent_id / allow_dept_ids）、表单校验提示、测试连接结果提示、同步状态标签
-- 三语齐全：`public/locales/en-US/bs.json` / `zh-Hans/bs.json` / `ja/bs.json`
+**i18n（R4 修订）**:
+- 新建独立 namespace **`orgSync.json`**（而非放进 `bs.json`），在 `src/i18n.js` 注册
+- 文案覆盖：Provider 选项标签、字段标签（corpid/corpsecret/agent_id/allow_dept_ids）、校验提示、测试连接结果、同步状态标签、删除确认、按钮文字
+- 三语齐全：`public/locales/en-US/orgSync.json` / `zh-Hans/orgSync.json` / `ja/orgSync.json`
+
+**表单控件（R3 修订）**:
+- corpid / agent_id：`<Input />`
+- corpsecret：`<Input type="password" />`；编辑态 `defaultValue="****"`，提交时若值仍为 `****` 则不带该字段（保留原值）
+- allow_dept_ids：`<Input type="number" /> + <Button onClick=add>` + 已添加的 `<Badge />` 列表（每个带 ✕ 删除）；onChange 时校验必须是整数；空数组入库为 `[1]`（默认企微根部门）
 
 ### 8.2 Client 前端
 

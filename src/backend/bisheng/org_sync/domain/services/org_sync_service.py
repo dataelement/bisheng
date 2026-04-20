@@ -104,6 +104,10 @@ class OrgSyncService:
 
             # Step 4: Decrypt auth_config and instantiate provider
             auth_config = decrypt_auth_config(config.auth_config)
+            # F021: inject config_id so Provider can build tenant-safe Redis keys
+            # (e.g. WeCom access_token cache per config). The underscore prefix
+            # marks it as provider-internal; the Service layer never persists it.
+            auth_config['_config_id'] = config.id
             provider = get_provider(config.provider, auth_config)
 
             # Step 5: Authenticate

@@ -1,0 +1,126 @@
+{
+  "title": "组织同步",
+  "description": "从企业微信、飞书等第三方系统自动同步部门与成员信息。",
+  "loading": "加载中...",
+  "emptyHint": "尚未配置任何同步源，点击右上角创建",
+  "providers": {
+    "wecom": "企业微信",
+    "feishu": "飞书",
+    "dingtalk": "钉钉",
+    "generic_api": "通用 REST API"
+  },
+  "runStatus": {
+    "running": "运行中",
+    "success": "成功",
+    "partial": "部分成功",
+    "failed": "失败"
+  },
+  "syncStatus": {
+    "idle": "空闲",
+    "running": "运行中"
+  },
+  "triggerType": {
+    "manual": "手动",
+    "scheduled": "定时"
+  },
+  "columns": {
+    "configName": "配置名称",
+    "provider": "类型",
+    "syncStatus": "同步状态",
+    "lastSync": "上次同步",
+    "lastResult": "上次结果",
+    "actions": "操作"
+  },
+  "actions": {
+    "create": "新建配置",
+    "edit": "编辑",
+    "delete": "删除",
+    "test": "测试连接",
+    "execute": "立即同步",
+    "viewLogs": "查看日志",
+    "save": "保存",
+    "cancel": "取消",
+    "close": "关闭",
+    "add": "添加",
+    "remove": "删除"
+  },
+  "form": {
+    "configName": "配置名称",
+    "configNamePlaceholder": "例如：企业微信生产环境",
+    "provider": "同步源类型",
+    "providerImmutable": "已创建的配置不可更改类型"
+  },
+  "dialog": {
+    "createTitle": "新建同步配置",
+    "editTitle": "编辑同步配置"
+  },
+  "wecom": {
+    "corpid": "企业 ID (corpid)",
+    "corpidPlaceholder": "企业微信 CorpID，以 ww 开头",
+    "corpidRequired": "请填写 corpid",
+    "corpsecret": "应用 Secret (corpsecret)",
+    "corpsecretPlaceholder": "应用的 Secret 密钥",
+    "corpsecretMaskedHint": "保持空值或 **** 表示不修改",
+    "corpsecretRequired": "请填写 corpsecret",
+    "corpsecretEditHint": "当前值为掩码占位，保存时将保留原有 secret。",
+    "corpsecretCannotBeMasked": "新建配置时必须填写真实的 corpsecret",
+    "agentId": "应用 ID (agent_id)",
+    "agentIdPlaceholder": "企业微信后台应用的 AgentId",
+    "agentIdRequired": "请填写 agent_id",
+    "allowDeptIds": "允许同步的根部门 ID",
+    "allowDeptIdsHint": "留空表示默认使用企微根部门（id=1）。仅整数，多个根部门分别添加。",
+    "allowDeptIdsPlaceholder": "输入整数后点击添加",
+    "allowDeptIdsDefault": "（默认 [1]）"
+  },
+  "feishu": {
+    "appId": "App ID",
+    "appIdPlaceholder": "飞书自建应用 App ID",
+    "appIdRequired": "请填写 App ID",
+    "appSecret": "App Secret",
+    "appSecretPlaceholder": "飞书应用 Secret",
+    "appSecretMaskedHint": "保持空值或 **** 表示不修改",
+    "appSecretRequired": "请填写 App Secret",
+    "appSecretCannotBeMasked": "新建配置时必须填写真实的 App Secret"
+  },
+  "generic": {
+    "endpointUrl": "API 地址",
+    "endpointUrlPlaceholder": "https://example.com/org-sync",
+    "endpointUrlRequired": "请填写 API 地址",
+    "endpointUrlInvalid": "请填写以 http:// 或 https:// 开头的地址",
+    "apiKey": "API Key（可选）",
+    "apiKeyPlaceholder": "接口鉴权密钥（如有）",
+    "apiKeyMaskedHint": "保持空值或 **** 表示不修改"
+  },
+  "validation": {
+    "nameRequired": "请填写配置名称"
+  },
+  "testConnection": {
+    "successTitle": "连接成功",
+    "successDesc": "{{org}} 共 {{depts}} 个部门，{{members}} 名成员"
+  },
+  "confirmExecute": {
+    "title": "确认立即同步？",
+    "desc": "同步配置 “{{name}}” 将拉取最新的部门与成员，期间相关数据可能发生变化。"
+  },
+  "confirmDelete": {
+    "title": "确认删除配置？",
+    "desc": "删除配置 “{{name}}” 后将不再自动同步。已同步的数据不会被删除。"
+  },
+  "executeSuccess": {
+    "title": "同步任务已提交",
+    "desc": "任务在后台执行，可在同步日志中查看进度。"
+  },
+  "createSuccess": "配置创建成功",
+  "updateSuccess": "配置更新成功",
+  "deleteSuccess": "配置已删除",
+  "syncLog": {
+    "title": "同步日志 · {{name}}",
+    "status": "状态",
+    "triggerType": "触发方式",
+    "deptChanges": "部门变动",
+    "memberChanges": "成员变动",
+    "startTime": "开始时间",
+    "endTime": "结束时间",
+    "empty": "暂无同步记录"
+  }
+}

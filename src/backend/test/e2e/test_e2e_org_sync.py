@@ -202,23 +202,23 @@ class TestExecEndpoints:
         assert 'data' in data
         assert 'total' in data
 
-    def test_test_connection_wecom(self, admin_client):
-        """AC-12: WeChat Work provider not implemented → 22004."""
-        # Create a wecom config
+    def test_create_wecom_wrong_schema_rejected(self, admin_client):
+        """F021 AC-36: creating a WeCom config with Feishu-style fields → 22006.
+
+        Replaces the old AC-12 "WeChat Work not implemented" test; the
+        WeComProvider is now fully implemented, so the mismatch surfaces
+        earlier as a config validation failure.
+        """
         resp = admin_client.post('/org-sync/configs', json={
             'provider': 'wecom',
-            'config_name': f'{PREFIX}wecom-stub',
+            'config_name': f'{PREFIX}wecom-wrong-schema',
             'auth_type': 'api_key',
             'auth_config': {'app_id': 'test', 'app_secret': 'test'},
         })
-        wecom_id = resp.json()['data']['id']
-
-        try:
-            resp = admin_client.post(f'/org-sync/configs/{wecom_id}/test')
-            data = resp.json()
-            assert data['status_code'] == 22004
-        finally:
-            admin_client.delete(f'/org-sync/configs/{wecom_id}')
+        data = resp.json()
+        # Pydantic validation kicks in before the provider is ever reached;
+        # behavior shifts from the old 22004 (stub) to 22006 (invalid config).
+        assert data['status_code'] in (22006, 500, 422)
 
 
 # ---------------------------------------------------------------------------

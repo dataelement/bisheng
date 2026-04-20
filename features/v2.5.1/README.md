@@ -24,7 +24,7 @@
 | F018 | [resource-owner-transfer](./018-resource-owner-transfer/) | P0 | 🔲 未开始 | F011, F013 |
 | F019 | [admin-tenant-scope](./019-admin-tenant-scope/) | P1 | 🔲 未开始 | F013 |
 | F020 | [llm-tenant-isolation](./020-llm-tenant-isolation/) | P1 | 🔲 未开始 | F011, F013, F019 |
-| F021 | [wecom-org-sync-provider](./021-wecom-org-sync-provider/) | P0 | 🔲 未开始 | v2.5.0/F009, F011 |
+| F021 | [wecom-org-sync-provider](./021-wecom-org-sync-provider/) | P0 | ✅ 完成（2026-04-20，91 后端单测 + 17 E2E 全绿） | v2.5.0/F009, F011 |
 
 ---
 
