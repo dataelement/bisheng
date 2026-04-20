@@ -11,7 +11,11 @@ from bisheng.llm.domain.utils import wrapper_bisheng_llm_info, wrapper_bisheng_l
 
 
 class LLMServerBase(SQLModelSerializable):
-    name: str = Field(default='', index=True, unique=True, description='Service name')
+    # F020: name uniqueness scoped to tenant via the composite
+    # ``uk_llm_server_tenant_name`` UniqueConstraint on the concrete
+    # LLMServer class below; the per-column ``unique=True`` flag was
+    # removed so different Children may reuse names like "Azure-GPT-4".
+    name: str = Field(default='', index=True, description='Service name')
     description: Optional[str] = Field(default='', sa_column=Column(Text), description='Service Description')
     type: str = Field(sa_column=Column(CHAR(20)), description='Service Provider Type')
     limit_flag: bool = Field(default=False, description='Whether to turn on the daily call limit')
@@ -19,6 +23,12 @@ class LLMServerBase(SQLModelSerializable):
     config: Optional[Dict] = Field(default=None, sa_column=Column(JSON),
                                    description='Service Provider Public Configuration')
     user_id: int = Field(default=0, description='creatorID')
+    # F001 (v2.5.0) added this column at the DB level with server_default=1;
+    # the ORM field was never declared, causing the tenant_filter event to
+    # skip llm_server writes. F020 surfaces it so auto-fill (get_current_
+    # tenant_id) and the composite unique key can function.
+    tenant_id: int = Field(default=1, index=True, nullable=False,
+                           description='F001: Tenant isolation (default Root=1)')
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
@@ -37,6 +47,10 @@ class LLMModelBase(SQLModelSerializable):
     remark: Optional[str] = Field(default='', sa_column=Column(Text), description='Abnormal reason')
     online: bool = Field(default=True, description='Online')
     user_id: int = Field(default=0, description='creatorID')
+    # F001 (v2.5.0) added the column; F020 surfaces it on the ORM. Kept
+    # aligned with the parent llm_server so cascading ORM inserts fill both.
+    tenant_id: int = Field(default=1, index=True, nullable=False,
+                           description='F001: Tenant isolation (mirrors parent llm_server)')
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
@@ -45,6 +59,10 @@ class LLMModelBase(SQLModelSerializable):
 
 class LLMServer(LLMServerBase, table=True):
     __tablename__ = 'llm_server'
+    __table_args__ = (
+        # F020: replaces the v2.4 UNIQUE(name) global constraint.
+        UniqueConstraint('tenant_id', 'name', name='uk_llm_server_tenant_name'),
+    )
 
     id: Optional[int] = Field(default=None, nullable=False, primary_key=True, description='Service UniqueID')
 
