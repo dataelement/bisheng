@@ -256,6 +256,24 @@ class OrgSyncService:
         cls, op: CreateDept, config: OrgSyncConfig,
         ext_to_local: dict[str, int],
     ) -> None:
+        # A "remote root" — a department whose parent is outside the sync
+        # scope — shouldn't be created as a child of the local tenant root;
+        # it IS the tenant root's counterpart upstream. Adopt the local
+        # tenant root (stamp its external_id + source + name) so the tree
+        # merges cleanly instead of nesting the whole org one level deeper.
+        if op.remote.parent_external_id is None:
+            local_root = await DepartmentDao.aget_root_by_tenant(config.tenant_id)
+            if local_root and not local_root.external_id:
+                local_root.external_id = op.remote.external_id
+                local_root.source = config.provider
+                local_root.name = op.remote.name
+                await DepartmentDao.aupdate(local_root)
+                ext_to_local[op.remote.external_id] = local_root.id
+                return
+            # Fallthrough: local root already adopted by someone else, or no
+            # local root (shouldn't happen). Create as a sibling-of-root child
+            # so we don't silently lose the remote row.
+
         # Resolve parent
         parent_id: Optional[int] = None
         if op.remote.parent_external_id:
@@ -267,7 +285,7 @@ class OrgSyncService:
                 if parent:
                     parent_id = parent.id
         else:
-            # Root department — find tenant root
+            # Fallback (see above) — attach under tenant root.
             root = await DepartmentDao.aget_root_by_tenant(config.tenant_id)
             if root:
                 parent_id = root.id
